@@ -57,8 +57,8 @@ const FASTNAV_KEY = 'viewer-fastnav-enabled';
 export function getFastNavEnabled(): boolean {
   try {
     const stored = localStorage.getItem(FASTNAV_KEY);
-    return stored !== null ? JSON.parse(stored) : true;
-  } catch { return true; }
+    return stored !== null ? JSON.parse(stored) : false;
+  } catch { return false; }
 }
 export function setFastNavEnabled(enabled: boolean) {
   localStorage.setItem(FASTNAV_KEY, JSON.stringify(enabled));

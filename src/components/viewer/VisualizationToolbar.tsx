@@ -737,84 +737,52 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     className
   );
 
-  return (
-    <div className={containerClassName}>
-      {/* Trigger button */}
-      <Button
-        variant="secondary"
-        size="icon"
-        title="Visning"
-        onClick={() => handleSetIsOpen(!isOpen)}
-        className={cn(
-          "shadow-lg bg-card/95 backdrop-blur-sm border",
-          "h-8 w-8 sm:h-10 sm:w-10",
-          isOpen && "ring-2 ring-primary"
-        )}
-      >
-        <MoreVertical className="h-4 w-4 sm:h-5 sm:w-5" />
-      </Button>
-
-      {/* Floating draggable panel - responsive positioning with transparency */}
-      {isOpen && (
-        <TooltipProvider delayDuration={300}>
-          <div
+    return (
+      <div className={containerClassName}>
+        {/* Trigger button - positioned at top right */}
+        {!isOpen && (
+          <Button
+            variant="secondary"
+            size="icon"
+            title="Visning"
+            onClick={() => handleSetIsOpen(true)}
             className={cn(
-              "fixed z-[60] border rounded-lg shadow-xl",
-              // Solid dark frosted glass — must stay readable over bright 360° panos in split mode
-              "bg-card/95 backdrop-blur-xl text-foreground",
-              // Mobile: allow more height for scrolling
-              "max-h-[85vh] sm:max-h-[80vh]",
-             "flex flex-col overflow-hidden",
-              "transition-all duration-150",
-               // Mobile: bottom sheet style — positioned above toolbar
-               "left-2 right-2 bottom-[calc(env(safe-area-inset-bottom,0px)+80px)] sm:inset-auto pb-2",
-              // Desktop: fixed-width draggable panel (narrower for side-pop architecture)
-              "sm:w-72 md:w-80",
-              isDragging && "cursor-grabbing opacity-90"
+              "shadow-lg bg-card/95 backdrop-blur-sm border",
+              "h-8 w-8 sm:h-10 sm:w-10",
             )}
-            style={{ 
-              // Swipe transform on mobile
-              transform: touchDelta > 0 ? `translateY(${touchDelta}px)` : undefined,
-              opacity: touchDelta > 0 ? Math.max(0.3, 1 - (touchDelta / 200)) : undefined,
-              // Only apply position on desktop (>= 640px)
-              ...(typeof window !== 'undefined' && window.innerWidth >= 640 ? {
-                left: position.x,
-                top: position.y,
-                right: 'auto',
-                bottom: 'auto'
-              } : {})
-            }}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
           >
-          {/* Swipe indicator bar (mobile only) */}
-          <div className="sm:hidden flex justify-center pt-2 pb-1">
-            <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
-          </div>
-          
-          {/* Header - Draggable on desktop */}
-          <div
-            className="flex items-center justify-between px-2.5 pb-2.5 sm:p-3 border-b cursor-grab select-none"
-            onMouseDown={handleMouseDown}
-          >
-            <div className="flex items-center gap-2">
-              <GripVertical className="h-4 w-4 text-muted-foreground hidden sm:block" />
-              <span className="font-medium text-sm">Visning</span>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 sm:h-6 sm:w-6"
-              onClick={() => handleSetIsOpen(false)}
-            >
-              <X className="h-4 w-4 sm:h-3 sm:w-3" />
-            </Button>
-          </div>
+            <MoreVertical className="h-4 w-4 sm:h-5 sm:w-5" />
+          </Button>
+        )}
 
-           {/* Content - compact height for side-pop architecture */}
-           <div ref={scrollWrapRef} className="relative flex-1 min-h-0">
-             <ScrollArea className="h-full p-2.5 pr-4 sm:p-3">
+        {/* Fixed right sidebar panel */}
+        {isOpen && (
+          <TooltipProvider delayDuration={300}>
+            <div
+              className={cn(
+                "fixed top-0 right-0 z-[60] border-l shadow-xl",
+                "bg-card/95 backdrop-blur-xl text-foreground",
+                "h-full w-72 sm:w-80",
+                "flex flex-col overflow-hidden",
+                "transition-transform duration-200",
+              )}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-3 py-3 border-b shrink-0">
+                <span className="font-medium text-sm">Visning</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => handleSetIsOpen(false)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Content - scrollable */}
+              <div ref={scrollWrapRef} className="relative flex-1 min-h-0 overflow-hidden">
+                <ScrollArea className="h-full p-3">
                <div className="space-y-2 sm:space-y-3">
               {/* BIM Models - click to open side panel */}
               <div className="flex items-center justify-between py-1.5">

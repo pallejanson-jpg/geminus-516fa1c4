@@ -256,49 +256,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     };
   }, [xeokitViewer]);
 
-  // Context menu actions
-  const handleZoomToFit = useCallback(() => {
-    if (!xeokitViewer || !contextMenu?.entityId) return;
-    const entity = xeokitViewer.scene.objects?.[contextMenu.entityId];
-    if (entity?.aabb) {
-      xeokitViewer.cameraFlight.flyTo({ aabb: entity.aabb, duration: 0.5 });
-    }
-  }, [xeokitViewer, contextMenu]);
-
-  const handleIsolate = useCallback(() => {
-    if (!xeokitViewer || !contextMenu?.entityId) return;
-    const scene = xeokitViewer.scene;
-    scene.setObjectsVisible(scene.objectIds, false);
-    const entity = scene.objects?.[contextMenu.entityId];
-    if (entity) {
-      entity.visible = true;
-      xeokitViewer.cameraFlight.flyTo({ aabb: entity.aabb, duration: 0.5 });
-    }
-  }, [xeokitViewer, contextMenu]);
-
-  const handleHideSelected = useCallback(() => {
-    if (!xeokitViewer || !contextMenu?.entityId) return;
-    const entity = xeokitViewer.scene.objects?.[contextMenu.entityId];
-    if (entity) entity.visible = false;
-  }, [xeokitViewer, contextMenu]);
-
-  const handleShowAll = useCallback(() => {
-    if (!xeokitViewer) return;
-    const scene = xeokitViewer.scene;
-    scene.setObjectsVisible(scene.objectIds, true);
-    scene.setObjectsXRayed(scene.objectIds, false);
-    scene.setObjectsColorized(scene.objectIds, false);
-  }, [xeokitViewer]);
-
-  const handleProperties = useCallback(() => {
-    if (!contextMenu?.entityId) return;
-    setPropertiesEntity({
-      entityId: contextMenu.entityId,
-      fmGuid: contextMenu.fmGuid,
-      name: contextMenu.entityName,
-    });
-  }, [contextMenu]);
-
+  // Context menu actions (simplified - old handlers removed, new menu has different actions)
   const handleChangeViewMode = useCallback((mode: '2d' | '3d' | '360') => {
     setViewMode(mode);
     window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode } }));
@@ -399,17 +357,22 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           entityId={contextMenu.entityId}
           entityName={contextMenu.entityName}
           onClose={() => setContextMenu(null)}
-          onProperties={handleProperties}
-          onSelect={() => {
-            if (contextMenu.entityId && xeokitViewer?.scene?.objects) {
-              const entity = xeokitViewer.scene.objects[contextMenu.entityId];
-              if (entity) entity.selected = !entity.selected;
-            }
+          onShowLabels={() => {
+            // Toggle annotations
+            window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', { detail: { show: true } }));
           }}
-          onZoomToFit={handleZoomToFit}
-          onIsolate={handleIsolate}
-          onHideSelected={handleHideSelected}
-          onShowAll={handleShowAll}
+          onCreateIssue={() => {
+            // Trigger issue creation via VisualizationToolbar
+            setShowVisualizationMenu(true);
+          }}
+          onViewIssues={() => {
+            // Open issue list
+            setShowVisualizationMenu(true);
+          }}
+          onShowRoomLabels={() => {
+            // Toggle room labels
+            window.dispatchEvent(new CustomEvent('ROOM_LABELS_TOGGLE', { detail: { enabled: true } }));
+          }}
         />
       )}
 

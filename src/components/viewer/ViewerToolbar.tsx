@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   ZoomIn,
-  ZoomOut,
   Focus,
   Ruler,
   Scissors,
@@ -11,10 +10,15 @@ import {
   Cuboid,
   SquareDashed,
   Box,
+  Settings,
+  Eye,
+  Crosshair,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import {
   useSectionPlaneClipping,
@@ -40,9 +44,47 @@ type NavMode = 'orbit' | 'firstPerson';
 type ViewMode = '3d' | '2d';
 
 interface ViewerToolbarProps {
-  /** The native xeokit Viewer instance */
   viewer: any;
   className?: string;
+}
+
+// All available tools with metadata
+interface ToolDef {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  group?: string;
+}
+
+const STORAGE_KEY = 'viewer-toolbar-tools';
+
+const ALL_TOOLS: ToolDef[] = [
+  { id: 'orbit', label: 'Orbit', icon: <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'nav' },
+  { id: 'firstPerson', label: 'First person', icon: <Move className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'nav' },
+  { id: 'fitView', label: 'Fit view', icon: <Focus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'view' },
+  { id: 'select', label: 'Select', icon: <MousePointer2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'tool' },
+  { id: 'measure', label: 'Measure', icon: <Ruler className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'tool' },
+  { id: 'section', label: 'Section', icon: <Scissors className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'tool' },
+  { id: 'viewMode', label: '2D/3D', icon: <Cuboid className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'mode' },
+  // Configurable extras
+  { id: 'xray', label: 'X-ray', icon: <Box className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
+  { id: 'onHover', label: 'On hover info', icon: <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
+  { id: 'zoomIn', label: 'Zoom in', icon: <ZoomIn className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
+  { id: 'crosshair', label: 'Crosshair', icon: <Crosshair className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
+];
+
+const DEFAULT_ENABLED = ['orbit', 'firstPerson', 'fitView', 'select', 'measure', 'section', 'viewMode'];
+
+function getEnabledTools(): string[] {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch {}
+  return DEFAULT_ENABLED;
+}
+
+function saveEnabledTools(tools: string[]) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(tools));
 }
 
 // ─── ToolButton ───────────────────────────────────────────────────────────────
@@ -91,13 +133,14 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
   const [navMode, setNavMode] = useState<NavMode>('orbit');
   const [viewMode, setViewMode] = useState<ViewMode>('3d');
   const [isXrayActive, setIsXrayActive] = useState(false);
+  const [enabledTools, setEnabledTools] = useState<string[]>(getEnabledTools);
+  const [showConfig, setShowConfig] = useState(false);
 
   const viewModeRef = useRef<ViewMode>(viewMode);
   const colorizedFor2dRef = useRef<Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean }>>(new Map());
   const [currentFloorId, setCurrentFloorId] = useState<string | null>(null);
   const [currentFloorBounds, setCurrentFloorBounds] = useState<{ minY: number; maxY: number } | null>(null);
 
-  // Keep a mutable ref so the shim-based hooks can still find the viewer
   const viewerShimRef = useRef<any>(null);
   useEffect(() => {
     if (!viewer) return;
@@ -108,6 +151,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
 
   const isReady = !!viewer?.scene;
+  const isToolEnabled = (id: string) => enabledTools.includes(id);
 
   // ── Section plane clipping hook ───────────────────────────────────────────
   const {
@@ -223,13 +267,6 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     viewer.cameraFlight.flyTo({ eye: newEye, look, duration: 0.3 });
   }, [viewer]);
 
-  const handleZoomOut = useCallback(() => {
-    if (!viewer?.cameraFlight) return;
-    const { eye, look } = viewer.camera;
-    const newEye = eye.map((v: number, i: number) => v - (look[i] - v) * 0.25);
-    viewer.cameraFlight.flyTo({ eye: newEye, look, duration: 0.3 });
-  }, [viewer]);
-
   const handleViewFit = useCallback(() => {
     if (!viewer?.cameraFlight) return;
     const selected = viewer.scene?.selectedObjectIds || [];
@@ -278,8 +315,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     planes.forEach((sp: any) => { try { sp.destroy(); } catch {} });
   }, [viewer]);
 
-  // ── X-ray toggle — direct xeokit API ─────────────────────────────────────
-
+  // ── X-ray toggle ─────────────────────────────────────────────────────────
   const XRAY_BATCH = 100;
   const handleXrayToggle = useCallback(() => {
     if (!viewer?.scene) return;
@@ -324,7 +360,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     }
   }, [viewer, isXrayActive]);
 
-  // ── 2D / 3D toggle — direct xeokit API ───────────────────────────────────
+  // ── 2D / 3D toggle ───────────────────────────────────────────────────────
 
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     if (!viewer?.scene) return;
@@ -334,21 +370,17 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     window.dispatchEvent(new CustomEvent(VIEW_MODE_CHANGED_EVENT, { detail: { mode, floorId: currentFloorId } }));
 
     if (mode === '2d') {
-      // Apply section clipping
-      if (currentFloorId) {
-        applyFloorPlanClipping(currentFloorId);
-      } else {
+      if (currentFloorId) applyFloorPlanClipping(currentFloorId);
+      else {
         const sceneAABB = scene.getAABB?.();
         if (sceneAABB) applyGlobalFloorPlanClipping(sceneAABB[1]);
       }
 
-      // Save original edge material
       const edgeMat = scene.edgeMaterial;
       const origEdgeColor = edgeMat?.edgeColor ? [...edgeMat.edgeColor] : [0.2, 0.2, 0.2];
       const origEdgeAlpha = edgeMat?.edgeAlpha ?? 0.5;
       const origEdgeWidth = edgeMat?.edgeWidth ?? 1;
 
-      // Handle IFC types for 2D plan view
       const SLAB_TYPES = new Set(['ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase', 'ifcroof', 'ifccovering', 'ifcplate']);
       const WALL_TYPES = new Set(['ifcwall', 'ifcwallstandardcase']);
       const SUBDUED_TYPES = new Set(['ifcdoor', 'ifcwindow', 'ifcfurnishingelement', 'ifcrailing', 'ifcstair', 'ifcstairflight']);
@@ -380,7 +412,6 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
       colorizedFor2dRef.current = colorized;
       (viewerShimRef.current as any).__orig2dEdge = { origEdgeColor, origEdgeAlpha, origEdgeWidth };
 
-      // Set camera to ortho top-down
       const camera = viewer.camera;
       if (camera) {
         const lookX = camera.look[0], lookY = camera.look[1], lookZ = camera.look[2];
@@ -391,7 +422,6 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         viewer.cameraFlight.flyTo({ eye: [lookX, lookY + dist, lookZ], look: [lookX, lookY, lookZ], up: [0, 0, -1], duration: 0.5 });
       }
     } else {
-      // Restore 2D → 3D
       if (colorizedFor2dRef.current.size > 0) {
         colorizedFor2dRef.current.forEach((orig, id) => {
           const entity = scene.objects?.[id];
@@ -425,7 +455,20 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     }
   }, [viewer, currentFloorId, currentFloorBounds, calculateFloorBounds, applyFloorPlanClipping, applyGlobalFloorPlanClipping, applyCeilingClipping, removeSectionPlane]);
 
+  // ── Toggle tool in config ────────────────────────────────────────────────
+  const toggleTool = useCallback((toolId: string) => {
+    setEnabledTools(prev => {
+      const next = prev.includes(toolId) 
+        ? prev.filter(t => t !== toolId)
+        : prev.length < 10 ? [...prev, toolId] : prev;
+      saveEnabledTools(next);
+      return next;
+    });
+  }, []);
+
   // ── Render ────────────────────────────────────────────────────────────────
+
+  const visibleTools = ALL_TOOLS.filter(t => enabledTools.includes(t.id));
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -438,46 +481,95 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         )}
         style={{ bottom: 'calc(max(env(safe-area-inset-bottom, 0px), 12px) + 8px)' }}
       >
-        {/* Navigation mode */}
-        <ToolButton icon={<RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="Orbit (rotate)" onClick={() => handleNavModeChange('orbit')} active={navMode === 'orbit'} disabled={!isReady} />
-        <ToolButton icon={<Move className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="First person (walk)" onClick={() => handleNavModeChange('firstPerson')} active={navMode === 'firstPerson'} disabled={!isReady} />
+        {visibleTools.map((tool, idx) => {
+          // Add separators between groups
+          const prevTool = idx > 0 ? visibleTools[idx - 1] : null;
+          const showSep = prevTool && prevTool.group !== tool.group;
+
+          return (
+            <React.Fragment key={tool.id}>
+              {showSep && <Separator orientation="vertical" className="h-4 sm:h-6 mx-0.5 sm:mx-1 bg-white/20" />}
+              
+              {tool.id === 'orbit' && (
+                <ToolButton icon={tool.icon} label={tool.label} onClick={() => handleNavModeChange('orbit')} active={navMode === 'orbit'} disabled={!isReady} />
+              )}
+              {tool.id === 'firstPerson' && (
+                <ToolButton icon={tool.icon} label={tool.label} onClick={() => handleNavModeChange('firstPerson')} active={navMode === 'firstPerson'} disabled={!isReady} />
+              )}
+              {tool.id === 'fitView' && (
+                <ToolButton icon={tool.icon} label={tool.label} onClick={handleViewFit} disabled={!isReady} />
+              )}
+              {tool.id === 'select' && (
+                <ToolButton icon={tool.icon} label={tool.label} onClick={() => handleToolChange('select')} active={activeTool === 'select'} disabled={!isReady} />
+              )}
+              {tool.id === 'measure' && (
+                <ToolButton icon={tool.icon} label={tool.label} onClick={() => handleToolChange('measure')} active={activeTool === 'measure'} disabled={!isReady} />
+              )}
+              {tool.id === 'section' && viewMode !== '2d' && (
+                <>
+                  <ToolButton icon={tool.icon} label={tool.label} onClick={() => handleToolChange('slicer')} active={activeTool === 'slicer'} disabled={!isReady} />
+                  {activeTool === 'slicer' && (
+                    <ToolButton icon={<RotateCcw className="h-3 w-3 sm:h-3.5 sm:w-3.5" />} label="Clear sections" onClick={handleClearSlices} disabled={!isReady} />
+                  )}
+                </>
+              )}
+              {tool.id === 'viewMode' && (
+                <ToolButton
+                  icon={viewMode === '3d' ? <SquareDashed className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Cuboid className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+                  label={viewMode === '3d' ? '2D view' : '3D view'}
+                  onClick={() => handleViewModeChange(viewMode === '3d' ? '2d' : '3d')}
+                  active={viewMode === '2d'}
+                  disabled={!isReady}
+                />
+              )}
+              {tool.id === 'xray' && (
+                <ToolButton icon={tool.icon} label={tool.label} onClick={handleXrayToggle} active={isXrayActive} disabled={!isReady} />
+              )}
+              {tool.id === 'onHover' && (
+                <ToolButton icon={tool.icon} label={tool.label} onClick={() => {}} disabled={!isReady} />
+              )}
+              {tool.id === 'zoomIn' && (
+                <ToolButton icon={tool.icon} label={tool.label} onClick={handleZoomIn} disabled={!isReady} />
+              )}
+              {tool.id === 'crosshair' && (
+                <ToolButton icon={tool.icon} label={tool.label} onClick={() => {}} disabled={!isReady} />
+              )}
+            </React.Fragment>
+          );
+        })}
 
         <Separator orientation="vertical" className="h-4 sm:h-6 mx-0.5 sm:mx-1 bg-white/20" />
 
-        {/* Zoom / Fit */}
-        <ToolButton icon={<ZoomIn className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="Zoom in" onClick={handleZoomIn} disabled={!isReady} />
-        <ToolButton icon={<ZoomOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="Zoom out" onClick={handleZoomOut} disabled={!isReady} />
-        <ToolButton icon={<Focus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="Fit view" onClick={handleViewFit} disabled={!isReady} />
-
-        <Separator orientation="vertical" className="h-4 sm:h-6 mx-0.5 sm:mx-1 bg-white/20" />
-
-        {/* Interaction tools */}
-        <ToolButton icon={<MousePointer2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="Select" onClick={() => handleToolChange('select')} active={activeTool === 'select'} disabled={!isReady} />
-        <ToolButton icon={<Ruler className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="Measure" onClick={() => handleToolChange('measure')} active={activeTool === 'measure'} disabled={!isReady} />
-        {viewMode !== '2d' && (
-          <>
-            <ToolButton icon={<Scissors className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="Section plane" onClick={() => handleToolChange('slicer')} active={activeTool === 'slicer'} disabled={!isReady} />
-            {activeTool === 'slicer' && (
-              <ToolButton icon={<RotateCcw className="h-3 w-3 sm:h-3.5 sm:w-3.5" />} label="Clear sections" onClick={handleClearSlices} disabled={!isReady} />
-            )}
-          </>
-        )}
-
-        <Separator orientation="vertical" className="h-4 sm:h-6 mx-0.5 sm:mx-1 bg-white/20" />
-
-        {/* X-ray */}
-        <ToolButton icon={<Box className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="X-ray" onClick={handleXrayToggle} active={isXrayActive} disabled={!isReady} />
-
-        <Separator orientation="vertical" className="h-4 sm:h-6 mx-0.5 sm:mx-1 bg-white/20" />
-
-        {/* View mode */}
-        <ToolButton
-          icon={viewMode === '3d' ? <SquareDashed className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Cuboid className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-          label={viewMode === '3d' ? '2D view' : '3D view'}
-          onClick={() => handleViewModeChange(viewMode === '3d' ? '2d' : '3d')}
-          active={viewMode === '2d'}
-          disabled={!isReady}
-        />
+        {/* Settings cog */}
+        <Popover open={showConfig} onOpenChange={setShowConfig}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 sm:h-9 sm:w-9 text-white/90 hover:text-white hover:bg-white/10"
+            >
+              <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent side="top" className="w-56 p-2" align="end">
+            <p className="text-xs font-medium mb-2 text-muted-foreground">Toolbar tools (max 10)</p>
+            <div className="space-y-1.5">
+              {ALL_TOOLS.map(tool => (
+                <div key={tool.id} className="flex items-center justify-between py-0.5">
+                  <div className="flex items-center gap-2 text-sm">
+                    {tool.icon}
+                    <span>{tool.label}</span>
+                  </div>
+                  <Switch
+                    checked={enabledTools.includes(tool.id)}
+                    onCheckedChange={() => toggleTool(tool.id)}
+                    disabled={!enabledTools.includes(tool.id) && enabledTools.length >= 10}
+                  />
+                </div>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
     </TooltipProvider>
   );
