@@ -14,7 +14,9 @@ import VisualizationToolbar from './VisualizationToolbar';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { AppContext } from '@/context/AppContext';
 import { VIEW_MODE_REQUESTED_EVENT } from '@/lib/viewer-events';
+import { ROOM_LABELS_TOGGLE_EVENT } from '@/hooks/useRoomLabels';
 import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDialog';
+import { ARCHITECT_BACKGROUND_CHANGED_EVENT, ARCHITECT_BACKGROUND_PRESETS, type BackgroundPresetId } from '@/hooks/useArchitectViewMode';
 import { Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
@@ -26,7 +28,7 @@ interface NativeViewerShellProps {
 
 const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, onClose }) => {
   const isMobile = useIsMobile();
-  const { allData } = useContext(AppContext);
+  const { allData, isSidebarExpanded } = useContext(AppContext);
 
   // Viewer instance
   const [xeokitViewer, setXeokitViewer] = useState<any>(null);
@@ -60,6 +62,22 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     );
     return b?.commonName || b?.name || '';
   }, [allData, buildingFmGuid]);
+
+  // ── Background color handler ────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: CustomEvent) => {
+      const presetId = e.detail?.presetId as BackgroundPresetId;
+      const preset = ARCHITECT_BACKGROUND_PRESETS.find(p => p.id === presetId);
+      if (!preset) return;
+      // Apply to the native canvas parent element
+      const canvasParent = document.querySelector('.native-viewer-canvas-parent') as HTMLElement;
+      if (canvasParent) {
+        canvasParent.style.background = `linear-gradient(180deg, rgb(255, 255, 255) 0%, ${preset.bottom} 100%)`;
+      }
+    };
+    window.addEventListener(ARCHITECT_BACKGROUND_CHANGED_EVENT, handler as EventListener);
+    return () => window.removeEventListener(ARCHITECT_BACKGROUND_CHANGED_EVENT, handler as EventListener);
+  }, []);
 
   // When xeokit viewer becomes ready, build the shim ref
   const handleViewerReady = useCallback((viewer: any) => {
@@ -107,8 +125,6 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         }
       },
       useTool: (tool: string | null) => {
-        // Native xeokit: select is the default pick mode
-        // Measure and slicer emit events handled by respective hooks
         console.debug('[NativeShim] useTool:', tool);
       },
       clearSlices: () => {
@@ -128,10 +144,15 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           if (mo.type?.toLowerCase() === 'ifcspace') {
             const entity = scene.objects?.[mo.id];
             if (entity) {
-              entity.visible = show;
+              // Always set color BEFORE making visible to prevent red flash
               if (show) {
-                entity.opacity = 0.3;
                 entity.colorize = [0.5, 0.7, 0.9];
+                entity.opacity = 0.3;
+                entity.pickable = true;
+              }
+              entity.visible = show;
+              if (!show) {
+                entity.pickable = false;
               }
             }
           }
@@ -162,7 +183,6 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       e.preventDefault();
       e.stopPropagation();
 
-      // Pick entity at click position
       const pickResult = xeokitViewer.scene.pick({
         canvasPos: [e.offsetX, e.offsetY],
         pickSurface: false,
@@ -180,12 +200,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         }
       }
 
-      setContextMenu({
-        position: { x: e.clientX, y: e.clientY },
-        entityId,
-        fmGuid,
-        entityName,
-      });
+      setContextMenu({ position: { x: e.clientX, y: e.clientY }, entityId, fmGuid, entityName });
     };
 
     // Long-press for mobile
@@ -200,46 +215,25 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         const rect = canvas.getBoundingClientRect();
         const offsetX = touchPos.x - rect.left;
         const offsetY = touchPos.y - rect.top;
-
-        const pickResult = xeokitViewer.scene.pick({
-          canvasPos: [offsetX, offsetY],
-          pickSurface: false,
-        });
-
+        const pickResult = xeokitViewer.scene.pick({ canvasPos: [offsetX, offsetY], pickSurface: false });
         const entityId = pickResult?.entity?.id || null;
         let fmGuid: string | null = null;
         let entityName: string | null = null;
-
         if (entityId && xeokitViewer.metaScene?.metaObjects) {
           const metaObj = xeokitViewer.metaScene.metaObjects[entityId];
-          if (metaObj) {
-            fmGuid = metaObj.originalSystemId || null;
-            entityName = metaObj.name || metaObj.type || null;
-          }
+          if (metaObj) { fmGuid = metaObj.originalSystemId || null; entityName = metaObj.name || metaObj.type || null; }
         }
-
-        setContextMenu({
-          position: { x: touchPos.x, y: touchPos.y },
-          entityId,
-          fmGuid,
-          entityName,
-        });
+        setContextMenu({ position: { x: touchPos.x, y: touchPos.y }, entityId, fmGuid, entityName });
       }, 600);
     };
 
-    const handleTouchEnd = () => {
-      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-    };
-
+    const handleTouchEnd = () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } };
     const handleTouchMove = (e: TouchEvent) => {
       if (!longPressTimer) return;
       const touch = e.touches[0];
       const dx = touch.clientX - touchPos.x;
       const dy = touch.clientY - touchPos.y;
-      if (Math.sqrt(dx * dx + dy * dy) > 10) {
-        clearTimeout(longPressTimer);
-        longPressTimer = null;
-      }
+      if (Math.sqrt(dx * dx + dy * dy) > 10) { clearTimeout(longPressTimer); longPressTimer = null; }
     };
 
     canvas.addEventListener('contextmenu', handleContextMenu);
@@ -256,14 +250,81 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     };
   }, [xeokitViewer]);
 
-  // Context menu actions (simplified - old handlers removed, new menu has different actions)
+  // ── Context menu action handlers ─────────────────────────────────────────
+
+  const handleContextZoomTo = useCallback(() => {
+    if (!contextMenu?.entityId || !xeokitViewer?.cameraFlight) return;
+    const entity = xeokitViewer.scene.objects?.[contextMenu.entityId];
+    if (entity?.aabb) {
+      xeokitViewer.cameraFlight.flyTo({ aabb: entity.aabb, duration: 0.5 });
+    }
+  }, [contextMenu, xeokitViewer]);
+
+  const handleContextHide = useCallback(() => {
+    if (!contextMenu?.entityId || !xeokitViewer?.scene) return;
+    const entity = xeokitViewer.scene.objects?.[contextMenu.entityId];
+    if (entity) entity.visible = false;
+  }, [contextMenu, xeokitViewer]);
+
+  const handleContextIsolate = useCallback(() => {
+    if (!contextMenu?.entityId || !xeokitViewer?.scene) return;
+    const scene = xeokitViewer.scene;
+    const allIds = scene.objectIds || [];
+    scene.setObjectsVisible(allIds, false);
+    // Show the picked entity and its parent storey
+    const entity = scene.objects?.[contextMenu.entityId];
+    if (entity) entity.visible = true;
+    // Also show parent hierarchy
+    const metaObj = xeokitViewer.metaScene?.metaObjects?.[contextMenu.entityId];
+    if (metaObj?.parent) {
+      const collectParentIds = (mo: any): string[] => {
+        const ids = [mo.id];
+        mo.children?.forEach((c: any) => ids.push(...collectParentIds(c)));
+        return ids;
+      };
+      const parentIds = collectParentIds(metaObj.parent);
+      parentIds.forEach(id => {
+        const e = scene.objects?.[id];
+        if (e) e.visible = true;
+      });
+    }
+  }, [contextMenu, xeokitViewer]);
+
+  const handleContextShowAll = useCallback(() => {
+    if (!xeokitViewer?.scene) return;
+    const scene = xeokitViewer.scene;
+    scene.setObjectsVisible(scene.objectIds, true);
+    // Re-hide IfcSpaces
+    const metaObjects = xeokitViewer.metaScene?.metaObjects;
+    if (metaObjects) {
+      Object.values(metaObjects).forEach((mo: any) => {
+        if ((mo.type || '').toLowerCase() === 'ifcspace') {
+          const entity = scene.objects?.[mo.id];
+          if (entity) { entity.visible = false; entity.pickable = false; }
+        }
+      });
+    }
+  }, [xeokitViewer]);
+
+  const handleContextProperties = useCallback(() => {
+    if (!contextMenu) return;
+    setPropertiesEntity({
+      entityId: contextMenu.entityId || '',
+      fmGuid: contextMenu.fmGuid,
+      name: contextMenu.entityName,
+    });
+  }, [contextMenu]);
+
   const handleChangeViewMode = useCallback((mode: '2d' | '3d' | '360') => {
     setViewMode(mode);
     window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode } }));
   }, []);
 
-    return (
-    <div className="relative w-full h-full overflow-hidden">
+  // Calculate left offset for floor switcher and filter button based on sidebar
+  const sidebarOffset = !isMobile && isSidebarExpanded ? 'left-[calc(3.5rem+12px)]' : 'left-3';
+
+  return (
+    <div className="relative w-full h-full overflow-hidden native-viewer-canvas-parent">
       {/* Canvas layer */}
       <NativeXeokitViewer
         buildingFmGuid={buildingFmGuid}
@@ -271,11 +332,9 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         onViewerReady={handleViewerReady}
       />
 
-      {/* Bottom toolbar (zoom, select, measure, xray, 2d/3d) — always mounted for event logic */}
+      {/* Bottom toolbar */}
       {isViewerReady && xeokitViewer && (
-        <ViewerToolbar
-          viewer={xeokitViewer}
-        />
+        <ViewerToolbar viewer={xeokitViewer} />
       )}
 
       {/* Mobile header overlay */}
@@ -300,6 +359,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           viewerRef={viewerShimRef}
           buildingFmGuid={buildingFmGuid}
           isViewerReady={isViewerReady}
+          className={!isMobile ? sidebarOffset : undefined}
         />
       )}
 
@@ -311,13 +371,13 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
               <Button
                 variant={showFilterPanel ? 'default' : 'secondary'}
                 size="icon"
-                className="absolute top-3 left-3 z-30 h-9 w-9 bg-card/95 backdrop-blur-sm shadow-md border"
+                className={`absolute top-3 ${sidebarOffset} z-30 h-9 w-9 bg-card/95 backdrop-blur-sm shadow-md border`}
                 onClick={() => setShowFilterPanel(p => !p)}
               >
                 <Filter className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="left">Filter</TooltipContent>
+            <TooltipContent side="right">Filter</TooltipContent>
           </Tooltip>
         </TooltipProvider>
       )}
@@ -332,7 +392,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         />
       )}
 
-      {/* Visualization toolbar — always mounted, mobile uses settings button as trigger */}
+      {/* Visualization toolbar (right sidebar) */}
       {isViewerReady && (
         <VisualizationToolbar
           viewerRef={viewerShimRef}
@@ -356,23 +416,25 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           position={contextMenu.position}
           entityId={contextMenu.entityId}
           entityName={contextMenu.entityName}
+          fmGuid={contextMenu.fmGuid}
           onClose={() => setContextMenu(null)}
           onShowLabels={() => {
-            // Toggle annotations
             window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', { detail: { show: true } }));
           }}
           onCreateIssue={() => {
-            // Trigger issue creation via VisualizationToolbar
             setShowVisualizationMenu(true);
           }}
           onViewIssues={() => {
-            // Open issue list
             setShowVisualizationMenu(true);
           }}
           onShowRoomLabels={() => {
-            // Toggle room labels
-            window.dispatchEvent(new CustomEvent('ROOM_LABELS_TOGGLE', { detail: { enabled: true } }));
+            window.dispatchEvent(new CustomEvent(ROOM_LABELS_TOGGLE_EVENT, { detail: { enabled: true } }));
           }}
+          onShowProperties={contextMenu.fmGuid ? handleContextProperties : undefined}
+          onZoomTo={contextMenu.entityId ? handleContextZoomTo : undefined}
+          onHideEntity={contextMenu.entityId ? handleContextHide : undefined}
+          onIsolateEntity={contextMenu.entityId ? handleContextIsolate : undefined}
+          onShowAll={handleContextShowAll}
         />
       )}
 
