@@ -328,7 +328,12 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       Object.values(metaObjects).forEach((mo: any) => {
         if ((mo.type || '').toLowerCase() === 'ifcspace') {
           const entity = scene.objects?.[mo.id];
-          if (entity) { entity.visible = false; entity.pickable = false; }
+          if (entity) {
+            entity.colorize = [0.5, 0.7, 0.9];
+            entity.opacity = 0.3;
+            entity.visible = false;
+            entity.pickable = false;
+          }
         }
       });
     }

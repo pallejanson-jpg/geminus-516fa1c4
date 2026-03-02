@@ -39,8 +39,8 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
     <>
       {/* Compact Header - absolute positioned over the canvas */}
       <div
-        className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between p-2 bg-gradient-to-b from-background/90 via-background/60 to-transparent"
-        style={{ paddingTop: 'calc(max(env(safe-area-inset-top, 0px), 20px) + 8px)' }}
+        className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-1.5 py-1 bg-gradient-to-b from-background/90 via-background/60 to-transparent"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4px)' }}
       >
         {/* Left: Back button */}
         {onClose && (
@@ -48,9 +48,9 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
             variant="secondary"
             size="icon"
             onClick={onClose}
-            className="h-9 w-9 bg-card/95 backdrop-blur-sm shadow-md border"
+            className="h-8 w-8 bg-card/95 backdrop-blur-sm shadow-md border"
           >
-            <ArrowLeft className="h-5 w-5" />
+            <ArrowLeft className="h-4 w-4" />
           </Button>
         )}
 
@@ -60,7 +60,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
             <Button
               size="sm"
               variant={viewMode === '2d' ? 'default' : 'ghost'}
-              className={`h-7 px-2.5 text-[10px] rounded-md gap-1 ${viewMode !== '2d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+              className={`h-6 px-2 text-[10px] rounded-md gap-0.5 ${viewMode !== '2d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
               onClick={() => onChangeViewMode('2d')}
             >
               <Square className="h-3 w-3" />
@@ -69,7 +69,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
             <Button
               size="sm"
               variant={viewMode === '3d' ? 'default' : 'ghost'}
-              className={`h-7 px-2.5 text-[10px] rounded-md gap-1 ${viewMode !== '3d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+              className={`h-6 px-2 text-[10px] rounded-md gap-0.5 ${viewMode !== '3d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
               onClick={() => onChangeViewMode('3d')}
             >
               <Box className="h-3 w-3" />
@@ -79,7 +79,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
               <Button
                 size="sm"
                 variant={viewMode === '360' ? 'default' : 'ghost'}
-                className={`h-7 px-2.5 text-[10px] rounded-md gap-1 ${viewMode !== '360' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+                className={`h-6 px-2 text-[10px] rounded-md gap-0.5 ${viewMode !== '360' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
                 onClick={() => onChangeViewMode('360')}
               >
                 <View className="h-3 w-3" />
@@ -90,25 +90,25 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
         )}
 
         {/* Right: Filter + Settings */}
-        <div className="flex gap-1.5">
+        <div className="flex gap-1">
           <Button
             variant={showFilterPanel ? 'default' : 'secondary'}
             size="icon"
-            className="h-9 w-9 bg-card/95 backdrop-blur-sm shadow-md border"
+            className="h-8 w-8 bg-card/95 backdrop-blur-sm shadow-md border"
             onClick={onToggleFilterPanel}
             disabled={!isViewerReady}
           >
-            <Filter className="h-4 w-4" />
+            <Filter className="h-3.5 w-3.5" />
           </Button>
 
           <Button
             variant="secondary"
             size="icon"
-            className="h-9 w-9 bg-card/95 backdrop-blur-sm shadow-md border"
+            className="h-8 w-8 bg-card/95 backdrop-blur-sm shadow-md border"
             onClick={onOpenSettings}
             disabled={!isViewerReady}
           >
-            <Settings2 className="h-4 w-4" />
+            <Settings2 className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
