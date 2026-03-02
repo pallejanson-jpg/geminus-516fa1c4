@@ -59,22 +59,27 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   // Room labels hook — listens for ROOM_LABELS_TOGGLE_EVENT
   const { setLabelsEnabled, updateFloorFilter, updateViewMode: updateRoomLabelViewMode } = useRoomLabels(viewerShimRef);
 
-  // Wire room labels toggle event
+  // Track current visible floor guids for room labels
+  const currentFloorGuidsRef = React.useRef<string[]>([]);
+
+  // Wire room labels toggle event — pass current floor filter so labels only show for selected floors
   useEffect(() => {
     const handler = (e: CustomEvent<RoomLabelsToggleDetail>) => {
-      setLabelsEnabled(e.detail.enabled);
+      setLabelsEnabled(e.detail.enabled, currentFloorGuidsRef.current);
     };
     window.addEventListener(ROOM_LABELS_TOGGLE_EVENT, handler as EventListener);
     return () => window.removeEventListener(ROOM_LABELS_TOGGLE_EVENT, handler as EventListener);
   }, [setLabelsEnabled]);
 
-  // Wire floor selection → room label floor filter
+  // Wire floor selection → room label floor filter + track current selection
   useEffect(() => {
     const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
       const { visibleFloorFmGuids, isAllFloorsVisible } = e.detail;
       if (isAllFloorsVisible) {
+        currentFloorGuidsRef.current = [];
         updateFloorFilter([]);
       } else if (visibleFloorFmGuids?.length) {
+        currentFloorGuidsRef.current = visibleFloorFmGuids;
         updateFloorFilter(visibleFloorFmGuids);
       }
     };
@@ -326,7 +331,8 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     const metaObjects = xeokitViewer.metaScene?.metaObjects;
     if (metaObjects) {
       Object.values(metaObjects).forEach((mo: any) => {
-        if ((mo.type || '').toLowerCase() === 'ifcspace') {
+        const t = (mo.type || '').toLowerCase();
+        if (t.includes('ifcspace') || t === 'ifc_space' || t === 'space') {
           const entity = scene.objects?.[mo.id];
           if (entity) {
             entity.colorize = [0.5, 0.7, 0.9];
@@ -357,7 +363,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const sidebarOffset = !isMobile && isSidebarExpanded ? 'left-[calc(3.5rem+12px)]' : 'left-3';
 
   return (
-    <div className="relative w-full h-full overflow-hidden native-viewer-canvas-parent">
+    <div className="relative w-full h-full overflow-hidden native-viewer-canvas-parent" style={{ background: 'linear-gradient(180deg, #f5f5f5 0%, #e8e8e8 100%)' }}>
       {/* Canvas layer */}
       <NativeXeokitViewer
         buildingFmGuid={buildingFmGuid}
