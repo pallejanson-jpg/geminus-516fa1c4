@@ -1,0 +1,76 @@
+import React, { useState } from 'react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { Plus } from 'lucide-react';
+import SupportCaseList from './SupportCaseList';
+import CreateSupportCase from './CreateSupportCase';
+
+const CustomerPortalView: React.FC = () => {
+  const [showCreate, setShowCreate] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const handleCreated = () => {
+    setShowCreate(false);
+    setRefreshKey(k => k + 1);
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Support</h1>
+          <p className="text-sm text-muted-foreground">Ärenden och kontakt med SWG</p>
+        </div>
+        <Button onClick={() => setShowCreate(true)} size="sm">
+          <Plus className="h-4 w-4 mr-1" />
+          Nytt ärende
+        </Button>
+      </div>
+
+      <Tabs defaultValue="cases">
+        <TabsList>
+          <TabsTrigger value="cases">Ärenden</TabsTrigger>
+          <TabsTrigger value="contact">Kontakt</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="cases">
+          <SupportCaseList key={refreshKey} />
+        </TabsContent>
+
+        <TabsContent value="contact">
+          <div className="rounded-lg border bg-card p-6 space-y-4">
+            <h3 className="text-lg font-semibold text-foreground">Kontakta SWG</h3>
+            <div className="grid gap-3 text-sm text-muted-foreground">
+              <div>
+                <span className="font-medium text-foreground">E-post:</span>{' '}
+                <a href="mailto:support@swg.se" className="text-primary hover:underline">support@swg.se</a>
+              </div>
+              <div>
+                <span className="font-medium text-foreground">Telefon:</span>{' '}
+                <a href="tel:+4686909600" className="text-primary hover:underline">08-690 96 00</a>
+              </div>
+              <div>
+                <span className="font-medium text-foreground">Öppettider:</span>{' '}
+                Vardagar 08:00–17:00
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Du kan också skapa ett ärende direkt via knappen "Nytt ärende" ovan, 
+              eller skicka ett ärende från 3D-viewern via "Skicka till Support".
+            </p>
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      {showCreate && (
+        <CreateSupportCase
+          open={showCreate}
+          onClose={() => setShowCreate(false)}
+          onCreated={handleCreated}
+        />
+      )}
+    </div>
+  );
+};
+
+export default CustomerPortalView;

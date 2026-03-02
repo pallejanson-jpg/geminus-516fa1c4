@@ -32,6 +32,7 @@ import {
   User,
   Box,
   Mail,
+  LifeBuoy,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -350,6 +351,34 @@ const IssueDetailSheet: React.FC<IssueDetailSheetProps> = ({
                   >
                     <Mail className="h-4 w-4 mr-1" />
                     Send to user
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={async () => {
+                      if (!user) return;
+                      try {
+                        const { error } = await supabase.from('support_cases').insert({
+                          title: issue.title,
+                          description: issue.description || null,
+                          reported_by: user.id,
+                          bcf_issue_id: issue.id,
+                          screenshot_url: issue.screenshot_url || null,
+                          building_fm_guid: issue.building_fm_guid || null,
+                          building_name: issue.building_name || null,
+                          priority: issue.priority || 'medium',
+                          category: issue.issue_type === 'fault' ? 'fault' : 'question',
+                        });
+                        if (error) throw error;
+                        toast({ title: "Skickat till Support" });
+                      } catch {
+                        toast({ title: "Kunde inte skicka till Support", variant: "destructive" });
+                      }
+                    }}
+                  >
+                    <LifeBuoy className="h-4 w-4 mr-1" />
+                    Skicka till Support
                   </Button>
                 </div>
               )}
