@@ -1197,8 +1197,11 @@ export type Database = {
           contact_phone: string | null
           created_at: string
           description: string | null
+          desired_date: string | null
           external_reference: string | null
           id: string
+          installation_number: string | null
+          location_description: string | null
           priority: string
           reported_by: string
           resolved_at: string | null
@@ -1216,8 +1219,11 @@ export type Database = {
           contact_phone?: string | null
           created_at?: string
           description?: string | null
+          desired_date?: string | null
           external_reference?: string | null
           id?: string
+          installation_number?: string | null
+          location_description?: string | null
           priority?: string
           reported_by: string
           resolved_at?: string | null
@@ -1235,8 +1241,11 @@ export type Database = {
           contact_phone?: string | null
           created_at?: string
           description?: string | null
+          desired_date?: string | null
           external_reference?: string | null
           id?: string
+          installation_number?: string | null
+          location_description?: string | null
           priority?: string
           reported_by?: string
           resolved_at?: string | null

@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Send, Loader2, User, Clock, MapPin, Link2 } from 'lucide-react';
+import { Send, Loader2, User, Clock, MapPin, Link2, Wrench, CalendarDays } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/hooks/use-toast';
@@ -31,6 +31,16 @@ const STATUS_OPTIONS = [
   { value: 'resolved', label: 'Löst' },
   { value: 'closed', label: 'Stängt' },
 ];
+
+const CATEGORY_LABELS: Record<string, string> = {
+  question: 'Fråga',
+  fault: 'Felanmälan',
+  service: 'Servicebeställning',
+  warranty: 'Garantiärende',
+  inspection: 'Besiktning',
+  consultation: 'Fråga / Rådgivning',
+  other: 'Övrigt',
+};
 
 interface Props {
   supportCase: SupportCase | null;
@@ -123,13 +133,18 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
 
   if (!supportCase) return null;
 
+  const caseNumber = `#${supportCase.id.slice(0, 8).toUpperCase()}`;
+  const categoryLabel = CATEGORY_LABELS[supportCase.category] || supportCase.category;
+
   return (
     <Sheet open={open} onOpenChange={o => !o && onClose()}>
       <SheetContent className="sm:max-w-lg w-full flex flex-col">
         <SheetHeader className="flex-shrink-0">
           <SheetTitle className="text-left">{supportCase.title}</SheetTitle>
-          <SheetDescription className="text-left flex items-center gap-2 mt-1">
-            <Badge variant="outline">{supportCase.category}</Badge>
+          <SheetDescription className="text-left flex items-center gap-2 mt-1 flex-wrap">
+            <span className="text-xs font-mono text-muted-foreground">{caseNumber}</span>
+            <Badge variant="secondary">{categoryLabel}</Badge>
+            <Badge variant="outline">{supportCase.priority}</Badge>
             <span className="text-xs text-muted-foreground">
               {format(new Date(supportCase.created_at), 'PPP')}
             </span>
@@ -156,6 +171,33 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
                 <div>
                   <span className="text-muted-foreground">Byggnad</span>
                   <p className="font-medium text-foreground">{supportCase.building_name}</p>
+                </div>
+              )}
+              {supportCase.location_description && (
+                <div className="flex items-start gap-1.5">
+                  <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                  <div>
+                    <span className="text-muted-foreground">Plats</span>
+                    <p className="font-medium text-foreground">{supportCase.location_description}</p>
+                  </div>
+                </div>
+              )}
+              {supportCase.installation_number && (
+                <div className="flex items-start gap-1.5">
+                  <Wrench className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                  <div>
+                    <span className="text-muted-foreground">Installationsnr</span>
+                    <p className="font-medium text-foreground">{supportCase.installation_number}</p>
+                  </div>
+                </div>
+              )}
+              {supportCase.desired_date && (
+                <div className="flex items-start gap-1.5">
+                  <CalendarDays className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                  <div>
+                    <span className="text-muted-foreground">Önskat datum</span>
+                    <p className="font-medium text-foreground">{format(new Date(supportCase.desired_date), 'PPP')}</p>
+                  </div>
                 </div>
               )}
               {supportCase.contact_email && (
