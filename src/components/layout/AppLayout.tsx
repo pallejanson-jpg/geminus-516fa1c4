@@ -26,9 +26,16 @@ const AppLayoutInner: React.FC = () => {
     const isMobile = useIsMobile();
     const { activeApp } = useContext(AppContext);
 
-    // Hide chrome on mobile always for immersive apps, and on desktop hide sidebar for viewer apps
+    const { setIsSidebarExpanded } = useContext(AppContext);
+    // Hide chrome on mobile always for immersive apps
     const isImmersive = isMobile && IMMERSIVE_APPS.includes(activeApp);
-    const hideDesktopSidebar = !isMobile && IMMERSIVE_APPS.includes(activeApp);
+
+    // Auto-collapse sidebar when entering a viewer app on desktop
+    useEffect(() => {
+        if (!isMobile && IMMERSIVE_APPS.includes(activeApp)) {
+            setIsSidebarExpanded(false);
+        }
+    }, [activeApp, isMobile, setIsSidebarExpanded]);
 
     // Listen for voice settings changes
     useEffect(() => {
@@ -72,7 +79,7 @@ const AppLayoutInner: React.FC = () => {
 
     return (
         <div className="flex h-screen w-full overflow-hidden font-sans relative">
-            {!isImmersive && !hideDesktopSidebar && <LeftSidebar />}
+            {!isImmersive && <LeftSidebar />}
             
             <div className="flex-1 flex flex-col min-w-0 w-full relative">
                 {!isImmersive && (
@@ -88,7 +95,7 @@ const AppLayoutInner: React.FC = () => {
                 </div>
             </div>
             
-            {!isImmersive && !hideDesktopSidebar && <RightSidebar />}
+            {!isImmersive && <RightSidebar />}
             
             {!isImmersive && (
                 <MobileNav 

@@ -353,7 +353,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
               <Button
                 variant={showFilterPanel ? 'default' : 'secondary'}
                 size="icon"
-                className="absolute top-3 right-3 z-30 h-9 w-9 bg-card/95 backdrop-blur-sm shadow-md border"
+                className="absolute top-3 left-3 z-30 h-9 w-9 bg-card/95 backdrop-blur-sm shadow-md border"
                 onClick={() => setShowFilterPanel(p => !p)}
               >
                 <Filter className="h-4 w-4" />
