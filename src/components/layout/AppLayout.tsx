@@ -15,7 +15,7 @@ import { getGunnarSettings, GUNNAR_SETTINGS_CHANGED_EVENT } from '@/components/s
 import { getIleanSettings, ILEAN_SETTINGS_CHANGED_EVENT } from '@/components/settings/IleanSettings';
 import { AppContext } from '@/context/AppContext';
 
-/** Apps that should hide header/sidebars on mobile for fullscreen experience */
+/** Apps that should hide header/sidebars for fullscreen experience */
 const IMMERSIVE_APPS = ['assetplus_viewer', 'viewer', 'native_viewer', 'radar'];
 
 const AppLayoutInner: React.FC = () => {
@@ -26,7 +26,9 @@ const AppLayoutInner: React.FC = () => {
     const isMobile = useIsMobile();
     const { activeApp } = useContext(AppContext);
 
+    // Hide chrome on mobile always for immersive apps, and on desktop hide sidebar for viewer apps
     const isImmersive = isMobile && IMMERSIVE_APPS.includes(activeApp);
+    const hideDesktopSidebar = !isMobile && IMMERSIVE_APPS.includes(activeApp);
 
     // Listen for voice settings changes
     useEffect(() => {
@@ -70,7 +72,7 @@ const AppLayoutInner: React.FC = () => {
 
     return (
         <div className="flex h-screen w-full overflow-hidden font-sans relative">
-            {!isImmersive && <LeftSidebar />}
+            {!isImmersive && !hideDesktopSidebar && <LeftSidebar />}
             
             <div className="flex-1 flex flex-col min-w-0 w-full relative">
                 {!isImmersive && (
@@ -86,7 +88,7 @@ const AppLayoutInner: React.FC = () => {
                 </div>
             </div>
             
-            {!isImmersive && <RightSidebar />}
+            {!isImmersive && !hideDesktopSidebar && <RightSidebar />}
             
             {!isImmersive && (
                 <MobileNav 

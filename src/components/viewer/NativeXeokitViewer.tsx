@@ -487,15 +487,23 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           viewer.scene.sao.scale = 1000;
         }
 
-        // Reset any stale colorization — ensure clean default state
+        // Apply neutral default colorize to all objects — prevents raw IFC material
+        // colors (reds, greens etc.) from showing through on architectural models.
+        // Fire models and other specialty models will load with their own colors later.
         const scene = viewer.scene;
         const allIds = scene.objectIds || [];
         if (allIds.length > 0) {
-          scene.setObjectsColorized(allIds, false); // Clears colorize to default
           scene.setObjectsXRayed(allIds, false);
+          // Apply neutral grey to all objects as default base color
+          const NEUTRAL_COLOR = [0.85, 0.85, 0.85];
+          allIds.forEach((id: string) => {
+            const entity = scene.objects?.[id];
+            if (entity) {
+              entity.colorize = NEUTRAL_COLOR;
+            }
+          });
+          console.log(`[NativeViewer] Applied neutral default color to ${allIds.length} objects`);
         }
-
-        // Native IFC material colors are preserved as-is (including red fire models etc.)
       }
 
       const totalTime = Math.round(performance.now() - t0);

@@ -4957,12 +4957,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
               <VisualizationLegendBarOverlay />
               
               <ViewerToolbar 
-                viewerRef={viewerInstanceRef} 
-                flashOnSelectEnabled={flashOnSelectEnabled}
-                onToggleFlashOnSelect={setFlashOnSelectEnabled}
-                hoverHighlightEnabled={hoverHighlightEnabled}
-                onToggleHoverHighlight={setHoverHighlightEnabled}
-                disableSelectTool={pickModeEnabled}
+                viewer={viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer}
                 className="pointer-events-auto"
               />
               
@@ -5093,33 +5088,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             <ViewerContextMenu
               position={contextMenu.position}
               entityId={contextMenu.entityId}
-              fmGuid={contextMenu.fmGuid}
               entityName={contextMenu.entityName}
               onClose={() => setContextMenu(null)}
               onProperties={() => {
                 if (contextMenu.fmGuid || contextMenu.entityId) {
-                  // Use fmGuid if available, fall back to entityId for BIM metadata lookup
                   const guidToUse = contextMenu.fmGuid || contextMenu.entityId || '';
                   setSelectedFmGuids([guidToUse]);
                   setPropertiesDialogOpen(true);
-                }
-              }}
-              onCreateIssue={() => {
-                // Dispatch to VisualizationToolbar / ViewerRightPanel's captureIssueState
-                window.dispatchEvent(new CustomEvent('CONTEXT_MENU_CREATE_ISSUE'));
-              }}
-              onCreateWorkOrder={() => {
-                setWorkOrderContext({
-                  objectName: contextMenu.entityName || undefined,
-                  objectFmGuid: contextMenu.fmGuid || undefined,
-                });
-                setWorkOrderDialogOpen(true);
-              }}
-              onViewInSpace={() => {
-                if (contextMenu.entityId) {
-                  const viewer = viewerInstanceRef.current;
-                  const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
-                  assetView?.viewInSpace?.(contextMenu.entityId);
                 }
               }}
               onSelect={() => {
@@ -5136,6 +5111,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                   assetView?.viewFit?.([contextMenu.entityId]);
                 }
               }}
+              onIsolate={() => {}}
+              onHideSelected={() => {}}
+              onShowAll={() => {}}
             />
           )}
 
