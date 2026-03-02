@@ -173,26 +173,16 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const scrollWrapRef = useRef<HTMLDivElement | null>(null);
   const [scrollViewportEl, setScrollViewportEl] = useState<HTMLElement | null>(null);
   
-  // Draggable panel state
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  // Fixed sidebar position (right sidebar, no dragging)
+  const sidebarWidth = typeof window !== 'undefined' && window.innerWidth >= 640 ? 320 : 288;
+  const position = { x: (typeof window !== 'undefined' ? window.innerWidth - sidebarWidth : 800), y: 0 };
   
   // Touch swipe state for mobile close gesture
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchDelta, setTouchDelta] = useState(0);
   
   // Panel dimensions for side-pop positioning
-  const panelWidth = typeof window !== 'undefined' && window.innerWidth >= 640 ? 320 : 280;
-
-  // Initialize position when panel opens
-  useEffect(() => {
-    if (isOpen && position.x === 0 && position.y === 0) {
-      // Position to the left of the trigger button (top-right area)
-      const initialX = typeof window !== 'undefined' ? window.innerWidth - 420 : 200;
-      setPosition({ x: initialX, y: 60 });
-    }
-  }, [isOpen, position.x, position.y]);
+  const panelWidth = sidebarWidth;
 
   // Grab Radix ScrollArea viewport so we can render a visible edge indicator (like in the reference screenshot)
   useEffect(() => {
@@ -276,6 +266,13 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
       window.removeEventListener(FORCE_SHOW_SPACES_EVENT, handleForceShowSpaces as EventListener);
     };
   }, [showSpaces, viewerRef, onShowSpacesChange]);
+
+  // Listen for OPEN_ISSUE_LIST event (from context menu "Visa ärenden")
+  useEffect(() => {
+    const handler = () => setShowIssueList(true);
+    window.addEventListener('OPEN_ISSUE_LIST', handler);
+    return () => window.removeEventListener('OPEN_ISSUE_LIST', handler);
+  }, []);
 
   // Handle clip height change
   const handleClipHeightChange = useCallback((value: number[]) => {
@@ -643,32 +640,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     return setting?.visible ?? true;
   }, [toolSettings]);
 
-  // Drag handlers (desktop)
-  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest('button, input, select, [role="switch"]')) return;
-    setIsDragging(true);
-    setDragOffset({ x: e.clientX - position.x, y: e.clientY - position.y });
-  }, [position]);
-
-  useEffect(() => {
-    if (!isDragging) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      setPosition({
-        x: Math.max(0, Math.min(window.innerWidth - 400, e.clientX - dragOffset.x)),
-        y: Math.max(0, Math.min(window.innerHeight - 200, e.clientY - dragOffset.y)),
-      });
-    };
-
-    const handleMouseUp = () => setIsDragging(false);
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDragging, dragOffset]);
+  // Drag handlers removed — now a fixed right sidebar
 
   // Touch swipe handlers (mobile close gesture)
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
