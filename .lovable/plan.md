@@ -1,55 +1,24 @@
 
 
-## SWG Kundportal API-integration
+## Fix support-proxy: JWT-based authentication
 
-### Sammanfattning
-Bygga en `support-proxy` edge function som autentiserar mot SWGs kundportal (`https://support.serviceworksglobal.se/api/`) och proxar supportärende-anrop -- samma mönster som `errorreport-proxy` använder för felanmälan.
+From the request headers you provided, the SWG portal authentication is now clear:
 
-### Vad vi vet
-- Portalen är en Angular-app (DevExtreme) med e-post/lösenord-login
-- API-endpoint: `GET /api/requests?filter={...}` returnerar ärenden (200 OK efter inloggning, 401 utan)
-- Statusar: New, UnderReview, AwaitingResponse, AwaitingOrder, Planned, InProgress, Done, Completed, Closed
-- Headern `realm` och `Expression` skickas med requests -- troligtvis auth-token
+1. **Login endpoint**: POST to `/api/users/login` with `{ email, password }` -- this returns a JWT token
+2. **Auth header**: Subsequent requests use a **`jwt`** header (not `Cookie`, `realm`, or `Expression`)
+3. The JWT contains user/company data and has ~10 hour TTL (`exp` - `iat`)
 
-### Steg 1: Lagra credentials (secrets)
-Tre nya secrets behövs:
-- `SWG_SUPPORT_URL` = `https://support.serviceworksglobal.se`
-- `SWG_SUPPORT_USERNAME` = din e-postadress till portalen
-- `SWG_SUPPORT_PASSWORD` = ditt lösenord till portalen
+### Changes
 
-### Steg 2: Skapa edge function `support-proxy`
-Ny fil: `supabase/functions/support-proxy/index.ts`
+**`supabase/functions/support-proxy/index.ts`** -- Complete rewrite of auth logic:
 
-Actions:
-- **`login`** -- POST till `/api/auth/login` (eller liknande) med credentials, returnera/cacha auth-token
-- **`list-requests`** -- GET `/api/requests?filter={...}` med auth-header, returnera ärendelistan  
-- **`get-request`** -- GET `/api/requests/{id}` för att hämta detaljer på ett specifikt ärende
-- **`create-request`** -- POST `/api/requests` för att skapa nytt ärende
-- **`add-comment`** -- POST kommentar till ett ärende
+1. Replace the multi-endpoint discovery `login()` with a single POST to `/api/users/login` sending `{ email, password }` (using `SWG_SUPPORT_USERNAME` as email)
+2. Cache the returned JWT token (not cookies/realm/expression)
+3. In `proxyRequest()`, send the JWT as a `jwt` header on all API calls
+4. Remove `tryEndpoint()` and `discover-endpoints` action (no longer needed)
+5. Keep `test-login`, `list-requests`, `get-request`, `create-request`, `add-comment` actions
+6. Fix build error (the current code compiles fine, so the build error is likely elsewhere -- will check)
 
-Proxy:n testar login-endpointen och loggar svaret så vi kan se exakt vilken auth-mekanism som används (cookie, bearer token, eller `realm`/`Expression` headers).
-
-### Steg 3: Uppdatera config.toml
-Lägg till `[functions.support-proxy]` med `verify_jwt = false`.
-
-### Steg 4: Uppdatera frontend
-
-**SupportCaseList.tsx:**
-- Hämta ärenden via `support-proxy` (action: `list-requests`) istället för lokala `support_cases`-tabellen
-- Mappa SWG-statusar (New, UnderReview, etc.) till befintliga svenska etiketter
-- Behåll sökfunktion och statusfiltrering
-
-**CreateSupportCase.tsx:**
-- Skicka nya ärenden via `support-proxy` (action: `create-request`) till SWG-backend
-- Behåll samtidig lokal kopia i `support_cases`-tabellen för offline/historik
-
-**SupportCaseDetail.tsx:**
-- Hämta kommentarer från SWG via proxy
-- Skicka nya kommentarer till SWG via proxy
-
-### Steg 5: API-inställningar
-Lägg till SWG Support-sektion i API Settings (Sync-tab) för att testa anslutningen och visa status.
-
-### Approach: Stegvis
-Eftersom vi inte vet exakt vilka endpoints login använder, börjar vi med att skapa edge function som testar `/api/auth/login`, `/api/login`, och `/api/account/login` och loggar svaren. Sedan anpassar vi baserat på resultaten.
+### Build error
+The build error says "dev server state is error" but doesn't give specifics. The edge function code itself doesn't affect the Vite build. Need to check if there's a frontend import issue.
 
