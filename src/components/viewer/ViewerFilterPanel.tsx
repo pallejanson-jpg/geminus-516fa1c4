@@ -753,28 +753,62 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       levels.filter(l => checkedSources.has(l.sourceGuid)).forEach(l => {
         eMap.get(l.fmGuid)?.forEach(id => sourceIds!.add(id));
       });
+      // Also collect from source:: keys in entityMap
+      checkedSources.forEach(srcGuid => {
+        eMap.get(`source::${srcGuid}`)?.forEach(id => sourceIds!.add(id));
+      });
       // Also collect from scene models matched to these sources
-      const viewer = getXeokitViewer();
-      const sceneModels = viewer?.scene?.models || {};
-      const metaObjects = viewer?.metaScene?.metaObjects;
+      const viewer2 = getXeokitViewer();
+      const sceneModels = viewer2?.scene?.models || {};
+      const metaObjects = viewer2?.metaScene?.metaObjects;
       if (metaObjects) {
-        Object.entries(sceneModels).forEach(([, model]: [string, any]) => {
-          const objKeys = Object.keys(model.objects || {});
-          for (const objId of objKeys) {
-            const mo = metaObjects[objId];
-            if (mo?.type === 'IfcBuildingStorey') {
-              const sysId = (mo.originalSystemId || '').toLowerCase();
-              const matchedLevel = levels.find(l =>
-                l.fmGuid.toLowerCase() === sysId ||
-                l.fmGuid.toLowerCase().replace(/-/g, '') === sysId.replace(/-/g, '')
-              );
-              if (matchedLevel && checkedSources.has(matchedLevel.sourceGuid)) {
-                objKeys.forEach(id => sourceIds!.add(id));
+        // Try to match scene models to checked sources via sharedModels name matching
+        const checkedSourceNames = new Set(
+          sources.filter(s => checkedSources.has(s.guid)).map(s => s.name.toLowerCase())
+        );
+        sharedModels.forEach(sm => {
+          if (checkedSourceNames.has(sm.name.toLowerCase())) {
+            const sceneModel = sceneModels[sm.id];
+            if (sceneModel) {
+              // Method 1: model.objects
+              const objs = sceneModel.objects || {};
+              const objKeys = Array.isArray(objs) ? objs.map((e: any) => e.id).filter(Boolean) : Object.keys(objs);
+              objKeys.forEach((id: string) => sourceIds!.add(id));
+              // Method 2: metaModel fallback
+              if (objKeys.length === 0 && metaObjects) {
+                Object.values(metaObjects).forEach((mo: any) => {
+                  if (mo.metaModel?.id === sm.id) sourceIds!.add(mo.id);
+                });
               }
-              break;
             }
           }
         });
+        // Fallback: if sourceIds still empty, try direct model objects scan
+        if (sourceIds.size === 0) {
+          Object.entries(sceneModels).forEach(([, model]: [string, any]) => {
+            const objKeys = Object.keys(model.objects || {});
+            for (const objId of objKeys) {
+              const mo = metaObjects[objId];
+              if (mo?.type === 'IfcBuildingStorey') {
+                const sysId = (mo.originalSystemId || '').toLowerCase();
+                const matchedLevel = levels.find(l =>
+                  l.fmGuid.toLowerCase() === sysId ||
+                  l.fmGuid.toLowerCase().replace(/-/g, '') === sysId.replace(/-/g, '')
+                );
+                if (matchedLevel && checkedSources.has(matchedLevel.sourceGuid)) {
+                  objKeys.forEach(id => sourceIds!.add(id));
+                }
+                break;
+              }
+            }
+          });
+        }
+      }
+      // Safety: if source filter is active but produced no IDs, don't hide everything —
+      // fall back to showing all scene objects (prevents "everything disappears" bug)
+      if (sourceIds.size === 0) {
+        console.warn('[FilterPanel] Source filter produced 0 IDs — falling back to all objects');
+        sourceIds = null;
       }
     }
 

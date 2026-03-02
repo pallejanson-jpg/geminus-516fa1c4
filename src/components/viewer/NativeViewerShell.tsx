@@ -14,9 +14,11 @@ import VisualizationToolbar from './VisualizationToolbar';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { AppContext } from '@/context/AppContext';
 import { VIEW_MODE_REQUESTED_EVENT } from '@/lib/viewer-events';
-import { ROOM_LABELS_TOGGLE_EVENT } from '@/hooks/useRoomLabels';
+import { ROOM_LABELS_TOGGLE_EVENT, ROOM_LABELS_CONFIG_EVENT, type RoomLabelsToggleDetail } from '@/hooks/useRoomLabels';
+import useRoomLabels from '@/hooks/useRoomLabels';
 import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDialog';
 import { ARCHITECT_BACKGROUND_CHANGED_EVENT, ARCHITECT_BACKGROUND_PRESETS, type BackgroundPresetId } from '@/hooks/useArchitectViewMode';
+import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
@@ -53,6 +55,32 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
   // Shim ref that matches the old Asset+ ref chain for existing hooks
   const viewerShimRef = useRef<any>(null);
+
+  // Room labels hook — listens for ROOM_LABELS_TOGGLE_EVENT
+  const { setLabelsEnabled, updateFloorFilter, updateViewMode: updateRoomLabelViewMode } = useRoomLabels(viewerShimRef);
+
+  // Wire room labels toggle event
+  useEffect(() => {
+    const handler = (e: CustomEvent<RoomLabelsToggleDetail>) => {
+      setLabelsEnabled(e.detail.enabled);
+    };
+    window.addEventListener(ROOM_LABELS_TOGGLE_EVENT, handler as EventListener);
+    return () => window.removeEventListener(ROOM_LABELS_TOGGLE_EVENT, handler as EventListener);
+  }, [setLabelsEnabled]);
+
+  // Wire floor selection → room label floor filter
+  useEffect(() => {
+    const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
+      const { visibleFloorFmGuids, isAllFloorsVisible } = e.detail;
+      if (isAllFloorsVisible) {
+        updateFloorFilter([]);
+      } else if (visibleFloorFmGuids?.length) {
+        updateFloorFilter(visibleFloorFmGuids);
+      }
+    };
+    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+  }, [updateFloorFilter]);
 
   const buildingName = React.useMemo(() => {
     if (!allData || !buildingFmGuid) return '';
@@ -425,7 +453,12 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
             setShowVisualizationMenu(true);
           }}
           onViewIssues={() => {
+            // Only open the visualization menu to show issues, don't toggle spaces
             setShowVisualizationMenu(true);
+            // Dispatch a specific event to open the issue list directly
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('OPEN_ISSUE_LIST'));
+            }, 100);
           }}
           onShowRoomLabels={() => {
             window.dispatchEvent(new CustomEvent(ROOM_LABELS_TOGGLE_EVENT, { detail: { enabled: true } }));
