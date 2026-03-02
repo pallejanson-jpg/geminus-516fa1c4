@@ -625,7 +625,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
           'bg-black/80 backdrop-blur-sm border border-white/10 shadow-lg text-white',
           className,
         )}
-        style={{ bottom: 'calc(max(env(safe-area-inset-bottom, 0px), 12px) + 8px)' }}
+        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 4px)' }}
       >
         {visibleTools.map((tool, idx) => {
           const prevTool = idx > 0 ? visibleTools[idx - 1] : null;
