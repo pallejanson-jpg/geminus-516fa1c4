@@ -32,7 +32,6 @@ import {
   type ViewerToolChangedDetail,
   type ViewMode2DToggledDetail,
 } from '@/lib/viewer-events';
-// import { LEVEL_LABELS_TOGGLE_EVENT } from '@/hooks/useLevelLabels'; // disabled
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,19 +40,12 @@ type NavMode = 'orbit' | 'firstPerson';
 type ViewMode = '3d' | '2d';
 
 interface ViewerToolbarProps {
-  viewerRef: React.MutableRefObject<any>;
-  /** Kept for event compatibility only — no longer shown in toolbar */
-  flashOnSelectEnabled?: boolean;
-  onToggleFlashOnSelect?: (v: boolean) => void;
-  /** Kept for event compatibility only — no longer shown in toolbar */
-  hoverHighlightEnabled?: boolean;
-  onToggleHoverHighlight?: (v: boolean) => void;
+  /** The native xeokit Viewer instance */
+  viewer: any;
   className?: string;
-  /** When true, select tool is not auto-activated (pick-mode navigation) */
-  disableSelectTool?: boolean;
 }
 
-// ─── ToolButton (defined OUTSIDE render loop — no React warning) ───────────────
+// ─── ToolButton ───────────────────────────────────────────────────────────────
 
 interface ToolButtonProps {
   icon: React.ReactNode;
@@ -61,11 +53,10 @@ interface ToolButtonProps {
   onClick: () => void;
   active?: boolean;
   disabled?: boolean;
-  compact?: boolean;
 }
 
 const ToolButton = React.forwardRef<HTMLButtonElement, ToolButtonProps>(
-  ({ icon, label, onClick, active = false, disabled = false, compact = false }, ref) => (
+  ({ icon, label, onClick, active = false, disabled = false }, ref) => (
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
@@ -73,7 +64,7 @@ const ToolButton = React.forwardRef<HTMLButtonElement, ToolButtonProps>(
           variant={active ? 'secondary' : 'ghost'}
           size="icon"
           className={cn(
-            compact ? 'h-8 w-8' : 'h-7 w-7 sm:h-9 sm:w-9',
+            'h-7 w-7 sm:h-9 sm:w-9',
             'text-white/90 hover:text-white hover:bg-white/10',
             active && 'ring-2 ring-primary bg-white/15 text-primary',
             disabled && 'opacity-50 cursor-not-allowed',
@@ -95,25 +86,28 @@ ToolButton.displayName = 'ToolButton';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
-  viewerRef,
-  className,
-  disableSelectTool = false,
-}) => {
-  const [activeTool, setActiveTool] = useState<ViewerTool>(disableSelectTool ? null : 'select');
+const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
+  const [activeTool, setActiveTool] = useState<ViewerTool>('select');
   const [navMode, setNavMode] = useState<NavMode>('orbit');
   const [viewMode, setViewMode] = useState<ViewMode>('3d');
-  const [isViewerReady, setIsViewerReady] = useState(false);
   const [isXrayActive, setIsXrayActive] = useState(false);
 
-  const toolDebounceRef = useRef(false);
   const viewModeRef = useRef<ViewMode>(viewMode);
-  const hiddenFor2dRef = useRef<string[]>([]);
   const colorizedFor2dRef = useRef<Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean }>>(new Map());
   const [currentFloorId, setCurrentFloorId] = useState<string | null>(null);
   const [currentFloorBounds, setCurrentFloorBounds] = useState<{ minY: number; maxY: number } | null>(null);
 
+  // Keep a mutable ref so the shim-based hooks can still find the viewer
+  const viewerShimRef = useRef<any>(null);
+  useEffect(() => {
+    if (!viewer) return;
+    const assetViewShim = { viewer, viewFit: () => {}, setNavMode: () => {}, useTool: () => {}, clearSlices: () => {} };
+    viewerShimRef.current = { $refs: { AssetViewer: { $refs: { assetView: assetViewShim } } }, assetViewer: { $refs: { assetView: assetViewShim } } };
+  }, [viewer]);
+
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
+
+  const isReady = !!viewer?.scene;
 
   // ── Section plane clipping hook ───────────────────────────────────────────
   const {
@@ -125,46 +119,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     calculateFloorBounds,
     updateFloorCutHeight,
     update3DCeilingOffset,
-  } = useSectionPlaneClipping(viewerRef, { enabled: true, clipMode: 'floor', floorCutHeight: 1.2 });
-
-  // ── Viewer accessors ──────────────────────────────────────────────────────
-
-  const getAssetView = useCallback(() => {
-    try {
-      return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView ?? null;
-    } catch { return null; }
-  }, [viewerRef]);
-
-  const getXeokitViewer = useCallback(() => {
-    try { return getAssetView()?.viewer ?? null; }
-    catch { return null; }
-  }, [getAssetView]);
-
-  // ── Viewer readiness ──────────────────────────────────────────────────────
-
-  useEffect(() => {
-    const check = () => {
-      const ready = !!getXeokitViewer()?.scene;
-      setIsViewerReady(ready);
-      if (!ready) setActiveTool('select');
-    };
-    check();
-    const t1 = setTimeout(check, 200);
-    const t2 = setTimeout(check, 500);
-    const t3 = setTimeout(check, 1000);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
-  }, [getXeokitViewer]);
+  } = useSectionPlaneClipping(viewerShimRef, { enabled: true, clipMode: 'floor', floorCutHeight: 1.2 });
 
   // ── Floor selection events ────────────────────────────────────────────────
-
   useEffect(() => {
     const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
       let { floorId, bounds, isAllFloorsVisible, visibleMetaFloorIds } = e.detail;
       const visibleFloorFmGuids = (e.detail as any).visibleFloorFmGuids as string[] | undefined;
 
-      // If no metaScene floorId but we have FM GUIDs, resolve from metaScene
       if (!floorId && visibleFloorFmGuids?.length && !visibleMetaFloorIds?.length) {
-        const viewer = getXeokitViewer();
         const metaObjects = viewer?.scene?.metaScene?.metaObjects || {};
         const fmGuidSet = new Set(visibleFloorFmGuids.map((g: string) => g.toLowerCase()));
         for (const mo of Object.values(metaObjects) as any[]) {
@@ -187,10 +150,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
       const soloId = isSolo ? (visibleMetaFloorIds![0] || floorId) : null;
 
       if (viewModeRef.current === '2d') {
-        if (floorId) {
-          applyFloorPlanClipping(floorId);
-        } else {
-          const sceneAABB = getXeokitViewer()?.scene?.getAABB?.();
+        if (floorId) applyFloorPlanClipping(floorId);
+        else {
+          const sceneAABB = viewer?.scene?.getAABB?.();
           if (sceneAABB) applyGlobalFloorPlanClipping(sceneAABB[1]);
         }
       } else {
@@ -199,10 +161,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     };
     window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
     return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
-  }, [applyFloorPlanClipping, applyGlobalFloorPlanClipping, applyCeilingClipping, remove3DClipping, getXeokitViewer]);
+  }, [viewer, applyFloorPlanClipping, applyGlobalFloorPlanClipping, applyCeilingClipping, remove3DClipping]);
 
   // ── Clip height events ────────────────────────────────────────────────────
-
   useEffect(() => {
     const handler = (e: CustomEvent<ClipHeightEventDetail>) => updateFloorCutHeight(e.detail.height);
     window.addEventListener(CLIP_HEIGHT_CHANGED_EVENT, handler as EventListener);
@@ -219,7 +180,6 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   }, [update3DCeilingOffset]);
 
   // ── View mode request events ──────────────────────────────────────────────
-
   useEffect(() => {
     const handler = (e: CustomEvent<ViewModeRequestedDetail>) => {
       if (e.detail.mode === '2d' || e.detail.mode === '3d') handleViewModeChange(e.detail.mode);
@@ -229,18 +189,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── External 2D toggle (from UnifiedViewer mode-switcher) ─────────────────
+  // ── External 2D toggle ───────────────────────────────────────────────────
   const pending2dRef = useRef(false);
   useEffect(() => {
     const handler = (e: CustomEvent<ViewMode2DToggledDetail>) => {
       if (e.detail.enabled) {
-        // If viewer isn't ready yet, mark as pending and apply when ready
-        if (!getXeokitViewer()?.scene) {
-          pending2dRef.current = true;
-          setViewMode('2d');
-        } else {
-          handleViewModeChange('2d');
-        }
+        if (!viewer?.scene) { pending2dRef.current = true; setViewMode('2d'); }
+        else handleViewModeChange('2d');
       } else {
         pending2dRef.current = false;
         handleViewModeChange('3d');
@@ -251,89 +206,84 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Retroactive 2D application when viewer becomes ready ─────────────────
   useEffect(() => {
-    if (isViewerReady && pending2dRef.current) {
+    if (isReady && pending2dRef.current) {
       pending2dRef.current = false;
       handleViewModeChange('2d');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isViewerReady]);
+  }, [isReady]);
 
-  // ── Navigation handlers ───────────────────────────────────────────────────
+  // ── Navigation handlers — direct xeokit API ──────────────────────────────
 
   const handleZoomIn = useCallback(() => {
-    if (!isViewerReady) return;
-    const viewer = getXeokitViewer();
     if (!viewer?.cameraFlight) return;
     const { eye, look } = viewer.camera;
     const newEye = eye.map((v: number, i: number) => v + (look[i] - v) * 0.2);
     viewer.cameraFlight.flyTo({ eye: newEye, look, duration: 0.3 });
-  }, [getXeokitViewer, isViewerReady]);
+  }, [viewer]);
 
   const handleZoomOut = useCallback(() => {
-    if (!isViewerReady) return;
-    const viewer = getXeokitViewer();
     if (!viewer?.cameraFlight) return;
     const { eye, look } = viewer.camera;
     const newEye = eye.map((v: number, i: number) => v - (look[i] - v) * 0.25);
     viewer.cameraFlight.flyTo({ eye: newEye, look, duration: 0.3 });
-  }, [getXeokitViewer, isViewerReady]);
+  }, [viewer]);
 
   const handleViewFit = useCallback(() => {
-    if (!isViewerReady) return;
-    const assetView = viewerRef.current?.assetViewer?.$refs?.assetView
-      ?? viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView;
-    if (!assetView) return;
-    const selected = assetView.selectedItemIds;
-    selected?.length > 0 ? assetView.viewFit(selected, false) : assetView.viewFit(undefined, true);
-  }, [viewerRef, isViewerReady]);
+    if (!viewer?.cameraFlight) return;
+    const selected = viewer.scene?.selectedObjectIds || [];
+    if (selected.length > 0) {
+      const aabb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+      selected.forEach((id: string) => {
+        const entity = viewer.scene.objects?.[id];
+        if (entity?.aabb) {
+          aabb[0] = Math.min(aabb[0], entity.aabb[0]);
+          aabb[1] = Math.min(aabb[1], entity.aabb[1]);
+          aabb[2] = Math.min(aabb[2], entity.aabb[2]);
+          aabb[3] = Math.max(aabb[3], entity.aabb[3]);
+          aabb[4] = Math.max(aabb[4], entity.aabb[4]);
+          aabb[5] = Math.max(aabb[5], entity.aabb[5]);
+        }
+      });
+      if (aabb[0] !== Infinity) viewer.cameraFlight.flyTo({ aabb, duration: 0.5 });
+    } else {
+      viewer.cameraFlight.flyTo({ aabb: viewer.scene.aabb, duration: 0.5 });
+    }
+  }, [viewer]);
 
   const handleNavModeChange = useCallback((mode: NavMode) => {
-    if (!isViewerReady) return;
-    const assetView = getAssetView();
-    if (assetView) { assetView.setNavMode(mode); setNavMode(mode); }
-  }, [getAssetView, isViewerReady]);
+    if (!viewer?.cameraControl) return;
+    if (mode === 'firstPerson') {
+      viewer.cameraControl.navMode = 'firstPerson';
+      viewer.cameraControl.followPointer = true;
+    } else {
+      viewer.cameraControl.navMode = 'orbit';
+      viewer.cameraControl.followPointer = false;
+    }
+    setNavMode(mode);
+  }, [viewer]);
 
   const handleToolChange = useCallback((tool: ViewerTool) => {
-    if (!isViewerReady || toolDebounceRef.current) return;
-    toolDebounceRef.current = true;
-    let newTool: ViewerTool = tool;
-    try {
-      const assetView = getAssetView();
-      if (assetView && typeof assetView.useTool === 'function') {
-        try { assetView.useTool(null); } catch { /* ignore */ }
-        if (tool === activeTool) {
-          assetView.useTool('select');
-          newTool = 'select';
-        } else {
-          assetView.useTool(tool);
-          newTool = tool;
-        }
-        setActiveTool(newTool);
-      }
-    } catch {
-      newTool = 'select';
-      setActiveTool('select');
-    } finally {
-      window.dispatchEvent(new CustomEvent<ViewerToolChangedDetail>(VIEWER_TOOL_CHANGED_EVENT, {
-        detail: { tool: newTool! },
-      }));
-      setTimeout(() => { toolDebounceRef.current = false; }, 150);
-    }
-  }, [getAssetView, activeTool, isViewerReady]);
+    const newTool = tool === activeTool ? 'select' : tool;
+    setActiveTool(newTool);
+    window.dispatchEvent(new CustomEvent<ViewerToolChangedDetail>(VIEWER_TOOL_CHANGED_EVENT, {
+      detail: { tool: newTool },
+    }));
+  }, [activeTool]);
 
   const handleClearSlices = useCallback(() => {
-    getAssetView()?.clearSlices?.();
-  }, [getAssetView]);
+    if (!viewer?.scene) return;
+    const planes = Object.values(viewer.scene.sectionPlanes || {});
+    planes.forEach((sp: any) => { try { sp.destroy(); } catch {} });
+  }, [viewer]);
 
-  // ── X-ray toggle ──────────────────────────────────────────────────────────
+  // ── X-ray toggle — direct xeokit API ─────────────────────────────────────
 
   const XRAY_BATCH = 100;
   const handleXrayToggle = useCallback(() => {
-    const xeokitViewer = getXeokitViewer();
-    if (!xeokitViewer?.scene) return;
-    const scene = xeokitViewer.scene;
+    if (!viewer?.scene) return;
+    const scene = viewer.scene;
     const objectIds = scene.objectIds || [];
     const enabling = !isXrayActive;
     setIsXrayActive(enabling);
@@ -372,82 +322,39 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
       };
       requestAnimationFrame(off);
     }
-  }, [getXeokitViewer, isXrayActive]);
+  }, [viewer, isXrayActive]);
 
-  // ── 2D / 3D toggle ───────────────────────────────────────────────────────
+  // ── 2D / 3D toggle — direct xeokit API ───────────────────────────────────
 
   const handleViewModeChange = useCallback((mode: ViewMode) => {
-    const viewer = getXeokitViewer();
-    if (!viewer) return;
+    if (!viewer?.scene) return;
+    const scene = viewer.scene;
 
     setViewMode(mode);
     window.dispatchEvent(new CustomEvent(VIEW_MODE_CHANGED_EVENT, { detail: { mode, floorId: currentFloorId } }));
 
     if (mode === '2d') {
-      // Level labels disabled
-      // window.dispatchEvent(new CustomEvent(LEVEL_LABELS_TOGGLE_EVENT, { detail: { enabled: false } }));
-      const scene = viewer.scene;
-      const assetViewer = viewerRef.current?.$refs?.AssetViewer;
-      const assetView = assetViewer?.$refs?.assetView;
-      let targetBounds: number[] | null = null;
-      let lookHeight = 0;
-
-      // 1. Use Asset+ built-in floor plan mode (primary method)
-      try {
-        assetViewer?.setShowFloorplan?.(true);
-        console.log('[2D Mode] setShowFloorplan(true) called');
-      } catch (e) {
-        console.warn('[2D Mode] setShowFloorplan not available:', e);
-      }
-
-      // 2. Set ortho top-down nav mode via Asset+ API
-      try {
-        assetView?.setNavMode?.('planView');
-        console.log('[2D Mode] setNavMode("planView") called');
-      } catch (e) {
-        console.warn('[2D Mode] setNavMode not available:', e);
-      }
-
-      // 3. Calculate bounds and apply clipping as backup
-      if (currentFloorId && currentFloorBounds) {
-        const floorBounds = calculateFloorBounds(currentFloorId);
-        if (floorBounds) {
-          let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-          floorBounds.metaObjectIds.forEach((id: string) => {
-            const aabb = scene?.objects?.[id]?.aabb;
-            if (aabb) {
-              minX = Math.min(minX, aabb[0]); maxX = Math.max(maxX, aabb[3]);
-              minZ = Math.min(minZ, aabb[2]); maxZ = Math.max(maxZ, aabb[5]);
-            }
-          });
-          if (minX !== Infinity) targetBounds = [minX, floorBounds.minY, minZ, maxX, floorBounds.maxY, maxZ];
-          lookHeight = floorBounds.minY + 1.2;
-        }
+      // Apply section clipping
+      if (currentFloorId) {
         applyFloorPlanClipping(currentFloorId);
       } else {
-        targetBounds = scene?.getAABB?.();
-        lookHeight = targetBounds ? (targetBounds[1] + targetBounds[4]) / 2 : 0;
-        if (targetBounds) applyGlobalFloorPlanClipping(targetBounds[1]);
+        const sceneAABB = scene.getAABB?.();
+        if (sceneAABB) applyGlobalFloorPlanClipping(sceneAABB[1]);
       }
 
-      // Save original edge material values
+      // Save original edge material
       const edgeMat = scene.edgeMaterial;
       const origEdgeColor = edgeMat?.edgeColor ? [...edgeMat.edgeColor] : [0.2, 0.2, 0.2];
       const origEdgeAlpha = edgeMat?.edgeAlpha ?? 0.5;
       const origEdgeWidth = edgeMat?.edgeWidth ?? 1;
 
-      // 4. Handle IFC types for 2D plan view
-      const SLAB_TYPES = new Set([
-        'ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase',
-        'ifcroof', 'ifccovering', 'ifcplate',
-      ]);
+      // Handle IFC types for 2D plan view
+      const SLAB_TYPES = new Set(['ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase', 'ifcroof', 'ifccovering', 'ifcplate']);
       const WALL_TYPES = new Set(['ifcwall', 'ifcwallstandardcase']);
       const SUBDUED_TYPES = new Set(['ifcdoor', 'ifcwindow', 'ifcfurnishingelement', 'ifcrailing', 'ifcstair', 'ifcstairflight']);
       const SPACE_TYPES = new Set(['ifcspace']);
       const metaObjects = scene?.metaScene?.metaObjects || {};
       const colorized = new Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean }>();
-      let slabCount = 0;
-      let spaceCount = 0;
 
       Object.values(metaObjects).forEach((mo: any) => {
         const typeLower = mo.type?.toLowerCase() || '';
@@ -455,140 +362,70 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         if (!entity) return;
 
         if (SLAB_TYPES.has(typeLower)) {
-          // Slabs: keep visible=true but unpickable + fully transparent (click passes through)
           colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
-          entity.visible = true;
-          entity.pickable = false;
-          entity.opacity = 0;
-          entity.edges = false;
-          slabCount++;
+          entity.visible = true; entity.pickable = false; entity.opacity = 0; entity.edges = false;
         } else if (SPACE_TYPES.has(typeLower)) {
-          // IfcSpace: make visible + pickable with near-zero opacity as invisible click targets
           colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
-          entity.visible = true;
-          entity.pickable = true;
-          entity.opacity = 0.02;
-          entity.colorize = [0.5, 0.7, 0.9];
-          spaceCount++;
+          entity.visible = true; entity.pickable = true; entity.opacity = 0.02; entity.colorize = [0.5, 0.7, 0.9];
         } else if (WALL_TYPES.has(typeLower)) {
           colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
-          entity.colorize = [0.2, 0.2, 0.2];
-          entity.opacity = 1.0;
-          entity.edges = true;
+          entity.colorize = [0.2, 0.2, 0.2]; entity.opacity = 1.0; entity.edges = true;
         } else if (SUBDUED_TYPES.has(typeLower)) {
           colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
-          entity.colorize = [0.75, 0.75, 0.75];
-          entity.opacity = 0.6;
+          entity.colorize = [0.75, 0.75, 0.75]; entity.opacity = 0.6;
         }
       });
 
-      // Apply stronger edge styling for 2D
-      if (edgeMat) {
-        edgeMat.edgeColor = [0.15, 0.15, 0.15];
-        edgeMat.edgeAlpha = 1.0;
-        edgeMat.edgeWidth = 2;
-      }
-
-      hiddenFor2dRef.current = []; // No longer hiding via setObjectsVisible
+      if (edgeMat) { edgeMat.edgeColor = [0.15, 0.15, 0.15]; edgeMat.edgeAlpha = 1.0; edgeMat.edgeWidth = 2; }
       colorizedFor2dRef.current = colorized;
-      // Store original edge values for restore
-      (viewerRef.current as any).__orig2dEdge = { origEdgeColor, origEdgeAlpha, origEdgeWidth };
-      console.log(`[2D Mode] Slabs transparent+unpickable: ${slabCount}, Spaces as click targets: ${spaceCount}, Colorized: ${colorized.size}`);
+      (viewerShimRef.current as any).__orig2dEdge = { origEdgeColor, origEdgeAlpha, origEdgeWidth };
 
-      // 5. Set camera — preserve current look position for smooth transition
+      // Set camera to ortho top-down
       const camera = viewer.camera;
       if (camera) {
-        const lookX = camera.look[0];
-        const lookY = camera.look[1];
-        const lookZ = camera.look[2];
-        const dx = camera.eye[0] - lookX;
-        const dy = camera.eye[1] - lookY;
-        const dz = camera.eye[2] - lookZ;
+        const lookX = camera.look[0], lookY = camera.look[1], lookZ = camera.look[2];
+        const dx = camera.eye[0] - lookX, dy = camera.eye[1] - lookY, dz = camera.eye[2] - lookZ;
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        const orthoScale = dist * 1.2;
-
         camera.projection = 'ortho';
-        camera.ortho.scale = orthoScale;
-        viewer.cameraFlight.flyTo({
-          eye: [lookX, lookY + dist, lookZ],
-          look: [lookX, lookY, lookZ],
-          up: [0, 0, -1],
-          duration: 0.5,
-        });
+        camera.ortho.scale = dist * 1.2;
+        viewer.cameraFlight.flyTo({ eye: [lookX, lookY + dist, lookZ], look: [lookX, lookY, lookZ], up: [0, 0, -1], duration: 0.5 });
       }
     } else {
-      // Back to 3D -- disable Asset+ floor plan mode
-      const assetViewer = viewerRef.current?.$refs?.AssetViewer;
-      const assetView = assetViewer?.$refs?.assetView;
-      try {
-        assetViewer?.setShowFloorplan?.(false);
-        console.log('[3D Mode] setShowFloorplan(false) called');
-      } catch (e) { /* ignore */ }
-
-      // Restore objects hidden for 2D mode
-      if (hiddenFor2dRef.current.length > 0) {
-        viewer.scene.setObjectsVisible(hiddenFor2dRef.current, true);
-        console.log(`[3D Mode] Restored ${hiddenFor2dRef.current.length} hidden IFC objects`);
-        hiddenFor2dRef.current = [];
-      }
-
-      // Restore colorized entities (including slabs and spaces)
+      // Restore 2D → 3D
       if (colorizedFor2dRef.current.size > 0) {
         colorizedFor2dRef.current.forEach((orig, id) => {
-          const entity = viewer.scene.objects?.[id];
+          const entity = scene.objects?.[id];
           if (entity) {
-            if (orig.colorize) entity.colorize = orig.colorize;
-            else entity.colorize = null;
-            entity.opacity = orig.opacity;
-            entity.edges = orig.edges;
-            entity.pickable = orig.pickable;
-            entity.visible = orig.visible;
+            if (orig.colorize) entity.colorize = orig.colorize; else entity.colorize = null;
+            entity.opacity = orig.opacity; entity.edges = orig.edges; entity.pickable = orig.pickable; entity.visible = orig.visible;
           }
         });
-        console.log(`[3D Mode] Restored ${colorizedFor2dRef.current.size} entities (slabs, spaces, walls)`);
         colorizedFor2dRef.current.clear();
       }
 
-      // Restore original edge material
-      const origEdge = (viewerRef.current as any)?.__orig2dEdge;
+      const origEdge = (viewerShimRef.current as any)?.__orig2dEdge;
       if (origEdge) {
-        const edgeMat = viewer.scene.edgeMaterial;
-        if (edgeMat) {
-          edgeMat.edgeColor = origEdge.origEdgeColor;
-          edgeMat.edgeAlpha = origEdge.origEdgeAlpha;
-          edgeMat.edgeWidth = origEdge.origEdgeWidth;
-        }
-        delete (viewerRef.current as any).__orig2dEdge;
+        const edgeMat = scene.edgeMaterial;
+        if (edgeMat) { edgeMat.edgeColor = origEdge.origEdgeColor; edgeMat.edgeAlpha = origEdge.origEdgeAlpha; edgeMat.edgeWidth = origEdge.origEdgeWidth; }
+        delete (viewerShimRef.current as any).__orig2dEdge;
       }
 
       removeSectionPlane();
       if (currentFloorId) applyCeilingClipping(currentFloorId);
 
-      // Camera sync: preserve look position from 2D
       const camera = viewer.camera;
       if (camera) {
-        const lookX = camera.look[0];
-        const lookY = camera.look[1];
-        const lookZ = camera.look[2];
+        const lookX = camera.look[0], lookY = camera.look[1], lookZ = camera.look[2];
         const scale = camera.ortho?.scale || 50;
         const dist = scale * 0.8;
-        // Place camera at 45° angle above the current look point
         const offset = dist / Math.sqrt(2);
-
         camera.projection = 'perspective';
-        viewer.cameraFlight.flyTo({
-          eye: [lookX - offset, lookY + offset, lookZ - offset],
-          look: [lookX, lookY, lookZ],
-          up: [0, 1, 0],
-          duration: 0.5,
-        });
+        viewer.cameraFlight.flyTo({ eye: [lookX - offset, lookY + offset, lookZ - offset], look: [lookX, lookY, lookZ], up: [0, 1, 0], duration: 0.5 });
       }
     }
-  }, [getXeokitViewer, viewerRef, currentFloorId, currentFloorBounds, calculateFloorBounds, applyFloorPlanClipping, applyGlobalFloorPlanClipping, applyCeilingClipping, removeSectionPlane]);
+  }, [viewer, currentFloorId, currentFloorBounds, calculateFloorBounds, applyFloorPlanClipping, applyGlobalFloorPlanClipping, applyCeilingClipping, removeSectionPlane]);
 
   // ── Render ────────────────────────────────────────────────────────────────
-
-  const disabled = !isViewerReady;
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -601,101 +438,45 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         )}
         style={{ bottom: 'calc(max(env(safe-area-inset-bottom, 0px), 12px) + 8px)' }}
       >
-        {/* Group 1 — Navigation mode */}
-        <ToolButton
-          icon={<RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-          label="Orbit (rotate)"
-          onClick={() => handleNavModeChange('orbit')}
-          active={navMode === 'orbit'}
-          disabled={disabled}
-        />
-        <ToolButton
-          icon={<Move className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-          label="First person (walk)"
-          onClick={() => handleNavModeChange('firstPerson')}
-          active={navMode === 'firstPerson'}
-          disabled={disabled}
-        />
+        {/* Navigation mode */}
+        <ToolButton icon={<RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="Orbit (rotate)" onClick={() => handleNavModeChange('orbit')} active={navMode === 'orbit'} disabled={!isReady} />
+        <ToolButton icon={<Move className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="First person (walk)" onClick={() => handleNavModeChange('firstPerson')} active={navMode === 'firstPerson'} disabled={!isReady} />
 
         <Separator orientation="vertical" className="h-4 sm:h-6 mx-0.5 sm:mx-1 bg-white/20" />
 
-        {/* Group 2 — Zoom / Fit */}
-        <ToolButton
-          icon={<ZoomIn className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-          label="Zoom in"
-          onClick={handleZoomIn}
-          disabled={disabled}
-        />
-        <ToolButton
-          icon={<ZoomOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-          label="Zoom out"
-          onClick={handleZoomOut}
-          disabled={disabled}
-        />
-        <ToolButton
-          icon={<Focus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-          label="Fit view (selection or entire scene)"
-          onClick={handleViewFit}
-          disabled={disabled}
-        />
+        {/* Zoom / Fit */}
+        <ToolButton icon={<ZoomIn className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="Zoom in" onClick={handleZoomIn} disabled={!isReady} />
+        <ToolButton icon={<ZoomOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="Zoom out" onClick={handleZoomOut} disabled={!isReady} />
+        <ToolButton icon={<Focus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="Fit view" onClick={handleViewFit} disabled={!isReady} />
 
         <Separator orientation="vertical" className="h-4 sm:h-6 mx-0.5 sm:mx-1 bg-white/20" />
 
-        {/* Group 3 — Interaction tools */}
-        <ToolButton
-          icon={<MousePointer2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-          label="Select object (CTRL for multi-select)"
-          onClick={() => handleToolChange('select')}
-          active={activeTool === 'select'}
-          disabled={disabled}
-        />
-        <ToolButton
-          icon={<Ruler className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-          label="Measure"
-          onClick={() => handleToolChange('measure')}
-          active={activeTool === 'measure'}
-          disabled={disabled}
-        />
+        {/* Interaction tools */}
+        <ToolButton icon={<MousePointer2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="Select" onClick={() => handleToolChange('select')} active={activeTool === 'select'} disabled={!isReady} />
+        <ToolButton icon={<Ruler className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="Measure" onClick={() => handleToolChange('measure')} active={activeTool === 'measure'} disabled={!isReady} />
         {viewMode !== '2d' && (
           <>
-            <ToolButton
-              icon={<Scissors className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-              label="Section plane"
-              onClick={() => handleToolChange('slicer')}
-              active={activeTool === 'slicer'}
-              disabled={disabled}
-            />
+            <ToolButton icon={<Scissors className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="Section plane" onClick={() => handleToolChange('slicer')} active={activeTool === 'slicer'} disabled={!isReady} />
             {activeTool === 'slicer' && (
-              <ToolButton
-                icon={<RotateCcw className="h-3 w-3 sm:h-3.5 sm:w-3.5" />}
-                label="Clear sections"
-                onClick={handleClearSlices}
-                disabled={disabled}
-              />
+              <ToolButton icon={<RotateCcw className="h-3 w-3 sm:h-3.5 sm:w-3.5" />} label="Clear sections" onClick={handleClearSlices} disabled={!isReady} />
             )}
           </>
         )}
 
         <Separator orientation="vertical" className="h-4 sm:h-6 mx-0.5 sm:mx-1 bg-white/20" />
 
-        {/* Group 4 — X-ray */}
-        <ToolButton
-          icon={<Box className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-          label="X-ray (transparent view)"
-          onClick={handleXrayToggle}
-          active={isXrayActive}
-          disabled={disabled}
-        />
+        {/* X-ray */}
+        <ToolButton icon={<Box className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="X-ray" onClick={handleXrayToggle} active={isXrayActive} disabled={!isReady} />
 
         <Separator orientation="vertical" className="h-4 sm:h-6 mx-0.5 sm:mx-1 bg-white/20" />
 
-        {/* Group 5 — View mode */}
+        {/* View mode */}
         <ToolButton
           icon={viewMode === '3d' ? <SquareDashed className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Cuboid className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-          label={viewMode === '3d' ? 'Switch to 2D view' : 'Switch to 3D view'}
+          label={viewMode === '3d' ? '2D view' : '3D view'}
           onClick={() => handleViewModeChange(viewMode === '3d' ? '2d' : '3d')}
           active={viewMode === '2d'}
-          disabled={disabled}
+          disabled={!isReady}
         />
       </div>
     </TooltipProvider>

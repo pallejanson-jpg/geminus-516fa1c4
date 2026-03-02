@@ -1,7 +1,7 @@
 /**
  * NavCubePlugin - 3D Navigation Cube for xeokit viewer
  * 
- * Classic cube design with distinct face shading, full labels, and hover highlights.
+ * Professional neutral design with subtle face shading, clean edges, and labels.
  * Synchronized camera orientation. Click to fly to face.
  */
 (function(global) {
@@ -235,25 +235,24 @@
         for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
         ctx.closePath();
         
-        // Classic distinct face colors
+        // Neutral professional face colors with subtle shading
         const colors = {
-          top:    isHovered ? '#6a9fd8' : '#4a7fb8',
-          bottom: isHovered ? '#5a7a9a' : '#3a5a7a',
-          front:  isHovered ? '#5588bb' : '#3568a0',
-          back:   isHovered ? '#4a7090' : '#2a5070',
-          left:   isHovered ? '#4e80a8' : '#2e6088',
-          right:  isHovered ? '#5890b8' : '#387098',
+          top:    isHovered ? '#c8cdd3' : '#b0b5bc',
+          bottom: isHovered ? '#9ea3aa' : '#888d94',
+          front:  isHovered ? '#bcc1c8' : '#a4a9b0',
+          back:   isHovered ? '#a8adb4' : '#909598',
+          left:   isHovered ? '#b4b9c0' : '#9ca1a8',
+          right:  isHovered ? '#c0c5cc' : '#a8adb4',
         };
         
-        ctx.fillStyle = colors[face.name] || '#3568a0';
+        ctx.fillStyle = colors[face.name] || '#a4a9b0';
         ctx.fill();
         
-        // Crisp edges
-        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+        // Clean white edges
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)';
         ctx.lineWidth = 1;
         ctx.stroke();
         
-        // Full face labels
         this._drawFaceLabel(ctx, points, face.name, isHovered);
       });
     }
@@ -275,7 +274,8 @@
         bottom: 'BTM', left: 'LEFT', right: 'RIGHT'
       };
       
-      ctx.fillStyle = isHovered ? '#ffffff' : 'rgba(255,255,255,0.75)';
+      // Dark text for contrast against light grey faces
+      ctx.fillStyle = isHovered ? '#1a1a1a' : '#3a3a3a';
       ctx.fillText(labels[faceName] || '', centerX, centerY);
       ctx.restore();
     }

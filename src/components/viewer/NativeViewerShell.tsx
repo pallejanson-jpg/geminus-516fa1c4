@@ -314,9 +314,9 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       />
 
       {/* Bottom toolbar (zoom, select, measure, xray, 2d/3d) — always mounted for event logic */}
-      {isViewerReady && (
+      {isViewerReady && xeokitViewer && (
         <ViewerToolbar
-          viewerRef={viewerShimRef}
+          viewer={xeokitViewer}
         />
       )}
 
@@ -397,13 +397,9 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         <ViewerContextMenu
           position={contextMenu.position}
           entityId={contextMenu.entityId}
-          fmGuid={contextMenu.fmGuid}
           entityName={contextMenu.entityName}
           onClose={() => setContextMenu(null)}
           onProperties={handleProperties}
-          onCreateIssue={() => {/* TODO: wire to CreateIssueDialog */}}
-          onCreateWorkOrder={() => {}}
-          onViewInSpace={() => {}}
           onSelect={() => {
             if (contextMenu.entityId && xeokitViewer?.scene?.objects) {
               const entity = xeokitViewer.scene.objects[contextMenu.entityId];
