@@ -9,59 +9,92 @@ const corsHeaders = {
 // In-memory JWT cache (per cold-start)
 let cachedJwt: string | null = null;
 let cacheTime = 0;
-const CACHE_TTL = 9 * 60 * 60 * 1000; // 9 hours (JWT has ~10h TTL)
+const CACHE_TTL = 9 * 60 * 60 * 1000; // 9 hours
 
 async function login(): Promise<string> {
   if (cachedJwt && Date.now() - cacheTime < CACHE_TTL) {
     return cachedJwt;
   }
 
-  const baseUrl = Deno.env.get("SWG_SUPPORT_URL")!;
-  const email = Deno.env.get("SWG_SUPPORT_USERNAME")!;
-  const password = Deno.env.get("SWG_SUPPORT_PASSWORD")!;
+  const rawUrl = Deno.env.get("SWG_SUPPORT_URL") || "";
+  const baseUrl = rawUrl.replace(/\/+$/, "");
+  const email = Deno.env.get("SWG_SUPPORT_USERNAME") || "";
+  const password = Deno.env.get("SWG_SUPPORT_PASSWORD") || "";
 
-  const res = await fetch(`${baseUrl}/api/users/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
+  console.log(`SWG login: baseUrl="${baseUrl}", email="${email}", password length=${password.length}`);
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Login failed (${res.status}): ${text}`);
-  }
+  // Try different body formats on /api/users/login
+  const loginUrl = `${baseUrl}/api/users/login`;
+  const bodyFormats = [
+    { email, password },
+    { Email: email, Password: password },
+    { username: email, password },
+    { UserName: email, Password: password },
+  ];
 
-  // The JWT may come as a response header or in the body
-  const jwt = res.headers.get("jwt") || res.headers.get("token");
-  
-  let bodyJwt: string | null = null;
-  try {
-    const body = await res.json();
-    bodyJwt = body?.jwt || body?.token || body?.Token || body?.access_token || body?.accessToken || null;
-    // If the entire body is a string that looks like a JWT
-    if (!bodyJwt && typeof body === "string" && body.includes(".")) {
-      bodyJwt = body;
+  let lastError = "";
+  for (const body of bodyFormats) {
+    console.log(`Trying login at: ${loginUrl} with body keys: ${Object.keys(body).join(", ")}`);
+    try {
+      const res = await fetch(loginUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      console.log(`Login response: status=${res.status}, keys=${Object.keys(body).join(",")}`);
+
+      if (res.status === 401) {
+        lastError = `keys ${Object.keys(body).join(",")} returned 401`;
+        continue;
+      }
+
+      const text = await res.text();
+      console.log(`Login response body (first 500 chars): ${text.substring(0, 500)}`);
+
+      if (!res.ok) {
+        lastError = `keys ${Object.keys(body).join(",")} returned ${res.status}: ${text.substring(0, 200)}`;
+        continue;
+      }
+
+      // Try to extract JWT from response
+      const headerJwt = res.headers.get("jwt") || res.headers.get("token");
+      
+      let bodyJwt: string | null = null;
+      try {
+        const parsed = JSON.parse(text);
+        bodyJwt = parsed?.jwt || parsed?.token || parsed?.Token || parsed?.access_token || parsed?.accessToken || null;
+        if (!bodyJwt && typeof parsed === "string" && parsed.includes(".")) {
+          bodyJwt = parsed;
+        }
+      } catch {
+        if (text && text.includes(".") && !text.includes("<")) {
+          bodyJwt = text.trim();
+        }
+      }
+
+      const token = headerJwt || bodyJwt;
+      if (!token) {
+        lastError = `keys ${Object.keys(body).join(",")} succeeded but no JWT found. Response headers: ${JSON.stringify(Object.fromEntries(res.headers.entries()))}. Body: ${text.substring(0, 300)}`;
+        continue;
+      }
+
+      console.log(`Login successful, JWT length=${token.length}`);
+      cachedJwt = token;
+      cacheTime = Date.now();
+      return token;
+    } catch (err) {
+      lastError = `fetch error: ${err}`;
+      console.error(lastError);
     }
-  } catch {
-    const text = await res.text();
-    // If the response is a plain JWT string
-    if (text && text.includes(".") && !text.includes("<")) {
-      bodyJwt = text.trim();
-    }
   }
 
-  const token = jwt || bodyJwt;
-  if (!token) {
-    throw new Error("Login succeeded but no JWT token found in response");
-  }
-
-  cachedJwt = token;
-  cacheTime = Date.now();
-  return token;
+  throw new Error(`All login attempts failed. Last error: ${lastError}`);
 }
 
 async function proxyRequest(method: string, path: string, body?: unknown): Promise<Response> {
-  const baseUrl = Deno.env.get("SWG_SUPPORT_URL")!;
+  const rawUrl = Deno.env.get("SWG_SUPPORT_URL") || "";
+  const baseUrl = rawUrl.replace(/\/+$/, "");
   const jwt = await login();
 
   const url = `${baseUrl}${path}`;
