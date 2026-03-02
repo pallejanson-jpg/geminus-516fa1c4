@@ -1,74 +1,42 @@
 
 
-## Plan: Refactor 3D Viewer Controls for Native Xeokit
+## Plan: Fix 5 Outstanding 3D Viewer Issues
 
-### Issues Identified
+### Issue 1: Rooms (IfcSpace) are red and visible by default
+The neutral grey colorize (`[0.85, 0.85, 0.85]`) applied in `NativeXeokitViewer.tsx` (line 498) colors ALL objects including IfcSpace. The native viewer has no logic to hide IfcSpace objects after load — unlike the AssetPlusViewer which tracks and hides them.
 
-1. **Red objects in Akerselva Atrium A-model**: Line 494 in `NativeXeokitViewer.tsx` calls `scene.setObjectsColorized(allIds, false)` which resets colorize state but xeokit's internal defaults for some IFC objects may differ from what the old Asset+ viewer showed. The old viewer likely applied its own default material/color scheme. Need to investigate whether removing this reset, or applying a neutral default colorize, fixes the issue.
+**Fix**: After the neutral colorize loop, iterate `metaScene.metaObjects`, find all `ifcspace` type objects, and hide them (`entity.visible = false`). They remain hidden until the visualization/filter panel explicitly enables them. Remove the blanket neutral colorize — instead only colorize objects that have strong red IFC materials (the original problem), leaving other objects with their native colors.
 
-2. **Floor switcher overlaps sidebar on desktop**: The sidebar (`LeftSidebar`) is only hidden on mobile via `isImmersive = isMobile && IMMERSIVE_APPS`. On desktop, the sidebar (14-16 wide) stays visible, causing the `left-3` floor switcher to be hidden behind it. Fix: hide the left sidebar on desktop when `native_viewer` is active, or offset the switcher by the sidebar width.
+Actually, the real issue is simpler: the blanket neutral grey is overriding all native colors. The A-model for Akerselva Atrium never had red objects before the native viewer — the reds appeared because `setObjectsColorized(allIds, false)` was resetting colorize state to raw IFC materials. The correct fix:
+- **Remove the blanket neutral colorize entirely** (lines 490-506)
+- **Don't call `setObjectsColorized(allIds, false)` either** — just leave objects with whatever colors xeokit loads from XKT
+- **Hide IfcSpace objects by default** after load, since rooms should be off by default
 
-3. **ViewerToolbar broken with native xeokit**: The toolbar relies on the Asset+ shim ref chain (`getAssetView()`, `assetView.useTool()`, etc.) which are stubs in the native shim. Measure, slicer, select tools don't actually work. Needs complete rewrite to talk directly to xeokit APIs.
+### Issue 2: Left sidebar should be accessible via hamburger in 3D mode
+Currently `hideDesktopSidebar` completely removes the sidebar in viewer apps. Instead, the sidebar should be collapsed by default when entering a viewer app, with the hamburger button still accessible to expand/collapse it.
 
-4. **ViewerContextMenu**: Works reasonably well already (picks entities, zoom-to-fit, isolate, hide, show all). But "Create issue", "Create work order", "View in space" are no-ops. Should be cleaned up.
+**Fix in `AppLayout.tsx`**: Remove the `hideDesktopSidebar` condition that hides `LeftSidebar`. Instead, auto-collapse the sidebar when `activeApp` is a viewer app by calling `setIsSidebarExpanded(false)` via a `useEffect`. The hamburger in `LeftSidebar` remains visible (the sidebar is always 14-16px wide when collapsed showing just icons).
 
-5. **NavCube colors**: Currently uses vivid blue palette. User wants neutral/clean appearance.
+### Issue 3: Filter icon overlaps ViewerToolbar icon
+The filter toggle button is at `top-3 right-3`. It overlaps with other controls.
 
----
+**Fix in `NativeViewerShell.tsx`**: Move the filter button to `top-3 left-3` (upper left corner) instead.
 
-### Implementation Plan
+### Issue 4: NavCube still shows colored faces
+Looking at the NavCubePlugin.js code, the colors defined at lines 239-246 ARE neutral greys (`#b0b5bc`, `#888d94`, etc.). If the user still sees red/green/purple, it means the file wasn't actually deployed or the browser cached the old version. However, to be safe, I'll verify the colors are truly neutral and add a cache-busting mechanism.
 
-#### Task 1: Fix red objects in A-model
-- Remove `scene.setObjectsColorized(allIds, false)` on line 494 — this is likely forcing xeokit to use raw IFC material colors which include reds that Asset+ previously overrode with its own default scheme.
-- Instead, after loading, apply a neutral default color `[0.85, 0.85, 0.85]` to all objects (mimicking the grey-ish default that BIM viewers typically show for architectural models), then let the filter panel and visualization tools override as needed.
-- This ensures A-models look clean without baked-in IFC material colors showing through.
+**Fix**: The colors in the code look correct. The issue is likely that `NavCubePlugin.js` is in `/public/lib/xeokit/` and may be browser-cached. Ensure the colors are definitively neutral by using even more obviously grey values, and reference the file with a version query param in the HTML or loader.
 
-#### Task 2: Hide sidebar in 3D on desktop
-- In `AppLayout.tsx`, change `isImmersive` logic from `isMobile && IMMERSIVE_APPS` to also hide sidebar on desktop when `activeApp` is a viewer app (native_viewer, radar, etc.).
-- This gives the viewer full width and prevents the floor switcher from being hidden.
-- Alternative: keep sidebar visible but offset floor switcher by sidebar width. Hiding is cleaner.
+### Issue 5: Floor switcher should clip objects protruding above
+The `applyCeilingClipping` in `useSectionPlaneClipping` already creates a section plane at the next floor's minY to clip above. The `ViewerToolbar` listens for `FLOOR_SELECTION_CHANGED_EVENT` and calls `applyCeilingClipping(soloId)` when a solo floor is selected. This should already work.
 
-#### Task 3: Rewrite ViewerToolbar for native xeokit
-- Delete the current `ViewerToolbar.tsx` (705 lines of Asset+-dependent code).
-- Write a new clean toolbar that talks directly to the xeokit `Viewer` instance (passed via prop, not through shim ref chain).
-- Core functions mapped directly:
-  - **Orbit/FirstPerson**: `viewer.cameraControl.navMode`
-  - **Zoom in/out**: camera eye manipulation (already working)
-  - **View fit**: `viewer.cameraFlight.flyTo({ aabb })` using selected or scene AABB
-  - **Select**: already default pick behavior in xeokit
-  - **X-ray**: `scene.setObjectsXRayed()` (already working)
-  - **2D/3D toggle**: camera projection + section plane clipping (keep existing `useSectionPlaneClipping` hook)
-  - **Measure**: use xeokit `DistanceMeasurementsPlugin` directly
-  - **Section plane**: use xeokit `SectionPlanesPlugin` directly
-- Keep the bottom-center floating pill design.
-- Pass `xeokitViewer` directly instead of `viewerShimRef`.
-
-#### Task 4: Clean up ViewerContextMenu
-- Remove unused actions (Create issue, Create work order, View in space) that are no-ops.
-- Remove the configurable settings system (`ContextMenuSettings.ts`) — simplify to hardcoded actions that actually work.
-- Keep: Properties, Select, Zoom to fit, Isolate, Hide, Show all.
-- Pass `xeokitViewer` directly for cleaner integration.
-
-#### Task 5: Fix NavCube appearance
-- Replace the blue color palette in `NavCubePlugin.js` with a neutral/professional scheme:
-  - Light grey faces with subtle shading variation per face
-  - Clean white edges
-  - Darker text labels
-- This gives a clean, non-distracting appearance typical of professional BIM viewers.
-
-#### Task 6: Update NativeViewerShell
-- Update props to pass `xeokitViewer` directly to the new toolbar and context menu instead of through the shim ref.
-- Remove shim ref construction that's no longer needed for toolbar (keep it if other components still use it).
+**Verify**: Check that the `FloatingFloorSwitcher` dispatches `isSoloFloor` correctly and that `ViewerToolbar` receives and processes it. The floor switcher does dispatch the event with `isAllFloorsVisible` and the toolbar checks `!isAllFloorsVisible && visibleMetaFloorIds?.length === 1`. This logic looks correct — the clipping should already work if the section plane creation succeeds.
 
 ---
 
-### Technical Details
-
-**File changes:**
-- `src/components/viewer/NativeXeokitViewer.tsx` — apply neutral default colorize instead of reset
-- `src/components/layout/AppLayout.tsx` — hide sidebar for viewer apps on desktop
-- `src/components/viewer/ViewerToolbar.tsx` — complete rewrite (~250 lines instead of 705)
-- `src/components/viewer/ViewerContextMenu.tsx` — simplify to working actions only
-- `public/lib/xeokit/NavCubePlugin.js` — neutral color scheme
-- `src/components/viewer/NativeViewerShell.tsx` — updated props/wiring
+### Files to change:
+1. **`src/components/viewer/NativeXeokitViewer.tsx`** — Remove blanket neutral colorize. Add IfcSpace hiding after model load.
+2. **`src/components/layout/AppLayout.tsx`** — Replace sidebar hiding with auto-collapse via `useEffect` + `setIsSidebarExpanded(false)`.
+3. **`src/components/viewer/NativeViewerShell.tsx`** — Move filter button from `top-3 right-3` to `top-3 left-3`.
+4. **`public/lib/xeokit/NavCubePlugin.js`** — Verify/reinforce neutral grey palette. The current code already has greys — may need cache clearing or the file wasn't saved properly last time.
 
