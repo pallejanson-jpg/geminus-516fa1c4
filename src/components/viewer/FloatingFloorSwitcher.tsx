@@ -272,7 +272,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
       'pointer-events-auto',
       isMobile
         ? 'bottom-16 left-1/2 -translate-x-1/2 flex flex-row bg-black/50 backdrop-blur-md rounded-full px-1.5 py-1 border border-white/10'
-        : cn('left-3 flex flex-col', compact ? 'top-[100px] gap-px' : 'top-[140px]'),
+        : cn('right-4 flex flex-col', compact ? 'top-[100px] gap-px' : 'top-[140px]'),
       className
     )}>
       {visiblePills.map((floor) => {
@@ -299,7 +299,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                 <span className={cn(compact ? "text-[7px]" : "text-[9px] sm:text-xs", "truncate")}>{floor.name}</span>
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="left">
+            <TooltipContent side="right">
               <p>{floor.name}</p>
               <p className="text-xs text-muted-foreground">{state === 'active' ? 'Solo' : state === 'partial' ? 'Part of selection' : 'Not isolated'}</p>
             </TooltipContent>
@@ -314,7 +314,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
               <span className="text-[10px]">+{overflowPills.length}</span>
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-56 p-2" align="center" side="left" sideOffset={8}>
+          <PopoverContent className="w-56 p-2" align="center" side="right" sideOffset={8}>
             <div className="space-y-1 max-h-48 overflow-y-auto">
               {overflowPills.map((floor) => {
                 const isFloorVisible = visibleFloorIds.has(floor.id);
