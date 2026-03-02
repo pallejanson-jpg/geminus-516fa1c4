@@ -15,6 +15,9 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { AppContext } from '@/context/AppContext';
 import { VIEW_MODE_REQUESTED_EVENT } from '@/lib/viewer-events';
 import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDialog';
+import { Filter } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 
 interface NativeViewerShellProps {
   buildingFmGuid: string;
@@ -340,6 +343,25 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           buildingFmGuid={buildingFmGuid}
           isViewerReady={isViewerReady}
         />
+      )}
+
+      {/* Desktop filter toggle button */}
+      {!isMobile && isViewerReady && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={showFilterPanel ? 'default' : 'secondary'}
+                size="icon"
+                className="absolute top-3 right-3 z-30 h-9 w-9 bg-card/95 backdrop-blur-sm shadow-md border"
+                onClick={() => setShowFilterPanel(p => !p)}
+              >
+                <Filter className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">Filter</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
 
       {/* Filter panel */}
