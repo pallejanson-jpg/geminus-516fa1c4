@@ -6,96 +6,18 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// In-memory JWT cache (per cold-start)
-let cachedJwt: string | null = null;
-let cacheTime = 0;
-const CACHE_TTL = 9 * 60 * 60 * 1000; // 9 hours
-
-async function login(): Promise<string> {
-  if (cachedJwt && Date.now() - cacheTime < CACHE_TTL) {
-    return cachedJwt;
+function getJwt(): string {
+  const jwt = Deno.env.get("SWG_SUPPORT_JWT");
+  if (!jwt) {
+    throw new Error("SWG_SUPPORT_JWT secret is not configured");
   }
-
-  const rawUrl = Deno.env.get("SWG_SUPPORT_URL") || "";
-  const baseUrl = rawUrl.replace(/\/+$/, "");
-  const email = Deno.env.get("SWG_SUPPORT_USERNAME") || "";
-  const password = Deno.env.get("SWG_SUPPORT_PASSWORD") || "";
-
-  console.log(`SWG login: baseUrl="${baseUrl}", email="${email}", password length=${password.length}`);
-
-  // Try different body formats on /api/users/login
-  const loginUrl = `${baseUrl}/api/users/login`;
-  const bodyFormats = [
-    { email, password },
-    { Email: email, Password: password },
-    { username: email, password },
-    { UserName: email, Password: password },
-  ];
-
-  let lastError = "";
-  for (const body of bodyFormats) {
-    console.log(`Trying login at: ${loginUrl} with body keys: ${Object.keys(body).join(", ")}`);
-    try {
-      const res = await fetch(loginUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      console.log(`Login response: status=${res.status}, keys=${Object.keys(body).join(",")}`);
-
-      if (res.status === 401) {
-        lastError = `keys ${Object.keys(body).join(",")} returned 401`;
-        continue;
-      }
-
-      const text = await res.text();
-      console.log(`Login response body (first 500 chars): ${text.substring(0, 500)}`);
-
-      if (!res.ok) {
-        lastError = `keys ${Object.keys(body).join(",")} returned ${res.status}: ${text.substring(0, 200)}`;
-        continue;
-      }
-
-      // Try to extract JWT from response
-      const headerJwt = res.headers.get("jwt") || res.headers.get("token");
-      
-      let bodyJwt: string | null = null;
-      try {
-        const parsed = JSON.parse(text);
-        bodyJwt = parsed?.jwt || parsed?.token || parsed?.Token || parsed?.access_token || parsed?.accessToken || null;
-        if (!bodyJwt && typeof parsed === "string" && parsed.includes(".")) {
-          bodyJwt = parsed;
-        }
-      } catch {
-        if (text && text.includes(".") && !text.includes("<")) {
-          bodyJwt = text.trim();
-        }
-      }
-
-      const token = headerJwt || bodyJwt;
-      if (!token) {
-        lastError = `keys ${Object.keys(body).join(",")} succeeded but no JWT found. Response headers: ${JSON.stringify(Object.fromEntries(res.headers.entries()))}. Body: ${text.substring(0, 300)}`;
-        continue;
-      }
-
-      console.log(`Login successful, JWT length=${token.length}`);
-      cachedJwt = token;
-      cacheTime = Date.now();
-      return token;
-    } catch (err) {
-      lastError = `fetch error: ${err}`;
-      console.error(lastError);
-    }
-  }
-
-  throw new Error(`All login attempts failed. Last error: ${lastError}`);
+  return jwt;
 }
 
 async function proxyRequest(method: string, path: string, body?: unknown): Promise<Response> {
   const rawUrl = Deno.env.get("SWG_SUPPORT_URL") || "";
   const baseUrl = rawUrl.replace(/\/+$/, "");
-  const jwt = await login();
+  const jwt = getJwt();
 
   const url = `${baseUrl}${path}`;
   console.log(`Proxying ${method} ${url}`);
@@ -109,6 +31,19 @@ async function proxyRequest(method: string, path: string, body?: unknown): Promi
     },
     body: body ? JSON.stringify(body) : undefined,
   });
+
+  // If 401, the JWT has likely expired
+  if (res.status === 401) {
+    const text = await res.text();
+    console.error(`JWT expired or invalid. Response: ${text.substring(0, 300)}`);
+    return new Response(JSON.stringify({
+      error: "jwt_expired",
+      message: "SWG JWT har gått ut. Logga in manuellt på supportportalen och uppdatera SWG_SUPPORT_JWT i backend secrets.",
+    }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   const contentType = res.headers.get("content-type") || "";
   let data: unknown;
@@ -134,7 +69,7 @@ serve(async (req) => {
 
     switch (action) {
       case "test-login": {
-        const jwt = await login();
+        const jwt = getJwt();
         return new Response(JSON.stringify({
           ok: true,
           hasJwt: !!jwt,
