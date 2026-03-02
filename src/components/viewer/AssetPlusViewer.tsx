@@ -5090,30 +5090,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
               entityId={contextMenu.entityId}
               entityName={contextMenu.entityName}
               onClose={() => setContextMenu(null)}
-              onProperties={() => {
-                if (contextMenu.fmGuid || contextMenu.entityId) {
-                  const guidToUse = contextMenu.fmGuid || contextMenu.entityId || '';
-                  setSelectedFmGuids([guidToUse]);
-                  setPropertiesDialogOpen(true);
-                }
+              onShowLabels={() => {
+                window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', { detail: { show: true } }));
               }}
-              onSelect={() => {
-                if (contextMenu.entityId) {
-                  const viewer = viewerInstanceRef.current;
-                  const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
-                  assetView?.selectItems?.([contextMenu.entityId]);
-                }
+              onCreateIssue={() => {}}
+              onViewIssues={() => {}}
+              onShowRoomLabels={() => {
+                window.dispatchEvent(new CustomEvent('ROOM_LABELS_TOGGLE', { detail: { enabled: true } }));
               }}
-              onZoomToFit={() => {
-                if (contextMenu.entityId) {
-                  const viewer = viewerInstanceRef.current;
-                  const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
-                  assetView?.viewFit?.([contextMenu.entityId]);
-                }
-              }}
-              onIsolate={() => {}}
-              onHideSelected={() => {}}
-              onShowAll={() => {}}
             />
           )}
 

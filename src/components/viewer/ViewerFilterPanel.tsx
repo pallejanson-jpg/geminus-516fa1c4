@@ -668,11 +668,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       if (entity) entity.opacity = 1.0;
     });
 
-    // Step 0b: Always hide "Area" IfcSpace entities (full-floor coverage objects)
-    if (areaSpaceIdsRef.current.length > 0) {
-      areaSpaceIdsRef.current.forEach(id => {
-        const entity = scene.objects?.[id];
-        if (entity) { entity.visible = false; entity.pickable = false; }
+    // Step 0b: Always hide ALL IfcSpace entities after clean slate (prevent red rooms)
+    // They should only become visible when explicitly enabled via "Visa rum" or space filter
+    if (viewer.metaScene?.metaObjects) {
+      Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
+        const ifcType = (mo.type || '').toLowerCase();
+        if (ifcType === 'ifcspace' || ifcType === 'ifc_space') {
+          const entity = scene.objects?.[mo.id];
+          if (entity) { entity.visible = false; entity.pickable = false; }
+        }
       });
     }
 
