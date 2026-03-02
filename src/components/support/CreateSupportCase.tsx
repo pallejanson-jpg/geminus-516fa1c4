@@ -35,13 +35,21 @@ interface Props {
   };
 }
 
+// SWG portal category types (from screenshot)
 const CATEGORY_OPTIONS = [
-  { value: 'fault', label: 'Felanmälan' },
-  { value: 'service', label: 'Servicebeställning' },
-  { value: 'warranty', label: 'Garantiärende' },
-  { value: 'inspection', label: 'Besiktning' },
-  { value: 'consultation', label: 'Fråga / Rådgivning' },
-  { value: 'other', label: 'Övrigt' },
+  { value: 'Ritningsfiler - inleverans', label: 'Ritningsfiler - inleverans' },
+  { value: 'Ritningsfiler - inleverans - Revit A', label: 'Ritningsfiler - inleverans - Revit A' },
+  { value: 'Ritningsfiler - inleverans - Modell, CAD', label: 'Ritningsfiler - inleverans - Modell, CAD' },
+  { value: 'Ritningsfiler - plottning', label: 'Ritningsfiler - plottning' },
+  { value: 'Ritningsfiler - utskick', label: 'Ritningsfiler - utskick' },
+  { value: 'Ändring av areor', label: 'Ändring av areor' },
+  { value: 'Visualisering', label: 'Visualisering' },
+  { value: 'Laserskanning', label: 'Laserskanning' },
+  { value: 'Outdoor', label: 'Outdoor' },
+  { value: 'Asset+', label: 'Asset+' },
+  { value: 'Interaxo', label: 'Interaxo' },
+  { value: 'Supportärende', label: 'Supportärende' },
+  { value: 'Annat ärende', label: 'Annat ärende' },
 ];
 
 interface BuildingOption {
@@ -56,7 +64,7 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
   const [title, setTitle] = useState(prefill?.title || '');
   const [description, setDescription] = useState(prefill?.description || '');
   const [priority, setPriority] = useState('medium');
-  const [category, setCategory] = useState('fault');
+  const [category, setCategory] = useState('Supportärende');
   const [contactEmail, setContactEmail] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [locationDescription, setLocationDescription] = useState('');
@@ -95,7 +103,32 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
     if (!title.trim() || !user) return;
     setSubmitting(true);
     try {
-      const { error } = await supabase.from('support_cases').insert({
+      // Send to SWG via proxy
+      const { data: proxyResult, error: proxyError } = await supabase.functions.invoke('support-proxy', {
+        body: {
+          action: 'create-request',
+          payload: {
+            name: title.trim(),
+            description: description.trim() || null,
+            productName: category,
+            area: buildingName || null,
+            location: locationDescription.trim() || null,
+            installationNumber: installationNumber.trim() || null,
+            contactEmail: contactEmail.trim() || null,
+            contactPhone: contactPhone.trim() || null,
+            startDate: desiredDate ? desiredDate.toISOString() : null,
+          },
+        },
+      });
+
+      if (proxyError) {
+        console.error('SWG proxy error:', proxyError);
+      } else {
+        console.log('SWG create-request response:', proxyResult);
+      }
+
+      // Also save local backup
+      await supabase.from('support_cases').insert({
         title: title.trim(),
         description: description.trim() || null,
         priority,
@@ -110,8 +143,11 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
         location_description: locationDescription.trim() || null,
         installation_number: installationNumber.trim() || null,
         desired_date: desiredDate ? desiredDate.toISOString() : null,
+        external_reference: proxyResult?.data?.id ? String(proxyResult.data.id) : null,
+      }).then(({ error }) => {
+        if (error) console.warn('Local backup save failed:', error);
       });
-      if (error) throw error;
+
       toast({ title: 'Ärende skapat' });
       onCreated();
     } catch (err) {

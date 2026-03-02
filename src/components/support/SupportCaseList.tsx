@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Loader2, Clock, AlertCircle, CheckCircle, XCircle, Search, Mail, Phone } from 'lucide-react';
+import { Loader2, Clock, AlertCircle, CheckCircle, XCircle, Search, FileText, Eye, Package, PlayCircle, MessageSquare } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
 import { formatDistanceToNow } from 'date-fns';
 import SupportCaseDetail from './SupportCaseDetail';
 
+// SWG request mapped to our interface
 export interface SupportCase {
   id: string;
   title: string;
@@ -29,17 +29,35 @@ export interface SupportCase {
   created_at: string;
   updated_at: string;
   resolved_at: string | null;
+  // SWG-specific fields
+  swg_id?: number;
+  swg_status?: string;
+  swg_product?: string;
 }
 
 const STATUS_FILTERS = [
   { value: 'all', label: 'Alla' },
-  { value: 'new', label: 'Nytt' },
-  { value: 'in_progress', label: 'Pågående' },
-  { value: 'resolved', label: 'Löst' },
-  { value: 'closed', label: 'Stängt' },
+  { value: 'New', label: 'Nytt' },
+  { value: 'UnderReview', label: 'Granskas' },
+  { value: 'AwaitingResponse', label: 'Väntar svar' },
+  { value: 'InProgress', label: 'Pågående' },
+  { value: 'Planned', label: 'Planerat' },
+  { value: 'Done', label: 'Klart' },
+  { value: 'Completed', label: 'Avslutat' },
+  { value: 'Closed', label: 'Stängt' },
 ];
 
 const STATUS_CONFIG: Record<string, { icon: React.ElementType; color: string; label: string }> = {
+  New: { icon: AlertCircle, color: 'text-blue-500', label: 'Nytt' },
+  UnderReview: { icon: Eye, color: 'text-purple-500', label: 'Granskas' },
+  AwaitingResponse: { icon: MessageSquare, color: 'text-amber-500', label: 'Väntar svar' },
+  AwaitingOrder: { icon: Package, color: 'text-orange-500', label: 'Väntar order' },
+  Planned: { icon: FileText, color: 'text-indigo-500', label: 'Planerat' },
+  InProgress: { icon: PlayCircle, color: 'text-cyan-500', label: 'Pågående' },
+  Done: { icon: CheckCircle, color: 'text-green-500', label: 'Klart' },
+  Completed: { icon: CheckCircle, color: 'text-emerald-600', label: 'Avslutat' },
+  Closed: { icon: XCircle, color: 'text-muted-foreground', label: 'Stängt' },
+  // Fallbacks for local cases
   new: { icon: AlertCircle, color: 'text-blue-500', label: 'Nytt' },
   in_progress: { icon: Clock, color: 'text-amber-500', label: 'Pågående' },
   resolved: { icon: CheckCircle, color: 'text-green-500', label: 'Löst' },
@@ -53,66 +71,113 @@ const PRIORITY_COLORS: Record<string, string> = {
   critical: 'bg-destructive/10 text-destructive',
 };
 
-const CATEGORY_LABELS: Record<string, string> = {
-  question: 'Fråga',
-  fault: 'Felanmälan',
-  service: 'Service',
-  warranty: 'Garanti',
-  inspection: 'Besiktning',
-  consultation: 'Rådgivning',
-  other: 'Övrigt',
-};
+// Map SWG API response to our SupportCase interface
+function mapSwgRequest(r: Record<string, unknown>): SupportCase {
+  return {
+    id: String(r.id || r.Id || ''),
+    title: String(r.name || r.Name || r.title || r.Title || r.subject || r.Subject || ''),
+    description: (r.description || r.Description || null) as string | null,
+    status: String(r.status || r.Status || r.statusName || r.StatusName || 'New'),
+    priority: String(r.priority || r.Priority || 'medium'),
+    category: String(r.productName || r.ProductName || r.product || r.Product || r.category || r.Category || ''),
+    building_name: (r.buildingName || r.BuildingName || r.area || r.Area || null) as string | null,
+    building_fm_guid: null,
+    reported_by: String(r.createdBy || r.CreatedBy || r.reportedBy || ''),
+    bcf_issue_id: null,
+    screenshot_url: null,
+    contact_email: (r.contactEmail || r.ContactEmail || null) as string | null,
+    contact_phone: (r.contactPhone || r.ContactPhone || null) as string | null,
+    external_reference: (r.referenceNumber || r.ReferenceNumber || r.externalReference || null) as string | null,
+    location_description: (r.location || r.Location || null) as string | null,
+    installation_number: (r.installationNumber || r.InstallationNumber || null) as string | null,
+    desired_date: (r.desiredDate || r.DesiredDate || r.startDate || r.StartDate || null) as string | null,
+    created_at: String(r.created || r.Created || r.createdAt || r.CreatedAt || new Date().toISOString()),
+    updated_at: String(r.updated || r.Updated || r.updatedAt || r.UpdatedAt || new Date().toISOString()),
+    resolved_at: (r.resolvedAt || r.ResolvedAt || r.completedAt || r.CompletedAt || null) as string | null,
+    swg_id: typeof r.id === 'number' ? r.id : undefined,
+    swg_status: String(r.statusName || r.StatusName || r.status || r.Status || ''),
+    swg_product: String(r.productName || r.ProductName || ''),
+  };
+}
 
 const SupportCaseList: React.FC = () => {
-  const { user, isAdmin } = useAuth();
   const [cases, setCases] = useState<SupportCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCase, setSelectedCase] = useState<SupportCase | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchCases = async () => {
+  const fetchCases = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      let query = supabase
-        .from('support_cases')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // Build SWG filter based on selected status
+      const searchShow: Record<string, boolean> = {
+        showNew: filter === 'all' || filter === 'New',
+        showUnderReview: filter === 'all' || filter === 'UnderReview',
+        showAwaitingResponse: filter === 'all' || filter === 'AwaitingResponse',
+        showAwaitingOrder: filter === 'all' || filter === 'AwaitingOrder',
+        showPlanned: filter === 'all' || filter === 'Planned',
+        showInProgress: filter === 'all' || filter === 'InProgress',
+        showDone: filter === 'all' || filter === 'Done',
+        showCompleted: filter === 'all' || filter === 'Completed',
+        showClosed: filter === 'all' || filter === 'Closed',
+      };
 
-      if (filter !== 'all') {
-        query = query.eq('status', filter);
+      const { data, error: fnError } = await supabase.functions.invoke('support-proxy', {
+        body: {
+          action: 'list-requests',
+          filter: {
+            excludeDetails: false,
+            includeDescription: true,
+            searchShow,
+          },
+        },
+      });
+
+      if (fnError) throw fnError;
+
+      console.log('SWG list-requests response:', data);
+
+      // The proxy wraps the response as { status, data }
+      const responseData = data?.data;
+      
+      if (Array.isArray(responseData)) {
+        setCases(responseData.map(mapSwgRequest));
+      } else if (responseData && typeof responseData === 'object') {
+        // Maybe data is wrapped in another property
+        const items = (responseData as Record<string, unknown>).requests || 
+                      (responseData as Record<string, unknown>).items || 
+                      (responseData as Record<string, unknown>).data ||
+                      (responseData as Record<string, unknown>).result;
+        if (Array.isArray(items)) {
+          setCases(items.map(mapSwgRequest));
+        } else {
+          console.warn('Unexpected SWG response shape:', responseData);
+          setCases([]);
+        }
+      } else {
+        setCases([]);
       }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      setCases((data as SupportCase[]) || []);
     } catch (err) {
       console.error('Failed to fetch support cases:', err);
+      setError('Kunde inte hämta ärenden från SWG');
+      setCases([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
 
   useEffect(() => {
     fetchCases();
-  }, [filter]);
-
-  useEffect(() => {
-    const channel = supabase
-      .channel('support-cases-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'support_cases' }, () => {
-        fetchCases();
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [filter]);
+  }, [fetchCases]);
 
   const filteredCases = searchQuery.trim()
     ? cases.filter(c =>
         c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (c.description && c.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        c.id.slice(0, 8).includes(searchQuery.toLowerCase())
+        String(c.id).includes(searchQuery)
       )
     : cases;
 
@@ -126,6 +191,12 @@ const SupportCaseList: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      {error && (
+        <div className="text-sm text-destructive bg-destructive/10 rounded-md p-3">
+          {error}
+        </div>
+      )}
+
       {/* Search */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -159,10 +230,9 @@ const SupportCaseList: React.FC = () => {
       ) : (
         <div className="space-y-2">
           {filteredCases.map(c => {
-            const statusCfg = STATUS_CONFIG[c.status] || STATUS_CONFIG.new;
+            const statusCfg = STATUS_CONFIG[c.status] || STATUS_CONFIG[c.swg_status || ''] || STATUS_CONFIG.New;
             const StatusIcon = statusCfg.icon;
-            const caseNumber = `#${c.id.slice(0, 8).toUpperCase()}`;
-            const categoryLabel = CATEGORY_LABELS[c.category] || c.category;
+            const caseNumber = c.swg_id ? `#${c.swg_id}` : `#${String(c.id).slice(0, 8).toUpperCase()}`;
             return (
               <Card
                 key={c.id}
@@ -180,18 +250,11 @@ const SupportCaseList: React.FC = () => {
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">{c.description}</p>
                     )}
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      <Badge variant="secondary" className="text-xs">{categoryLabel}</Badge>
-                      <Badge variant="outline" className={`text-xs ${PRIORITY_COLORS[c.priority] || ''}`}>
-                        {c.priority}
-                      </Badge>
-                      {c.bcf_issue_id && (
-                        <Badge variant="secondary" className="text-xs">BCF</Badge>
+                      {c.category && (
+                        <Badge variant="secondary" className="text-xs">{c.category}</Badge>
                       )}
-                      {(c.contact_email || c.contact_phone) && (
-                        <span className="flex items-center gap-1 text-muted-foreground">
-                          {c.contact_email && <Mail className="h-3 w-3" />}
-                          {c.contact_phone && <Phone className="h-3 w-3" />}
-                        </span>
+                      {c.swg_product && c.swg_product !== c.category && (
+                        <Badge variant="outline" className="text-xs">{c.swg_product}</Badge>
                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
