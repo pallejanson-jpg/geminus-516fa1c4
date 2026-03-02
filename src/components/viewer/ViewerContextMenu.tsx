@@ -1,18 +1,15 @@
 import React, { useEffect, useRef } from 'react';
-import { Info, MousePointer, ZoomIn, EyeOff, Focus, Eye } from 'lucide-react';
-import { Separator } from '@/components/ui/separator';
+import { Type, MessageSquarePlus, MessageSquare, Tags } from 'lucide-react';
 
 interface ViewerContextMenuProps {
   position: { x: number; y: number };
   entityId: string | null;
   entityName: string | null;
   onClose: () => void;
-  onProperties: () => void;
-  onSelect: () => void;
-  onZoomToFit: () => void;
-  onIsolate: () => void;
-  onHideSelected: () => void;
-  onShowAll: () => void;
+  onShowLabels: () => void;
+  onCreateIssue: () => void;
+  onViewIssues: () => void;
+  onShowRoomLabels: () => void;
 }
 
 const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
@@ -20,12 +17,10 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   entityId,
   entityName,
   onClose,
-  onProperties,
-  onSelect,
-  onZoomToFit,
-  onIsolate,
-  onHideSelected,
-  onShowAll,
+  onShowLabels,
+  onCreateIssue,
+  onViewIssues,
+  onShowRoomLabels,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -40,24 +35,17 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   }, [onClose]);
 
   const menuWidth = 200;
-  const menuHeight = 280;
+  const menuHeight = 200;
   const x = Math.min(position.x, window.innerWidth - menuWidth - 8);
   const y = Math.min(position.y, window.innerHeight - menuHeight - 8);
-
-  const hasEntity = !!entityId;
 
   const handleClick = (action: () => void) => { action(); onClose(); };
 
   const items = [
-    { icon: Info, label: 'Properties', action: onProperties, needsEntity: true, color: 'text-primary' },
-  ];
-
-  const viewerItems = [
-    { icon: MousePointer, label: 'Select object', action: onSelect, needsEntity: true },
-    { icon: ZoomIn, label: 'Zoom to fit', action: onZoomToFit, needsEntity: true },
-    { icon: Focus, label: 'Isolate object', action: onIsolate, needsEntity: true },
-    { icon: EyeOff, label: 'Hide object', action: onHideSelected, needsEntity: true },
-    { icon: Eye, label: 'Show all', action: onShowAll, needsEntity: false },
+    { icon: Tags, label: 'Visa etiketter', action: onShowLabels },
+    { icon: MessageSquarePlus, label: 'Skapa ärende', action: onCreateIssue },
+    { icon: MessageSquare, label: 'Visa ärenden', action: onViewIssues },
+    { icon: Type, label: 'Visa rumsetiketter', action: onShowRoomLabels },
   ];
 
   return (
@@ -73,28 +61,11 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
       )}
 
       <div className="py-1">
-        {items.map(({ icon: Icon, label, action, needsEntity, color }) => (
+        {items.map(({ icon: Icon, label, action }) => (
           <button
             key={label}
-            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-zinc-100 hover:bg-zinc-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-zinc-100 hover:bg-zinc-800 transition-colors"
             onClick={() => handleClick(action)}
-            disabled={needsEntity && !hasEntity}
-          >
-            <Icon className={`h-4 w-4 ${color || 'text-muted-foreground'}`} />
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <Separator className="bg-zinc-700" />
-
-      <div className="py-1">
-        {viewerItems.map(({ icon: Icon, label, action, needsEntity }) => (
-          <button
-            key={label}
-            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-zinc-100 hover:bg-zinc-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            onClick={() => handleClick(action)}
-            disabled={needsEntity && !hasEntity}
           >
             <Icon className="h-4 w-4 text-muted-foreground" />
             {label}
