@@ -19,6 +19,7 @@ import useRoomLabels from '@/hooks/useRoomLabels';
 import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDialog';
 import { ARCHITECT_BACKGROUND_CHANGED_EVENT, ARCHITECT_BACKGROUND_PRESETS, type BackgroundPresetId } from '@/hooks/useArchitectViewMode';
 import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
+import { recolorArchitectObjects } from '@/lib/architect-colors';
 import { Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
@@ -327,7 +328,9 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     if (!xeokitViewer?.scene) return;
     const scene = xeokitViewer.scene;
     scene.setObjectsVisible(scene.objectIds, true);
-    // Re-hide IfcSpaces
+    // Re-apply full architect color palette (includes hiding spaces)
+    recolorArchitectObjects(xeokitViewer);
+    // Re-hide spaces
     const metaObjects = xeokitViewer.metaScene?.metaObjects;
     if (metaObjects) {
       Object.values(metaObjects).forEach((mo: any) => {
@@ -335,8 +338,6 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         if (t.includes('ifcspace') || t === 'ifc_space' || t === 'space') {
           const entity = scene.objects?.[mo.id];
           if (entity) {
-            entity.colorize = [0.5, 0.7, 0.9];
-            entity.opacity = 0.3;
             entity.visible = false;
             entity.pickable = false;
           }
