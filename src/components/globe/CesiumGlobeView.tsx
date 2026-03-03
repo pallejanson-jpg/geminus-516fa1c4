@@ -65,9 +65,9 @@ const CesiumGlobeView: React.FC = () => {
     });
   }, []);
 
-  // Create Cesium Viewer imperatively
+  // Create Cesium Viewer imperatively — wait for token
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !tokenReady) return;
 
     const viewer = new Cesium.Viewer(containerRef.current, {
       timeline: false,
