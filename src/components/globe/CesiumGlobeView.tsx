@@ -43,6 +43,7 @@ const CesiumGlobeView: React.FC = () => {
   const facilitiesByGuidRef = useRef<Map<string, BuildingCoord & { displayName: string; has360: boolean }>>(new Map());
   const osmBuildingsLayerRef = useRef<Cesium.Cesium3DTileset | null>(null);
   const hasFlewInRef = useRef(false);
+  const zoomedFmGuidRef = useRef<string | null>(null);
 
   const [tokenError, setTokenError] = useState(false);
   const [tokenReady, setTokenReady] = useState(false);
@@ -50,6 +51,7 @@ const CesiumGlobeView: React.FC = () => {
   const [show3dBuildings, setShow3dBuildings] = useState(true);
   const [selectedBuilding, setSelectedBuilding] = useState<SelectedBuilding | null>(null);
   const [selectedFmGuid, setSelectedFmGuid] = useState<string | null>(null);
+  const [zoomedFmGuid, setZoomedFmGuid] = useState<string | null>(null);
   const [viewerReady, setViewerReady] = useState(false);
 
   // Fetch Cesium token
@@ -108,10 +110,11 @@ const CesiumGlobeView: React.FC = () => {
       const entity = picked?.id as Cesium.Entity | undefined;
       const fmGuid = entity?.properties?.fm_guid?.getValue?.() as string | undefined;
 
-      // If clicked empty space, close popup
+      // If clicked empty space, close popup and reset
       if (!fmGuid) {
         setSelectedBuilding(null);
         setSelectedFmGuid(null);
+        setZoomedFmGuid(null);
         return;
       }
 
@@ -119,9 +122,30 @@ const CesiumGlobeView: React.FC = () => {
       if (!facility) return;
 
       setSelectedFmGuid(facility.fm_guid);
-      setSelectedBuilding(null);
 
-      // Fly to ~300m camera altitude with 3D perspective
+      // Check if we already zoomed to this building — second click shows popup
+      const alreadyZoomed = zoomedFmGuidRef.current === fmGuid;
+
+      if (alreadyZoomed) {
+        // Second click: show popup, offset above and to the right of pin
+        const screenPos = Cesium.SceneTransforms.worldToWindowCoordinates(
+          viewer.scene,
+          toCartesian(facility.latitude, facility.longitude, 0),
+        );
+        if (screenPos) {
+          setSelectedBuilding({
+            facility,
+            screenX: screenPos.x,
+            screenY: screenPos.y,
+          });
+        }
+        return;
+      }
+
+      // First click: zoom in, no popup
+      setSelectedBuilding(null);
+      setZoomedFmGuid(fmGuid);
+
       viewer.camera.flyTo({
         destination: toCartesian(facility.latitude, facility.longitude, 300),
         orientation: {
@@ -130,20 +154,6 @@ const CesiumGlobeView: React.FC = () => {
           roll: 0,
         },
         duration: 1.5,
-        complete: () => {
-          // After fly-to completes, show the popup
-          const screenPos = Cesium.SceneTransforms.worldToWindowCoordinates(
-            viewer.scene,
-            toCartesian(facility.latitude, facility.longitude, 0),
-          );
-          if (screenPos) {
-            setSelectedBuilding({
-              facility,
-              screenX: screenPos.x,
-              screenY: screenPos.y,
-            });
-          }
-        },
       });
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
@@ -206,9 +216,14 @@ const CesiumGlobeView: React.FC = () => {
     facilitiesByGuidRef.current = facilitiesByGuid;
   }, [facilitiesByGuid]);
 
+  useEffect(() => {
+    zoomedFmGuidRef.current = zoomedFmGuid;
+  }, [zoomedFmGuid]);
+
   const handleNavigateToFacility = useCallback((fmGuid: string) => {
     setSelectedBuilding(null);
     setSelectedFmGuid(null);
+    setZoomedFmGuid(null);
     const node = navigatorTreeData.find(n => n.fmGuid.toLowerCase() === fmGuid.toLowerCase());
     if (node) {
       setSelectedFacility(node);
@@ -219,14 +234,18 @@ const CesiumGlobeView: React.FC = () => {
   const handleOpenViewer = useCallback((fmGuid: string) => {
     setSelectedBuilding(null);
     setSelectedFmGuid(null);
+    setZoomedFmGuid(null);
     const node = navigatorTreeData.find(n => n.fmGuid.toLowerCase() === fmGuid.toLowerCase());
-    if (node) setSelectedFacility(node);
-    navigate(`/split-viewer?building=${fmGuid}&mode=3d`);
+    if (node) {
+      setSelectedFacility(node);
+    }
+    navigate('/split-viewer');
   }, [navigatorTreeData, setSelectedFacility, navigate]);
 
   const handleResetView = useCallback(() => {
     setSelectedBuilding(null);
     setSelectedFmGuid(null);
+    setZoomedFmGuid(null);
     // Fly back to the overview instead of default home
     const viewer = cesiumViewerRef.current;
     if (viewer && facilities.length > 0) {
@@ -423,8 +442,8 @@ const CesiumGlobeView: React.FC = () => {
         <div
           className="fixed z-50 pointer-events-auto"
           style={{
-            left: Math.min(selectedBuilding.screenX - 80, window.innerWidth - 190),
-            top: Math.max(selectedBuilding.screenY - 110, 8),
+            left: Math.min(selectedBuilding.screenX + 20, window.innerWidth - 190),
+            top: Math.max(selectedBuilding.screenY - 60, 8),
           }}
           onClick={(e) => e.stopPropagation()}
         >
