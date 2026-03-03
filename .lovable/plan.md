@@ -1,33 +1,44 @@
 
 
-## Plan: Mobile 3D Viewer Layout Optimization + Red Room Fix
+# Plan: Cesium Globe — Fly-in animation, building popup, 3D buildings default, XKT placement
 
-### Problem 1: Mobile header too low, toolbar too high
-The `MobileViewerOverlay` header uses `paddingTop: calc(max(env(safe-area-inset-top), 20px) + 8px)` — this adds extra padding pushing controls down. The `ViewerToolbar` bottom bar uses `bottom: calc(max(env(safe-area-inset-bottom), 12px) + 8px)` — not enough clearance but also not utilizing the space well.
+## 1. Startup fly-in animation
+When the globe loads and buildings are available, start with a zoomed-out view of Earth, then fly to the bounding region of all buildings (Nordic/Northern Europe) over ~3 seconds.
 
-### Problem 2: Red rooms on first load
-IfcSpace objects are hidden at line 526 in `NativeXeokitViewer.tsx` — but they're hidden *without* first applying the blue color. When any code later makes them visible (filter panel, "Visa rum", "Show All"), they appear with raw red IFC materials until explicitly re-colored. The fix is to **pre-apply the blue color and opacity to all IfcSpace entities at load time**, before hiding them. This way, whenever they become visible later, they're already blue.
+**Implementation in `CesiumGlobeView.tsx`:**
+- After pins are placed (in the facilities sync `useEffect`), compute a `Rectangle` bounding all building coordinates with some padding
+- Call `viewer.camera.flyTo({ destination: boundingRect, duration: 3 })` to smoothly zoom from the default global view down to Northern Europe
 
-### Changes
+## 2. Click → building info popup (like MapView)
+Replace the current "click selects + fly" behavior with a floating info card showing building name, address, category, and a button to navigate to the facility landing page.
 
-**1. `src/components/viewer/mobile/MobileViewerOverlay.tsx`**
-- Reduce the header's `paddingTop` to use just the safe-area-inset with minimal extra padding: `calc(env(safe-area-inset-top, 0px) + 4px)` and reduce `p-2` to `p-1.5`
-- Make buttons smaller (`h-8 w-8`) and mode switcher more compact
+**Implementation:**
+- Add a `selectedBuilding` state holding the clicked facility data + screen position
+- On left-click: set `selectedBuilding` with facility info, fly to 300m altitude above it
+- Render a floating `Card` positioned near the pin showing:
+  - Building name, category badge
+  - "Visa detaljer" button → navigates to facility landing page (`setSelectedFacility` + `setActiveApp('portfolio')`)
+  - "Visa 3D" button → navigates to split-viewer
+- Clicking the card's action button enters the building's landing page
 
-**2. `src/components/viewer/ViewerToolbar.tsx`**
-- On mobile, increase bottom offset to push the toolbar lower: `calc(env(safe-area-inset-bottom, 0px) + 4px)` — just enough to clear the browser chrome without going under it
-- Reduce button sizes on mobile for more compact layout
+## 3. Enable 3D buildings by default + set 300m fly-to altitude
+- Change `show3dBuildings` initial state from `false` to `true`
+- When clicking a building, fly to `toCartesian(lat, lng, 300)` with a slight pitch/heading for perspective
 
-**3. `src/components/viewer/NativeXeokitViewer.tsx`**
-- At lines 518-532 where IfcSpace entities are hidden, **pre-colorize them blue** before hiding:
-  ```
-  entity.colorize = [0.5, 0.7, 0.9];
-  entity.opacity = 0.3;
-  entity.visible = false;
-  entity.pickable = false;
-  ```
-- This ensures any subsequent `visible = true` shows blue, never red
+## 4. Smaller, cleaner 3D buildings toggle
+Reduce the control card size — make it a compact pill-style toggle instead of a full card with padding. Remove the "Cesium Globe" title header, keep just the switch with a small icon.
 
-**4. `src/components/viewer/NativeViewerShell.tsx`**
-- In `handleContextShowAll` (line 321-335), after re-hiding IfcSpaces, also pre-apply blue color so they stay blue if toggled on later
+## 5. Future: XKT model placement on globe
+This is a more complex feature that requires:
+- Converting XKT models to glTF/3D Tiles format (Cesium doesn't natively load XKT)
+- Georeferencing the model (placing it at correct lat/lng/altitude with rotation)
+- Options: convert IFC → 3D Tiles via a pipeline, or use Cesium ion for hosting
+
+I'll note this as a future enhancement and return with a detailed plan when ready.
+
+## Files to change
+
+| File | Change |
+|------|--------|
+| `CesiumGlobeView.tsx` | Fly-in animation, building popup card, 3D buildings default on, compact toggle, 300m perspective fly-to |
 
