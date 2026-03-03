@@ -257,7 +257,7 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
 
       {/* Issue overlay - ready for when 2D view works */}
       {phase === 'ready' && buildingFmGuid && (
-        <FmAccessIssueOverlay
+        <GeminusPluginMenu
           buildingFmGuid={buildingFmGuid}
           buildingName={buildingName}
           source="2d_fm_access"
