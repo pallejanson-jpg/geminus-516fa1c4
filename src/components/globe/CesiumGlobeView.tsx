@@ -50,6 +50,7 @@ const CesiumGlobeView: React.FC = () => {
   const [show3dBuildings, setShow3dBuildings] = useState(true);
   const [selectedBuilding, setSelectedBuilding] = useState<SelectedBuilding | null>(null);
   const [selectedFmGuid, setSelectedFmGuid] = useState<string | null>(null);
+  const [zoomedFmGuid, setZoomedFmGuid] = useState<string | null>(null);
   const [viewerReady, setViewerReady] = useState(false);
 
   // Fetch Cesium token
