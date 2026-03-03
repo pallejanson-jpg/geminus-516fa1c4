@@ -891,19 +891,23 @@ serve(async (req) => {
 
       case 'get-hierarchy': {
         const { buildingFmGuid, perspectiveId = '8' } = params;
-        if (!buildingFmGuid) {
-          return new Response(
-            JSON.stringify({ success: false, error: 'buildingFmGuid is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
 
         try {
-          // Get full subtree: Fastighet → Byggnad → Plan → Rum → Objekt
-          const response = await fmAccessFetch(
-            config,
-            `/api/perspective/byguid/subtree/json/${encodeURIComponent(perspectiveId)}/${encodeURIComponent(buildingFmGuid)}`
-          );
+          let response;
+          if (buildingFmGuid) {
+            // Get full subtree: Fastighet → Byggnad → Plan → Rum → Objekt
+            response = await fmAccessFetch(
+              config,
+              `/api/perspective/byguid/subtree/json/${encodeURIComponent(perspectiveId)}/${encodeURIComponent(buildingFmGuid)}`
+            );
+          } else {
+            // No building specified — get root perspective tree (all properties/buildings)
+            console.log('FM Access: Loading root perspective tree (no buildingFmGuid)');
+            response = await fmAccessFetch(
+              config,
+              `/api/perspective/root/json/${encodeURIComponent(perspectiveId)}`
+            );
+          }
           const text = await response.text();
           let data;
           try { data = JSON.parse(text); } catch { data = text; }

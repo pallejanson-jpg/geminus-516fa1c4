@@ -3,10 +3,8 @@ import { AppContext } from '@/context/AppContext';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { TreePine, Search, FileText, Plug, Loader2, Building2 } from 'lucide-react';
+import { TreePine, Search, FileText, Loader2, Building2 } from 'lucide-react';
 import { useFmAccessApi, FmAccessNode } from '@/hooks/useFmAccessApi';
 import { useIsMobile } from '@/hooks/use-mobile';
 import FmAccessTree from './FmAccessTree';
@@ -25,13 +23,24 @@ const FmAccessNativeView: React.FC = () => {
   const [leftTab, setLeftTab] = useState<string>('tree');
 
   const buildingFmGuid = selectedFacility?.fm_guid || selectedFacility?.fm_access_building_guid;
-  const buildingName = selectedFacility?.name || 'Byggnad';
+  const buildingName = buildingFmGuid ? (selectedFacility?.name || 'Byggnad') : 'FM Access';
 
   const loadHierarchy = useCallback(async () => {
-    if (!buildingFmGuid) return;
     setTreeLoading(true);
-    const data = await getHierarchy(buildingFmGuid);
-    setRootNode(data);
+    // If no building selected, load root tree (all properties)
+    const data = await getHierarchy(buildingFmGuid || undefined);
+    if (data) {
+      if (Array.isArray(data)) {
+        // Root returns array of top-level nodes — wrap in virtual root
+        setRootNode({
+          objectName: 'FM Access',
+          classId: 0,
+          children: data,
+        });
+      } else {
+        setRootNode(data);
+      }
+    }
     setTreeLoading(false);
   }, [buildingFmGuid, getHierarchy]);
 
@@ -51,7 +60,6 @@ const FmAccessNativeView: React.FC = () => {
   const handleRefresh = () => {
     loadHierarchy();
     if (selectedNode?.guid || selectedNode?.systemGuid) {
-      // Re-select to refresh detail
       setSelectedNode({ ...selectedNode });
     }
   };
@@ -60,13 +68,11 @@ const FmAccessNativeView: React.FC = () => {
     // Could open a dialog — for now, placeholder
   };
 
-  // Determine building objectId for documents
-  const buildingObjectId = rootNode?.objectId ? String(rootNode.objectId) : buildingFmGuid;
+  const buildingObjectId = rootNode?.objectId ? String(rootNode.objectId) : buildingFmGuid || '';
 
   if (isMobile) {
     return (
       <div className="flex flex-col h-full bg-background">
-        {/* Header */}
         <div className="flex items-center gap-2 p-3 border-b border-border">
           <Building2 size={16} className="text-primary" />
           <h2 className="text-sm font-semibold truncate flex-1">{buildingName}</h2>
@@ -103,10 +109,8 @@ const FmAccessNativeView: React.FC = () => {
     );
   }
 
-  // Desktop: resizable panels
   return (
     <div className="flex flex-col h-full bg-background">
-      {/* Header */}
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-card">
         <Building2 size={18} className="text-primary" />
         <h2 className="text-base font-semibold truncate">{buildingName}</h2>
@@ -116,7 +120,6 @@ const FmAccessNativeView: React.FC = () => {
       </div>
 
       <ResizablePanelGroup direction="horizontal" className="flex-1">
-        {/* Left panel: tree / search */}
         <ResizablePanel defaultSize={30} minSize={20} maxSize={45}>
           <Tabs value={leftTab} onValueChange={setLeftTab} className="h-full flex flex-col">
             <TabsList className="mx-2 mt-2 mb-0">
@@ -144,7 +147,6 @@ const FmAccessNativeView: React.FC = () => {
 
         <ResizableHandle withHandle />
 
-        {/* Right panel: object detail */}
         <ResizablePanel defaultSize={70}>
           <FmAccessObjectPanel
             selectedNode={selectedNode}
