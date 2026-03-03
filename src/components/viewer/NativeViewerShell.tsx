@@ -327,7 +327,9 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     if (!xeokitViewer?.scene) return;
     const scene = xeokitViewer.scene;
     scene.setObjectsVisible(scene.objectIds, true);
-    // Re-hide IfcSpaces
+    // Re-apply full architect color palette (includes hiding spaces)
+    recolorArchitectObjects(xeokitViewer);
+    // Re-hide spaces
     const metaObjects = xeokitViewer.metaScene?.metaObjects;
     if (metaObjects) {
       Object.values(metaObjects).forEach((mo: any) => {
@@ -335,8 +337,6 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         if (t.includes('ifcspace') || t === 'ifc_space' || t === 'space') {
           const entity = scene.objects?.[mo.id];
           if (entity) {
-            entity.colorize = [0.5, 0.7, 0.9];
-            entity.opacity = 0.3;
             entity.visible = false;
             entity.pickable = false;
           }
