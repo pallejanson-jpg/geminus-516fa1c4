@@ -45,6 +45,7 @@ const CesiumGlobeView: React.FC = () => {
   const osmBuildingsLayerRef = useRef<Cesium.Cesium3DTileset | null>(null);
 
   const [tokenError, setTokenError] = useState(false);
+  const [tokenReady, setTokenReady] = useState(false);
   const [buildingCoords, setBuildingCoords] = useState<BuildingCoord[]>([]);
   const [show3dBuildings, setShow3dBuildings] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
