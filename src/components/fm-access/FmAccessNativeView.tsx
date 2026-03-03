@@ -26,12 +26,15 @@ const FmAccessNativeView: React.FC = () => {
   const buildingName = buildingFmGuid ? (selectedFacility?.name || 'Byggnad') : 'FM Access';
 
   const loadHierarchy = useCallback(async () => {
+    if (!buildingFmGuid) {
+      // No building selected — show empty state, don't call API
+      setRootNode(null);
+      return;
+    }
     setTreeLoading(true);
-    // If no building selected, load root tree (all properties)
-    const data = await getHierarchy(buildingFmGuid || undefined);
+    const data = await getHierarchy(buildingFmGuid);
     if (data) {
       if (Array.isArray(data)) {
-        // Root returns array of top-level nodes — wrap in virtual root
         setRootNode({
           objectName: 'FM Access',
           classId: 0,
