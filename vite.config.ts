@@ -61,6 +61,9 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Force a single copy of @cesium/engine to prevent resium/cesium
+      // from bundling a second version (v23) alongside the project's v22.
+      "@cesium/engine": path.resolve(__dirname, "node_modules/@cesium/engine"),
     },
   },
   // Ensure WASM files from web-ifc are served correctly
