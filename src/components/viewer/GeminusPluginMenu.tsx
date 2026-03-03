@@ -163,8 +163,8 @@ export default function GeminusPluginMenu({
             handleClose();
           }}
           prefill={{
-            buildingName: buildingName,
-            buildingFmGuid: buildingFmGuid,
+            building_name: buildingName,
+            building_fm_guid: buildingFmGuid,
           }}
         />
       )}
