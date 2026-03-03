@@ -80,18 +80,12 @@ const MainContent: React.FC = () => {
                     );
                 }
                 return <InsightsView />;
-            case 'fma_plus': {
-                const fmaConfig = appConfigs?.fma_plus || {};
+            case 'fma_plus':
                 return (
                     <Suspense fallback={<LazyFallback />}>
-                        <FmaInternalView
-                            url={fmaConfig.url || 'https://swg-demo.bim.cloud/'}
-                            buildingFmGuid={selectedFacility?.fm_guid}
-                            buildingName={selectedFacility?.name}
-                        />
+                        <FmAccessNativeView />
                     </Suspense>
                 );
-            }
             case 'asset_plus':
                 return (
                     <PlaceholderView 
