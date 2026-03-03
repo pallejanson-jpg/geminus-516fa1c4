@@ -73,6 +73,8 @@ const FmAccessNativeView: React.FC = () => {
 
   const buildingObjectId = rootNode?.objectId ? String(rootNode.objectId) : buildingFmGuid || '';
 
+  const noBuildingSelected = !buildingFmGuid;
+
   if (isMobile) {
     return (
       <div className="flex flex-col h-full bg-background">
