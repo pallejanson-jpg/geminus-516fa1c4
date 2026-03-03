@@ -234,14 +234,18 @@ const CesiumGlobeView: React.FC = () => {
   const handleOpenViewer = useCallback((fmGuid: string) => {
     setSelectedBuilding(null);
     setSelectedFmGuid(null);
+    setZoomedFmGuid(null);
     const node = navigatorTreeData.find(n => n.fmGuid.toLowerCase() === fmGuid.toLowerCase());
-    if (node) setSelectedFacility(node);
-    navigate(`/split-viewer?building=${fmGuid}&mode=3d`);
+    if (node) {
+      setSelectedFacility(node);
+    }
+    navigate('/split-viewer');
   }, [navigatorTreeData, setSelectedFacility, navigate]);
 
   const handleResetView = useCallback(() => {
     setSelectedBuilding(null);
     setSelectedFmGuid(null);
+    setZoomedFmGuid(null);
     // Fly back to the overview instead of default home
     const viewer = cesiumViewerRef.current;
     if (viewer && facilities.length > 0) {
