@@ -632,7 +632,15 @@ export default function Ivion360View({
             }}
           />
         )}
+
+        {/* Geminus plugin menu */}
+        {buildingFmGuid && (
+          <GeminusPluginMenu
+            buildingFmGuid={buildingFmGuid}
+            buildingName={buildingName}
+            source="ivion_360"
+          />
+        )}
       </div>
-    </div>
   );
 }
