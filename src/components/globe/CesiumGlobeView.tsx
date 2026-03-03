@@ -442,8 +442,8 @@ const CesiumGlobeView: React.FC = () => {
         <div
           className="fixed z-50 pointer-events-auto"
           style={{
-            left: Math.min(selectedBuilding.screenX - 80, window.innerWidth - 190),
-            top: Math.max(selectedBuilding.screenY - 110, 8),
+            left: Math.min(selectedBuilding.screenX + 20, window.innerWidth - 190),
+            top: Math.max(selectedBuilding.screenY - 60, 8),
           }}
           onClick={(e) => e.stopPropagation()}
         >
