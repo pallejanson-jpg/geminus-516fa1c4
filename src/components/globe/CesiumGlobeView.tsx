@@ -216,6 +216,10 @@ const CesiumGlobeView: React.FC = () => {
     facilitiesByGuidRef.current = facilitiesByGuid;
   }, [facilitiesByGuid]);
 
+  useEffect(() => {
+    zoomedFmGuidRef.current = zoomedFmGuid;
+  }, [zoomedFmGuid]);
+
   const handleNavigateToFacility = useCallback((fmGuid: string) => {
     setSelectedBuilding(null);
     setSelectedFmGuid(null);
