@@ -1,13 +1,13 @@
 import React, { useContext, useState, lazy, Suspense } from "react";
-import { Loader2, Box, Archive, Split } from "lucide-react";
+import { Box, Archive, Split } from "lucide-react";
 import { THEMES } from "@/lib/constants";
 import { AppContext } from "@/context/AppContext";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { Spinner } from "@/components/ui/spinner";
 import PortfolioView from "@/components/portfolio/PortfolioView";
 import HomeLanding from "@/components/home/HomeLanding";
 import PlaceholderView from "@/components/layout/PlaceholderView";
 import NavigatorView from "@/components/navigator/NavigatorView";
-// Viewer (AssetPlusViewer) removed — native_viewer is the standard now
 import InsightsView from "@/components/insights/InsightsView";
 import BuildingInsightsView from "@/components/insights/BuildingInsightsView";
 import Ivion360View from "@/components/viewer/Ivion360View";
@@ -25,11 +25,14 @@ const FmaInternalView = lazy(() => import("@/components/viewer/FmaInternalView")
 const CesiumGlobeView = lazy(() => import("@/components/globe/CesiumGlobeView"));
 const CustomerPortalView = lazy(() => import("@/components/support/CustomerPortalView"));
 
-// Apps that need overflow:hidden and h-full on BOTH desktop and mobile (3D canvas, maps)
 const VIEWER_APPS = ['assetplus_viewer', 'viewer', 'native_viewer', 'radar', 'senslinc_dashboard', 'globe', 'map'];
-// Apps that have internal scrollbars and need h-full but NOT overflow:hidden
 const FILL_APPS = ['portfolio', 'navigation', 'fma_plus', 'entity_insights', 'ivion_create'];
-// All other apps are scroll-pages (home, insights, inventory, fault_report, ai_scan, asset_registration)
+
+const LazyFallback = () => (
+    <div className="flex-1 flex items-center justify-center">
+        <Spinner size="lg" label="Laddar..." />
+    </div>
+);
 
 const MainContent: React.FC = () => {
     const { theme, activeApp, insightsFacility, setInsightsFacility, setActiveApp, setIvion360Context, setSenslincDashboardContext, selectedFacility, appConfigs } = useContext(AppContext);
@@ -45,11 +48,7 @@ const MainContent: React.FC = () => {
                 return <PortfolioView />;
             case 'map':
                 return (
-                    <Suspense fallback={
-                        <div className="flex-1 flex items-center justify-center">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        </div>
-                    }>
+                    <Suspense fallback={<LazyFallback />}>
                         <MapView />
                     </Suspense>
                 );
@@ -61,11 +60,7 @@ const MainContent: React.FC = () => {
                 return <NativeViewerPage />;
             case 'asset_registration':
                 return (
-                    <Suspense fallback={
-                        <div className="flex-1 flex items-center justify-center">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        </div>
-                    }>
+                    <Suspense fallback={<LazyFallback />}>
                         <AssetRegistration />
                     </Suspense>
                 );
@@ -87,11 +82,7 @@ const MainContent: React.FC = () => {
             case 'fma_plus': {
                 const fmaConfig = appConfigs?.fma_plus || {};
                 return (
-                    <Suspense fallback={
-                        <div className="flex-1 flex items-center justify-center">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        </div>
-                    }>
+                    <Suspense fallback={<LazyFallback />}>
                         <FmaInternalView
                             url={fmaConfig.url || 'https://swg-demo.bim.cloud/'}
                             buildingFmGuid={selectedFacility?.fm_guid}
@@ -136,61 +127,37 @@ const MainContent: React.FC = () => {
                 );
             case 'inventory':
                 return (
-                    <Suspense fallback={
-                        <div className="flex-1 flex items-center justify-center">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        </div>
-                    }>
+                    <Suspense fallback={<LazyFallback />}>
                         <Inventory />
                     </Suspense>
                 );
             case 'ivion_create':
                 return (
-                    <Suspense fallback={
-                        <div className="flex-1 flex items-center justify-center">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        </div>
-                    }>
+                    <Suspense fallback={<LazyFallback />}>
                         <IvionCreate />
                     </Suspense>
                 );
             case 'fault_report':
                 return (
-                    <Suspense fallback={
-                        <div className="flex-1 flex items-center justify-center">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        </div>
-                    }>
+                    <Suspense fallback={<LazyFallback />}>
                         <InAppFaultReport />
                     </Suspense>
                 );
             case 'ai_scan':
                 return (
-                    <Suspense fallback={
-                        <div className="flex-1 flex items-center justify-center">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        </div>
-                    }>
+                    <Suspense fallback={<LazyFallback />}>
                         <AiAssetScan preselectedBuildingGuid={selectedFacility?.fm_guid} />
                     </Suspense>
                 );
             case 'globe':
                 return (
-                    <Suspense fallback={
-                        <div className="flex-1 flex items-center justify-center">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        </div>
-                    }>
+                    <Suspense fallback={<LazyFallback />}>
                         <CesiumGlobeView />
                     </Suspense>
                 );
             case 'support':
                 return (
-                    <Suspense fallback={
-                        <div className="flex-1 flex items-center justify-center">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        </div>
-                    }>
+                    <Suspense fallback={<LazyFallback />}>
                         <CustomerPortalView />
                     </Suspense>
                 );
@@ -199,11 +166,8 @@ const MainContent: React.FC = () => {
         }
     };
 
-    // Viewer apps need overflow:hidden + h-full on ALL platforms (desktop + mobile)
-    // Fill apps need h-full but allow internal scroll
     const isViewerApp = VIEWER_APPS.includes(activeApp);
     const needsHFull = isViewerApp || FILL_APPS.includes(activeApp);
-    // Viewer apps also need touch-action:none on mobile to prevent touch event hijacking
     const isMobileViewer = isMobile && (isViewerApp || FILL_APPS.includes(activeApp));
 
     return (
