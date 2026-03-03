@@ -5,7 +5,7 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
-import { Building2, Globe, Box, RotateCcw, ArrowRight } from 'lucide-react';
+import { Building2, Eye, Globe, Box, RotateCcw, ArrowRight } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -82,14 +82,24 @@ const CesiumGlobeView: React.FC = () => {
     });
 
     cesiumViewerRef.current = viewer;
-    viewer.scene.globe.depthTestAgainstTerrain = false;
+
+    // Add Cesium World Terrain so 3D buildings sit correctly on the ground
+    Cesium.CesiumTerrainProvider.fromIonAssetId(1).then(terrainProvider => {
+      if (cesiumViewerRef.current) {
+        cesiumViewerRef.current.terrainProvider = terrainProvider;
+      }
+    }).catch(err => {
+      console.warn('Could not load Cesium World Terrain:', err);
+    });
+
+    viewer.scene.globe.depthTestAgainstTerrain = true;
 
     // Pin data source
     const pinDataSource = new Cesium.CustomDataSource('facility-pins');
     pinDataSourceRef.current = pinDataSource;
     viewer.dataSources.add(pinDataSource);
 
-    // Click handlers
+    // Click handler
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     clickHandlerRef.current = handler;
 
@@ -111,9 +121,9 @@ const CesiumGlobeView: React.FC = () => {
       setSelectedFmGuid(facility.fm_guid);
       setSelectedBuilding(null);
 
-      // Fly to ~2km altitude with slight perspective to see the area
+      // Fly to ~300m camera altitude with 3D perspective
       viewer.camera.flyTo({
-        destination: toCartesian(facility.latitude, facility.longitude, 2000),
+        destination: toCartesian(facility.latitude, facility.longitude, 300),
         orientation: {
           heading: Cesium.Math.toRadians(0),
           pitch: Cesium.Math.toRadians(-50),
@@ -198,6 +208,7 @@ const CesiumGlobeView: React.FC = () => {
 
   const handleNavigateToFacility = useCallback((fmGuid: string) => {
     setSelectedBuilding(null);
+    setSelectedFmGuid(null);
     const node = navigatorTreeData.find(n => n.fmGuid.toLowerCase() === fmGuid.toLowerCase());
     if (node) {
       setSelectedFacility(node);
@@ -207,31 +218,37 @@ const CesiumGlobeView: React.FC = () => {
 
   const handleOpenViewer = useCallback((fmGuid: string) => {
     setSelectedBuilding(null);
+    setSelectedFmGuid(null);
     const node = navigatorTreeData.find(n => n.fmGuid.toLowerCase() === fmGuid.toLowerCase());
     if (node) setSelectedFacility(node);
     navigate(`/split-viewer?building=${fmGuid}&mode=3d`);
   }, [navigatorTreeData, setSelectedFacility, navigate]);
 
-  const handleOpen360 = useCallback((facility: SelectedBuilding['facility']) => {
-    setSelectedBuilding(null);
-    const radarConfig = appConfigs?.radar || {};
-    const ivionUrl = radarConfig.url || 'https://swg.iv.navvis.com';
-
-    open360WithContext({
-      buildingFmGuid: facility.fm_guid,
-      buildingName: facility.displayName,
-      ivionSiteId: facility.ivion_site_id || '',
-      ivionUrl,
-    });
-  }, [appConfigs, open360WithContext]);
-
   const handleResetView = useCallback(() => {
     setSelectedBuilding(null);
     setSelectedFmGuid(null);
-    cesiumViewerRef.current?.camera?.flyHome?.(1.5);
-  }, []);
+    // Fly back to the overview instead of default home
+    const viewer = cesiumViewerRef.current;
+    if (viewer && facilities.length > 0) {
+      const lats = facilities.map(f => f.latitude);
+      const lngs = facilities.map(f => f.longitude);
+      const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+      const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
+      viewer.camera.flyTo({
+        destination: toCartesian(centerLat, centerLng, 1500000),
+        orientation: {
+          heading: 0,
+          pitch: Cesium.Math.toRadians(-90),
+          roll: 0,
+        },
+        duration: 1.5,
+      });
+    } else {
+      viewer?.camera?.flyHome?.(1.5);
+    }
+  }, [facilities]);
 
-  // Keep pin layer in sync
+  // Keep pin layer in sync — smaller pins and labels for overview
   useEffect(() => {
     const dataSource = pinDataSourceRef.current;
     if (!dataSource || !viewerReady) return;
@@ -248,64 +265,54 @@ const CesiumGlobeView: React.FC = () => {
           fm_guid: facility.fm_guid,
         },
         point: {
-          pixelSize: isSelected ? 18 : 14,
+          pixelSize: isSelected ? 14 : 10,
           color: isSelected
             ? Cesium.Color.fromCssColorString('hsl(262, 83%, 58%)')
             : Cesium.Color.fromCssColorString('hsl(212, 92%, 60%)'),
           outlineColor: Cesium.Color.WHITE,
-          outlineWidth: 2,
+          outlineWidth: isSelected ? 2 : 1.5,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
           heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+          scaleByDistance: new Cesium.NearFarScalar(500, 1.4, 2000000, 0.6),
         },
         label: {
           text: facility.displayName,
-          font: '13px sans-serif',
+          font: '11px sans-serif',
           fillColor: Cesium.Color.WHITE,
           outlineColor: Cesium.Color.BLACK,
           outlineWidth: 2,
           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-          pixelOffset: new Cesium.Cartesian2(0, -28),
+          pixelOffset: new Cesium.Cartesian2(0, -20),
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
           heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
           showBackground: true,
           backgroundColor: Cesium.Color.fromCssColorString('rgba(0,0,0,0.4)'),
-          backgroundPadding: new Cesium.Cartesian2(6, 3),
+          backgroundPadding: new Cesium.Cartesian2(5, 2),
+          scaleByDistance: new Cesium.NearFarScalar(500, 1.2, 2000000, 0.5),
         },
       });
     });
   }, [facilities, selectedFmGuid, viewerReady]);
 
-  // Fly-in animation: zoom from global view to bounding region of all buildings
+  // Fly-in animation: zoom from global view to high overview of building region
   useEffect(() => {
     const viewer = cesiumViewerRef.current;
     if (!viewer || !viewerReady || facilities.length === 0 || hasFlewInRef.current) return;
     hasFlewInRef.current = true;
 
-    // Compute bounding rectangle of all buildings with padding
+    // Compute center of all buildings and fly to a high overview (~1500km)
     const lats = facilities.map(f => f.latitude);
     const lngs = facilities.map(f => f.longitude);
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs);
-    const maxLng = Math.max(...lngs);
-
-    const padLat = Math.max((maxLat - minLat) * 0.3, 0.5);
-    const padLng = Math.max((maxLng - minLng) * 0.3, 0.5);
-
-    const rect = Cesium.Rectangle.fromDegrees(
-      minLng - padLng,
-      minLat - padLat,
-      maxLng + padLng,
-      maxLat + padLat,
-    );
+    const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+    const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
 
     // Delay slightly so the globe renders first
     setTimeout(() => {
       viewer.camera.flyTo({
-        destination: rect,
+        destination: toCartesian(centerLat, centerLng, 1500000),
         orientation: {
           heading: 0,
-          pitch: Cesium.Math.toRadians(-35),
+          pitch: Cesium.Math.toRadians(-90),
           roll: 0,
         },
         duration: 3,
@@ -416,34 +423,49 @@ const CesiumGlobeView: React.FC = () => {
         <div
           className="fixed z-50 pointer-events-auto"
           style={{
-            left: Math.min(selectedBuilding.screenX - 90, window.innerWidth - 200),
-            top: Math.max(selectedBuilding.screenY - 100, 8),
+            left: Math.min(selectedBuilding.screenX - 80, window.innerWidth - 190),
+            top: Math.max(selectedBuilding.screenY - 110, 8),
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <Card
-            className="w-[180px] sm:w-[200px] bg-card/95 backdrop-blur-md shadow-xl border-border/60 overflow-hidden cursor-pointer hover:bg-accent/10 transition-colors"
-            onClick={() => handleNavigateToFacility(selectedBuilding.facility.fm_guid)}
-          >
-            <CardContent className="p-2.5">
-              <h3 className="text-xs sm:text-sm font-semibold text-foreground truncate">
+          <Card className="w-[170px] sm:w-[190px] bg-card/95 backdrop-blur-md shadow-xl border-border/60 overflow-hidden">
+            <CardContent className="p-2">
+              <h3 className="text-[11px] sm:text-xs font-semibold text-foreground truncate">
                 {selectedBuilding.facility.displayName}
               </h3>
-              <div className="flex items-center gap-1.5 mt-1">
-                <Badge variant="outline" className="text-[9px] sm:text-[10px] px-1.5 py-0 h-4">
-                  <Building2 size={9} className="mr-0.5" />
+              <div className="flex items-center gap-1 mt-1">
+                <Badge variant="outline" className="text-[8px] sm:text-[9px] px-1 py-0 h-3.5">
+                  <Building2 size={8} className="mr-0.5" />
                   Fastighet
                 </Badge>
                 {selectedBuilding.facility.has360 && (
-                  <Badge variant="outline" className="text-[9px] sm:text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">
-                    <Globe size={9} className="mr-0.5" />
+                  <Badge variant="outline" className="text-[8px] sm:text-[9px] px-1 py-0 h-3.5 text-primary border-primary/30">
+                    <Globe size={8} className="mr-0.5" />
                     360°
                   </Badge>
                 )}
               </div>
-              <div className="flex items-center justify-between mt-2 text-[10px] sm:text-xs text-primary font-medium">
-                <span>Visa detaljer</span>
-                <ArrowRight size={11} />
+              <div className="flex flex-col gap-0.5 mt-1.5">
+                <button
+                  className="w-full flex items-center justify-between px-1.5 py-1.5 text-[10px] sm:text-[11px] font-medium text-foreground hover:bg-primary/10 rounded transition-colors"
+                  onClick={() => handleNavigateToFacility(selectedBuilding.facility.fm_guid)}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Building2 size={11} className="text-primary" />
+                    Visa detaljer
+                  </span>
+                  <ArrowRight size={10} className="text-muted-foreground" />
+                </button>
+                <button
+                  className="w-full flex items-center justify-between px-1.5 py-1.5 text-[10px] sm:text-[11px] font-medium text-foreground hover:bg-primary/10 rounded transition-colors"
+                  onClick={() => handleOpenViewer(selectedBuilding.facility.fm_guid)}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Eye size={11} className="text-primary" />
+                    Öppna 3D-viewer
+                  </span>
+                  <ArrowRight size={10} className="text-muted-foreground" />
+                </button>
               </div>
             </CardContent>
           </Card>
