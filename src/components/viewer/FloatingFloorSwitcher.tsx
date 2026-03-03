@@ -271,7 +271,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
       'fixed z-20 items-center gap-1 w-auto',
       'pointer-events-auto',
       isMobile
-        ? 'bottom-16 left-1/2 -translate-x-1/2 flex flex-row bg-black/50 backdrop-blur-md rounded-full px-1.5 py-1 border border-white/10'
+        ? 'bottom-[4.5rem] left-1/2 -translate-x-1/2 flex flex-row bg-black/50 backdrop-blur-md rounded-full px-1.5 py-1 border border-white/10'
         : cn('left-3 flex flex-col', compact ? 'top-[100px] gap-px' : 'top-[140px]'),
       className
     )}>
