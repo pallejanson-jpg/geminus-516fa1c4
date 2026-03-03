@@ -136,7 +136,7 @@ const CesiumGlobeView: React.FC = () => {
       cesiumViewerRef.current = null;
       viewer.destroy();
     };
-  }, []);
+  }, [tokenReady]);
 
   // Fetch building coordinates
   useEffect(() => {
