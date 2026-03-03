@@ -79,10 +79,13 @@ export function useFmAccessApi() {
     }
   }, [toast]);
 
-  const getHierarchy = useCallback((buildingFmGuid: string) =>
+  // If buildingFmGuid is omitted, loads root perspective tree
+  const getHierarchy = useCallback((buildingFmGuid?: string) =>
     withLoading(async () => {
-      const res = await fmCall('get-hierarchy', { buildingFmGuid });
-      return res.data as FmAccessNode;
+      const params: Record<string, any> = {};
+      if (buildingFmGuid) params.buildingFmGuid = buildingFmGuid;
+      const res = await fmCall('get-hierarchy', params);
+      return res.data as FmAccessNode | FmAccessNode[];
     }), [withLoading]);
 
   const getSubtree = useCallback((guid: string, perspectiveId = '8') =>
