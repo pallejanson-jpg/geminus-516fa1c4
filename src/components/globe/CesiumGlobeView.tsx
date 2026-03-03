@@ -109,10 +109,11 @@ const CesiumGlobeView: React.FC = () => {
       const entity = picked?.id as Cesium.Entity | undefined;
       const fmGuid = entity?.properties?.fm_guid?.getValue?.() as string | undefined;
 
-      // If clicked empty space, close popup
+      // If clicked empty space, close popup and reset
       if (!fmGuid) {
         setSelectedBuilding(null);
         setSelectedFmGuid(null);
+        setZoomedFmGuid(null);
         return;
       }
 
@@ -120,9 +121,30 @@ const CesiumGlobeView: React.FC = () => {
       if (!facility) return;
 
       setSelectedFmGuid(facility.fm_guid);
-      setSelectedBuilding(null);
 
-      // Fly to ~300m camera altitude with 3D perspective
+      // Check if we already zoomed to this building — second click shows popup
+      const alreadyZoomed = zoomedFmGuidRef.current === fmGuid;
+
+      if (alreadyZoomed) {
+        // Second click: show popup, offset above and to the right of pin
+        const screenPos = Cesium.SceneTransforms.worldToWindowCoordinates(
+          viewer.scene,
+          toCartesian(facility.latitude, facility.longitude, 0),
+        );
+        if (screenPos) {
+          setSelectedBuilding({
+            facility,
+            screenX: screenPos.x,
+            screenY: screenPos.y,
+          });
+        }
+        return;
+      }
+
+      // First click: zoom in, no popup
+      setSelectedBuilding(null);
+      setZoomedFmGuid(fmGuid);
+
       viewer.camera.flyTo({
         destination: toCartesian(facility.latitude, facility.longitude, 300),
         orientation: {
@@ -131,20 +153,6 @@ const CesiumGlobeView: React.FC = () => {
           roll: 0,
         },
         duration: 1.5,
-        complete: () => {
-          // After fly-to completes, show the popup
-          const screenPos = Cesium.SceneTransforms.worldToWindowCoordinates(
-            viewer.scene,
-            toCartesian(facility.latitude, facility.longitude, 0),
-          );
-          if (screenPos) {
-            setSelectedBuilding({
-              facility,
-              screenX: screenPos.x,
-              screenY: screenPos.y,
-            });
-          }
-        },
       });
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
