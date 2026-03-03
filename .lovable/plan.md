@@ -1,44 +1,33 @@
 
 
-# Plan: Native Xeokit i alla lägen + korrekt IFC-färgläggning
+## Plan: Mobile 3D Viewer Layout Optimization + Red Room Fix
 
-## Problem 1: Native Xeokit saknas i vissa lägen
+### Problem 1: Mobile header too low, toolbar too high
+The `MobileViewerOverlay` header uses `paddingTop: calc(max(env(safe-area-inset-top), 20px) + 8px)` — this adds extra padding pushing controls down. The `ViewerToolbar` bottom bar uses `bottom: calc(max(env(safe-area-inset-bottom), 12px) + 8px)` — not enough clearance but also not utilizing the space well.
 
-`shouldUseNative3D` på rad 452 i `UnifiedViewer.tsx` täcker bara `3d`, `2d`, `split`. Lägena `vt`, `split2d3d` faller igenom till legacy `AssetPlusViewer`.
+### Problem 2: Red rooms on first load
+IfcSpace objects are hidden at line 526 in `NativeXeokitViewer.tsx` — but they're hidden *without* first applying the blue color. When any code later makes them visible (filter panel, "Visa rum", "Show All"), they appear with raw red IFC materials until explicitly re-colored. The fix is to **pre-apply the blue color and opacity to all IfcSpace entities at load time**, before hiding them. This way, whenever they become visible later, they're already blue.
 
-**Fix**: Ändra till `const shouldUseNative3D = true` — alla lägen ska använda Native Xeokit. Behåll `needs3D` (styr container-visibility) som den är.
+### Changes
 
-## Problem 2: Fönster är blåa, rum är röda
+**1. `src/components/viewer/mobile/MobileViewerOverlay.tsx`**
+- Reduce the header's `paddingTop` to use just the safe-area-inset with minimal extra padding: `calc(env(safe-area-inset-top, 0px) + 4px)` and reduce `p-2` to `p-1.5`
+- Make buttons smaller (`h-8 w-8`) and mode switcher more compact
 
-Native Xeokit visar rå XKT-materialfärger som inte matchar förväntad IFC-typ-styling. `useArchitectViewMode` har redan en komplett IFC-typ-till-färg-mappning som ger korrekta färger (väggar → beige, dörrar → gröna, fönster → blågrå, rum → ljusgrå, etc).
+**2. `src/components/viewer/ViewerToolbar.tsx`**
+- On mobile, increase bottom offset to push the toolbar lower: `calc(env(safe-area-inset-bottom, 0px) + 4px)` — just enough to clear the browser chrome without going under it
+- Reduce button sizes on mobile for more compact layout
 
-**Fix**: I `NativeXeokitViewer.tsx`, efter modell-laddning (rad 510-537), applicera IFC-typ-baserad färgläggning på alla objekt — samma färgschema som `useArchitectViewMode` använder. Detta gör att:
-- Fönster får rätt blågrå ton istället av knallblå
-- Rum (IfcSpace) får ljusgrå istället av rött, plus behåller opacity 0.3 och hidden
-- Väggar, dörrar, tak, golv etc. får arkitektoniska toner
+**3. `src/components/viewer/NativeXeokitViewer.tsx`**
+- At lines 518-532 where IfcSpace entities are hidden, **pre-colorize them blue** before hiding:
+  ```
+  entity.colorize = [0.5, 0.7, 0.9];
+  entity.opacity = 0.3;
+  entity.visible = false;
+  entity.pickable = false;
+  ```
+- This ensures any subsequent `visible = true` shows blue, never red
 
-## Ändringar
-
-### 1. `src/pages/UnifiedViewer.tsx` (rad 452)
-```ts
-// Före:
-const shouldUseNative3D = viewMode === '3d' || viewMode === '2d' || viewMode === 'split';
-// Efter:
-const shouldUseNative3D = true;
-```
-
-### 2. `src/components/viewer/NativeXeokitViewer.tsx` (rad 510-537)
-Ersätt den befintliga post-load-logiken med IFC-typ-baserad färgläggning:
-- Importera/definiera samma `IFC_TYPE_COLORS`-mappning som i `useArchitectViewMode`
-- Iterera alla `metaObjects`, slå upp IFC-typ, applicera matchande färg via `entity.colorize`
-- IfcSpace-objekt: applicera ljusgrå färg + opacity 0.3 + hidden + non-pickable (som idag men med rätt färg)
-- Objekt utan matchad typ: behåll en neutral standardfärg
-
-### 3. `vite.config.ts` — Cesium-alias
-Lägg till `"cesium": "@cesium/engine"` i resolve.alias för att fixa resium-importen (detta var planerat men saknades i senaste bygget).
-
-## Resultat
-- Alla 6 lägen (2D, 3D, Split 2D/3D, Split 3D/360, VT, 360) använder Native Xeokit
-- IFC-objekt visas med arkitektoniska, korrekta färger direkt vid laddning
-- Rum (IfcSpace) visas aldrig i rött
+**4. `src/components/viewer/NativeViewerShell.tsx`**
+- In `handleContextShowAll` (line 321-335), after re-hiding IfcSpaces, also pre-apply blue color so they stay blue if toggled on later
 
