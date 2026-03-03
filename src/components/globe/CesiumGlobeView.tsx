@@ -5,12 +5,11 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
-import { Building2, Eye, Globe, Box, RotateCcw } from 'lucide-react';
+import { Building2, Eye, Globe, Box, RotateCcw, ArrowRight } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { useNavigate } from 'react-router-dom';
@@ -23,10 +22,10 @@ interface BuildingCoord {
   ivion_site_id?: string | null;
 }
 
-interface ContextMenu {
-  x: number;
-  y: number;
+interface SelectedBuilding {
   facility: BuildingCoord & { displayName: string; has360: boolean };
+  screenX: number;
+  screenY: number;
 }
 
 function toCartesian(lat: number, lng: number, height = 0) {
@@ -43,12 +42,13 @@ const CesiumGlobeView: React.FC = () => {
   const pinDataSourceRef = useRef<Cesium.CustomDataSource | null>(null);
   const facilitiesByGuidRef = useRef<Map<string, BuildingCoord & { displayName: string; has360: boolean }>>(new Map());
   const osmBuildingsLayerRef = useRef<Cesium.Cesium3DTileset | null>(null);
+  const hasFlewInRef = useRef(false);
 
   const [tokenError, setTokenError] = useState(false);
   const [tokenReady, setTokenReady] = useState(false);
   const [buildingCoords, setBuildingCoords] = useState<BuildingCoord[]>([]);
-  const [show3dBuildings, setShow3dBuildings] = useState(false);
-  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
+  const [show3dBuildings, setShow3dBuildings] = useState(true);
+  const [selectedBuilding, setSelectedBuilding] = useState<SelectedBuilding | null>(null);
   const [selectedFmGuid, setSelectedFmGuid] = useState<string | null>(null);
   const [viewerReady, setViewerReady] = useState(false);
 
@@ -97,16 +97,42 @@ const CesiumGlobeView: React.FC = () => {
       const picked = viewer.scene.pick(movement.position);
       const entity = picked?.id as Cesium.Entity | undefined;
       const fmGuid = entity?.properties?.fm_guid?.getValue?.() as string | undefined;
-      if (!fmGuid) return;
+
+      // If clicked empty space, close popup
+      if (!fmGuid) {
+        setSelectedBuilding(null);
+        setSelectedFmGuid(null);
+        return;
+      }
 
       const facility = facilitiesByGuidRef.current.get(fmGuid);
       if (!facility) return;
 
-      setContextMenu(null);
       setSelectedFmGuid(facility.fm_guid);
+
+      // Fly to 300m altitude with perspective
       viewer.camera.flyTo({
         destination: toCartesian(facility.latitude, facility.longitude, 300),
+        orientation: {
+          heading: Cesium.Math.toRadians(0),
+          pitch: Cesium.Math.toRadians(-45),
+          roll: 0,
+        },
         duration: 1.5,
+        complete: () => {
+          // After fly-to completes, get screen position for popup
+          const screenPos = Cesium.SceneTransforms.worldToWindowCoordinates(
+            viewer.scene,
+            toCartesian(facility.latitude, facility.longitude, 0),
+          );
+          if (screenPos) {
+            setSelectedBuilding({
+              facility,
+              screenX: screenPos.x,
+              screenY: screenPos.y,
+            });
+          }
+        },
       });
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
@@ -119,11 +145,16 @@ const CesiumGlobeView: React.FC = () => {
       const facility = facilitiesByGuidRef.current.get(fmGuid);
       if (!facility) return;
 
-      const rect = viewer.scene.canvas.getBoundingClientRect();
-      setContextMenu({
-        x: rect.left + movement.position.x,
-        y: rect.top + movement.position.y,
-        facility,
+      setSelectedBuilding(null);
+      setSelectedFmGuid(facility.fm_guid);
+      viewer.camera.flyTo({
+        destination: toCartesian(facility.latitude, facility.longitude, 300),
+        orientation: {
+          heading: Cesium.Math.toRadians(0),
+          pitch: Cesium.Math.toRadians(-45),
+          roll: 0,
+        },
+        duration: 1.5,
       });
     }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
 
@@ -186,15 +217,24 @@ const CesiumGlobeView: React.FC = () => {
     facilitiesByGuidRef.current = facilitiesByGuid;
   }, [facilitiesByGuid]);
 
+  const handleNavigateToFacility = useCallback((fmGuid: string) => {
+    setSelectedBuilding(null);
+    const node = navigatorTreeData.find(n => n.fmGuid.toLowerCase() === fmGuid.toLowerCase());
+    if (node) {
+      setSelectedFacility(node);
+      setActiveApp('portfolio');
+    }
+  }, [navigatorTreeData, setSelectedFacility, setActiveApp]);
+
   const handleOpenViewer = useCallback((fmGuid: string) => {
-    setContextMenu(null);
+    setSelectedBuilding(null);
     const node = navigatorTreeData.find(n => n.fmGuid.toLowerCase() === fmGuid.toLowerCase());
     if (node) setSelectedFacility(node);
     navigate(`/split-viewer?building=${fmGuid}&mode=3d`);
   }, [navigatorTreeData, setSelectedFacility, navigate]);
 
-  const handleOpen360 = useCallback((facility: ContextMenu['facility']) => {
-    setContextMenu(null);
+  const handleOpen360 = useCallback((facility: SelectedBuilding['facility']) => {
+    setSelectedBuilding(null);
     const radarConfig = appConfigs?.radar || {};
     const ivionUrl = radarConfig.url || 'https://swg.iv.navvis.com';
 
@@ -207,6 +247,8 @@ const CesiumGlobeView: React.FC = () => {
   }, [appConfigs, open360WithContext]);
 
   const handleResetView = useCallback(() => {
+    setSelectedBuilding(null);
+    setSelectedFmGuid(null);
     cesiumViewerRef.current?.camera?.flyHome?.(1.5);
   }, []);
 
@@ -254,6 +296,44 @@ const CesiumGlobeView: React.FC = () => {
     });
   }, [facilities, selectedFmGuid, viewerReady]);
 
+  // Fly-in animation: zoom from global view to bounding region of all buildings
+  useEffect(() => {
+    const viewer = cesiumViewerRef.current;
+    if (!viewer || !viewerReady || facilities.length === 0 || hasFlewInRef.current) return;
+    hasFlewInRef.current = true;
+
+    // Compute bounding rectangle of all buildings with padding
+    const lats = facilities.map(f => f.latitude);
+    const lngs = facilities.map(f => f.longitude);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+
+    const padLat = Math.max((maxLat - minLat) * 0.3, 0.5);
+    const padLng = Math.max((maxLng - minLng) * 0.3, 0.5);
+
+    const rect = Cesium.Rectangle.fromDegrees(
+      minLng - padLng,
+      minLat - padLat,
+      maxLng + padLng,
+      maxLat + padLat,
+    );
+
+    // Delay slightly so the globe renders first
+    setTimeout(() => {
+      viewer.camera.flyTo({
+        destination: rect,
+        orientation: {
+          heading: 0,
+          pitch: Cesium.Math.toRadians(-35),
+          roll: 0,
+        },
+        duration: 3,
+      });
+    }, 500);
+  }, [facilities, viewerReady]);
+
   // Toggle OSM 3D buildings
   useEffect(() => {
     const viewer = cesiumViewerRef.current;
@@ -284,103 +364,142 @@ const CesiumGlobeView: React.FC = () => {
     }
   }, [show3dBuildings, viewerReady]);
 
-  // Close context menu on outside click
+  // Close popup on outside click (but not on the popup itself)
   useEffect(() => {
-    const close = () => setContextMenu(null);
+    const close = () => setSelectedBuilding(null);
     window.addEventListener('click', close);
     return () => window.removeEventListener('click', close);
   }, []);
+
+  // Update popup position when camera moves
+  useEffect(() => {
+    const viewer = cesiumViewerRef.current;
+    if (!viewer || !viewerReady || !selectedBuilding) return;
+
+    const updatePopupPosition = () => {
+      if (!selectedBuilding) return;
+      const screenPos = Cesium.SceneTransforms.worldToWindowCoordinates(
+        viewer.scene,
+        toCartesian(selectedBuilding.facility.latitude, selectedBuilding.facility.longitude, 0),
+      );
+      if (screenPos) {
+        setSelectedBuilding(prev => prev ? { ...prev, screenX: screenPos.x, screenY: screenPos.y } : null);
+      }
+    };
+
+    viewer.scene.postRender.addEventListener(updatePopupPosition);
+    return () => {
+      viewer.scene.postRender.removeEventListener(updatePopupPosition);
+    };
+  }, [viewerReady, selectedBuilding?.facility.fm_guid]);
 
   return (
     <div className="flex-1 flex flex-col h-full relative overflow-hidden">
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
 
-      {/* Top-left controls */}
-      <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
-        <Card className="bg-card/90 backdrop-blur-sm shadow-lg border-border">
-          <CardContent className="p-3 space-y-3">
-            <div className="flex items-center gap-2">
-              <Globe size={16} className="text-primary" />
-              <span className="text-sm font-semibold text-foreground">Cesium Globe</span>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <Label htmlFor="toggle-3d" className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <Box size={12} />
-                3D-byggnader
-              </Label>
-              <Switch
-                id="toggle-3d"
-                checked={show3dBuildings}
-                onCheckedChange={setShow3dBuildings}
-              />
-            </div>
-            {tokenError && (
-              <p className="text-[10px] text-muted-foreground">
-                Inget Cesium-token — 3D-byggnader kan vara begränsade
-              </p>
-            )}
-          </CardContent>
-        </Card>
+      {/* Compact top-left controls */}
+      <div className="absolute top-3 left-3 z-20 flex flex-col gap-1.5">
+        <div className="flex items-center gap-1.5 bg-card/80 backdrop-blur-sm rounded-full px-3 py-1.5 shadow border border-border/50">
+          <Box size={12} className="text-muted-foreground" />
+          <span className="text-[11px] text-muted-foreground">3D</span>
+          <Switch
+            id="toggle-3d"
+            checked={show3dBuildings}
+            onCheckedChange={setShow3dBuildings}
+            className="scale-75 origin-center"
+          />
+        </div>
 
-        <Badge variant="secondary" className="w-fit text-xs bg-card/90 backdrop-blur-sm">
-          <Building2 size={12} className="mr-1" />
+        <Badge variant="secondary" className="w-fit text-[11px] bg-card/80 backdrop-blur-sm border-border/50 rounded-full px-2.5 py-0.5">
+          <Building2 size={11} className="mr-1" />
           {facilities.length} byggnader
         </Badge>
+
+        {tokenError && (
+          <span className="text-[9px] text-muted-foreground bg-card/80 backdrop-blur-sm rounded px-2 py-0.5">
+            Begränsat Cesium-token
+          </span>
+        )}
       </div>
 
       <Button
         variant="secondary"
         size="icon"
         onClick={handleResetView}
-        className="absolute top-4 right-4 z-20 bg-card/90 backdrop-blur-sm shadow-lg"
+        className="absolute top-3 right-3 z-20 bg-card/80 backdrop-blur-sm shadow border border-border/50 h-8 w-8"
         title="Återställ vy"
       >
-        <RotateCcw size={16} />
+        <RotateCcw size={14} />
       </Button>
 
-      {contextMenu && (
+      {/* Building info popup */}
+      {selectedBuilding && (
         <div
-          className="fixed z-50 min-w-[180px] rounded-lg border border-border bg-card/95 backdrop-blur-sm shadow-xl py-1"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
+          className="fixed z-50 pointer-events-auto"
+          style={{
+            left: Math.min(selectedBuilding.screenX - 120, window.innerWidth - 260),
+            top: Math.max(selectedBuilding.screenY - 160, 8),
+          }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="px-3 py-2 border-b border-border">
-            <p className="text-xs font-semibold text-foreground truncate">
-              {contextMenu.facility.displayName}
-            </p>
-          </div>
-          <button
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors text-left"
-            onClick={() => handleOpenViewer(contextMenu.facility.fm_guid)}
-          >
-            <Eye size={14} className="text-primary" />
-            Visa Viewer (3D)
-          </button>
-          {contextMenu.facility.has360 && (
-            <button
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors text-left"
-              onClick={() => handleOpen360(contextMenu.facility)}
-            >
-              <Globe size={14} className="text-primary" />
-              Visa 360°
-            </button>
-          )}
-          <button
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors text-left"
-            onClick={() => {
-              const node = navigatorTreeData.find(
-                n => n.fmGuid.toLowerCase() === contextMenu.facility.fm_guid.toLowerCase(),
-              );
-              if (node) {
-                setSelectedFacility(node);
-                setActiveApp('portfolio');
-              }
-              setContextMenu(null);
-            }}
-          >
-            <Building2 size={14} className="text-primary" />
-            Visa detaljer
-          </button>
+          <Card className="w-[240px] bg-card/95 backdrop-blur-md shadow-xl border-border/60 overflow-hidden">
+            <CardContent className="p-0">
+              {/* Header */}
+              <div className="px-3 py-2.5 border-b border-border/40">
+                <h3 className="text-sm font-semibold text-foreground truncate">
+                  {selectedBuilding.facility.displayName}
+                </h3>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                    <Building2 size={9} className="mr-0.5" />
+                    Fastighet
+                  </Badge>
+                  {selectedBuilding.facility.has360 && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">
+                      <Globe size={9} className="mr-0.5" />
+                      360°
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="p-1.5 flex flex-col gap-0.5">
+                <button
+                  className="w-full flex items-center justify-between px-2.5 py-2 text-xs font-medium text-foreground hover:bg-primary/10 rounded-md transition-colors"
+                  onClick={() => handleNavigateToFacility(selectedBuilding.facility.fm_guid)}
+                >
+                  <span className="flex items-center gap-2">
+                    <Building2 size={13} className="text-primary" />
+                    Visa detaljer
+                  </span>
+                  <ArrowRight size={12} className="text-muted-foreground" />
+                </button>
+                <button
+                  className="w-full flex items-center justify-between px-2.5 py-2 text-xs font-medium text-foreground hover:bg-primary/10 rounded-md transition-colors"
+                  onClick={() => handleOpenViewer(selectedBuilding.facility.fm_guid)}
+                >
+                  <span className="flex items-center gap-2">
+                    <Eye size={13} className="text-primary" />
+                    Öppna 3D-viewer
+                  </span>
+                  <ArrowRight size={12} className="text-muted-foreground" />
+                </button>
+                {selectedBuilding.facility.has360 && (
+                  <button
+                    className="w-full flex items-center justify-between px-2.5 py-2 text-xs font-medium text-foreground hover:bg-primary/10 rounded-md transition-colors"
+                    onClick={() => handleOpen360(selectedBuilding.facility)}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Globe size={13} className="text-primary" />
+                      Visa 360°
+                    </span>
+                    <ArrowRight size={12} className="text-muted-foreground" />
+                  </button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 
