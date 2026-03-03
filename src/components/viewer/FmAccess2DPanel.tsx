@@ -11,7 +11,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader2, AlertCircle, Square, MapPin, ArrowLeft, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import FmAccessIssueOverlay from './FmAccessIssueOverlay';
+import GeminusPluginMenu from './GeminusPluginMenu';
 
 interface FmAccess2DPanelProps {
   buildingFmGuid: string;
