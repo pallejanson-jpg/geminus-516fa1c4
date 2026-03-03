@@ -11,7 +11,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader2, AlertCircle, Square, MapPin, ArrowLeft, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import FmAccessIssueOverlay from './FmAccessIssueOverlay';
+import GeminusPluginMenu from './GeminusPluginMenu';
 
 interface FmAccess2DPanelProps {
   buildingFmGuid: string;
@@ -257,7 +257,7 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
 
       {/* Issue overlay - ready for when 2D view works */}
       {phase === 'ready' && buildingFmGuid && (
-        <FmAccessIssueOverlay
+        <GeminusPluginMenu
           buildingFmGuid={buildingFmGuid}
           buildingName={buildingName}
           source="2d_fm_access"

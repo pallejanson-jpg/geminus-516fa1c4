@@ -5,6 +5,7 @@ import { AppContext, Ivion360Context } from "@/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import IvionRegistrationPanel from "@/components/inventory/IvionRegistrationPanel";
+import GeminusPluginMenu from "./GeminusPluginMenu";
 import UnplacedAssetsPanel from "@/components/inventory/UnplacedAssetsPanel";
 import { useIvionCameraSync } from "@/hooks/useIvionCameraSync";
 import type { BuildingOrigin } from "@/lib/coordinate-transform";
@@ -629,6 +630,15 @@ export default function Ivion360View({
             onAssetsCreated={() => {
               toast.success('POIs skapade i Ivion');
             }}
+          />
+        )}
+
+        {/* Geminus plugin menu */}
+        {buildingFmGuid && (
+          <GeminusPluginMenu
+            buildingFmGuid={buildingFmGuid}
+            buildingName={buildingName}
+            source="ivion_360"
           />
         )}
       </div>
