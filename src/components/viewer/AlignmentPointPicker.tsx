@@ -48,9 +48,23 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
     const mainView = resolveMainView(api);
     if (!mainView) return;
 
-    // Listen for clicks on the Ivion container to capture the current image location
-    const container = mainView.getElement?.() || mainView.domElement;
-    if (!container) return;
+    // Find the Ivion SDK container — look for the SDK's rendered element
+    // The SDK container is the parent of the ivApiRef's rendering target
+    const findContainer = (): HTMLElement | null => {
+      // Try common SDK container selectors
+      const el = document.querySelector('[class*="ivion"]') as HTMLElement
+        || document.querySelector('[data-ivion]') as HTMLElement;
+      if (el) return el;
+      // Fallback: the right half of the split view (SDK container)
+      const sdkDiv = document.querySelector('.absolute.z-0.transition-opacity') as HTMLElement;
+      return sdkDiv;
+    };
+
+    const container = findContainer();
+    if (!container) {
+      console.warn('[AlignmentPicker] Could not find 360° container element');
+      return;
+    }
 
     const handleClick = () => {
       try {
