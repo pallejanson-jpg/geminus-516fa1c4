@@ -43,6 +43,7 @@ const CesiumGlobeView: React.FC = () => {
   const facilitiesByGuidRef = useRef<Map<string, BuildingCoord & { displayName: string; has360: boolean }>>(new Map());
   const osmBuildingsLayerRef = useRef<Cesium.Cesium3DTileset | null>(null);
   const hasFlewInRef = useRef(false);
+  const zoomedFmGuidRef = useRef<string | null>(null);
 
   const [tokenError, setTokenError] = useState(false);
   const [tokenReady, setTokenReady] = useState(false);
