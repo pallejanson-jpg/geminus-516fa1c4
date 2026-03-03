@@ -1,4 +1,8 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+
+// CRITICAL: Set base URL before importing Cesium so it can find Workers/Assets
+(window as any).CESIUM_BASE_URL = '/cesiumStatic';
+
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import { Building2, Eye, Globe, Box, RotateCcw } from 'lucide-react';
