@@ -403,22 +403,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     // Clear section planes
     const planes = Object.values(viewer.scene.sectionPlanes || {});
     planes.forEach((sp: any) => { try { sp.destroy(); } catch {} });
-    // Reset visibility
+    // Reset visibility and re-apply architect colors
     const allIds = viewer.scene.objectIds || [];
     if (allIds.length > 0) {
       viewer.scene.setObjectsVisible(allIds, true);
       viewer.scene.setObjectsXRayed(allIds, false);
-      viewer.scene.setObjectsColorized(allIds, false);
-      // Hide IfcSpaces
-      const metaObjects = viewer.metaScene?.metaObjects;
-      if (metaObjects) {
-        Object.values(metaObjects).forEach((mo: any) => {
-          if ((mo.type || '').toLowerCase() === 'ifcspace') {
-            const entity = viewer.scene.objects?.[mo.id];
-            if (entity) { entity.visible = false; entity.pickable = false; }
-          }
-        });
-      }
+      // Re-apply architect color palette (includes hiding spaces)
+      applyArchitectColors(viewer);
     }
     // Fly to initial camera or scene bounds
     if (initialCameraRef.current) {
