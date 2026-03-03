@@ -22,6 +22,7 @@ const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
 const InAppFaultReport = lazy(() => import("@/components/fault-report/InAppFaultReport"));
 const AiAssetScan = lazy(() => import("@/pages/AiAssetScan"));
 const FmaInternalView = lazy(() => import("@/components/viewer/FmaInternalView"));
+const FmAccessNativeView = lazy(() => import("@/components/fm-access/FmAccessNativeView"));
 const CesiumGlobeView = lazy(() => import("@/components/globe/CesiumGlobeView"));
 const CustomerPortalView = lazy(() => import("@/components/support/CustomerPortalView"));
 
