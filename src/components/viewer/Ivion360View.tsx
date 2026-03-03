@@ -642,5 +642,6 @@ export default function Ivion360View({
           />
         )}
       </div>
+    </div>
   );
 }
