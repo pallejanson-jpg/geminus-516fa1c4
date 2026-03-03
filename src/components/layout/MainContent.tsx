@@ -22,6 +22,7 @@ const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
 const InAppFaultReport = lazy(() => import("@/components/fault-report/InAppFaultReport"));
 const AiAssetScan = lazy(() => import("@/pages/AiAssetScan"));
 const FmaInternalView = lazy(() => import("@/components/viewer/FmaInternalView"));
+const FmAccessNativeView = lazy(() => import("@/components/fm-access/FmAccessNativeView"));
 const CesiumGlobeView = lazy(() => import("@/components/globe/CesiumGlobeView"));
 const CustomerPortalView = lazy(() => import("@/components/support/CustomerPortalView"));
 
@@ -79,18 +80,12 @@ const MainContent: React.FC = () => {
                     );
                 }
                 return <InsightsView />;
-            case 'fma_plus': {
-                const fmaConfig = appConfigs?.fma_plus || {};
+            case 'fma_plus':
                 return (
                     <Suspense fallback={<LazyFallback />}>
-                        <FmaInternalView
-                            url={fmaConfig.url || 'https://swg-demo.bim.cloud/'}
-                            buildingFmGuid={selectedFacility?.fm_guid}
-                            buildingName={selectedFacility?.name}
-                        />
+                        <FmAccessNativeView />
                     </Suspense>
                 );
-            }
             case 'asset_plus':
                 return (
                     <PlaceholderView 
