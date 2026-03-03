@@ -1,4 +1,8 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+
+// CRITICAL: Set base URL before importing Cesium so it can find Workers/Assets
+(window as any).CESIUM_BASE_URL = '/cesiumStatic';
+
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import { Building2, Eye, Globe, Box, RotateCcw } from 'lucide-react';
@@ -41,6 +45,7 @@ const CesiumGlobeView: React.FC = () => {
   const osmBuildingsLayerRef = useRef<Cesium.Cesium3DTileset | null>(null);
 
   const [tokenError, setTokenError] = useState(false);
+  const [tokenReady, setTokenReady] = useState(false);
   const [buildingCoords, setBuildingCoords] = useState<BuildingCoord[]>([]);
   const [show3dBuildings, setShow3dBuildings] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
@@ -56,12 +61,13 @@ const CesiumGlobeView: React.FC = () => {
         setTokenError(true);
         Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlYWE1OWUxNy1mMWZiLTQzYjYtYTQ0OS1kMWFjYmFkNjc4ZTkiLCJpZCI6NTc3MzMsImlhdCI6MTYyMjY0NjQ5OH0.XcKpgANiY19MC4bdFUXMVEBToBmqS8kuYpUlxJHYZxk';
       }
+      setTokenReady(true);
     });
   }, []);
 
-  // Create Cesium Viewer imperatively
+  // Create Cesium Viewer imperatively — wait for token
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !tokenReady) return;
 
     const viewer = new Cesium.Viewer(containerRef.current, {
       timeline: false,
@@ -130,7 +136,7 @@ const CesiumGlobeView: React.FC = () => {
       cesiumViewerRef.current = null;
       viewer.destroy();
     };
-  }, []);
+  }, [tokenReady]);
 
   // Fetch building coordinates
   useEffect(() => {
