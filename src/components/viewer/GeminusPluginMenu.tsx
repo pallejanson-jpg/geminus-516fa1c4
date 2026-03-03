@@ -15,7 +15,7 @@ import CreateIssueDialog from './CreateIssueDialog';
 import CreateWorkOrderDialog from './CreateWorkOrderDialog';
 import InsightsDrawerPanel from './InsightsDrawerPanel';
 import GunnarChat from '@/components/chat/GunnarChat';
-import { CreateSupportCase } from '@/components/support/CreateSupportCase';
+import CreateSupportCase from '@/components/support/CreateSupportCase';
 
 interface GeminusPluginMenuProps {
   buildingFmGuid?: string;
