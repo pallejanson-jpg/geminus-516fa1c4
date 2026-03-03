@@ -223,6 +223,7 @@ const CesiumGlobeView: React.FC = () => {
   const handleNavigateToFacility = useCallback((fmGuid: string) => {
     setSelectedBuilding(null);
     setSelectedFmGuid(null);
+    setZoomedFmGuid(null);
     const node = navigatorTreeData.find(n => n.fmGuid.toLowerCase() === fmGuid.toLowerCase());
     if (node) {
       setSelectedFacility(node);
