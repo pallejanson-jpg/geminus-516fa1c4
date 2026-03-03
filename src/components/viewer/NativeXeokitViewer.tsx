@@ -545,6 +545,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       
       if (mountedRef.current) {
         setPhase('ready');
+        (window as any).__nativeXeokitViewer = viewer;
         onViewerReady?.(viewer);
       }
 
@@ -574,6 +575,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           console.debug('[NativeViewer] Viewer destroy error:', e);
         }
         viewerRef.current = null;
+        (window as any).__nativeXeokitViewer = null;
       }
       // Clean up any NavCube canvas we added
       const nc = document.getElementById(`native-navcube-${buildingFmGuid.substring(0, 8)}`);
