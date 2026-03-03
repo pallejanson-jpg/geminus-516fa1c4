@@ -61,7 +61,6 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      "cesium": "@cesium/engine",
     },
   },
   // Ensure WASM files from web-ifc are served correctly

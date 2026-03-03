@@ -1,7 +1,7 @@
 import React, { useState, useRef, useContext, useEffect } from 'react';
 import { Loader2, ArrowLeft, ExternalLink, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import FmAccessIssueOverlay from './FmAccessIssueOverlay';
+import GeminusPluginMenu from './GeminusPluginMenu';
 import { AppContext } from '@/context/AppContext';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -110,7 +110,7 @@ const FmaInternalView: React.FC<FmaInternalViewProps> = ({
 
       {/* Issue overlay FAB */}
       {!isLoading && !loadError && buildingFmGuid && (
-        <FmAccessIssueOverlay
+        <GeminusPluginMenu
           buildingFmGuid={buildingFmGuid}
           buildingName={buildingName}
           source="fma_plus"
