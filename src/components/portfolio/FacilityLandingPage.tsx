@@ -655,7 +655,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-3 sm:px-6">
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+                <div className="grid grid-cols-3 md:grid-cols-4 gap-1.5 sm:gap-3">
                   {isBuilding && (
                     <KpiCard 
                       title="Floors" 
