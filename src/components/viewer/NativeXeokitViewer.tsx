@@ -13,6 +13,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { AlertCircle, Box } from 'lucide-react';
 import { getModelFromMemory, storeModelInMemory, getMemoryStats } from '@/hooks/useXktPreload';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { applyArchitectColors } from '@/lib/architect-colors';
 import { INSIGHTS_COLOR_UPDATE_EVENT, type InsightsColorUpdateDetail } from '@/lib/viewer-events';
 
 const XEOKIT_CDN = '/lib/xeokit/xeokit-sdk.es.js';

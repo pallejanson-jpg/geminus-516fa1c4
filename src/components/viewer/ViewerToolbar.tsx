@@ -21,6 +21,7 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { applyArchitectColors } from '@/lib/architect-colors';
 import {
   useSectionPlaneClipping,
   FLOOR_SELECTION_CHANGED_EVENT,
