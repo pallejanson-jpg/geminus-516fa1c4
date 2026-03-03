@@ -51,10 +51,10 @@ export default defineConfig(({ mode }) => ({
     shimNodeModules(),
     viteStaticCopy({
       targets: [
-        { src: 'node_modules/@cesium/engine/Build/Workers', dest: 'cesiumStatic' },
-        { src: 'node_modules/@cesium/engine/Build/ThirdParty', dest: 'cesiumStatic' },
-        { src: 'node_modules/@cesium/engine/Source/Assets', dest: 'cesiumStatic' },
-        { src: 'node_modules/@cesium/engine/Source/Widget', dest: 'cesiumStatic' },
+        { src: 'node_modules/cesium/Build/Cesium/Workers', dest: 'cesiumStatic' },
+        { src: 'node_modules/cesium/Build/Cesium/ThirdParty', dest: 'cesiumStatic' },
+        { src: 'node_modules/cesium/Build/Cesium/Assets', dest: 'cesiumStatic' },
+        { src: 'node_modules/cesium/Build/Cesium/Widgets', dest: 'cesiumStatic' },
       ],
     }),
   ].filter(Boolean),
