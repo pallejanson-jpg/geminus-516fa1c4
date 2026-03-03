@@ -416,66 +416,34 @@ const CesiumGlobeView: React.FC = () => {
         <div
           className="fixed z-50 pointer-events-auto"
           style={{
-            left: Math.min(selectedBuilding.screenX - 120, window.innerWidth - 260),
-            top: Math.max(selectedBuilding.screenY - 160, 8),
+            left: Math.min(selectedBuilding.screenX - 90, window.innerWidth - 200),
+            top: Math.max(selectedBuilding.screenY - 100, 8),
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <Card className="w-[240px] bg-card/95 backdrop-blur-md shadow-xl border-border/60 overflow-hidden">
-            <CardContent className="p-0">
-              {/* Header */}
-              <div className="px-3 py-2.5 border-b border-border/40">
-                <h3 className="text-sm font-semibold text-foreground truncate">
-                  {selectedBuilding.facility.displayName}
-                </h3>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
-                    <Building2 size={9} className="mr-0.5" />
-                    Fastighet
-                  </Badge>
-                  {selectedBuilding.facility.has360 && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">
-                      <Globe size={9} className="mr-0.5" />
-                      360°
-                    </Badge>
-                  )}
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="p-1.5 flex flex-col gap-0.5">
-                <button
-                  className="w-full flex items-center justify-between px-2.5 py-2 text-xs font-medium text-foreground hover:bg-primary/10 rounded-md transition-colors"
-                  onClick={() => handleNavigateToFacility(selectedBuilding.facility.fm_guid)}
-                >
-                  <span className="flex items-center gap-2">
-                    <Building2 size={13} className="text-primary" />
-                    Visa detaljer
-                  </span>
-                  <ArrowRight size={12} className="text-muted-foreground" />
-                </button>
-                <button
-                  className="w-full flex items-center justify-between px-2.5 py-2 text-xs font-medium text-foreground hover:bg-primary/10 rounded-md transition-colors"
-                  onClick={() => handleOpenViewer(selectedBuilding.facility.fm_guid)}
-                >
-                  <span className="flex items-center gap-2">
-                    <Eye size={13} className="text-primary" />
-                    Öppna 3D-viewer
-                  </span>
-                  <ArrowRight size={12} className="text-muted-foreground" />
-                </button>
+          <Card
+            className="w-[180px] sm:w-[200px] bg-card/95 backdrop-blur-md shadow-xl border-border/60 overflow-hidden cursor-pointer hover:bg-accent/10 transition-colors"
+            onClick={() => handleNavigateToFacility(selectedBuilding.facility.fm_guid)}
+          >
+            <CardContent className="p-2.5">
+              <h3 className="text-xs sm:text-sm font-semibold text-foreground truncate">
+                {selectedBuilding.facility.displayName}
+              </h3>
+              <div className="flex items-center gap-1.5 mt-1">
+                <Badge variant="outline" className="text-[9px] sm:text-[10px] px-1.5 py-0 h-4">
+                  <Building2 size={9} className="mr-0.5" />
+                  Fastighet
+                </Badge>
                 {selectedBuilding.facility.has360 && (
-                  <button
-                    className="w-full flex items-center justify-between px-2.5 py-2 text-xs font-medium text-foreground hover:bg-primary/10 rounded-md transition-colors"
-                    onClick={() => handleOpen360(selectedBuilding.facility)}
-                  >
-                    <span className="flex items-center gap-2">
-                      <Globe size={13} className="text-primary" />
-                      Visa 360°
-                    </span>
-                    <ArrowRight size={12} className="text-muted-foreground" />
-                  </button>
+                  <Badge variant="outline" className="text-[9px] sm:text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">
+                    <Globe size={9} className="mr-0.5" />
+                    360°
+                  </Badge>
                 )}
+              </div>
+              <div className="flex items-center justify-between mt-2 text-[10px] sm:text-xs text-primary font-medium">
+                <span>Visa detaljer</span>
+                <ArrowRight size={11} />
               </div>
             </CardContent>
           </Card>
