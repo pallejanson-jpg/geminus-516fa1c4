@@ -88,6 +88,12 @@ const LeftSidebar: React.FC = () => {
             return;
         }
 
+        // Force FMA+ to always open the new internal React view
+        if (id === 'fma_plus') {
+            setActiveApp('fma_plus');
+            return;
+        }
+
         if (meta.type === 'config') {
             const currentAppConfig = appConfigs[id] || {};
             if (currentAppConfig.openMode === 'external' && currentAppConfig.url) {
