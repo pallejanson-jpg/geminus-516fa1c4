@@ -110,7 +110,7 @@ const FmaInternalView: React.FC<FmaInternalViewProps> = ({
 
       {/* Issue overlay FAB */}
       {!isLoading && !loadError && buildingFmGuid && (
-        <FmAccessIssueOverlay
+        <GeminusPluginMenu
           buildingFmGuid={buildingFmGuid}
           buildingName={buildingName}
           source="fma_plus"
