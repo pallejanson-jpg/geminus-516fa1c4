@@ -192,7 +192,7 @@ export default function GeminusPluginMenu({
             </Button>
           </div>
           <div className="flex-1 overflow-hidden" style={{ minHeight: 300 }}>
-            <GunnarChat />
+            <GunnarChat open={true} onClose={handleClose} embedded />
           </div>
         </div>
       )}
