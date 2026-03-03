@@ -545,6 +545,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       
       if (mountedRef.current) {
         setPhase('ready');
+        (window as any).__nativeXeokitViewer = viewer;
         onViewerReady?.(viewer);
       }
 

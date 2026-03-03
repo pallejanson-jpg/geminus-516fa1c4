@@ -2,8 +2,8 @@
  * Point-pick alignment workflow for Split mode.
  * 
  * Two-step calibration:
- *   1. User captures current 360° position (Ivion local coords)
- *   2. User clicks a corresponding point in the 3D view (BIM coords)
+ *   1. User clicks a point in the 360° view (Ivion local coords)
+ *   2. User clicks the same point in the 3D view (BIM coords)
  *   3. System calculates offset = bimPoint - rotate(ivionPoint, rotation)
  */
 
@@ -37,83 +37,75 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
   const [ivionPoint, setIvionPoint] = useState<Vec3 | null>(null);
   const [bimPoint, setBimPoint] = useState<Vec3 | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
-  const pickListenerRef = useRef<((e: any) => void) | null>(null);
 
-  // Step 1: Capture current 360° position
-  const capture360Position = useCallback(() => {
-    setCaptureError(null);
+  // Step 1: Listen for user click in the 360° view
+  useEffect(() => {
+    if (step !== 'picking360') return;
+
     const api = ivApiRef.current;
-    if (!api) {
-      const msg = 'SDK ej redo – försök igen om några sekunder';
-      setCaptureError(msg);
-      toast.error(msg);
-      return;
-    }
+    if (!api) return;
 
-    // Debug: log what the API ref actually contains
-    console.log('[AlignmentPicker] ivApiRef.current type:', typeof api);
-    console.log('[AlignmentPicker] ivApiRef.current keys:', Object.keys(api).slice(0, 20));
+    const mainView = resolveMainView(api);
+    if (!mainView) return;
 
-    try {
-      const mainView = resolveMainView(api);
-      if (!mainView) {
-        console.warn('[AlignmentPicker] Could not resolve mainView. Available keys:', Object.keys(api).slice(0, 30));
-        const msg = 'Kunde inte hitta 360°-vyn. Kontrollera att panoraman är inladdad.';
-        setCaptureError(msg);
-        toast.error(msg);
-        return;
+    // Listen for clicks on the Ivion container to capture the current image location
+    const container = mainView.getElement?.() || mainView.domElement;
+    if (!container) return;
+
+    const handleClick = () => {
+      try {
+        const image = mainView.getImage?.();
+        if (image?.location) {
+          const loc = image.location;
+          const pt: Vec3 = { x: loc.x, y: loc.y, z: loc.z };
+          setIvionPoint(pt);
+          setStep('picking3D');
+          setCaptureError(null);
+          toast.success(`360°-position fångad: (${pt.x.toFixed(1)}, ${pt.y.toFixed(1)}, ${pt.z.toFixed(1)})`);
+          console.log('[AlignmentPicker] 360° position captured on click:', loc);
+        } else {
+          setCaptureError('Ingen panoramaposition tillgänglig. Navigera till en bild först.');
+        }
+      } catch (e: any) {
+        setCaptureError(`Fel: ${e.message}`);
       }
+    };
 
-      const image = mainView.getImage?.();
-      if (image?.location) {
-        const loc = image.location;
-        const pt: Vec3 = { x: loc.x, y: loc.y, z: loc.z };
-        setIvionPoint(pt);
-        setStep('picking3D');
-        toast.success(`360°-position fångad: (${pt.x.toFixed(1)}, ${pt.y.toFixed(1)}, ${pt.z.toFixed(1)})`);
-        console.log('[AlignmentPicker] 360° position captured:', loc);
-      } else {
-        const msg = 'Ingen panoramaposition tillgänglig. Navigera till en bild först.';
-        setCaptureError(msg);
-        toast.error(msg);
-        console.warn('[AlignmentPicker] No image location available');
-      }
-    } catch (e: any) {
-      const msg = `Fel vid positionsfångst: ${e.message || 'okänt fel'}`;
-      setCaptureError(msg);
-      toast.error(msg);
-      console.error('[AlignmentPicker] Failed to capture 360 position:', e);
-    }
-  }, [ivApiRef]);
+    container.addEventListener('click', handleClick);
+    console.log('[AlignmentPicker] Listening for clicks in 360° view');
 
-  // Step 2: Listen for xeokit pick in 3D view
-  // Deactivate select tool when entering picking3D to prevent object selection
+    return () => {
+      container.removeEventListener('click', handleClick);
+    };
+  }, [step, ivApiRef]);
+
+  // Step 2: Listen for click in native xeokit 3D view
   useEffect(() => {
     if (step !== 'picking3D') return;
 
-    // Deactivate select tool AND suppress highlighting during point picking
-    const assetView = (window as any).__assetPlusViewerInstance?.$refs?.AssetViewer?.$refs?.assetView;
-    const xv = assetView?.viewer;
-    let savedHighlightEdges = true;
+    // Try native xeokit viewer first, then legacy
+    const xv = (window as any).__nativeXeokitViewer ||
+      (window as any).__assetPlusViewerInstance?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
 
-    if (assetView && typeof assetView.useTool === 'function') {
-      assetView.useTool(null);
-      console.log('[AlignmentPicker] Deactivated select tool for point picking');
+    if (!xv?.scene) {
+      console.warn('[AlignmentPicker] No xeokit viewer found for 3D picking');
+      return;
     }
 
-    // Suppress highlighting so clicks don't visually select objects
-    if (xv?.scene) {
-      savedHighlightEdges = xv.scene.highlightMaterial?.edges ?? true;
+    let savedHighlightEdges = true;
+
+    // Suppress highlighting during point picking
+    if (xv.scene.highlightMaterial) {
+      savedHighlightEdges = xv.scene.highlightMaterial.edges ?? true;
       xv.scene.highlightMaterial.edges = false;
-      // Clear any existing highlights
       const allIds = xv.scene.objectIds;
       if (allIds?.length) {
         xv.scene.setObjectsHighlighted(allIds, false);
         xv.scene.setObjectsSelected(allIds, false);
       }
-      console.log('[AlignmentPicker] Suppressed highlighting for point picking');
     }
 
+    // Listen for xeokit-pick custom event
     const handlePick = (e: CustomEvent) => {
       const worldPos = e.detail?.worldPos;
       if (worldPos && Array.isArray(worldPos) && worldPos.length >= 3) {
@@ -121,27 +113,21 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
         setBimPoint(picked);
         setStep('done');
         toast.success(`3D-punkt vald: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
-        console.log('[AlignmentPicker] 3D point picked:', picked);
       }
     };
-
-    // Listen for xeokit pick event dispatched by AssetPlusViewer
     window.addEventListener('xeokit-pick', handlePick as EventListener);
-    pickListenerRef.current = handlePick as any;
 
-    // Also register directly on the viewer instance for surface picking
+    // Also register directly on the viewer for surface picking
     let inputSub: any = null;
-    if (xv?.scene?.input) {
+    if (xv.scene.input) {
       inputSub = xv.scene.input.on('mouseclicked', (canvasCoords: number[]) => {
         const pickResult = xv.scene.pick({ canvasPos: canvasCoords, pickSurface: true });
         if (pickResult?.worldPos) {
-          // Accept ANY surface hit — no entity requirement
           const picked: Vec3 = {
             x: pickResult.worldPos[0],
             y: pickResult.worldPos[1],
             z: pickResult.worldPos[2],
           };
-          // Clear any selection/highlight that the pick may have triggered
           if (pickResult.entity) {
             pickResult.entity.highlighted = false;
             pickResult.entity.selected = false;
@@ -149,7 +135,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           setBimPoint(picked);
           setStep('done');
           toast.success(`3D-punkt vald: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
-          console.log('[AlignmentPicker] 3D point picked via xeokit:', picked, 'entity:', pickResult.entity?.id || 'none');
+          console.log('[AlignmentPicker] 3D point picked:', picked);
         } else {
           toast.warning('Ingen yta träffad. Klicka direkt på en synlig vägg, golv eller pelare.');
         }
@@ -158,36 +144,24 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
 
     return () => {
       window.removeEventListener('xeokit-pick', handlePick as EventListener);
-      if (inputSub !== null && xv?.scene?.input) {
+      if (inputSub !== null && xv.scene?.input) {
         xv.scene.input.off(inputSub);
       }
-      // Restore highlighting behavior
-      if (xv?.scene?.highlightMaterial) {
+      if (xv.scene?.highlightMaterial) {
         xv.scene.highlightMaterial.edges = savedHighlightEdges;
-      }
-      // Restore select tool
-      const av = (window as any).__assetPlusViewerInstance?.$refs?.AssetViewer?.$refs?.assetView;
-      if (av && typeof av.useTool === 'function') {
-        av.useTool('select');
-        console.log('[AlignmentPicker] Restored select tool and highlighting');
       }
     };
   }, [step]);
 
-  // Calculate and apply offsets when both points are captured
+  // Calculate and apply offsets
   const applyOffsets = useCallback(() => {
     if (!ivionPoint || !bimPoint) return;
-
-    // Rotate the ivion point by current rotation to get where it "should" be in BIM space
     const rotated = ivionToBim(ivionPoint, { ...transform, offsetX: 0, offsetY: 0, offsetZ: 0 });
-
-    // The offset is the difference between where it IS in BIM and where the rotated ivion point maps to
     const offsets = {
       offsetX: parseFloat((bimPoint.x - rotated.x).toFixed(2)),
       offsetY: parseFloat((bimPoint.y - rotated.y).toFixed(2)),
       offsetZ: parseFloat((bimPoint.z - rotated.z).toFixed(2)),
     };
-
     console.log('[AlignmentPicker] Calculated offsets:', offsets);
     toast.success('Offset beräknad och applicerad');
     onOffsetsCalculated(offsets);
@@ -219,7 +193,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
         </div>
       </div>
 
-      {/* Step 1: 360 position */}
+      {/* Step 1: 360 position — click in panorama */}
       <div className={`flex items-start gap-2 p-2 rounded-md text-xs ${
         step === 'picking360' ? 'bg-primary/10 border border-primary/30' : 'bg-muted/50'
       }`}>
@@ -229,18 +203,20 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           {ivionPoint ? <Check className="h-3 w-3" /> : '1'}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-foreground">Fånga 360°-position</p>
-          <p className="text-foreground/70 mt-0.5 leading-snug">
-            Navigera i 360°-vyn till en punkt du kan identifiera i 3D (t.ex. ett hörn, dörr eller pelare). Tryck sedan knappen nedan.
-          </p>
+          <p className="font-medium text-foreground">Klicka i 360°-vyn</p>
           {ivionPoint ? (
             <p className="text-green-400 font-mono text-[10px] mt-1.5">✓ {formatCoord(ivionPoint)}</p>
           ) : (
-            <div className="mt-1.5 space-y-1.5">
-              <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1.5" onClick={capture360Position}>
-                <MousePointerClick className="h-3 w-3" />
-                Fånga position
-              </Button>
+            <div className="mt-0.5 space-y-1.5">
+              <p className="text-foreground/70 leading-snug">
+                Navigera till en punkt du kan identifiera i 3D (hörn, dörr, pelare) och <strong>klicka direkt</strong> i 360°-bilden.
+              </p>
+              {step === 'picking360' && (
+                <div className="flex items-center gap-1.5 text-primary">
+                  <MousePointerClick className="h-3 w-3" />
+                  <span className="text-[11px] font-medium animate-pulse">Väntar på klick i 360°...</span>
+                </div>
+              )}
               {captureError && (
                 <div className="flex items-start gap-1.5 text-destructive">
                   <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
@@ -268,7 +244,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           ) : step === 'picking3D' ? (
             <div className="mt-1 space-y-1">
               <p className="text-foreground/70 leading-snug">
-                Klicka nu på <strong>exakt samma punkt</strong> i 3D-modellen till vänster. Klicka direkt på ytan (vägg, golv, dörr).
+                Klicka nu på <strong>exakt samma punkt</strong> i 3D-modellen till vänster.
               </p>
               <div className="flex items-center gap-1.5 text-primary">
                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -276,7 +252,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
               </div>
             </div>
           ) : (
-            <p className="text-foreground/60 mt-1">Fånga 360°-position först (steg 1)</p>
+            <p className="text-foreground/60 mt-1">Klicka i 360° först (steg 1)</p>
           )}
         </div>
       </div>

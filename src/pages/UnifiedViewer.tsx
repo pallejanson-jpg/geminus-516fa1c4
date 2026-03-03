@@ -449,7 +449,7 @@ const UnifiedViewerContent: React.FC<{
   const is3DMode = viewMode === '3d';
   const isVTMode = viewMode === 'vt';
   const isSplit2D3D = viewMode === 'split2d3d';
-  const shouldUseNative3D = viewMode === '3d' || viewMode === '2d';
+  const shouldUseNative3D = viewMode === '3d' || viewMode === '2d' || viewMode === 'split';
 
   const viewerContainerStyle: React.CSSProperties = {
     position: 'absolute',
