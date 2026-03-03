@@ -63,7 +63,12 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       // 1. Load xeokit SDK
       setPhase('loading_sdk');
       console.log('[NativeViewer] Loading xeokit SDK...');
-      const sdk = await import(/* @vite-ignore */ XEOKIT_CDN);
+      const sdkResponse = await fetch(XEOKIT_CDN);
+      const sdkText = await sdkResponse.text();
+      const sdkBlob = new Blob([sdkText], { type: 'application/javascript' });
+      const sdkBlobUrl = URL.createObjectURL(sdkBlob);
+      const sdk = await import(/* @vite-ignore */ sdkBlobUrl);
+      URL.revokeObjectURL(sdkBlobUrl);
       if (!mountedRef.current) return;
       console.log(`[NativeViewer] SDK loaded in ${Math.round(performance.now() - t0)}ms`);
 

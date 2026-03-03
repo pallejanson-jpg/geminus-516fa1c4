@@ -1,5 +1,4 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Viewer, type CesiumComponentRef } from 'resium';
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import { Building2, Eye, Globe, Box, RotateCcw } from 'lucide-react';
@@ -34,7 +33,8 @@ const CesiumGlobeView: React.FC = () => {
   const { navigatorTreeData, setActiveApp, setSelectedFacility, open360WithContext, appConfigs } = useContext(AppContext);
   const navigate = useNavigate();
 
-  const viewerRef = useRef<CesiumComponentRef<any> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const cesiumViewerRef = useRef<Cesium.Viewer | null>(null);
   const clickHandlerRef = useRef<Cesium.ScreenSpaceEventHandler | null>(null);
   const pinDataSourceRef = useRef<Cesium.CustomDataSource | null>(null);
   const facilitiesByGuidRef = useRef<Map<string, BuildingCoord & { displayName: string; has360: boolean }>>(new Map());
@@ -43,9 +43,9 @@ const CesiumGlobeView: React.FC = () => {
   const [tokenError, setTokenError] = useState(false);
   const [buildingCoords, setBuildingCoords] = useState<BuildingCoord[]>([]);
   const [show3dBuildings, setShow3dBuildings] = useState(false);
-  const [osmBuildingsLayer, setOsmBuildingsLayer] = useState<Cesium.Cesium3DTileset | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [selectedFmGuid, setSelectedFmGuid] = useState<string | null>(null);
+  const [viewerReady, setViewerReady] = useState(false);
 
   // Fetch Cesium token
   useEffect(() => {
@@ -57,6 +57,79 @@ const CesiumGlobeView: React.FC = () => {
         Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlYWE1OWUxNy1mMWZiLTQzYjYtYTQ0OS1kMWFjYmFkNjc4ZTkiLCJpZCI6NTc3MzMsImlhdCI6MTYyMjY0NjQ5OH0.XcKpgANiY19MC4bdFUXMVEBToBmqS8kuYpUlxJHYZxk';
       }
     });
+  }, []);
+
+  // Create Cesium Viewer imperatively
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const viewer = new Cesium.Viewer(containerRef.current, {
+      timeline: false,
+      animation: false,
+      baseLayerPicker: false,
+      geocoder: false,
+      homeButton: false,
+      sceneModePicker: false,
+      navigationHelpButton: false,
+      infoBox: false,
+      selectionIndicator: false,
+    });
+
+    cesiumViewerRef.current = viewer;
+    viewer.scene.globe.depthTestAgainstTerrain = false;
+
+    // Pin data source
+    const pinDataSource = new Cesium.CustomDataSource('facility-pins');
+    pinDataSourceRef.current = pinDataSource;
+    viewer.dataSources.add(pinDataSource);
+
+    // Click handlers
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    clickHandlerRef.current = handler;
+
+    handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
+      const picked = viewer.scene.pick(movement.position);
+      const entity = picked?.id as Cesium.Entity | undefined;
+      const fmGuid = entity?.properties?.fm_guid?.getValue?.() as string | undefined;
+      if (!fmGuid) return;
+
+      const facility = facilitiesByGuidRef.current.get(fmGuid);
+      if (!facility) return;
+
+      setContextMenu(null);
+      setSelectedFmGuid(facility.fm_guid);
+      viewer.camera.flyTo({
+        destination: toCartesian(facility.latitude, facility.longitude, 300),
+        duration: 1.5,
+      });
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+    handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
+      const picked = viewer.scene.pick(movement.position);
+      const entity = picked?.id as Cesium.Entity | undefined;
+      const fmGuid = entity?.properties?.fm_guid?.getValue?.() as string | undefined;
+      if (!fmGuid) return;
+
+      const facility = facilitiesByGuidRef.current.get(fmGuid);
+      if (!facility) return;
+
+      const rect = viewer.scene.canvas.getBoundingClientRect();
+      setContextMenu({
+        x: rect.left + movement.position.x,
+        y: rect.top + movement.position.y,
+        facility,
+      });
+    }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+
+    setViewerReady(true);
+
+    return () => {
+      handler.destroy();
+      clickHandlerRef.current = null;
+      pinDataSourceRef.current = null;
+      cesiumViewerRef.current = null;
+      viewer.destroy();
+    };
   }, []);
 
   // Fetch building coordinates
@@ -107,21 +180,6 @@ const CesiumGlobeView: React.FC = () => {
     facilitiesByGuidRef.current = facilitiesByGuid;
   }, [facilitiesByGuid]);
 
-  useEffect(() => {
-    osmBuildingsLayerRef.current = osmBuildingsLayer;
-  }, [osmBuildingsLayer]);
-
-  const handlePinClick = useCallback((facility: (typeof facilities)[number]) => {
-    setSelectedFmGuid(facility.fm_guid);
-    const viewer = viewerRef.current?.cesiumElement as any;
-    if (!viewer?.camera) return;
-
-    viewer.camera.flyTo({
-      destination: toCartesian(facility.latitude, facility.longitude, 300),
-      duration: 1.5,
-    });
-  }, []);
-
   const handleOpenViewer = useCallback((fmGuid: string) => {
     setContextMenu(null);
     const node = navigatorTreeData.find(n => n.fmGuid.toLowerCase() === fmGuid.toLowerCase());
@@ -143,64 +201,13 @@ const CesiumGlobeView: React.FC = () => {
   }, [appConfigs, open360WithContext]);
 
   const handleResetView = useCallback(() => {
-    const viewer = viewerRef.current?.cesiumElement as any;
-    viewer?.camera?.flyHome?.(1.5);
+    cesiumViewerRef.current?.camera?.flyHome?.(1.5);
   }, []);
-
-  const ensureViewerSetup = useCallback(() => {
-    const viewer = viewerRef.current?.cesiumElement as any;
-    if (!viewer || pinDataSourceRef.current) return;
-
-    viewer.scene.globe.depthTestAgainstTerrain = false;
-
-    const pinDataSource = new Cesium.CustomDataSource('facility-pins');
-    pinDataSourceRef.current = pinDataSource;
-    viewer.dataSources.add(pinDataSource);
-
-    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-    clickHandlerRef.current = handler;
-
-    handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
-      const picked = viewer.scene.pick(movement.position);
-      const entity = picked?.id as Cesium.Entity | undefined;
-      const fmGuid = entity?.properties?.fm_guid?.getValue?.() as string | undefined;
-      if (!fmGuid) return;
-
-      const facility = facilitiesByGuidRef.current.get(fmGuid);
-      if (!facility) return;
-
-      setContextMenu(null);
-      handlePinClick(facility);
-    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
-
-    handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
-      const picked = viewer.scene.pick(movement.position);
-      const entity = picked?.id as Cesium.Entity | undefined;
-      const fmGuid = entity?.properties?.fm_guid?.getValue?.() as string | undefined;
-      if (!fmGuid) return;
-
-      const facility = facilitiesByGuidRef.current.get(fmGuid);
-      if (!facility) return;
-
-      const rect = viewer.scene.canvas.getBoundingClientRect();
-      setContextMenu({
-        x: rect.left + movement.position.x,
-        y: rect.top + movement.position.y,
-        facility,
-      });
-    }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
-  }, [handlePinClick]);
-
-  useEffect(() => {
-    ensureViewerSetup();
-  }, [ensureViewerSetup, facilities.length]);
 
   // Keep pin layer in sync
   useEffect(() => {
-    ensureViewerSetup();
-
     const dataSource = pinDataSourceRef.current;
-    if (!dataSource) return;
+    if (!dataSource || !viewerReady) return;
 
     dataSource.entities.removeAll();
 
@@ -216,8 +223,8 @@ const CesiumGlobeView: React.FC = () => {
         point: {
           pixelSize: isSelected ? 18 : 14,
           color: isSelected
-            ? Cesium.Color.fromCssColorString('hsl(262 83% 58%)')
-            : Cesium.Color.fromCssColorString('hsl(212 92% 60%)'),
+            ? Cesium.Color.fromCssColorString('hsl(262, 83%, 58%)')
+            : Cesium.Color.fromCssColorString('hsl(212, 92%, 60%)'),
           outlineColor: Cesium.Color.WHITE,
           outlineWidth: 2,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
@@ -239,12 +246,12 @@ const CesiumGlobeView: React.FC = () => {
         },
       });
     });
-  }, [ensureViewerSetup, facilities, selectedFmGuid]);
+  }, [facilities, selectedFmGuid, viewerReady]);
 
   // Toggle OSM 3D buildings
   useEffect(() => {
-    const viewer = viewerRef.current?.cesiumElement as any;
-    if (!viewer) return;
+    const viewer = cesiumViewerRef.current;
+    if (!viewer || !viewerReady) return;
 
     if (show3dBuildings) {
       let cancelled = false;
@@ -253,7 +260,7 @@ const CesiumGlobeView: React.FC = () => {
         .then(tileset => {
           if (cancelled) return;
           viewer.scene.primitives.add(tileset);
-          setOsmBuildingsLayer(tileset);
+          osmBuildingsLayerRef.current = tileset;
         })
         .catch(err => {
           console.warn('OSM 3D Buildings requires Cesium token:', err);
@@ -264,31 +271,12 @@ const CesiumGlobeView: React.FC = () => {
       };
     }
 
-    if (osmBuildingsLayer) {
-      viewer.scene.primitives.remove(osmBuildingsLayer);
-      setOsmBuildingsLayer(null);
+    const osmLayer = osmBuildingsLayerRef.current;
+    if (osmLayer) {
+      viewer.scene.primitives.remove(osmLayer);
+      osmBuildingsLayerRef.current = null;
     }
-  }, [show3dBuildings, osmBuildingsLayer]);
-
-  // Cleanup once on unmount
-  useEffect(() => {
-    return () => {
-      clickHandlerRef.current?.destroy();
-      clickHandlerRef.current = null;
-
-      const viewer = viewerRef.current?.cesiumElement as any;
-      const dataSource = pinDataSourceRef.current;
-      if (viewer && dataSource) {
-        viewer.dataSources?.remove?.(dataSource, true);
-      }
-      pinDataSourceRef.current = null;
-
-      const osmLayer = osmBuildingsLayerRef.current;
-      if (viewer && osmLayer) {
-        viewer.scene?.primitives?.remove?.(osmLayer);
-      }
-    };
-  }, []);
+  }, [show3dBuildings, viewerReady]);
 
   // Close context menu on outside click
   useEffect(() => {
@@ -299,20 +287,7 @@ const CesiumGlobeView: React.FC = () => {
 
   return (
     <div className="flex-1 flex flex-col h-full relative overflow-hidden">
-      <Viewer
-        ref={viewerRef}
-        full
-        timeline={false}
-        animation={false}
-        baseLayerPicker={false}
-        geocoder={false}
-        homeButton={false}
-        sceneModePicker={false}
-        navigationHelpButton={false}
-        infoBox={false}
-        selectionIndicator={false}
-        style={{ position: 'absolute', inset: 0 }}
-      />
+      <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
 
       {/* Top-left controls */}
       <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">

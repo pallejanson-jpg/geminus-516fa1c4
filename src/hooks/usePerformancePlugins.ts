@@ -47,7 +47,12 @@ export function usePerformancePlugins({ viewerRef, ready, isMobile }: UsePerform
 
       try {
         // Dynamic import from xeokit CDN
-        const sdk = await import(/* @vite-ignore */ XEOKIT_CDN);
+        const sdkResponse = await fetch(XEOKIT_CDN);
+        const sdkText = await sdkResponse.text();
+        const sdkBlob = new Blob([sdkText], { type: 'application/javascript' });
+        const sdkBlobUrl = URL.createObjectURL(sdkBlob);
+        const sdk = await import(/* @vite-ignore */ sdkBlobUrl);
+        URL.revokeObjectURL(sdkBlobUrl);
         if (cancelled) return;
 
         // 1. FastNavPlugin — check user setting
