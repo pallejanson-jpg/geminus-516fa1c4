@@ -1,7 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Viewer, type CesiumComponentRef } from 'resium';
-import * as Cesium from '@cesium/engine';
-import '@cesium/engine/Source/Widget/CesiumWidget.css';
+import * as Cesium from 'cesium';
+import 'cesium/Build/Cesium/Widgets/widgets.css';
 import { Building2, Eye, Globe, Box, RotateCcw } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
