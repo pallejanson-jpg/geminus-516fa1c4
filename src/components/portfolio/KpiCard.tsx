@@ -33,12 +33,12 @@ const KpiCard: React.FC<KpiCardProps> = ({ title, value, icon: Icon, onClick }) 
   const displayValue = formatValue(value);
   
   const content = (
-    <CardContent className="p-3 sm:p-4 flex flex-col justify-between h-full">
-      <div className="flex items-center gap-2 text-muted-foreground text-[11px] sm:text-xs uppercase font-bold">
-        <Icon size={14} className="sm:w-4 sm:h-4 flex-shrink-0" />
+    <CardContent className="p-2 sm:p-4 flex flex-col justify-between h-full">
+      <div className="flex items-center gap-1 sm:gap-2 text-muted-foreground text-[9px] sm:text-xs uppercase font-bold">
+        <Icon size={12} className="sm:w-4 sm:h-4 flex-shrink-0" />
         <span className="truncate">{title}</span>
       </div>
-      <p className="text-lg sm:text-2xl font-bold text-foreground mt-1 truncate">{displayValue}</p>
+      <p className="text-sm sm:text-2xl font-bold text-foreground mt-0.5 sm:mt-1 truncate">{displayValue}</p>
     </CardContent>
   );
 
