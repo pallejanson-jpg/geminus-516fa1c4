@@ -109,18 +109,19 @@ const CesiumGlobeView: React.FC = () => {
       if (!facility) return;
 
       setSelectedFmGuid(facility.fm_guid);
+      setSelectedBuilding(null);
 
-      // Fly to 300m altitude with perspective
+      // Fly to ~2km altitude with slight perspective to see the area
       viewer.camera.flyTo({
-        destination: toCartesian(facility.latitude, facility.longitude, 300),
+        destination: toCartesian(facility.latitude, facility.longitude, 2000),
         orientation: {
           heading: Cesium.Math.toRadians(0),
-          pitch: Cesium.Math.toRadians(-45),
+          pitch: Cesium.Math.toRadians(-50),
           roll: 0,
         },
         duration: 1.5,
         complete: () => {
-          // After fly-to completes, get screen position for popup
+          // After fly-to completes, show the popup
           const screenPos = Cesium.SceneTransforms.worldToWindowCoordinates(
             viewer.scene,
             toCartesian(facility.latitude, facility.longitude, 0),
@@ -135,28 +136,6 @@ const CesiumGlobeView: React.FC = () => {
         },
       });
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
-
-    handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
-      const picked = viewer.scene.pick(movement.position);
-      const entity = picked?.id as Cesium.Entity | undefined;
-      const fmGuid = entity?.properties?.fm_guid?.getValue?.() as string | undefined;
-      if (!fmGuid) return;
-
-      const facility = facilitiesByGuidRef.current.get(fmGuid);
-      if (!facility) return;
-
-      setSelectedBuilding(null);
-      setSelectedFmGuid(facility.fm_guid);
-      viewer.camera.flyTo({
-        destination: toCartesian(facility.latitude, facility.longitude, 300),
-        orientation: {
-          heading: Cesium.Math.toRadians(0),
-          pitch: Cesium.Math.toRadians(-45),
-          roll: 0,
-        },
-        duration: 1.5,
-      });
-    }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
 
     setViewerReady(true);
 
