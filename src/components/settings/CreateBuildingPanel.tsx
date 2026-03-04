@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -7,13 +7,9 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { convertToXktWithMetadata, type IfcHierarchyResult } from '@/services/acc-xkt-converter';
 import {
-  Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers, Timer, Cloud, Monitor
+  Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers, Timer, Cloud
 } from 'lucide-react';
-
-/** Files larger than this threshold (in bytes) are converted server-side */
-const SERVER_CONVERSION_THRESHOLD = 20 * 1024 * 1024; // 20 MB
 
 interface CreatedBuilding {
   complexFmGuid: string;
@@ -58,6 +54,7 @@ const CreateBuildingPanel: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [conversionStartTime, setConversionStartTime] = useState<number | null>(null);
   const [elapsedDisplay, setElapsedDisplay] = useState('');
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Elapsed timer tick
   useEffect(() => {
@@ -72,6 +69,13 @@ const CreateBuildingPanel: React.FC = () => {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [conversionStartTime, conversionDone]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, []);
 
   // Fetch existing buildings
   useEffect(() => {
@@ -92,9 +96,9 @@ const CreateBuildingPanel: React.FC = () => {
     fetchBuildings();
   }, [createdBuilding]);
 
-  const addLog = (msg: string) => {
+  const addLog = useCallback((msg: string) => {
     setConversionLogs(prev => [...prev, msg]);
-  };
+  }, []);
 
   const handleCreate = async () => {
     if (!complexDesignation || !complexName || !buildingDesignation || !buildingName) {
@@ -146,6 +150,41 @@ const CreateBuildingPanel: React.FC = () => {
   const targetBuildingFmGuid = createdBuilding?.buildingFmGuid || selectedExistingFmGuid;
   const targetModelFmGuid = createdBuilding?.modelFmGuid || '';
 
+  /** Poll conversion_jobs for progress updates */
+  const startPolling = useCallback((jobId: string) => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+
+    pollingRef.current = setInterval(async () => {
+      const { data } = await supabase
+        .from('conversion_jobs')
+        .select('status, progress, log_messages, error_message, result_model_id')
+        .eq('id', jobId)
+        .single();
+
+      if (!data) return;
+
+      // Update progress
+      if (data.progress != null) setConversionProgress(data.progress);
+
+      // Update logs from server
+      if (data.log_messages && Array.isArray(data.log_messages)) {
+        setConversionLogs(data.log_messages as string[]);
+      }
+
+      if (data.status === 'done') {
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        pollingRef.current = null;
+        setConversionDone(true);
+        setIsConverting(false);
+      } else if (data.status === 'error') {
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        pollingRef.current = null;
+        setIsConverting(false);
+        addLog(`❌ Error: ${data.error_message || 'Unknown error'}`);
+      }
+    }, 2000);
+  }, [addLog]);
+
   const handleIfcUpload = async () => {
     if (!ifcFile || !targetBuildingFmGuid) return;
 
@@ -155,41 +194,79 @@ const CreateBuildingPanel: React.FC = () => {
     setConversionDone(false);
     setConversionStartTime(Date.now());
 
-    const useServerSide = ifcFile.size > SERVER_CONVERSION_THRESHOLD;
-
     try {
       addLog(`Reading file: ${ifcFile.name} (${(ifcFile.size / 1024 / 1024).toFixed(1)} MB)`);
-      if (useServerSide) {
-        addLog('📡 Large file detected — using server-side conversion');
-      }
-      setConversionProgress(10);
+      addLog('📡 Uploading IFC to server for conversion...');
+      setConversionProgress(5);
 
-      if (useServerSide) {
-        // ── Server-side path: upload IFC → call edge function ──
-        const ifcStoragePath = `${targetBuildingFmGuid}/${ifcFile.name}`;
-        addLog('Uploading IFC to storage...');
-        const { error: ifcUploadError } = await supabase.storage
-          .from('ifc-uploads')
-          .upload(ifcStoragePath, ifcFile, {
-            contentType: 'application/octet-stream',
-            upsert: true,
-          });
-        if (ifcUploadError) throw new Error(`IFC upload failed: ${ifcUploadError.message}`);
-        setConversionProgress(30);
-        addLog('IFC uploaded. Starting server conversion...');
-
-        const { data: convResult, error: fnError } = await supabase.functions.invoke('ifc-to-xkt', {
-          body: {
-            ifcStoragePath,
-            buildingFmGuid: targetBuildingFmGuid,
-            modelName: ifcFile.name.replace(/\.ifc$/i, ''),
-          },
+      // 1. Upload IFC to storage
+      const ifcStoragePath = `${targetBuildingFmGuid}/${ifcFile.name}`;
+      const { error: ifcUploadError } = await supabase.storage
+        .from('ifc-uploads')
+        .upload(ifcStoragePath, ifcFile, {
+          contentType: 'application/octet-stream',
+          upsert: true,
         });
+      if (ifcUploadError) throw new Error(`IFC upload failed: ${ifcUploadError.message}`);
+      setConversionProgress(15);
+      addLog('IFC uploaded to storage.');
 
-        if (fnError) throw new Error(`Server conversion failed: ${fnError.message}`);
-        if (!convResult?.success) throw new Error(convResult?.error || 'Conversion failed');
+      // 2. Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
 
-        setConversionProgress(85);
+      // 3. Create conversion job row
+      const safeModelName = ifcFile.name.replace(/\.ifc$/i, '');
+      const { data: jobRow, error: jobError } = await supabase
+        .from('conversion_jobs')
+        .insert({
+          building_fm_guid: targetBuildingFmGuid,
+          ifc_storage_path: ifcStoragePath,
+          model_name: safeModelName,
+          status: 'pending',
+          progress: 0,
+          log_messages: [],
+          created_by: user.id,
+        } as any)
+        .select('id')
+        .single();
+
+      if (jobError || !jobRow) throw new Error(`Failed to create conversion job: ${jobError?.message}`);
+      const jobId = (jobRow as any).id as string;
+      addLog('Conversion job created. Starting server-side conversion...');
+
+      // 4. Start polling for progress
+      startPolling(jobId);
+
+      // 5. Invoke edge function (fire-and-forget style — polling handles updates)
+      const { data: convResult, error: fnError } = await supabase.functions.invoke('ifc-to-xkt', {
+        body: {
+          ifcStoragePath,
+          buildingFmGuid: targetBuildingFmGuid,
+          modelName: safeModelName,
+          jobId,
+        },
+      });
+
+      if (fnError) {
+        // Edge function returned error immediately
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        pollingRef.current = null;
+        throw new Error(`Server conversion failed: ${fnError.message}`);
+      }
+
+      if (convResult && !convResult.success) {
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        pollingRef.current = null;
+        throw new Error(convResult.error || 'Conversion failed');
+      }
+
+      // Edge function returned success — polling may already have set done
+      if (convResult?.success) {
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        pollingRef.current = null;
+
+        setConversionProgress(90);
         addLog(`XKT generated: ${convResult.xktSizeMB} MB`);
         addLog(`Hierarchy: ${convResult.levels?.length || 0} levels, ${convResult.spaces?.length || 0} spaces`);
 
@@ -223,93 +300,17 @@ const CreateBuildingPanel: React.FC = () => {
           else addLog(`⚠️ ${hierarchyData?.error || 'Hierarchy creation failed'}`);
         }
 
-      } else {
-        // ── Client-side path: convert on main thread for small files ──
-        addLog('🖥️ Small file — converting locally');
-        const arrayBuffer = await ifcFile.arrayBuffer();
-        setConversionProgress(20);
+        setConversionProgress(100);
+        setConversionDone(true);
+        addLog('✅ Done! The model is ready to view in the 3D viewer.');
 
-        addLog('Converting IFC to XKT and extracting hierarchy...');
-        const result: IfcHierarchyResult = await convertToXktWithMetadata(arrayBuffer, (msg) => {
-          addLog(msg);
-          setConversionProgress(prev => Math.min(prev + 5, 70));
+        toast({
+          title: 'IFC uploaded!',
+          description: `${ifcFile.name} converted and saved as a 3D model.`,
         });
-
-        setConversionProgress(75);
-        addLog(`XKT generated: ${(result.xktData.byteLength / 1024 / 1024).toFixed(2)} MB`);
-        addLog(`Hierarchy: ${result.levels.length} levels, ${result.spaces.length} spaces`);
-
-        // Upload XKT to storage
-        const modelId = `ifc-${Date.now()}`;
-        const storageFileName = `${modelId}.xkt`;
-        const storagePath = `${targetBuildingFmGuid}/${storageFileName}`;
-
-        addLog('Uploading XKT to storage...');
-        const blob = new Blob([result.xktData], { type: 'application/octet-stream' });
-        const { error: uploadError } = await supabase.storage
-          .from('xkt-models')
-          .upload(storagePath, blob, { contentType: 'application/octet-stream', upsert: true });
-
-        if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
-        setConversionProgress(82);
-
-        addLog('Saving XKT metadata...');
-        const { error: dbError } = await supabase
-          .from('xkt_models')
-          .upsert({
-            building_fm_guid: targetBuildingFmGuid,
-            model_id: modelId,
-            model_name: ifcFile.name.replace(/\.ifc$/i, ''),
-            file_name: storageFileName,
-            file_size: result.xktData.byteLength,
-            storage_path: storagePath,
-            format: 'xkt',
-            synced_at: new Date().toISOString(),
-            source_updated_at: new Date().toISOString(),
-          } as any, { onConflict: 'building_fm_guid,model_id' });
-
-        if (dbError) throw new Error(`Database error: ${dbError.message}`);
-        setConversionProgress(88);
-
-        // Create hierarchy in Asset+
-        if ((result.levels.length > 0 || result.spaces.length > 0) && targetModelFmGuid) {
-          addLog(`Creating ${result.levels.length} levels and ${result.spaces.length} spaces in Asset+...`);
-          const levelFmGuids = new Map<string, string>();
-          const hierarchyLevels = result.levels.map(level => {
-            const fmGuid = crypto.randomUUID();
-            levelFmGuids.set(level.id, fmGuid);
-            return { fmGuid, designation: level.name, commonName: level.name };
-          });
-          const hierarchySpaces = result.spaces.map(space => {
-            const fmGuid = crypto.randomUUID();
-            return {
-              fmGuid,
-              designation: space.name,
-              commonName: space.name,
-              levelFmGuid: levelFmGuids.get(space.parentId) || undefined,
-            };
-          });
-
-          const { data: hierarchyData, error: hierarchyError } = await supabase.functions.invoke(
-            'asset-plus-create-hierarchy',
-            { body: { buildingFmGuid: targetBuildingFmGuid, modelFmGuid: targetModelFmGuid, levels: hierarchyLevels, spaces: hierarchySpaces } }
-          );
-          if (hierarchyError) addLog(`⚠️ Hierarchy creation failed: ${hierarchyError.message}`);
-          else if (hierarchyData?.success) addLog(`✅ ${hierarchyData.message}`);
-          else addLog(`⚠️ ${hierarchyData?.error || 'Hierarchy creation failed'}`);
-        } else if (result.levels.length > 0 || result.spaces.length > 0) {
-          addLog('ℹ️ Hierarchy extracted but no modelFmGuid — saved locally only.');
-        }
+        setIsConverting(false);
       }
-
-      setConversionProgress(100);
-      setConversionDone(true);
-      addLog('✅ Done! The model is ready to view in the 3D viewer.');
-
-      toast({
-        title: 'IFC uploaded!',
-        description: `${ifcFile.name} converted and saved as a 3D model.`,
-      });
+      // If convResult is null (timeout but still processing), polling continues
     } catch (err: any) {
       addLog(`❌ Error: ${err.message}`);
       toast({
@@ -317,12 +318,13 @@ const CreateBuildingPanel: React.FC = () => {
         title: 'Conversion error',
         description: err.message,
       });
-    } finally {
       setIsConverting(false);
     }
   };
 
   const handleReset = () => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    pollingRef.current = null;
     setCreatedBuilding(null);
     setComplexDesignation('');
     setComplexName('');
@@ -496,10 +498,7 @@ const CreateBuildingPanel: React.FC = () => {
                 </div>
                 {isConverting && !conversionDone && (
                   <p className="text-[10px] text-muted-foreground animate-pulse flex items-center gap-1">
-                    {ifcFile && ifcFile.size > SERVER_CONVERSION_THRESHOLD
-                      ? <><Cloud className="h-3 w-3" /> Converting on server — this may take a few minutes…</>
-                      : <><Monitor className="h-3 w-3" /> Parsing IFC locally — this may take several minutes for large files…</>
-                    }
+                    <Cloud className="h-3 w-3" /> Converting on server — this may take a few minutes…
                   </p>
                 )}
                 <div className="rounded-md border bg-background p-2 max-h-32 overflow-y-auto">
