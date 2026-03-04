@@ -579,7 +579,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
       )}
 
       {/* Content */}
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-auto">
         {viewMode === 'grid' ? (
           /* Grid/Table View with draggable columns */
           <div className="p-4">
