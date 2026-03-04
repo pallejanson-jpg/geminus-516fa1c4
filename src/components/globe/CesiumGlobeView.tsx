@@ -386,7 +386,11 @@ const CesiumGlobeView: React.FC = () => {
     const viewer = cesiumViewerRef.current;
     if (!viewer || !viewerReady || !selectedBuilding) return;
 
+    let frameId = 0;
     const updatePopupPosition = () => {
+      // Throttle to ~30fps to reduce overhead
+      frameId++;
+      if (frameId % 2 !== 0) return;
       if (!selectedBuilding) return;
       const screenPos = Cesium.SceneTransforms.worldToWindowCoordinates(
         viewer.scene,
