@@ -381,8 +381,8 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
   return (
     <div className="relative w-full h-full overflow-hidden native-viewer-canvas-parent" style={{ background: 'linear-gradient(180deg, rgb(255,255,255) 0%, rgb(230,230,230) 100%)' }}>
-      {/* Desktop back button */}
-      {!isMobile && (
+      {/* Desktop back button — hidden when parent (UnifiedViewer) has its own */}
+      {!isMobile && !hideBackButton && (
         <Button
           variant="secondary"
           size="icon"

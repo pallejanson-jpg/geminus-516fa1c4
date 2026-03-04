@@ -775,6 +775,7 @@ function MobileUnifiedViewer({
             <NativeViewerShell
               buildingFmGuid={buildingData.fmGuid}
               onClose={onGoBack}
+              hideBackButton
             />
           ) : (
             <React.Suspense fallback={<div className="flex items-center justify-center h-full bg-black"><Loader2 className="h-8 w-8 animate-spin text-white/50" /></div>}>
