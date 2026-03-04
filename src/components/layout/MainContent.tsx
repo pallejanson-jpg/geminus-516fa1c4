@@ -85,7 +85,17 @@ const MainContent: React.FC = () => {
                     );
                 }
                 return <InsightsView />;
-            case 'fma_plus':
+            case 'fma_plus': {
+                const fmaUrl = appConfigs?.fma_plus?.url || 'https://swg-demo.bim.cloud/';
+                const buildingFmGuid = selectedFacility?.fm_guid || selectedFacility?.fmGuid;
+                const buildingName = selectedFacility?.commonName || selectedFacility?.name;
+                return (
+                    <Suspense fallback={<LazyFallback />}>
+                        <FmaInternalView url={fmaUrl} buildingFmGuid={buildingFmGuid} buildingName={buildingName} />
+                    </Suspense>
+                );
+            }
+            case 'fma_native':
                 return (
                     <Suspense fallback={<LazyFallback />}>
                         <FmAccessNativeView />
