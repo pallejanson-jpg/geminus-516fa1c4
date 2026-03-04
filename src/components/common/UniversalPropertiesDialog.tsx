@@ -62,6 +62,7 @@ const SECTION_LABELS: Record<string, string> = {
   'local': 'Local Settings',
   'coordinates': 'Position',
   'area': 'Area & Dimensions',
+  'classification': 'Klassificering (BIP)',
   'user-defined': 'User-Defined',
 };
 
