@@ -5,39 +5,19 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
-import { Building2, Eye, Globe, Box, RotateCcw, ArrowRight, Loader2, Boxes, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { Building2, Eye, Box, RotateCcw, Loader2, Boxes, ArrowRight } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { NORDIC_CITIES } from '@/lib/constants';
-
-interface BuildingCoord {
-  fm_guid: string;
-  latitude: number;
-  longitude: number;
-  name?: string;
-  ivion_site_id?: string | null;
-  rotation?: number | null;
-}
-
-interface CesiumFacility {
-  fm_guid: string;
-  latitude: number;
-  longitude: number;
-  ivion_site_id?: string | null;
-  rotation?: number | null;
-  displayName: string;
-  address: string;
-  has360: boolean;
-}
+import { useMapFacilities, MapFacility } from '@/hooks/useMapFacilities';
+import BuildingSidebar from '@/components/map/BuildingSidebar';
+import BuildingInfoCard from '@/components/map/BuildingInfoCard';
 
 interface SelectedBuilding {
-  facility: CesiumFacility;
+  facility: MapFacility;
   screenX: number;
   screenY: number;
 }
@@ -51,21 +31,20 @@ const VIEWER_RETURN_APP_KEY = 'viewer-return-app';
 const CESIUM_CAMERA_STATE_KEY = 'cesium-camera-state';
 
 const CesiumGlobeView: React.FC = () => {
-  const { navigatorTreeData, setActiveApp, setSelectedFacility, setViewer3dFmGuid, allData, appConfigs } = useContext(AppContext);
+  const { navigatorTreeData, setActiveApp, setSelectedFacility, setViewer3dFmGuid } = useContext(AppContext);
+  const { facilities: mapFacilities } = useMapFacilities();
 
   const containerRef = useRef<HTMLDivElement>(null);
   const cesiumViewerRef = useRef<Cesium.Viewer | null>(null);
   const clickHandlerRef = useRef<Cesium.ScreenSpaceEventHandler | null>(null);
   const pinDataSourceRef = useRef<Cesium.CustomDataSource | null>(null);
-  const facilitiesByGuidRef = useRef<Map<string, CesiumFacility>>(new Map());
+  const facilitiesByGuidRef = useRef<Map<string, MapFacility>>(new Map());
   const osmBuildingsLayerRef = useRef<Cesium.Cesium3DTileset | null>(null);
   const hasFlewInRef = useRef(false);
   const zoomedFmGuidRef = useRef<string | null>(null);
   const bimEntityRef = useRef<Cesium.Entity | null>(null);
 
-  const [tokenError, setTokenError] = useState(false);
   const [tokenReady, setTokenReady] = useState(false);
-  const [buildingCoords, setBuildingCoords] = useState<BuildingCoord[]>([]);
   const [show3dBuildings, setShow3dBuildings] = useState(true);
   const [selectedBuilding, setSelectedBuilding] = useState<SelectedBuilding | null>(null);
   const [selectedFmGuid, setSelectedFmGuid] = useState<string | null>(null);
@@ -74,67 +53,65 @@ const CesiumGlobeView: React.FC = () => {
   const [bimLoading, setBimLoading] = useState(false);
   const [bimLoadedFmGuid, setBimLoadedFmGuid] = useState<string | null>(null);
 
+  // Sidebar items from shared hook
+  const sidebarItems = useMemo(() =>
+    mapFacilities.map(f => ({
+      id: f.fmGuid!,
+      displayName: f.displayName,
+      address: f.address || '',
+    })),
+    [mapFacilities],
+  );
+
+  const facilitiesByGuid = useMemo(() => {
+    const map = new Map<string, MapFacility>();
+    mapFacilities.forEach(f => map.set(f.fmGuid!, f));
+    return map;
+  }, [mapFacilities]);
+
+  useEffect(() => { facilitiesByGuidRef.current = facilitiesByGuid; }, [facilitiesByGuid]);
+  useEffect(() => { zoomedFmGuidRef.current = zoomedFmGuid; }, [zoomedFmGuid]);
+
   // Fetch Cesium token
   useEffect(() => {
     supabase.functions.invoke('get-cesium-token').then(({ data, error }) => {
       if (!error && data?.token) {
         Cesium.Ion.defaultAccessToken = data.token;
       } else {
-        setTokenError(true);
         Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlYWE1OWUxNy1mMWZiLTQzYjYtYTQ0OS1kMWFjYmFkNjc4ZTkiLCJpZCI6NTc3MzMsImlhdCI6MTYyMjY0NjQ5OH0.XcKpgANiY19MC4bdFUXMVEBToBmqS8kuYpUlxJHYZxk';
       }
       setTokenReady(true);
     });
   }, []);
 
-  // Create Cesium Viewer imperatively — wait for token
+  // Create Cesium Viewer imperatively
   useEffect(() => {
     if (!containerRef.current || !tokenReady) return;
 
     const viewer = new Cesium.Viewer(containerRef.current, {
-      timeline: false,
-      animation: false,
-      baseLayerPicker: false,
-      geocoder: false,
-      homeButton: false,
-      sceneModePicker: false,
-      navigationHelpButton: false,
-      infoBox: false,
-      selectionIndicator: false,
+      timeline: false, animation: false, baseLayerPicker: false, geocoder: false,
+      homeButton: false, sceneModePicker: false, navigationHelpButton: false,
+      infoBox: false, selectionIndicator: false,
     });
 
     cesiumViewerRef.current = viewer;
-
-    // Reduce resolution on desktop for better performance
     viewer.resolutionScale = window.innerWidth > 768 ? 0.85 : 1.0;
 
-    // Start in a visible Nordic overview immediately (before heavy layers are ready)
     viewer.camera.setView({
       destination: toCartesian(62.5, 15.0, 2200000),
-      orientation: {
-        heading: 0,
-        pitch: Cesium.Math.toRadians(-90),
-        roll: 0,
-      },
+      orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
     });
 
-    // Add Cesium World Terrain so 3D buildings sit correctly on the ground
-    Cesium.CesiumTerrainProvider.fromIonAssetId(1).then(terrainProvider => {
-      if (cesiumViewerRef.current && !cesiumViewerRef.current.isDestroyed()) {
-        cesiumViewerRef.current.terrainProvider = terrainProvider;
-      }
-    }).catch(err => {
-      console.warn('Could not load Cesium World Terrain:', err);
-    });
+    Cesium.CesiumTerrainProvider.fromIonAssetId(1).then(tp => {
+      if (cesiumViewerRef.current && !cesiumViewerRef.current.isDestroyed()) cesiumViewerRef.current.terrainProvider = tp;
+    }).catch(() => {});
 
     viewer.scene.globe.depthTestAgainstTerrain = true;
 
-    // Pin data source
     const pinDataSource = new Cesium.CustomDataSource('facility-pins');
     pinDataSourceRef.current = pinDataSource;
     viewer.dataSources.add(pinDataSource);
 
-    // Click handler
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     clickHandlerRef.current = handler;
 
@@ -144,51 +121,29 @@ const CesiumGlobeView: React.FC = () => {
       const entity = picked?.id as Cesium.Entity | undefined;
       const fmGuid = entity?.properties?.fm_guid?.getValue?.() as string | undefined;
 
-      // If clicked empty space, close popup and reset
       if (!fmGuid) {
-        setSelectedBuilding(null);
-        setSelectedFmGuid(null);
-        setZoomedFmGuid(null);
+        setSelectedBuilding(null); setSelectedFmGuid(null); setZoomedFmGuid(null);
         return;
       }
 
       const facility = facilitiesByGuidRef.current.get(fmGuid);
       if (!facility) return;
 
-      setSelectedFmGuid(facility.fm_guid);
-
-      // Check if we already zoomed to this building — second click shows popup
+      setSelectedFmGuid(facility.fmGuid!);
       const alreadyZoomed = zoomedFmGuidRef.current === fmGuid;
 
       if (alreadyZoomed) {
-        // Second click: show popup
-        const screenPos = Cesium.SceneTransforms.worldToWindowCoordinates(
-          viewer.scene,
-          toCartesian(facility.latitude, facility.longitude, 0),
-        );
-        if (screenPos) {
-          setSelectedBuilding({
-            facility,
-            screenX: screenPos.x,
-            screenY: screenPos.y,
-          });
-        }
+        const screenPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, toCartesian(facility.lat, facility.lng, 0));
+        if (screenPos) setSelectedBuilding({ facility, screenX: screenPos.x, screenY: screenPos.y });
         return;
       }
 
-      // First click: zoom in to centered pin, no popup
       setSelectedBuilding(null);
       setZoomedFmGuid(fmGuid);
-
-      const pinCenter = toCartesian(facility.latitude, facility.longitude, 0);
-      viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(pinCenter, 24), {
-        offset: new Cesium.HeadingPitchRange(
-          Cesium.Math.toRadians(0),
-          Cesium.Math.toRadians(-50),
-          360,
-        ),
-        duration: 1.4,
-      });
+      viewer.camera.flyToBoundingSphere(
+        new Cesium.BoundingSphere(toCartesian(facility.lat, facility.lng, 0), 24),
+        { offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-50), 360), duration: 1.4 },
+      );
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
     setViewerReady(true);
@@ -198,92 +153,12 @@ const CesiumGlobeView: React.FC = () => {
       handler.destroy();
       clickHandlerRef.current = null;
       pinDataSourceRef.current = null;
-      if (!viewer.isDestroyed()) {
-        viewer.destroy();
-      }
+      if (!viewer.isDestroyed()) viewer.destroy();
       cesiumViewerRef.current = null;
     };
   }, [tokenReady]);
 
-  // Fetch building coordinates (include rotation for BIM placement)
-  useEffect(() => {
-    const fetchCoords = async () => {
-      const { data } = await supabase
-        .from('building_settings')
-        .select('fm_guid, latitude, longitude, ivion_site_id, rotation');
-
-      if (!data) return;
-
-      setBuildingCoords(
-        data
-          .filter(d => d.latitude !== null && d.longitude !== null)
-          .map(d => ({
-            fm_guid: d.fm_guid,
-            latitude: d.latitude!,
-            longitude: d.longitude!,
-            ivion_site_id: d.ivion_site_id,
-            rotation: d.rotation ?? 0,
-          })),
-      );
-    };
-
-    fetchCoords();
-  }, []);
-
-  // ── Build facilities from navigatorTreeData (same source as MapView) ──
-  const facilities: CesiumFacility[] = useMemo(() => {
-    const coordsLookup: Record<string, BuildingCoord> = {};
-    buildingCoords.forEach(bc => {
-      coordsLookup[bc.fm_guid.toLowerCase()] = bc;
-    });
-
-    return navigatorTreeData.map((building, index) => {
-      const saved = coordsLookup[building.fmGuid.toLowerCase()];
-
-      let lat: number;
-      let lng: number;
-      let address: string;
-
-      if (saved) {
-        lat = saved.latitude;
-        lng = saved.longitude;
-        address = (building as any).attributes?.address || 'Sparad position';
-      } else {
-        const cityIndex = index % NORDIC_CITIES.length;
-        const city = NORDIC_CITIES[cityIndex];
-        lat = city.lat + (Math.random() - 0.5) * 0.1;
-        lng = city.lng + (Math.random() - 0.5) * 0.1;
-        address = (building as any).attributes?.address || city.name;
-      }
-
-      return {
-        fm_guid: building.fmGuid,
-        latitude: lat,
-        longitude: lng,
-        ivion_site_id: saved?.ivion_site_id ?? null,
-        rotation: saved?.rotation ?? 0,
-        displayName: building.commonName || building.name || building.fmGuid.substring(0, 8),
-        address,
-        has360: !!saved?.ivion_site_id,
-      };
-    });
-  }, [navigatorTreeData, buildingCoords]);
-
-  const facilitiesByGuid = useMemo(() => {
-    const map = new Map<string, CesiumFacility>();
-    facilities.forEach(f => map.set(f.fm_guid, f));
-    return map;
-  }, [facilities]);
-
-  useEffect(() => {
-    facilitiesByGuidRef.current = facilitiesByGuid;
-  }, [facilitiesByGuid]);
-
-  useEffect(() => {
-    zoomedFmGuidRef.current = zoomedFmGuid;
-  }, [zoomedFmGuid]);
-
-  // ── Save camera state helper ──
+  // Save camera state helper
   const saveCameraState = useCallback(() => {
     const viewer = cesiumViewerRef.current;
     if (!viewer || viewer.isDestroyed()) return;
@@ -293,24 +168,18 @@ const CesiumGlobeView: React.FC = () => {
         pos: { x: cam.position.x, y: cam.position.y, z: cam.position.z },
         dir: { x: cam.direction.x, y: cam.direction.y, z: cam.direction.z },
         up: { x: cam.up.x, y: cam.up.y, z: cam.up.z },
-        selectedFmGuid,
-        zoomedFmGuid,
+        selectedFmGuid, zoomedFmGuid,
       }));
     } catch { /* ignore */ }
   }, [selectedFmGuid, zoomedFmGuid]);
 
-  // ── Navigation handlers ──
-
+  // Navigation handlers
   const handleNavigateToFacility = useCallback((fmGuid: string) => {
     saveCameraState();
-    setSelectedBuilding(null);
-    setSelectedFmGuid(null);
-    setZoomedFmGuid(null);
+    setSelectedBuilding(null); setSelectedFmGuid(null); setZoomedFmGuid(null);
     const node = navigatorTreeData.find(n => n.fmGuid.toLowerCase() === fmGuid.toLowerCase());
     if (node) {
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem(PORTFOLIO_RETURN_APP_KEY, 'globe');
-      }
+      sessionStorage.setItem(PORTFOLIO_RETURN_APP_KEY, 'globe');
       setSelectedFacility(node);
     }
     setActiveApp('portfolio');
@@ -318,23 +187,17 @@ const CesiumGlobeView: React.FC = () => {
 
   const handleOpenViewer = useCallback((fmGuid: string) => {
     saveCameraState();
-    setSelectedBuilding(null);
-    setSelectedFmGuid(null);
-    setZoomedFmGuid(null);
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem(VIEWER_RETURN_APP_KEY, 'globe');
-    }
+    setSelectedBuilding(null); setSelectedFmGuid(null); setZoomedFmGuid(null);
+    sessionStorage.setItem(VIEWER_RETURN_APP_KEY, 'globe');
     setViewer3dFmGuid(fmGuid);
   }, [setViewer3dFmGuid, saveCameraState]);
 
   const handleShowBim = useCallback(async (fmGuid: string) => {
     const viewer = cesiumViewerRef.current;
     if (!viewer || viewer.isDestroyed()) return;
-
     const facility = facilitiesByGuidRef.current.get(fmGuid);
     if (!facility) return;
 
-    // Toggle off if already loaded
     if (bimLoadedFmGuid === fmGuid && bimEntityRef.current) {
       viewer.entities.remove(bimEntityRef.current);
       bimEntityRef.current = null;
@@ -347,10 +210,7 @@ const CesiumGlobeView: React.FC = () => {
     setSelectedBuilding(null);
 
     try {
-      const { data: checkData, error: checkError } = await supabase.functions.invoke('bim-to-gltf', {
-        body: { action: 'check', buildingFmGuid: fmGuid },
-      });
-
+      const { data: checkData, error: checkError } = await supabase.functions.invoke('bim-to-gltf', { body: { action: 'check', buildingFmGuid: fmGuid } });
       if (checkError) throw new Error(checkError.message);
 
       let glbUrl: string | null = null;
@@ -359,16 +219,10 @@ const CesiumGlobeView: React.FC = () => {
         glbUrl = checkData.glbUrl;
       } else if (checkData?.hasIfc || checkData?.hasXkt) {
         toast.info('Konverterar BIM-modell...', { duration: 12000, id: 'bim-convert' });
-
-        const { data: convertData, error: convertError } = await supabase.functions.invoke('bim-to-gltf', {
-          body: { action: 'convert', buildingFmGuid: fmGuid },
-        });
-
+        const { data: convertData, error: convertError } = await supabase.functions.invoke('bim-to-gltf', { body: { action: 'convert', buildingFmGuid: fmGuid } });
         toast.dismiss('bim-convert');
-
         if (convertError) throw new Error(convertError.message);
         if (!convertData?.glbUrl) throw new Error(convertData?.error || 'No GLB URL returned');
-
         glbUrl = convertData.glbUrl;
       } else {
         toast.warning('Ingen BIM-källa hittades (IFC/XKT) för denna byggnad');
@@ -376,29 +230,19 @@ const CesiumGlobeView: React.FC = () => {
         return;
       }
 
-      if (bimEntityRef.current) {
-        viewer.entities.remove(bimEntityRef.current);
-        bimEntityRef.current = null;
-      }
+      if (bimEntityRef.current) { viewer.entities.remove(bimEntityRef.current); bimEntityRef.current = null; }
 
-      const position = Cesium.Cartesian3.fromDegrees(
-        facility.longitude,
-        facility.latitude,
-        0
-      );
-
+      const position = Cesium.Cartesian3.fromDegrees(facility.lng, facility.lat, 0);
       const heading = Cesium.Math.toRadians(facility.rotation || 0);
       const hpr = new Cesium.HeadingPitchRoll(heading, 0, 0);
       const orientation = Cesium.Transforms.headingPitchRollQuaternion(position, hpr);
 
       const entity = viewer.entities.add({
-        position,
-        orientation,
+        position, orientation,
         model: {
           uri: glbUrl!,
           heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-          minimumPixelSize: 64,
-          maximumScale: 20000,
+          minimumPixelSize: 64, maximumScale: 20000,
           color: Cesium.Color.WHITE.withAlpha(0.85),
           silhouetteColor: Cesium.Color.fromCssColorString('hsl(212, 92%, 60%)'),
           silhouetteSize: 1.5,
@@ -409,12 +253,8 @@ const CesiumGlobeView: React.FC = () => {
       setBimLoadedFmGuid(fmGuid);
 
       viewer.camera.flyTo({
-        destination: toCartesian(facility.latitude, facility.longitude, 200),
-        orientation: {
-          heading: Cesium.Math.toRadians(45),
-          pitch: Cesium.Math.toRadians(-35),
-          roll: 0,
-        },
+        destination: toCartesian(facility.lat, facility.lng, 200),
+        orientation: { heading: Cesium.Math.toRadians(45), pitch: Cesium.Math.toRadians(-35), roll: 0 },
         duration: 1.5,
       });
 
@@ -428,62 +268,44 @@ const CesiumGlobeView: React.FC = () => {
   }, [bimLoadedFmGuid]);
 
   const handleResetView = useCallback(() => {
-    setSelectedBuilding(null);
-    setSelectedFmGuid(null);
-    setZoomedFmGuid(null);
+    setSelectedBuilding(null); setSelectedFmGuid(null); setZoomedFmGuid(null);
     const viewer = cesiumViewerRef.current;
-    if (viewer && !viewer.isDestroyed() && facilities.length > 0) {
-      const lats = facilities.map(f => f.latitude);
-      const lngs = facilities.map(f => f.longitude);
-      const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
-      const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
+    if (viewer && !viewer.isDestroyed() && mapFacilities.length > 0) {
+      const lats = mapFacilities.map(f => f.lat);
+      const lngs = mapFacilities.map(f => f.lng);
       viewer.camera.flyTo({
-        destination: toCartesian(centerLat, centerLng, 1500000),
-        orientation: {
-          heading: 0,
-          pitch: Cesium.Math.toRadians(-90),
-          roll: 0,
-        },
+        destination: toCartesian((Math.min(...lats) + Math.max(...lats)) / 2, (Math.min(...lngs) + Math.max(...lngs)) / 2, 1500000),
+        orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
         duration: 1.5,
       });
-    } else {
-      viewer?.camera?.flyHome?.(1.5);
     }
-  }, [facilities]);
+  }, [mapFacilities]);
 
-  // Keep pin layer in sync
+  // Pin layer sync
   useEffect(() => {
     const dataSource = pinDataSourceRef.current;
     if (!dataSource || !viewerReady) return;
-
     dataSource.entities.removeAll();
 
-    facilities.forEach(facility => {
-      const isSelected = selectedFmGuid === facility.fm_guid;
-
+    mapFacilities.forEach(facility => {
+      const isSelected = selectedFmGuid === facility.fmGuid;
       dataSource.entities.add({
-        id: `facility-${facility.fm_guid}`,
-        position: toCartesian(facility.latitude, facility.longitude),
-        properties: {
-          fm_guid: facility.fm_guid,
-        },
+        id: `facility-${facility.fmGuid}`,
+        position: toCartesian(facility.lat, facility.lng),
+        properties: { fm_guid: facility.fmGuid },
         point: {
           pixelSize: isSelected ? 18 : 14,
           color: isSelected
             ? Cesium.Color.fromCssColorString('hsl(262, 83%, 58%)')
             : Cesium.Color.fromCssColorString('hsl(212, 92%, 60%)'),
-          outlineColor: Cesium.Color.WHITE,
-          outlineWidth: isSelected ? 2.5 : 2,
+          outlineColor: Cesium.Color.WHITE, outlineWidth: isSelected ? 2.5 : 2,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
           heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
           scaleByDistance: new Cesium.NearFarScalar(500, 1.4, 2000000, 0.8),
         },
         label: {
-          text: facility.displayName,
-          font: '13px sans-serif',
-          fillColor: Cesium.Color.WHITE,
-          outlineColor: Cesium.Color.BLACK,
-          outlineWidth: 2,
+          text: facility.displayName, font: '13px sans-serif',
+          fillColor: Cesium.Color.WHITE, outlineColor: Cesium.Color.BLACK, outlineWidth: 2,
           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
           pixelOffset: new Cesium.Cartesian2(0, -24),
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
@@ -495,15 +317,14 @@ const CesiumGlobeView: React.FC = () => {
         },
       });
     });
-  }, [facilities, selectedFmGuid, viewerReady]);
+  }, [mapFacilities, selectedFmGuid, viewerReady]);
 
-  // Fly-in animation — restore saved camera if available
+  // Fly-in / restore camera
   useEffect(() => {
     const viewer = cesiumViewerRef.current;
-    if (!viewer || viewer.isDestroyed() || !viewerReady || facilities.length === 0 || hasFlewInRef.current) return;
+    if (!viewer || viewer.isDestroyed() || !viewerReady || mapFacilities.length === 0 || hasFlewInRef.current) return;
     hasFlewInRef.current = true;
 
-    // Try to restore saved camera state
     try {
       const saved = sessionStorage.getItem(CESIUM_CAMERA_STATE_KEY);
       if (saved) {
@@ -522,21 +343,14 @@ const CesiumGlobeView: React.FC = () => {
       }
     } catch { /* ignore */ }
 
-    const lats = facilities.map(f => f.latitude);
-    const lngs = facilities.map(f => f.longitude);
-    const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
-    const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
-
+    const lats = mapFacilities.map(f => f.lat);
+    const lngs = mapFacilities.map(f => f.lng);
     viewer.camera.flyTo({
-      destination: toCartesian(centerLat, centerLng, 1500000),
-      orientation: {
-        heading: 0,
-        pitch: Cesium.Math.toRadians(-90),
-        roll: 0,
-      },
+      destination: toCartesian((Math.min(...lats) + Math.max(...lats)) / 2, (Math.min(...lngs) + Math.max(...lngs)) / 2, 1500000),
+      orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
       duration: 1.8,
     });
-  }, [facilities, viewerReady]);
+  }, [mapFacilities, viewerReady]);
 
   // Toggle OSM 3D buildings
   useEffect(() => {
@@ -545,25 +359,14 @@ const CesiumGlobeView: React.FC = () => {
 
     if (show3dBuildings) {
       let cancelled = false;
-
       Cesium.createOsmBuildingsAsync()
-        .then(tileset => {
-          if (cancelled) return;
-          viewer.scene.primitives.add(tileset);
-          osmBuildingsLayerRef.current = tileset;
-        })
-        .catch(err => {
-          console.warn('OSM 3D Buildings requires Cesium token:', err);
-        });
-
-      return () => {
-        cancelled = true;
-      };
+        .then(tileset => { if (!cancelled) { viewer.scene.primitives.add(tileset); osmBuildingsLayerRef.current = tileset; } })
+        .catch(() => {});
+      return () => { cancelled = true; };
     }
 
-    const osmLayer = osmBuildingsLayerRef.current;
-    if (osmLayer) {
-      viewer.scene.primitives.remove(osmLayer);
+    if (osmBuildingsLayerRef.current) {
+      viewer.scene.primitives.remove(osmBuildingsLayerRef.current);
       osmBuildingsLayerRef.current = null;
     }
   }, [show3dBuildings, viewerReady]);
@@ -579,147 +382,67 @@ const CesiumGlobeView: React.FC = () => {
     return () => window.removeEventListener('click', close);
   }, []);
 
-  // Update popup position when camera moves
+  // Update popup position on camera move
   useEffect(() => {
     const viewer = cesiumViewerRef.current;
     if (!viewer || viewer.isDestroyed() || !viewerReady || !selectedBuilding) return;
 
     let frameId = 0;
-    const updatePopupPosition = () => {
+    const update = () => {
       if (viewer.isDestroyed()) return;
       frameId++;
-      if (frameId % 2 !== 0) return;
-      if (!selectedBuilding) return;
-      const screenPos = Cesium.SceneTransforms.worldToWindowCoordinates(
-        viewer.scene,
-        toCartesian(selectedBuilding.facility.latitude, selectedBuilding.facility.longitude, 0),
-      );
-      if (screenPos) {
-        setSelectedBuilding(prev => prev ? { ...prev, screenX: screenPos.x, screenY: screenPos.y } : null);
-      }
+      if (frameId % 2 !== 0 || !selectedBuilding) return;
+      const screenPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, toCartesian(selectedBuilding.facility.lat, selectedBuilding.facility.lng, 0));
+      if (screenPos) setSelectedBuilding(prev => prev ? { ...prev, screenX: screenPos.x, screenY: screenPos.y } : null);
     };
 
-    viewer.scene.postRender.addEventListener(updatePopupPosition);
-    return () => {
-      if (!viewer.isDestroyed()) {
-        viewer.scene.postRender.removeEventListener(updatePopupPosition);
-      }
-    };
-  }, [viewerReady, selectedBuilding?.facility.fm_guid]);
+    viewer.scene.postRender.addEventListener(update);
+    return () => { if (!viewer.isDestroyed()) viewer.scene.postRender.removeEventListener(update); };
+  }, [viewerReady, selectedBuilding?.facility.fmGuid]);
 
-  // ── Building sidebar ──
-  const [sidebarExpanded, setSidebarExpanded] = useState(false);
-  const [sidebarSearch, setSidebarSearch] = useState('');
-
-  const filteredFacilities = useMemo(() => {
-    if (!sidebarSearch.trim()) return facilities;
-    const q = sidebarSearch.toLowerCase();
-    return facilities.filter(f =>
-      f.displayName.toLowerCase().includes(q) ||
-      f.address.toLowerCase().includes(q)
-    );
-  }, [facilities, sidebarSearch]);
-
-  const handleSidebarSelect = useCallback((fmGuid: string) => {
+  // Sidebar select handler
+  const handleSidebarSelect = useCallback((id: string) => {
     const viewer = cesiumViewerRef.current;
-    const facility = facilitiesByGuidRef.current.get(fmGuid);
+    const facility = facilitiesByGuidRef.current.get(id);
     if (!viewer || viewer.isDestroyed() || !facility) return;
 
-    setSelectedFmGuid(fmGuid);
-    setZoomedFmGuid(fmGuid);
+    setSelectedFmGuid(id);
+    setZoomedFmGuid(id);
     setSelectedBuilding(null);
 
-    const pinCenter = toCartesian(facility.latitude, facility.longitude, 0);
-    viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(pinCenter, 24), {
-      offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-50), 360),
-      duration: 1.4,
-    });
+    viewer.camera.flyToBoundingSphere(
+      new Cesium.BoundingSphere(toCartesian(facility.lat, facility.lng, 0), 24),
+      { offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-50), 360), duration: 1.4 },
+    );
   }, []);
 
   return (
     <div className="flex-1 flex flex-col h-full relative overflow-hidden">
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
 
-      {/* Building sidebar */}
-      <div className="absolute top-14 sm:top-4 left-3 sm:left-4 z-10 w-[calc(100%-1.5rem)] sm:w-72 max-h-[calc(100%-4.5rem)] sm:max-h-[calc(100%-2rem)]">
-        <Card className="bg-card/95 backdrop-blur-sm shadow-xl">
-          <CardHeader
-            className="pb-2 cursor-pointer sm:cursor-default p-3 sm:p-4"
-            onClick={() => setSidebarExpanded(!sidebarExpanded)}
-          >
-            <CardTitle className="text-xs sm:text-sm flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <Building2 size={14} className="sm:w-4 sm:h-4 text-primary" />
-                Byggnader ({facilities.length})
-              </span>
-              <Button variant="ghost" size="icon" className="h-6 w-6 sm:hidden"
-                onClick={(e) => { e.stopPropagation(); setSidebarExpanded(!sidebarExpanded); }}
-              >
-                {sidebarExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              </Button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className={`overflow-y-auto space-y-2 pt-0 px-3 sm:px-4 pb-3 sm:pb-4 transition-all duration-200 ${
-            sidebarExpanded ? 'max-h-48 sm:max-h-60' : 'max-h-0 sm:max-h-80'
-          } ${!sidebarExpanded && 'hidden sm:block'}`}>
-            <div className="relative">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Sök byggnader..."
-                value={sidebarSearch}
-                onChange={(e) => setSidebarSearch(e.target.value)}
-                className="h-8 pl-8 text-xs"
-              />
-            </div>
-            {filteredFacilities.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-4 text-center">
-                {sidebarSearch ? 'Inga matchningar' : 'Inga byggnader'}
-              </p>
-            ) : (
-              filteredFacilities.map(f => (
-                <div
-                  key={f.fm_guid}
-                  onClick={() => handleSidebarSelect(f.fm_guid)}
-                  className={`p-2 rounded-md cursor-pointer transition-colors ${
-                    selectedFmGuid === f.fm_guid
-                      ? 'bg-primary/20 border border-primary/50'
-                      : 'bg-muted/50 hover:bg-muted'
-                  }`}
-                >
-                  <p className="text-xs sm:text-sm font-medium truncate">{f.displayName}</p>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{f.address}</p>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      {/* Shared sidebar */}
+      <BuildingSidebar
+        facilities={sidebarItems}
+        selectedId={selectedFmGuid}
+        onSelect={handleSidebarSelect}
+        title="Byggnader"
+        searchPlaceholder="Sök byggnader..."
+        emptyLabel="Inga byggnader"
+        noMatchLabel="Inga matchningar"
+      />
 
-      {/* Compact top-right controls */}
+      {/* Top-right controls */}
       <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5">
         <div className="flex items-center gap-1.5 bg-card/80 backdrop-blur-sm rounded-full px-3 py-1.5 shadow border border-border/50">
           <Box size={12} className="text-muted-foreground" />
           <span className="text-[11px] text-muted-foreground">3D</span>
-          <Switch
-            id="toggle-3d"
-            checked={show3dBuildings}
-            onCheckedChange={setShow3dBuildings}
-            className="scale-75 origin-center"
-          />
+          <Switch id="toggle-3d" checked={show3dBuildings} onCheckedChange={setShow3dBuildings} className="scale-75 origin-center" />
         </div>
-
-        <Button
-          variant="secondary"
-          size="icon"
-          onClick={handleResetView}
-          className="bg-card/80 backdrop-blur-sm shadow border border-border/50 h-8 w-8"
-          title="Återställ vy"
-        >
+        <Button variant="secondary" size="icon" onClick={handleResetView} className="bg-card/80 backdrop-blur-sm shadow border border-border/50 h-8 w-8" title="Återställ vy">
           <RotateCcw size={14} />
         </Button>
       </div>
 
-      {/* BIM loading indicator */}
       {bimLoading && (
         <div className="absolute top-14 right-3 z-20 bg-card/90 backdrop-blur-sm rounded-lg px-3 py-2 shadow border border-border/50 flex items-center gap-2">
           <Loader2 size={14} className="animate-spin text-primary" />
@@ -727,7 +450,7 @@ const CesiumGlobeView: React.FC = () => {
         </div>
       )}
 
-      {/* Building info popup */}
+      {/* Info popup using shared BuildingInfoCard */}
       {selectedBuilding && (
         <div
           className="fixed z-50 pointer-events-auto"
@@ -735,81 +458,37 @@ const CesiumGlobeView: React.FC = () => {
             left: Math.min(selectedBuilding.screenX + 20, window.innerWidth - 190),
             top: Math.max(selectedBuilding.screenY - 60, 8),
           }}
-          onClick={(e) => e.stopPropagation()}
+          onClick={e => e.stopPropagation()}
         >
-          <Card className="w-[170px] sm:w-[190px] bg-card/95 backdrop-blur-md shadow-xl border-border/60 overflow-hidden">
-            <CardContent className="p-2">
-              <h3 className="text-[11px] sm:text-xs font-semibold text-foreground truncate">
-                {selectedBuilding.facility.displayName}
-              </h3>
-              {selectedBuilding.facility.address && (
-                <p className="text-[9px] sm:text-[10px] text-muted-foreground truncate mt-0.5">
-                  {selectedBuilding.facility.address}
-                </p>
-              )}
-              <div className="flex items-center gap-1 mt-1">
-                <Badge variant="outline" className="text-[8px] sm:text-[9px] px-1 py-0 h-3.5">
-                  <Building2 size={8} className="mr-0.5" />
-                  Fastighet
-                </Badge>
-                {selectedBuilding.facility.has360 && (
-                  <Badge variant="outline" className="text-[8px] sm:text-[9px] px-1 py-0 h-3.5 text-primary border-primary/30">
-                    <Globe size={8} className="mr-0.5" />
-                    360°
-                  </Badge>
-                )}
-              </div>
-              <div className="flex flex-col gap-0.5 mt-1.5">
-                <button
-                  className="w-full flex items-center justify-between px-1.5 py-1.5 text-[10px] sm:text-[11px] font-medium text-foreground hover:bg-primary/10 rounded transition-colors"
-                  onClick={() => handleNavigateToFacility(selectedBuilding.facility.fm_guid)}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <Building2 size={11} className="text-primary" />
-                    Visa detaljer
-                  </span>
-                  <ArrowRight size={10} className="text-muted-foreground" />
-                </button>
-                <button
-                  className="w-full flex items-center justify-between px-1.5 py-1.5 text-[10px] sm:text-[11px] font-medium text-foreground hover:bg-primary/10 rounded transition-colors"
-                  onClick={() => handleOpenViewer(selectedBuilding.facility.fm_guid)}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <Eye size={11} className="text-primary" />
-                    Öppna 3D-viewer
-                  </span>
-                  <ArrowRight size={10} className="text-muted-foreground" />
-                </button>
-                <button
-                  className="w-full flex items-center justify-between px-1.5 py-1.5 text-[10px] sm:text-[11px] font-medium text-foreground hover:bg-primary/10 rounded transition-colors"
-                  onClick={() => handleShowBim(selectedBuilding.facility.fm_guid)}
-                  disabled={bimLoading}
-                >
-                  <span className="flex items-center gap-1.5">
-                    {bimLoading ? (
-                      <Loader2 size={11} className="text-primary animate-spin" />
-                    ) : (
-                      <Boxes size={11} className="text-primary" />
-                    )}
-                    {bimLoadedFmGuid === selectedBuilding.facility.fm_guid ? 'Dölj BIM' : 'Visa BIM'}
-                  </span>
-                  <ArrowRight size={10} className="text-muted-foreground" />
-                </button>
-              </div>
-            </CardContent>
-          </Card>
+          <BuildingInfoCard
+            name={selectedBuilding.facility.displayName}
+            address={selectedBuilding.facility.address}
+            has360={selectedBuilding.facility.has360}
+            onViewDetails={() => handleNavigateToFacility(selectedBuilding.facility.fmGuid!)}
+            onOpen3D={() => handleOpenViewer(selectedBuilding.facility.fmGuid!)}
+            extraActions={
+              <button
+                className="w-full flex items-center justify-between px-1.5 py-1.5 text-[10px] sm:text-[11px] font-medium text-foreground hover:bg-primary/10 rounded transition-colors"
+                onClick={() => handleShowBim(selectedBuilding.facility.fmGuid!)}
+                disabled={bimLoading}
+              >
+                <span className="flex items-center gap-1.5">
+                  {bimLoading ? <Loader2 size={11} className="text-primary animate-spin" /> : <Boxes size={11} className="text-primary" />}
+                  {bimLoadedFmGuid === selectedBuilding.facility.fmGuid ? 'Dölj BIM' : 'Visa BIM'}
+                </span>
+                <ArrowRight size={10} className="text-muted-foreground" />
+              </button>
+            }
+          />
         </div>
       )}
 
-      {facilities.length === 0 && (
+      {mapFacilities.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
           <Card className="bg-card/90 backdrop-blur-sm">
             <CardContent className="p-4 flex flex-col items-center gap-2">
               <Building2 size={24} className="text-muted-foreground" />
-              <p className="text-sm text-muted-foreground text-center">
-                Inga byggnader laddade.<br />
-                Synkronisera data i Inställningar.
-              </p>
+              <p className="text-sm text-muted-foreground text-center">Inga byggnader laddade.<br />Synkronisera data i Inställningar.</p>
             </CardContent>
           </Card>
         </div>
