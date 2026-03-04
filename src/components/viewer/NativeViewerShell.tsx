@@ -365,6 +365,19 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
   return (
     <div className="relative w-full h-full overflow-hidden native-viewer-canvas-parent" style={{ background: 'linear-gradient(180deg, rgb(255,255,255) 0%, rgb(230,230,230) 100%)' }}>
+      {/* Desktop back button */}
+      {!isMobile && (
+        <Button
+          variant="secondary"
+          size="icon"
+          onClick={onClose}
+          className="absolute top-3 left-3 z-40 h-9 w-9 bg-card/80 backdrop-blur-sm shadow-md border"
+          title="Tillbaka"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+      )}
+
       {/* Canvas layer */}
       <NativeXeokitViewer
         buildingFmGuid={buildingFmGuid}

@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
+import { NORDIC_CITIES } from '@/lib/constants';
 
 interface BuildingCoord {
   fm_guid: string;
@@ -24,8 +25,19 @@ interface BuildingCoord {
   rotation?: number | null;
 }
 
+interface CesiumFacility {
+  fm_guid: string;
+  latitude: number;
+  longitude: number;
+  ivion_site_id?: string | null;
+  rotation?: number | null;
+  displayName: string;
+  address: string;
+  has360: boolean;
+}
+
 interface SelectedBuilding {
-  facility: BuildingCoord & { displayName: string; has360: boolean };
+  facility: CesiumFacility;
   screenX: number;
   screenY: number;
 }
@@ -36,15 +48,16 @@ function toCartesian(lat: number, lng: number, height = 0) {
 
 const PORTFOLIO_RETURN_APP_KEY = 'portfolio-return-app';
 const VIEWER_RETURN_APP_KEY = 'viewer-return-app';
+const CESIUM_CAMERA_STATE_KEY = 'cesium-camera-state';
 
 const CesiumGlobeView: React.FC = () => {
-  const { navigatorTreeData, setActiveApp, setSelectedFacility, setViewer3dFmGuid, open360WithContext, appConfigs } = useContext(AppContext);
+  const { navigatorTreeData, setActiveApp, setSelectedFacility, setViewer3dFmGuid, allData, appConfigs } = useContext(AppContext);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const cesiumViewerRef = useRef<Cesium.Viewer | null>(null);
   const clickHandlerRef = useRef<Cesium.ScreenSpaceEventHandler | null>(null);
   const pinDataSourceRef = useRef<Cesium.CustomDataSource | null>(null);
-  const facilitiesByGuidRef = useRef<Map<string, BuildingCoord & { displayName: string; has360: boolean }>>(new Map());
+  const facilitiesByGuidRef = useRef<Map<string, CesiumFacility>>(new Map());
   const osmBuildingsLayerRef = useRef<Cesium.Cesium3DTileset | null>(null);
   const hasFlewInRef = useRef(false);
   const zoomedFmGuidRef = useRef<string | null>(null);
@@ -217,22 +230,47 @@ const CesiumGlobeView: React.FC = () => {
     fetchCoords();
   }, []);
 
-  const facilities = useMemo(() => {
-    return buildingCoords.map(coord => {
-      const treeNode = navigatorTreeData.find(
-        n => n.fmGuid.toLowerCase() === coord.fm_guid.toLowerCase(),
-      );
+  // ── Build facilities from navigatorTreeData (same source as MapView) ──
+  const facilities: CesiumFacility[] = useMemo(() => {
+    const coordsLookup: Record<string, BuildingCoord> = {};
+    buildingCoords.forEach(bc => {
+      coordsLookup[bc.fm_guid.toLowerCase()] = bc;
+    });
+
+    return navigatorTreeData.map((building, index) => {
+      const saved = coordsLookup[building.fmGuid.toLowerCase()];
+
+      let lat: number;
+      let lng: number;
+      let address: string;
+
+      if (saved) {
+        lat = saved.latitude;
+        lng = saved.longitude;
+        address = (building as any).attributes?.address || 'Sparad position';
+      } else {
+        const cityIndex = index % NORDIC_CITIES.length;
+        const city = NORDIC_CITIES[cityIndex];
+        lat = city.lat + (Math.random() - 0.5) * 0.1;
+        lng = city.lng + (Math.random() - 0.5) * 0.1;
+        address = (building as any).attributes?.address || city.name;
+      }
 
       return {
-        ...coord,
-        displayName: treeNode?.commonName || treeNode?.name || coord.fm_guid.substring(0, 8),
-        has360: !!coord.ivion_site_id,
+        fm_guid: building.fmGuid,
+        latitude: lat,
+        longitude: lng,
+        ivion_site_id: saved?.ivion_site_id ?? null,
+        rotation: saved?.rotation ?? 0,
+        displayName: building.commonName || building.name || building.fmGuid.substring(0, 8),
+        address,
+        has360: !!saved?.ivion_site_id,
       };
     });
-  }, [buildingCoords, navigatorTreeData]);
+  }, [navigatorTreeData, buildingCoords]);
 
   const facilitiesByGuid = useMemo(() => {
-    const map = new Map<string, (typeof facilities)[number]>();
+    const map = new Map<string, CesiumFacility>();
     facilities.forEach(f => map.set(f.fm_guid, f));
     return map;
   }, [facilities]);
@@ -245,9 +283,26 @@ const CesiumGlobeView: React.FC = () => {
     zoomedFmGuidRef.current = zoomedFmGuid;
   }, [zoomedFmGuid]);
 
+  // ── Save camera state helper ──
+  const saveCameraState = useCallback(() => {
+    const viewer = cesiumViewerRef.current;
+    if (!viewer || viewer.isDestroyed()) return;
+    const cam = viewer.camera;
+    try {
+      sessionStorage.setItem(CESIUM_CAMERA_STATE_KEY, JSON.stringify({
+        pos: { x: cam.position.x, y: cam.position.y, z: cam.position.z },
+        dir: { x: cam.direction.x, y: cam.direction.y, z: cam.direction.z },
+        up: { x: cam.up.x, y: cam.up.y, z: cam.up.z },
+        selectedFmGuid,
+        zoomedFmGuid,
+      }));
+    } catch { /* ignore */ }
+  }, [selectedFmGuid, zoomedFmGuid]);
+
   // ── Navigation handlers ──
 
   const handleNavigateToFacility = useCallback((fmGuid: string) => {
+    saveCameraState();
     setSelectedBuilding(null);
     setSelectedFmGuid(null);
     setZoomedFmGuid(null);
@@ -259,18 +314,18 @@ const CesiumGlobeView: React.FC = () => {
       setSelectedFacility(node);
     }
     setActiveApp('portfolio');
-  }, [navigatorTreeData, setSelectedFacility, setActiveApp]);
+  }, [navigatorTreeData, setSelectedFacility, setActiveApp, saveCameraState]);
 
   const handleOpenViewer = useCallback((fmGuid: string) => {
+    saveCameraState();
     setSelectedBuilding(null);
     setSelectedFmGuid(null);
     setZoomedFmGuid(null);
     if (typeof window !== 'undefined') {
       sessionStorage.setItem(VIEWER_RETURN_APP_KEY, 'globe');
     }
-    // setViewer3dFmGuid automatically switches to native_viewer
     setViewer3dFmGuid(fmGuid);
-  }, [setViewer3dFmGuid]);
+  }, [setViewer3dFmGuid, saveCameraState]);
 
   const handleShowBim = useCallback(async (fmGuid: string) => {
     const viewer = cesiumViewerRef.current;
@@ -292,7 +347,6 @@ const CesiumGlobeView: React.FC = () => {
     setSelectedBuilding(null);
 
     try {
-      // 1. Check for cached GLB
       const { data: checkData, error: checkError } = await supabase.functions.invoke('bim-to-gltf', {
         body: { action: 'check', buildingFmGuid: fmGuid },
       });
@@ -304,7 +358,6 @@ const CesiumGlobeView: React.FC = () => {
       if (checkData?.cached && checkData.glbUrl) {
         glbUrl = checkData.glbUrl;
       } else if (checkData?.hasIfc || checkData?.hasXkt) {
-        // 2. Convert source model → GLB (IFC primary, XKT/ACC fallback)
         toast.info('Konverterar BIM-modell...', { duration: 12000, id: 'bim-convert' });
 
         const { data: convertData, error: convertError } = await supabase.functions.invoke('bim-to-gltf', {
@@ -323,13 +376,11 @@ const CesiumGlobeView: React.FC = () => {
         return;
       }
 
-      // 3. Remove previous BIM entity if any
       if (bimEntityRef.current) {
         viewer.entities.remove(bimEntityRef.current);
         bimEntityRef.current = null;
       }
 
-      // 4. Place GLB model on the globe
       const position = Cesium.Cartesian3.fromDegrees(
         facility.longitude,
         facility.latitude,
@@ -357,7 +408,6 @@ const CesiumGlobeView: React.FC = () => {
       bimEntityRef.current = entity;
       setBimLoadedFmGuid(fmGuid);
 
-      // Fly to a good viewing angle
       viewer.camera.flyTo({
         destination: toCartesian(facility.latitude, facility.longitude, 200),
         orientation: {
@@ -401,7 +451,7 @@ const CesiumGlobeView: React.FC = () => {
     }
   }, [facilities]);
 
-  // Keep pin layer in sync — smaller pins and labels for overview
+  // Keep pin layer in sync
   useEffect(() => {
     const dataSource = pinDataSourceRef.current;
     if (!dataSource || !viewerReady) return;
@@ -447,11 +497,30 @@ const CesiumGlobeView: React.FC = () => {
     });
   }, [facilities, selectedFmGuid, viewerReady]);
 
-  // Fly-in animation
+  // Fly-in animation — restore saved camera if available
   useEffect(() => {
     const viewer = cesiumViewerRef.current;
     if (!viewer || viewer.isDestroyed() || !viewerReady || facilities.length === 0 || hasFlewInRef.current) return;
     hasFlewInRef.current = true;
+
+    // Try to restore saved camera state
+    try {
+      const saved = sessionStorage.getItem(CESIUM_CAMERA_STATE_KEY);
+      if (saved) {
+        sessionStorage.removeItem(CESIUM_CAMERA_STATE_KEY);
+        const state = JSON.parse(saved);
+        viewer.camera.setView({
+          destination: new Cesium.Cartesian3(state.pos.x, state.pos.y, state.pos.z),
+          orientation: {
+            direction: new Cesium.Cartesian3(state.dir.x, state.dir.y, state.dir.z),
+            up: new Cesium.Cartesian3(state.up.x, state.up.y, state.up.z),
+          },
+        });
+        if (state.selectedFmGuid) setSelectedFmGuid(state.selectedFmGuid);
+        if (state.zoomedFmGuid) setZoomedFmGuid(state.zoomedFmGuid);
+        return;
+      }
+    } catch { /* ignore */ }
 
     const lats = facilities.map(f => f.latitude);
     const lngs = facilities.map(f => f.longitude);
@@ -538,14 +607,17 @@ const CesiumGlobeView: React.FC = () => {
     };
   }, [viewerReady, selectedBuilding?.facility.fm_guid]);
 
-  // ── Building sidebar (like MapView) ──
+  // ── Building sidebar ──
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [sidebarSearch, setSidebarSearch] = useState('');
 
   const filteredFacilities = useMemo(() => {
     if (!sidebarSearch.trim()) return facilities;
     const q = sidebarSearch.toLowerCase();
-    return facilities.filter(f => f.displayName.toLowerCase().includes(q));
+    return facilities.filter(f =>
+      f.displayName.toLowerCase().includes(q) ||
+      f.address.toLowerCase().includes(q)
+    );
   }, [facilities, sidebarSearch]);
 
   const handleSidebarSelect = useCallback((fmGuid: string) => {
@@ -615,6 +687,7 @@ const CesiumGlobeView: React.FC = () => {
                   }`}
                 >
                   <p className="text-xs sm:text-sm font-medium truncate">{f.displayName}</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{f.address}</p>
                 </div>
               ))
             )}
@@ -669,6 +742,11 @@ const CesiumGlobeView: React.FC = () => {
               <h3 className="text-[11px] sm:text-xs font-semibold text-foreground truncate">
                 {selectedBuilding.facility.displayName}
               </h3>
+              {selectedBuilding.facility.address && (
+                <p className="text-[9px] sm:text-[10px] text-muted-foreground truncate mt-0.5">
+                  {selectedBuilding.facility.address}
+                </p>
+              )}
               <div className="flex items-center gap-1 mt-1">
                 <Badge variant="outline" className="text-[8px] sm:text-[9px] px-1 py-0 h-3.5">
                   <Building2 size={8} className="mr-0.5" />
@@ -729,8 +807,8 @@ const CesiumGlobeView: React.FC = () => {
             <CardContent className="p-4 flex flex-col items-center gap-2">
               <Building2 size={24} className="text-muted-foreground" />
               <p className="text-sm text-muted-foreground text-center">
-                Inga byggnader med koordinater.<br />
-                Konfigurera koordinater i Inställningar.
+                Inga byggnader laddade.<br />
+                Synkronisera data i Inställningar.
               </p>
             </CardContent>
           </Card>
