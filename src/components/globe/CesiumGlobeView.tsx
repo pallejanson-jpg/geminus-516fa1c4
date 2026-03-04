@@ -164,11 +164,14 @@ const CesiumGlobeView: React.FC = () => {
     setViewerReady(true);
 
     return () => {
+      setViewerReady(false);
       handler.destroy();
       clickHandlerRef.current = null;
       pinDataSourceRef.current = null;
+      if (!viewer.isDestroyed()) {
+        viewer.destroy();
+      }
       cesiumViewerRef.current = null;
-      viewer.destroy();
     };
   }, [tokenReady]);
 
