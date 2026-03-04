@@ -302,9 +302,9 @@ const CesiumGlobeView: React.FC = () => {
 
       if (checkData?.cached && checkData.glbUrl) {
         glbUrl = checkData.glbUrl;
-      } else if (checkData?.hasIfc) {
-        // 2. Convert IFC → GLB
-        toast.info('Konverterar BIM-modell...', { duration: 10000, id: 'bim-convert' });
+      } else if (checkData?.hasIfc || checkData?.hasXkt) {
+        // 2. Convert source model → GLB (IFC primary, XKT/ACC fallback)
+        toast.info('Konverterar BIM-modell...', { duration: 12000, id: 'bim-convert' });
 
         const { data: convertData, error: convertError } = await supabase.functions.invoke('bim-to-gltf', {
           body: { action: 'convert', buildingFmGuid: fmGuid },
@@ -313,11 +313,11 @@ const CesiumGlobeView: React.FC = () => {
         toast.dismiss('bim-convert');
 
         if (convertError) throw new Error(convertError.message);
-        if (!convertData?.glbUrl) throw new Error('No GLB URL returned');
+        if (!convertData?.glbUrl) throw new Error(convertData?.error || 'No GLB URL returned');
 
         glbUrl = convertData.glbUrl;
       } else {
-        toast.warning('Ingen IFC-fil hittades för denna byggnad');
+        toast.warning('Ingen BIM-källa hittades (IFC/XKT) för denna byggnad');
         setBimLoading(false);
         return;
       }
