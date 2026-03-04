@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import {
-  X,
+  ArrowLeft,
   Search,
   LayoutGrid,
   List,
