@@ -925,10 +925,10 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       )}
 
       {/* Content */}
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-auto">
         {viewMode === 'grid' ? (
           <div className="p-2 sm:p-4">
-            <div className="border rounded-lg overflow-hidden overflow-x-auto">
+            <div className="border rounded-lg overflow-x-auto">
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background">
