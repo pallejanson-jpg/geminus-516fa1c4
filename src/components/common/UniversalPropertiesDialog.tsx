@@ -908,7 +908,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
             </div>
           ) : (
             // Render sections
-            ['system', 'local', 'coordinates', 'area', 'user-defined'].map(section => {
+            ['system', 'local', 'coordinates', 'area', 'classification', 'user-defined'].map(section => {
               const sectionProps = groupedProperties[section];
               if (!sectionProps || sectionProps.length === 0) return null;
               
