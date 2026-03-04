@@ -12,6 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 import { Label } from '@/components/ui/label';
 import { AppContext } from '@/context/AppContext';
+import { BUILDING_IMAGES } from '@/lib/constants';
 import BuildingMapPicker from '@/components/map/BuildingMapPicker';
 import { Facility } from '@/lib/types';
 import { useBuildingSettings } from '@/hooks/useBuildingSettings';
