@@ -952,6 +952,53 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
               );
             })
           )}
+          
+          {/* BIP Classification Suggestions */}
+          {bipSuggestions.length > 0 && (
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center gap-2 px-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">BIP-förslag</span>
+              </div>
+              {bipSuggestions.map((s, i) => (
+                <div key={i} className="border rounded-md p-2.5 space-y-1 bg-muted/30">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Badge variant="outline" className="text-xs font-mono shrink-0">{s.code}</Badge>
+                      <span className="text-sm font-medium truncate">{s.title}</span>
+                    </div>
+                    <Button 
+                      variant={bipApplied === s.code ? "default" : "outline"} 
+                      size="sm" 
+                      className="shrink-0 h-7 text-xs"
+                      onClick={() => handleApplyBipSuggestion(s)}
+                      disabled={bipApplied === s.code}
+                    >
+                      {bipApplied === s.code ? <Check className="h-3 w-3 mr-1" /> : <Tag className="h-3 w-3 mr-1" />}
+                      {bipApplied === s.code ? 'Vald' : 'Välj'}
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 text-xs">
+                    {s.usercode_syntax && (
+                      <Badge variant="secondary" className="text-[10px]">Typ: {s.usercode_syntax}</Badge>
+                    )}
+                    {s.bsab_e && (
+                      <Badge variant="secondary" className="text-[10px]">BSAB-E: {s.bsab_e}</Badge>
+                    )}
+                    {s.aff && (
+                      <Badge variant="secondary" className="text-[10px]">AFF: {s.aff}</Badge>
+                    )}
+                    <Badge variant={s.confidence >= 0.7 ? "default" : "secondary"} className="text-[10px]">
+                      {Math.round(s.confidence * 100)}%
+                    </Badge>
+                  </div>
+                  {s.reasoning && (
+                    <p className="text-xs text-muted-foreground">{s.reasoning}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </ScrollArea>
 
