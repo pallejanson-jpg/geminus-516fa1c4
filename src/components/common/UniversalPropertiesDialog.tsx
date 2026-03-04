@@ -116,6 +116,11 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   
   // Form data for editing
   const [formData, setFormData] = useState<Record<string, any>>({});
+  
+  // BIP classification state
+  const [isClassifying, setIsClassifying] = useState(false);
+  const [bipSuggestions, setBipSuggestions] = useState<BipSuggestion[]>([]);
+  const [bipApplied, setBipApplied] = useState<string | null>(null);
 
   // Fetch data for all selected items
   useEffect(() => {
