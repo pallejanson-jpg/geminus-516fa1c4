@@ -163,8 +163,18 @@ const PortfolioView: React.FC = () => {
       const parent = facilityHistory[facilityHistory.length - 1];
       setFacilityHistory(prev => prev.slice(0, -1));
       setSelectedFacility(parent);
-    } else {
-      setSelectedFacility(null);
+      return;
+    }
+
+    const returnApp = typeof window !== 'undefined'
+      ? sessionStorage.getItem('portfolio-return-app')
+      : null;
+
+    setSelectedFacility(null);
+
+    if (returnApp) {
+      sessionStorage.removeItem('portfolio-return-app');
+      setActiveApp(returnApp);
     }
   };
   const handleEdit = (facility: Facility) => console.log('Edit:', facility);
