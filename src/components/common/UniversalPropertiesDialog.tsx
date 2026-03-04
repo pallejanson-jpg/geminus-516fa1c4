@@ -711,8 +711,77 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       setIsPushingFma(false);
     }
   };
-  
-  // Title for header
+
+  // BIP classification handler
+  const handleClassify = async () => {
+    if (assets.length === 0) return;
+    setIsClassifying(true);
+    setBipSuggestions([]);
+    setBipApplied(null);
+
+    try {
+      const asset = assets[0];
+      const { data, error } = await supabase.functions.invoke('bip-classify', {
+        body: {
+          assetName: asset.common_name || asset.name,
+          assetType: asset.asset_type,
+          category: asset.category,
+          ifcType: asset.asset_type,
+          attributes: asset.attributes,
+          fmGuids: fmGuids,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      setBipSuggestions(data.suggestions || []);
+      
+      // Auto-open the classification section
+      setOpenSections(prev => new Set([...prev, 'classification']));
+      
+      if ((data.suggestions || []).length === 0) {
+        toast.info('Inga BIP-matchningar hittades');
+      }
+    } catch (error: any) {
+      console.error('BIP classify error:', error);
+      toast.error('Klassificering misslyckades: ' + (error.message || 'Okänt fel'));
+    } finally {
+      setIsClassifying(false);
+    }
+  };
+
+  // Apply a BIP suggestion to the asset
+  const handleApplyBipSuggestion = async (suggestion: BipSuggestion) => {
+    if (assets.length === 0) return;
+
+    try {
+      const updatedAttrs = {
+        ...(assets[0].attributes || {}),
+        bipCode: suggestion.code,
+        bipTypeId: suggestion.usercode_syntax || suggestion.code,
+        bipTitle: suggestion.title,
+        bipBsabE: suggestion.bsab_e || '',
+        bipAff: suggestion.aff || '',
+      };
+
+      const { error } = await supabase
+        .from('assets')
+        .update({ attributes: updatedAttrs })
+        .in('fm_guid', fmGuids);
+
+      if (error) throw error;
+
+      // Update local state
+      setAssets(prev => prev.map(a => ({ ...a, attributes: updatedAttrs })));
+      setBipApplied(suggestion.code);
+      toast.success(`BIP-kod ${suggestion.code} tillämpad`);
+      onUpdate?.();
+    } catch (error: any) {
+      toast.error('Kunde inte spara BIP-kod: ' + error.message);
+    }
+  };
+
   const headerTitle = useMemo(() => {
     if (isMultiMode) {
       return `${fmGuids.length} items selected`;
