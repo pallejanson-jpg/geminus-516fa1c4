@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import {
-  X,
+  ArrowLeft,
   Search,
   LayoutGrid,
   List,
@@ -468,8 +468,8 @@ const RoomsView: React.FC<RoomsViewProps> = ({
           </div>
         </div>
         <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 sm:h-9 sm:w-9 shrink-0">
-          <X size={16} className="sm:hidden" />
-          <X size={20} className="hidden sm:block" />
+          <ArrowLeft size={16} className="sm:hidden" />
+          <ArrowLeft size={20} className="hidden sm:block" />
         </Button>
       </div>
 
@@ -572,14 +572,14 @@ const RoomsView: React.FC<RoomsViewProps> = ({
           </Button>
           
           <Button size="sm" variant="ghost" onClick={() => setSelectedRows(new Set())} className="gap-1 ml-auto">
-            <X size={14} />
+            <ArrowLeft size={14} />
             Avmarkera
           </Button>
         </div>
       )}
 
       {/* Content */}
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-auto">
         {viewMode === 'grid' ? (
           /* Grid/Table View with draggable columns */
           <div className="p-4">
@@ -748,7 +748,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
             </div>
           </div>
         )}
-      </ScrollArea>
+      </div>
 
       {/* Properties dialog - supports multi-select */}
       {showPropertiesFor && showPropertiesFor.length > 0 && (
