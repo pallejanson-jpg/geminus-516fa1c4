@@ -462,3 +462,135 @@ function buildGlb(vertices: Float32Array, indices: Uint32Array): ArrayBuffer {
 
   return glb;
 }
+
+/**
+ * Parse XKT v10 binary format to extract raw geometry (positions + indices).
+ * XKT stores quantized positions per-entity; we dequantize and merge them.
+ * 
+ * XKT v10 binary layout (simplified):
+ *   - Header: magic(4) + version(4) + numElements(4)
+ *   - Element directory: [byteLength(4)] × numElements
+ *   - Element data blocks
+ *
+ * Key elements we need:
+ *   [0]  types
+ *   [6]  eachEntityPositionsAndNormalsPortion (Uint32)
+ *   [7]  eachEntityIndicesPortion (Uint32)
+ *   [14] positions (Uint16 quantized)
+ *   [16] indices (Uint32)
+ *   [20] eachEntityMeshInstancesPortion — deprecated, skip
+ *   [24] positionsDecodeMatrix (Float32, 16 values per entity)
+ */
+function parseXktGeometry(xktData: Uint8Array): { positions: Float32Array; indices: Uint32Array; vertexCount: number } {
+  const dataView = new DataView(xktData.buffer, xktData.byteOffset, xktData.byteLength);
+
+  // Read header
+  const magic = dataView.getUint32(0, true); // "XKT\0" or version indicator
+  const version = dataView.getUint32(4, true);
+  const numElements = dataView.getUint32(8, true);
+
+  console.log(`[parseXkt] version=${version}, numElements=${numElements}`);
+
+  // Read element sizes directory
+  const elementSizes: number[] = [];
+  let offset = 12;
+  for (let i = 0; i < numElements; i++) {
+    elementSizes.push(dataView.getUint32(offset, true));
+    offset += 4;
+  }
+
+  // Calculate element offsets
+  const elementOffsets: number[] = [];
+  let currentOffset = offset;
+  for (let i = 0; i < numElements; i++) {
+    elementOffsets.push(currentOffset);
+    currentOffset += elementSizes[i];
+  }
+
+  // Helper to get element as typed array
+  const getElement = (idx: number) => {
+    if (idx >= numElements) return new Uint8Array(0);
+    return xktData.subarray(elementOffsets[idx], elementOffsets[idx] + elementSizes[idx]);
+  };
+
+  // For XKT v10, the positions are at element index 14 (quantized Uint16)
+  // and indices at element index 16 (Uint32)
+  // positionsDecodeMatrix at element 24
+  // But the exact indices depend on the XKT version.
+  // We'll use a simpler approach: find the largest float-like and uint-like arrays.
+
+  // Try to extract quantized positions (Uint16) and indices (Uint32)
+  // In v9/v10: positions=14, normals=15, indices=16, edgeIndices=17
+  // decode matrices=24 (or 22 in some versions)
+
+  let quantizedPositions: Uint16Array;
+  let rawIndices: Uint32Array;
+
+  if (version >= 9 && numElements > 16) {
+    // v9/v10 layout
+    const posBytes = getElement(14);
+    quantizedPositions = new Uint16Array(posBytes.buffer, posBytes.byteOffset, posBytes.byteLength / 2);
+
+    const idxBytes = getElement(16);
+    rawIndices = new Uint32Array(idxBytes.buffer, idxBytes.byteOffset, idxBytes.byteLength / 4);
+  } else {
+    // Fallback: try to find positions/indices in earlier format (v6-v8)
+    // positions=6, normals=7, indices=8
+    const posBytes = getElement(6);
+    quantizedPositions = new Uint16Array(posBytes.buffer, posBytes.byteOffset, posBytes.byteLength / 2);
+
+    const idxBytes = getElement(8);
+    rawIndices = new Uint32Array(idxBytes.buffer, idxBytes.byteOffset, idxBytes.byteLength / 4);
+  }
+
+  if (quantizedPositions.length === 0 || rawIndices.length === 0) {
+    console.log(`[parseXkt] No geometry found: positions=${quantizedPositions.length}, indices=${rawIndices.length}`);
+    return { positions: new Float32Array(0), indices: new Uint32Array(0), vertexCount: 0 };
+  }
+
+  const vertexCount = quantizedPositions.length / 3;
+
+  // Try to get decode matrix (element 24 in v10, or 22 in v9)
+  let decodeMatrixElement: Uint8Array | null = null;
+  if (version >= 10 && numElements > 24 && elementSizes[24] >= 64) {
+    decodeMatrixElement = getElement(24);
+  } else if (version >= 9 && numElements > 22 && elementSizes[22] >= 64) {
+    decodeMatrixElement = getElement(22);
+  }
+
+  // Dequantize positions
+  const positions = new Float32Array(vertexCount * 3);
+
+  if (decodeMatrixElement && decodeMatrixElement.byteLength >= 64) {
+    // Use first decode matrix (global) — 4x4 float32 matrix
+    const matrix = new Float32Array(decodeMatrixElement.buffer, decodeMatrixElement.byteOffset, 16);
+    
+    for (let i = 0; i < vertexCount; i++) {
+      const qx = quantizedPositions[i * 3];
+      const qy = quantizedPositions[i * 3 + 1];
+      const qz = quantizedPositions[i * 3 + 2];
+
+      // Normalize to 0..1
+      const nx = qx / 65535;
+      const ny = qy / 65535;
+      const nz = qz / 65535;
+
+      // Apply decode matrix (column-major 4x4)
+      positions[i * 3]     = matrix[0] * nx + matrix[4] * ny + matrix[8]  * nz + matrix[12];
+      positions[i * 3 + 1] = matrix[1] * nx + matrix[5] * ny + matrix[9]  * nz + matrix[13];
+      positions[i * 3 + 2] = matrix[2] * nx + matrix[6] * ny + matrix[10] * nz + matrix[14];
+    }
+  } else {
+    // No decode matrix — just normalize to a unit-ish range
+    console.log(`[parseXkt] No decode matrix, using raw dequantization`);
+    for (let i = 0; i < vertexCount; i++) {
+      positions[i * 3]     = quantizedPositions[i * 3] / 65535 * 100 - 50;
+      positions[i * 3 + 1] = quantizedPositions[i * 3 + 1] / 65535 * 100 - 50;
+      positions[i * 3 + 2] = quantizedPositions[i * 3 + 2] / 65535 * 100 - 50;
+    }
+  }
+
+  console.log(`[parseXkt] Dequantized ${vertexCount} vertices, ${rawIndices.length} indices`);
+
+  return { positions, indices: rawIndices, vertexCount };
+}
