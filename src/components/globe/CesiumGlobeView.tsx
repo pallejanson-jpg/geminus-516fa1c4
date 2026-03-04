@@ -85,6 +85,9 @@ const CesiumGlobeView: React.FC = () => {
 
     cesiumViewerRef.current = viewer;
 
+    // Reduce resolution on desktop for better performance
+    viewer.resolutionScale = window.innerWidth > 768 ? 0.85 : 1.0;
+
     // Add Cesium World Terrain so 3D buildings sit correctly on the ground
     Cesium.CesiumTerrainProvider.fromIonAssetId(1).then(terrainProvider => {
       if (cesiumViewerRef.current) {
@@ -106,6 +109,7 @@ const CesiumGlobeView: React.FC = () => {
     clickHandlerRef.current = handler;
 
     handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
+      // Stop propagation to prevent window click handler from immediately closing popup
       const picked = viewer.scene.pick(movement.position);
       const entity = picked?.id as Cesium.Entity | undefined;
       const fmGuid = entity?.properties?.fm_guid?.getValue?.() as string | undefined;
@@ -284,30 +288,30 @@ const CesiumGlobeView: React.FC = () => {
           fm_guid: facility.fm_guid,
         },
         point: {
-          pixelSize: isSelected ? 14 : 10,
+          pixelSize: isSelected ? 18 : 14,
           color: isSelected
             ? Cesium.Color.fromCssColorString('hsl(262, 83%, 58%)')
             : Cesium.Color.fromCssColorString('hsl(212, 92%, 60%)'),
           outlineColor: Cesium.Color.WHITE,
-          outlineWidth: isSelected ? 2 : 1.5,
+          outlineWidth: isSelected ? 2.5 : 2,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
           heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-          scaleByDistance: new Cesium.NearFarScalar(500, 1.4, 2000000, 0.6),
+          scaleByDistance: new Cesium.NearFarScalar(500, 1.4, 2000000, 0.8),
         },
         label: {
           text: facility.displayName,
-          font: '11px sans-serif',
+          font: '13px sans-serif',
           fillColor: Cesium.Color.WHITE,
           outlineColor: Cesium.Color.BLACK,
           outlineWidth: 2,
           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-          pixelOffset: new Cesium.Cartesian2(0, -20),
+          pixelOffset: new Cesium.Cartesian2(0, -24),
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
           heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
           showBackground: true,
-          backgroundColor: Cesium.Color.fromCssColorString('rgba(0,0,0,0.4)'),
-          backgroundPadding: new Cesium.Cartesian2(5, 2),
-          scaleByDistance: new Cesium.NearFarScalar(500, 1.2, 2000000, 0.5),
+          backgroundColor: Cesium.Color.fromCssColorString('rgba(0,0,0,0.5)'),
+          backgroundPadding: new Cesium.Cartesian2(6, 3),
+          scaleByDistance: new Cesium.NearFarScalar(500, 1.2, 2000000, 0.7),
         },
       });
     });
@@ -369,9 +373,13 @@ const CesiumGlobeView: React.FC = () => {
     }
   }, [show3dBuildings, viewerReady]);
 
-  // Close popup on outside click (but not on the popup itself)
+  // Close popup on outside click — but ignore clicks on the Cesium canvas (handled by ScreenSpaceEventHandler)
   useEffect(() => {
-    const close = () => setSelectedBuilding(null);
+    const close = (e: MouseEvent) => {
+      const canvas = cesiumViewerRef.current?.scene?.canvas;
+      if (canvas && canvas.contains(e.target as Node)) return;
+      setSelectedBuilding(null);
+    };
     window.addEventListener('click', close);
     return () => window.removeEventListener('click', close);
   }, []);
@@ -381,7 +389,11 @@ const CesiumGlobeView: React.FC = () => {
     const viewer = cesiumViewerRef.current;
     if (!viewer || !viewerReady || !selectedBuilding) return;
 
+    let frameId = 0;
     const updatePopupPosition = () => {
+      // Throttle to ~30fps to reduce overhead
+      frameId++;
+      if (frameId % 2 !== 0) return;
       if (!selectedBuilding) return;
       const screenPos = Cesium.SceneTransforms.worldToWindowCoordinates(
         viewer.scene,

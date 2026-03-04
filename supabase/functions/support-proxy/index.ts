@@ -6,18 +6,58 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-function getJwt(): string {
-  const jwt = Deno.env.get("SWG_SUPPORT_JWT");
-  if (!jwt) {
-    throw new Error("SWG_SUPPORT_JWT secret is not configured");
+let cachedJwt: string | null = null;
+
+function getStoredJwt(): string | null {
+  return cachedJwt || Deno.env.get("SWG_SUPPORT_JWT") || null;
+}
+
+async function loginAndGetJwt(): Promise<string> {
+  const baseUrl = (Deno.env.get("SWG_SUPPORT_URL") || "").replace(/\/+$/, "");
+  const username = Deno.env.get("SWG_SUPPORT_USERNAME");
+  const password = Deno.env.get("SWG_SUPPORT_PASSWORD");
+
+  if (!baseUrl || !username || !password) {
+    throw new Error("SWG_SUPPORT_URL, SWG_SUPPORT_USERNAME, and SWG_SUPPORT_PASSWORD must be configured");
   }
+
+  console.log(`Attempting auto-login to SWG as ${username}`);
+
+  const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+
+  if (!loginRes.ok) {
+    const text = await loginRes.text();
+    console.error(`SWG login failed: ${loginRes.status} - ${text.substring(0, 300)}`);
+    throw new Error(`SWG login failed: ${loginRes.status}`);
+  }
+
+  const loginData = await loginRes.json();
+  const jwt = loginData.jwt || loginData.token || loginData.accessToken;
+
+  if (!jwt) {
+    console.error("SWG login response did not contain a JWT:", JSON.stringify(loginData).substring(0, 300));
+    throw new Error("SWG login response did not contain a JWT");
+  }
+
+  cachedJwt = jwt;
+  console.log("SWG auto-login successful, JWT cached");
   return jwt;
 }
 
-async function proxyRequest(method: string, path: string, body?: unknown): Promise<Response> {
+async function getJwt(): Promise<string> {
+  const stored = getStoredJwt();
+  if (stored) return stored;
+  return await loginAndGetJwt();
+}
+
+async function proxyRequest(method: string, path: string, body?: unknown, retried = false): Promise<Response> {
   const rawUrl = Deno.env.get("SWG_SUPPORT_URL") || "";
   const baseUrl = rawUrl.replace(/\/+$/, "");
-  const jwt = getJwt();
+  const jwt = await getJwt();
 
   const url = `${baseUrl}${path}`;
   console.log(`Proxying ${method} ${url}`);
@@ -32,17 +72,24 @@ async function proxyRequest(method: string, path: string, body?: unknown): Promi
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  // If 401, the JWT has likely expired
-  if (res.status === 401) {
-    const text = await res.text();
-    console.error(`JWT expired or invalid. Response: ${text.substring(0, 300)}`);
-    return new Response(JSON.stringify({
-      error: "jwt_expired",
-      message: "SWG JWT har gått ut. Logga in manuellt på supportportalen och uppdatera SWG_SUPPORT_JWT i backend secrets.",
-    }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+  // If 401, try auto-login once
+  if (res.status === 401 && !retried) {
+    console.log("JWT expired, attempting auto-login...");
+    try {
+      cachedJwt = null; // Clear cached JWT
+      await loginAndGetJwt();
+      // Retry the request with new JWT
+      return proxyRequest(method, path, body, true);
+    } catch (loginErr) {
+      console.error("Auto-login failed:", loginErr);
+      return new Response(JSON.stringify({
+        error: "jwt_expired",
+        message: "SWG JWT har gått ut och automatisk inloggning misslyckades. Kontrollera SWG_SUPPORT_USERNAME och SWG_SUPPORT_PASSWORD.",
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
   }
 
   const contentType = res.headers.get("content-type") || "";
@@ -69,7 +116,7 @@ serve(async (req) => {
 
     switch (action) {
       case "test-login": {
-        const jwt = getJwt();
+        const jwt = await getJwt();
         return new Response(JSON.stringify({
           ok: true,
           hasJwt: !!jwt,

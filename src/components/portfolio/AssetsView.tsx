@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useContext } from 'react';
 import {
-  X,
+  ArrowLeft,
   Search,
   LayoutGrid,
   List,
@@ -760,8 +760,8 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           </div>
         </div>
         <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 sm:h-9 sm:w-9 shrink-0">
-          <X size={16} className="sm:hidden" />
-          <X size={20} className="hidden sm:block" />
+          <ArrowLeft size={16} className="sm:hidden" />
+          <ArrowLeft size={20} className="hidden sm:block" />
         </Button>
       </div>
 
@@ -771,7 +771,11 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
           <Input
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              // Debounce search by using startTransition
+              React.startTransition(() => setSearchQuery(val));
+            }}
             placeholder="Sök assets..."
             className="pl-7 sm:pl-9 h-8 sm:h-9 text-xs sm:text-sm"
           />
@@ -914,17 +918,17 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           )}
           
           <Button size="sm" variant="ghost" onClick={() => setSelectedRows(new Set())} className="gap-1 ml-auto">
-            <X size={14} />
+            <ArrowLeft size={14} />
             Avmarkera
           </Button>
         </div>
       )}
 
       {/* Content */}
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-auto">
         {viewMode === 'grid' ? (
           <div className="p-2 sm:p-4">
-            <div className="border rounded-lg overflow-hidden overflow-x-auto">
+            <div className="border rounded-lg overflow-x-auto">
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background">
@@ -1132,7 +1136,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
             </div>
           </div>
         )}
-      </ScrollArea>
+      </div>
 
       {/* Properties dialog - supports multi-select */}
       {showPropertiesFor && showPropertiesFor.length > 0 && (

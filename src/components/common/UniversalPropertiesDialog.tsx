@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
-  X, Pencil, Save, GripVertical, ChevronDown, ChevronUp, Loader2, 
+  ArrowLeft, Pencil, Save, ChevronDown, ChevronUp, Loader2, 
   Building2, Layers, DoorOpen, Box, Database, Search, AlertCircle, Cloud,
   Trash2, Upload, CloudOff
 } from 'lucide-react';
@@ -987,66 +987,27 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     );
   }
 
-  // Desktop: Floating dialog with backdrop
+  // Desktop: Fixed right-side panel (like the 3D view menu)
   return (
-    <>
-      {/* Backdrop — click to close */}
-      <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
-      <div
-        className={cn(
-          "fixed z-50 bg-card border rounded-lg shadow-xl transition-all flex flex-col",
-          "w-full max-w-[400px] max-h-[90vh]",
-          "sm:max-w-none",
-          isDragging && "cursor-grabbing opacity-90",
-          isResizing && "select-none"
-        )}
-        style={{ 
-          left: position.x, 
-          top: position.y,
-          width: size.width,
-          height: !isCollapsed ? size.height : undefined,
-        }}
-      >
-      {/* Header - Draggable */}
-      <div
-        className="flex items-center justify-between p-3 border-b cursor-grab select-none bg-muted/30 shrink-0"
-        onMouseDown={handleMouseDown}
-      >
+    <div
+      className="fixed inset-y-0 right-0 z-50 w-80 bg-card border-l shadow-xl flex flex-col animate-in slide-in-from-right duration-300"
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between p-3 border-b bg-muted/30 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
+          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onClose}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
           {CATEGORY_ICONS[displayCategory] || <Database className="h-4 w-4 shrink-0" />}
           <span className="font-medium text-sm truncate">
             {headerTitle}
           </span>
           <Badge variant="outline" className="text-xs shrink-0">{displayCategory}</Badge>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsCollapsed(!isCollapsed)}>
-            {isCollapsed ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
       </div>
 
-      {!isCollapsed && (
-        <>
-          {renderContent()}
-
-          {/* Resize handle - desktop only */}
-          <div
-            className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-10"
-            onMouseDown={handleResizeStart}
-          >
-            <svg className="w-3 h-3 absolute bottom-1 right-1 text-muted-foreground" viewBox="0 0 10 10">
-              <path d="M0 10 L10 0 M4 10 L10 4 M7 10 L10 7" stroke="currentColor" strokeWidth="1.5" fill="none" />
-            </svg>
-          </div>
-        </>
-      )}
-      </div>
-    </>
+      {renderContent()}
+    </div>
   );
 };
 
