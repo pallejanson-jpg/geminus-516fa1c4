@@ -33,6 +33,9 @@ function toCartesian(lat: number, lng: number, height = 0) {
   return Cesium.Cartesian3.fromDegrees(lng, lat, height);
 }
 
+const PORTFOLIO_RETURN_APP_KEY = 'portfolio-return-app';
+const VIEWER_RETURN_APP_KEY = 'viewer-return-app';
+
 const CesiumGlobeView: React.FC = () => {
   const { navigatorTreeData, setActiveApp, setSelectedFacility, setViewer3dFmGuid, open360WithContext, appConfigs } = useContext(AppContext);
 
@@ -90,6 +93,16 @@ const CesiumGlobeView: React.FC = () => {
 
     // Reduce resolution on desktop for better performance
     viewer.resolutionScale = window.innerWidth > 768 ? 0.85 : 1.0;
+
+    // Start in a visible Nordic overview immediately (before heavy layers are ready)
+    viewer.camera.setView({
+      destination: toCartesian(62.5, 15.0, 2200000),
+      orientation: {
+        heading: 0,
+        pitch: Cesium.Math.toRadians(-90),
+        roll: 0,
+      },
+    });
 
     // Add Cesium World Terrain so 3D buildings sit correctly on the ground
     Cesium.CesiumTerrainProvider.fromIonAssetId(1).then(terrainProvider => {
@@ -149,18 +162,18 @@ const CesiumGlobeView: React.FC = () => {
         return;
       }
 
-      // First click: zoom in, no popup
+      // First click: zoom in to centered pin, no popup
       setSelectedBuilding(null);
       setZoomedFmGuid(fmGuid);
 
-      viewer.camera.flyTo({
-        destination: toCartesian(facility.latitude, facility.longitude, 300),
-        orientation: {
-          heading: Cesium.Math.toRadians(0),
-          pitch: Cesium.Math.toRadians(-50),
-          roll: 0,
-        },
-        duration: 1.5,
+      const pinCenter = toCartesian(facility.latitude, facility.longitude, 0);
+      viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(pinCenter, 24), {
+        offset: new Cesium.HeadingPitchRange(
+          Cesium.Math.toRadians(0),
+          Cesium.Math.toRadians(-50),
+          360,
+        ),
+        duration: 1.4,
       });
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
@@ -239,6 +252,9 @@ const CesiumGlobeView: React.FC = () => {
     setZoomedFmGuid(null);
     const node = navigatorTreeData.find(n => n.fmGuid.toLowerCase() === fmGuid.toLowerCase());
     if (node) {
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem(PORTFOLIO_RETURN_APP_KEY, 'globe');
+      }
       setSelectedFacility(node);
     }
     setActiveApp('portfolio');
@@ -248,6 +264,9 @@ const CesiumGlobeView: React.FC = () => {
     setSelectedBuilding(null);
     setSelectedFmGuid(null);
     setZoomedFmGuid(null);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(VIEWER_RETURN_APP_KEY, 'globe');
+    }
     // setViewer3dFmGuid automatically switches to native_viewer
     setViewer3dFmGuid(fmGuid);
   }, [setViewer3dFmGuid]);
@@ -283,9 +302,9 @@ const CesiumGlobeView: React.FC = () => {
 
       if (checkData?.cached && checkData.glbUrl) {
         glbUrl = checkData.glbUrl;
-      } else if (checkData?.hasIfc) {
-        // 2. Convert IFC → GLB
-        toast.info('Konverterar BIM-modell...', { duration: 10000, id: 'bim-convert' });
+      } else if (checkData?.hasIfc || checkData?.hasXkt) {
+        // 2. Convert source model → GLB (IFC primary, XKT/ACC fallback)
+        toast.info('Konverterar BIM-modell...', { duration: 12000, id: 'bim-convert' });
 
         const { data: convertData, error: convertError } = await supabase.functions.invoke('bim-to-gltf', {
           body: { action: 'convert', buildingFmGuid: fmGuid },
@@ -294,11 +313,11 @@ const CesiumGlobeView: React.FC = () => {
         toast.dismiss('bim-convert');
 
         if (convertError) throw new Error(convertError.message);
-        if (!convertData?.glbUrl) throw new Error('No GLB URL returned');
+        if (!convertData?.glbUrl) throw new Error(convertData?.error || 'No GLB URL returned');
 
         glbUrl = convertData.glbUrl;
       } else {
-        toast.warning('Ingen IFC-fil hittades för denna byggnad');
+        toast.warning('Ingen BIM-källa hittades (IFC/XKT) för denna byggnad');
         setBimLoading(false);
         return;
       }
@@ -438,18 +457,15 @@ const CesiumGlobeView: React.FC = () => {
     const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
     const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
 
-    setTimeout(() => {
-      if (viewer.isDestroyed()) return;
-      viewer.camera.flyTo({
-        destination: toCartesian(centerLat, centerLng, 1500000),
-        orientation: {
-          heading: 0,
-          pitch: Cesium.Math.toRadians(-90),
-          roll: 0,
-        },
-        duration: 3,
-      });
-    }, 500);
+    viewer.camera.flyTo({
+      destination: toCartesian(centerLat, centerLng, 1500000),
+      orientation: {
+        heading: 0,
+        pitch: Cesium.Math.toRadians(-90),
+        roll: 0,
+      },
+      duration: 1.8,
+    });
   }, [facilities, viewerReady]);
 
   // Toggle OSM 3D buildings
