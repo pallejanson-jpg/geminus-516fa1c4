@@ -120,7 +120,7 @@ export function useArchitectViewMode() {
     originalEdgeColor: [0, 0, 0],
     originalEdgeAlpha: 1,
     originalEdgesEnabled: true,
-    currentBackgroundPreset: 'sage', // Default green
+    currentBackgroundPreset: 'light-gray', // Default gray
   });
 
   /**
