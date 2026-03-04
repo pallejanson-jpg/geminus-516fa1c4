@@ -27,6 +27,8 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/comp
 interface NativeViewerShellProps {
   buildingFmGuid: string;
   onClose: () => void;
+  /** Hide the desktop back button (when parent already has one, e.g. UnifiedViewer) */
+  hideBackButton?: boolean;
 }
 
 const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, onClose }) => {
