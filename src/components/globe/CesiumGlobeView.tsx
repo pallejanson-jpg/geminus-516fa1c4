@@ -252,6 +252,9 @@ const CesiumGlobeView: React.FC = () => {
     setZoomedFmGuid(null);
     const node = navigatorTreeData.find(n => n.fmGuid.toLowerCase() === fmGuid.toLowerCase());
     if (node) {
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem(PORTFOLIO_RETURN_APP_KEY, 'globe');
+      }
       setSelectedFacility(node);
     }
     setActiveApp('portfolio');
@@ -261,6 +264,9 @@ const CesiumGlobeView: React.FC = () => {
     setSelectedBuilding(null);
     setSelectedFmGuid(null);
     setZoomedFmGuid(null);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(VIEWER_RETURN_APP_KEY, 'globe');
+    }
     // setViewer3dFmGuid automatically switches to native_viewer
     setViewer3dFmGuid(fmGuid);
   }, [setViewer3dFmGuid]);
