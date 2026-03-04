@@ -47,3 +47,9 @@ verify_jwt = false
 
 [functions.bim-to-gltf]
 verify_jwt = false
+
+[functions.bip-import]
+verify_jwt = false
+
+[functions.bip-classify]
+verify_jwt = false

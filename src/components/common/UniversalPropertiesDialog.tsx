@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   ArrowLeft, Pencil, Save, ChevronDown, ChevronUp, Loader2, 
   Building2, Layers, DoorOpen, Box, Database, Search, AlertCircle, Cloud,
-  Trash2, Upload, CloudOff
+  Trash2, Upload, CloudOff, Tag, Check, Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
