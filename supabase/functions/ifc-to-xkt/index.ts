@@ -6,6 +6,42 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+/** Download WASM files to /tmp so web-ifc can find them */
+async function ensureWasm(): Promise<string> {
+  const dir = "/tmp/web-ifc-wasm";
+  try {
+    await Deno.mkdir(dir, { recursive: true });
+  } catch (_) {
+    // already exists
+  }
+
+  // web-ifc looks for web-ifc.wasm (browser) or web-ifc-node.wasm (node)
+  // In Deno edge runtime it tries the node variant first
+  const files = ["web-ifc.wasm", "web-ifc-node.wasm"];
+  const baseUrl = "https://unpkg.com/web-ifc@0.0.57";
+
+  for (const file of files) {
+    const dest = `${dir}/${file}`;
+    try {
+      await Deno.stat(dest);
+      // Already downloaded
+    } catch {
+      console.log(`Downloading ${file}...`);
+      const resp = await fetch(`${baseUrl}/${file}`);
+      if (resp.ok) {
+        const bytes = new Uint8Array(await resp.arrayBuffer());
+        await Deno.writeFile(dest, bytes);
+        console.log(`Saved ${file} (${(bytes.length / 1024 / 1024).toFixed(1)} MB)`);
+      } else {
+        console.warn(`Could not download ${file}: ${resp.status}`);
+      }
+    }
+  }
+
+  // wasmPath must end with /
+  return dir + "/";
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -51,7 +87,6 @@ Deno.serve(async (req) => {
       console.log(msg);
       if (!jobId) return;
       try {
-        // Fetch current logs, append, update
         const { data } = await supabase
           .from("conversion_jobs")
           .select("log_messages")
@@ -89,8 +124,10 @@ Deno.serve(async (req) => {
     const fileSizeMB = ifcArrayBuffer.byteLength / 1024 / 1024;
     await appendLog(`IFC downloaded: ${fileSizeMB.toFixed(1)} MB`, 20);
 
-    // 2. Convert IFC to XKT using web-ifc + xeokit-convert
-    await appendLog("Loading web-ifc WASM...", 25);
+    // 2. Download WASM to /tmp and load libraries
+    await appendLog("Preparing WASM runtime...", 25);
+    const wasmPath = await ensureWasm();
+    await appendLog(`WASM ready at ${wasmPath}`, 28);
 
     const WebIFC = await import("npm:web-ifc@0.0.57");
     const xeokitConvert = await import("npm:@xeokit/xeokit-convert@1.3.1");
@@ -98,14 +135,12 @@ Deno.serve(async (req) => {
     const xktModel = new (xeokitConvert as any).XKTModel();
     await appendLog("Parsing IFC...", 30);
 
-    // Use parseIFCIntoXKTModel with explicit WebIFC module and WASM path
-    // The WASM is resolved from the npm package by Deno
     await (xeokitConvert as any).parseIFCIntoXKTModel({
       WebIFC,
       data: new Uint8Array(ifcArrayBuffer),
       xktModel,
       autoNormals: true,
-      wasmPath: "https://unpkg.com/web-ifc@0.0.57/",
+      wasmPath,
       log: (msg: string) => console.log(`  ${msg}`),
     });
 
