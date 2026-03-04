@@ -500,6 +500,54 @@ export type Database = {
         }
         Relationships: []
       }
+      bip_reference: {
+        Row: {
+          aff: string | null
+          bsab_e: string | null
+          code: string | null
+          etim: string | null
+          id: string
+          parent_id: number | null
+          raw_data: Json | null
+          ref_id: number | null
+          ref_type: string
+          schema_id: number | null
+          title: string
+          updated_at: string | null
+          usercode_syntax: string | null
+        }
+        Insert: {
+          aff?: string | null
+          bsab_e?: string | null
+          code?: string | null
+          etim?: string | null
+          id?: string
+          parent_id?: number | null
+          raw_data?: Json | null
+          ref_id?: number | null
+          ref_type: string
+          schema_id?: number | null
+          title: string
+          updated_at?: string | null
+          usercode_syntax?: string | null
+        }
+        Update: {
+          aff?: string | null
+          bsab_e?: string | null
+          code?: string | null
+          etim?: string | null
+          id?: string
+          parent_id?: number | null
+          raw_data?: Json | null
+          ref_id?: number | null
+          ref_type?: string
+          schema_id?: number | null
+          title?: string
+          updated_at?: string | null
+          usercode_syntax?: string | null
+        }
+        Relationships: []
+      }
       building_external_links: {
         Row: {
           building_fm_guid: string

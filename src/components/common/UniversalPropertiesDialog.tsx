@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   ArrowLeft, Pencil, Save, ChevronDown, ChevronUp, Loader2, 
   Building2, Layers, DoorOpen, Box, Database, Search, AlertCircle, Cloud,
-  Trash2, Upload, CloudOff
+  Trash2, Upload, CloudOff, Tag, Check, Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,9 +34,19 @@ interface PropertyItem {
   editable: boolean;
   source: 'lovable' | 'asset-plus';
   type: 'text' | 'number' | 'boolean' | 'coordinates';
-  section: 'system' | 'local' | 'area' | 'user-defined' | 'coordinates';
+  section: 'system' | 'local' | 'area' | 'user-defined' | 'coordinates' | 'classification';
   isDifferent?: boolean;
   differentCount?: number;
+}
+
+interface BipSuggestion {
+  code: string;
+  title: string;
+  usercode_syntax?: string;
+  bsab_e?: string;
+  aff?: string;
+  confidence: number;
+  reasoning?: string;
 }
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -52,6 +62,7 @@ const SECTION_LABELS: Record<string, string> = {
   'local': 'Local Settings',
   'coordinates': 'Position',
   'area': 'Area & Dimensions',
+  'classification': 'Klassificering (BIP)',
   'user-defined': 'User-Defined',
 };
 
@@ -105,6 +116,11 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   
   // Form data for editing
   const [formData, setFormData] = useState<Record<string, any>>({});
+  
+  // BIP classification state
+  const [isClassifying, setIsClassifying] = useState(false);
+  const [bipSuggestions, setBipSuggestions] = useState<BipSuggestion[]>([]);
+  const [bipApplied, setBipApplied] = useState<string | null>(null);
 
   // Fetch data for all selected items
   useEffect(() => {
@@ -433,6 +449,25 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       });
     }
 
+    // Classification section - show saved BIP codes from attributes
+    if (!isMultiMode && firstAsset.attributes) {
+      const attrs = firstAsset.attributes as Record<string, any>;
+      if (attrs.bipTypeId || attrs.bipBsabE || attrs.bipAff) {
+        if (attrs.bipTypeId) {
+          props.push({ key: 'attr_bipTypeId', label: 'BIP Typbeteckning', value: attrs.bipTypeId, editable: false, source: 'lovable', type: 'text', section: 'classification' });
+        }
+        if (attrs.bipBsabE) {
+          props.push({ key: 'attr_bipBsabE', label: 'BSAB-E', value: attrs.bipBsabE, editable: false, source: 'lovable', type: 'text', section: 'classification' });
+        }
+        if (attrs.bipAff) {
+          props.push({ key: 'attr_bipAff', label: 'AFF', value: attrs.bipAff, editable: false, source: 'lovable', type: 'text', section: 'classification' });
+        }
+        if (attrs.bipCode) {
+          props.push({ key: 'attr_bipCode', label: 'BIP Kod', value: attrs.bipCode, editable: false, source: 'lovable', type: 'text', section: 'classification' });
+        }
+      }
+    }
+
     return props;
   }, [assets, buildingSettings, isMultiMode, getPropertyValue]);
 
@@ -676,8 +711,77 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       setIsPushingFma(false);
     }
   };
-  
-  // Title for header
+
+  // BIP classification handler
+  const handleClassify = async () => {
+    if (assets.length === 0) return;
+    setIsClassifying(true);
+    setBipSuggestions([]);
+    setBipApplied(null);
+
+    try {
+      const asset = assets[0];
+      const { data, error } = await supabase.functions.invoke('bip-classify', {
+        body: {
+          assetName: asset.common_name || asset.name,
+          assetType: asset.asset_type,
+          category: asset.category,
+          ifcType: asset.asset_type,
+          attributes: asset.attributes,
+          fmGuids: fmGuids,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      setBipSuggestions(data.suggestions || []);
+      
+      // Auto-open the classification section
+      setOpenSections(prev => new Set([...prev, 'classification']));
+      
+      if ((data.suggestions || []).length === 0) {
+        toast.info('Inga BIP-matchningar hittades');
+      }
+    } catch (error: any) {
+      console.error('BIP classify error:', error);
+      toast.error('Klassificering misslyckades: ' + (error.message || 'Okänt fel'));
+    } finally {
+      setIsClassifying(false);
+    }
+  };
+
+  // Apply a BIP suggestion to the asset
+  const handleApplyBipSuggestion = async (suggestion: BipSuggestion) => {
+    if (assets.length === 0) return;
+
+    try {
+      const updatedAttrs = {
+        ...(assets[0].attributes || {}),
+        bipCode: suggestion.code,
+        bipTypeId: suggestion.usercode_syntax || suggestion.code,
+        bipTitle: suggestion.title,
+        bipBsabE: suggestion.bsab_e || '',
+        bipAff: suggestion.aff || '',
+      };
+
+      const { error } = await supabase
+        .from('assets')
+        .update({ attributes: updatedAttrs })
+        .in('fm_guid', fmGuids);
+
+      if (error) throw error;
+
+      // Update local state
+      setAssets(prev => prev.map(a => ({ ...a, attributes: updatedAttrs })));
+      setBipApplied(suggestion.code);
+      toast.success(`BIP-kod ${suggestion.code} tillämpad`);
+      onUpdate?.();
+    } catch (error: any) {
+      toast.error('Kunde inte spara BIP-kod: ' + error.message);
+    }
+  };
+
   const headerTitle = useMemo(() => {
     if (isMultiMode) {
       return `${fmGuids.length} items selected`;
@@ -804,7 +908,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
             </div>
           ) : (
             // Render sections
-            ['system', 'local', 'coordinates', 'area', 'user-defined'].map(section => {
+            ['system', 'local', 'coordinates', 'area', 'classification', 'user-defined'].map(section => {
               const sectionProps = groupedProperties[section];
               if (!sectionProps || sectionProps.length === 0) return null;
               
@@ -847,6 +951,53 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                 </Collapsible>
               );
             })
+          )}
+          
+          {/* BIP Classification Suggestions */}
+          {bipSuggestions.length > 0 && (
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center gap-2 px-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">BIP-förslag</span>
+              </div>
+              {bipSuggestions.map((s, i) => (
+                <div key={i} className="border rounded-md p-2.5 space-y-1 bg-muted/30">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Badge variant="outline" className="text-xs font-mono shrink-0">{s.code}</Badge>
+                      <span className="text-sm font-medium truncate">{s.title}</span>
+                    </div>
+                    <Button 
+                      variant={bipApplied === s.code ? "default" : "outline"} 
+                      size="sm" 
+                      className="shrink-0 h-7 text-xs"
+                      onClick={() => handleApplyBipSuggestion(s)}
+                      disabled={bipApplied === s.code}
+                    >
+                      {bipApplied === s.code ? <Check className="h-3 w-3 mr-1" /> : <Tag className="h-3 w-3 mr-1" />}
+                      {bipApplied === s.code ? 'Vald' : 'Välj'}
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 text-xs">
+                    {s.usercode_syntax && (
+                      <Badge variant="secondary" className="text-[10px]">Typ: {s.usercode_syntax}</Badge>
+                    )}
+                    {s.bsab_e && (
+                      <Badge variant="secondary" className="text-[10px]">BSAB-E: {s.bsab_e}</Badge>
+                    )}
+                    {s.aff && (
+                      <Badge variant="secondary" className="text-[10px]">AFF: {s.aff}</Badge>
+                    )}
+                    <Badge variant={s.confidence >= 0.7 ? "default" : "secondary"} className="text-[10px]">
+                      {Math.round(s.confidence * 100)}%
+                    </Badge>
+                  </div>
+                  {s.reasoning && (
+                    <p className="text-xs text-muted-foreground">{s.reasoning}</p>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </ScrollArea>
@@ -935,6 +1086,12 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                   Push to FM Access
                 </Button>
               )}
+              
+              {/* BIP Classify button */}
+              <Button variant="outline" size="sm" onClick={handleClassify} disabled={isClassifying}>
+                {isClassifying ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Sparkles className="h-4 w-4 mr-1" />}
+                Klassificera (BIP)
+              </Button>
             </div>
             
             <div className="flex gap-1">
