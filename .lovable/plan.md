@@ -1,87 +1,33 @@
 
 
-# Plan: Consolidate shared building map logic between MapView and CesiumGlobeView
+## Plan: Mobile 3D Viewer Layout Optimization + Red Room Fix
 
-## Problem
+### Problem 1: Mobile header too low, toolbar too high
+The `MobileViewerOverlay` header uses `paddingTop: calc(max(env(safe-area-inset-top), 20px) + 8px)` — this adds extra padding pushing controls down. The `ViewerToolbar` bottom bar uses `bottom: calc(max(env(safe-area-inset-bottom), 12px) + 8px)` — not enough clearance but also not utilizing the space well.
 
-`MapView.tsx` (626 lines) and `CesiumGlobeView.tsx` (821 lines) duplicate significant logic:
+### Problem 2: Red rooms on first load
+IfcSpace objects are hidden at line 526 in `NativeXeokitViewer.tsx` — but they're hidden *without* first applying the blue color. When any code later makes them visible (filter panel, "Visa rum", "Show All"), they appear with raw red IFC materials until explicitly re-colored. The fix is to **pre-apply the blue color and opacity to all IfcSpace entities at load time**, before hiding them. This way, whenever they become visible later, they're already blue.
 
-1. **Building data preparation** (~50 lines each): Both fetch `building_settings` coordinates from the database, merge with `navigatorTreeData`, and fall back to `NORDIC_CITIES` for buildings without saved positions. The code is nearly identical.
-2. **Building sidebar** (~80 lines each): Both implement a collapsible card with search input, filtered building list, selected highlight, and mobile expand/collapse. MapView has it as a named component; Cesium has it inline.
-3. **Building info popup** (~60 lines each): Both show name, address, badges, and action buttons ("Visa detaljer", "Öppna 3D-viewer"). Cesium adds "Visa BIM".
-4. **Navigation handlers**: Both implement `handleOpenFacility` (navigate to portfolio) and `handleOpenViewer` (open 3D viewer) with similar patterns.
+### Changes
 
-## Proposed shared modules
+**1. `src/components/viewer/mobile/MobileViewerOverlay.tsx`**
+- Reduce the header's `paddingTop` to use just the safe-area-inset with minimal extra padding: `calc(env(safe-area-inset-top, 0px) + 4px)` and reduce `p-2` to `p-1.5`
+- Make buttons smaller (`h-8 w-8`) and mode switcher more compact
 
-### 1. New hook: `src/hooks/useMapFacilities.ts`
+**2. `src/components/viewer/ViewerToolbar.tsx`**
+- On mobile, increase bottom offset to push the toolbar lower: `calc(env(safe-area-inset-bottom, 0px) + 4px)` — just enough to clear the browser chrome without going under it
+- Reduce button sizes on mobile for more compact layout
 
-Extracts the duplicated data-fetching and merging logic:
+**3. `src/components/viewer/NativeXeokitViewer.tsx`**
+- At lines 518-532 where IfcSpace entities are hidden, **pre-colorize them blue** before hiding:
+  ```
+  entity.colorize = [0.5, 0.7, 0.9];
+  entity.opacity = 0.3;
+  entity.visible = false;
+  entity.pickable = false;
+  ```
+- This ensures any subsequent `visible = true` shows blue, never red
 
-- Fetches `building_settings` (coords, ivion_site_id, rotation) from database
-- Merges with `navigatorTreeData` from AppContext
-- Falls back to `NORDIC_CITIES` for buildings without coords
-- Computes `area`, `numberOfLevels`, `numberOfSpaces` from `allData`
-- Returns a unified `MapFacility[]` array and a `coordsLookup` map
-
-Both MapView and CesiumGlobeView import and use this hook instead of their own inline implementations.
-
-### 2. Shared component: `src/components/map/BuildingSidebar.tsx`
-
-Extract MapView's `BuildingSidebar` into its own file with a generic interface:
-
-```typescript
-interface BuildingSidebarProps {
-  facilities: { fmGuid: string; displayName: string; address: string }[];
-  selectedFmGuid: string | null;
-  onSelect: (fmGuid: string) => void;
-  title?: string; // "Buildings" vs "Byggnader"
-}
-```
-
-Both MapView and CesiumGlobeView import this shared component.
-
-### 3. Shared component: `src/components/map/BuildingInfoCard.tsx`
-
-Extract the popup content (name, address, badges, action buttons) into a reusable card:
-
-```typescript
-interface BuildingInfoCardProps {
-  name: string;
-  address: string;
-  has360?: boolean;
-  onViewDetails: () => void;
-  onOpen3D: () => void;
-  extraActions?: React.ReactNode; // For Cesium's "Visa BIM" button
-}
-```
-
-CesiumGlobeView passes `extraActions` for the BIM toggle. MapView uses the card inside its Mapbox `<Popup>`.
-
-### 4. Refactor MapView.tsx and CesiumGlobeView.tsx
-
-- Replace inline building data logic with `useMapFacilities()` hook
-- Replace inline sidebar with `<BuildingSidebar />`
-- Replace inline popup content with `<BuildingInfoCard />`
-- Keep renderer-specific code in place (Cesium pins/camera/BIM, Mapbox clusters/supercluster/token)
-
-## Estimated line reduction
-
-| File | Before | After (approx) |
-|------|--------|-----------------|
-| MapView.tsx | 626 | ~420 |
-| CesiumGlobeView.tsx | 821 | ~580 |
-| New shared files | 0 | ~250 |
-| **Net** | 1447 | ~1250 |
-
-The main benefit is not line count but single-source-of-truth: adding a building field or changing sidebar behavior only needs one edit.
-
-## Files
-
-| File | Action |
-|------|--------|
-| `src/hooks/useMapFacilities.ts` | Create — shared data hook |
-| `src/components/map/BuildingSidebar.tsx` | Create — shared sidebar component |
-| `src/components/map/BuildingInfoCard.tsx` | Create — shared popup/info card |
-| `src/components/map/MapView.tsx` | Refactor to use shared modules |
-| `src/components/globe/CesiumGlobeView.tsx` | Refactor to use shared modules |
+**4. `src/components/viewer/NativeViewerShell.tsx`**
+- In `handleContextShowAll` (line 321-335), after re-hiding IfcSpaces, also pre-apply blue color so they stay blue if toggled on later
 
