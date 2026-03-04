@@ -72,13 +72,6 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
     const meta = SIDEBAR_ITEM_META[id];
     if (!meta) return;
 
-    // Force FMA+ to always open the new internal React view
-    if (id === 'fma_plus') {
-      setActiveApp('fma_plus');
-      setIsMobileMenuOpen(false);
-      return;
-    }
-
     if (meta.type === 'config') {
       const cfg = appConfigs[id] || {};
       if (cfg.openMode === 'external' && cfg.url) {
