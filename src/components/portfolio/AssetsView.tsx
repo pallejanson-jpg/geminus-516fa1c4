@@ -1136,7 +1136,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
             </div>
           </div>
         )}
-      </ScrollArea>
+      </div>
 
       {/* Properties dialog - supports multi-select */}
       {showPropertiesFor && showPropertiesFor.length > 0 && (

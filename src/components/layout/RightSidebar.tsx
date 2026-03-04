@@ -1,7 +1,7 @@
 import React, { useContext, useState } from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { 
-  LifeBuoy, BookOpen, MessageSquare, X, HelpCircle, Search, 
+  LifeBuoy, BookOpen, MessageSquare, ArrowLeft, HelpCircle, Search, 
   ExternalLink, Bot, FileText, Code, ChevronRight, Loader2,
   Send
 } from 'lucide-react';
@@ -14,8 +14,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import CustomerPortalView from '@/components/support/CustomerPortalView';
 
-// Help article structure
 interface HelpArticle {
   id: string;
   title: string;
@@ -25,7 +25,6 @@ interface HelpArticle {
   keywords: string[];
 }
 
-// Sample help articles (to be expanded with real content)
 const HELP_ARTICLES: HelpArticle[] = [
   {
     id: 'getting-started',
@@ -77,7 +76,6 @@ const HELP_ARTICLES: HelpArticle[] = [
   },
 ];
 
-// API Documentation categories
 const API_CATEGORIES = [
   {
     name: 'Asset+ Object Management',
@@ -168,7 +166,6 @@ const RightSidebar: React.FC = () => {
     setChatMessages(prev => [...prev, { role: 'user', content: userMsg }]);
     setIsChatLoading(true);
 
-    // Simulate AI response (replace with actual Lovable AI call)
     setTimeout(() => {
       setChatMessages(prev => [...prev, { 
         role: 'assistant', 
@@ -191,33 +188,33 @@ const RightSidebar: React.FC = () => {
           Help Center
         </h2>
         <AppButton variant="ghost" className="h-8 w-8 p-0" onClick={toggleRightSidebar}>
-          <X size={18}/>
+          <ArrowLeft size={18}/>
         </AppButton>
       </div>
 
       {/* Main Content with Tabs */}
-      <Tabs defaultValue="support" className="flex-1 flex flex-col overflow-hidden">
+      <Tabs defaultValue="articles" className="flex-1 flex flex-col overflow-hidden">
         <TabsList className="w-full justify-start rounded-none border-b px-2 h-auto py-1 bg-transparent shrink-0">
+          <TabsTrigger value="articles" className="text-xs gap-1 data-[state=active]:bg-muted">
+            <BookOpen size={14} />
+            Articles
+          </TabsTrigger>
           <TabsTrigger value="support" className="text-xs gap-1 data-[state=active]:bg-muted">
             <LifeBuoy size={14} />
-            Support
-          </TabsTrigger>
-            <TabsTrigger value="docs" className="text-xs gap-1 data-[state=active]:bg-muted">
-            <BookOpen size={14} />
-            Documentation
+            Register Case
           </TabsTrigger>
           <TabsTrigger value="api" className="text-xs gap-1 data-[state=active]:bg-muted">
             <Code size={14} />
             API
           </TabsTrigger>
-            <TabsTrigger value="chat" className="text-xs gap-1 data-[state=active]:bg-muted">
+          <TabsTrigger value="chat" className="text-xs gap-1 data-[state=active]:bg-muted">
             <MessageSquare size={14} />
             Chat
           </TabsTrigger>
         </TabsList>
 
-        {/* Support Tab */}
-        <TabsContent value="support" className="flex-1 flex flex-col overflow-hidden mt-0">
+        {/* Articles Tab (was Support) */}
+        <TabsContent value="articles" className="flex-1 flex flex-col overflow-hidden mt-0">
           <div className="p-3 border-b">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -278,31 +275,10 @@ const RightSidebar: React.FC = () => {
           </div>
         </TabsContent>
 
-        {/* Documentation Tab */}
-        <TabsContent value="docs" className="flex-1 flex flex-col overflow-hidden mt-0">
+        {/* Support / Register Case Tab */}
+        <TabsContent value="support" className="flex-1 flex flex-col overflow-hidden mt-0">
           <ScrollArea className="flex-1">
-            <div className="p-3 space-y-4">
-              {/* App-specific documentation sections */}
-              {['Geminus', 'Asset+', 'FM Access', 'Ivion', 'Senslink'].map(app => (
-                <div key={app} className="border rounded-lg overflow-hidden">
-                  <div className="p-3 bg-muted/50 flex items-center justify-between">
-                    <span className="font-medium text-sm">{app}</span>
-                    <ChevronRight size={14} />
-                  </div>
-                  <div className="p-3 space-y-2">
-                    {HELP_ARTICLES.filter(a => a.app === app).map(article => (
-                      <div key={article.id} className="text-sm text-muted-foreground hover:text-foreground cursor-pointer flex items-center gap-2">
-                        <FileText size={12} />
-                        {article.title}
-                      </div>
-                    ))}
-                    {HELP_ARTICLES.filter(a => a.app === app).length === 0 && (
-                      <p className="text-xs text-muted-foreground italic">Documentation coming soon...</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <CustomerPortalView />
           </ScrollArea>
         </TabsContent>
 
@@ -428,9 +404,9 @@ const RightSidebar: React.FC = () => {
               <AccordionContent className="px-3 pb-3 text-xs">
                 <div className="space-y-1">
                   <div><span className="font-medium">FMGUID:</span> <span className="break-all text-muted-foreground">{viewerDiagnostics.fmGuid}</span></div>
-                  <div><span className="font-medium">Step:</span> {viewerDiagnostics.initStep}</div>
-                  <div><span className="font-medium">Models:</span> {viewerDiagnostics.modelCount ?? '—'}</div>
-                  <div><span className="font-medium">XKT:</span> {viewerDiagnostics.xkt.attempted}/{viewerDiagnostics.xkt.ok}/{viewerDiagnostics.xkt.fail}</div>
+                  <div><span className="font-medium">Models:</span> {viewerDiagnostics.modelCount}</div>
+                  <div><span className="font-medium">Entities:</span> {viewerDiagnostics.entityCount}</div>
+                  <div><span className="font-medium">Error:</span> {viewerDiagnostics.lastError || 'None'}</div>
                 </div>
               </AccordionContent>
             </AccordionItem>

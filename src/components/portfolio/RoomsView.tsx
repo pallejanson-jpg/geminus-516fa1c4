@@ -748,7 +748,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
             </div>
           </div>
         )}
-      </ScrollArea>
+      </div>
 
       {/* Properties dialog - supports multi-select */}
       {showPropertiesFor && showPropertiesFor.length > 0 && (
