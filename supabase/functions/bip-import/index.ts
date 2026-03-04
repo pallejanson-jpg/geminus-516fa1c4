@@ -28,7 +28,6 @@ async function fetchGitLabFile(filePath: string): Promise<any> {
   const url = `${GITLAB_API}/repository/files/${encodeURIComponent(filePath)}/raw?ref=master`;
   const res = await fetch(url);
   if (!res.ok) {
-    // Try main branch
     const url2 = `${GITLAB_API}/repository/files/${encodeURIComponent(filePath)}/raw?ref=main`;
     const res2 = await fetch(url2);
     if (!res2.ok) throw new Error(`GitLab file error ${res2.status} for ${filePath}`);
@@ -37,13 +36,60 @@ async function fetchGitLabFile(filePath: string): Promise<any> {
   return res.json();
 }
 
+// Fetch files in parallel batches to speed things up
+async function fetchFilesBatched(files: { name: string; path: string }[], cat: string, batchSize = 10): Promise<any[]> {
+  const rows: any[] = [];
+  for (let i = 0; i < files.length; i += batchSize) {
+    const batch = files.slice(i, i + batchSize);
+    const results = await Promise.allSettled(batch.map(async (file) => {
+      const data = await fetchGitLabFile(file.path);
+      return { data, fileName: file.name };
+    }));
+    for (const result of results) {
+      if (result.status !== "fulfilled") continue;
+      const { data, fileName } = result.value;
+      const row: any = {
+        ref_type: cat,
+        raw_data: data,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (cat === "maincategory") {
+        row.ref_id = data.mc_id;
+        row.code = data.mc_code;
+        row.title = data.mc_title || fileName;
+        row.schema_id = data.mc_schema;
+      } else if (cat === "subcategory") {
+        row.ref_id = data.sc_id;
+        row.code = data.sc_code;
+        row.title = data.sc_title || fileName;
+        row.parent_id = data.sc_maincategory;
+        row.usercode_syntax = data.sc_usercode_syntax;
+        row.bsab_e = data.sc_bsabE;
+        row.aff = typeof data.aff === "object" ? JSON.stringify(data.aff) : data.aff;
+        row.etim = typeof data.etim === "object" ? JSON.stringify(data.etim) : data.etim;
+      } else if (cat === "property") {
+        row.ref_id = data.pr_id;
+        row.code = data.prop_class || String(data.pr_id);
+        row.title = data.prop_title || fileName;
+      } else if (cat === "schema") {
+        row.ref_id = data.schema_id;
+        row.code = data.schema_code || String(data.schema_id);
+        row.title = data.schema_title || fileName;
+      }
+
+      rows.push(row);
+    }
+  }
+  return rows;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Verify admin
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -56,7 +102,6 @@ serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // Verify user is admin
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -83,7 +128,21 @@ serve(async (req) => {
       });
     }
 
-    const categories = ["maincategory", "subcategory", "property", "schema"];
+    // Parse body to get single category
+    let body: any = {};
+    try { body = await req.json(); } catch { /* empty body = import all (legacy) */ }
+
+    const requestedCategory = body.category as string | undefined;
+    const validCategories = ["maincategory", "subcategory", "property", "schema"];
+
+    if (requestedCategory && !validCategories.includes(requestedCategory)) {
+      return new Response(JSON.stringify({ error: `Invalid category. Must be one of: ${validCategories.join(", ")}` }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const categories = requestedCategory ? [requestedCategory] : validCategories;
     const stats: Record<string, number> = {};
 
     for (const cat of categories) {
@@ -100,53 +159,12 @@ serve(async (req) => {
       }
 
       console.log(`Found ${files.length} files in ${cat}`);
-      const rows: any[] = [];
-
-      for (const file of files) {
-        try {
-          const data = await fetchGitLabFile(file.path);
-
-          const row: any = {
-            ref_type: cat,
-            raw_data: data,
-            updated_at: new Date().toISOString(),
-          };
-
-          if (cat === "maincategory") {
-            row.ref_id = data.mc_id;
-            row.code = data.mc_code;
-            row.title = data.mc_title || file.name;
-            row.schema_id = data.mc_schema;
-          } else if (cat === "subcategory") {
-            row.ref_id = data.sc_id;
-            row.code = data.sc_code;
-            row.title = data.sc_title || file.name;
-            row.parent_id = data.sc_maincategory;
-            row.usercode_syntax = data.sc_usercode_syntax;
-            row.bsab_e = data.sc_bsabE;
-            row.aff = typeof data.aff === "object" ? JSON.stringify(data.aff) : data.aff;
-            row.etim = typeof data.etim === "object" ? JSON.stringify(data.etim) : data.etim;
-          } else if (cat === "property") {
-            row.ref_id = data.pr_id;
-            row.code = data.prop_class || String(data.pr_id);
-            row.title = data.prop_title || file.name;
-          } else if (cat === "schema") {
-            row.ref_id = data.schema_id;
-            row.code = data.schema_code || String(data.schema_id);
-            row.title = data.schema_title || file.name;
-          }
-
-          rows.push(row);
-        } catch (e) {
-          console.warn(`Error parsing ${file.path}: ${e}`);
-        }
-      }
+      
+      const rows = await fetchFilesBatched(files, cat, 15);
 
       if (rows.length > 0) {
-        // Clear existing data for this type and insert fresh
         await serviceClient.from("bip_reference").delete().eq("ref_type", cat);
 
-        // Insert in batches of 50
         for (let i = 0; i < rows.length; i += 50) {
           const batch = rows.slice(i, i + 50);
           const { error: insertError } = await serviceClient.from("bip_reference").insert(batch);
@@ -166,6 +184,7 @@ serve(async (req) => {
         success: true,
         message: `Imported ${total} BIP reference items`,
         stats,
+        category: requestedCategory || "all",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

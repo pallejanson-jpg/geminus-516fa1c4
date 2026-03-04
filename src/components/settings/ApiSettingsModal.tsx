@@ -3168,15 +3168,22 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 onClick={async () => {
                                                     setIsImportingBip(true);
                                                     setBipImportResult(null);
+                                                    const categories = ['maincategory', 'subcategory', 'property', 'schema'];
+                                                    const allStats: Record<string, number> = {};
                                                     try {
                                                         const { data: { session } } = await supabase.auth.getSession();
-                                                        const { data, error } = await supabase.functions.invoke('bip-import', {
-                                                            headers: { Authorization: `Bearer ${session?.access_token}` },
-                                                        });
-                                                        if (error) throw error;
-                                                        const stats = data?.stats || {};
-                                                        const total = Object.values(stats).reduce((a: number, b: any) => a + (b as number), 0);
-                                                        setBipImportResult(`Imported ${total} items (${Object.entries(stats).map(([k,v]) => `${k}: ${v}`).join(', ')})`);
+                                                        for (const cat of categories) {
+                                                            setBipImportResult(`Importing ${cat}...`);
+                                                            const { data, error } = await supabase.functions.invoke('bip-import', {
+                                                                headers: { Authorization: `Bearer ${session?.access_token}` },
+                                                                body: { category: cat },
+                                                            });
+                                                            if (error) throw new Error(`${cat}: ${error.message}`);
+                                                            const count = data?.stats?.[cat] ?? 0;
+                                                            allStats[cat] = count;
+                                                        }
+                                                        const total = Object.values(allStats).reduce((a, b) => a + b, 0);
+                                                        setBipImportResult(`Imported ${total} items (${Object.entries(allStats).map(([k,v]) => `${k}: ${v}`).join(', ')})`);
                                                         toast({ title: 'BIP Import Complete', description: `${total} reference items imported` });
                                                     } catch (e: any) {
                                                         setBipImportResult(`Error: ${e.message}`);
@@ -3194,7 +3201,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             </Button>
                                         </div>
                                         {bipImportResult && (
-                                            <p className={`text-xs ${bipImportResult.startsWith('Error') ? 'text-destructive' : 'text-green-600'}`}>
+                                            <p className={`text-xs ${bipImportResult.startsWith('Error') || bipImportResult.startsWith('Importing') ? (bipImportResult.startsWith('Error') ? 'text-destructive' : 'text-muted-foreground') : 'text-green-600'}`}>
                                                 {bipImportResult}
                                             </p>
                                         )}
