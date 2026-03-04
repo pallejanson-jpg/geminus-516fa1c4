@@ -285,30 +285,30 @@ const CesiumGlobeView: React.FC = () => {
           fm_guid: facility.fm_guid,
         },
         point: {
-          pixelSize: isSelected ? 14 : 10,
+          pixelSize: isSelected ? 18 : 14,
           color: isSelected
             ? Cesium.Color.fromCssColorString('hsl(262, 83%, 58%)')
             : Cesium.Color.fromCssColorString('hsl(212, 92%, 60%)'),
           outlineColor: Cesium.Color.WHITE,
-          outlineWidth: isSelected ? 2 : 1.5,
+          outlineWidth: isSelected ? 2.5 : 2,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
           heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-          scaleByDistance: new Cesium.NearFarScalar(500, 1.4, 2000000, 0.6),
+          scaleByDistance: new Cesium.NearFarScalar(500, 1.4, 2000000, 0.8),
         },
         label: {
           text: facility.displayName,
-          font: '11px sans-serif',
+          font: '13px sans-serif',
           fillColor: Cesium.Color.WHITE,
           outlineColor: Cesium.Color.BLACK,
           outlineWidth: 2,
           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-          pixelOffset: new Cesium.Cartesian2(0, -20),
+          pixelOffset: new Cesium.Cartesian2(0, -24),
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
           heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
           showBackground: true,
-          backgroundColor: Cesium.Color.fromCssColorString('rgba(0,0,0,0.4)'),
-          backgroundPadding: new Cesium.Cartesian2(5, 2),
-          scaleByDistance: new Cesium.NearFarScalar(500, 1.2, 2000000, 0.5),
+          backgroundColor: Cesium.Color.fromCssColorString('rgba(0,0,0,0.5)'),
+          backgroundPadding: new Cesium.Cartesian2(6, 3),
+          scaleByDistance: new Cesium.NearFarScalar(500, 1.2, 2000000, 0.7),
         },
       });
     });
