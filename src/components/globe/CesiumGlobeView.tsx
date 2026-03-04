@@ -370,9 +370,13 @@ const CesiumGlobeView: React.FC = () => {
     }
   }, [show3dBuildings, viewerReady]);
 
-  // Close popup on outside click (but not on the popup itself)
+  // Close popup on outside click — but ignore clicks on the Cesium canvas (handled by ScreenSpaceEventHandler)
   useEffect(() => {
-    const close = () => setSelectedBuilding(null);
+    const close = (e: MouseEvent) => {
+      const canvas = cesiumViewerRef.current?.scene?.canvas;
+      if (canvas && canvas.contains(e.target as Node)) return;
+      setSelectedBuilding(null);
+    };
     window.addEventListener('click', close);
     return () => window.removeEventListener('click', close);
   }, []);
