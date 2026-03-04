@@ -85,6 +85,9 @@ const CesiumGlobeView: React.FC = () => {
 
     cesiumViewerRef.current = viewer;
 
+    // Reduce resolution on desktop for better performance
+    viewer.resolutionScale = window.innerWidth > 768 ? 0.85 : 1.0;
+
     // Add Cesium World Terrain so 3D buildings sit correctly on the ground
     Cesium.CesiumTerrainProvider.fromIonAssetId(1).then(terrainProvider => {
       if (cesiumViewerRef.current) {

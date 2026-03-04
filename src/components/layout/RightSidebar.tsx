@@ -405,8 +405,8 @@ const RightSidebar: React.FC = () => {
                 <div className="space-y-1">
                   <div><span className="font-medium">FMGUID:</span> <span className="break-all text-muted-foreground">{viewerDiagnostics.fmGuid}</span></div>
                   <div><span className="font-medium">Models:</span> {viewerDiagnostics.modelCount}</div>
-                  <div><span className="font-medium">Entities:</span> {viewerDiagnostics.entityCount}</div>
-                  <div><span className="font-medium">Error:</span> {viewerDiagnostics.lastError || 'None'}</div>
+                  <div><span className="font-medium">XKT:</span> {viewerDiagnostics.xkt?.ok || 0} loaded</div>
+                  <div><span className="font-medium">Error:</span> {viewerDiagnostics.lastError?.message || 'None'}</div>
                 </div>
               </AccordionContent>
             </AccordionItem>
