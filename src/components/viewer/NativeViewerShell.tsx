@@ -31,7 +31,7 @@ interface NativeViewerShellProps {
   hideBackButton?: boolean;
 }
 
-const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, onClose }) => {
+const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, onClose, hideBackButton = false }) => {
   const isMobile = useIsMobile();
   const { allData, isSidebarExpanded } = useContext(AppContext);
 
