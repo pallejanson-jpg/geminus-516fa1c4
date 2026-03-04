@@ -1086,6 +1086,12 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                   Push to FM Access
                 </Button>
               )}
+              
+              {/* BIP Classify button */}
+              <Button variant="outline" size="sm" onClick={handleClassify} disabled={isClassifying}>
+                {isClassifying ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Sparkles className="h-4 w-4 mr-1" />}
+                Klassificera (BIP)
+              </Button>
             </div>
             
             <div className="flex gap-1">
