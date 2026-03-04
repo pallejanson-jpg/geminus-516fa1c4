@@ -613,6 +613,51 @@ export type Database = {
           },
         ]
       }
+      conversion_jobs: {
+        Row: {
+          building_fm_guid: string
+          created_at: string | null
+          created_by: string | null
+          error_message: string | null
+          id: string
+          ifc_storage_path: string
+          log_messages: string[] | null
+          model_name: string | null
+          progress: number | null
+          result_model_id: string | null
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          building_fm_guid: string
+          created_at?: string | null
+          created_by?: string | null
+          error_message?: string | null
+          id?: string
+          ifc_storage_path: string
+          log_messages?: string[] | null
+          model_name?: string | null
+          progress?: number | null
+          result_model_id?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          building_fm_guid?: string
+          created_at?: string | null
+          created_by?: string | null
+          error_message?: string | null
+          id?: string
+          ifc_storage_path?: string
+          log_messages?: string[] | null
+          model_name?: string | null
+          progress?: number | null
+          result_model_id?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       detection_templates: {
         Row: {
           ai_prompt: string
