@@ -69,11 +69,30 @@ Deno.serve(async (req) => {
 
       const ifcFile = ifcFiles?.find(f => f.name.toLowerCase().endsWith(".ifc"));
 
+      // Check if XKT source exists
+      const { data: xktFiles } = await supabase.storage
+        .from("xkt-models")
+        .list(buildingFmGuid, { limit: 50 });
+
+      const xktFile = xktFiles?.find(f => f.name.toLowerCase().endsWith(".xkt"));
+
+      const { data: accTranslation } = await supabase
+        .from("acc_model_translations")
+        .select("version_urn")
+        .eq("building_fm_guid", buildingFmGuid)
+        .eq("translation_status", "success")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
       return new Response(
         JSON.stringify({
           cached: false,
           hasIfc: !!ifcFile,
           ifcFileName: ifcFile?.name || null,
+          hasXkt: !!xktFile,
+          xktFileName: xktFile?.name || null,
+          hasAccTranslation: !!accTranslation?.version_urn,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
