@@ -349,7 +349,7 @@ const CesiumGlobeView: React.FC = () => {
   // Toggle OSM 3D buildings
   useEffect(() => {
     const viewer = cesiumViewerRef.current;
-    if (!viewer || !viewerReady) return;
+    if (!viewer || viewer.isDestroyed() || !viewerReady) return;
 
     if (show3dBuildings) {
       let cancelled = false;
