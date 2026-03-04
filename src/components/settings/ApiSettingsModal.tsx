@@ -335,6 +335,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [documentCount, setDocumentCount] = useState(0);
     const [allBuildings, setAllBuildings] = useState<any[]>([]);
     
+    // BIP import state
+    const [isImportingBip, setIsImportingBip] = useState(false);
+    const [bipImportResult, setBipImportResult] = useState<string | null>(null);
+
     // Ivion connection modal state
     const [isIvionModalOpen, setIsIvionModalOpen] = useState(false);
     
