@@ -34,9 +34,19 @@ interface PropertyItem {
   editable: boolean;
   source: 'lovable' | 'asset-plus';
   type: 'text' | 'number' | 'boolean' | 'coordinates';
-  section: 'system' | 'local' | 'area' | 'user-defined' | 'coordinates';
+  section: 'system' | 'local' | 'area' | 'user-defined' | 'coordinates' | 'classification';
   isDifferent?: boolean;
   differentCount?: number;
+}
+
+interface BipSuggestion {
+  code: string;
+  title: string;
+  usercode_syntax?: string;
+  bsab_e?: string;
+  aff?: string;
+  confidence: number;
+  reasoning?: string;
 }
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
