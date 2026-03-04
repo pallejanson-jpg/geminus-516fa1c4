@@ -102,109 +102,191 @@ Deno.serve(async (req) => {
     if (action === "convert") {
       console.log(`[bim-to-gltf] Starting conversion for ${buildingFmGuid}`);
 
-      // 1. Find IFC file
+      // 1. Try IFC source first
       const { data: ifcFiles } = await supabase.storage
         .from("ifc-uploads")
         .list(buildingFmGuid, { limit: 10 });
 
       const ifcFile = ifcFiles?.find(f => f.name.toLowerCase().endsWith(".ifc"));
-      if (!ifcFile) {
-        // Try to find IFC in root of bucket with building guid prefix
+
+      if (ifcFile) {
+        const ifcPath = `${buildingFmGuid}/${ifcFile.name}`;
+        console.log(`[bim-to-gltf] Downloading IFC: ${ifcPath}`);
+
+        const { data: ifcBlob, error: dlError } = await supabase.storage
+          .from("ifc-uploads")
+          .download(ifcPath);
+
+        if (dlError || !ifcBlob) {
+          throw new Error(`Failed to download IFC: ${dlError?.message || "no data"}`);
+        }
+
+        const ifcBuffer = await ifcBlob.arrayBuffer();
+        const sizeMB = ifcBuffer.byteLength / (1024 * 1024);
+        console.log(`[bim-to-gltf] IFC size: ${sizeMB.toFixed(1)} MB`);
+
+        // 2. Parse IFC with web-ifc
+        const WebIFC = await import("npm:web-ifc@0.0.57");
+        const ifcApi = new WebIFC.IfcAPI();
+        await ifcApi.Init();
+
+        const modelID = ifcApi.OpenModel(new Uint8Array(ifcBuffer));
+        console.log(`[bim-to-gltf] IFC model opened, ID: ${modelID}`);
+
+        // 3. Extract all mesh geometry
+        const allVertices: number[] = [];
+        const allIndices: number[] = [];
+        let vertexOffset = 0;
+
+        ifcApi.StreamAllMeshes(modelID, (mesh: any) => {
+          const numGeometries = mesh.geometries.size();
+          for (let i = 0; i < numGeometries; i++) {
+            const placedGeom = mesh.geometries.get(i);
+            const geomData = ifcApi.GetGeometry(modelID, placedGeom.geometryExpressID);
+
+            const vertsData = ifcApi.GetVertexArray(
+              geomData.GetVertexData(),
+              geomData.GetVertexDataSize()
+            );
+            const idxData = ifcApi.GetIndexArray(
+              geomData.GetIndexData(),
+              geomData.GetIndexDataSize()
+            );
+
+            // web-ifc returns 6 floats per vertex: x,y,z, nx,ny,nz
+            const numVerts = vertsData.length / 6;
+
+            // Apply transformation matrix
+            const matrix = placedGeom.flatTransformation;
+
+            for (let v = 0; v < numVerts; v++) {
+              const x = vertsData[v * 6];
+              const y = vertsData[v * 6 + 1];
+              const z = vertsData[v * 6 + 2];
+
+              // Apply 4x4 transform (column-major)
+              const tx = matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12];
+              const ty = matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13];
+              const tz = matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14];
+
+              allVertices.push(tx, ty, tz);
+            }
+
+            for (let idx = 0; idx < idxData.length; idx++) {
+              allIndices.push(idxData[idx] + vertexOffset);
+            }
+
+            vertexOffset += numVerts;
+
+            // Free geometry data
+            geomData.delete?.();
+          }
+        });
+
+        ifcApi.CloseModel(modelID);
+        console.log(`[bim-to-gltf] Extracted ${vertexOffset} vertices, ${allIndices.length} indices`);
+
+        if (vertexOffset === 0) {
+          return new Response(
+            JSON.stringify({ error: "No geometry found in IFC file" }),
+            { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // 4. Build minimal GLB
+        const glbBuffer = buildGlb(new Float32Array(allVertices), new Uint32Array(allIndices));
+        const glbSizeMB = glbBuffer.byteLength / (1024 * 1024);
+        console.log(`[bim-to-gltf] GLB size: ${glbSizeMB.toFixed(2)} MB`);
+
+        // 5. Upload to storage
+        const { error: uploadError } = await supabase.storage
+          .from("glb-models")
+          .upload(glbPath, glbBuffer, {
+            contentType: "model/gltf-binary",
+            upsert: true,
+          });
+
+        if (uploadError) {
+          throw new Error(`GLB upload failed: ${uploadError.message}`);
+        }
+
+        // 6. Get signed URL
+        const { data: urlData } = await supabase.storage
+          .from("glb-models")
+          .createSignedUrl(glbPath, 3600);
+
+        console.log(`[bim-to-gltf] ✅ IFC conversion complete`);
+
         return new Response(
-          JSON.stringify({ error: "No IFC file found for this building" }),
+          JSON.stringify({
+            success: true,
+            source: "ifc",
+            glbUrl: urlData?.signedUrl || null,
+            glbSizeMB: parseFloat(glbSizeMB.toFixed(2)),
+            vertexCount: vertexOffset,
+            indexCount: allIndices.length,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // 2. IFC missing -> fallback via ACC translation (for XKT-only buildings)
+      const { data: xktFiles } = await supabase.storage
+        .from("xkt-models")
+        .list(buildingFmGuid, { limit: 50 });
+
+      const xktFile = xktFiles?.find(f => f.name.toLowerCase().endsWith(".xkt"));
+      if (!xktFile) {
+        return new Response(
+          JSON.stringify({ error: "No IFC or XKT source model found for this building" }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const ifcPath = `${buildingFmGuid}/${ifcFile.name}`;
-      console.log(`[bim-to-gltf] Downloading IFC: ${ifcPath}`);
+      const { data: accTranslation } = await supabase
+        .from("acc_model_translations")
+        .select("version_urn, file_name")
+        .eq("building_fm_guid", buildingFmGuid)
+        .eq("translation_status", "success")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      const { data: ifcBlob, error: dlError } = await supabase.storage
-        .from("ifc-uploads")
-        .download(ifcPath);
-
-      if (dlError || !ifcBlob) {
-        throw new Error(`Failed to download IFC: ${dlError?.message || "no data"}`);
-      }
-
-      const ifcBuffer = await ifcBlob.arrayBuffer();
-      const sizeMB = ifcBuffer.byteLength / (1024 * 1024);
-      console.log(`[bim-to-gltf] IFC size: ${sizeMB.toFixed(1)} MB`);
-
-      // 2. Parse IFC with web-ifc
-      const WebIFC = await import("npm:web-ifc@0.0.57");
-      const ifcApi = new WebIFC.IfcAPI();
-      await ifcApi.Init();
-
-      const modelID = ifcApi.OpenModel(new Uint8Array(ifcBuffer));
-      console.log(`[bim-to-gltf] IFC model opened, ID: ${modelID}`);
-
-      // 3. Extract all mesh geometry
-      const allVertices: number[] = [];
-      const allIndices: number[] = [];
-      let vertexOffset = 0;
-
-      ifcApi.StreamAllMeshes(modelID, (mesh: any) => {
-        const numGeometries = mesh.geometries.size();
-        for (let i = 0; i < numGeometries; i++) {
-          const placedGeom = mesh.geometries.get(i);
-          const geomData = ifcApi.GetGeometry(modelID, placedGeom.geometryExpressID);
-
-          const vertsData = ifcApi.GetVertexArray(
-            geomData.GetVertexData(),
-            geomData.GetVertexDataSize()
-          );
-          const idxData = ifcApi.GetIndexArray(
-            geomData.GetIndexData(),
-            geomData.GetIndexDataSize()
-          );
-
-          // web-ifc returns 6 floats per vertex: x,y,z, nx,ny,nz
-          const numVerts = vertsData.length / 6;
-
-          // Apply transformation matrix
-          const matrix = placedGeom.flatTransformation;
-
-          for (let v = 0; v < numVerts; v++) {
-            const x = vertsData[v * 6];
-            const y = vertsData[v * 6 + 1];
-            const z = vertsData[v * 6 + 2];
-
-            // Apply 4x4 transform (column-major)
-            const tx = matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12];
-            const ty = matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13];
-            const tz = matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14];
-
-            allVertices.push(tx, ty, tz);
-          }
-
-          for (let idx = 0; idx < idxData.length; idx++) {
-            allIndices.push(idxData[idx] + vertexOffset);
-          }
-
-          vertexOffset += numVerts;
-
-          // Free geometry data
-          geomData.delete?.();
-        }
-      });
-
-      ifcApi.CloseModel(modelID);
-      console.log(`[bim-to-gltf] Extracted ${vertexOffset} vertices, ${allIndices.length} indices`);
-
-      if (vertexOffset === 0) {
+      if (!accTranslation?.version_urn) {
         return new Response(
-          JSON.stringify({ error: "No geometry found in IFC file" }),
+          JSON.stringify({ error: "XKT exists but no convertible source translation was found yet" }),
           { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // 4. Build minimal GLB
-      const glbBuffer = buildGlb(new Float32Array(allVertices), new Uint32Array(allIndices));
-      const glbSizeMB = glbBuffer.byteLength / (1024 * 1024);
-      console.log(`[bim-to-gltf] GLB size: ${glbSizeMB.toFixed(2)} MB`);
+      console.log(`[bim-to-gltf] IFC missing, invoking ACC fallback conversion for ${buildingFmGuid}`);
 
-      // 5. Upload to storage
+      const fallbackRes = await fetch(`${supabaseUrl}/functions/v1/acc-svf-to-gltf`, {
+        method: "POST",
+        headers: {
+          "Authorization": authHeader,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          versionUrn: accTranslation.version_urn,
+          buildingFmGuid,
+          fileName: accTranslation.file_name || xktFile.name,
+        }),
+      });
+
+      const fallbackData = await fallbackRes.json().catch(() => null);
+      if (!fallbackRes.ok || !fallbackData?.success || !fallbackData?.glbUrl) {
+        throw new Error(fallbackData?.error || `ACC fallback conversion failed (${fallbackRes.status})`);
+      }
+
+      const glbDownload = await fetch(fallbackData.glbUrl);
+      if (!glbDownload.ok) {
+        throw new Error(`Could not download fallback GLB (${glbDownload.status})`);
+      }
+
+      const glbBuffer = await glbDownload.arrayBuffer();
+      const glbSizeMB = glbBuffer.byteLength / (1024 * 1024);
+
       const { error: uploadError } = await supabase.storage
         .from("glb-models")
         .upload(glbPath, glbBuffer, {
@@ -213,23 +295,21 @@ Deno.serve(async (req) => {
         });
 
       if (uploadError) {
-        throw new Error(`GLB upload failed: ${uploadError.message}`);
+        throw new Error(`GLB cache upload failed: ${uploadError.message}`);
       }
 
-      // 6. Get signed URL
       const { data: urlData } = await supabase.storage
         .from("glb-models")
         .createSignedUrl(glbPath, 3600);
 
-      console.log(`[bim-to-gltf] ✅ Conversion complete`);
+      console.log(`[bim-to-gltf] ✅ Fallback conversion complete`);
 
       return new Response(
         JSON.stringify({
           success: true,
+          source: "xkt-acc-fallback",
           glbUrl: urlData?.signedUrl || null,
           glbSizeMB: parseFloat(glbSizeMB.toFixed(2)),
-          vertexCount: vertexOffset,
-          indexCount: allIndices.length,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
