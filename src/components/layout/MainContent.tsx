@@ -41,6 +41,11 @@ const MainContent: React.FC = () => {
     const t = THEMES[theme];
     const [previousAppBefore360, setPreviousAppBefore360] = useState('portfolio');
 
+    useEffect(() => {
+        // Preload Cesium chunk to reduce first-open delay
+        import('@/components/globe/CesiumGlobeView').catch(() => {});
+    }, []);
+
     const renderContent = () => {
         switch (activeApp) {
             case 'home':

@@ -275,11 +275,20 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
             setPreviousAppBeforeViewer(activeApp);
             setViewer3dFmGuidInternal(fmGuid);
             setActiveApp('native_viewer');
-        } else {
-            // Return to previous app when closing viewer
-            setViewer3dFmGuidInternal(null);
-            setActiveApp(previousAppBeforeViewer);
+            return;
         }
+
+        // Return to explicit origin when provided (eg. Globe -> 3D -> back)
+        const forcedReturnApp = typeof window !== 'undefined'
+            ? window.sessionStorage.getItem('viewer-return-app')
+            : null;
+
+        if (forcedReturnApp && typeof window !== 'undefined') {
+            window.sessionStorage.removeItem('viewer-return-app');
+        }
+
+        setViewer3dFmGuidInternal(null);
+        setActiveApp(forcedReturnApp || previousAppBeforeViewer);
     }, [activeApp, previousAppBeforeViewer]);
 
     const clearAiSelection = useCallback(() => {

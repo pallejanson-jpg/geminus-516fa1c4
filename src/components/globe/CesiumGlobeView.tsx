@@ -457,18 +457,15 @@ const CesiumGlobeView: React.FC = () => {
     const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
     const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
 
-    setTimeout(() => {
-      if (viewer.isDestroyed()) return;
-      viewer.camera.flyTo({
-        destination: toCartesian(centerLat, centerLng, 1500000),
-        orientation: {
-          heading: 0,
-          pitch: Cesium.Math.toRadians(-90),
-          roll: 0,
-        },
-        duration: 3,
-      });
-    }, 500);
+    viewer.camera.flyTo({
+      destination: toCartesian(centerLat, centerLng, 1500000),
+      orientation: {
+        heading: 0,
+        pitch: Cesium.Math.toRadians(-90),
+        roll: 0,
+      },
+      duration: 1.8,
+    });
   }, [facilities, viewerReady]);
 
   // Toggle OSM 3D buildings
