@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
-  X, Pencil, Save, GripVertical, ChevronDown, ChevronUp, Loader2, 
+  ArrowLeft, Pencil, Save, ChevronDown, ChevronUp, Loader2, 
   Building2, Layers, DoorOpen, Box, Database, Search, AlertCircle, Cloud,
   Trash2, Upload, CloudOff
 } from 'lucide-react';
