@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useCallback, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useContext, useMemo } from 'react';
 import { AppContext } from '@/context/AppContext';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
 import { TreePine, Search, FileText, Loader2, Building2 } from 'lucide-react';
 import { useFmAccessApi, FmAccessNode } from '@/hooks/useFmAccessApi';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -13,7 +15,7 @@ import FmAccessSearch from './FmAccessSearch';
 import FmAccessDocuments from './FmAccessDocuments';
 
 const FmAccessNativeView: React.FC = () => {
-  const { selectedFacility } = useContext(AppContext);
+  const { selectedFacility, navigatorTreeData } = useContext(AppContext);
   const isMobile = useIsMobile();
   const { getHierarchy, loading } = useFmAccessApi();
 
@@ -21,13 +23,29 @@ const FmAccessNativeView: React.FC = () => {
   const [selectedNode, setSelectedNode] = useState<FmAccessNode | null>(null);
   const [treeLoading, setTreeLoading] = useState(false);
   const [leftTab, setLeftTab] = useState<string>('tree');
+  const [manualFmGuid, setManualFmGuid] = useState<string | null>(null);
+  const [buildingSearch, setBuildingSearch] = useState('');
 
-  const buildingFmGuid = selectedFacility?.fm_guid || selectedFacility?.fm_access_building_guid;
-  const buildingName = buildingFmGuid ? (selectedFacility?.name || 'Byggnad') : 'FM Access';
+  const buildingFmGuid = manualFmGuid || selectedFacility?.fm_guid || selectedFacility?.fm_access_building_guid;
+  const buildingName = buildingFmGuid ? (selectedFacility?.name || 'Byggnad') : 'FM Access 2.0';
+
+  // Building list for empty state selector
+  const buildings = useMemo(() => {
+    if (!navigatorTreeData) return [];
+    return navigatorTreeData.filter(n => n.category === 'Building');
+  }, [navigatorTreeData]);
+
+  const filteredBuildings = useMemo(() => {
+    if (!buildingSearch.trim()) return buildings;
+    const q = buildingSearch.toLowerCase();
+    return buildings.filter(b =>
+      (b.commonName || '').toLowerCase().includes(q) ||
+      (b.name || '').toLowerCase().includes(q)
+    );
+  }, [buildings, buildingSearch]);
 
   const loadHierarchy = useCallback(async () => {
     if (!buildingFmGuid) {
-      // No building selected — show empty state, don't call API
       setRootNode(null);
       return;
     }
@@ -67,13 +85,54 @@ const FmAccessNativeView: React.FC = () => {
     }
   };
 
-  const handleCreateChild = (parentGuid: string) => {
-    // Could open a dialog — for now, placeholder
-  };
+  const handleCreateChild = (parentGuid: string) => {};
 
   const buildingObjectId = rootNode?.objectId ? String(rootNode.objectId) : buildingFmGuid || '';
 
-  const noBuildingSelected = !buildingFmGuid;
+  // Building selector empty state
+  if (!buildingFmGuid) {
+    return (
+      <div className="flex flex-col h-full bg-background items-center justify-center p-6">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6 space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Building2 size={20} className="text-primary" />
+              <h2 className="text-base font-semibold">Välj byggnad</h2>
+              <Badge variant="outline" className="text-[10px] ml-auto">FMA 2.0</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Välj en byggnad för att ladda FM Access-hierarkin.
+            </p>
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Sök byggnad..."
+                value={buildingSearch}
+                onChange={(e) => setBuildingSearch(e.target.value)}
+                className="h-9 pl-8 text-sm"
+              />
+            </div>
+            <div className="max-h-64 overflow-y-auto space-y-1">
+              {filteredBuildings.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-4">Inga byggnader hittades</p>
+              ) : (
+                filteredBuildings.map(b => (
+                  <button
+                    key={b.fmGuid}
+                    onClick={() => setManualFmGuid(b.fmGuid)}
+                    className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-muted transition-colors"
+                  >
+                    <p className="font-medium truncate">{b.commonName || b.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{b.fmGuid}</p>
+                  </button>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (isMobile) {
     return (
@@ -81,7 +140,7 @@ const FmAccessNativeView: React.FC = () => {
         <div className="flex items-center gap-2 p-3 border-b border-border">
           <Building2 size={16} className="text-primary" />
           <h2 className="text-sm font-semibold truncate flex-1">{buildingName}</h2>
-          <Badge variant="outline" className="text-[10px]">FM Access</Badge>
+          <Badge variant="outline" className="text-[10px]">FMA 2.0</Badge>
         </div>
 
         <Tabs value={leftTab} onValueChange={setLeftTab} className="flex-1 flex flex-col">
@@ -119,8 +178,11 @@ const FmAccessNativeView: React.FC = () => {
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-card">
         <Building2 size={18} className="text-primary" />
         <h2 className="text-base font-semibold truncate">{buildingName}</h2>
-        <Badge variant="outline" className="text-[10px]">FM Access 2.0</Badge>
+        <Badge variant="outline" className="text-[10px]">FMA 2.0</Badge>
         <div className="flex-1" />
+        <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setManualFmGuid(null); setRootNode(null); setSelectedNode(null); }}>
+          Byt byggnad
+        </Button>
         {loading && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
       </div>
 
