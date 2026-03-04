@@ -390,7 +390,7 @@ const CesiumGlobeView: React.FC = () => {
   // Update popup position when camera moves
   useEffect(() => {
     const viewer = cesiumViewerRef.current;
-    if (!viewer || !viewerReady || !selectedBuilding) return;
+    if (!viewer || viewer.isDestroyed() || !viewerReady || !selectedBuilding) return;
 
     let frameId = 0;
     const updatePopupPosition = () => {
