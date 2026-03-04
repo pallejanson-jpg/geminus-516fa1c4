@@ -20,7 +20,7 @@ import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDi
 import { ARCHITECT_BACKGROUND_CHANGED_EVENT, ARCHITECT_BACKGROUND_PRESETS, type BackgroundPresetId } from '@/hooks/useArchitectViewMode';
 import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { recolorArchitectObjects } from '@/lib/architect-colors';
-import { Filter } from 'lucide-react';
+import { Filter, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 
