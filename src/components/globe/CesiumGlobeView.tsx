@@ -538,12 +538,92 @@ const CesiumGlobeView: React.FC = () => {
     };
   }, [viewerReady, selectedBuilding?.facility.fm_guid]);
 
+  // ── Building sidebar (like MapView) ──
+  const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const [sidebarSearch, setSidebarSearch] = useState('');
+
+  const filteredFacilities = useMemo(() => {
+    if (!sidebarSearch.trim()) return facilities;
+    const q = sidebarSearch.toLowerCase();
+    return facilities.filter(f => f.displayName.toLowerCase().includes(q));
+  }, [facilities, sidebarSearch]);
+
+  const handleSidebarSelect = useCallback((fmGuid: string) => {
+    const viewer = cesiumViewerRef.current;
+    const facility = facilitiesByGuidRef.current.get(fmGuid);
+    if (!viewer || viewer.isDestroyed() || !facility) return;
+
+    setSelectedFmGuid(fmGuid);
+    setZoomedFmGuid(fmGuid);
+    setSelectedBuilding(null);
+
+    const pinCenter = toCartesian(facility.latitude, facility.longitude, 0);
+    viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(pinCenter, 24), {
+      offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-50), 360),
+      duration: 1.4,
+    });
+  }, []);
+
   return (
     <div className="flex-1 flex flex-col h-full relative overflow-hidden">
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
 
-      {/* Compact top-left controls */}
-      <div className="absolute top-3 left-3 z-20 flex flex-col gap-1.5">
+      {/* Building sidebar */}
+      <div className="absolute top-14 sm:top-4 left-3 sm:left-4 z-10 w-[calc(100%-1.5rem)] sm:w-72 max-h-[calc(100%-4.5rem)] sm:max-h-[calc(100%-2rem)]">
+        <Card className="bg-card/95 backdrop-blur-sm shadow-xl">
+          <CardHeader
+            className="pb-2 cursor-pointer sm:cursor-default p-3 sm:p-4"
+            onClick={() => setSidebarExpanded(!sidebarExpanded)}
+          >
+            <CardTitle className="text-xs sm:text-sm flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Building2 size={14} className="sm:w-4 sm:h-4 text-primary" />
+                Byggnader ({facilities.length})
+              </span>
+              <Button variant="ghost" size="icon" className="h-6 w-6 sm:hidden"
+                onClick={(e) => { e.stopPropagation(); setSidebarExpanded(!sidebarExpanded); }}
+              >
+                {sidebarExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className={`overflow-y-auto space-y-2 pt-0 px-3 sm:px-4 pb-3 sm:pb-4 transition-all duration-200 ${
+            sidebarExpanded ? 'max-h-48 sm:max-h-60' : 'max-h-0 sm:max-h-80'
+          } ${!sidebarExpanded && 'hidden sm:block'}`}>
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Sök byggnader..."
+                value={sidebarSearch}
+                onChange={(e) => setSidebarSearch(e.target.value)}
+                className="h-8 pl-8 text-xs"
+              />
+            </div>
+            {filteredFacilities.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-4 text-center">
+                {sidebarSearch ? 'Inga matchningar' : 'Inga byggnader'}
+              </p>
+            ) : (
+              filteredFacilities.map(f => (
+                <div
+                  key={f.fm_guid}
+                  onClick={() => handleSidebarSelect(f.fm_guid)}
+                  className={`p-2 rounded-md cursor-pointer transition-colors ${
+                    selectedFmGuid === f.fm_guid
+                      ? 'bg-primary/20 border border-primary/50'
+                      : 'bg-muted/50 hover:bg-muted'
+                  }`}
+                >
+                  <p className="text-xs sm:text-sm font-medium truncate">{f.displayName}</p>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Compact top-right controls */}
+      <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5">
         <div className="flex items-center gap-1.5 bg-card/80 backdrop-blur-sm rounded-full px-3 py-1.5 shadow border border-border/50">
           <Box size={12} className="text-muted-foreground" />
           <span className="text-[11px] text-muted-foreground">3D</span>
@@ -555,27 +635,16 @@ const CesiumGlobeView: React.FC = () => {
           />
         </div>
 
-        <Badge variant="secondary" className="w-fit text-[11px] bg-card/80 backdrop-blur-sm border-border/50 rounded-full px-2.5 py-0.5">
-          <Building2 size={11} className="mr-1" />
-          {facilities.length} byggnader
-        </Badge>
-
-        {tokenError && (
-          <span className="text-[9px] text-muted-foreground bg-card/80 backdrop-blur-sm rounded px-2 py-0.5">
-            Begränsat Cesium-token
-          </span>
-        )}
+        <Button
+          variant="secondary"
+          size="icon"
+          onClick={handleResetView}
+          className="bg-card/80 backdrop-blur-sm shadow border border-border/50 h-8 w-8"
+          title="Återställ vy"
+        >
+          <RotateCcw size={14} />
+        </Button>
       </div>
-
-      <Button
-        variant="secondary"
-        size="icon"
-        onClick={handleResetView}
-        className="absolute top-3 right-3 z-20 bg-card/80 backdrop-blur-sm shadow border border-border/50 h-8 w-8"
-        title="Återställ vy"
-      >
-        <RotateCcw size={14} />
-      </Button>
 
       {/* BIM loading indicator */}
       {bimLoading && (
