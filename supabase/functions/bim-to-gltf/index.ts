@@ -230,7 +230,7 @@ Deno.serve(async (req) => {
         );
       }
 
-      // 2. IFC missing -> fallback via ACC translation (for XKT-only buildings)
+      // 2. IFC missing -> try XKT direct download and GLB build
       const { data: xktFiles } = await supabase.storage
         .from("xkt-models")
         .list(buildingFmGuid, { limit: 50 });
@@ -243,50 +243,40 @@ Deno.serve(async (req) => {
         );
       }
 
-      const { data: accTranslation } = await supabase
-        .from("acc_model_translations")
-        .select("version_urn, file_name")
-        .eq("building_fm_guid", buildingFmGuid)
-        .eq("translation_status", "success")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // Download the XKT file and parse geometry to build GLB directly
+      const xktPath = `${buildingFmGuid}/${xktFile.name}`;
+      console.log(`[bim-to-gltf] Downloading XKT: ${xktPath}`);
 
-      if (!accTranslation?.version_urn) {
+      const { data: xktBlob, error: xktDlError } = await supabase.storage
+        .from("xkt-models")
+        .download(xktPath);
+
+      if (xktDlError || !xktBlob) {
+        throw new Error(`Failed to download XKT: ${xktDlError?.message || "no data"}`);
+      }
+
+      const xktBuffer = await xktBlob.arrayBuffer();
+      const xktSizeMB = xktBuffer.byteLength / (1024 * 1024);
+      console.log(`[bim-to-gltf] XKT size: ${xktSizeMB.toFixed(1)} MB, parsing geometry...`);
+
+      // Parse XKT v10 binary format to extract positions and indices
+      const xktResult = parseXktGeometry(new Uint8Array(xktBuffer));
+
+      if (xktResult.vertexCount === 0) {
         return new Response(
-          JSON.stringify({ error: "XKT exists but no convertible source translation was found yet" }),
+          JSON.stringify({ error: "No geometry found in XKT file" }),
           { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      console.log(`[bim-to-gltf] IFC missing, invoking ACC fallback conversion for ${buildingFmGuid}`);
+      console.log(`[bim-to-gltf] XKT extracted ${xktResult.vertexCount} vertices, ${xktResult.indices.length} indices`);
 
-      const fallbackRes = await fetch(`${supabaseUrl}/functions/v1/acc-svf-to-gltf`, {
-        method: "POST",
-        headers: {
-          "Authorization": authHeader,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          versionUrn: accTranslation.version_urn,
-          buildingFmGuid,
-          fileName: accTranslation.file_name || xktFile.name,
-        }),
-      });
-
-      const fallbackData = await fallbackRes.json().catch(() => null);
-      if (!fallbackRes.ok || !fallbackData?.success || !fallbackData?.glbUrl) {
-        throw new Error(fallbackData?.error || `ACC fallback conversion failed (${fallbackRes.status})`);
-      }
-
-      const glbDownload = await fetch(fallbackData.glbUrl);
-      if (!glbDownload.ok) {
-        throw new Error(`Could not download fallback GLB (${glbDownload.status})`);
-      }
-
-      const glbBuffer = await glbDownload.arrayBuffer();
+      // Build GLB from extracted geometry
+      const glbBuffer = buildGlb(xktResult.positions, xktResult.indices);
       const glbSizeMB = glbBuffer.byteLength / (1024 * 1024);
+      console.log(`[bim-to-gltf] GLB size: ${glbSizeMB.toFixed(2)} MB`);
 
+      // Upload to storage
       const { error: uploadError } = await supabase.storage
         .from("glb-models")
         .upload(glbPath, glbBuffer, {
@@ -295,21 +285,23 @@ Deno.serve(async (req) => {
         });
 
       if (uploadError) {
-        throw new Error(`GLB cache upload failed: ${uploadError.message}`);
+        throw new Error(`GLB upload failed: ${uploadError.message}`);
       }
 
       const { data: urlData } = await supabase.storage
         .from("glb-models")
         .createSignedUrl(glbPath, 3600);
 
-      console.log(`[bim-to-gltf] ✅ Fallback conversion complete`);
+      console.log(`[bim-to-gltf] ✅ XKT→GLB conversion complete`);
 
       return new Response(
         JSON.stringify({
           success: true,
-          source: "xkt-acc-fallback",
+          source: "xkt-direct",
           glbUrl: urlData?.signedUrl || null,
           glbSizeMB: parseFloat(glbSizeMB.toFixed(2)),
+          vertexCount: xktResult.vertexCount,
+          indexCount: xktResult.indices.length,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
