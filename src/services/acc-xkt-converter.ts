@@ -119,12 +119,10 @@ export async function convertToXktWithMetadata(
   const xktModel = new XKTModel();
 
   if (format === 'ifc') {
-    const fileSizeMB = glbData.byteLength / 1024 / 1024;
-    const timeoutMs = Math.max(10 * 60_000, fileSizeMB * 3000);
-    logger(`IFC file: ${fileSizeMB.toFixed(1)} MB, timeout: ${(timeoutMs / 60_000).toFixed(1)} min`);
-
-    const { convertIfcInWorker } = await import('./ifc-worker-bridge');
-    return await convertIfcInWorker(glbData, '/lib/xeokit/', logger, timeoutMs);
+    throw new Error(
+      'IFC conversion is handled server-side via the ifc-to-xkt edge function. ' +
+      'Use the CreateBuildingPanel to upload IFC files.'
+    );
   } else if (format === 'obj') {
     logger('Parsing OBJ into XKTModel...');
     const mod = await import('@xeokit/xeokit-convert');
