@@ -106,6 +106,7 @@ const CesiumGlobeView: React.FC = () => {
     clickHandlerRef.current = handler;
 
     handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
+      // Stop propagation to prevent window click handler from immediately closing popup
       const picked = viewer.scene.pick(movement.position);
       const entity = picked?.id as Cesium.Entity | undefined;
       const fmGuid = entity?.properties?.fm_guid?.getValue?.() as string | undefined;
