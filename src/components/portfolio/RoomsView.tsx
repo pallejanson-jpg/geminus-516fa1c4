@@ -468,8 +468,8 @@ const RoomsView: React.FC<RoomsViewProps> = ({
           </div>
         </div>
         <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 sm:h-9 sm:w-9 shrink-0">
-          <X size={16} className="sm:hidden" />
-          <X size={20} className="hidden sm:block" />
+          <ArrowLeft size={16} className="sm:hidden" />
+          <ArrowLeft size={20} className="hidden sm:block" />
         </Button>
       </div>
 
