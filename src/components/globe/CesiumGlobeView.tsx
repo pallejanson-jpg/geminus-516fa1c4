@@ -5,14 +5,14 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
-import { Building2, Eye, Globe, Box, RotateCcw, ArrowRight } from 'lucide-react';
+import { Building2, Eye, Globe, Box, RotateCcw, ArrowRight, Loader2, Boxes } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 interface BuildingCoord {
   fm_guid: string;
@@ -20,6 +20,7 @@ interface BuildingCoord {
   longitude: number;
   name?: string;
   ivion_site_id?: string | null;
+  rotation?: number | null;
 }
 
 interface SelectedBuilding {
@@ -33,8 +34,7 @@ function toCartesian(lat: number, lng: number, height = 0) {
 }
 
 const CesiumGlobeView: React.FC = () => {
-  const { navigatorTreeData, setActiveApp, setSelectedFacility, open360WithContext, appConfigs } = useContext(AppContext);
-  const navigate = useNavigate();
+  const { navigatorTreeData, setActiveApp, setSelectedFacility, setViewer3dFmGuid, open360WithContext, appConfigs } = useContext(AppContext);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const cesiumViewerRef = useRef<Cesium.Viewer | null>(null);
@@ -44,6 +44,7 @@ const CesiumGlobeView: React.FC = () => {
   const osmBuildingsLayerRef = useRef<Cesium.Cesium3DTileset | null>(null);
   const hasFlewInRef = useRef(false);
   const zoomedFmGuidRef = useRef<string | null>(null);
+  const bimEntityRef = useRef<Cesium.Entity | null>(null);
 
   const [tokenError, setTokenError] = useState(false);
   const [tokenReady, setTokenReady] = useState(false);
@@ -53,6 +54,8 @@ const CesiumGlobeView: React.FC = () => {
   const [selectedFmGuid, setSelectedFmGuid] = useState<string | null>(null);
   const [zoomedFmGuid, setZoomedFmGuid] = useState<string | null>(null);
   const [viewerReady, setViewerReady] = useState(false);
+  const [bimLoading, setBimLoading] = useState(false);
+  const [bimLoadedFmGuid, setBimLoadedFmGuid] = useState<string | null>(null);
 
   // Fetch Cesium token
   useEffect(() => {
@@ -90,7 +93,7 @@ const CesiumGlobeView: React.FC = () => {
 
     // Add Cesium World Terrain so 3D buildings sit correctly on the ground
     Cesium.CesiumTerrainProvider.fromIonAssetId(1).then(terrainProvider => {
-      if (cesiumViewerRef.current) {
+      if (cesiumViewerRef.current && !cesiumViewerRef.current.isDestroyed()) {
         cesiumViewerRef.current.terrainProvider = terrainProvider;
       }
     }).catch(err => {
@@ -109,7 +112,7 @@ const CesiumGlobeView: React.FC = () => {
     clickHandlerRef.current = handler;
 
     handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
-      // Stop propagation to prevent window click handler from immediately closing popup
+      if (viewer.isDestroyed()) return;
       const picked = viewer.scene.pick(movement.position);
       const entity = picked?.id as Cesium.Entity | undefined;
       const fmGuid = entity?.properties?.fm_guid?.getValue?.() as string | undefined;
@@ -131,7 +134,7 @@ const CesiumGlobeView: React.FC = () => {
       const alreadyZoomed = zoomedFmGuidRef.current === fmGuid;
 
       if (alreadyZoomed) {
-        // Second click: show popup, offset above and to the right of pin
+        // Second click: show popup
         const screenPos = Cesium.SceneTransforms.worldToWindowCoordinates(
           viewer.scene,
           toCartesian(facility.latitude, facility.longitude, 0),
@@ -175,12 +178,12 @@ const CesiumGlobeView: React.FC = () => {
     };
   }, [tokenReady]);
 
-  // Fetch building coordinates
+  // Fetch building coordinates (include rotation for BIM placement)
   useEffect(() => {
     const fetchCoords = async () => {
       const { data } = await supabase
         .from('building_settings')
-        .select('fm_guid, latitude, longitude, ivion_site_id');
+        .select('fm_guid, latitude, longitude, ivion_site_id, rotation');
 
       if (!data) return;
 
@@ -192,6 +195,7 @@ const CesiumGlobeView: React.FC = () => {
             latitude: d.latitude!,
             longitude: d.longitude!,
             ivion_site_id: d.ivion_site_id,
+            rotation: d.rotation ?? 0,
           })),
       );
     };
@@ -227,6 +231,8 @@ const CesiumGlobeView: React.FC = () => {
     zoomedFmGuidRef.current = zoomedFmGuid;
   }, [zoomedFmGuid]);
 
+  // ── Navigation handlers ──
+
   const handleNavigateToFacility = useCallback((fmGuid: string) => {
     setSelectedBuilding(null);
     setSelectedFmGuid(null);
@@ -234,28 +240,129 @@ const CesiumGlobeView: React.FC = () => {
     const node = navigatorTreeData.find(n => n.fmGuid.toLowerCase() === fmGuid.toLowerCase());
     if (node) {
       setSelectedFacility(node);
-      setActiveApp('portfolio');
     }
+    setActiveApp('portfolio');
   }, [navigatorTreeData, setSelectedFacility, setActiveApp]);
 
   const handleOpenViewer = useCallback((fmGuid: string) => {
     setSelectedBuilding(null);
     setSelectedFmGuid(null);
     setZoomedFmGuid(null);
-    const node = navigatorTreeData.find(n => n.fmGuid.toLowerCase() === fmGuid.toLowerCase());
-    if (node) {
-      setSelectedFacility(node);
+    // setViewer3dFmGuid automatically switches to native_viewer
+    setViewer3dFmGuid(fmGuid);
+  }, [setViewer3dFmGuid]);
+
+  const handleShowBim = useCallback(async (fmGuid: string) => {
+    const viewer = cesiumViewerRef.current;
+    if (!viewer || viewer.isDestroyed()) return;
+
+    const facility = facilitiesByGuidRef.current.get(fmGuid);
+    if (!facility) return;
+
+    // Toggle off if already loaded
+    if (bimLoadedFmGuid === fmGuid && bimEntityRef.current) {
+      viewer.entities.remove(bimEntityRef.current);
+      bimEntityRef.current = null;
+      setBimLoadedFmGuid(null);
+      toast.info('BIM-modell borttagen');
+      return;
     }
-    navigate('/split-viewer');
-  }, [navigatorTreeData, setSelectedFacility, navigate]);
+
+    setBimLoading(true);
+    setSelectedBuilding(null);
+
+    try {
+      // 1. Check for cached GLB
+      const { data: checkData, error: checkError } = await supabase.functions.invoke('bim-to-gltf', {
+        body: { action: 'check', buildingFmGuid: fmGuid },
+      });
+
+      if (checkError) throw new Error(checkError.message);
+
+      let glbUrl: string | null = null;
+
+      if (checkData?.cached && checkData.glbUrl) {
+        glbUrl = checkData.glbUrl;
+      } else if (checkData?.hasIfc) {
+        // 2. Convert IFC → GLB
+        toast.info('Konverterar BIM-modell...', { duration: 10000, id: 'bim-convert' });
+
+        const { data: convertData, error: convertError } = await supabase.functions.invoke('bim-to-gltf', {
+          body: { action: 'convert', buildingFmGuid: fmGuid },
+        });
+
+        toast.dismiss('bim-convert');
+
+        if (convertError) throw new Error(convertError.message);
+        if (!convertData?.glbUrl) throw new Error('No GLB URL returned');
+
+        glbUrl = convertData.glbUrl;
+      } else {
+        toast.warning('Ingen IFC-fil hittades för denna byggnad');
+        setBimLoading(false);
+        return;
+      }
+
+      // 3. Remove previous BIM entity if any
+      if (bimEntityRef.current) {
+        viewer.entities.remove(bimEntityRef.current);
+        bimEntityRef.current = null;
+      }
+
+      // 4. Place GLB model on the globe
+      const position = Cesium.Cartesian3.fromDegrees(
+        facility.longitude,
+        facility.latitude,
+        0
+      );
+
+      const heading = Cesium.Math.toRadians(facility.rotation || 0);
+      const hpr = new Cesium.HeadingPitchRoll(heading, 0, 0);
+      const orientation = Cesium.Transforms.headingPitchRollQuaternion(position, hpr);
+
+      const entity = viewer.entities.add({
+        position,
+        orientation,
+        model: {
+          uri: glbUrl!,
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+          minimumPixelSize: 64,
+          maximumScale: 20000,
+          color: Cesium.Color.WHITE.withAlpha(0.85),
+          silhouetteColor: Cesium.Color.fromCssColorString('hsl(212, 92%, 60%)'),
+          silhouetteSize: 1.5,
+        },
+      });
+
+      bimEntityRef.current = entity;
+      setBimLoadedFmGuid(fmGuid);
+
+      // Fly to a good viewing angle
+      viewer.camera.flyTo({
+        destination: toCartesian(facility.latitude, facility.longitude, 200),
+        orientation: {
+          heading: Cesium.Math.toRadians(45),
+          pitch: Cesium.Math.toRadians(-35),
+          roll: 0,
+        },
+        duration: 1.5,
+      });
+
+      toast.success('BIM-modell laddad');
+    } catch (err: any) {
+      console.error('BIM load error:', err);
+      toast.error(`Kunde inte ladda BIM: ${err.message}`);
+    } finally {
+      setBimLoading(false);
+    }
+  }, [bimLoadedFmGuid]);
 
   const handleResetView = useCallback(() => {
     setSelectedBuilding(null);
     setSelectedFmGuid(null);
     setZoomedFmGuid(null);
-    // Fly back to the overview instead of default home
     const viewer = cesiumViewerRef.current;
-    if (viewer && facilities.length > 0) {
+    if (viewer && !viewer.isDestroyed() && facilities.length > 0) {
       const lats = facilities.map(f => f.latitude);
       const lngs = facilities.map(f => f.longitude);
       const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
@@ -320,19 +427,17 @@ const CesiumGlobeView: React.FC = () => {
     });
   }, [facilities, selectedFmGuid, viewerReady]);
 
-  // Fly-in animation: zoom from global view to high overview of building region
+  // Fly-in animation
   useEffect(() => {
     const viewer = cesiumViewerRef.current;
     if (!viewer || viewer.isDestroyed() || !viewerReady || facilities.length === 0 || hasFlewInRef.current) return;
     hasFlewInRef.current = true;
 
-    // Compute center of all buildings and fly to a high overview (~1500km)
     const lats = facilities.map(f => f.latitude);
     const lngs = facilities.map(f => f.longitude);
     const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
     const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
 
-    // Delay slightly so the globe renders first
     setTimeout(() => {
       if (viewer.isDestroyed()) return;
       viewer.camera.flyTo({
@@ -377,7 +482,7 @@ const CesiumGlobeView: React.FC = () => {
     }
   }, [show3dBuildings, viewerReady]);
 
-  // Close popup on outside click — but ignore clicks on the Cesium canvas (handled by ScreenSpaceEventHandler)
+  // Close popup on outside click
   useEffect(() => {
     const close = (e: MouseEvent) => {
       const canvas = cesiumViewerRef.current?.scene?.canvas;
@@ -396,7 +501,6 @@ const CesiumGlobeView: React.FC = () => {
     let frameId = 0;
     const updatePopupPosition = () => {
       if (viewer.isDestroyed()) return;
-      // Throttle to ~30fps to reduce overhead
       frameId++;
       if (frameId % 2 !== 0) return;
       if (!selectedBuilding) return;
@@ -456,6 +560,14 @@ const CesiumGlobeView: React.FC = () => {
         <RotateCcw size={14} />
       </Button>
 
+      {/* BIM loading indicator */}
+      {bimLoading && (
+        <div className="absolute top-14 right-3 z-20 bg-card/90 backdrop-blur-sm rounded-lg px-3 py-2 shadow border border-border/50 flex items-center gap-2">
+          <Loader2 size={14} className="animate-spin text-primary" />
+          <span className="text-[11px] text-muted-foreground">Laddar BIM...</span>
+        </div>
+      )}
+
       {/* Building info popup */}
       {selectedBuilding && (
         <div
@@ -501,6 +613,21 @@ const CesiumGlobeView: React.FC = () => {
                   <span className="flex items-center gap-1.5">
                     <Eye size={11} className="text-primary" />
                     Öppna 3D-viewer
+                  </span>
+                  <ArrowRight size={10} className="text-muted-foreground" />
+                </button>
+                <button
+                  className="w-full flex items-center justify-between px-1.5 py-1.5 text-[10px] sm:text-[11px] font-medium text-foreground hover:bg-primary/10 rounded transition-colors"
+                  onClick={() => handleShowBim(selectedBuilding.facility.fm_guid)}
+                  disabled={bimLoading}
+                >
+                  <span className="flex items-center gap-1.5">
+                    {bimLoading ? (
+                      <Loader2 size={11} className="text-primary animate-spin" />
+                    ) : (
+                      <Boxes size={11} className="text-primary" />
+                    )}
+                    {bimLoadedFmGuid === selectedBuilding.facility.fm_guid ? 'Dölj BIM' : 'Visa BIM'}
                   </span>
                   <ArrowRight size={10} className="text-muted-foreground" />
                 </button>
