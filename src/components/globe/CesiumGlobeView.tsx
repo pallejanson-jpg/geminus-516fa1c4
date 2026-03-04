@@ -323,7 +323,7 @@ const CesiumGlobeView: React.FC = () => {
   // Fly-in animation: zoom from global view to high overview of building region
   useEffect(() => {
     const viewer = cesiumViewerRef.current;
-    if (!viewer || !viewerReady || facilities.length === 0 || hasFlewInRef.current) return;
+    if (!viewer || viewer.isDestroyed() || !viewerReady || facilities.length === 0 || hasFlewInRef.current) return;
     hasFlewInRef.current = true;
 
     // Compute center of all buildings and fly to a high overview (~1500km)
