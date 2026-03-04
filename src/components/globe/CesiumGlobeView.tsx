@@ -334,6 +334,7 @@ const CesiumGlobeView: React.FC = () => {
 
     // Delay slightly so the globe renders first
     setTimeout(() => {
+      if (viewer.isDestroyed()) return;
       viewer.camera.flyTo({
         destination: toCartesian(centerLat, centerLng, 1500000),
         orientation: {
