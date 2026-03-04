@@ -12,6 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 import { Label } from '@/components/ui/label';
 import { AppContext } from '@/context/AppContext';
+import { BUILDING_IMAGES } from '@/lib/constants';
 import BuildingMapPicker from '@/components/map/BuildingMapPicker';
 import { Facility } from '@/lib/types';
 import { useBuildingSettings } from '@/hooks/useBuildingSettings';
@@ -688,24 +689,32 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
               <div className="mt-4 sm:mt-6 animate-in fade-in duration-500">
                 <h3 className="text-base sm:text-lg font-bold mb-3 sm:mb-4">Våningar ({childStoreys.length})</h3>
                 
-                {/* Floor pills - "Season" tabs — scrollable carousel */}
+                {/* Floor hero-image carousel */}
                 <Carousel opts={{ align: 'start', dragFree: true }} className="mb-4">
-                  <CarouselContent className="-ml-1.5">
-                    {childStoreys.map((storey, idx) => (
-                      <CarouselItem key={storey.fmGuid} className="pl-1.5 basis-auto">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedFloorIdx(idx)}
-                          className={`shrink-0 px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
-                            selectedFloorIdx === idx
-                              ? 'bg-primary text-primary-foreground shadow-md'
-                              : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
-                          }`}
-                        >
-                          {storey.commonName || storey.name || `Våning ${idx + 1}`}
-                        </button>
-                      </CarouselItem>
-                    ))}
+                  <CarouselContent className="-ml-2">
+                    {childStoreys.map((storey, idx) => {
+                      // Stable pseudo-random image based on fmGuid hash
+                      const hash = (storey.fmGuid || '').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+                      const img = BUILDING_IMAGES[hash % BUILDING_IMAGES.length];
+                      const isSelected = selectedFloorIdx === idx;
+                      return (
+                        <CarouselItem key={storey.fmGuid} className="pl-2 basis-auto">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedFloorIdx(idx)}
+                            className={`relative w-36 h-24 rounded-xl overflow-hidden transition-all ${
+                              isSelected ? 'ring-2 ring-primary shadow-lg scale-[1.02]' : 'opacity-80 hover:opacity-100'
+                            }`}
+                          >
+                            <img src={img} alt="" className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                            <span className="absolute bottom-1.5 left-2 right-2 text-[11px] font-semibold text-white truncate">
+                              {storey.commonName || storey.name || `Våning ${idx + 1}`}
+                            </span>
+                          </button>
+                        </CarouselItem>
+                      );
+                    })}
                   </CarouselContent>
                 </Carousel>
 

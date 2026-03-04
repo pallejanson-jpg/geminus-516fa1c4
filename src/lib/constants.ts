@@ -88,6 +88,7 @@ export const DEFAULT_SIDEBAR_ORDER: SidebarItem[] = [
     { id: 'support', hasDividerAfter: false },
     { id: 'insights', hasDividerAfter: true },
     { id: 'fma_plus', hasDividerAfter: false },
+    { id: 'fma_native', hasDividerAfter: false },
     { id: 'asset_plus', hasDividerAfter: false },
     { id: 'iot', hasDividerAfter: false },
     { id: 'original_archive', hasDividerAfter: false },
