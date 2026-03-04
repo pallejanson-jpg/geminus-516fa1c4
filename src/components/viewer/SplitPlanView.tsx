@@ -46,7 +46,10 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
   const getXeokitViewer = useCallback(() => {
     try {
-      return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      const v = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      if (v) return v;
+      // Fallback: native xeokit viewer exposed by NativeViewerShell
+      return (window as any).__nativeXeokitViewer ?? null;
     } catch { return null; }
   }, [viewerRef]);
 

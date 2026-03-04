@@ -56,7 +56,10 @@ export function useVirtualTwinSync({
 
   const getXeokitViewer = useCallback(() => {
     try {
-      return viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer ?? null;
+      const v = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      if (v) return v;
+      // Fallback: native xeokit viewer exposed by NativeViewerShell
+      return (window as any).__nativeXeokitViewer ?? null;
     } catch {
       return null;
     }
