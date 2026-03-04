@@ -1,45 +1,33 @@
 
 
-# Plan: Standard-tema = Arkitektfärger, Room Labels-fix, Bakgrundsfärg-fix
+## Plan: Mobile 3D Viewer Layout Optimization + Red Room Fix
 
-## 1. Kopiera arkitektvy-inställningar till "Standard"-temat
+### Problem 1: Mobile header too low, toolbar too high
+The `MobileViewerOverlay` header uses `paddingTop: calc(max(env(safe-area-inset-top), 20px) + 8px)` — this adds extra padding pushing controls down. The `ViewerToolbar` bottom bar uses `bottom: calc(max(env(safe-area-inset-bottom), 12px) + 8px)` — not enough clearance but also not utilizing the space well.
 
-Uppdatera DB-raden `viewer_themes` där `name = 'Standard'` så att `color_mappings` och `edge_settings` matchar "Arkitektvy"-temat. Sedan är arkitektfärgerna standard, tillämpade automatiskt vid modelladdning.
+### Problem 2: Red rooms on first load
+IfcSpace objects are hidden at line 526 in `NativeXeokitViewer.tsx` — but they're hidden *without* first applying the blue color. When any code later makes them visible (filter panel, "Visa rum", "Show All"), they appear with raw red IFC materials until explicitly re-colored. The fix is to **pre-apply the blue color and opacity to all IfcSpace entities at load time**, before hiding them. This way, whenever they become visible later, they're already blue.
 
-**Migration SQL:**
-```sql
-UPDATE viewer_themes 
-SET color_mappings = (SELECT color_mappings FROM viewer_themes WHERE name = 'Arkitektvy'),
-    edge_settings = (SELECT edge_settings FROM viewer_themes WHERE name = 'Arkitektvy'),
-    space_opacity = (SELECT space_opacity FROM viewer_themes WHERE name = 'Arkitektvy')
-WHERE name = 'Standard';
-```
+### Changes
 
-## 2. Room labels — fungerar bara första gången
+**1. `src/components/viewer/mobile/MobileViewerOverlay.tsx`**
+- Reduce the header's `paddingTop` to use just the safe-area-inset with minimal extra padding: `calc(env(safe-area-inset-top, 0px) + 4px)` and reduce `p-2` to `p-1.5`
+- Make buttons smaller (`h-8 w-8`) and mode switcher more compact
 
-**Orsak:** När labels stängs av anropas `destroyLabels()` som rensar kamera-lyssnare och label-element — men `containerRef` pekar fortfarande på ett DOM-element som kan ha blivit avkopplat om canvas-föräldraelementet har ändrats (t.ex. vid vy-byte). Vid andra toggle ON hittar `ensureContainer()` den gamla referensen men den kan vara orphaned.
+**2. `src/components/viewer/ViewerToolbar.tsx`**
+- On mobile, increase bottom offset to push the toolbar lower: `calc(env(safe-area-inset-bottom, 0px) + 4px)` — just enough to clear the browser chrome without going under it
+- Reduce button sizes on mobile for more compact layout
 
-**Fix i `useRoomLabels.ts`:**
-- I `destroyLabels`: ta även bort container-elementet och nollställ `containerRef.current = null` — inte bara vid unmount. Då skapas en ny container varje toggle-cykel.
-- Alternativt: validera att container fortfarande är connected (`containerRef.current?.isConnected`) i `ensureContainer`.
+**3. `src/components/viewer/NativeXeokitViewer.tsx`**
+- At lines 518-532 where IfcSpace entities are hidden, **pre-colorize them blue** before hiding:
+  ```
+  entity.colorize = [0.5, 0.7, 0.9];
+  entity.opacity = 0.3;
+  entity.visible = false;
+  entity.pickable = false;
+  ```
+- This ensures any subsequent `visible = true` shows blue, never red
 
-## 3. Bakgrundsfärg fungerar inte + sätt default till grå
-
-**Problem 1 — Default bakgrund:** `NativeViewerShell` har redan `style={{ background: 'linear-gradient(180deg, #f5f5f5 0%, #e8e8e8 100%)' }}` — detta är en subtil grå gradient. Om användaren vill ha tydligare grå, ändra till `light-gray`-preseten: `rgb(230,230,230)`.
-
-**Problem 2 — Färgväljaren fungerar inte:** `NativeViewerShell` lyssnar på `ARCHITECT_BACKGROUND_CHANGED_EVENT` och söker `.native-viewer-canvas-parent`. Eventen dispatchas av VisualizationToolbar/ViewerRightPanel. Men dessa paneler kanske inte renderas (de renderas bara i icke-native viewer-kontexten). Om det är NativeViewerShell som renderar verktygsfältet, behöver bakgrundsfärg-väljaren finnas i `ViewerToolbar` eller i `VisualizationToolbar` som renderas av NativeViewerShell.
-
-**Fix:**
-- Verifiera att `VisualizationToolbar` renderas i `NativeViewerShell` med bakgrundsfärg-stöd
-- Sätt standard bakgrundspresets-state till `'light-gray'` istället för `'sage'` i `useArchitectViewMode`
-- Uppdatera inline-style i NativeViewerShell till `light-gray` gradient
-
-## Filer som ändras
-
-| Fil | Ändring |
-|-----|---------|
-| Migration SQL | Kopiera Arkitektvy-mappings till Standard-tema |
-| `src/hooks/useRoomLabels.ts` | Fix destroyLabels: nollställ containerRef |
-| `src/hooks/useArchitectViewMode.ts` | Default preset → `'light-gray'` |
-| `src/components/viewer/NativeViewerShell.tsx` | Uppdatera default gradient till light-gray |
+**4. `src/components/viewer/NativeViewerShell.tsx`**
+- In `handleContextShowAll` (line 321-335), after re-hiding IfcSpaces, also pre-apply blue color so they stay blue if toggled on later
 

@@ -511,6 +511,15 @@ export function useRoomLabels(
     });
     labelsRef.current.clear();
 
+    // Remove and nullify container so a fresh one is created on next enable
+    if (containerRef.current) {
+      containerRef.current.remove();
+      containerRef.current = null;
+    }
+
+    // Clear occlusion cache
+    occlusionCacheRef.current.clear();
+
     console.log('Room labels destroyed');
   }, []);
 

@@ -364,7 +364,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const sidebarOffset = !isMobile && isSidebarExpanded ? 'left-[calc(3.5rem+12px)]' : 'left-3';
 
   return (
-    <div className="relative w-full h-full overflow-hidden native-viewer-canvas-parent" style={{ background: 'linear-gradient(180deg, #f5f5f5 0%, #e8e8e8 100%)' }}>
+    <div className="relative w-full h-full overflow-hidden native-viewer-canvas-parent" style={{ background: 'linear-gradient(180deg, rgb(255,255,255) 0%, rgb(230,230,230) 100%)' }}>
       {/* Canvas layer */}
       <NativeXeokitViewer
         buildingFmGuid={buildingFmGuid}
