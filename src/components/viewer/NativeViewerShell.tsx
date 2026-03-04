@@ -206,6 +206,10 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       $refs: { AssetViewer: assetViewerShim },
       assetViewer: assetViewerShim,
     };
+
+    // Expose globally so UnifiedViewer, SplitPlanView, and sync hooks can find it
+    (window as any).__assetPlusViewerInstance = viewerShimRef.current;
+    (window as any).__nativeXeokitViewer = viewer;
   }, []);
 
   // Context menu via right-click on canvas
