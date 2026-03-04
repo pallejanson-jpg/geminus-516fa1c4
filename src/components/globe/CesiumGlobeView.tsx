@@ -162,18 +162,18 @@ const CesiumGlobeView: React.FC = () => {
         return;
       }
 
-      // First click: zoom in, no popup
+      // First click: zoom in to centered pin, no popup
       setSelectedBuilding(null);
       setZoomedFmGuid(fmGuid);
 
-      viewer.camera.flyTo({
-        destination: toCartesian(facility.latitude, facility.longitude, 300),
-        orientation: {
-          heading: Cesium.Math.toRadians(0),
-          pitch: Cesium.Math.toRadians(-50),
-          roll: 0,
-        },
-        duration: 1.5,
+      const pinCenter = toCartesian(facility.latitude, facility.longitude, 0);
+      viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(pinCenter, 24), {
+        offset: new Cesium.HeadingPitchRange(
+          Cesium.Math.toRadians(0),
+          Cesium.Math.toRadians(-50),
+          360,
+        ),
+        duration: 1.4,
       });
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
