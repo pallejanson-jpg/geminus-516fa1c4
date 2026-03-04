@@ -164,11 +164,14 @@ const CesiumGlobeView: React.FC = () => {
     setViewerReady(true);
 
     return () => {
+      setViewerReady(false);
       handler.destroy();
       clickHandlerRef.current = null;
       pinDataSourceRef.current = null;
+      if (!viewer.isDestroyed()) {
+        viewer.destroy();
+      }
       cesiumViewerRef.current = null;
-      viewer.destroy();
     };
   }, [tokenReady]);
 
@@ -320,7 +323,7 @@ const CesiumGlobeView: React.FC = () => {
   // Fly-in animation: zoom from global view to high overview of building region
   useEffect(() => {
     const viewer = cesiumViewerRef.current;
-    if (!viewer || !viewerReady || facilities.length === 0 || hasFlewInRef.current) return;
+    if (!viewer || viewer.isDestroyed() || !viewerReady || facilities.length === 0 || hasFlewInRef.current) return;
     hasFlewInRef.current = true;
 
     // Compute center of all buildings and fly to a high overview (~1500km)
@@ -331,6 +334,7 @@ const CesiumGlobeView: React.FC = () => {
 
     // Delay slightly so the globe renders first
     setTimeout(() => {
+      if (viewer.isDestroyed()) return;
       viewer.camera.flyTo({
         destination: toCartesian(centerLat, centerLng, 1500000),
         orientation: {
@@ -346,7 +350,7 @@ const CesiumGlobeView: React.FC = () => {
   // Toggle OSM 3D buildings
   useEffect(() => {
     const viewer = cesiumViewerRef.current;
-    if (!viewer || !viewerReady) return;
+    if (!viewer || viewer.isDestroyed() || !viewerReady) return;
 
     if (show3dBuildings) {
       let cancelled = false;
@@ -387,10 +391,11 @@ const CesiumGlobeView: React.FC = () => {
   // Update popup position when camera moves
   useEffect(() => {
     const viewer = cesiumViewerRef.current;
-    if (!viewer || !viewerReady || !selectedBuilding) return;
+    if (!viewer || viewer.isDestroyed() || !viewerReady || !selectedBuilding) return;
 
     let frameId = 0;
     const updatePopupPosition = () => {
+      if (viewer.isDestroyed()) return;
       // Throttle to ~30fps to reduce overhead
       frameId++;
       if (frameId % 2 !== 0) return;
@@ -406,7 +411,9 @@ const CesiumGlobeView: React.FC = () => {
 
     viewer.scene.postRender.addEventListener(updatePopupPosition);
     return () => {
-      viewer.scene.postRender.removeEventListener(updatePopupPosition);
+      if (!viewer.isDestroyed()) {
+        viewer.scene.postRender.removeEventListener(updatePopupPosition);
+      }
     };
   }, [viewerReady, selectedBuilding?.facility.fm_guid]);
 
