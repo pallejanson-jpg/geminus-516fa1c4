@@ -27,7 +27,7 @@ const CesiumGlobeView = lazy(() => import("@/components/globe/CesiumGlobeView"))
 const CustomerPortalView = lazy(() => import("@/components/support/CustomerPortalView"));
 
 const VIEWER_APPS = ['assetplus_viewer', 'viewer', 'native_viewer', 'radar', 'senslinc_dashboard', 'globe', 'map'];
-const FILL_APPS = ['portfolio', 'navigation', 'fma_plus', 'entity_insights', 'ivion_create'];
+const FILL_APPS = ['portfolio', 'navigation', 'fma_plus', 'fma_native', 'entity_insights', 'ivion_create'];
 
 const LazyFallback = () => (
     <div className="flex-1 flex items-center justify-center">
@@ -85,7 +85,17 @@ const MainContent: React.FC = () => {
                     );
                 }
                 return <InsightsView />;
-            case 'fma_plus':
+            case 'fma_plus': {
+                const fmaUrl = appConfigs?.fma_plus?.url || 'https://swg-demo.bim.cloud/';
+                const buildingFmGuid = selectedFacility?.fm_guid || selectedFacility?.fmGuid;
+                const buildingName = selectedFacility?.commonName || selectedFacility?.name;
+                return (
+                    <Suspense fallback={<LazyFallback />}>
+                        <FmaInternalView url={fmaUrl} buildingFmGuid={buildingFmGuid} buildingName={buildingName} />
+                    </Suspense>
+                );
+            }
+            case 'fma_native':
                 return (
                     <Suspense fallback={<LazyFallback />}>
                         <FmAccessNativeView />

@@ -1,57 +1,33 @@
 
 
-# Plan: FMA+ iframe restore, FMA 2.0 ny knapp, Cesium byggnadsväljare, Våningskarusell med herobilder
+## Plan: Mobile 3D Viewer Layout Optimization + Red Room Fix
 
-## 1. Återställ FMA+ till iframe-baserad vy
+### Problem 1: Mobile header too low, toolbar too high
+The `MobileViewerOverlay` header uses `paddingTop: calc(max(env(safe-area-inset-top), 20px) + 8px)` — this adds extra padding pushing controls down. The `ViewerToolbar` bottom bar uses `bottom: calc(max(env(safe-area-inset-bottom), 12px) + 8px)` — not enough clearance but also not utilizing the space well.
 
-**Filer:** `MainContent.tsx`, `LeftSidebar.tsx`, `MobileNav.tsx`, `sidebar-config.ts`
+### Problem 2: Red rooms on first load
+IfcSpace objects are hidden at line 526 in `NativeXeokitViewer.tsx` — but they're hidden *without* first applying the blue color. When any code later makes them visible (filter panel, "Visa rum", "Show All"), they appear with raw red IFC materials until explicitly re-colored. The fix is to **pre-apply the blue color and opacity to all IfcSpace entities at load time**, before hiding them. This way, whenever they become visible later, they're already blue.
 
-- Ändra `fma_plus` case i `MainContent.tsx` att rendera `FmaInternalView` med URL från `appConfigs.fma_plus.url` (som redan har default `https://swg-demo.bim.cloud/`), istället för `FmAccessNativeView`
-- Ta bort "force FMA+ to internal" logiken i `LeftSidebar.tsx` och `MobileNav.tsx` — låt det falla tillbaka till config-baserad routing (öppna iframe internt)
-- Ändra `fma_plus` type tillbaka till `'config'` i `sidebar-config.ts`
+### Changes
 
-## 2. Lägg till FMA 2.0 som ny menypost
+**1. `src/components/viewer/mobile/MobileViewerOverlay.tsx`**
+- Reduce the header's `paddingTop` to use just the safe-area-inset with minimal extra padding: `calc(env(safe-area-inset-top, 0px) + 4px)` and reduce `p-2` to `p-1.5`
+- Make buttons smaller (`h-8 w-8`) and mode switcher more compact
 
-**Filer:** `sidebar-config.ts`, `constants.ts`, `MainContent.tsx`
+**2. `src/components/viewer/ViewerToolbar.tsx`**
+- On mobile, increase bottom offset to push the toolbar lower: `calc(env(safe-area-inset-bottom, 0px) + 4px)` — just enough to clear the browser chrome without going under it
+- Reduce button sizes on mobile for more compact layout
 
-- Lägg till `fma_native` i `SIDEBAR_ITEM_META` med label "FMA 2.0", icon `Building2`, type `'internal'`
-- Lägg till `fma_native` i `DEFAULT_SIDEBAR_ORDER` efter `fma_plus`
-- Lägg till `case 'fma_native'` i `MainContent.tsx` som renderar `FmAccessNativeView`
-- Lägg till `'fma_native'` i `FILL_APPS`
+**3. `src/components/viewer/NativeXeokitViewer.tsx`**
+- At lines 518-532 where IfcSpace entities are hidden, **pre-colorize them blue** before hiding:
+  ```
+  entity.colorize = [0.5, 0.7, 0.9];
+  entity.opacity = 0.3;
+  entity.visible = false;
+  entity.pickable = false;
+  ```
+- This ensures any subsequent `visible = true` shows blue, never red
 
-## 3. Undersök FMA 2.0-problem
-
-`FmAccessNativeView` anropar `getHierarchy(buildingFmGuid)` men om `selectedFacility` inte har `fm_guid` eller `fm_access_building_guid`, visas ingenting. Trolig orsak: inget byggnadssammanhang sätts när man öppnar FMA 2.0 fristående. 
-
-Fix: Visa en byggnadsväljare om `buildingFmGuid` saknas, med lista över tillgängliga byggnader från `navigatorTreeData`.
-
-## 4. Cesium: Byggnadsväljare-sidebar (som i MapView)
-
-**Fil:** `CesiumGlobeView.tsx`
-
-Lägg till en `BuildingSidebar`-komponent (liknande den i `MapView.tsx`) med sökfunktion och byggnadslista. Vid klick på en byggnad → flyg till pinnens position och sätt `selectedFmGuid`.
-
-Implementera som en intern komponent i CesiumGlobeView som använder `facilities`-arrayen.
-
-## 5. Våningskarusell med herobilder (FacilityLandingPage)
-
-**Fil:** `FacilityLandingPage.tsx`
-
-Ersätt de nuvarande pill-tabs (rad 692-710) med bildkort-karusell:
-- Varje `CarouselItem` visar en bild + våningsnamn som overlay
-- Använd `BUILDING_IMAGES` (5 bilder) som pool, tilldela slumpmässigt per våning med `useMemo` baserat på `storey.fmGuid` (hashbaserat för konsistens)
-- Kort: `w-36 h-24 rounded-xl overflow-hidden` med gradient-overlay och namn i botten
-- Markera vald våning med `ring-2 ring-primary`
-
----
-
-## Sammanfattning
-
-| # | Ändring | Filer |
-|---|---------|-------|
-| 1 | FMA+ → iframe igen | `MainContent.tsx`, `LeftSidebar.tsx`, `MobileNav.tsx`, `sidebar-config.ts` |
-| 2 | FMA 2.0 ny knapp | `sidebar-config.ts`, `constants.ts`, `MainContent.tsx` |
-| 3 | FMA 2.0 empty state fix | `FmAccessNativeView.tsx` |
-| 4 | Cesium byggnadsväljare | `CesiumGlobeView.tsx` |
-| 5 | Våningskarusell med bilder | `FacilityLandingPage.tsx` |
+**4. `src/components/viewer/NativeViewerShell.tsx`**
+- In `handleContextShowAll` (line 321-335), after re-hiding IfcSpaces, also pre-apply blue color so they stay blue if toggled on later
 
