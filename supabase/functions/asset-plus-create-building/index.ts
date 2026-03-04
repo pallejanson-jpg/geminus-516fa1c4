@@ -176,6 +176,7 @@ serve(async (req) => {
         UsedIdentifier: 1,
         BimObject: {
           ObjectType: ObjectType.Model,
+          Name: modelName,
           Designation: modelName,
           CommonName: modelName,
           APIKey: apiKey,
