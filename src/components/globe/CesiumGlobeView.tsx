@@ -411,7 +411,9 @@ const CesiumGlobeView: React.FC = () => {
 
     viewer.scene.postRender.addEventListener(updatePopupPosition);
     return () => {
-      viewer.scene.postRender.removeEventListener(updatePopupPosition);
+      if (!viewer.isDestroyed()) {
+        viewer.scene.postRender.removeEventListener(updatePopupPosition);
+      }
     };
   }, [viewerReady, selectedBuilding?.facility.fm_guid]);
 
