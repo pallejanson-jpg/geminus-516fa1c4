@@ -212,6 +212,16 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     (window as any).__nativeXeokitViewer = viewer;
   }, []);
 
+  // Clean up global refs on unmount
+  useEffect(() => {
+    return () => {
+      if ((window as any).__assetPlusViewerInstance === viewerShimRef.current) {
+        delete (window as any).__assetPlusViewerInstance;
+      }
+      delete (window as any).__nativeXeokitViewer;
+    };
+  }, []);
+
   // Context menu via right-click on canvas
   useEffect(() => {
     if (!xeokitViewer?.scene) return;
