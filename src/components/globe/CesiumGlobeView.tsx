@@ -395,6 +395,7 @@ const CesiumGlobeView: React.FC = () => {
 
     let frameId = 0;
     const updatePopupPosition = () => {
+      if (viewer.isDestroyed()) return;
       // Throttle to ~30fps to reduce overhead
       frameId++;
       if (frameId % 2 !== 0) return;
