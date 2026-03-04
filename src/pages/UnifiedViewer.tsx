@@ -303,12 +303,6 @@ const UnifiedViewerContent: React.FC<{
     updateFrom3D, updateFromIvion, setBuildingContext,
   } = useViewerSync();
 
-  // ─── Camera sync for split view (3D↔360° bidirectional via native xeokit) ──
-  useViewerCameraSync({
-    viewerRef: viewerInstanceRef,
-    enabled: isSplitMode && syncLocked && viewerReady,
-  });
-
   useEffect(() => {
     if (buildingData) {
       setBuildingContext({
