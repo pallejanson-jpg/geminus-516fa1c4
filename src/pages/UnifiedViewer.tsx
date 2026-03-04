@@ -323,6 +323,12 @@ const UnifiedViewerContent: React.FC<{
   const dummyIframeRef = useRef<HTMLIFrameElement>(null);
   const isSplitMode = viewMode === 'split';
 
+  // ─── Camera sync for split view (3D↔360° bidirectional via native xeokit) ──
+  useViewerCameraSync({
+    viewerRef: viewerInstanceRef,
+    enabled: isSplitMode && syncLocked && viewerReady,
+  });
+
   useIvionCameraSync({
     iframeRef: dummyIframeRef,
     ivApiRef,
