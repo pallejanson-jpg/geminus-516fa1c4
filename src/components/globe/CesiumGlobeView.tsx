@@ -33,6 +33,9 @@ function toCartesian(lat: number, lng: number, height = 0) {
   return Cesium.Cartesian3.fromDegrees(lng, lat, height);
 }
 
+const PORTFOLIO_RETURN_APP_KEY = 'portfolio-return-app';
+const VIEWER_RETURN_APP_KEY = 'viewer-return-app';
+
 const CesiumGlobeView: React.FC = () => {
   const { navigatorTreeData, setActiveApp, setSelectedFacility, setViewer3dFmGuid, open360WithContext, appConfigs } = useContext(AppContext);
 
