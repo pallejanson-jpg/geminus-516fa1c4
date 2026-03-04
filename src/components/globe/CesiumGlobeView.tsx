@@ -94,6 +94,16 @@ const CesiumGlobeView: React.FC = () => {
     // Reduce resolution on desktop for better performance
     viewer.resolutionScale = window.innerWidth > 768 ? 0.85 : 1.0;
 
+    // Start in a visible Nordic overview immediately (before heavy layers are ready)
+    viewer.camera.setView({
+      destination: toCartesian(62.5, 15.0, 2200000),
+      orientation: {
+        heading: 0,
+        pitch: Cesium.Math.toRadians(-90),
+        roll: 0,
+      },
+    });
+
     // Add Cesium World Terrain so 3D buildings sit correctly on the ground
     Cesium.CesiumTerrainProvider.fromIonAssetId(1).then(terrainProvider => {
       if (cesiumViewerRef.current && !cesiumViewerRef.current.isDestroyed()) {
