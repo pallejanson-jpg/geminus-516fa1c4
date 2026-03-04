@@ -37,6 +37,7 @@ import { useBuildingViewerData } from '@/hooks/useBuildingViewerData';
 import { useIvionSdk } from '@/hooks/useIvionSdk';
 import { useVirtualTwinSync } from '@/hooks/useVirtualTwinSync';
 import { useIvionCameraSync } from '@/hooks/useIvionCameraSync';
+import { useViewerCameraSync } from '@/hooks/useViewerCameraSync';
 import { IDENTITY_TRANSFORM, type IvionBimTransform } from '@/lib/ivion-bim-transform';
 import { VIEWER_TOOL_CHANGED_EVENT, VIEW_MODE_2D_TOGGLED_EVENT, VIEW_MODE_REQUESTED_EVENT, LOAD_SAVED_VIEW_EVENT, type ViewerToolChangedDetail, type ViewMode2DToggledDetail, type LoadSavedViewDetail } from '@/lib/viewer-events';
 import SplitPlanView from '@/components/viewer/SplitPlanView';
