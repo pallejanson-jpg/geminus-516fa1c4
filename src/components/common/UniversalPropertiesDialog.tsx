@@ -449,6 +449,25 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       });
     }
 
+    // Classification section - show saved BIP codes from attributes
+    if (!isMultiMode && firstAsset.attributes) {
+      const attrs = firstAsset.attributes as Record<string, any>;
+      if (attrs.bipTypeId || attrs.bipBsabE || attrs.bipAff) {
+        if (attrs.bipTypeId) {
+          props.push({ key: 'attr_bipTypeId', label: 'BIP Typbeteckning', value: attrs.bipTypeId, editable: false, source: 'lovable', type: 'text', section: 'classification' });
+        }
+        if (attrs.bipBsabE) {
+          props.push({ key: 'attr_bipBsabE', label: 'BSAB-E', value: attrs.bipBsabE, editable: false, source: 'lovable', type: 'text', section: 'classification' });
+        }
+        if (attrs.bipAff) {
+          props.push({ key: 'attr_bipAff', label: 'AFF', value: attrs.bipAff, editable: false, source: 'lovable', type: 'text', section: 'classification' });
+        }
+        if (attrs.bipCode) {
+          props.push({ key: 'attr_bipCode', label: 'BIP Kod', value: attrs.bipCode, editable: false, source: 'lovable', type: 'text', section: 'classification' });
+        }
+      }
+    }
+
     return props;
   }, [assets, buildingSettings, isMultiMode, getPropertyValue]);
 
