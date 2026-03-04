@@ -3149,6 +3149,58 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                     </div>
                                 </AccordionContent>
                             </AccordionItem>
+
+                            {/* BIP Reference Data */}
+                            <AccordionItem value="bip-sync" className="border rounded-lg px-4">
+                                <AccordionTrigger className="py-3">
+                                    <div className="flex items-center gap-2">
+                                        <Database className="h-4 w-4 text-primary" />
+                                        <span>BIP Reference Data</span>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    <div className="space-y-3">
+                                        <p className="text-xs text-muted-foreground">
+                                            Import BIP classification codes (main categories, subcategories, properties, schemas) from the open GitLab repository. Required for BIP auto-classification.
+                                        </p>
+                                        <div className="flex items-center gap-2">
+                                            <Button
+                                                onClick={async () => {
+                                                    setIsImportingBip(true);
+                                                    setBipImportResult(null);
+                                                    try {
+                                                        const { data: { session } } = await supabase.auth.getSession();
+                                                        const { data, error } = await supabase.functions.invoke('bip-import', {
+                                                            headers: { Authorization: `Bearer ${session?.access_token}` },
+                                                        });
+                                                        if (error) throw error;
+                                                        const stats = data?.stats || {};
+                                                        const total = Object.values(stats).reduce((a: number, b: any) => a + (b as number), 0);
+                                                        setBipImportResult(`Imported ${total} items (${Object.entries(stats).map(([k,v]) => `${k}: ${v}`).join(', ')})`);
+                                                        toast({ title: 'BIP Import Complete', description: `${total} reference items imported` });
+                                                    } catch (e: any) {
+                                                        setBipImportResult(`Error: ${e.message}`);
+                                                        toast({ title: 'BIP Import Failed', description: e.message, variant: 'destructive' });
+                                                    } finally {
+                                                        setIsImportingBip(false);
+                                                    }
+                                                }}
+                                                disabled={isImportingBip}
+                                                size="sm"
+                                                className="gap-1"
+                                            >
+                                                {isImportingBip ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                                Import BIP Data
+                                            </Button>
+                                        </div>
+                                        {bipImportResult && (
+                                            <p className={`text-xs ${bipImportResult.startsWith('Error') ? 'text-destructive' : 'text-green-600'}`}>
+                                                {bipImportResult}
+                                            </p>
+                                        )}
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
                         </Accordion>
                     </TabsContent>
 
