@@ -27,9 +27,11 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/comp
 interface NativeViewerShellProps {
   buildingFmGuid: string;
   onClose: () => void;
+  /** Hide the desktop back button (when parent already has one, e.g. UnifiedViewer) */
+  hideBackButton?: boolean;
 }
 
-const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, onClose }) => {
+const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, onClose, hideBackButton = false }) => {
   const isMobile = useIsMobile();
   const { allData, isSidebarExpanded } = useContext(AppContext);
 
@@ -204,6 +206,20 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       $refs: { AssetViewer: assetViewerShim },
       assetViewer: assetViewerShim,
     };
+
+    // Expose globally so UnifiedViewer, SplitPlanView, and sync hooks can find it
+    (window as any).__assetPlusViewerInstance = viewerShimRef.current;
+    (window as any).__nativeXeokitViewer = viewer;
+  }, []);
+
+  // Clean up global refs on unmount
+  useEffect(() => {
+    return () => {
+      if ((window as any).__assetPlusViewerInstance === viewerShimRef.current) {
+        delete (window as any).__assetPlusViewerInstance;
+      }
+      delete (window as any).__nativeXeokitViewer;
+    };
   }, []);
 
   // Context menu via right-click on canvas
@@ -365,8 +381,8 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
   return (
     <div className="relative w-full h-full overflow-hidden native-viewer-canvas-parent" style={{ background: 'linear-gradient(180deg, rgb(255,255,255) 0%, rgb(230,230,230) 100%)' }}>
-      {/* Desktop back button */}
-      {!isMobile && (
+      {/* Desktop back button — hidden when parent (UnifiedViewer) has its own */}
+      {!isMobile && !hideBackButton && (
         <Button
           variant="secondary"
           size="icon"
