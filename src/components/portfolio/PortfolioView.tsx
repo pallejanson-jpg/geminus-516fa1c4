@@ -312,7 +312,10 @@ const PortfolioView: React.FC = () => {
 
   // Handle opening 3D viewer for a room/asset
   const handleOpen3DRoom = (fmGuid: string, levelFmGuid?: string) => {
-    setViewer3dFmGuid(fmGuid);
+    // Resolve building GUID: for assets/rooms the fmGuid may not be a building
+    const item = allData.find((a: any) => a.fmGuid === fmGuid || a.fm_guid === fmGuid);
+    const buildingGuid = item?.buildingFmGuid || item?.building_fm_guid || showAssetsFor?.fmGuid || showRoomsFor?.fmGuid || fmGuid;
+    setViewer3dFmGuid(buildingGuid);
     setActiveApp('native_viewer');
     setShowRoomsFor(null);
     setShowAssetsFor(null);

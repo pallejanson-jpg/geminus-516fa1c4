@@ -284,6 +284,7 @@ async function createBatchObjects(
         ObjectType: ObjectType.Instance,
         Designation: item.designation,
         CommonName: item.commonName || item.designation,
+        ExternalType: item.commonName || item.designation,
         APIKey: apiKey,
         FmGuid: fmGuid,
         UsedIdentifier: 1,
