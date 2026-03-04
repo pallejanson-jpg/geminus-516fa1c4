@@ -227,12 +227,12 @@ const CreateBuildingPanel: React.FC = () => {
           progress: 0,
           log_messages: [],
           created_by: user.id,
-        } as any)
+        })
         .select('id')
         .single();
 
       if (jobError || !jobRow) throw new Error(`Failed to create conversion job: ${jobError?.message}`);
-      const jobId = (jobRow as any).id as string;
+      const jobId = jobRow.id;
       addLog('Conversion job created. Starting server-side conversion...');
 
       // 4. Start polling for progress
