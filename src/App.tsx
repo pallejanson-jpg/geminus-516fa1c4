@@ -110,13 +110,13 @@ const App = () => {
             } 
           />
           
-          {/* Mobile 3D Viewer - fullscreen mode */}
+          {/* Unified Viewer - fullscreen mode for all view modes */}
           <Route 
             path="/viewer" 
             element={
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                 <ProtectedRoute>
-                  <Mobile3DViewer />
+                  <UnifiedViewerPage />
                 </ProtectedRoute>
               </Suspense>
             } 
