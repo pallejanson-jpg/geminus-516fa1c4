@@ -94,7 +94,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
         )}
 
         {/* Right: Filter + Settings */}
-        <div className="flex gap-1">
+        <div className="flex shrink-0 gap-1">
           <Button
             variant={showFilterPanel ? 'default' : 'secondary'}
             size="icon"
