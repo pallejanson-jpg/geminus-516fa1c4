@@ -819,7 +819,7 @@ function MobileUnifiedViewer({
 /**
  * Top-level UnifiedViewer — wraps content in ViewerSyncProvider.
  */
-const UnifiedViewer: React.FC<UnifiedViewerProps> = ({ initialMode = 'vt' }) => {
+const UnifiedViewer: React.FC<UnifiedViewerProps> = ({ initialMode = '3d' }) => {
   return (
     <ViewerSyncProvider>
       <UnifiedViewerContent initialMode={initialMode} />
