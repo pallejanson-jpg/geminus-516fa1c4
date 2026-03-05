@@ -39,28 +39,44 @@ export const SPACE_COLOR = [0.898, 0.894, 0.890];
 export function applyArchitectColors(viewer: any): { colorized: number; hiddenSpaces: number } {
   const scene = viewer?.scene;
   const metaScene = viewer?.metaScene;
-  if (!scene || !metaScene?.metaObjects) return { colorized: 0, hiddenSpaces: 0 };
+  if (!scene) return { colorized: 0, hiddenSpaces: 0 };
 
   let hiddenSpaces = 0;
   let colorized = 0;
+  const processedIds = new Set<string>();
 
-  for (const [id, metaObj] of Object.entries(metaScene.metaObjects as Record<string, any>)) {
-    const ifcType = (metaObj.type || '').toLowerCase();
+  // Phase 1: Colorize objects that have metaObject entries (IFC-type-based)
+  if (metaScene?.metaObjects) {
+    for (const [id, metaObj] of Object.entries(metaScene.metaObjects as Record<string, any>)) {
+      const ifcType = (metaObj.type || '').toLowerCase();
+      const entity = scene.objects?.[id];
+      if (!entity) continue;
+      processedIds.add(id);
+
+      const isSpace = ifcType.includes('ifcspace') || ifcType === 'ifc_space' || ifcType === 'space';
+      if (isSpace) {
+        entity.colorize = SPACE_COLOR;
+        entity.opacity = 0.3;
+        entity.visible = false;
+        entity.pickable = false;
+        hiddenSpaces++;
+        continue;
+      }
+
+      const color = IFC_TYPE_COLORS[ifcType] || DEFAULT_COLOR;
+      entity.colorize = color;
+      colorized++;
+    }
+  }
+
+  // Phase 2: Apply DEFAULT_COLOR to any remaining scene objects without metaObject entries
+  // This prevents raw red/uncolored objects from showing
+  const allIds = scene.objectIds || [];
+  for (const id of allIds) {
+    if (processedIds.has(id)) continue;
     const entity = scene.objects?.[id];
     if (!entity) continue;
-
-    const isSpace = ifcType.includes('ifcspace') || ifcType === 'ifc_space' || ifcType === 'space';
-    if (isSpace) {
-      entity.colorize = SPACE_COLOR;
-      entity.opacity = 0.3;
-      entity.visible = false;
-      entity.pickable = false;
-      hiddenSpaces++;
-      continue;
-    }
-
-    const color = IFC_TYPE_COLORS[ifcType] || DEFAULT_COLOR;
-    entity.colorize = color;
+    entity.colorize = DEFAULT_COLOR;
     colorized++;
   }
 
