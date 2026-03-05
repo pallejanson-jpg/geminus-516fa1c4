@@ -60,7 +60,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
 
         {/* Center: Mode switcher */}
         {onChangeViewMode && (
-          <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md rounded-lg p-0.5 border border-white/10">
+          <div className="mx-auto flex max-w-full min-w-0 items-center gap-0.5 overflow-x-auto bg-black/50 backdrop-blur-md rounded-lg p-0.5 border border-white/10">
             <Button
               size="sm"
               variant={viewMode === '2d' ? 'default' : 'ghost'}
