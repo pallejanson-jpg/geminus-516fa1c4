@@ -370,7 +370,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
           title={settings?.isFavorite ? "Ta bort favorit" : "Lägg till favorit"}
           disabled={isSaving}
         >
-          <Star size={16} className={settings?.isFavorite ? 'fill-current text-yellow-400' : ''} />
+          <Star size={16} className={settings?.isFavorite ? 'fill-current text-accent' : ''} />
         </Button>
         <Button 
           onClick={() => setShowSettings(prev => !prev)} 
