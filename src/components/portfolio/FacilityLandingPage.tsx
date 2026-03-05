@@ -338,7 +338,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   );
 
   return (
-    <div className="absolute inset-0 z-40 bg-background flex flex-col animate-in fade-in duration-300 overflow-hidden">
+    <div className="absolute inset-0 z-40 bg-background flex flex-col animate-in fade-in duration-300 overflow-hidden w-full max-w-full">
       {/* Background Image */}
       <div className="absolute inset-0 h-full">
         <img src={heroImage} className="w-full h-full object-cover" alt="Object hero" />
@@ -359,10 +359,33 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
           <ArrowLeft size={20} className="hidden sm:block" />
         </Button>
       </div>
+
+      {/* Top-right floating actions (always visible including mobile) */}
+      <div className="absolute top-3 sm:top-4 right-3 sm:right-4 z-50 flex items-center gap-1.5">
+        <Button 
+          onClick={toggleFavorite} 
+          variant="ghost" 
+          size="icon"
+          className="h-9 w-9 bg-black/30 hover:bg-black/60 backdrop-blur-sm rounded-full text-white"
+          title={settings?.isFavorite ? "Ta bort favorit" : "Lägg till favorit"}
+          disabled={isSaving}
+        >
+          <Star size={16} className={settings?.isFavorite ? 'fill-current text-yellow-400' : ''} />
+        </Button>
+        <Button 
+          onClick={() => setShowSettings(prev => !prev)} 
+          variant="ghost" 
+          size="icon"
+          className="h-9 w-9 bg-black/30 hover:bg-black/60 backdrop-blur-sm rounded-full text-white"
+          title="Inställningar"
+        >
+          <Settings2 size={16} className={showSettings ? 'text-primary' : ''} />
+        </Button>
+      </div>
       
       {/* Scrollable Content */}
       <ScrollArea className="flex-1 z-10 pt-20 sm:pt-24 md:pt-32">
-        <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 pb-24">
+        <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 pb-24 w-full min-w-0 overflow-hidden">
           {/* Breadcrumb Navigation */}
           {breadcrumbs && breadcrumbs.length > 1 && (
             <nav className="flex items-center gap-1 text-xs text-white/60 mb-2 flex-wrap" aria-label="Breadcrumb">
@@ -388,7 +411,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
           )}
 
           {/* Header */}
-          <header className="relative w-full shrink-0 flex items-start gap-4 sm:gap-8 text-white">
+          <header className="relative w-full shrink-0 flex items-start gap-4 sm:gap-8 text-white min-w-0 overflow-hidden">
             <div className="flex-1 min-w-0">
               <h1 className="text-xl sm:text-2xl md:text-4xl font-bold truncate">{title}</h1>
               <div className="flex items-center gap-2 text-xs sm:text-sm text-white/80 mt-1">
@@ -400,8 +423,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
 
           <div className="space-y-4 sm:space-y-6 mt-6 sm:mt-8">
             {/* Basic Info Card */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between p-3 sm:p-6 pb-2 sm:pb-4">
+            <Card className="overflow-hidden">
+              <CardHeader className="flex flex-row items-center justify-between p-3 sm:p-6 pb-2 sm:pb-4 min-w-0">
                 <CardTitle className="text-sm sm:text-base flex items-center gap-2">
                   <Info size={14} className="sm:w-4 sm:h-4 text-primary" />
                   Basic Information
@@ -435,8 +458,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="px-3 sm:px-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-3 sm:gap-y-4 gap-x-4 sm:gap-x-6 text-sm">
+              <CardContent className="px-3 sm:px-6 min-w-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-3 sm:gap-y-4 gap-x-4 sm:gap-x-6 text-sm min-w-0">
                   <div>
                     <label className="text-[11px] sm:text-xs uppercase font-bold text-muted-foreground">Name</label>
                     <p className="font-medium truncate">{title}</p>
@@ -457,7 +480,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
 
             {/* Building Settings (collapsible) */}
             {showSettings && isBuilding && (
-              <Card className="animate-in fade-in duration-300">
+              <Card className="animate-in fade-in duration-300 overflow-hidden">
                 <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
                   <CardTitle className="text-sm sm:text-base flex items-center gap-2">
                     <Settings2 size={14} className="sm:w-4 sm:h-4 text-primary" />
@@ -648,7 +671,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
             )}
 
             {/* KPI Cards */}
-            <Card>
+            <Card className="overflow-hidden">
               <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
                 <CardTitle className="text-sm sm:text-base flex items-center gap-2">
                   <BarChart size={14} className="sm:w-4 sm:h-4 text-accent" />
