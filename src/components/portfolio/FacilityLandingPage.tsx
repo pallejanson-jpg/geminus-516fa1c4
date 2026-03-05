@@ -845,7 +845,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                                   buildingFmGuid: space.buildingFmGuid,
                                   attributes: space.attributes,
                                 })}
-                                className="rounded-xl border border-border bg-card/80 p-2 sm:p-3 text-left transition-all hover:border-primary/50 hover:shadow-md active:scale-[0.98] group overflow-hidden"
+                                className="w-full min-w-0 rounded-xl border border-border bg-card/80 p-2 sm:p-3 text-left transition-all hover:border-primary/50 hover:shadow-md active:scale-[0.98] group overflow-hidden"
                               >
                                 <div className="flex items-center gap-2 mb-1.5">
                                   <DoorOpen size={14} className="text-primary shrink-0" />
