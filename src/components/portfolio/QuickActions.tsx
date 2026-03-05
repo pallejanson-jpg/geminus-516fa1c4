@@ -73,9 +73,9 @@ const QuickActions: React.FC<QuickActionsProps> = ({
   const disabledClass = 'opacity-40 cursor-not-allowed';
 
   // Standardized button style with proper touch targets (min 44x44)
-  const btnClass = "justify-center gap-0 sm:gap-2 h-auto py-1 px-0 sm:py-3 sm:px-4 min-w-0 text-[10px] sm:text-sm flex-col sm:flex-row";
-  const iconSize = 12;
-  const labelClass = "text-[8px] sm:text-xs leading-tight mt-0.5 sm:mt-0";
+  const btnClass = "justify-center gap-0.5 sm:gap-2 h-auto py-2 px-1 sm:py-3 sm:px-4 min-w-0 text-[10px] sm:text-sm flex-col sm:flex-row";
+  const iconSize = 16;
+  const labelClass = "text-[9px] sm:text-xs leading-tight mt-0.5 sm:mt-0 truncate max-w-full";
 
   if (isLoading) {
     return (
@@ -100,7 +100,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
         <CardTitle className="text-sm sm:text-base">Quick Actions</CardTitle>
       </CardHeader>
       <CardContent className="px-3 sm:px-6">
-        <div className="grid grid-cols-4 sm:grid-cols-4 gap-0 sm:gap-2 md:gap-4">
+        <div className="grid grid-cols-4 sm:grid-cols-4 gap-1 sm:gap-2 md:gap-4">
           {/* ===== VISUALIZATION TOOLS ===== */}
           
           {/* 2D - Building, Storey, Space */}
