@@ -388,7 +388,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
           )}
 
           {/* Header */}
-          <header className="relative w-full shrink-0 flex items-start gap-4 sm:gap-8 text-white">
+          <header className="relative w-full shrink-0 flex items-start gap-4 sm:gap-8 text-white min-w-0 overflow-hidden">
             <div className="flex-1 min-w-0">
               <h1 className="text-xl sm:text-2xl md:text-4xl font-bold truncate">{title}</h1>
               <div className="flex items-center gap-2 text-xs sm:text-sm text-white/80 mt-1">
