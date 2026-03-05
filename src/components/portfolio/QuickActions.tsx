@@ -95,7 +95,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
   }
 
   return (
-    <Card className="mt-4 sm:mt-6">
+    <Card className="mt-4 sm:mt-6 overflow-hidden">
       <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
         <CardTitle className="text-sm sm:text-base">Quick Actions</CardTitle>
       </CardHeader>
