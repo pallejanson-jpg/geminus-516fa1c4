@@ -99,8 +99,8 @@ const QuickActions: React.FC<QuickActionsProps> = ({
       <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
         <CardTitle className="text-sm sm:text-base">Quick Actions</CardTitle>
       </CardHeader>
-      <CardContent className="px-3 sm:px-6">
-        <div className="grid grid-cols-3 sm:grid-cols-4 gap-1 sm:gap-2 md:gap-4">
+      <CardContent className="px-2.5 sm:px-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 items-stretch gap-0.5 sm:gap-2 md:gap-4">
           {/* ===== VISUALIZATION TOOLS ===== */}
           
           {/* 2D - Building, Storey, Space */}
