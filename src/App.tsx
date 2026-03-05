@@ -16,8 +16,8 @@ const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
 const IvionInventory = lazy(() => import("@/pages/IvionInventory"));
 // AI Asset Scan page
 const AiAssetScan = lazy(() => import("@/pages/AiAssetScan"));
-// Mobile 3D Viewer page (fullscreen)
-const Mobile3DViewer = lazy(() => import("@/pages/Mobile3DViewer"));
+// Unified Viewer page (fullscreen, all modes)
+const UnifiedViewerPage = lazy(() => import("@/pages/UnifiedViewer"));
 // Onboarding wizard
 const Onboarding = lazy(() => import("@/pages/Onboarding"));
 // Split Viewer - 3D + 360° side-by-side

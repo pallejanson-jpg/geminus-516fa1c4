@@ -72,6 +72,15 @@ const QuickActions: React.FC<QuickActionsProps> = ({
 
   const disabledClass = 'opacity-40 cursor-not-allowed';
 
+  // Unified navigation helper — always routes to /viewer with correct params
+  const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid || facility.fmGuid;
+  const floorParam = isStorey ? `&floor=${facility.fmGuid}&floorName=${encodeURIComponent(facility.commonName || facility.name || '')}` : '';
+  const entityParam = isSpace ? `&entity=${facility.fmGuid}` : '';
+  
+  const navigateToViewer = useCallback((mode: string) => {
+    navigate(`/viewer?building=${buildingGuid}&mode=${mode}${floorParam}${entityParam}`);
+  }, [navigate, buildingGuid, floorParam, entityParam]);
+
   // Standardized button style with proper touch targets (min 44x44)
   const btnClass = "w-full justify-center gap-0.5 sm:gap-2 h-auto py-1.5 px-1 sm:py-3 sm:px-4 min-w-0 min-h-[44px] text-[10px] sm:text-sm flex-col sm:flex-row whitespace-normal text-center";
   const iconSize = 14;

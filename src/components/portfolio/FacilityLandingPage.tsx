@@ -213,21 +213,22 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     };
   }, [facility, childSpaces, childStoreys, isSpace]);
 
-  // Handler for 3D button - passes the building's fmGuid to native viewer
+  // Handler for 3D button - navigates to UnifiedViewer with mode=3d
   const handleToggle3D = () => {
-    if (facility.fmGuid) {
-      onClose();
-      setViewer3dFmGuid(facility.fmGuid);
-      setActiveApp('native_viewer');
-    }
+    if (!facility.fmGuid) return;
+    const bGuid = buildingGuid || facility.fmGuid;
+    const entityParam = !isBuilding ? `&entity=${facility.fmGuid}` : '';
+    const floorParam = isStorey ? `&floor=${facility.fmGuid}&floorName=${encodeURIComponent(facility.commonName || facility.name || '')}` : '';
+    navigate(`/viewer?building=${bGuid}&mode=3d${floorParam}${entityParam}`);
   };
 
-  // Handler for 2D button - passes the storey's fmGuid to viewer
+  // Handler for 2D button - navigates to UnifiedViewer with mode=2d
   const handleToggle2D = () => {
-    if (facility.fmGuid) {
-      setViewer3dFmGuid(facility.fmGuid);
-      setActiveApp('native_viewer');
-    }
+    if (!facility.fmGuid) return;
+    const bGuid = buildingGuid || facility.fmGuid;
+    const floorParam = isStorey ? `&floor=${facility.fmGuid}&floorName=${encodeURIComponent(facility.commonName || facility.name || '')}` : '';
+    const entityParam = isSpace ? `&entity=${facility.fmGuid}` : '';
+    navigate(`/viewer?building=${bGuid}&mode=2d${floorParam}${entityParam}`);
   };
 
   // Handler for Add Asset button
