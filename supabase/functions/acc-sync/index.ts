@@ -747,6 +747,12 @@ async function extractBimHierarchy(
           // Room property keys
           const roomPropKeys: Record<string, string> = {};
 
+          // System property keys
+          let systemNameKey = '';
+          let systemTypeKey = '';
+          let systemClassKey = '';
+          let systemAbbrKey = '';
+
           // Build reverse map: lowercase field name -> key
           for (const [key, name] of Object.entries(fieldsMap)) {
             const lowerName = (name as string).toLowerCase().trim();
