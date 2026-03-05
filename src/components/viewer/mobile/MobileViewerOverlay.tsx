@@ -39,8 +39,12 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
     <>
       {/* Compact Header - absolute positioned over the canvas */}
       <div
-        className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-1.5 py-1 bg-gradient-to-b from-background/90 via-background/60 to-transparent"
-        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4px)' }}
+        className="absolute top-0 left-0 right-0 z-30 grid grid-cols-[auto_1fr_auto] items-center gap-1 px-1.5 py-1 bg-gradient-to-b from-background/90 via-background/60 to-transparent"
+        style={{
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4px)',
+          paddingLeft: 'max(env(safe-area-inset-left, 0px), 6px)',
+          paddingRight: 'max(env(safe-area-inset-right, 0px), 6px)',
+        }}
       >
         {/* Left: Back button */}
         {onClose && (
@@ -56,11 +60,11 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
 
         {/* Center: Mode switcher */}
         {onChangeViewMode && (
-          <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md rounded-lg p-0.5 border border-white/10">
+          <div className="mx-auto flex max-w-full min-w-0 items-center gap-0.5 overflow-x-auto bg-black/50 backdrop-blur-md rounded-lg p-0.5 border border-white/10">
             <Button
               size="sm"
               variant={viewMode === '2d' ? 'default' : 'ghost'}
-              className={`h-6 px-2 text-[10px] rounded-md gap-0.5 ${viewMode !== '2d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+              className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${viewMode !== '2d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
               onClick={() => onChangeViewMode('2d')}
             >
               <Square className="h-3 w-3" />
@@ -69,7 +73,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
             <Button
               size="sm"
               variant={viewMode === '3d' ? 'default' : 'ghost'}
-              className={`h-6 px-2 text-[10px] rounded-md gap-0.5 ${viewMode !== '3d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+              className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${viewMode !== '3d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
               onClick={() => onChangeViewMode('3d')}
             >
               <Box className="h-3 w-3" />
@@ -79,7 +83,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
               <Button
                 size="sm"
                 variant={viewMode === '360' ? 'default' : 'ghost'}
-                className={`h-6 px-2 text-[10px] rounded-md gap-0.5 ${viewMode !== '360' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+                className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${viewMode !== '360' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
                 onClick={() => onChangeViewMode('360')}
               >
                 <View className="h-3 w-3" />
@@ -90,11 +94,11 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
         )}
 
         {/* Right: Filter + Settings */}
-        <div className="flex gap-1">
+        <div className="flex shrink-0 gap-1">
           <Button
             variant={showFilterPanel ? 'default' : 'secondary'}
             size="icon"
-            className="h-8 w-8 bg-card/95 backdrop-blur-sm shadow-md border"
+            className="h-7 w-7 sm:h-8 sm:w-8 bg-card/95 backdrop-blur-sm shadow-md border"
             onClick={onToggleFilterPanel}
             disabled={!isViewerReady}
           >
@@ -104,7 +108,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
           <Button
             variant="secondary"
             size="icon"
-            className="h-8 w-8 bg-card/95 backdrop-blur-sm shadow-md border"
+            className="h-7 w-7 sm:h-8 sm:w-8 bg-card/95 backdrop-blur-sm shadow-md border"
             onClick={onOpenSettings}
             disabled={!isViewerReady}
           >
