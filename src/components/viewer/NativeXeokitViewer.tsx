@@ -634,7 +634,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   }, []);
 
   return (
-    <div className="relative w-full h-full bg-background">
+    <div className="relative w-full h-full">
       <canvas
         ref={canvasRef}
         className="w-full h-full block"
