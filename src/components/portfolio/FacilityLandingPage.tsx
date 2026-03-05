@@ -359,6 +359,29 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
           <ArrowLeft size={20} className="hidden sm:block" />
         </Button>
       </div>
+
+      {/* Top-right floating actions (always visible including mobile) */}
+      <div className="absolute top-3 sm:top-4 right-3 sm:right-4 z-50 flex items-center gap-1.5">
+        <Button 
+          onClick={toggleFavorite} 
+          variant="ghost" 
+          size="icon"
+          className="h-9 w-9 bg-black/30 hover:bg-black/60 backdrop-blur-sm rounded-full text-white"
+          title={settings?.isFavorite ? "Ta bort favorit" : "Lägg till favorit"}
+          disabled={isSaving}
+        >
+          <Star size={16} className={settings?.isFavorite ? 'fill-current text-yellow-400' : ''} />
+        </Button>
+        <Button 
+          onClick={() => setShowSettings(prev => !prev)} 
+          variant="ghost" 
+          size="icon"
+          className="h-9 w-9 bg-black/30 hover:bg-black/60 backdrop-blur-sm rounded-full text-white"
+          title="Inställningar"
+        >
+          <Settings2 size={16} className={showSettings ? 'text-primary' : ''} />
+        </Button>
+      </div>
       
       {/* Scrollable Content */}
       <ScrollArea className="flex-1 z-10 pt-20 sm:pt-24 md:pt-32">
