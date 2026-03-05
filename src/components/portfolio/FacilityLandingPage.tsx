@@ -370,7 +370,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
           title={settings?.isFavorite ? "Ta bort favorit" : "Lägg till favorit"}
           disabled={isSaving}
         >
-          <Star size={16} className={settings?.isFavorite ? 'fill-current text-yellow-400' : ''} />
+          <Star size={16} className={settings?.isFavorite ? 'fill-current text-accent' : ''} />
         </Button>
         <Button 
           onClick={() => setShowSettings(prev => !prev)} 
@@ -384,8 +384,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
       </div>
       
       {/* Scrollable Content */}
-      <ScrollArea className="flex-1 z-10 pt-20 sm:pt-24 md:pt-32">
-        <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 pb-24 w-full min-w-0 overflow-hidden">
+      <ScrollArea className="flex-1 z-10 pt-20 sm:pt-24 md:pt-32 overflow-x-hidden">
+        <div className="max-w-5xl mx-auto px-4 sm:px-4 md:px-6 pb-24 w-full min-w-0 overflow-hidden">
           {/* Breadcrumb Navigation */}
           {breadcrumbs && breadcrumbs.length > 1 && (
             <nav className="flex items-center gap-1 text-xs text-white/60 mb-2 flex-wrap" aria-label="Breadcrumb">
@@ -679,7 +679,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-3 sm:px-6">
-                <div className="grid grid-cols-3 md:grid-cols-4 gap-1.5 sm:gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1 sm:gap-3">
                   {isBuilding && (
                     <KpiCard 
                       title="Floors" 
@@ -826,7 +826,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                       </div>
                       
                       {floorSpaces.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 sm:gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1 sm:gap-3 min-w-0">
                           {floorSpaces.slice(0, 20).map((space: any) => {
                             const spaceArea = space.attributes ? 
                               Object.keys(space.attributes).find(k => k.toLowerCase().startsWith('nta')) : null;
@@ -845,7 +845,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                                   buildingFmGuid: space.buildingFmGuid,
                                   attributes: space.attributes,
                                 })}
-                                className="rounded-xl border border-border bg-card/80 p-2 sm:p-3 text-left transition-all hover:border-primary/50 hover:shadow-md active:scale-[0.98] group overflow-hidden"
+                                className="w-full min-w-0 rounded-xl border border-border bg-card/80 p-2 sm:p-3 text-left transition-all hover:border-primary/50 hover:shadow-md active:scale-[0.98] group overflow-hidden"
                               >
                                 <div className="flex items-center gap-2 mb-1.5">
                                   <DoorOpen size={14} className="text-primary shrink-0" />
@@ -892,7 +892,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-3 sm:px-6">
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 sm:gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1 sm:gap-3 min-w-0">
                   {childAssets.slice(0, 20).map((asset: any) => (
                     <button
                       key={asset.fmGuid || asset.fm_guid}
@@ -906,7 +906,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                         buildingFmGuid: asset.buildingFmGuid || asset.building_fm_guid,
                         attributes: asset.attributes,
                       })}
-                      className="rounded-xl border border-border bg-card/80 p-2 sm:p-3 text-left transition-all hover:border-primary/50 hover:shadow-md active:scale-[0.98] group overflow-hidden"
+                      className="w-full min-w-0 rounded-xl border border-border bg-card/80 p-2 sm:p-3 text-left transition-all hover:border-primary/50 hover:shadow-md active:scale-[0.98] group overflow-hidden"
                     >
                       <div className="flex items-center gap-2 mb-1">
                         <Layers size={14} className="text-accent shrink-0" />
