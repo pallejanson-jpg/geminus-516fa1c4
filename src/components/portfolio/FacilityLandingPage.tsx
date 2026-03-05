@@ -362,7 +362,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
       
       {/* Scrollable Content */}
       <ScrollArea className="flex-1 z-10 pt-20 sm:pt-24 md:pt-32">
-        <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 pb-24">
+        <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 pb-24 w-full min-w-0 overflow-hidden">
           {/* Breadcrumb Navigation */}
           {breadcrumbs && breadcrumbs.length > 1 && (
             <nav className="flex items-center gap-1 text-xs text-white/60 mb-2 flex-wrap" aria-label="Breadcrumb">
