@@ -770,6 +770,12 @@ async function extractBimHierarchy(
                 roomPropKeys[propName] = key;
               }
             }
+
+            // Resolve system property fields
+            if (/^(system\s*name|systemnamn|system_name)$/.test(lowerName)) systemNameKey = key;
+            if (/^(system\s*type|systemtyp|system_type)$/.test(lowerName)) systemTypeKey = key;
+            if (/^(system\s*classification|systemklassificering)$/.test(lowerName)) systemClassKey = key;
+            if (/^(system\s*abbreviation|systemförkortning|system_abbreviation)$/.test(lowerName)) systemAbbrKey = key;
           }
 
           // Resolve "type name" / "family" field
