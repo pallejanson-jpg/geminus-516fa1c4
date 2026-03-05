@@ -435,8 +435,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="px-3 sm:px-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-3 sm:gap-y-4 gap-x-4 sm:gap-x-6 text-sm">
+              <CardContent className="px-3 sm:px-6 min-w-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-3 sm:gap-y-4 gap-x-4 sm:gap-x-6 text-sm min-w-0">
                   <div>
                     <label className="text-[11px] sm:text-xs uppercase font-bold text-muted-foreground">Name</label>
                     <p className="font-medium truncate">{title}</p>
