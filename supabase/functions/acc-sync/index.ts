@@ -933,6 +933,12 @@ async function extractBimHierarchy(
               const levelRef = obj.props?.[levelKey] || null;
               const roomRef = roomRefKey ? (obj.props?.[roomRefKey] || null) : null;
 
+              // Resolve system properties
+              const sysName = systemNameKey ? (obj.props?.[systemNameKey] || null) : null;
+              const sysType = systemTypeKey ? (obj.props?.[systemTypeKey] || null) : null;
+              const sysClass = systemClassKey ? (obj.props?.[systemClassKey] || null) : null;
+              const sysAbbr = systemAbbrKey ? (obj.props?.[systemAbbrKey] || null) : null;
+
               // Build a descriptive name: prefer type/family, then raw name
               let instanceName = '';
               if (typeNameVal && typeNameVal !== externalId && typeNameVal.length < 100) {
@@ -949,6 +955,8 @@ async function extractBimHierarchy(
                 room: roomRef,
                 objectId: obj.objectId,
                 versionUrn: idx.versionUrn,
+                systemName: sysName || sysAbbr || null,
+                systemType: sysType || sysClass || null,
               });
             }
           }
