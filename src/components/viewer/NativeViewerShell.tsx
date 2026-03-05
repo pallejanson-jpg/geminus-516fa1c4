@@ -182,7 +182,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
             if (entity) {
               // Always set color BEFORE making visible to prevent red flash
               if (show) {
-                entity.colorize = [0.5, 0.7, 0.9];
+                entity.colorize = [0.898, 0.894, 0.890]; // SPACE_COLOR
                 entity.opacity = 0.3;
                 entity.pickable = true;
               }
