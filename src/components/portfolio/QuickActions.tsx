@@ -116,12 +116,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
           {(isBuilding || isStorey || isSpace) && (
             <Button 
               variant="ghost" 
-              onClick={() => {
-                const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid || facility.fmGuid;
-                const floorParam = isStorey ? `&floor=${facility.fmGuid}&floorName=${encodeURIComponent(facility.commonName || facility.name || '')}` : '';
-                const entityParam = isSpace ? `&entity=${facility.fmGuid}` : '';
-                navigate(`/split-viewer?building=${buildingGuid}&mode=2d${floorParam}${entityParam}`);
-              }}
+              onClick={() => navigateToViewer('2d')}
               className={btnClass}
             >
               <Square size={iconSize} className="text-primary" />
@@ -133,10 +128,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
           {(isBuilding || isStorey || isSpace) && (
             <Button 
               variant="ghost" 
-              onClick={() => {
-                if (!has3D) return;
-                onToggle3D(facility);
-              }} 
+              onClick={() => { if (has3D) navigateToViewer('3d'); }}
               className={`${btnClass} ${!has3D ? disabledClass : ''}`}
             >
               <Cuboid size={iconSize} className="text-primary" />
@@ -148,11 +140,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
           {(isBuilding || isStorey) && (
             <Button 
               variant="ghost" 
-              onClick={() => {
-                if (!has360) return;
-                const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid || facility.fmGuid;
-                navigate(`/split-viewer?building=${buildingGuid}&mode=360`);
-              }} 
+              onClick={() => { if (has360) navigateToViewer('360'); }}
               className={`${btnClass} ${!has360 ? disabledClass : ''}`}
             >
               <View size={iconSize} className="text-destructive" />
@@ -164,7 +152,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
           {isBuilding && (
             <Button 
               variant="ghost" 
-              onClick={() => { if (hasSplit) navigate(`/split-viewer?building=${facility.fmGuid}&mode=split`); }}
+              onClick={() => { if (hasSplit) navigateToViewer('split'); }}
               className={`${btnClass} ${!hasSplit ? disabledClass : ''}`}
             >
               <SplitSquareHorizontal size={iconSize} className="text-accent" />
@@ -176,7 +164,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
           {isBuilding && (
             <Button 
               variant="ghost" 
-              onClick={() => { if (hasSplit) navigate(`/split-viewer?building=${facility.fmGuid}&mode=vt`); }}
+              onClick={() => { if (hasSplit) navigateToViewer('vt'); }}
               className={`${btnClass} ${!hasSplit ? disabledClass : ''}`}
             >
               <Layers size={iconSize} className="text-primary" />
