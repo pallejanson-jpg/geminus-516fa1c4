@@ -648,7 +648,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
             )}
 
             {/* KPI Cards */}
-            <Card>
+            <Card className="overflow-hidden">
               <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
                 <CardTitle className="text-sm sm:text-base flex items-center gap-2">
                   <BarChart size={14} className="sm:w-4 sm:h-4 text-accent" />
