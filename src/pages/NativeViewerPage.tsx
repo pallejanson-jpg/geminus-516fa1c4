@@ -5,36 +5,37 @@ import BuildingSelector from "@/components/viewer/BuildingSelector";
 
 /**
  * NativeViewerPage — resolves a building from context and redirects to
- * UnifiedViewer (which has the mode switcher and all overlays).
+ * UnifiedViewer (/viewer) which has the mode switcher and all overlays.
  */
 export default function NativeViewerPage() {
   const { viewer3dFmGuid, setViewer3dFmGuid, allData, isLoadingData } = useContext(AppContext);
   const navigate = useNavigate();
 
-  const buildingFmGuid = useMemo(() => {
-    if (!viewer3dFmGuid || !allData || allData.length === 0) return null;
+  const { buildingFmGuid, entityFmGuid } = useMemo(() => {
+    if (!viewer3dFmGuid || !allData || allData.length === 0) return { buildingFmGuid: null, entityFmGuid: null };
     const facility = allData.find((item: any) => item.fmGuid === viewer3dFmGuid);
-    if (!facility) return null;
+    if (!facility) return { buildingFmGuid: null, entityFmGuid: null };
 
     if (facility.category === 'Building' || facility.category === 'IfcBuilding') {
-      return facility.fmGuid;
+      return { buildingFmGuid: facility.fmGuid, entityFmGuid: null };
     }
     if (facility.buildingFmGuid) {
       const building = allData.find((item: any) =>
         item.fmGuid === facility.buildingFmGuid &&
         (item.category === 'Building' || item.category === 'IfcBuilding')
       );
-      if (building) return building.fmGuid;
+      if (building) return { buildingFmGuid: building.fmGuid, entityFmGuid: facility.fmGuid };
     }
-    return null;
+    return { buildingFmGuid: null, entityFmGuid: null };
   }, [viewer3dFmGuid, allData]);
 
-  // Redirect to UnifiedViewer with building param
+  // Redirect to /viewer (UnifiedViewer) with building param
   useEffect(() => {
     if (buildingFmGuid) {
-      navigate(`/viewer?building=${buildingFmGuid}&mode=3d`, { replace: true });
+      const entityParam = entityFmGuid ? `&entity=${entityFmGuid}` : '';
+      navigate(`/viewer?building=${buildingFmGuid}&mode=3d${entityParam}`, { replace: true });
     }
-  }, [buildingFmGuid, navigate]);
+  }, [buildingFmGuid, entityFmGuid, navigate]);
 
   // Clear invalid guid
   useEffect(() => {
