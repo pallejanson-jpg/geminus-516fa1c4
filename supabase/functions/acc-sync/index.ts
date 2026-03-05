@@ -1215,7 +1215,88 @@ async function upsertBimAssets(
     console.log(`[BIM Instances] Upserted ${instanceCount} instances`);
   }
 
-  return { building: 1, levels: levelAssets.length, rooms: roomAssets.length, instances: instanceCount };
+  // 5. Extract and upsert systems from instance system properties
+  const systemGroups = new Map<string, { type: string | null; memberFmGuids: string[] }>();
+  for (const inst of instances) {
+    const sysName = inst.systemName;
+    if (!sysName) continue;
+    if (!systemGroups.has(sysName)) {
+      systemGroups.set(sysName, { type: inst.systemType || null, memberFmGuids: [] });
+    }
+    systemGroups.get(sysName)!.memberFmGuids.push(`acc-bim-instance-${inst.externalId}`);
+  }
+
+  let systemCount = 0;
+  if (systemGroups.size > 0) {
+    // Infer discipline from system name
+    const inferDiscipline = (name: string): string => {
+      const lower = name.toLowerCase();
+      if (/vent|air|lb|duct|ta|fra/.test(lower)) return 'Ventilation';
+      if (/heat|radi|vs|vv/.test(lower)) return 'Heating';
+      if (/cool|kyl|ka/.test(lower)) return 'Cooling';
+      if (/elec|el-|circuit|kraft/.test(lower)) return 'Electrical';
+      if (/plumb|pipe|va|avlopp/.test(lower)) return 'Plumbing';
+      if (/fire|brand|sprink/.test(lower)) return 'FireProtection';
+      return 'Other';
+    };
+
+    const sysRows = [...systemGroups.entries()].map(([name, data]) => ({
+      fm_guid: `sys-${buildingFmGuid}-${name}`,
+      name,
+      system_type: data.type || 'Unknown',
+      discipline: inferDiscipline(name),
+      source: 'acc',
+      building_fm_guid: buildingFmGuid,
+      is_active: true,
+    }));
+
+    const { data: upsertedSystems } = await supabase
+      .from('systems')
+      .upsert(sysRows, { onConflict: 'fm_guid' })
+      .select('id, fm_guid');
+
+    const sysDbMap = new Map<string, string>();
+    if (upsertedSystems) {
+      for (const s of upsertedSystems) sysDbMap.set(s.fm_guid, s.id);
+    }
+
+    // Upsert asset_system relations
+    const assetSysRows: Array<{ asset_fm_guid: string; system_id: string }> = [];
+    for (const [name, data] of systemGroups) {
+      const dbId = sysDbMap.get(`sys-${buildingFmGuid}-${name}`);
+      if (!dbId) continue;
+      for (const memberFmGuid of data.memberFmGuids) {
+        assetSysRows.push({ asset_fm_guid: memberFmGuid, system_id: dbId });
+      }
+    }
+
+    if (assetSysRows.length > 0) {
+      for (let i = 0; i < assetSysRows.length; i += 500) {
+        const chunk = assetSysRows.slice(i, i + 500);
+        await supabase.from('asset_system').upsert(chunk, { onConflict: 'asset_fm_guid,system_id' });
+      }
+    }
+
+    systemCount = systemGroups.size;
+    console.log(`[BIM Systems] Upserted ${systemCount} systems with ${assetSysRows.length} asset-system links`);
+  }
+
+  // 6. Store external ID mappings for reconciliation
+  const allExtIds = [
+    ...levels.map(l => ({ fm_guid: `acc-bim-level-${l.externalId}`, source: 'acc', external_id: l.externalId, last_seen_at: new Date().toISOString() })),
+    ...rooms.map(r => ({ fm_guid: `acc-bim-room-${r.externalId}`, source: 'acc', external_id: r.externalId, last_seen_at: new Date().toISOString() })),
+    ...instances.map(i => ({ fm_guid: `acc-bim-instance-${i.externalId}`, source: 'acc', external_id: i.externalId, last_seen_at: new Date().toISOString() })),
+  ];
+
+  if (allExtIds.length > 0) {
+    for (let i = 0; i < allExtIds.length; i += 500) {
+      const chunk = allExtIds.slice(i, i + 500);
+      await supabase.from('asset_external_ids').upsert(chunk, { onConflict: 'fm_guid,source' });
+    }
+    console.log(`[BIM ExtIDs] Stored ${allExtIds.length} external ID mappings`);
+  }
+
+  return { building: 1, levels: levelAssets.length, rooms: roomAssets.length, instances: instanceCount, systems: systemCount };
 }
 
 // ============ SYNC STATE HELPERS ============
