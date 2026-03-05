@@ -58,10 +58,10 @@ const LEVEL_PALETTE = [
 ];
 
 const CATEGORY_PALETTE: Record<string, string> = {
-  'Wall': '#607D8B', 'Door': '#8D6E63', 'Window': '#4FC3F7',
+  'Wall': '#607D8B', 'Door': '#8D6E63', 'Window': '#B0B0A8',
   'Slab': '#90A4AE', 'Roof': '#FF7043', 'Stair': '#AB47BC',
   'Column': '#78909C', 'Beam': '#A1887F', 'Covering': '#CE93D8',
-  'Railing': '#FFB74D', 'Curtain Wall': '#4DD0E1', 'Space': '#64B5F6',
+  'Railing': '#FFB74D', 'Curtain Wall': '#4DD0E1', 'Space': '#E5E4E3',
   'Furnishing': '#81C784', 'Flow Terminal': '#4DB6AC', 'Flow Segment': '#4DD0E1',
   'Flow Fitting': '#7986CB', 'Flow Controller': '#9575CD',
   'Pipe': '#26A69A', 'Duct': '#66BB6A', 'Member': '#BDBDBD', 'Proxy': '#E0E0E0',
