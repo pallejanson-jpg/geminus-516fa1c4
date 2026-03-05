@@ -100,7 +100,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
         <CardTitle className="text-sm sm:text-base">Quick Actions</CardTitle>
       </CardHeader>
       <CardContent className="px-3 sm:px-6">
-        <div className="grid grid-cols-4 sm:grid-cols-4 gap-1 sm:gap-2 md:gap-4">
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-1 sm:gap-2 md:gap-4">
           {/* ===== VISUALIZATION TOOLS ===== */}
           
           {/* 2D - Building, Storey, Space */}
