@@ -906,7 +906,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                         buildingFmGuid: asset.buildingFmGuid || asset.building_fm_guid,
                         attributes: asset.attributes,
                       })}
-                      className="rounded-xl border border-border bg-card/80 p-2 sm:p-3 text-left transition-all hover:border-primary/50 hover:shadow-md active:scale-[0.98] group overflow-hidden"
+                      className="w-full min-w-0 rounded-xl border border-border bg-card/80 p-2 sm:p-3 text-left transition-all hover:border-primary/50 hover:shadow-md active:scale-[0.98] group overflow-hidden"
                     >
                       <div className="flex items-center gap-2 mb-1">
                         <Layers size={14} className="text-accent shrink-0" />
