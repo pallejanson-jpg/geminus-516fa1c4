@@ -97,25 +97,38 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
 export function recolorArchitectObjects(viewer: any): number {
   const scene = viewer?.scene;
   const metaScene = viewer?.metaScene;
-  if (!scene || !metaScene?.metaObjects) return 0;
+  if (!scene) return 0;
 
   let colorized = 0;
+  const processedIds = new Set<string>();
 
-  for (const [id, metaObj] of Object.entries(metaScene.metaObjects as Record<string, any>)) {
-    const ifcType = (metaObj.type || '').toLowerCase();
+  if (metaScene?.metaObjects) {
+    for (const [id, metaObj] of Object.entries(metaScene.metaObjects as Record<string, any>)) {
+      const ifcType = (metaObj.type || '').toLowerCase();
+      const entity = scene.objects?.[id];
+      if (!entity) continue;
+      processedIds.add(id);
+
+      const isSpace = ifcType.includes('ifcspace') || ifcType === 'ifc_space' || ifcType === 'space';
+      if (isSpace) {
+        entity.colorize = SPACE_COLOR;
+        entity.opacity = 0.3;
+        continue;
+      }
+
+      const color = IFC_TYPE_COLORS[ifcType] || DEFAULT_COLOR;
+      entity.colorize = color;
+      colorized++;
+    }
+  }
+
+  // Colorize remaining objects without metaObject entries
+  const allIds = scene.objectIds || [];
+  for (const id of allIds) {
+    if (processedIds.has(id)) continue;
     const entity = scene.objects?.[id];
     if (!entity) continue;
-
-    const isSpace = ifcType.includes('ifcspace') || ifcType === 'ifc_space' || ifcType === 'space';
-    if (isSpace) {
-      // Pre-color spaces so they're always correct when shown
-      entity.colorize = SPACE_COLOR;
-      entity.opacity = 0.3;
-      continue;
-    }
-
-    const color = IFC_TYPE_COLORS[ifcType] || DEFAULT_COLOR;
-    entity.colorize = color;
+    entity.colorize = DEFAULT_COLOR;
     colorized++;
   }
 
