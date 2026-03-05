@@ -39,8 +39,12 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
     <>
       {/* Compact Header - absolute positioned over the canvas */}
       <div
-        className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-1.5 py-1 bg-gradient-to-b from-background/90 via-background/60 to-transparent"
-        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4px)' }}
+        className="absolute top-0 left-0 right-0 z-30 grid grid-cols-[auto_1fr_auto] items-center gap-1 px-1.5 py-1 bg-gradient-to-b from-background/90 via-background/60 to-transparent"
+        style={{
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4px)',
+          paddingLeft: 'max(env(safe-area-inset-left, 0px), 6px)',
+          paddingRight: 'max(env(safe-area-inset-right, 0px), 6px)',
+        }}
       >
         {/* Left: Back button */}
         {onClose && (
