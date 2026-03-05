@@ -15,8 +15,6 @@ async function ensureWasm(): Promise<string> {
     // already exists
   }
 
-  // web-ifc looks for web-ifc.wasm (browser) or web-ifc-node.wasm (node)
-  // In Deno edge runtime it tries the node variant first
   const files = ["web-ifc.wasm", "web-ifc-node.wasm"];
   const baseUrl = "https://unpkg.com/web-ifc@0.0.57";
 
@@ -24,7 +22,6 @@ async function ensureWasm(): Promise<string> {
     const dest = `${dir}/${file}`;
     try {
       await Deno.stat(dest);
-      // Already downloaded
     } catch {
       console.log(`Downloading ${file}...`);
       const resp = await fetch(`${baseUrl}/${file}`);
@@ -38,9 +35,272 @@ async function ensureWasm(): Promise<string> {
     }
   }
 
-  // wasmPath must end with /
   return dir + "/";
 }
+
+// ─── System & connectivity extraction helpers ───
+
+interface ExtractedSystem {
+  id: string;
+  name: string;
+  type: string;
+  discipline: string;
+  memberIds: string[];
+}
+
+interface ExtractedConnection {
+  fromId: string;
+  toId: string;
+  type: string;
+  direction: string;
+}
+
+/**
+ * Extract systems and connectivity from parsed IFC metaObjects.
+ * Strategy:
+ *   1. Look for IfcSystem / IfcDistributionSystem objects → explicit systems
+ *   2. Look for IfcRelAssignsToGroup → link members to systems
+ *   3. Fallback: group by SystemName property on objects
+ *   4. Extract IfcRelConnects* for topology
+ */
+function extractSystemsAndConnections(metaObjects: any[]): {
+  systems: ExtractedSystem[];
+  connections: ExtractedConnection[];
+  objectExternalIds: Array<{ metaObjectId: string; ifcType: string }>;
+} {
+  const systems: ExtractedSystem[] = [];
+  const connections: ExtractedConnection[] = [];
+  const objectExternalIds: Array<{ metaObjectId: string; ifcType: string }> = [];
+
+  // Index all meta objects by id for fast lookup
+  const byId = new Map<string, any>();
+  for (const m of metaObjects) {
+    const id = m.metaObjectId || m.id || "";
+    if (id) byId.set(id, m);
+  }
+
+  // Track which objects are system containers
+  const systemMap = new Map<string, ExtractedSystem>();
+  // Track objects grouped by SystemName property (fallback)
+  const systemNameGroups = new Map<string, string[]>();
+
+  for (const m of metaObjects) {
+    const t = m.metaType || m.type || "";
+    const id = m.metaObjectId || m.id || "";
+    const name = m.metaObjectName || m.name || "";
+    const parentId = m.parentMetaObjectId || m.parentId || "";
+
+    // Collect all object external IDs for reconciliation
+    if (id && t && !t.startsWith("IfcRel") && t !== "IfcSystem" && t !== "IfcDistributionSystem") {
+      objectExternalIds.push({ metaObjectId: id, ifcType: t });
+    }
+
+    // 1. Identify system objects
+    if (t === "IfcSystem" || t === "IfcDistributionSystem") {
+      const discipline = inferDiscipline(name, t);
+      const sys: ExtractedSystem = {
+        id,
+        name: name || id,
+        type: t,
+        discipline,
+        memberIds: [],
+      };
+      systemMap.set(id, sys);
+      continue;
+    }
+
+    // 2. If parent is a system, link as member
+    if (parentId && systemMap.has(parentId)) {
+      systemMap.get(parentId)!.memberIds.push(id);
+    }
+
+    // 3. Check for SystemName property (fallback grouping)
+    const props = m.properties || m.propertySets || {};
+    const systemName = findPropertyValue(props, ["SystemName", "System Name", "System_Name"]);
+    if (systemName && id) {
+      if (!systemNameGroups.has(systemName)) {
+        systemNameGroups.set(systemName, []);
+      }
+      systemNameGroups.get(systemName)!.push(id);
+    }
+
+    // 4. Extract connectivity (IfcRelConnects*)
+    if (t.startsWith("IfcRelConnects") || t === "IfcRelFlowControlElements") {
+      const relatingId = m.relatingElement || m.relatingPort || "";
+      const relatedId = m.relatedElement || m.relatedPort || "";
+      if (relatingId && relatedId) {
+        connections.push({
+          fromId: relatingId,
+          toId: relatedId,
+          type: inferConnectionType(t),
+          direction: "forward",
+        });
+      }
+    }
+  }
+
+  // Collect explicit systems
+  for (const sys of systemMap.values()) {
+    systems.push(sys);
+  }
+
+  // Fallback: create systems from SystemName groups that aren't already covered
+  const coveredIds = new Set<string>();
+  for (const sys of systems) {
+    for (const mid of sys.memberIds) coveredIds.add(mid);
+  }
+
+  for (const [sysName, memberIds] of systemNameGroups) {
+    const uncovered = memberIds.filter((id) => !coveredIds.has(id));
+    if (uncovered.length > 0) {
+      systems.push({
+        id: `prop-${sysName}`,
+        name: sysName,
+        type: "PropertyGrouped",
+        discipline: inferDiscipline(sysName, ""),
+        memberIds: uncovered,
+      });
+    }
+  }
+
+  return { systems, connections, objectExternalIds };
+}
+
+function inferDiscipline(name: string, type: string): string {
+  const lower = (name + " " + type).toLowerCase();
+  if (lower.includes("vent") || lower.includes("air") || lower.includes("lb") || lower.includes("duct")) return "Ventilation";
+  if (lower.includes("heat") || lower.includes("radi") || lower.includes("vs")) return "Heating";
+  if (lower.includes("cool") || lower.includes("kyl")) return "Cooling";
+  if (lower.includes("elec") || lower.includes("el-") || lower.includes("circuit")) return "Electrical";
+  if (lower.includes("plumb") || lower.includes("pipe") || lower.includes("va")) return "Plumbing";
+  if (lower.includes("fire") || lower.includes("brand") || lower.includes("sprink")) return "FireProtection";
+  return "Other";
+}
+
+function inferConnectionType(relType: string): string {
+  if (relType.includes("Flow")) return "flow";
+  if (relType.includes("Port")) return "port";
+  return "structural";
+}
+
+function findPropertyValue(props: any, keys: string[]): string | null {
+  if (!props || typeof props !== "object") return null;
+  for (const key of keys) {
+    if (props[key] !== undefined && props[key] !== null) return String(props[key]);
+  }
+  // Search nested property sets
+  for (const val of Object.values(props)) {
+    if (val && typeof val === "object" && !Array.isArray(val)) {
+      for (const key of keys) {
+        if ((val as any)[key] !== undefined) return String((val as any)[key]);
+      }
+    }
+  }
+  return null;
+}
+
+// ─── Persistence helpers ───
+
+async function persistSystemsAndConnections(
+  supabase: any,
+  buildingFmGuid: string,
+  systems: ExtractedSystem[],
+  connections: ExtractedConnection[],
+  objectExternalIds: Array<{ metaObjectId: string; ifcType: string }>,
+  appendLog: (msg: string, progress?: number) => Promise<void>
+) {
+  // 1. Upsert asset_external_ids for all parsed objects
+  if (objectExternalIds.length > 0) {
+    const extRows = objectExternalIds.map((obj) => ({
+      fm_guid: obj.metaObjectId,
+      source: "ifc",
+      external_id: obj.metaObjectId,
+      model_version: new Date().toISOString().slice(0, 10),
+      last_seen_at: new Date().toISOString(),
+    }));
+
+    // Batch in chunks of 500
+    for (let i = 0; i < extRows.length; i += 500) {
+      const chunk = extRows.slice(i, i + 500);
+      await supabase
+        .from("asset_external_ids")
+        .upsert(chunk, { onConflict: "fm_guid,source" });
+    }
+    await appendLog(`Stored ${objectExternalIds.length} external ID mappings`);
+  }
+
+  // 2. Upsert systems
+  if (systems.length > 0) {
+    const sysRows = systems.map((s) => ({
+      fm_guid: `sys-${buildingFmGuid}-${s.name}`,
+      name: s.name,
+      system_type: s.type,
+      discipline: s.discipline,
+      source: s.type === "PropertyGrouped" ? "ifc-property" : "ifc",
+      building_fm_guid: buildingFmGuid,
+      is_active: true,
+    }));
+
+    const { data: upsertedSystems } = await supabase
+      .from("systems")
+      .upsert(sysRows, { onConflict: "fm_guid" })
+      .select("id, fm_guid");
+
+    // Build fm_guid → system DB id mapping
+    const sysDbMap = new Map<string, string>();
+    if (upsertedSystems) {
+      for (const s of upsertedSystems) {
+        sysDbMap.set(s.fm_guid, s.id);
+      }
+    }
+
+    // 3. Upsert asset_system relations
+    const assetSysRows: Array<{ asset_fm_guid: string; system_id: string; role: string | null }> = [];
+    for (const sys of systems) {
+      const dbId = sysDbMap.get(`sys-${buildingFmGuid}-${sys.name}`);
+      if (!dbId) continue;
+      for (const memberId of sys.memberIds) {
+        assetSysRows.push({
+          asset_fm_guid: memberId,
+          system_id: dbId,
+          role: null,
+        });
+      }
+    }
+
+    if (assetSysRows.length > 0) {
+      for (let i = 0; i < assetSysRows.length; i += 500) {
+        const chunk = assetSysRows.slice(i, i + 500);
+        await supabase
+          .from("asset_system")
+          .upsert(chunk, { onConflict: "asset_fm_guid,system_id" });
+      }
+    }
+
+    await appendLog(`Stored ${systems.length} systems with ${assetSysRows.length} asset-system links`);
+  }
+
+  // 4. Upsert asset_connections
+  if (connections.length > 0) {
+    const connRows = connections.map((c) => ({
+      from_fm_guid: c.fromId,
+      to_fm_guid: c.toId,
+      connection_type: c.type,
+      direction: c.direction,
+      source: "ifc",
+    }));
+
+    for (let i = 0; i < connRows.length; i += 500) {
+      const chunk = connRows.slice(i, i + 500);
+      await supabase
+        .from("asset_connections")
+        .upsert(chunk, { onConflict: "from_fm_guid,to_fm_guid,connection_type" });
+    }
+    await appendLog(`Stored ${connections.length} asset connections`);
+  }
+}
+
+// ─── Main handler ───
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -48,7 +308,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Auth check
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -70,7 +329,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Helper to update conversion_jobs progress
     const updateJob = async (updates: Record<string, unknown>) => {
       if (!jobId) return;
       try {
@@ -124,7 +382,7 @@ Deno.serve(async (req) => {
     const fileSizeMB = ifcArrayBuffer.byteLength / 1024 / 1024;
     await appendLog(`IFC downloaded: ${fileSizeMB.toFixed(1)} MB`, 20);
 
-    // 2. Download WASM to /tmp and load libraries
+    // 2. Download WASM and load libraries
     await appendLog("Preparing WASM runtime...", 25);
     const wasmPath = await ensureWasm();
     await appendLog(`WASM ready at ${wasmPath}`, 28);
@@ -147,36 +405,42 @@ Deno.serve(async (req) => {
     await appendLog("Finalizing XKT model...", 60);
     xktModel.finalize();
 
-    // 3. Extract hierarchy
+    // 3. Extract spatial hierarchy
     const levels: Array<{ id: string; name: string; type: string }> = [];
     const spaces: Array<{ id: string; name: string; type: string; parentId: string }> = [];
 
-    if (xktModel.metaObjects) {
-      const vals = Array.isArray(xktModel.metaObjects)
-        ? xktModel.metaObjects
-        : Object.values(xktModel.metaObjects);
-      for (const m of vals as any[]) {
-        const t = m.metaType || m.type || "";
-        if (t === "IfcBuildingStorey") {
-          levels.push({
-            id: m.metaObjectId || m.id || "",
-            name: m.metaObjectName || m.name || t,
-            type: t,
-          });
-        } else if (t === "IfcSpace") {
-          spaces.push({
-            id: m.metaObjectId || m.id || "",
-            name: m.metaObjectName || m.name || t,
-            type: t,
-            parentId: m.parentMetaObjectId || m.parentId || "",
-          });
-        }
+    const metaObjectsList = xktModel.metaObjects
+      ? (Array.isArray(xktModel.metaObjects)
+          ? xktModel.metaObjects
+          : Object.values(xktModel.metaObjects))
+      : [];
+
+    for (const m of metaObjectsList as any[]) {
+      const t = m.metaType || m.type || "";
+      if (t === "IfcBuildingStorey") {
+        levels.push({
+          id: m.metaObjectId || m.id || "",
+          name: m.metaObjectName || m.name || t,
+          type: t,
+        });
+      } else if (t === "IfcSpace") {
+        spaces.push({
+          id: m.metaObjectId || m.id || "",
+          name: m.metaObjectName || m.name || t,
+          type: t,
+          parentId: m.parentMetaObjectId || m.parentId || "",
+        });
       }
     }
 
     await appendLog(`Hierarchy: ${levels.length} levels, ${spaces.length} spaces`, 65);
 
-    // 4. Write XKT to ArrayBuffer
+    // 4. Extract systems, connections, and external IDs
+    await appendLog("Extracting systems and connectivity...", 66);
+    const { systems, connections, objectExternalIds } = extractSystemsAndConnections(metaObjectsList as any[]);
+    await appendLog(`Found ${systems.length} systems, ${connections.length} connections, ${objectExternalIds.length} objects`, 68);
+
+    // 5. Write XKT to ArrayBuffer
     const stats: Record<string, any> = { texturesSize: 0 };
     const xktArrayBuffer = (xeokitConvert as any).writeXKTModelToArrayBuffer(
       xktModel,
@@ -187,7 +451,7 @@ Deno.serve(async (req) => {
     const xktSizeMB = xktArrayBuffer.byteLength / 1024 / 1024;
     await appendLog(`XKT generated: ${xktSizeMB.toFixed(2)} MB`, 70);
 
-    // 5. Upload XKT to storage
+    // 6. Upload XKT to storage
     await appendLog("Uploading XKT to storage...", 75);
     const modelId = `ifc-${Date.now()}`;
     const storageFileName = `${modelId}.xkt`;
@@ -206,9 +470,9 @@ Deno.serve(async (req) => {
       throw new Error(errMsg);
     }
 
-    await appendLog("Saving model metadata...", 85);
+    await appendLog("Saving model metadata...", 80);
 
-    // 6. Save metadata to xkt_models table
+    // 7. Save metadata to xkt_models table
     const safeName = (modelName || ifcStoragePath).replace(/\.ifc$/i, "");
     const { error: dbError } = await supabase.from("xkt_models").upsert(
       {
@@ -231,6 +495,17 @@ Deno.serve(async (req) => {
       throw new Error(errMsg);
     }
 
+    // 8. Persist systems, connections, and external IDs
+    await appendLog("Saving systems and connectivity...", 85);
+    await persistSystemsAndConnections(
+      supabase,
+      buildingFmGuid,
+      systems,
+      connections,
+      objectExternalIds,
+      appendLog
+    );
+
     await updateJob({
       status: "done",
       progress: 100,
@@ -246,6 +521,8 @@ Deno.serve(async (req) => {
         xktSizeMB: parseFloat(xktSizeMB.toFixed(2)),
         levels,
         spaces,
+        systemsCount: systems.length,
+        connectionsCount: connections.length,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
