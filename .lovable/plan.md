@@ -27,7 +27,7 @@ All tables have RLS: authenticated read, admin write. Indexes on common query pa
 ### System activation for existing buildings
 - **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
 - **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
-- **Asset+-byggnader**: `asset-plus-sync` stöder ännu inte systemextraktion (framtida)
+- **Asset+-byggnader**: Kör `sync-systems` action via `asset-plus-sync` edge function → extraherar system från befintliga attribut (IMPLEMENTERAT)
 
 ### Frontend (future phase)
 - System tab on FacilityLandingPage

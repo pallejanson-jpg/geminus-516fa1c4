@@ -1708,6 +1708,293 @@ serve(async (req) => {
       );
     }
 
+    // ============ SYNC SYSTEMS (extract system data from existing assets) ============
+    if (action === 'sync-systems') {
+      const MAX_EXECUTION_TIME = 45000;
+      const startTime = Date.now();
+      
+      console.log('Starting sync-systems: extracting system data from Asset+ properties');
+
+      // Get buildings to process (optionally filter to single building)
+      let buildingsQuery = supabase
+        .from('assets')
+        .select('fm_guid, common_name')
+        .eq('category', 'Building')
+        .order('common_name');
+      
+      if (buildingFmGuid) {
+        buildingsQuery = buildingsQuery.eq('fm_guid', buildingFmGuid);
+      }
+
+      const { data: buildings, error: buildingsError } = await buildingsQuery;
+      if (buildingsError) throw buildingsError;
+      if (!buildings || buildings.length === 0) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'No buildings found.' }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Load progress cursor
+      const { data: progress } = await supabase
+        .from('asset_sync_progress')
+        .select('*')
+        .eq('job', 'systems')
+        .maybeSingle();
+
+      let currentBuildingIndex = progress?.current_building_index || 0;
+      let totalSystemsCreated = progress?.total_synced || 0;
+      let totalLinksCreated = 0;
+      const totalBuildings = buildings.length;
+      let interrupted = false;
+
+      // Helper: infer discipline from system name
+      const inferDiscipline = (name: string): string => {
+        const n = name.toLowerCase();
+        if (/\b(lb|lk|lt|la|le|luft|ventil|air|ahu|fläkt|fan|don|tilluft|frånluft|supply|exhaust|duct|kanal)/i.test(n)) return 'Ventilation';
+        if (/\b(vs|vv|kv|radiator|värme|heat|fjärrvärme|pump|shunt)/i.test(n)) return 'Heating';
+        if (/\b(kyl|cool|chiller|kk)/i.test(n)) return 'Cooling';
+        if (/\b(el|kraft|power|belysning|light|ström|ups|central)/i.test(n)) return 'Electrical';
+        if (/\b(va|avlopp|vatten|water|plumb|sanitet|tappvatten|spillvatten|dagvatten)/i.test(n)) return 'Plumbing';
+        if (/\b(brand|fire|sprinkler|smoke|rök|detektor)/i.test(n)) return 'FireProtection';
+        if (/\b(styr|ddc|plc|bus|bacnet|modbus|sensor)/i.test(n)) return 'Automation';
+        return 'Other';
+      };
+
+      // System name property keys to look for in Asset+ attributes
+      const SYSTEM_PROPERTY_KEYS = [
+        'systemName', 'SystemName', 'System Name', 'system_name', 'systemnamn', 'Systemnamn',
+        'System Classification', 'systemClassification',
+        'System Abbreviation', 'systemAbbreviation',
+        'System Type', 'systemType', 'systemtyp', 'Systemtyp',
+      ];
+
+      while (currentBuildingIndex < totalBuildings && !interrupted) {
+        if (Date.now() - startTime > MAX_EXECUTION_TIME) {
+          interrupted = true;
+          break;
+        }
+
+        const building = buildings[currentBuildingIndex];
+        const bFmGuid = building.fm_guid;
+        const bName = building.common_name || bFmGuid;
+        console.log(`Processing systems for building ${currentBuildingIndex + 1}/${totalBuildings}: ${bName}`);
+
+        // Fetch all Instance assets for this building from local DB (they already have attributes from sync)
+        const instances: any[] = [];
+        let from = 0;
+        const PAGE = 1000;
+        let fetchDone = false;
+        while (!fetchDone) {
+          const { data, error } = await supabase
+            .from('assets')
+            .select('fm_guid, common_name, name, asset_type, attributes, in_room_fm_guid, level_fm_guid')
+            .eq('building_fm_guid', bFmGuid)
+            .eq('category', 'Instance')
+            .range(from, from + PAGE - 1);
+          if (error) throw error;
+          if (data && data.length > 0) {
+            instances.push(...data);
+            from += PAGE;
+            if (data.length < PAGE) fetchDone = true;
+          } else {
+            fetchDone = true;
+          }
+        }
+
+        console.log(`  Found ${instances.length} instances for ${bName}`);
+
+        // Extract system names from attributes
+        const systemMap = new Map<string, { name: string; type: string; discipline: string; assetFmGuids: string[] }>();
+
+        for (const inst of instances) {
+          const attrs = inst.attributes || {};
+          let systemName: string | null = null;
+          let systemType: string | null = null;
+
+          // Check top-level attribute keys
+          for (const key of SYSTEM_PROPERTY_KEYS) {
+            const val = attrs[key];
+            if (val && typeof val === 'string' && val.trim()) {
+              if (key.toLowerCase().includes('type') || key.toLowerCase().includes('typ')) {
+                systemType = val.trim();
+              } else {
+                systemName = val.trim();
+              }
+            }
+          }
+
+          // Also check nested property sets (some Asset+ data has properties inside sub-objects)
+          if (!systemName && attrs.properties && typeof attrs.properties === 'object') {
+            for (const [pKey, pVal] of Object.entries(attrs.properties as Record<string, any>)) {
+              const lk = pKey.toLowerCase();
+              if ((lk.includes('system') && lk.includes('name')) || lk === 'systemnamn') {
+                if (typeof pVal === 'string' && pVal.trim()) {
+                  systemName = pVal.trim();
+                }
+              }
+            }
+          }
+
+          if (!systemName) continue;
+
+          if (!systemMap.has(systemName)) {
+            systemMap.set(systemName, {
+              name: systemName,
+              type: systemType || 'Unknown',
+              discipline: inferDiscipline(systemName),
+              assetFmGuids: [],
+            });
+          }
+          systemMap.get(systemName)!.assetFmGuids.push(inst.fm_guid);
+        }
+
+        console.log(`  Found ${systemMap.size} systems in ${bName}`);
+
+        // Upsert systems and create asset_system links
+        for (const [sysName, sysData] of systemMap) {
+          if (Date.now() - startTime > MAX_EXECUTION_TIME) {
+            interrupted = true;
+            break;
+          }
+
+          // Generate a stable fm_guid for the system based on building + name
+          const systemFmGuid = `sys-${bFmGuid}-${sysName}`.substring(0, 200);
+
+          // Upsert system
+          const { data: existingSystem } = await supabase
+            .from('systems')
+            .select('id')
+            .eq('fm_guid', systemFmGuid)
+            .maybeSingle();
+
+          let systemId: string;
+          if (existingSystem) {
+            systemId = existingSystem.id;
+            // Update
+            await supabase
+              .from('systems')
+              .update({
+                name: sysData.name,
+                system_type: sysData.type,
+                discipline: sysData.discipline,
+                source: 'asset_plus',
+                building_fm_guid: bFmGuid,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', systemId);
+          } else {
+            const { data: newSystem, error: insertError } = await supabase
+              .from('systems')
+              .insert({
+                fm_guid: systemFmGuid,
+                name: sysData.name,
+                system_type: sysData.type,
+                discipline: sysData.discipline,
+                source: 'asset_plus',
+                building_fm_guid: bFmGuid,
+              })
+              .select('id')
+              .single();
+
+            if (insertError) {
+              console.error(`  Failed to create system ${sysName}:`, insertError.message);
+              continue;
+            }
+            systemId = newSystem.id;
+            totalSystemsCreated++;
+          }
+
+          // Batch upsert asset_system links
+          const links = sysData.assetFmGuids.map(fmGuid => ({
+            asset_fm_guid: fmGuid,
+            system_id: systemId,
+          }));
+
+          // Process in batches of 100
+          for (let i = 0; i < links.length; i += 100) {
+            const batch = links.slice(i, i + 100);
+            const { error: linkError } = await supabase
+              .from('asset_system')
+              .upsert(batch, { onConflict: 'asset_fm_guid,system_id' });
+            if (linkError) {
+              console.error(`  Failed to link assets to system ${sysName}:`, linkError.message);
+            } else {
+              totalLinksCreated += batch.length;
+            }
+          }
+        }
+
+        // Also store asset_external_ids for all instances in this building
+        const extIdBatches: any[] = [];
+        for (const inst of instances) {
+          extIdBatches.push({
+            fm_guid: inst.fm_guid,
+            source: 'asset_plus',
+            external_id: inst.fm_guid, // Asset+ uses fmGuid as its own external ID
+            last_seen_at: new Date().toISOString(),
+          });
+        }
+
+        // Upsert external IDs in batches
+        for (let i = 0; i < extIdBatches.length; i += 200) {
+          const batch = extIdBatches.slice(i, i + 200);
+          await supabase
+            .from('asset_external_ids')
+            .upsert(batch, { onConflict: 'fm_guid,source' });
+        }
+
+        if (!interrupted) {
+          currentBuildingIndex++;
+          // Save progress
+          await supabase
+            .from('asset_sync_progress')
+            .upsert({
+              job: 'systems',
+              building_fm_guid: currentBuildingIndex < totalBuildings ? buildings[currentBuildingIndex].fm_guid : null,
+              current_building_index: currentBuildingIndex,
+              skip: 0,
+              total_buildings: totalBuildings,
+              total_synced: totalSystemsCreated,
+              last_error: null,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'job' });
+        }
+      }
+
+      if (!interrupted && currentBuildingIndex >= totalBuildings) {
+        await supabase.from('asset_sync_progress').delete().eq('job', 'systems');
+      } else if (interrupted) {
+        await supabase
+          .from('asset_sync_progress')
+          .upsert({
+            job: 'systems',
+            building_fm_guid: currentBuildingIndex < totalBuildings ? buildings[currentBuildingIndex].fm_guid : null,
+            current_building_index: currentBuildingIndex,
+            skip: 0,
+            total_buildings: totalBuildings,
+            total_synced: totalSystemsCreated,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'job' });
+      }
+
+      console.log(`Systems sync ${interrupted ? 'paused' : 'completed'}: ${totalSystemsCreated} systems, ${totalLinksCreated} links`);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: interrupted
+            ? `Synkade ${totalSystemsCreated} system (${currentBuildingIndex}/${totalBuildings} byggnader). Anropa igen för att fortsätta.`
+            : `Klart: ${totalSystemsCreated} system, ${totalLinksCreated} kopplingar från ${totalBuildings} byggnader`,
+          systemsCreated: totalSystemsCreated,
+          linksCreated: totalLinksCreated,
+          interrupted,
+          progress: { currentBuildingIndex, totalBuildings }
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ============ DEFAULT: Unknown action ============
     return new Response(
       JSON.stringify({ success: false, error: `Unknown action: ${action}` }),
