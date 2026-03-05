@@ -338,7 +338,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   );
 
   return (
-    <div className="absolute inset-0 z-40 bg-background flex flex-col animate-in fade-in duration-300 overflow-hidden">
+    <div className="absolute inset-0 z-40 bg-background flex flex-col animate-in fade-in duration-300 overflow-hidden w-full max-w-full">
       {/* Background Image */}
       <div className="absolute inset-0 h-full">
         <img src={heroImage} className="w-full h-full object-cover" alt="Object hero" />
