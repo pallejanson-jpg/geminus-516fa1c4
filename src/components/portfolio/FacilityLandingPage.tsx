@@ -826,7 +826,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                       </div>
                       
                       {floorSpaces.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 sm:gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1 sm:gap-3 min-w-0">
                           {floorSpaces.slice(0, 20).map((space: any) => {
                             const spaceArea = space.attributes ? 
                               Object.keys(space.attributes).find(k => k.toLowerCase().startsWith('nta')) : null;
