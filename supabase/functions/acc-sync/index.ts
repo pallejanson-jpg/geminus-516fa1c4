@@ -808,6 +808,7 @@ async function extractBimHierarchy(
           // Debug logging
           console.log(`[BIM Fields] category=${categoryKey}, name=${nameKey}, elevation=${elevationKey}, level=${levelKey}, number=${numberKey}, roomName=${roomNameKey}, department=${departmentKey}, typeName=${typeNameKey}, roomRef=${roomRefKey}`);
           console.log(`[BIM Fields] Room prop keys: ${JSON.stringify(roomPropKeys)}`);
+          console.log(`[BIM Fields] System keys: systemName=${systemNameKey}, systemType=${systemTypeKey}, systemClass=${systemClassKey}, systemAbbr=${systemAbbrKey}`);
           console.log(`[BIM Fields] Total fields: ${Object.keys(fieldsMap).length}`);
           const fieldEntries = Object.entries(fieldsMap).map(([k, v]) => `${k}=${v}`).join(', ');
           console.log(`[BIM Fields] All fields: ${fieldEntries.substring(0, 2000)}`);
