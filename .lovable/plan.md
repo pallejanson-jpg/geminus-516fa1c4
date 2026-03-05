@@ -24,7 +24,31 @@ All tables have RLS: authenticated read, admin write. Indexes on common query pa
    - Stores ACC `externalId` mappings in `asset_external_ids` for all levels, rooms, instances
    - Infers discipline from system name (Ventilation, Heating, Cooling, Electrical, Plumbing, FireProtection)
 
+### System activation for existing buildings
+- **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
+- **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
+- **Asset+-byggnader**: `asset-plus-sync` stöder ännu inte systemextraktion (framtida)
+
 ### Frontend (future phase)
 - System tab on FacilityLandingPage
 - System badge on asset property dialogs
 - Manual system creation dialog
+
+---
+
+## Plan: Viewer Color Fix (IMPLEMENTED)
+
+### Changes made:
+1. **Window color** — Changed from blue-gray `[0.392, 0.490, 0.541]` (#647D8A) to neutral warm gray `[0.780, 0.780, 0.760]` (#C7C7C2) in:
+   - `src/lib/architect-colors.ts`
+   - `src/hooks/useArchitectViewMode.ts`
+   - Database `viewer_themes` table (both "Arkitektvy" and "Standard" themes)
+   - `ViewerFilterPanel.tsx` category palette
+
+2. **Space color** — Verified as correct neutral gray `[0.898, 0.894, 0.890]` (#E5E4E3). Changed category palette in ViewerFilterPanel from blue to neutral.
+
+3. **Background** — Already correct gray gradient in NativeViewerShell.
+
+4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
+
+5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
