@@ -108,7 +108,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
           <Button
             variant="secondary"
             size="icon"
-            className="h-8 w-8 bg-card/95 backdrop-blur-sm shadow-md border"
+            className="h-7 w-7 sm:h-8 sm:w-8 bg-card/95 backdrop-blur-sm shadow-md border"
             onClick={onOpenSettings}
             disabled={!isViewerReady}
           >
