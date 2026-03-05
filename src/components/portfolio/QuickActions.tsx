@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Globe, Package, BarChart, Cuboid, Square,
@@ -72,6 +72,15 @@ const QuickActions: React.FC<QuickActionsProps> = ({
 
   const disabledClass = 'opacity-40 cursor-not-allowed';
 
+  // Unified navigation helper — always routes to /viewer with correct params
+  const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid || facility.fmGuid;
+  const floorParam = isStorey ? `&floor=${facility.fmGuid}&floorName=${encodeURIComponent(facility.commonName || facility.name || '')}` : '';
+  const entityParam = isSpace ? `&entity=${facility.fmGuid}` : '';
+  
+  const navigateToViewer = useCallback((mode: string) => {
+    navigate(`/viewer?building=${buildingGuid}&mode=${mode}${floorParam}${entityParam}`);
+  }, [navigate, buildingGuid, floorParam, entityParam]);
+
   // Standardized button style with proper touch targets (min 44x44)
   const btnClass = "w-full justify-center gap-0.5 sm:gap-2 h-auto py-1.5 px-1 sm:py-3 sm:px-4 min-w-0 min-h-[44px] text-[10px] sm:text-sm flex-col sm:flex-row whitespace-normal text-center";
   const iconSize = 14;
@@ -107,12 +116,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
           {(isBuilding || isStorey || isSpace) && (
             <Button 
               variant="ghost" 
-              onClick={() => {
-                const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid || facility.fmGuid;
-                const floorParam = isStorey ? `&floor=${facility.fmGuid}&floorName=${encodeURIComponent(facility.commonName || facility.name || '')}` : '';
-                const entityParam = isSpace ? `&entity=${facility.fmGuid}` : '';
-                navigate(`/split-viewer?building=${buildingGuid}&mode=2d${floorParam}${entityParam}`);
-              }}
+              onClick={() => navigateToViewer('2d')}
               className={btnClass}
             >
               <Square size={iconSize} className="text-primary" />
@@ -124,10 +128,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
           {(isBuilding || isStorey || isSpace) && (
             <Button 
               variant="ghost" 
-              onClick={() => {
-                if (!has3D) return;
-                onToggle3D(facility);
-              }} 
+              onClick={() => { if (has3D) navigateToViewer('3d'); }}
               className={`${btnClass} ${!has3D ? disabledClass : ''}`}
             >
               <Cuboid size={iconSize} className="text-primary" />
@@ -139,11 +140,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
           {(isBuilding || isStorey) && (
             <Button 
               variant="ghost" 
-              onClick={() => {
-                if (!has360) return;
-                const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid || facility.fmGuid;
-                navigate(`/split-viewer?building=${buildingGuid}&mode=360`);
-              }} 
+              onClick={() => { if (has360) navigateToViewer('360'); }}
               className={`${btnClass} ${!has360 ? disabledClass : ''}`}
             >
               <View size={iconSize} className="text-destructive" />
@@ -155,7 +152,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
           {isBuilding && (
             <Button 
               variant="ghost" 
-              onClick={() => { if (hasSplit) navigate(`/split-viewer?building=${facility.fmGuid}&mode=split`); }}
+              onClick={() => { if (hasSplit) navigateToViewer('split'); }}
               className={`${btnClass} ${!hasSplit ? disabledClass : ''}`}
             >
               <SplitSquareHorizontal size={iconSize} className="text-accent" />
@@ -167,7 +164,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
           {isBuilding && (
             <Button 
               variant="ghost" 
-              onClick={() => { if (hasSplit) navigate(`/split-viewer?building=${facility.fmGuid}&mode=vt`); }}
+              onClick={() => { if (hasSplit) navigateToViewer('vt'); }}
               className={`${btnClass} ${!hasSplit ? disabledClass : ''}`}
             >
               <Layers size={iconSize} className="text-primary" />

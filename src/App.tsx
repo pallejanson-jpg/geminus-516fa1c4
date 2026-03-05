@@ -16,8 +16,8 @@ const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
 const IvionInventory = lazy(() => import("@/pages/IvionInventory"));
 // AI Asset Scan page
 const AiAssetScan = lazy(() => import("@/pages/AiAssetScan"));
-// Mobile 3D Viewer page (fullscreen)
-const Mobile3DViewer = lazy(() => import("@/pages/Mobile3DViewer"));
+// Unified Viewer page (fullscreen, all modes)
+const UnifiedViewerPage = lazy(() => import("@/pages/UnifiedViewer"));
 // Onboarding wizard
 const Onboarding = lazy(() => import("@/pages/Onboarding"));
 // Split Viewer - 3D + 360° side-by-side
@@ -110,13 +110,13 @@ const App = () => {
             } 
           />
           
-          {/* Mobile 3D Viewer - fullscreen mode */}
+          {/* Unified Viewer - fullscreen mode for all view modes */}
           <Route 
             path="/viewer" 
             element={
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                 <ProtectedRoute>
-                  <Mobile3DViewer />
+                  <UnifiedViewerPage />
                 </ProtectedRoute>
               </Suspense>
             } 
