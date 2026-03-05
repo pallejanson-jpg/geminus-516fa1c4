@@ -155,6 +155,66 @@ export type Database = {
         }
         Relationships: []
       }
+      asset_connections: {
+        Row: {
+          connection_type: string
+          created_at: string | null
+          direction: string | null
+          from_fm_guid: string
+          id: string
+          source: string | null
+          to_fm_guid: string
+        }
+        Insert: {
+          connection_type?: string
+          created_at?: string | null
+          direction?: string | null
+          from_fm_guid: string
+          id?: string
+          source?: string | null
+          to_fm_guid: string
+        }
+        Update: {
+          connection_type?: string
+          created_at?: string | null
+          direction?: string | null
+          from_fm_guid?: string
+          id?: string
+          source?: string | null
+          to_fm_guid?: string
+        }
+        Relationships: []
+      }
+      asset_external_ids: {
+        Row: {
+          created_at: string | null
+          external_id: string
+          fm_guid: string
+          id: string
+          last_seen_at: string | null
+          model_version: string | null
+          source: string
+        }
+        Insert: {
+          created_at?: string | null
+          external_id: string
+          fm_guid: string
+          id?: string
+          last_seen_at?: string | null
+          model_version?: string | null
+          source: string
+        }
+        Update: {
+          created_at?: string | null
+          external_id?: string
+          fm_guid?: string
+          id?: string
+          last_seen_at?: string | null
+          model_version?: string | null
+          source?: string
+        }
+        Relationships: []
+      }
       asset_plus_endpoint_cache: {
         Row: {
           key: string
@@ -253,6 +313,38 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      asset_system: {
+        Row: {
+          asset_fm_guid: string
+          created_at: string | null
+          id: string
+          role: string | null
+          system_id: string
+        }
+        Insert: {
+          asset_fm_guid: string
+          created_at?: string | null
+          id?: string
+          role?: string | null
+          system_id: string
+        }
+        Update: {
+          asset_fm_guid?: string
+          created_at?: string | null
+          id?: string
+          role?: string | null
+          system_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asset_system_system_id_fkey"
+            columns: ["system_id"]
+            isOneToOne: false
+            referencedRelation: "systems"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       assets: {
         Row: {
@@ -1353,6 +1445,56 @@ export type Database = {
             columns: ["bcf_issue_id"]
             isOneToOne: false
             referencedRelation: "bcf_issues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      systems: {
+        Row: {
+          building_fm_guid: string | null
+          created_at: string | null
+          discipline: string | null
+          fm_guid: string
+          id: string
+          is_active: boolean | null
+          name: string
+          parent_system_id: string | null
+          source: string | null
+          system_type: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          building_fm_guid?: string | null
+          created_at?: string | null
+          discipline?: string | null
+          fm_guid: string
+          id?: string
+          is_active?: boolean | null
+          name: string
+          parent_system_id?: string | null
+          source?: string | null
+          system_type?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          building_fm_guid?: string | null
+          created_at?: string | null
+          discipline?: string | null
+          fm_guid?: string
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          parent_system_id?: string | null
+          source?: string | null
+          system_type?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "systems_parent_system_id_fkey"
+            columns: ["parent_system_id"]
+            isOneToOne: false
+            referencedRelation: "systems"
             referencedColumns: ["id"]
           },
         ]
