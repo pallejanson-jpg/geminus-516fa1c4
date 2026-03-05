@@ -480,7 +480,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
 
             {/* Building Settings (collapsible) */}
             {showSettings && isBuilding && (
-              <Card className="animate-in fade-in duration-300">
+              <Card className="animate-in fade-in duration-300 overflow-hidden">
                 <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
                   <CardTitle className="text-sm sm:text-base flex items-center gap-2">
                     <Settings2 size={14} className="sm:w-4 sm:h-4 text-primary" />
