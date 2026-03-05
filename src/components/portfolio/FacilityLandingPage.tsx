@@ -400,8 +400,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
 
           <div className="space-y-4 sm:space-y-6 mt-6 sm:mt-8">
             {/* Basic Info Card */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between p-3 sm:p-6 pb-2 sm:pb-4">
+            <Card className="overflow-hidden">
+              <CardHeader className="flex flex-row items-center justify-between p-3 sm:p-6 pb-2 sm:pb-4 min-w-0">
                 <CardTitle className="text-sm sm:text-base flex items-center gap-2">
                   <Info size={14} className="sm:w-4 sm:h-4 text-primary" />
                   Basic Information
