@@ -225,6 +225,16 @@ const App = () => {
             } 
           />
           
+          {/* Standalone Plugin page — minimal chrome, for companion windows */}
+          <Route 
+            path="/plugin" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <PluginPage />
+              </Suspense>
+            } 
+          />
+          
           {/* Protected app routes */}
           <Route 
             path="/*" 

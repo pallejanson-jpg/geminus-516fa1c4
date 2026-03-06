@@ -289,6 +289,8 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
             floorId,
             floorName,
             drawingObjectId: embedConfig?.drawingObjectId,
+            hdcObjectId: hdcContext.objectId,
+            hdcObjectType: hdcContext.objectType,
           }}
         />
       )}
