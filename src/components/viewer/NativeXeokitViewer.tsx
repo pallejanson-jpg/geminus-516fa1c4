@@ -322,76 +322,32 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }).catch(() => {});
       }
 
-      // A-model filter: only load models whose name starts with "A" (architectural)
-      // Non-architectural prefixes are excluded (BRAND, FIRE, V-, EL-, MEP, SPRINKLER, etc.)
+      // Load all available models, but prioritize architectural models first in queue.
       const NON_ARCH_PREFIXES = ['BRAND', 'FIRE', 'V-', 'V_', 'VS-', 'VS_', 'EL-', 'EL_', 'MEP', 'SPRINKLER', 'K-', 'K_', 'R-', 'R_', 'S-', 'S_'];
       const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
-      const hasRealName = (name: string | null) => name && !UUID_RE.test(name);
 
-      const isArchitectural = (_id: string, name: string | null) => {
-        if (!hasRealName(name)) return false; // UUID or no name — can't determine, handle separately
-        const upper = name!.toUpperCase();
+      const isArchitectural = (name: string | null) => {
+        if (!name || UUID_RE.test(name)) return false;
+        const upper = name.toUpperCase();
         if (NON_ARCH_PREFIXES.some(p => upper.startsWith(p))) return false;
-        if (upper.charAt(0) === 'A') return true;
-        return false; // Unknown prefix — not architectural
+        return upper.charAt(0) === 'A' || upper.includes('ARKITEKT');
       };
 
-      // Separate models with real names vs UUID-only names
-      const namedModels = models.filter((m: ModelCandidate) => hasRealName(m.model_name));
-      const uuidModels = models.filter((m: ModelCandidate) => !hasRealName(m.model_name));
-
-      let loadList: ModelInfo[];
-      let backgroundList: ModelInfo[];
-
-      if (namedModels.length > 0) {
-        // Use strict name-based filtering: only A-prefixed architectural models
-        const archModels = namedModels.filter((m: ModelCandidate) => isArchitectural(m.model_id, m.model_name));
-        if (archModels.length > 0) {
-          loadList = archModels;
-        } else {
-          // Smart fallback: no A-models found, but named models exist that aren't explicitly non-architectural
-          // Load the largest non-excluded model (likely architectural with different naming in Asset+)
-          const nonExcluded = namedModels.filter((m: ModelCandidate) => {
-            const upper = (m.model_name || '').toUpperCase();
-            return !NON_ARCH_PREFIXES.some(p => upper.startsWith(p));
-          });
-          if (nonExcluded.length > 0) {
-            const sorted = [...nonExcluded].sort((a, b) => (b.file_size || 0) - (a.file_size || 0));
-            loadList = [sorted[0]];
-            console.warn(`[NativeViewer] No A-prefixed models — fallback to largest non-excluded: "${sorted[0].model_name}" (${((sorted[0].file_size || 0) / 1024 / 1024).toFixed(1)} MB)`);
-          } else {
-            loadList = [];
-          }
-        }
-        backgroundList = []; // Strict mode: never auto-load secondary/non-A models
-      } else {
-        // UUID-only fallback: prioritize DB-known models first, ignore storage-only spillover when possible
-        const dbUuidModels = uuidModels.filter((m: ModelCandidate) => m.source === 'db');
-        const uuidPool = dbUuidModels.length > 0 ? dbUuidModels : uuidModels;
-        const sorted = [...uuidPool].sort((a, b) => (b.file_size || 0) - (a.file_size || 0));
-
-        loadList = sorted.length > 0 ? [sorted[0]] : [];
-        backgroundList = []; // Strict mode
-
-        console.log(`[NativeViewer] UUID fallback pool: ${uuidPool.length} (db=${dbUuidModels.length}, storage=${uuidModels.length - dbUuidModels.length})`);
-      }
-
-      if (loadList.length === 0 && models.length > 0) {
-        // Last resort: load the single largest model regardless of naming
-        const fallbackSorted = [...models].sort((a, b) => (b.file_size || 0) - (a.file_size || 0));
-        loadList = [fallbackSorted[0]];
-        console.warn(`[NativeViewer] No A-models or named models matched — fallback to largest available: "${fallbackSorted[0].model_name || fallbackSorted[0].model_id}" (${((fallbackSorted[0].file_size || 0) / 1024 / 1024).toFixed(1)} MB)`);
-      }
+      const loadList: ModelInfo[] = [...models].sort((a, b) => {
+        const aArch = isArchitectural(a.model_name) ? 0 : 1;
+        const bArch = isArchitectural(b.model_name) ? 0 : 1;
+        if (aArch !== bArch) return aArch - bArch;
+        return (a.model_name || a.model_id).localeCompare((b.model_name || b.model_id), 'sv');
+      });
 
       if (loadList.length === 0) {
         console.warn('[NativeViewer] No models found at all for building', buildingFmGuid);
-        setErrorMsg(`Inga XKT-modeller hittades för denna byggnad, varken lokalt eller från Asset+.`);
+        setErrorMsg('Inga XKT-modeller hittades för denna byggnad.');
         setPhase('error');
         return;
       }
 
-      console.log(`[NativeViewer] A-filter (strict): Initial load ${loadList.length}/${models.length}. Secondary auto-load disabled.`);
-
+      console.log(`[NativeViewer] Loading ${loadList.length}/${models.length} models (A-models prioritized)`);
       setLoadProgress({ loaded: 0, total: loadList.length });
 
       // 4. Load models with strict sequential loading (prevents xeokit parser OOM/crashes on large files)
