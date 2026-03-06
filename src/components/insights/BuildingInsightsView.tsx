@@ -707,9 +707,17 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                 <Zap className="h-4 w-4 text-[hsl(var(--chart-4))]" />
                                                 Energy per Floor
                                                 <span className="ml-auto cursor-pointer" onClick={() => {
-                                                    const colorMap: Record<string, [number, number, number]> = {};
-                                                    energyByFloor.forEach(f => { colorMap[f.fmGuid] = hslStringToRgbFloat(f.color); });
-                                                    handleInsightsClick({ mode: 'energy_floors', colorMap });
+                                                    const roomColorMap: Record<string, [number, number, number]> = {};
+                                                    energyByFloor.forEach(f => {
+                                                        const floorColor = hslStringToRgbFloat(f.color);
+                                                        buildingSpaces.forEach((space: any) => {
+                                                            if (space.levelFmGuid === f.fmGuid) {
+                                                                roomColorMap[space.fmGuid] = floorColor;
+                                                            }
+                                                        });
+                                                        roomColorMap[f.fmGuid] = floorColor;
+                                                    });
+                                                    handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
                                                 }}><ViewerLink /></span>
                                             </CardTitle>
                                             <CardDescription>kWh per m² by floor level · Click bar for 3D</CardDescription>
@@ -728,9 +736,17 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                         <Bar dataKey="kwhPerSqm" name="kWh/m²" radius={[0, 4, 4, 0]} style={{ cursor: 'pointer' }}>
                                                             {energyByFloor.map((entry, index) => (
                                                                 <Cell key={`cell-${index}`} fill={entry.color} onClick={() => {
-                                                                    const colorMap: Record<string, [number, number, number]> = {};
-                                                                    colorMap[entry.fmGuid] = hslStringToRgbFloat(entry.color);
-                                                                    handleInsightsClick({ mode: 'energy_floor', colorMap, entity: entry.fmGuid });
+                                                                    // Resolve storey to child rooms for reliable 3D matching
+                                                                    const floorColor = hslStringToRgbFloat(entry.color);
+                                                                    const roomColorMap: Record<string, [number, number, number]> = {};
+                                                                    buildingSpaces.forEach((space: any) => {
+                                                                        if (space.levelFmGuid === entry.fmGuid) {
+                                                                            roomColorMap[space.fmGuid] = floorColor;
+                                                                        }
+                                                                    });
+                                                                    // Fallback: also include storey itself for models that do match
+                                                                    roomColorMap[entry.fmGuid] = floorColor;
+                                                                    handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
                                                                 }} />
                                                             ))}
                                                         </Bar>
@@ -748,10 +764,17 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                             <ThermometerSun className="h-4 w-4 text-[hsl(var(--chart-4))]" />
                                             Energy Distribution
                                             <span className="ml-auto cursor-pointer" onClick={() => {
-                                                // Navigate with all floor colors (energy doesn't map to objects directly)
-                                                const colorMap: Record<string, [number, number, number]> = {};
-                                                energyByFloor.forEach(f => { colorMap[f.fmGuid] = hslStringToRgbFloat(f.color); });
-                                                handleInsightsClick({ mode: 'energy_floors', colorMap });
+                                                const roomColorMap: Record<string, [number, number, number]> = {};
+                                                energyByFloor.forEach(f => {
+                                                    const floorColor = hslStringToRgbFloat(f.color);
+                                                    buildingSpaces.forEach((space: any) => {
+                                                        if (space.levelFmGuid === f.fmGuid) {
+                                                            roomColorMap[space.fmGuid] = floorColor;
+                                                        }
+                                                    });
+                                                    roomColorMap[f.fmGuid] = floorColor;
+                                                });
+                                                handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
                                             }}><ViewerLink /></span>
                                         </CardTitle>
                                         <CardDescription>Breakdown by category</CardDescription>
@@ -763,11 +786,18 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                     <Pie data={energyDistribution} cx="50%" cy="50%" innerRadius={isMobile ? 40 : 45} outerRadius={isMobile ? 65 : 75} paddingAngle={2} dataKey="value" label={renderPieLabel} labelLine={!isMobile}>
                                                         {energyDistribution.map((entry, index) => (
                                                             <Cell key={`cell-${index}`} fill={entry.color} style={{ cursor: 'pointer' }} onClick={() => {
-                                                                // Individual segment: color all floors with this category's color
-                                                                const colorMap: Record<string, [number, number, number]> = {};
+                                                                // Resolve all floors to child rooms for reliable 3D matching
                                                                 const categoryColor = hslStringToRgbFloat(entry.color);
-                                                                energyByFloor.forEach(f => { colorMap[f.fmGuid] = categoryColor; });
-                                                                handleInsightsClick({ mode: 'energy_floor', colorMap, entity: entry.name });
+                                                                const roomColorMap: Record<string, [number, number, number]> = {};
+                                                                energyByFloor.forEach(f => {
+                                                                    buildingSpaces.forEach((space: any) => {
+                                                                        if (space.levelFmGuid === f.fmGuid) {
+                                                                            roomColorMap[space.fmGuid] = categoryColor;
+                                                                        }
+                                                                    });
+                                                                    roomColorMap[f.fmGuid] = categoryColor;
+                                                                });
+                                                                handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
                                                             }} />
                                                         ))}
                                                     </Pie>
