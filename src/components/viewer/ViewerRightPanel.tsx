@@ -487,7 +487,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
           side={isMobile ? "bottom" : "right"} 
           className={cn(
             "p-0 bg-card backdrop-blur-md [&>button.absolute]:hidden z-[60]",
-            isMobile ? "w-full max-h-[75vh] rounded-t-2xl" : "w-[280px] sm:w-[320px] md:w-[340px] top-[52px] h-[calc(100vh-52px)]"
+            isMobile ? "w-full max-h-[75vh] rounded-t-2xl" : "w-[280px] sm:w-[320px] md:w-[340px] top-[44px] h-[calc(100vh-44px)]"
           )}
         >
           <SheetHeader className="p-4 pb-2 border-b">
