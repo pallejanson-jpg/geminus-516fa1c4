@@ -728,9 +728,17 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                         <Bar dataKey="kwhPerSqm" name="kWh/m²" radius={[0, 4, 4, 0]} style={{ cursor: 'pointer' }}>
                                                             {energyByFloor.map((entry, index) => (
                                                                 <Cell key={`cell-${index}`} fill={entry.color} onClick={() => {
-                                                                    const colorMap: Record<string, [number, number, number]> = {};
-                                                                    colorMap[entry.fmGuid] = hslStringToRgbFloat(entry.color);
-                                                                    handleInsightsClick({ mode: 'energy_floor', colorMap, entity: entry.fmGuid });
+                                                                    // Resolve storey to child rooms for reliable 3D matching
+                                                                    const floorColor = hslStringToRgbFloat(entry.color);
+                                                                    const roomColorMap: Record<string, [number, number, number]> = {};
+                                                                    buildingSpaces.forEach((space: any) => {
+                                                                        if (space.levelFmGuid === entry.fmGuid) {
+                                                                            roomColorMap[space.fmGuid] = floorColor;
+                                                                        }
+                                                                    });
+                                                                    // Fallback: also include storey itself for models that do match
+                                                                    roomColorMap[entry.fmGuid] = floorColor;
+                                                                    handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
                                                                 }} />
                                                             ))}
                                                         </Bar>
