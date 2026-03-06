@@ -97,8 +97,9 @@ const CesiumGlobeView: React.FC = () => {
     cesiumViewerRef.current = viewer;
     viewer.resolutionScale = window.innerWidth > 768 ? 0.85 : 1.0;
 
+    // Start fully zoomed out to show the whole globe
     viewer.camera.setView({
-      destination: toCartesian(62.5, 15.0, 2200000),
+      destination: Cesium.Cartesian3.fromDegrees(15.0, 20.0, 20000000),
       orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
     });
 
