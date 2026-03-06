@@ -208,14 +208,20 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   }, [levels, apSources]);
 
   const spaces: SpaceItem[] = useMemo(() => {
-    const visibleLevelGuids = checkedLevels.size > 0
-      ? new Set(Array.from(checkedLevels).map(g => normalizeGuid(g)))
-      : new Set(levels.map(l => normalizeGuid(l.fmGuid)));
+    // When levels are available from viewer, filter by visible levels
+    // When no levels (viewer not ready), show ALL spaces for this building
+    let visibleLevelGuids: Set<string> | null = null;
+    if (levels.length > 0) {
+      visibleLevelGuids = checkedLevels.size > 0
+        ? new Set(Array.from(checkedLevels).map(g => normalizeGuid(g)))
+        : new Set(levels.map(l => normalizeGuid(l.fmGuid)));
+    }
 
     return buildingData
       .filter((a: any) => {
         const cat = a.category;
         if (cat !== 'Space' && cat !== 'IfcSpace') return false;
+        if (!visibleLevelGuids) return true; // No levels loaded yet, show all
         const levelGuid = normalizeGuid(a.levelFmGuid || a.level_fm_guid || '');
         return visibleLevelGuids.has(levelGuid);
       })
@@ -641,7 +647,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       'Wall': ['IfcWall', 'IfcWallStandardCase'],
       'Door': ['IfcDoor'],
       'Window': ['IfcWindow'],
-      'Slab': ['IfcSlab'],
+      'Slab': ['IfcSlab', 'IfcSlabStandardCase'],
       'Roof': ['IfcRoof'],
       'Stair': ['IfcStairFlight', 'IfcStair'],
       'Column': ['IfcColumn'],
@@ -649,6 +655,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       'Covering': ['IfcCovering'],
       'Railing': ['IfcRailing'],
       'Curtain Wall': ['IfcCurtainWall', 'IfcPlate'],
+      'Furnishing': ['IfcFurnishingElement'],
+      'Flow Terminal': ['IfcFlowTerminal'],
+      'Flow Segment': ['IfcFlowSegment'],
+      'Flow Fitting': ['IfcFlowFitting'],
+      'Flow Controller': ['IfcFlowController'],
+      'Pipe': ['IfcPipeSegment', 'IfcPipeFitting'],
+      'Duct': ['IfcDuctSegment', 'IfcDuctFitting'],
+      'Member': ['IfcMember'],
+      'Proxy': ['IfcBuildingElementProxy'],
     };
     for (const [cat, types] of Object.entries(mappings)) {
       map.set(cat, new Set(types));
@@ -878,7 +893,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       checkedCategories.forEach(cat => {
         const ifcTypes = categoryToIfcTypes.get(cat);
         if (ifcTypes) ifcTypes.forEach(t => allowedIfcTypes.add(t));
+        // Also add the raw category name and its Ifc-prefixed variant for fallback matching
         allowedIfcTypes.add(cat);
+        allowedIfcTypes.add('Ifc' + cat);
+        allowedIfcTypes.add('Ifc' + cat.replace(/\s+/g, ''));
       });
       if (viewer.metaScene?.metaObjects) {
         Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
@@ -1210,7 +1228,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   return (
     <div
       className={cn(
-        "fixed left-0 top-0 bottom-0 z-40 w-[85%] max-w-[320px] sm:w-[320px]",
+        "fixed left-0 top-0 bottom-0 z-[65] w-[85%] max-w-[320px] sm:w-[320px]",
         "bg-card/95 backdrop-blur-xl border-r shadow-2xl text-foreground",
         "flex flex-col",
         "animate-in slide-in-from-left duration-200"

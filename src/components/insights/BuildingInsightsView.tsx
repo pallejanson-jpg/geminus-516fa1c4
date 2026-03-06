@@ -404,12 +404,11 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             }
         });
 
-        // Space types (REAL from allData - hierarchy is always loaded)
+        // Space types grouped by commonName (REAL from allData)
         const spaceTypes: Record<string, number> = {};
         buildingSpaces.forEach((space: any) => {
-            const attrs = space.attributes || {};
-            const type = attrs.spaceType || attrs.roomType || 'Unknown';
-            spaceTypes[type] = (spaceTypes[type] || 0) + 1;
+            const name = space.commonName || space.name || 'Unknown';
+            spaceTypes[name] = (spaceTypes[name] || 0) + 1;
         });
 
         // Deduplicate floors: strip model suffix like " - 01", " - 02" and count unique
@@ -549,7 +548,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             .map(([name, value], i) => ({ name, value, color: colors[i % colors.length] }));
     }, [stats.assetCategories]);
 
-    // Prepare space type pie data (REAL)
+    // Prepare space type pie data (REAL - grouped by commonName)
     const spaceTypePie = useMemo(() => {
         const colors = [
             'hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))',
@@ -558,7 +557,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         return Object.entries(stats.spaceTypes)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 6)
-            .map(([name, value], i) => ({ name: name.length > 15 ? name.substring(0, 15) + '...' : name, value, color: colors[i % colors.length] }));
+            .map(([name, value], i) => ({ name: name.length > 18 ? name.substring(0, 18) + '...' : name, fullName: name, value, color: colors[i % colors.length] }));
     }, [stats.spaceTypes]);
 
     return (
@@ -751,15 +750,13 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                             <DoorOpen className="h-4 w-4 text-[hsl(var(--chart-3))]" />
                                             Room Types
                                             <span className="ml-auto cursor-pointer" onClick={() => {
-                                                const typeColorMap: Record<string, [number, number, number]> = {};
-                                                spaceTypePie.forEach(s => { typeColorMap[s.name] = hslStringToRgbFloat(s.color); });
-                                                // Resolve type names → room fmGuids so the viewer can match by fmGuid
+                                                // Build color map: room fmGuid → pie chart color based on commonName
+                                                const nameColorMap: Record<string, [number, number, number]> = {};
+                                                spaceTypePie.forEach(s => { nameColorMap[s.fullName] = hslStringToRgbFloat(s.color); });
                                                 const roomColorMap: Record<string, [number, number, number]> = {};
                                                 buildingSpaces.forEach((space: any) => {
-                                                    const attrs = space.attributes || {};
-                                                    const type = attrs.spaceType || attrs.roomType || 'Unknown';
-                                                    const truncated = type.length > 15 ? type.substring(0, 15) + '...' : type;
-                                                    const color = typeColorMap[type] || typeColorMap[truncated];
+                                                    const name = space.commonName || space.name || 'Unknown';
+                                                    const color = nameColorMap[name];
                                                     if (color) roomColorMap[space.fmGuid] = color;
                                                 });
                                                 handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
@@ -775,14 +772,12 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                         <Pie data={spaceTypePie} cx="50%" cy="50%" innerRadius={isMobile ? 40 : 50} outerRadius={isMobile ? 65 : 80} paddingAngle={2} dataKey="value" label={renderPieLabel} labelLine={!isMobile}>
                                                             {spaceTypePie.map((entry, index) => (
                                                                 <Cell key={`cell-${index}`} fill={entry.color} style={{ cursor: 'pointer' }} onClick={() => {
-                                                                    // Resolve this room type to actual room fmGuids
+                                                                    // Resolve this room name group to actual room fmGuids
                                                                     const typeColor = hslStringToRgbFloat(entry.color);
                                                                     const roomColorMap: Record<string, [number, number, number]> = {};
                                                                     buildingSpaces.forEach((space: any) => {
-                                                                        const attrs = space.attributes || {};
-                                                                        const type = attrs.spaceType || attrs.roomType || 'Unknown';
-                                                                        const truncated = type.length > 15 ? type.substring(0, 15) + '...' : type;
-                                                                        if (type === entry.name || truncated === entry.name) {
+                                                                        const name = space.commonName || space.name || 'Unknown';
+                                                                        if (name === entry.fullName) {
                                                                             roomColorMap[space.fmGuid] = typeColor;
                                                                         }
                                                                     });
@@ -872,27 +867,25 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                  <sensorMetricDef.icon className="h-4 w-4" style={{ color: sensorMetricDef.color }} />
                                                  Room Heatmap – {sensorMetricDef.label}
                                              </CardTitle>
-                                             <Button
-                                                 variant="outline"
-                                                 size="sm"
-                                                 className="h-7 px-2 text-[10px] gap-1"
-                                                 onClick={() => {
-                                                     const typeColorMap: Record<string, [number, number, number]> = {};
-                                                     spaceTypePie.forEach(s => { typeColorMap[s.name] = hslStringToRgbFloat(s.color); });
-                                                     const roomColorMap: Record<string, [number, number, number]> = {};
-                                                     buildingSpaces.forEach((space: any) => {
-                                                         const attrs = space.attributes || {};
-                                                         const type = attrs.spaceType || attrs.roomType || 'Unknown';
-                                                         const truncated = type.length > 15 ? type.substring(0, 15) + '...' : type;
-                                                         const color = typeColorMap[type] || typeColorMap[truncated];
-                                                         if (color) roomColorMap[space.fmGuid] = color;
-                                                     });
-                                                     handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
-                                                 }}
-                                             >
-                                                 <Eye className="h-3 w-3" />
-                                                  View rooms in 3D
-                                             </Button>
+                                              <Button
+                                                  variant="outline"
+                                                  size="sm"
+                                                  className="h-7 px-2 text-[10px] gap-1"
+                                                  onClick={() => {
+                                                      // Use sensor heatmap colors matching the room cards
+                                                      const roomColorMap: Record<string, [number, number, number]> = {};
+                                                      sensorRoomValues.forEach((room: any) => {
+                                                          if (room.value !== null) {
+                                                              const rgb = getVisualizationColor(room.value, sensorMetric);
+                                                              roomColorMap[room.fmGuid] = rgb;
+                                                          }
+                                                      });
+                                                      handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
+                                                  }}
+                                              >
+                                                  <Eye className="h-3 w-3" />
+                                                   View rooms in 3D
+                                              </Button>
                                          </div>
                                          <CardDescription>
                                              {sensorRooms.length} of {spaceFloorFilter ? `rooms on ${spaceFloorFilter}` : `${buildingSpaces.length} rooms`} · click for sensor details
