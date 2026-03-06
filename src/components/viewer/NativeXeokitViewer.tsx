@@ -581,6 +581,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       const scene = viewer.scene;
       const colorMap = detail.colorMap;
+      const mode = detail.mode || '';
 
       // X-ray everything first
       const xrayMat = scene.xrayMaterial;
@@ -593,40 +594,80 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       }
       scene.setObjectsXRayed(scene.objectIds, true);
 
-      // Colorize matching objects
-      Object.entries(colorMap).forEach(([fmGuid, rgb]) => {
-        // Find entities matching this fmGuid in metaScene
-        const metaObjects = viewer.metaScene.metaObjects;
-        if (!metaObjects) return;
-        Object.values(metaObjects).forEach((mo: any) => {
-          const sysId = (mo.originalSystemId || '').toLowerCase();
-          if (sysId === fmGuid.toLowerCase() || sysId.replace(/-/g, '') === fmGuid.toLowerCase().replace(/-/g, '')) {
-            const entity = scene.objects?.[mo.id];
-            if (entity) {
-              entity.xrayed = false;
-              entity.visible = true;
-              entity.colorize = rgb;
-              entity.opacity = 0.85;
+      const metaObjects = viewer.metaScene.metaObjects;
+      if (!metaObjects) return;
+
+      // Helper: un-xray + colorize an entity and its descendants
+      const colorizeEntity = (mo: any, rgb: [number, number, number]) => {
+        const entity = scene.objects?.[mo.id];
+        if (entity) {
+          entity.xrayed = false;
+          entity.visible = true;
+          entity.colorize = rgb;
+          entity.opacity = 0.85;
+        }
+        const collectDescendants = (obj: any) => {
+          obj.children?.forEach((child: any) => {
+            const childEntity = scene.objects?.[child.id];
+            if (childEntity) {
+              childEntity.xrayed = false;
+              childEntity.visible = true;
+              childEntity.colorize = rgb;
+              childEntity.opacity = 0.85;
             }
-            // Also colorize descendants (e.g. room contents)
-            const collectDescendants = (obj: any) => {
-              obj.children?.forEach((child: any) => {
-                const childEntity = scene.objects?.[child.id];
-                if (childEntity) {
-                  childEntity.xrayed = false;
-                  childEntity.visible = true;
-                  childEntity.colorize = rgb;
-                  childEntity.opacity = 0.85;
-                }
-                collectDescendants(child);
-              });
-            };
-            collectDescendants(mo);
+            collectDescendants(child);
+          });
+        };
+        collectDescendants(mo);
+      };
+
+      // Normalize a guid for comparison
+      const norm = (s: string) => (s || '').toLowerCase().replace(/-/g, '');
+
+      if (mode === 'room_type' || mode === 'room_types') {
+        // colorMap is keyed by room-type name (e.g. "Kontor") → match IfcSpace objects by their type attribute
+        // We need allData from AppContext — but since we don't have it here, match via metaScene type name
+        // Strategy: iterate all metaObjects, find IfcSpace types, look up their originalSystemId in allData via event detail
+        // Since we can't access allData, we pass an extended colorMap from BuildingInsightsView that maps fmGuid→color
+        // Fallback: try matching colorMap keys as fmGuids first (room_spaces mode), then as type names
+        Object.values(metaObjects).forEach((mo: any) => {
+          const sysId = norm(mo.originalSystemId || '');
+          // Check if this object's fmGuid is directly in the colorMap
+          const directKey = Object.keys(colorMap).find(k => norm(k) === sysId);
+          if (directKey) {
+            colorizeEntity(mo, colorMap[directKey]);
           }
         });
-      });
+      } else if (mode === 'asset_category' || mode === 'asset_categories') {
+        // colorMap is keyed by asset type name (e.g. "Alarm", "FireExtinguisher")
+        // Match metaScene objects whose IFC type (without "Ifc" prefix) matches
+        const typeColorLookup = new Map<string, [number, number, number]>();
+        Object.entries(colorMap).forEach(([typeName, rgb]) => {
+          typeColorLookup.set(typeName.toLowerCase(), rgb);
+          // Also try with "Ifc" prefix stripped
+          typeColorLookup.set(('ifc' + typeName).toLowerCase(), rgb);
+        });
+        Object.values(metaObjects).forEach((mo: any) => {
+          const ifcType = (mo.type || '').toLowerCase();
+          const strippedType = ifcType.replace(/^ifc/, '');
+          const rgb = typeColorLookup.get(ifcType) || typeColorLookup.get(strippedType);
+          if (rgb) {
+            colorizeEntity(mo, rgb);
+          }
+        });
+      } else {
+        // Default: match by fmGuid (energy_floors, energy_floor, room_spaces, etc.)
+        Object.entries(colorMap).forEach(([fmGuid, rgb]) => {
+          Object.values(metaObjects).forEach((mo: any) => {
+            const sysId = norm(mo.originalSystemId || '');
+            if (sysId === norm(fmGuid)) {
+              colorizeEntity(mo, rgb);
+            }
+          });
+        });
+      }
 
-      console.log('[NativeViewer] Applied INSIGHTS_COLOR_UPDATE:', detail.mode, Object.keys(colorMap).length, 'entries');
+      console.log('[NativeViewer] Applied INSIGHTS_COLOR_UPDATE:', mode, Object.keys(colorMap).length, 'entries');
     };
 
     window.addEventListener(INSIGHTS_COLOR_UPDATE_EVENT, handler);
