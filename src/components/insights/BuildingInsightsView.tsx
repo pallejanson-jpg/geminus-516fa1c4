@@ -772,14 +772,12 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                         <Pie data={spaceTypePie} cx="50%" cy="50%" innerRadius={isMobile ? 40 : 50} outerRadius={isMobile ? 65 : 80} paddingAngle={2} dataKey="value" label={renderPieLabel} labelLine={!isMobile}>
                                                             {spaceTypePie.map((entry, index) => (
                                                                 <Cell key={`cell-${index}`} fill={entry.color} style={{ cursor: 'pointer' }} onClick={() => {
-                                                                    // Resolve this room type to actual room fmGuids
+                                                                    // Resolve this room name group to actual room fmGuids
                                                                     const typeColor = hslStringToRgbFloat(entry.color);
                                                                     const roomColorMap: Record<string, [number, number, number]> = {};
                                                                     buildingSpaces.forEach((space: any) => {
-                                                                        const attrs = space.attributes || {};
-                                                                        const type = attrs.spaceType || attrs.roomType || 'Unknown';
-                                                                        const truncated = type.length > 15 ? type.substring(0, 15) + '...' : type;
-                                                                        if (type === entry.name || truncated === entry.name) {
+                                                                        const name = space.commonName || space.name || 'Unknown';
+                                                                        if (name === entry.fullName) {
                                                                             roomColorMap[space.fmGuid] = typeColor;
                                                                         }
                                                                     });
