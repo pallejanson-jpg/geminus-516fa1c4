@@ -49,6 +49,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   const [loadProgress, setLoadProgress] = useState({ loaded: 0, total: 0 });
   const [errorMsg, setErrorMsg] = useState('');
   const mountedRef = useRef(true);
+  // Store pending insights color event to re-apply after models load
+  const pendingInsightsColorRef = useRef<InsightsColorUpdateDetail | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -535,6 +537,14 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         setPhase('ready');
         (window as any).__nativeXeokitViewer = viewer;
         onViewerReady?.(viewer);
+        // Re-apply any pending insights color event that arrived before models loaded
+        if (pendingInsightsColorRef.current) {
+          const pending = pendingInsightsColorRef.current;
+          pendingInsightsColorRef.current = null;
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail: pending }));
+          }, 200);
+        }
       }
 
       // 6. Secondary/non-A auto-loading disabled in strict A-mode to avoid OOM/crashes
@@ -574,13 +584,20 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   // ── Listen for Insights color events (chart click → colorize model) ───
   useEffect(() => {
     const handler = (e: Event) => {
-      const viewer = viewerRef.current;
-      if (!viewer?.scene || !viewer?.metaScene) return;
       const detail = (e as CustomEvent<InsightsColorUpdateDetail>).detail;
       if (!detail?.colorMap) return;
 
+      const viewer = viewerRef.current;
+      if (!viewer?.scene || !viewer?.metaScene) {
+        // Viewer not ready yet — store for later
+        pendingInsightsColorRef.current = detail;
+        console.log('[NativeViewer] INSIGHTS_COLOR_UPDATE received but viewer not ready — queued');
+        return;
+      }
+
       const scene = viewer.scene;
       const colorMap = detail.colorMap;
+      let matchCount = 0;
       const mode = detail.mode || '';
 
       // X-ray everything first
@@ -605,6 +622,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           entity.visible = true;
           entity.colorize = rgb;
           entity.opacity = 0.85;
+          matchCount++;
         }
         const collectDescendants = (obj: any) => {
           obj.children?.forEach((child: any) => {
@@ -667,7 +685,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         });
       }
 
-      console.log('[NativeViewer] Applied INSIGHTS_COLOR_UPDATE:', mode, Object.keys(colorMap).length, 'entries');
+      console.log('[NativeViewer] Applied INSIGHTS_COLOR_UPDATE:', mode, Object.keys(colorMap).length, 'entries,', matchCount, 'entities matched');
     };
 
     window.addEventListener(INSIGHTS_COLOR_UPDATE_EVENT, handler);
