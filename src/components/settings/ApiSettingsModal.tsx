@@ -992,9 +992,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     // Fetch sync status and asset count
     const fetchSyncStatus = async () => {
         try {
-            const [syncResult, countResult] = await Promise.all([
+            const [syncResult, countResult, systemCountResult] = await Promise.all([
                 supabase.from('asset_sync_state').select('*').order('subtree_name'),
-                supabase.from('assets').select('id', { count: 'exact', head: true })
+                supabase.from('assets').select('id', { count: 'exact', head: true }),
+                supabase.from('systems').select('id', { count: 'exact', head: true }),
             ]);
             
             if (syncResult.data) {
@@ -1002,6 +1003,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             }
             if (countResult.count !== null) {
                 setAssetCount(countResult.count);
+            }
+            if (systemCountResult.count !== null) {
+                setSystemCount(systemCountResult.count);
             }
         } catch (error) {
             console.error('Failed to fetch sync status:', error);
