@@ -3025,7 +3025,21 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             errorMessage={syncCheck?.xkt?.syncState?.error_message}
                                         />
 
-                                        {syncCheck && (
+                                        <SyncProgressCard
+                                            icon={<Network className="h-5 w-5 text-primary" />}
+                                            title="Technical Systems"
+                                            subtitle="Ventilation, heating, electrical systems from Asset+ attributes"
+                                            localCount={systemCount}
+                                            remoteLabel={systemSyncResult ? `${systemSyncResult.created} created, ${systemSyncResult.links} links` : undefined}
+                                            inSync={systemCount > 0 ? true : null}
+                                            isSyncing={isSyncingSystems}
+                                            isCheckingSync={isCheckingSync}
+                                            disabled={isSyncingStructure || isSyncingAssets || isSyncingXkt || isSyncingSystems}
+                                            onSync={handleSyncSystems}
+                                            syncButtonLabel="Sync Systems"
+                                            syncButtonVariant="secondary"
+                                        />
+
                                             <div className="rounded-lg border bg-muted/30 p-3">
                                                 <div className="flex items-center justify-between text-sm">
                                                     <span className="text-muted-foreground">Total in local database:</span>
