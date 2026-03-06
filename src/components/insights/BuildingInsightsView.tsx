@@ -867,27 +867,25 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                  <sensorMetricDef.icon className="h-4 w-4" style={{ color: sensorMetricDef.color }} />
                                                  Room Heatmap – {sensorMetricDef.label}
                                              </CardTitle>
-                                             <Button
-                                                 variant="outline"
-                                                 size="sm"
-                                                 className="h-7 px-2 text-[10px] gap-1"
-                                                 onClick={() => {
-                                                     const typeColorMap: Record<string, [number, number, number]> = {};
-                                                     spaceTypePie.forEach(s => { typeColorMap[s.name] = hslStringToRgbFloat(s.color); });
-                                                     const roomColorMap: Record<string, [number, number, number]> = {};
-                                                     buildingSpaces.forEach((space: any) => {
-                                                         const attrs = space.attributes || {};
-                                                         const type = attrs.spaceType || attrs.roomType || 'Unknown';
-                                                         const truncated = type.length > 15 ? type.substring(0, 15) + '...' : type;
-                                                         const color = typeColorMap[type] || typeColorMap[truncated];
-                                                         if (color) roomColorMap[space.fmGuid] = color;
-                                                     });
-                                                     handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
-                                                 }}
-                                             >
-                                                 <Eye className="h-3 w-3" />
-                                                  View rooms in 3D
-                                             </Button>
+                                              <Button
+                                                  variant="outline"
+                                                  size="sm"
+                                                  className="h-7 px-2 text-[10px] gap-1"
+                                                  onClick={() => {
+                                                      // Use sensor heatmap colors matching the room cards
+                                                      const roomColorMap: Record<string, [number, number, number]> = {};
+                                                      sensorRoomValues.forEach((room: any) => {
+                                                          if (room.value !== null) {
+                                                              const rgb = getVisualizationColor(room.value, sensorMetric);
+                                                              roomColorMap[room.fmGuid] = rgb;
+                                                          }
+                                                      });
+                                                      handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
+                                                  }}
+                                              >
+                                                  <Eye className="h-3 w-3" />
+                                                   View rooms in 3D
+                                              </Button>
                                          </div>
                                          <CardDescription>
                                              {sensorRooms.length} of {spaceFloorFilter ? `rooms on ${spaceFloorFilter}` : `${buildingSpaces.length} rooms`} · click for sensor details
