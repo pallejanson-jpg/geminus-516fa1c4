@@ -176,21 +176,39 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         const scene = viewer.scene;
         const metaObjects = viewer.metaScene?.metaObjects || scene?.metaScene?.metaObjects;
         if (!metaObjects) return;
+
+        const visibleFloorKeys = new Set(
+          (currentFloorGuidsRef.current || []).map((g) => (g || '').toLowerCase().replace(/-/g, ''))
+        );
+        const hasFloorFilter = visibleFloorKeys.size > 0;
+
         Object.values(metaObjects).forEach((mo: any) => {
-          if (mo.type?.toLowerCase() === 'ifcspace') {
-            const entity = scene.objects?.[mo.id];
-            if (entity) {
-              // Always set color BEFORE making visible to prevent red flash
-              if (show) {
-                entity.colorize = [0.898, 0.894, 0.890]; // SPACE_COLOR
-                entity.opacity = 0.3;
-                entity.pickable = true;
-              }
-              entity.visible = show;
-              if (!show) {
-                entity.pickable = false;
+          if (mo.type?.toLowerCase() !== 'ifcspace') return;
+          const entity = scene.objects?.[mo.id];
+          if (!entity) return;
+
+          let belongsToVisibleFloor = true;
+          if (hasFloorFilter) {
+            belongsToVisibleFloor = false;
+            let current = mo;
+            while (current?.parent) {
+              current = current.parent;
+              if (current?.type?.toLowerCase() === 'ifcbuildingstorey') {
+                const storeyGuid = (current.originalSystemId || current.id || '').toLowerCase().replace(/-/g, '');
+                belongsToVisibleFloor = visibleFloorKeys.has(storeyGuid);
+                break;
               }
             }
+          }
+
+          if (show && belongsToVisibleFloor) {
+            entity.colorize = [0.898, 0.894, 0.890]; // SPACE_COLOR
+            entity.opacity = 0.3;
+            entity.pickable = true;
+            entity.visible = true;
+          } else {
+            entity.visible = false;
+            entity.pickable = false;
           }
         });
       },
