@@ -68,6 +68,13 @@ function stripFollowups(content: string): string {
 }
 
 function getContextualGreeting(context?: GunnarContext): string {
+  if (context?.activeApp === 'fma_plus' || context?.activeApp === 'fma_native') {
+    const bName = context?.currentBuilding?.name;
+    if (bName) {
+      return `Hej! Du arbetar i FM Access för **${bName}**. Fråga mig om rum, utrustning, dokument eller arbetsordrar!`;
+    }
+    return `Hej! Du arbetar i FM Access. Välj en byggnad så kan jag svara på frågor om rum, dokument och utrustning.`;
+  }
   if (context?.currentBuilding?.name) {
     return `Hi! I see you're looking at **${context.currentBuilding.name}**. Ask me about floors, rooms, areas, assets, work orders, or issues!`;
   }
