@@ -63,6 +63,8 @@ export const ALARM_ANNOTATIONS_SHOW_EVENT = 'ALARM_ANNOTATIONS_SHOW';
 export interface InsightsColorUpdateDetail {
   mode: string;
   colorMap: Record<string, [number, number, number]>;
+  /** Optional name-based lookup: maps a display name → color for fallback matching */
+  nameColorMap?: Record<string, [number, number, number]>;
 }
 
 /** Type for alarm annotations show event detail */
