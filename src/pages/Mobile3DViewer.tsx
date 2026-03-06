@@ -2,7 +2,7 @@ import React, { useContext, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Building2 } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
-import NativeXeokitViewer from '@/components/viewer/NativeXeokitViewer';
+import NativeViewerShell from '@/components/viewer/NativeViewerShell';
 import ViewerErrorBoundary from '@/components/common/ViewerErrorBoundary';
 import { AppButton } from '@/components/common/AppButton';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -120,9 +120,9 @@ const Mobile3DViewer: React.FC = () => {
   // Fullscreen 3D viewer - let MobileViewerOverlay handle the close button
   return (
     <div className="w-screen relative bg-background overflow-hidden" style={{ height: '100dvh', touchAction: 'none' }}>
-      {/* 3D Viewer - fullscreen */}
+      {/* 3D Viewer - fullscreen via NativeViewerShell (same as desktop) */}
       <ViewerErrorBoundary onReset={handleClose}>
-        <NativeXeokitViewer 
+        <NativeViewerShell 
           buildingFmGuid={selectedBuildingFmGuid} 
           onClose={handleClose}
         />
