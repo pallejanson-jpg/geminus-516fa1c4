@@ -884,7 +884,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       checkedCategories.forEach(cat => {
         const ifcTypes = categoryToIfcTypes.get(cat);
         if (ifcTypes) ifcTypes.forEach(t => allowedIfcTypes.add(t));
+        // Also add the raw category name and its Ifc-prefixed variant for fallback matching
         allowedIfcTypes.add(cat);
+        allowedIfcTypes.add('Ifc' + cat);
+        allowedIfcTypes.add('Ifc' + cat.replace(/\s+/g, ''));
       });
       if (viewer.metaScene?.metaObjects) {
         Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
