@@ -729,9 +729,18 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                             <DoorOpen className="h-4 w-4 text-[hsl(var(--chart-3))]" />
                                             Room Types
                                             <span className="ml-auto cursor-pointer" onClick={() => {
-                                                const colorMap: Record<string, [number, number, number]> = {};
-                                                spaceTypePie.forEach(s => { colorMap[s.name] = hslStringToRgbFloat(s.color); });
-                                                handleInsightsClick({ mode: 'room_types', colorMap });
+                                                const typeColorMap: Record<string, [number, number, number]> = {};
+                                                spaceTypePie.forEach(s => { typeColorMap[s.name] = hslStringToRgbFloat(s.color); });
+                                                // Resolve type names → room fmGuids so the viewer can match by fmGuid
+                                                const roomColorMap: Record<string, [number, number, number]> = {};
+                                                buildingSpaces.forEach((space: any) => {
+                                                    const attrs = space.attributes || {};
+                                                    const type = attrs.spaceType || attrs.roomType || 'Unknown';
+                                                    const truncated = type.length > 15 ? type.substring(0, 15) + '...' : type;
+                                                    const color = typeColorMap[type] || typeColorMap[truncated];
+                                                    if (color) roomColorMap[space.fmGuid] = color;
+                                                });
+                                                handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
                                             }}><ViewerLink /></span>
                                         </CardTitle>
                                         <CardDescription>{stats.roomCount} rooms · {stats.totalArea.toLocaleString()} m² · Click to view in 3D</CardDescription>
