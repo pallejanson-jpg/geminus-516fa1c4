@@ -246,7 +246,7 @@ export function useSenslincData(fmGuid: string | null | undefined) {
             siteName: machine.site_name || undefined,
             lineName: machine.line_name || undefined,
             dashboardUrl: dashboardUrl || '',
-            current: deriveCurrentValues(timeSeries, latestVals),
+            current: deriveCurrentValues(finalTimeSeries, latestVals),
             timeSeries: finalTimeSeries,
             availableFields: finalFields,
           });
