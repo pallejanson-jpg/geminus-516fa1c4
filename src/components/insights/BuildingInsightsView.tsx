@@ -764,10 +764,17 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                             <ThermometerSun className="h-4 w-4 text-[hsl(var(--chart-4))]" />
                                             Energy Distribution
                                             <span className="ml-auto cursor-pointer" onClick={() => {
-                                                // Navigate with all floor colors (energy doesn't map to objects directly)
-                                                const colorMap: Record<string, [number, number, number]> = {};
-                                                energyByFloor.forEach(f => { colorMap[f.fmGuid] = hslStringToRgbFloat(f.color); });
-                                                handleInsightsClick({ mode: 'energy_floors', colorMap });
+                                                const roomColorMap: Record<string, [number, number, number]> = {};
+                                                energyByFloor.forEach(f => {
+                                                    const floorColor = hslStringToRgbFloat(f.color);
+                                                    buildingSpaces.forEach((space: any) => {
+                                                        if (space.levelFmGuid === f.fmGuid) {
+                                                            roomColorMap[space.fmGuid] = floorColor;
+                                                        }
+                                                    });
+                                                    roomColorMap[f.fmGuid] = floorColor;
+                                                });
+                                                handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
                                             }}><ViewerLink /></span>
                                         </CardTitle>
                                         <CardDescription>Breakdown by category</CardDescription>
