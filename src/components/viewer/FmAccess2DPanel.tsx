@@ -115,7 +115,9 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
     return () => { cancelled = true; };
   }, [buildingFmGuid, floorId, floorName, fmAccessBuildingGuid, buildingName, retryCount, noFloorSelected]);
 
-  // ── Listen for HDC_APP_SYSTEM_READY to know when fully loaded ──
+  // ── Listen for HDC_APP_SYSTEM_READY + all navigation events ──
+  const [hdcContext, setHdcContext] = useState<{ objectId?: string; objectType?: string }>({});
+
   const handleMessage = useCallback((event: MessageEvent) => {
     if (!embedConfig) return;
     try {
@@ -124,11 +126,33 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
     } catch { return; }
 
     const msgType = event.data?.type || event.data;
+    
+    // Debug: log ALL messages from HDC for investigation
+    console.log('[FmAccess2D] postMessage from HDC:', msgType, event.data);
+
     if (msgType === 'HDC_APP_SYSTEM_READY') {
       console.log('[FmAccess2D] HDC_APP_SYSTEM_READY received');
       setPhase('ready');
     }
-  }, [embedConfig]);
+
+    // Capture navigation / object selection events from HDC
+    if (event.data?.objectId || event.data?.guid || event.data?.fmGuid) {
+      const ctx = {
+        objectId: event.data.objectId || event.data.guid || event.data.fmGuid,
+        objectType: event.data.objectType || event.data.type || 'unknown',
+      };
+      setHdcContext(ctx);
+      // Dispatch context change event for Gunnar/Ilean/Insights
+      window.dispatchEvent(new CustomEvent('FM_ACCESS_CONTEXT_CHANGED', {
+        detail: {
+          objectId: ctx.objectId,
+          objectType: ctx.objectType,
+          buildingGuid: buildingFmGuid,
+          raw: event.data,
+        },
+      }));
+    }
+  }, [embedConfig, buildingFmGuid]);
 
   useEffect(() => {
     window.addEventListener('message', handleMessage);
