@@ -52,3 +52,29 @@ All tables have RLS: authenticated read, admin write. Indexes on common query pa
 4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
 
 5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
+
+---
+
+## Plan: IFC System-Only Import (IMPLEMENTED - Phase 1)
+
+### What was built
+1. **`ifc-extract-systems` edge function** — New lightweight edge function that:
+   - Downloads IFC from `ifc-uploads` bucket
+   - Parses metadata via `web-ifc` + `xeokit-convert` (same pipeline as `ifc-to-xkt`)
+   - Extracts systems (`IfcSystem`, `IfcDistributionSystem`, `SystemName` property grouping)
+   - Extracts connections (`IfcRelConnects*`)
+   - Reconciles IFC GUIDs with existing assets (3-step: exact match → name match → identity)
+   - Persists to `systems`, `asset_system`, `asset_connections`, `asset_external_ids`
+   - **Skips XKT generation** — much faster (~10-15s vs minutes)
+   - Supports 3 modes: `systems-only` (default), `enrich-guids` (future), `full` (delegates to `ifc-to-xkt`)
+
+2. **UI in ApiSettingsModal** — "From IFC" button on the Technical Systems card:
+   - Building selector dropdown
+   - IFC file upload
+   - Mode radio: "Only systems (fast)" / "Systems + FMGUIDs (coming soon)" / "Full conversion"
+   - Progress tracking and result display
+
+### Still to implement
+- **`enrich-guids` mode** — FMGUID generation + IFC write-back via `web-ifc` property injection
+- **IFC archive** — Store enriched IFC in `ifc-uploads/{buildingFmGuid}/enriched/`
+- **ACC `enrich-guids` action** — Deterministic GUID generation for ACC-sourced models
