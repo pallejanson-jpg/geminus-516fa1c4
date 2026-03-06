@@ -1271,6 +1271,51 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         runResumableSync();
     };
 
+    // Sync technical systems from Asset+
+    const handleSyncSystems = async () => {
+        setIsSyncingSystems(true);
+        setSystemSyncResult(null);
+        
+        const runResumableSync = async (): Promise<void> => {
+            try {
+                const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+                    body: { action: 'sync-systems' }
+                });
+
+                if (error) {
+                    console.error('System sync error:', error);
+                    toast({ variant: "destructive", title: "System Sync Error", description: error.message });
+                    setIsSyncingSystems(false);
+                    return;
+                }
+
+                await fetchSyncStatus();
+
+                if (data?.interrupted) {
+                    console.log(`System sync progress: ${data.systemsCreated} created, continuing...`);
+                    setTimeout(() => runResumableSync(), 1000);
+                } else {
+                    const created = data?.systemsCreated || 0;
+                    const links = data?.linksCreated || 0;
+                    setSystemSyncResult({ created, links });
+                    toast({
+                        title: "System Sync Complete",
+                        description: `${created} systems, ${links} asset links synced.`,
+                    });
+                    setIsSyncingSystems(false);
+                    await fetchSyncStatus();
+                }
+            } catch (error: any) {
+                console.error('System sync exception:', error);
+                toast({ variant: "destructive", title: "System Sync Failed", description: error.message });
+                setIsSyncingSystems(false);
+            }
+        };
+
+        toast({ title: "Starting System Sync", description: "Extracting technical systems from Asset+ attributes." });
+        runResumableSync();
+    };
+
     // Fetch favorite building(s)
     const fetchFavoriteBuildings = async () => {
         try {
