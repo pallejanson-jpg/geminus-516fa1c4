@@ -23,7 +23,7 @@ import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
-const AssetPlusViewer = React.lazy(() => import('@/components/viewer/AssetPlusViewer'));
+const NativeXeokitViewer = React.lazy(() => import('@/components/viewer/NativeXeokitViewer'));
 import { useSenslincBuildingData } from '@/hooks/useSenslincData';
 import { cn } from '@/lib/utils';
 import RoomSensorDetailSheet from '@/components/insights/RoomSensorDetailSheet';
