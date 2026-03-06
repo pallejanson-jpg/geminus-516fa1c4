@@ -622,6 +622,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           entity.visible = true;
           entity.colorize = rgb;
           entity.opacity = 0.85;
+          matchCount++;
         }
         const collectDescendants = (obj: any) => {
           obj.children?.forEach((child: any) => {
