@@ -597,6 +597,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       const scene = viewer.scene;
       const colorMap = detail.colorMap;
+      let matchCount = 0;
       const mode = detail.mode || '';
 
       // X-ray everything first
