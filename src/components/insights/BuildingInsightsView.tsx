@@ -162,6 +162,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
 
     // Sensors tab state
     const [sensorMetric, setSensorMetric] = useState<VisualizationType>('temperature');
+    const [selectedSensorRooms, setSelectedSensorRooms] = useState<Set<string>>(new Set());
     const [sensorSheetOpen, setSensorSheetOpen] = useState(false);
     const [sensorSheetRoom, setSensorSheetRoom] = useState<{ fmGuid: string; name: string } | null>(null);
     const { data: buildingIoT, isLoading: iotLoading, isLive: iotLive } = useSenslincBuildingData(facility.fmGuid);
@@ -397,6 +398,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     const sensorMetricDef = SENSOR_METRICS.find(m => m.key === sensorMetric)!;
 
 
+
     // Calculate actual stats from allData for this building (REAL for hierarchy, DB for assets)
     const stats = useMemo(() => {
         let totalArea = 0;
@@ -498,7 +500,61 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         }
     }, [isMobile, drawerMode, navigateToInsights3D, buildingStoreys, buildingSpaces]);
 
-    // Fullscreen handler for inline viewer
+    // Helper: build color map from room values and push to 3D
+    const colorizeAllSensorRooms = useCallback(() => {
+        const roomColorMap: Record<string, [number, number, number]> = {};
+        sensorRoomValues.forEach((room: any) => {
+            if (room.value !== null) {
+                const rgb = getVisualizationColor(room.value, sensorMetric);
+                if (rgb) roomColorMap[room.fmGuid] = rgb;
+            }
+        });
+        handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
+    }, [sensorRoomValues, sensorMetric, handleInsightsClick]);
+
+    // Helper: colorize only selected rooms
+    const colorizeSelectedSensorRooms = useCallback((guids: Set<string>) => {
+        const roomColorMap: Record<string, [number, number, number]> = {};
+        sensorRoomValues.forEach((room: any) => {
+            if (guids.has(room.fmGuid) && room.value !== null) {
+                const rgb = getVisualizationColor(room.value, sensorMetric);
+                if (rgb) roomColorMap[room.fmGuid] = rgb;
+            }
+        });
+        handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
+    }, [sensorRoomValues, sensorMetric, handleInsightsClick]);
+
+    // Auto-colorize when switching metrics (if sensor tab is active)
+    useEffect(() => {
+        if (activeTab !== 'performance') return;
+        if (sensorRoomValues.length === 0) return;
+        if (!drawerMode && isMobile) return;
+        const roomColorMap: Record<string, [number, number, number]> = {};
+        sensorRoomValues.forEach((room: any) => {
+            if (room.value !== null) {
+                const rgb = getVisualizationColor(room.value, sensorMetric);
+                if (rgb) roomColorMap[room.fmGuid] = rgb;
+            }
+        });
+        const nameColorMap: Record<string, [number, number, number]> = {};
+        sensorRoomValues.forEach((room: any) => {
+            if (room.value !== null) {
+                const name = (room.commonName || room.name || '').toLowerCase().trim();
+                const rgb = getVisualizationColor(room.value, sensorMetric);
+                if (name && rgb) nameColorMap[name] = rgb;
+            }
+        });
+        const detail = { mode: 'room_spaces', colorMap: roomColorMap, nameColorMap };
+        setInlineInsightsMode('room_spaces');
+        setInlineColorMap(roomColorMap);
+        window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail }));
+    }, [sensorMetric, sensorRoomValues, activeTab]);
+
+    // Clear selection when metric changes
+    useEffect(() => {
+        setSelectedSensorRooms(new Set());
+    }, [sensorMetric]);
+
     const handleInlineFullscreen = useCallback(() => {
         if (inlineInsightsMode && inlineColorMap) {
             navigateToInsights3D({ mode: inlineInsightsMode as any, colorMap: inlineColorMap });
@@ -876,24 +932,16 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                  Room Heatmap – {sensorMetricDef.label}
                                              </CardTitle>
                                               <Button
-                                                  variant="outline"
-                                                  size="sm"
-                                                  className="h-7 px-2 text-[10px] gap-1"
-                                                  onClick={() => {
-                                                      // Use sensor heatmap colors matching the room cards
-                                                      const roomColorMap: Record<string, [number, number, number]> = {};
-                                                      sensorRoomValues.forEach((room: any) => {
-                                                          if (room.value !== null) {
-                                                              const rgb = getVisualizationColor(room.value, sensorMetric);
-                                                              roomColorMap[room.fmGuid] = rgb;
-                                                          }
-                                                      });
-                                                      handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
-                                                  }}
-                                              >
-                                                  <Eye className="h-3 w-3" />
-                                                   View rooms in 3D
-                                              </Button>
+                                                   variant="outline"
+                                                   size="sm"
+                                                   className="h-7 px-2 text-[10px] gap-1"
+                                                   onClick={() => {
+                                                       colorizeAllSensorRooms();
+                                                   }}
+                                               >
+                                                   <Eye className="h-3 w-3" />
+                                                   View all
+                                               </Button>
                                          </div>
                                          <CardDescription>
                                              {sensorRooms.length} of {spaceFloorFilter ? `rooms on ${spaceFloorFilter}` : `${buildingSpaces.length} rooms`} · click for sensor details
@@ -915,17 +963,36 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                      const hex = rgb ? rgbToHex(rgb) : undefined;
                                                      return (
                                                          <div
-                                                             key={room.fmGuid}
-                                                             className="rounded-lg border text-center p-2.5 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-md active:scale-95"
-                                                             style={{
-                                                                 backgroundColor: hex ? hex + '22' : undefined,
-                                                                 borderColor: hex ? hex + '55' : undefined,
-                                                             }}
-                                                             onClick={() => {
-                                                                 setSensorSheetRoom({ fmGuid: room.fmGuid, name: room.commonName || room.name || room.fmGuid });
-                                                                 setSensorSheetOpen(true);
-                                                             }}
-                                                         >
+                                                              key={room.fmGuid}
+                                                              className={cn(
+                                                                  "rounded-lg border text-center p-2.5 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-md active:scale-95",
+                                                                  selectedSensorRooms.has(room.fmGuid) && "ring-2 ring-primary ring-offset-1"
+                                                              )}
+                                                              style={{
+                                                                  backgroundColor: hex ? hex + '22' : undefined,
+                                                                  borderColor: hex ? hex + '55' : undefined,
+                                                              }}
+                                                              onClick={(e) => {
+                                                                  if (e.ctrlKey || e.metaKey) {
+                                                                      // Multi-select: toggle this room in selection
+                                                                      setSelectedSensorRooms(prev => {
+                                                                          const next = new Set(prev);
+                                                                          if (next.has(room.fmGuid)) next.delete(room.fmGuid);
+                                                                          else next.add(room.fmGuid);
+                                                                          // Colorize only selected rooms in 3D
+                                                                          colorizeSelectedSensorRooms(next);
+                                                                          return next;
+                                                                      });
+                                                                  } else {
+                                                                      // Single click: select only this room + colorize + open sheet
+                                                                      const single = new Set([room.fmGuid]);
+                                                                      setSelectedSensorRooms(single);
+                                                                      colorizeSelectedSensorRooms(single);
+                                                                      setSensorSheetRoom({ fmGuid: room.fmGuid, name: room.commonName || room.name || room.fmGuid });
+                                                                      setSensorSheetOpen(true);
+                                                                  }
+                                                              }}
+                                                          >
                                                              <div className="text-[10px] text-muted-foreground truncate mb-0.5">
                                                                  {room.commonName || room.name || room.fmGuid.substring(0, 6)}
                                                              </div>
