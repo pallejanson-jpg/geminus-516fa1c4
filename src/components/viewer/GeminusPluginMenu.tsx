@@ -57,6 +57,20 @@ export default function GeminusPluginMenu({
   const isMobile = useIsMobile();
   const { user } = useAuth();
 
+  // Track live FM Access context changes (object selection in iframe)
+  const [fmaLiveContext, setFmaLiveContext] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    const isFma = source === 'fma_plus' || source === '2d_fm_access';
+    if (!isFma) return;
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail) setFmaLiveContext(detail);
+    };
+    window.addEventListener('FM_ACCESS_CONTEXT_CHANGED', handler);
+    return () => window.removeEventListener('FM_ACCESS_CONTEXT_CHANGED', handler);
+  }, [source]);
+
   // Auto-show tooltip on first render to help discoverability
   useEffect(() => {
     if (tooltipShownRef.current) return;
@@ -75,9 +89,9 @@ export default function GeminusPluginMenu({
     setActivePanel(null);
   }, []);
 
-  // Build Gunnar context from plugin menu props
+  // Build Gunnar context from plugin menu props + live FM Access context
   const gunnarContext: GunnarContext = {
-    activeApp: source === 'fma_plus' ? 'fma_plus' : source === 'fma_native' ? 'fma_native' : source,
+    activeApp: source === 'fma_plus' ? 'fma_plus' : source === 'fma_native' ? 'fma_native' : source === '2d_fm_access' ? 'fma_plus' : source,
     currentBuilding: buildingFmGuid ? { fmGuid: buildingFmGuid, name: buildingName || 'Byggnad' } : undefined,
     currentStorey: contextMetadata?.floorGuid ? { fmGuid: contextMetadata.floorGuid, name: contextMetadata.floorName || '' } : undefined,
     currentSpace: contextMetadata?.roomGuid ? { fmGuid: contextMetadata.roomGuid, name: contextMetadata.roomName || '' } : undefined,
