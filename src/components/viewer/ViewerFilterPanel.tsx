@@ -82,6 +82,9 @@ const hexToRgb01 = (hex: string): [number, number, number] => {
 const isGuid = (str: string): boolean =>
   !!str && str.length >= 20 && /^[0-9a-f]{8}[-]?[0-9a-f]{4}/i.test(str);
 
+const normalizeGuid = (value?: string | null): string =>
+  (value || '').toLowerCase().replace(/-/g, '');
+
 const getDescendantIds = (viewer: any, rootId: string): string[] => {
   const metaObj = viewer?.metaScene?.metaObjects?.[rootId];
   if (!metaObj) return [rootId];
@@ -151,37 +154,29 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     );
   }, [allData, buildingFmGuid]);
 
-  // Sources: derived from shared useModelData hook (consistent with Visningsmeny)
-  const sources: BimSource[] = useMemo(() => {
-    // Build from Asset+ sources map (same data, but guaranteed consistent naming)
-    return Array.from(apSources.entries())
-      .map(([guid, name]) => {
-        // Count storeys belonging to this source
-        const storeyCount = buildingData.filter((a: any) => {
-          const attrs = a.attributes || {};
-          return (a.category === 'Building Storey' || a.category === 'IfcBuildingStorey') &&
-            attrs.parentBimObjectId === guid;
-        }).length;
-        return { guid, name, storeyCount };
-      })
-      .sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-  }, [apSources, buildingData]);
-
   // Levels: derived from shared useFloorData hook (consistent naming with Visningsmeny)
   const levels: LevelItem[] = useMemo(() => {
     return sharedFloors.map(floor => {
-      // Find matching Asset+ storey for sourceGuid
+      const levelGuidSet = new Set(floor.databaseLevelFmGuids.map(g => normalizeGuid(g)));
+
+      // Find matching Asset+ storey for sourceGuid (normalized comparison)
       const matchingAsset = buildingData.find((a: any) => {
-        const fmGuid = (a.fmGuid || a.fm_guid || '').toLowerCase();
+        const fmGuid = normalizeGuid(a.fmGuid || a.fm_guid || '');
         return (a.category === 'Building Storey' || a.category === 'IfcBuildingStorey') &&
-          floor.databaseLevelFmGuids.some(g => g.toLowerCase() === fmGuid);
+          levelGuidSet.has(fmGuid);
       });
+
       const sourceGuid = matchingAsset?.attributes?.parentBimObjectId || '';
       const fmGuid = floor.databaseLevelFmGuids[0] || floor.id;
-      const spaceCount = buildingData.filter((s: any) =>
-        (s.category === 'Space' || s.category === 'IfcSpace') &&
-        floor.databaseLevelFmGuids.includes(s.levelFmGuid || s.level_fm_guid)
-      ).length;
+
+      const levelGuidNormalizedSet = new Set(floor.databaseLevelFmGuids.map(g => normalizeGuid(g)));
+      const spaceCount = buildingData.filter((s: any) => {
+        const cat = s.category;
+        if (cat !== 'Space' && cat !== 'IfcSpace') return false;
+        const levelGuid = normalizeGuid(s.levelFmGuid || s.level_fm_guid || '');
+        return levelGuidNormalizedSet.has(levelGuid);
+      }).length;
+
       return { fmGuid, name: floor.name, sourceGuid, spaceCount };
     }).sort((a, b) => {
       const extract = (n: string) => { const m = n.match(/(-?\d+)/); return m ? parseInt(m[1], 10) : 0; };
@@ -189,16 +184,39 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     });
   }, [sharedFloors, buildingData]);
 
+  // Sources: ONLY from levels that exist in current viewer (prevents phantom models)
+  const sources: BimSource[] = useMemo(() => {
+    const grouped = new Map<string, { name: string; storeyCount: number }>();
 
+    levels.forEach(level => {
+      if (!level.sourceGuid) return;
+      const current = grouped.get(level.sourceGuid);
+      const resolvedName = apSources.get(level.sourceGuid) || current?.name || level.sourceGuid;
+      grouped.set(level.sourceGuid, {
+        name: resolvedName,
+        storeyCount: (current?.storeyCount || 0) + 1,
+      });
+    });
 
+    const result = Array.from(grouped.entries()).map(([guid, val]) => ({
+      guid,
+      name: val.name,
+      storeyCount: val.storeyCount,
+    }));
+
+    return result.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+  }, [levels, apSources]);
 
   const spaces: SpaceItem[] = useMemo(() => {
-    const visibleLevelGuids = checkedLevels.size > 0 ? checkedLevels : new Set(levels.map(l => l.fmGuid));
+    const visibleLevelGuids = checkedLevels.size > 0
+      ? new Set(Array.from(checkedLevels).map(g => normalizeGuid(g)))
+      : new Set(levels.map(l => normalizeGuid(l.fmGuid)));
+
     return buildingData
       .filter((a: any) => {
         const cat = a.category;
         if (cat !== 'Space' && cat !== 'IfcSpace') return false;
-        const levelGuid = a.levelFmGuid || a.level_fm_guid;
+        const levelGuid = normalizeGuid(a.levelFmGuid || a.level_fm_guid || '');
         return visibleLevelGuids.has(levelGuid);
       })
       .map((a: any) => ({
