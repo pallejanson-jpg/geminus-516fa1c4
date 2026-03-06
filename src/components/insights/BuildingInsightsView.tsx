@@ -707,9 +707,17 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                 <Zap className="h-4 w-4 text-[hsl(var(--chart-4))]" />
                                                 Energy per Floor
                                                 <span className="ml-auto cursor-pointer" onClick={() => {
-                                                    const colorMap: Record<string, [number, number, number]> = {};
-                                                    energyByFloor.forEach(f => { colorMap[f.fmGuid] = hslStringToRgbFloat(f.color); });
-                                                    handleInsightsClick({ mode: 'energy_floors', colorMap });
+                                                    const roomColorMap: Record<string, [number, number, number]> = {};
+                                                    energyByFloor.forEach(f => {
+                                                        const floorColor = hslStringToRgbFloat(f.color);
+                                                        buildingSpaces.forEach((space: any) => {
+                                                            if (space.levelFmGuid === f.fmGuid) {
+                                                                roomColorMap[space.fmGuid] = floorColor;
+                                                            }
+                                                        });
+                                                        roomColorMap[f.fmGuid] = floorColor;
+                                                    });
+                                                    handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
                                                 }}><ViewerLink /></span>
                                             </CardTitle>
                                             <CardDescription>kWh per m² by floor level · Click bar for 3D</CardDescription>
