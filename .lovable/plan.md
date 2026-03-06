@@ -1,80 +1,114 @@
 
 
-## Plan: System Support + Reconciliation Engine (IMPLEMENTED)
+## Plan: Mobile Layout Fix + Room Card Redesign + Gunnar Smart Upgrade
 
-### Database tables created
-1. **`asset_external_ids`** — Maps external IDs (IFC GUID, ACC externalId, Revit UniqueId) to stable `fm_guid` for cross-source reconciliation
-2. **`systems`** — Technical systems (e.g., LB01 Supply Air) with `fm_guid`, `discipline`, `system_type`, `building_fm_guid`, hierarchical `parent_system_id`
-3. **`asset_system`** — Many-to-many relation between assets and systems with optional `role`
-4. **`asset_connections`** — Topology/flow between assets (`from_fm_guid` → `to_fm_guid`) with `connection_type` and `direction`
+### Part 1: Mobile Layout Overflow Fix
 
-All tables have RLS: authenticated read, admin write. Indexes on common query patterns.
+**Problem:** On FacilityLandingPage, sections overflow to the right on mobile (~320px).
 
-### Edge function changes
-1. **`ifc-to-xkt/index.ts`** — Extended with system extraction:
-   - Identifies `IfcSystem` / `IfcDistributionSystem` meta objects
-   - Falls back to `SystemName` property grouping
-   - Extracts `IfcRelConnects*` for topology → `asset_connections`
-   - Stores all object IDs in `asset_external_ids`
-   - Persists systems, asset-system links, and connections in batches
+**Root cause:** Several sections lack proper overflow constraints. The outer container at line 389 has `overflow-x-hidden` but inner cards/grids may still push beyond.
 
-2. **`acc-sync/index.ts`** — Extended with system support:
-   - Resolves `System Name`, `System Type`, `System Classification`, `System Abbreviation` property fields
-   - Groups instances by `SystemName` → auto-creates `systems` + `asset_system` rows
-   - Stores ACC `externalId` mappings in `asset_external_ids` for all levels, rooms, instances
-   - Infers discipline from system name (Ventilation, Heating, Cooling, Electrical, Plumbing, FireProtection)
+**Fix in `FacilityLandingPage.tsx`:**
+- Add `overflow-hidden` to all `Card` components and inner `CardContent` divs
+- Constrain the grid containers (KPIs, rooms, assets, saved views) with `min-w-0` and `w-full`
+- Ensure the settings section (map picker, sliders, coordinate inputs) wraps properly on narrow screens
+- Add `break-words` / `truncate` to text that may overflow
+- The `BuildingMapPicker` and `Slider` already handle their widths, but their parent containers need `overflow-hidden`
 
-### System activation for existing buildings
-- **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
-- **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
-- **Asset+-byggnader**: Kör `sync-systems` action via `asset-plus-sync` edge function → extraherar system från befintliga attribut (IMPLEMENTERAT)
+### Part 2: Move Room Cards from Building Page → Storey Page
 
-### Frontend (future phase)
-- System tab on FacilityLandingPage
-- System badge on asset property dialogs
-- Manual system creation dialog
+**Current:** Building page shows a floor carousel + room grid for the selected floor.  
+**Change:** 
+- On the **building page**, remove the room grid section entirely (keep the floor carousel as navigation cards that click into the storey page)
+- On the **storey page** (`isStorey`), add room cards using a compact list layout similar to Insights' `SpaceManagementTab` — each room shown as a horizontal row with name, number, area, and an occupancy-style progress bar
+- Include search and sort controls (same pattern currently used)
+- This matches the Insights visual language: compact rows with key metrics inline
+
+### Part 3: Gunnar Smart Upgrade — FM Access, Viewer Control, Insights
+
+This is the largest section. We need to add new tools to the `gunnar-chat` edge function and new action types in the frontend `GunnarChat.tsx`.
+
+#### 3a. New Tools in `gunnar-chat/index.ts`
+
+**FM Access tools** (call `fm-access-query` edge function internally):
+
+| Tool | Description |
+|------|-------------|
+| `fm_access_get_drawings` | Get drawings for a building, grouped by tab/discipline (Arkitekt, El, VVS, etc.) |
+| `fm_access_get_hierarchy` | Get object count and hierarchy for a building |
+| `fm_access_search_objects` | Search objects in FM Access |
+| `fm_access_show_drawing` | Get the 2D viewer URL for a specific floor's architect drawing |
+
+Each tool calls the existing `fm-access-query` edge function (same pattern as `callSenslincQuery`):
+```typescript
+async function callFmAccessQuery(action: string, params: Record<string, unknown>) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const resp = await fetch(`${supabaseUrl}/functions/v1/fm-access-query`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${serviceKey}`,
+    },
+    body: JSON.stringify({ action, ...params }),
+  });
+  return resp.json();
+}
+```
+
+**Viewer control tools:**
+
+| Tool | Description |
+|------|-------------|
+| `viewer_show_floor` | Isolate a specific floor in the 3D viewer |
+| `viewer_show_model` | Show/hide specific models (A-modell, VVS, El, etc.) |
+| `viewer_open_building_3d` | Open the 3D viewer for a building |
+| `viewer_switch_mode` | Switch between 2D/3D view modes |
+
+These return action instructions that the AI will format as action buttons in its response using the existing `action:` link syntax.
+
+**Insights/sensor enhancement:**
+- Update the system prompt to instruct Gunnar to use `senslinc_search_data` for temperature/sensor questions and provide floor-level answers
+- Add guidance for "which floors have avg temp > X" queries — Gunnar should call `get_floor_details` for each floor, then `senslinc_search_data` per floor
+
+#### 3b. New Action Types in `GunnarChat.tsx`
+
+Add to `handleActionLink` and `executeAction`:
+- `action:showDrawing:BUILDING_GUID:FLOOR_NAME` → Navigate to `/viewer?building=GUID&mode=2d&floorName=NAME`
+- `action:isolateModel:MODEL_ID` → Dispatch event to show only specified model
+- `action:showFloorIn3D:BUILDING_GUID:FLOOR_GUID` → Navigate to `/viewer?building=GUID&mode=3d&floor=FLOOR_GUID`
+
+#### 3c. System Prompt Enhancement
+
+Update `buildSystemPrompt` to include:
+- FM Access capabilities and example interactions
+- Instructions to always suggest follow-up actions
+- Building name → `building_settings.fm_access_building_guid` mapping for FM Access queries
+- Model naming conventions (A-modell = Arkitekt, K-modell = Konstruktion, etc.)
+- Pre-fetch `building_settings` with `fm_access_building_guid` to include in the building directory
+
+#### 3d. New Action Button Syntax in System Prompt
+
+```
+[📐 Visa ritning](action:showDrawing:BUILDING_GUID:FLOOR_NAME) — show 2D drawing
+[🧊 Visa våning i 3D](action:showFloorIn3D:BUILDING_GUID:FLOOR_GUID) — show floor in 3D
+[🏗️ Visa modell](action:isolateModel:MODEL_ID) — isolate a specific BIM model
+```
 
 ---
 
-## Plan: Viewer Color Fix (IMPLEMENTED)
+### Implementation Order
 
-### Changes made:
-1. **Window color** — Changed from blue-gray `[0.392, 0.490, 0.541]` (#647D8A) to neutral warm gray `[0.780, 0.780, 0.760]` (#C7C7C2) in:
-   - `src/lib/architect-colors.ts`
-   - `src/hooks/useArchitectViewMode.ts`
-   - Database `viewer_themes` table (both "Arkitektvy" and "Standard" themes)
-   - `ViewerFilterPanel.tsx` category palette
+1. Fix mobile overflow in `FacilityLandingPage.tsx`
+2. Restructure room cards: remove from building page, add Insights-style layout to storey page
+3. Add FM Access tools to `gunnar-chat/index.ts`
+4. Add viewer control tools to `gunnar-chat/index.ts`
+5. Update system prompt with FM Access, viewer, and follow-up instructions
+6. Add new action types in `GunnarChat.tsx`
 
-2. **Space color** — Verified as correct neutral gray `[0.898, 0.894, 0.890]` (#E5E4E3). Changed category palette in ViewerFilterPanel from blue to neutral.
+### Files Modified
 
-3. **Background** — Already correct gray gradient in NativeViewerShell.
+- `src/components/portfolio/FacilityLandingPage.tsx` — mobile fix + room card restructure
+- `supabase/functions/gunnar-chat/index.ts` — new tools + prompt update
+- `src/components/chat/GunnarChat.tsx` — new action types
 
-4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
-
-5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
-
----
-
-## Plan: IFC System-Only Import (IMPLEMENTED - Phase 1)
-
-### What was built
-1. **`ifc-extract-systems` edge function** — New lightweight edge function that:
-   - Downloads IFC from `ifc-uploads` bucket
-   - Parses metadata via `web-ifc` + `xeokit-convert` (same pipeline as `ifc-to-xkt`)
-   - Extracts systems (`IfcSystem`, `IfcDistributionSystem`, `SystemName` property grouping)
-   - Extracts connections (`IfcRelConnects*`)
-   - Reconciles IFC GUIDs with existing assets (3-step: exact match → name match → identity)
-   - Persists to `systems`, `asset_system`, `asset_connections`, `asset_external_ids`
-   - **Skips XKT generation** — much faster (~10-15s vs minutes)
-   - Supports 3 modes: `systems-only` (default), `enrich-guids` (future), `full` (delegates to `ifc-to-xkt`)
-
-2. **UI in ApiSettingsModal** — "From IFC" button on the Technical Systems card:
-   - Building selector dropdown
-   - IFC file upload
-   - Mode radio: "Only systems (fast)" / "Systems + FMGUIDs (coming soon)" / "Full conversion"
-   - Progress tracking and result display
-
-### Still to implement
-- **`enrich-guids` mode** — FMGUID generation + IFC write-back via `web-ifc` property injection
-- **IFC archive** — Store enriched IFC in `ifc-uploads/{buildingFmGuid}/enriched/`
-- **ACC `enrich-guids` action** — Deterministic GUID generation for ACC-sourced models
