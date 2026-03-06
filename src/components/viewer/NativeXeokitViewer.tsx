@@ -49,6 +49,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   const [loadProgress, setLoadProgress] = useState({ loaded: 0, total: 0 });
   const [errorMsg, setErrorMsg] = useState('');
   const mountedRef = useRef(true);
+  // Store pending insights color event to re-apply after models load
+  const pendingInsightsColorRef = useRef<InsightsColorUpdateDetail | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
