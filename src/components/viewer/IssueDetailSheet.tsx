@@ -235,6 +235,10 @@ const IssueDetailSheet: React.FC<IssueDetailSheetProps> = ({
 
       setCurrentStatus(newStatus);
       toast({ title: "Status updated" });
+      // Auto-close the detail sheet when issue is closed
+      if (newStatus === 'closed') {
+        setTimeout(() => onClose(), 500);
+      }
     } catch (err) {
       console.error('Failed to update status:', err);
       toast({ title: "Failed to update status", variant: "destructive" });

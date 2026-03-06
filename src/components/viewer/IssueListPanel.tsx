@@ -118,7 +118,8 @@ const IssueListPanel: React.FC<IssueListPanelProps> = ({
   }, [buildingFmGuid]);
 
   const openIssues = issues.filter((i) => i.status === 'open' || i.status === 'in_progress');
-  const resolvedIssues = issues.filter((i) => i.status === 'resolved' || i.status === 'closed');
+  const resolvedIssues = issues.filter((i) => i.status === 'resolved');
+  // Closed issues are excluded from the list entirely
 
   return (
     <div className={cn("flex flex-col h-full", className)}>
