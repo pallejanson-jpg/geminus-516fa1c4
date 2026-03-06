@@ -963,17 +963,36 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                      const hex = rgb ? rgbToHex(rgb) : undefined;
                                                      return (
                                                          <div
-                                                             key={room.fmGuid}
-                                                             className="rounded-lg border text-center p-2.5 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-md active:scale-95"
-                                                             style={{
-                                                                 backgroundColor: hex ? hex + '22' : undefined,
-                                                                 borderColor: hex ? hex + '55' : undefined,
-                                                             }}
-                                                             onClick={() => {
-                                                                 setSensorSheetRoom({ fmGuid: room.fmGuid, name: room.commonName || room.name || room.fmGuid });
-                                                                 setSensorSheetOpen(true);
-                                                             }}
-                                                         >
+                                                              key={room.fmGuid}
+                                                              className={cn(
+                                                                  "rounded-lg border text-center p-2.5 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-md active:scale-95",
+                                                                  selectedSensorRooms.has(room.fmGuid) && "ring-2 ring-primary ring-offset-1"
+                                                              )}
+                                                              style={{
+                                                                  backgroundColor: hex ? hex + '22' : undefined,
+                                                                  borderColor: hex ? hex + '55' : undefined,
+                                                              }}
+                                                              onClick={(e) => {
+                                                                  if (e.ctrlKey || e.metaKey) {
+                                                                      // Multi-select: toggle this room in selection
+                                                                      setSelectedSensorRooms(prev => {
+                                                                          const next = new Set(prev);
+                                                                          if (next.has(room.fmGuid)) next.delete(room.fmGuid);
+                                                                          else next.add(room.fmGuid);
+                                                                          // Colorize only selected rooms in 3D
+                                                                          colorizeSelectedSensorRooms(next);
+                                                                          return next;
+                                                                      });
+                                                                  } else {
+                                                                      // Single click: select only this room + colorize + open sheet
+                                                                      const single = new Set([room.fmGuid]);
+                                                                      setSelectedSensorRooms(single);
+                                                                      colorizeSelectedSensorRooms(single);
+                                                                      setSensorSheetRoom({ fmGuid: room.fmGuid, name: room.commonName || room.name || room.fmGuid });
+                                                                      setSensorSheetOpen(true);
+                                                                  }
+                                                              }}
+                                                          >
                                                              <div className="text-[10px] text-muted-foreground truncate mb-0.5">
                                                                  {room.commonName || room.name || room.fmGuid.substring(0, 6)}
                                                              </div>
