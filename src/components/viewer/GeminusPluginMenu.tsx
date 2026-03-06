@@ -1,6 +1,7 @@
-import React, { useState, useContext, useCallback } from 'react';
+import React, { useState, useContext, useCallback, useEffect, useRef } from 'react';
 import {
   Menu, X, MessageSquarePlus, LifeBuoy, BarChart2, Bot, FileText, Wrench,
+  Send, Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
@@ -10,12 +11,19 @@ import { AppContext } from '@/context/AppContext';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 import CreateIssueDialog from './CreateIssueDialog';
 import CreateWorkOrderDialog from './CreateWorkOrderDialog';
 import InsightsDrawerPanel from './InsightsDrawerPanel';
-import GunnarChat from '@/components/chat/GunnarChat';
+import GunnarChat, { GunnarContext } from '@/components/chat/GunnarChat';
 import CreateSupportCase from '@/components/support/CreateSupportCase';
+import IleanEmbeddedChat from './IleanEmbeddedChat';
 
 interface GeminusPluginMenuProps {
   buildingFmGuid?: string;
@@ -44,8 +52,19 @@ export default function GeminusPluginMenu({
   const [expanded, setExpanded] = useState(false);
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const tooltipShownRef = useRef(false);
   const isMobile = useIsMobile();
   const { user } = useAuth();
+
+  // Auto-show tooltip on first render to help discoverability
+  useEffect(() => {
+    if (tooltipShownRef.current) return;
+    tooltipShownRef.current = true;
+    const timer = setTimeout(() => setShowTooltip(true), 800);
+    const hideTimer = setTimeout(() => setShowTooltip(false), 4000);
+    return () => { clearTimeout(timer); clearTimeout(hideTimer); };
+  }, []);
 
   const handleOpen = useCallback((panel: ActivePanel) => {
     setActivePanel(panel);
@@ -55,6 +74,14 @@ export default function GeminusPluginMenu({
   const handleClose = useCallback(() => {
     setActivePanel(null);
   }, []);
+
+  // Build Gunnar context from plugin menu props
+  const gunnarContext: GunnarContext = {
+    activeApp: source === 'fma_plus' ? 'fma_plus' : source === 'fma_native' ? 'fma_native' : source,
+    currentBuilding: buildingFmGuid ? { fmGuid: buildingFmGuid, name: buildingName || 'Byggnad' } : undefined,
+    currentStorey: contextMetadata?.floorGuid ? { fmGuid: contextMetadata.floorGuid, name: contextMetadata.floorName || '' } : undefined,
+    currentSpace: contextMetadata?.roomGuid ? { fmGuid: contextMetadata.roomGuid, name: contextMetadata.roomName || '' } : undefined,
+  };
 
   // ── Issue submit handler ──
   const handleIssueSubmit = useCallback(async (data: {
@@ -111,19 +138,32 @@ export default function GeminusPluginMenu({
           </div>
         )}
 
-        {/* Main FAB */}
-        <Button
-          size="icon"
-          className={cn(
-            'h-12 w-12 rounded-full shadow-xl',
-            'bg-primary text-primary-foreground hover:bg-primary/90',
-            'transition-transform',
-            expanded && 'rotate-45'
-          )}
-          onClick={() => setExpanded((v) => !v)}
-        >
-          {expanded ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </Button>
+        {/* Main FAB with tooltip */}
+        <TooltipProvider delayDuration={0}>
+          <Tooltip open={showTooltip && !expanded}>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                className={cn(
+                  'h-12 w-12 rounded-full shadow-xl',
+                  'bg-primary text-primary-foreground hover:bg-primary/90',
+                  'transition-transform',
+                  expanded && 'rotate-45',
+                  !expanded && 'animate-pulse'
+                )}
+                onClick={() => {
+                  setExpanded((v) => !v);
+                  setShowTooltip(false);
+                }}
+              >
+                {expanded ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="bg-primary text-primary-foreground border-primary">
+              Geminus-menyn
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
 
       {/* ── Backdrop when expanded ── */}
@@ -179,7 +219,7 @@ export default function GeminusPluginMenu({
         />
       )}
 
-      {/* Gunnar Chat */}
+      {/* Gunnar Chat — with FM Access context */}
       {activePanel === 'gunnar' && (
         <div className="fixed bottom-24 right-6 z-50 w-[380px] max-h-[70vh] bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
           <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/50">
@@ -192,12 +232,12 @@ export default function GeminusPluginMenu({
             </Button>
           </div>
           <div className="flex-1 overflow-hidden" style={{ minHeight: 300 }}>
-            <GunnarChat open={true} onClose={handleClose} embedded />
+            <GunnarChat open={true} onClose={handleClose} context={gunnarContext} embedded />
           </div>
         </div>
       )}
 
-      {/* Ilean — simple doc Q&A placeholder using Gunnar for now */}
+      {/* Ilean — real document Q&A chat */}
       {activePanel === 'ilean' && (
         <div className="fixed bottom-24 right-6 z-50 w-[380px] max-h-[70vh] bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
           <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/50">
@@ -209,13 +249,10 @@ export default function GeminusPluginMenu({
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <div className="flex-1 overflow-hidden p-4 text-center text-sm text-muted-foreground" style={{ minHeight: 300 }}>
-            <FileText className="h-10 w-10 mx-auto mb-3 text-muted-foreground/50" />
-            <p>Ilean dokument-AI</p>
-            <p className="text-xs mt-1">Ställ frågor om dokument för {buildingName || 'denna byggnad'}.</p>
-            {/* The full IleanButton component is standalone with its own context; 
-                here we render a simplified entry point */}
-          </div>
+          <IleanEmbeddedChat
+            buildingFmGuid={buildingFmGuid}
+            buildingName={buildingName}
+          />
         </div>
       )}
     </>

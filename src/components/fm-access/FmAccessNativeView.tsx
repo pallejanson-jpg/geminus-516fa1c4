@@ -13,6 +13,7 @@ import FmAccessTree from './FmAccessTree';
 import FmAccessObjectPanel from './FmAccessObjectPanel';
 import FmAccessSearch from './FmAccessSearch';
 import FmAccessDocuments from './FmAccessDocuments';
+import GeminusPluginMenu from '@/components/viewer/GeminusPluginMenu';
 
 const FmAccessNativeView: React.FC = () => {
   const { selectedFacility, navigatorTreeData } = useContext(AppContext);
@@ -222,6 +223,17 @@ const FmAccessNativeView: React.FC = () => {
           />
         </ResizablePanel>
       </ResizablePanelGroup>
+
+      {/* Geminus Plugin Menu FAB */}
+      <GeminusPluginMenu
+        buildingFmGuid={buildingFmGuid}
+        buildingName={buildingName}
+        source="fma_native"
+        contextMetadata={{
+          selectedNodeGuid: selectedNode?.guid || selectedNode?.systemGuid,
+          selectedNodeName: selectedNode?.objectName,
+        }}
+      />
     </div>
   );
 };

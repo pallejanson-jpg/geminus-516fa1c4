@@ -1,51 +1,54 @@
 
 
-# Plan: Förbättra Geminus Plugin Menu i FM Access
+## Plan: System Support + Reconciliation Engine (IMPLEMENTED)
 
-## Nuläge — Problem
+### Database tables created
+1. **`asset_external_ids`** — Maps external IDs (IFC GUID, ACC externalId, Revit UniqueId) to stable `fm_guid` for cross-source reconciliation
+2. **`systems`** — Technical systems (e.g., LB01 Supply Air) with `fm_guid`, `discipline`, `system_type`, `building_fm_guid`, hierarchical `parent_system_id`
+3. **`asset_system`** — Many-to-many relation between assets and systems with optional `role`
+4. **`asset_connections`** — Topology/flow between assets (`from_fm_guid` → `to_fm_guid`) with `connection_type` and `direction`
 
-Utifrån bilden och koden ser jag tre huvudproblem:
+All tables have RLS: authenticated read, admin write. Indexes on common query patterns.
 
-1. **GeminusPluginMenu syns inte i FMA+ (legacy iframe-vyn)**
-   - Bilden visar FM Access i "fma_plus"-läge (hela gränssnittet är Tessels HDC-klient)
-   - `FmaInternalView` renderar `GeminusPluginMenu` men **bara om `buildingFmGuid` finns** — och den FAB-knappen hamnar nere till höger, delvis dold av FM Access-gränssnittets egna knappar
-   - Användaren förstår inte att det finns en meny att använda
+### Edge function changes
+1. **`ifc-to-xkt/index.ts`** — Extended with system extraction:
+   - Identifies `IfcSystem` / `IfcDistributionSystem` meta objects
+   - Falls back to `SystemName` property grouping
+   - Extracts `IfcRelConnects*` for topology → `asset_connections`
+   - Stores all object IDs in `asset_external_ids`
+   - Persists systems, asset-system links, and connections in batches
 
-2. **Gunnar saknar FM Access-kontext**
-   - I `GeminusPluginMenu` skapas `GunnarChat` utan `context`-prop — den får ingen information om vilken byggnad, våning eller rum som är valt i FM Access
-   - Gunnar kan inte svara på FM Access-specifika frågor
+2. **`acc-sync/index.ts`** — Extended with system support:
+   - Resolves `System Name`, `System Type`, `System Classification`, `System Abbreviation` property fields
+   - Groups instances by `SystemName` → auto-creates `systems` + `asset_system` rows
+   - Stores ACC `externalId` mappings in `asset_external_ids` for all levels, rooms, instances
+   - Infers discipline from system name (Ventilation, Heating, Cooling, Electrical, Plumbing, FireProtection)
 
-3. **Ilean är bara en placeholder**
-   - Ilean-panelen i plugin-menyn visar bara en statisk text, ingen faktisk chat. Den riktiga `IleanButton`-komponenten med `useIleanData` används inte
+### System activation for existing buildings
+- **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
+- **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
+- **Asset+-byggnader**: Kör `sync-systems` action via `asset-plus-sync` edge function → extraherar system från befintliga attribut (IMPLEMENTERAT)
 
-## Lösning
+### Frontend (future phase)
+- System tab on FacilityLandingPage
+- System badge on asset property dialogs
+- Manual system creation dialog
 
-### Task 1: Gör FAB-knappen synligare i FM Access
-- Lägg till en **pulsande animation** på FAB-knappen första gången den visas i FM Access
-- Lägg till en **tooltip** "Geminus-menyn" som visas automatiskt i 3 sekunder vid första laddning
-- Flytta FAB:en till `bottom-6 right-20` i fma_plus-läge för att inte kollidera med FM Access-knappar
+---
 
-### Task 2: Skicka FM Access-kontext till Gunnar
-- I `GeminusPluginMenu`, bygg ett `GunnarContext`-objekt baserat på `buildingFmGuid`, `buildingName`, `source` och `contextMetadata` (som innehåller `hdcObjectId` från postMessage-bryggan)
-- Skicka detta som `context`-prop till `GunnarChat`
-- Lägg till FM Access-specifik hälsning i `getContextualGreeting` (t.ex. "Du arbetar i FM Access för {buildingName}. Fråga mig om rum, dokument eller utrustning!")
-- Gunnar kan då använda sina befintliga verktyg (queryAssets, aggregateAssets etc.) med rätt byggnadskontext
+## Plan: Viewer Color Fix (IMPLEMENTED)
 
-### Task 3: Aktivera riktig Ilean-chat i plugin-menyn
-- Ersätt placeholder-panelen med en inbäddad version av Ilean-chatten som använder `useIleanData`-hooken
-- Skicka `buildingFmGuid` som kontext så att Ilean kan ställa dokumentfrågor mot rätt byggnad via Senslinc
-- Rendera meddelanden med `ReactMarkdown` och inkludera startfrågor
+### Changes made:
+1. **Window color** — Changed from blue-gray `[0.392, 0.490, 0.541]` (#647D8A) to neutral warm gray `[0.780, 0.780, 0.760]` (#C7C7C2) in:
+   - `src/lib/architect-colors.ts`
+   - `src/hooks/useArchitectViewMode.ts`
+   - Database `viewer_themes` table (both "Arkitektvy" and "Standard" themes)
+   - `ViewerFilterPanel.tsx` category palette
 
-### Task 4: Uppdatera FmAccessNativeView med plugin-menyn
-- `FmAccessNativeView` (FMA 2.0) renderar idag **ingen** `GeminusPluginMenu`
-- Lägg till FAB:en även här med rätt `buildingFmGuid` och `buildingName`
+2. **Space color** — Verified as correct neutral gray `[0.898, 0.894, 0.890]` (#E5E4E3). Changed category palette in ViewerFilterPanel from blue to neutral.
 
-## Filändringar
+3. **Background** — Already correct gray gradient in NativeViewerShell.
 
-| Fil | Ändring |
-|-----|---------|
-| `src/components/viewer/GeminusPluginMenu.tsx` | Bygg GunnarContext från props, skicka till GunnarChat. Ersätt Ilean-placeholder med riktig chat via useIleanData. Lägg till puls-animation och tooltip vid första visning. |
-| `src/components/chat/GunnarChat.tsx` | Lägg till FM Access-gren i `getContextualGreeting` |
-| `src/components/fm-access/FmAccessNativeView.tsx` | Lägg till GeminusPluginMenu-rendering |
-| `src/components/viewer/FmaInternalView.tsx` | Justera FAB-position för att undvika överlapp med FM Access-UI |
+4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
 
+5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
