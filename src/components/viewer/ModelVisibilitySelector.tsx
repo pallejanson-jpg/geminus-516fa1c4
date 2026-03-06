@@ -89,7 +89,18 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
       setIsInitialized(true);
     }, [models, isInitialized, applyModelVisibility, isLoadingNames]);
 
-    // ── Handlers ──────────────────────────────────────────────────────────
+
+    // Broadcast model visibility changes so floor/filter hooks can react immediately
+    useEffect(() => {
+      if (!isInitialized) return;
+      window.dispatchEvent(new CustomEvent(MODEL_VISIBILITY_CHANGED_EVENT, {
+        detail: {
+          buildingFmGuid,
+          visibleModelIds: Array.from(visibleModelIds),
+        },
+      }));
+    }, [visibleModelIds, isInitialized, buildingFmGuid]);
+
     const handleModelToggle = useCallback((modelId: string, checked: boolean) => {
       if (checked) {
         const model = modelsRef.current.find(m => m.id === modelId);
