@@ -97,8 +97,9 @@ const CesiumGlobeView: React.FC = () => {
     cesiumViewerRef.current = viewer;
     viewer.resolutionScale = window.innerWidth > 768 ? 0.85 : 1.0;
 
+    // Start fully zoomed out to show the whole globe
     viewer.camera.setView({
-      destination: toCartesian(62.5, 15.0, 2200000),
+      destination: Cesium.Cartesian3.fromDegrees(15.0, 20.0, 20000000),
       orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
     });
 
@@ -319,7 +320,7 @@ const CesiumGlobeView: React.FC = () => {
     });
   }, [mapFacilities, selectedFmGuid, viewerReady]);
 
-  // Fly-in / restore camera
+  // Fly-in / restore camera — starts zoomed out, then flies in to Nordics after a short delay
   useEffect(() => {
     const viewer = cesiumViewerRef.current;
     if (!viewer || viewer.isDestroyed() || !viewerReady || mapFacilities.length === 0 || hasFlewInRef.current) return;
@@ -343,13 +344,19 @@ const CesiumGlobeView: React.FC = () => {
       }
     } catch { /* ignore */ }
 
+    // Wait 1.2 seconds showing the whole globe, then fly in to the Nordics
     const lats = mapFacilities.map(f => f.lat);
     const lngs = mapFacilities.map(f => f.lng);
-    viewer.camera.flyTo({
-      destination: toCartesian((Math.min(...lats) + Math.max(...lats)) / 2, (Math.min(...lngs) + Math.max(...lngs)) / 2, 1500000),
-      orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
-      duration: 1.8,
-    });
+    const flyInTimer = setTimeout(() => {
+      if (viewer.isDestroyed()) return;
+      viewer.camera.flyTo({
+        destination: toCartesian((Math.min(...lats) + Math.max(...lats)) / 2, (Math.min(...lngs) + Math.max(...lngs)) / 2, 1500000),
+        orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
+        duration: 2.2,
+      });
+    }, 1200);
+
+    return () => clearTimeout(flyInTimer);
   }, [mapFacilities, viewerReady]);
 
   // Toggle OSM 3D buildings
