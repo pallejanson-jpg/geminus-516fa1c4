@@ -639,30 +639,20 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         collectDescendants(mo);
       };
 
-      // Normalize a guid for comparison
+      // Normalize a guid for comparison (lowercase, no dashes)
       const norm = (s: string) => (s || '').toLowerCase().replace(/-/g, '');
 
-      if (mode === 'room_type' || mode === 'room_types') {
-        // colorMap is keyed by room-type name (e.g. "Kontor") → match IfcSpace objects by their type attribute
-        // We need allData from AppContext — but since we don't have it here, match via metaScene type name
-        // Strategy: iterate all metaObjects, find IfcSpace types, look up their originalSystemId in allData via event detail
-        // Since we can't access allData, we pass an extended colorMap from BuildingInsightsView that maps fmGuid→color
-        // Fallback: try matching colorMap keys as fmGuids first (room_spaces mode), then as type names
-        Object.values(metaObjects).forEach((mo: any) => {
-          const sysId = norm(mo.originalSystemId || '');
-          // Check if this object's fmGuid is directly in the colorMap
-          const directKey = Object.keys(colorMap).find(k => norm(k) === sysId);
-          if (directKey) {
-            colorizeEntity(mo, colorMap[directKey]);
-          }
-        });
-      } else if (mode === 'asset_category' || mode === 'asset_categories') {
+      // Build a lookup of normalized fmGuid → rgb for fast matching
+      const fmGuidLookup = new Map<string, [number, number, number]>();
+      Object.entries(colorMap).forEach(([key, rgb]) => {
+        fmGuidLookup.set(norm(key), rgb);
+      });
+
+      if (mode === 'asset_category' || mode === 'asset_categories') {
         // colorMap is keyed by asset type name (e.g. "Alarm", "FireExtinguisher")
-        // Match metaScene objects whose IFC type (without "Ifc" prefix) matches
         const typeColorLookup = new Map<string, [number, number, number]>();
         Object.entries(colorMap).forEach(([typeName, rgb]) => {
           typeColorLookup.set(typeName.toLowerCase(), rgb);
-          // Also try with "Ifc" prefix stripped
           typeColorLookup.set(('ifc' + typeName).toLowerCase(), rgb);
         });
         Object.values(metaObjects).forEach((mo: any) => {
@@ -674,35 +664,45 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           }
         });
       } else {
-        // Default: match by fmGuid (energy_floors, energy_floor, room_spaces, etc.)
-        // Build a lookup of normalized fmGuid → rgb for fast matching
-        const fmGuidLookup = new Map<string, [number, number, number]>();
-        Object.entries(colorMap).forEach(([fmGuid, rgb]) => {
-          fmGuidLookup.set(norm(fmGuid), rgb);
-        });
-
-        // For floor-level modes, also match all children of matching storeys
+        // Match by fmGuid via originalSystemId or mo.id
+        // For room_spaces mode: also make IfcSpace objects visible
+        const isRoomMode = mode === 'room_spaces' || mode === 'room_type' || mode === 'room_types';
         const isFloorMode = mode.startsWith('energy_floor');
-        
-        // First pass: find matching storeys/objects and colorize them + descendants
+
         Object.values(metaObjects).forEach((mo: any) => {
           const sysId = norm(mo.originalSystemId || '');
           const moId = norm(mo.id || '');
           const rgb = fmGuidLookup.get(sysId) || fmGuidLookup.get(moId);
           if (rgb) {
+            // For room modes, ensure IfcSpace objects are visible
+            if (isRoomMode) {
+              const entity = scene.objects?.[mo.id];
+              if (entity) {
+                entity.visible = true;
+                entity.pickable = true;
+              }
+            }
             colorizeEntity(mo, rgb);
+            
+            // For floor modes, also colorize all children (all objects on that floor)
+            if (isFloorMode) {
+              const colorizeAllChildren = (obj: any) => {
+                obj.children?.forEach((child: any) => {
+                  const childEntity = scene.objects?.[child.id];
+                  if (childEntity) {
+                    childEntity.xrayed = false;
+                    childEntity.visible = true;
+                    childEntity.colorize = rgb;
+                    childEntity.opacity = 0.85;
+                    matchCount++;
+                  }
+                  colorizeAllChildren(child);
+                });
+              };
+              colorizeAllChildren(mo);
+            }
           }
         });
-
-        // For floor modes with 0 matches: try matching storey names → child colorization
-        if (matchCount === 0 && isFloorMode) {
-          // Log sample metaObjects for debugging
-          const sampleMos = Object.values(metaObjects).slice(0, 5).map((mo: any) => ({
-            id: mo.id, type: mo.type, sysId: mo.originalSystemId, name: mo.name,
-          }));
-          console.log('[NativeViewer] DEBUG: Sample metaObjects:', sampleMos);
-          console.log('[NativeViewer] DEBUG: colorMap keys:', Object.keys(colorMap).slice(0, 5));
-        }
       }
 
       console.log('[NativeViewer] Applied INSIGHTS_COLOR_UPDATE:', mode, Object.keys(colorMap).length, 'entries,', matchCount, 'entities matched');
