@@ -2,7 +2,7 @@ import React, { useContext, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Building2 } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
-import NativeXeokitViewer from '@/components/viewer/NativeXeokitViewer';
+import NativeViewerShell from '@/components/viewer/NativeViewerShell';
 import ViewerErrorBoundary from '@/components/common/ViewerErrorBoundary';
 import { AppButton } from '@/components/common/AppButton';
 import { ScrollArea } from '@/components/ui/scroll-area';
