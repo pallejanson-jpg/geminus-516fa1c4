@@ -1325,6 +1325,65 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         runResumableSync();
     };
 
+    // Import systems from IFC file
+    const handleImportIfcSystems = async () => {
+        if (!ifcSystemFile || !ifcSystemBuildingGuid) {
+            toast({ variant: "destructive", title: "Missing fields", description: "Select a building and upload an IFC file." });
+            return;
+        }
+        setIsImportingIfcSystems(true);
+        setIfcSystemImportResult(null);
+
+        try {
+            // 1. Upload IFC to storage
+            const storagePath = `${ifcSystemBuildingGuid}/system-import-${Date.now()}.ifc`;
+            const { error: uploadError } = await supabase.storage
+                .from('ifc-uploads')
+                .upload(storagePath, ifcSystemFile, { contentType: 'application/octet-stream', upsert: true });
+
+            if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+
+            toast({ title: "IFC Uploaded", description: "Extracting systems from IFC..." });
+
+            // 2. Call edge function
+            const { data, error } = await supabase.functions.invoke('ifc-extract-systems', {
+                body: {
+                    ifcStoragePath: storagePath,
+                    buildingFmGuid: ifcSystemBuildingGuid,
+                    mode: ifcSystemMode,
+                },
+            });
+
+            if (error) throw error;
+
+            setIfcSystemImportResult(data);
+            toast({
+                title: "IFC System Import Complete",
+                description: `${data?.systemsCount || 0} systems, ${data?.linksCount || 0} links, ${data?.connectionsCount || 0} connections found.`,
+            });
+            await fetchSyncStatus();
+        } catch (error: any) {
+            console.error('IFC system import error:', error);
+            toast({ variant: "destructive", title: "Import Failed", description: error.message });
+        } finally {
+            setIsImportingIfcSystems(false);
+        }
+    };
+
+    // Fetch buildings for IFC system import dropdown
+    const fetchIfcSystemBuildings = async () => {
+        const { data } = await supabase
+            .from('assets')
+            .select('fm_guid, common_name, name')
+            .eq('category', 'Building');
+        if (data) {
+            setIfcSystemBuildings(data.map(b => ({ fm_guid: b.fm_guid, name: b.common_name || b.name || b.fm_guid })));
+            if (data.length > 0 && !ifcSystemBuildingGuid) {
+                setIfcSystemBuildingGuid(data[0].fm_guid);
+            }
+        }
+    };
+
     // Fetch favorite building(s)
     const fetchFavoriteBuildings = async () => {
         try {
