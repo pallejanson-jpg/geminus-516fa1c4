@@ -303,6 +303,135 @@ const tools = [
       },
     },
   },
+  // ── FM Access tools ──
+  {
+    type: "function",
+    function: {
+      name: "fm_access_get_drawings",
+      description: "Get drawings (ritningar) from FM Access for a building, grouped by discipline/tab (Arkitekt, El, VVS, etc.). Requires the FM Access building GUID (different from the Geminus fm_guid — use query_building_settings to find the fm_access_building_guid for a building).",
+      parameters: {
+        type: "object",
+        properties: {
+          fm_access_building_guid: { type: "string", description: "The FM Access building GUID (from building_settings.fm_access_building_guid)" },
+        },
+        required: ["fm_access_building_guid"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "fm_access_get_hierarchy",
+      description: "Get the full object hierarchy from FM Access for a building. Returns all objects (floors, rooms, equipment) with counts. Useful for answering 'how many objects are there in this building?'",
+      parameters: {
+        type: "object",
+        properties: {
+          fm_access_building_guid: { type: "string", description: "The FM Access building GUID" },
+        },
+        required: ["fm_access_building_guid"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "fm_access_search_objects",
+      description: "Search for objects in FM Access by text query. Returns matching objects with their GUIDs and class types.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search text" },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "fm_access_get_floors",
+      description: "Get list of floors from FM Access for a building.",
+      parameters: {
+        type: "object",
+        properties: {
+          fm_access_building_guid: { type: "string", description: "The FM Access building GUID" },
+        },
+        required: ["fm_access_building_guid"],
+        additionalProperties: false,
+      },
+    },
+  },
+  // ── Viewer control tools ──
+  {
+    type: "function",
+    function: {
+      name: "viewer_show_floor",
+      description: "Generate an action link to isolate and show a specific floor in the 3D viewer. Returns markdown action link that the user can click.",
+      parameters: {
+        type: "object",
+        properties: {
+          building_fm_guid: { type: "string", description: "Building fm_guid" },
+          floor_fm_guid: { type: "string", description: "Floor fm_guid to show" },
+          floor_name: { type: "string", description: "Floor display name" },
+        },
+        required: ["building_fm_guid", "floor_fm_guid"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "viewer_show_model",
+      description: "Generate an action link to isolate a specific BIM model in the viewer. Model naming conventions: A-modell/ARK = Arkitekt, K-modell = Konstruktion, V-modell/VVS = VVS, E-modell/EL = El, S-modell = Sprinkler.",
+      parameters: {
+        type: "object",
+        properties: {
+          building_fm_guid: { type: "string", description: "Building fm_guid" },
+          model_id: { type: "string", description: "Model ID to isolate" },
+          model_name: { type: "string", description: "Model display name" },
+        },
+        required: ["building_fm_guid", "model_id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "viewer_open_3d",
+      description: "Generate an action link to open the 3D viewer for a building, optionally focused on a specific floor.",
+      parameters: {
+        type: "object",
+        properties: {
+          building_fm_guid: { type: "string", description: "Building fm_guid" },
+          floor_fm_guid: { type: "string", description: "Optional floor to focus on" },
+          floor_name: { type: "string", description: "Floor name for URL" },
+        },
+        required: ["building_fm_guid"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "viewer_show_drawing",
+      description: "Generate an action link to show a 2D drawing from FM Access in the viewer.",
+      parameters: {
+        type: "object",
+        properties: {
+          building_fm_guid: { type: "string", description: "Building fm_guid" },
+          floor_name: { type: "string", description: "Floor name to show the drawing for" },
+        },
+        required: ["building_fm_guid"],
+        additionalProperties: false,
+      },
+    },
+  },
   // ── Write tools ──
   {
     type: "function",
@@ -379,7 +508,6 @@ async function execAggregateAssets(supabase: any, args: any) {
   const { data, error } = await query;
   if (error) throw error;
 
-  // Aggregate in code (Supabase JS doesn't do GROUP BY)
   const groups: Record<string, { count: number; sum_area: number }> = {};
   for (const row of data || []) {
     const key = row[groupBy] || "(tom)";
@@ -708,6 +836,145 @@ async function execSenslincGetIndices() {
   return callSenslincQuery("get-indices", {});
 }
 
+/* ─────────────────────────────────────────────
+   FM Access helpers
+   ───────────────────────────────────────────── */
+
+async function callFmAccessQuery(action: string, params: Record<string, unknown>) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const resp = await fetch(`${supabaseUrl}/functions/v1/fm-access-query`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${serviceKey}`,
+    },
+    body: JSON.stringify({ action, ...params }),
+  });
+  return resp.json();
+}
+
+async function execFmAccessGetDrawings(args: any) {
+  const result = await callFmAccessQuery("get-drawings", { buildingId: args.fm_access_building_guid });
+  if (!result?.success) return { error: result?.error || "Failed to get drawings" };
+
+  // Group drawings by discipline/tab
+  const drawings = result.data || [];
+  const grouped: Record<string, any[]> = {};
+  for (const d of drawings) {
+    const tab = d.tabName || d.className || "Övrigt";
+    if (!grouped[tab]) grouped[tab] = [];
+    grouped[tab].push({
+      id: d.objectId || d.drawingId,
+      name: d.objectName || d.name,
+      className: d.className,
+    });
+  }
+
+  const summary = Object.entries(grouped).map(([tab, items]) => ({
+    tab,
+    count: items.length,
+    drawings: items.slice(0, 5),
+  }));
+
+  return {
+    total_drawings: drawings.length,
+    tabs: summary,
+  };
+}
+
+async function execFmAccessGetHierarchy(args: any) {
+  const result = await callFmAccessQuery("get-hierarchy", { buildingFmGuid: args.fm_access_building_guid });
+  if (!result?.success) return { error: result?.error || "Failed to get hierarchy" };
+
+  // Count objects recursively
+  function countNodes(node: any): number {
+    let count = 1;
+    if (node.children) {
+      for (const child of node.children) {
+        count += countNodes(child);
+      }
+    }
+    return count;
+  }
+
+  const data = result.data;
+  const totalObjects = Array.isArray(data) ? data.reduce((sum: number, n: any) => sum + countNodes(n), 0) : countNodes(data);
+
+  // Count by classId
+  function countByClass(node: any, counts: Record<string, number>) {
+    const cls = node.className || `ClassId:${node.classId || 'unknown'}`;
+    counts[cls] = (counts[cls] || 0) + 1;
+    if (node.children) {
+      for (const child of node.children) countByClass(child, counts);
+    }
+  }
+
+  const classCounts: Record<string, number> = {};
+  if (Array.isArray(data)) {
+    data.forEach((n: any) => countByClass(n, classCounts));
+  } else {
+    countByClass(data, classCounts);
+  }
+
+  return {
+    total_objects: totalObjects,
+    by_class: Object.entries(classCounts).map(([cls, count]) => ({ class: cls, count })).sort((a, b) => b.count - a.count),
+  };
+}
+
+async function execFmAccessSearchObjects(args: any) {
+  const result = await callFmAccessQuery("search-objects", { query: args.query });
+  if (!result?.success) return { error: result?.error || "Failed to search" };
+  return result.data || [];
+}
+
+async function execFmAccessGetFloors(args: any) {
+  const result = await callFmAccessQuery("get-floors", { buildingFmGuid: args.fm_access_building_guid });
+  if (!result?.success) return { error: result?.error || "Failed to get floors" };
+  return result.data || [];
+}
+
+/* ── Viewer control tool execution ── */
+
+function execViewerShowFloor(args: any) {
+  const floorName = args.floor_name || "Våning";
+  return {
+    action_link: `[🏢 Visa ${floorName} i 3D](action:showFloorIn3D:${args.building_fm_guid}:${args.floor_fm_guid}:${encodeURIComponent(floorName)})`,
+    instruction: `Use this action link in your response to let the user click to show floor "${floorName}" in the 3D viewer.`,
+  };
+}
+
+function execViewerShowModel(args: any) {
+  const modelName = args.model_name || args.model_id;
+  return {
+    action_link: `[🏗️ Visa ${modelName}](action:isolateModel:${args.building_fm_guid}:${args.model_id})`,
+    instruction: `Use this action link in your response to let the user isolate the "${modelName}" model.`,
+  };
+}
+
+function execViewerOpen3D(args: any) {
+  const parts = [`action:openViewer3D:${args.building_fm_guid}`];
+  if (args.floor_fm_guid) parts.push(args.floor_fm_guid);
+  const label = args.floor_name ? `Öppna 3D (${args.floor_name})` : 'Öppna 3D-viewer';
+  return {
+    action_link: `[🧊 ${label}](${parts.join(':')})`,
+    instruction: `Use this action link in your response.`,
+  };
+}
+
+function execViewerShowDrawing(args: any) {
+  const floorName = args.floor_name || '';
+  return {
+    action_link: `[📐 Visa ritning${floorName ? ` (${floorName})` : ''}](action:showDrawing:${args.building_fm_guid}:${encodeURIComponent(floorName)})`,
+    instruction: `Use this action link in your response to show the 2D drawing.`,
+  };
+}
+
+/* ─────────────────────────────────────────────
+   Tool dispatcher
+   ───────────────────────────────────────────── */
+
 async function executeTool(supabase: any, name: string, args: any) {
   switch (name) {
     case "query_assets": return execQueryAssets(supabase, args);
@@ -727,6 +994,17 @@ async function executeTool(supabase: any, name: string, args: any) {
     case "senslinc_get_sites": return execSenslincGetSites(args);
     case "senslinc_search_data": return execSenslincSearchData(args);
     case "senslinc_get_indices": return execSenslincGetIndices();
+    // FM Access tools
+    case "fm_access_get_drawings": return execFmAccessGetDrawings(args);
+    case "fm_access_get_hierarchy": return execFmAccessGetHierarchy(args);
+    case "fm_access_search_objects": return execFmAccessSearchObjects(args);
+    case "fm_access_get_floors": return execFmAccessGetFloors(args);
+    // Viewer tools
+    case "viewer_show_floor": return execViewerShowFloor(args);
+    case "viewer_show_model": return execViewerShowModel(args);
+    case "viewer_open_3d": return execViewerOpen3D(args);
+    case "viewer_show_drawing": return execViewerShowDrawing(args);
+    // Write tools
     case "create_work_order": return execCreateWorkOrder(supabase, args);
     case "update_issue_status": return execUpdateIssueStatus(supabase, args);
     default: return { error: `Unknown tool: ${name}` };
@@ -752,7 +1030,6 @@ async function loadRecentConversation(supabase: any, userId: string, buildingFmG
   const { data } = await query;
   if (data?.[0]) {
     const age = Date.now() - new Date(data[0].updated_at).getTime();
-    // Only use if less than 24h old
     if (age < 24 * 60 * 60 * 1000) {
       return data[0];
     }
@@ -761,13 +1038,11 @@ async function loadRecentConversation(supabase: any, userId: string, buildingFmG
 }
 
 async function saveConversation(supabase: any, userId: string, buildingFmGuid: string | null, messages: any[]) {
-  // Keep last 10 messages for memory
   const recentMessages = messages.slice(-10).map((m: any) => ({
     role: m.role,
     content: typeof m.content === "string" ? m.content.slice(0, 500) : "",
   }));
 
-  // Upsert: find existing conversation for this user+building, update or create
   const { data: existing } = await supabase
     .from("gunnar_conversations")
     .select("id")
@@ -797,22 +1072,62 @@ async function saveConversation(supabase: any, userId: string, buildingFmGuid: s
    ───────────────────────────────────────────── */
 
 async function buildSystemPrompt(supabase: any, context: any, userProfile: any, previousConversation: any) {
-  // Pre-fetch building directory for context
+  // Pre-fetch building directory with FM Access mapping
   let buildingDirectory = "";
   try {
-    const { data: buildings } = await supabase
-      .from("assets")
-      .select("fm_guid, common_name, name")
-      .eq("category", "Building")
-      .order("common_name")
-      .limit(50);
+    const [buildingsResult, settingsResult] = await Promise.all([
+      supabase
+        .from("assets")
+        .select("fm_guid, common_name, name")
+        .eq("category", "Building")
+        .order("common_name")
+        .limit(50),
+      supabase
+        .from("building_settings")
+        .select("fm_guid, fm_access_building_guid, ivion_site_id")
+        .limit(50),
+    ]);
 
-    if (buildings?.length) {
-      const lines = buildings.map((b: any) => `  - "${b.common_name || b.name}" (fm_guid: ${b.fm_guid})`);
+    const settingsMap: Record<string, any> = {};
+    for (const s of settingsResult.data || []) {
+      settingsMap[s.fm_guid] = s;
+    }
+
+    if (buildingsResult.data?.length) {
+      const lines = buildingsResult.data.map((b: any) => {
+        const s = settingsMap[b.fm_guid] || {};
+        let line = `  - "${b.common_name || b.name}" (fm_guid: ${b.fm_guid}`;
+        if (s.fm_access_building_guid) line += `, fm_access_guid: ${s.fm_access_building_guid}`;
+        if (s.ivion_site_id) line += `, ivion: ${s.ivion_site_id}`;
+        line += ')';
+        return line;
+      });
       buildingDirectory = `\nAVAILABLE BUILDINGS IN THE PORTFOLIO:\n${lines.join("\n")}`;
     }
   } catch (e) {
     console.error("Failed to fetch building directory:", e);
+  }
+
+  // Pre-fetch BIM models for the current building
+  let modelsCtx = "";
+  const bGuid = context?.currentBuilding?.fmGuid;
+  if (bGuid) {
+    try {
+      const { data: models } = await supabase
+        .from("xkt_models")
+        .select("model_id, model_name, file_name")
+        .eq("building_fm_guid", bGuid)
+        .eq("is_chunk", false)
+        .order("model_name")
+        .limit(20);
+
+      if (models?.length) {
+        const lines = models.map((m: any) => `  - "${m.model_name || m.file_name}" (model_id: ${m.model_id})`);
+        modelsCtx = `\nAVAILABLE BIM MODELS for this building:\n${lines.join("\n")}`;
+      }
+    } catch (e) {
+      console.error("Failed to fetch models:", e);
+    }
   }
 
   // Current context
@@ -834,7 +1149,6 @@ async function buildSystemPrompt(supabase: any, context: any, userProfile: any, 
     ctx += `\nViewer state: mode=${vs.viewMode}, visible floors=${vs.visibleFloorFmGuids?.length || 0}, selected objects=${vs.selectedFmGuids?.length || 0}`;
   }
 
-  // User profile context
   let userCtx = "";
   if (userProfile) {
     const displayName = userProfile.display_name || "användaren";
@@ -842,7 +1156,6 @@ async function buildSystemPrompt(supabase: any, context: any, userProfile: any, 
     userCtx = `\nUSER PROFILE:\n- Name: ${displayName}\n- Role: ${role}${role === "admin" ? " (has admin privileges, can manage work orders and issues)" : ""}`;
   }
 
-  // Previous conversation memory
   let memoryCtx = "";
   if (previousConversation?.messages?.length) {
     const msgs = previousConversation.messages
@@ -860,6 +1173,7 @@ You have access to tools that query the database. ALWAYS use tools to get data �
 ${userCtx}
 ${ctx}
 ${buildingDirectory}
+${modelsCtx}
 ${memoryCtx}
 
 SWEDISH FACILITY MANAGEMENT TERMINOLOGY:
@@ -883,6 +1197,7 @@ SWEDISH FACILITY MANAGEMENT TERMINOLOGY:
 - El = electrical (IfcElectricDistributionBoard, IfcOutlet)
 - VS = plumbing (IfcPipeFitting, IfcValve, IfcSanitaryTerminal)
 - Energiförbrukning = energy consumption (typically kWh/m²/year, good = <100, average = 100-150, high = >150)
+- Ritning = drawing (technical drawing, blueprint)
 
 ASSET CATEGORIES in the database:
 - "Building" – the building itself
@@ -890,6 +1205,14 @@ ASSET CATEGORIES in the database:
 - "Space" – rooms (rum)
 - "Instance" – equipment, furniture, installations (utrustning)
 - "Door" – doors (dörrar)
+
+BIM MODEL NAMING CONVENTIONS:
+- A-modell / ARK / Arkitektmodell = Architecture model
+- K-modell / Konstruktion = Structural model
+- V-modell / VVS = HVAC/plumbing model
+- E-modell / EL = Electrical model
+- S-modell / Sprinkler = Sprinkler/fire suppression model
+When user asks about "arkitektmodellen" or similar, match against the model names in AVAILABLE BIM MODELS.
 
 REASONING APPROACH — Think step by step:
 Before answering any question, plan your approach:
@@ -932,23 +1255,42 @@ When the user asks for advice ("ge mig råd", "vad bör jag göra", "advisor"), 
    - 🔴 Risks / deficiencies
    - 📋 Recommended actions with priority
 
-GUIDELINES:
-1. Always respond in English unless the user explicitly writes in another language.
-2. When the user has an active building, scope queries to that building by default.
-3. Be concise but thorough. Use markdown formatting: **bold** for key numbers, bullet lists for multiple items, tables for comparisons.
-4. After every answer, suggest 2-3 relevant follow-up questions. Write them as a numbered list at the very end, prefixed with "**Suggestions:**".
-5. When referencing specific assets, floors, or rooms, ALWAYS include ACTION BUTTONS using this exact syntax:
-   [🔍 View](action:flyTo:FM_GUID)  — fly the camera to an object
-   [📍 Open](action:openViewer:FM_GUID) — open the 3D viewer for a building
-   [🏢 Show floor](action:showFloor:FM_GUID) — switch to a specific floor
-   [🔎 Find in tree](action:selectInTree:FM_GUID1,FM_GUID2) — highlight objects in navigator
-   [📋 Switch to 2D](action:switchTo2D:) — switch viewer to 2D mode
-   [🧊 Switch to 3D](action:switchTo3D:) — switch viewer to 3D mode
-6. ALWAYS add action buttons when listing specific assets, rooms, or floors. For example: "Room **Office 201** [🔍 View](action:flyTo:abc-123)"
-7. When listing multiple items in a table or list, add an action button next to each one.
-8. When you receive data from tools, analyze it and provide insights, not just raw data. Calculate percentages, spot trends, highlight anomalies.
-9. If the user asks something you can't answer with the available tools, say so clearly and suggest what they could do instead.
-10. If the user previously discussed something (see PREVIOUS CONVERSATION), you can reference it naturally: "As we discussed earlier..."
+FM ACCESS (RITNINGAR / DRAWINGS / HDC):
+You have tools to query FM Access (Tessel HDC) for drawings, hierarchy, and object search.
+
+WORKFLOW for FM Access questions:
+1. First, find the fm_access_building_guid from query_building_settings (it's listed in the building directory above).
+2. Then use the appropriate FM Access tool:
+   - "Vilka ritningar finns?" → fm_access_get_drawings(fm_access_building_guid)
+   - "Hur många objekt?" → fm_access_get_hierarchy(fm_access_building_guid)
+   - "Sök objekt" → fm_access_search_objects(query)
+   - "Vilka våningar?" → fm_access_get_floors(fm_access_building_guid)
+3. Present the results with counts grouped by discipline/tab.
+4. Offer to show drawings using viewer_show_drawing action links.
+
+EXAMPLE FM Access interaction:
+User: "Vilka ritningar finns det i Småviken?"
+→ Call query_building_settings to get fm_access_building_guid for Småviken
+→ Call fm_access_get_drawings(fm_access_building_guid)
+→ Present: "Det finns X ritningar fördelat på dessa discipliner:\n- Arkitekt: 8 st\n- El: 12 st\n- VVS: 7 st\nSka jag lista dem?"
+
+VIEWER CONTROL:
+You have tools to generate action links for viewer control:
+- viewer_show_floor — show a specific floor in 3D
+- viewer_show_model — isolate a specific BIM model  
+- viewer_open_3d — open the 3D viewer for a building
+- viewer_show_drawing — show a 2D drawing from FM Access
+
+When the user asks to see something in 3D:
+1. Use the appropriate viewer tool to generate an action link
+2. Include the action link in your response so the user can click it
+3. ALWAYS suggest follow-up actions (e.g., "Vill du se arkitektmodellen ensam eller ihop med VVS?")
+
+EXAMPLE viewer interaction:
+User: "Visa mig våning 3 i 3D"
+→ Call get_building_summary to find floor 3's fm_guid
+→ Call viewer_show_floor(building_fm_guid, floor_fm_guid, "Våning 3")
+→ Present: "Här kan du öppna våning 3: [🏢 Visa Våning 3 i 3D](action:showFloorIn3D:...)\n\nVill du se den med bara arkitektmodellen eller med alla modeller?"
 
 SENSLINC (IoT / SENSOR DATA):
 You have tools to query IoT sensor data from the Senslinc system.
@@ -959,12 +1301,40 @@ RECOMMENDED WORKFLOW:
 3. senslinc_get_indices — discover available workspace keys (REQUIRED before search_data)
 4. senslinc_search_data(workspace_key, ...) — query time-series data
 
+For temperature questions by floor (e.g. "vilka våningar har > 23°C"):
+1. Call get_building_summary to get floor list with fm_guids
+2. Call senslinc_get_indices to find workspace_key
+3. For each floor, call senslinc_search_data with machine_code=floor_fm_guid and property_name=temperature
+4. Compare averages and present which floors exceed the threshold
+5. Offer to show the floor in 3D: [🧊 Visa våning X](action:showFloorIn3D:...)
+
 IMPORTANT:
 - ALWAYS call senslinc_get_indices first to discover valid workspace_key values before using senslinc_search_data.
 - Use senslinc_get_equipment to find machine_code values for filtering.
 - Chain: get_equipment -> get_indices -> search_data for complete IoT queries.
 - Present dashboard links as: [📊 Senslinc Dashboard](URL)
 - Summarize readings with min/max/avg and flag anomalies.
+
+GUIDELINES:
+1. ALWAYS respond in the same language as the user. If they write in Swedish, respond in Swedish. If English, respond in English.
+2. When the user has an active building, scope queries to that building by default.
+3. Be concise but thorough. Use markdown formatting: **bold** for key numbers, bullet lists for multiple items, tables for comparisons.
+4. After EVERY answer, suggest 2-3 relevant follow-up actions or questions. Write them as a numbered list at the very end, prefixed with "**Förslag:**" (Swedish) or "**Suggestions:**" (English). ALWAYS lead the user forward with suggestions.
+5. When referencing specific assets, floors, or rooms, ALWAYS include ACTION BUTTONS using this exact syntax:
+   [🔍 View](action:flyTo:FM_GUID)  — fly the camera to an object
+   [📍 Open](action:openViewer:FM_GUID) — open the 3D viewer for a building
+   [🏢 Show floor](action:showFloor:FM_GUID) — switch to a specific floor
+   [🔎 Find in tree](action:selectInTree:FM_GUID1,FM_GUID2) — highlight objects in navigator
+   [📋 Switch to 2D](action:switchTo2D:) — switch viewer to 2D mode
+   [🧊 Switch to 3D](action:switchTo3D:) — switch viewer to 3D mode
+   [🏢 Visa i 3D](action:showFloorIn3D:BUILDING_GUID:FLOOR_GUID:FLOOR_NAME) — show floor in 3D viewer
+   [🏗️ Visa modell](action:isolateModel:BUILDING_GUID:MODEL_ID) — isolate a BIM model
+   [📐 Visa ritning](action:showDrawing:BUILDING_GUID:FLOOR_NAME) — show 2D drawing
+6. ALWAYS add action buttons when listing specific assets, rooms, or floors. For example: "Room **Office 201** [🔍 View](action:flyTo:abc-123)"
+7. When listing multiple items in a table or list, add an action button next to each one.
+8. When you receive data from tools, analyze it and provide insights, not just raw data. Calculate percentages, spot trends, highlight anomalies.
+9. If the user asks something you can't answer with the available tools, say so clearly and suggest what they could do instead.
+10. If the user previously discussed something (see PREVIOUS CONVERSATION), you can reference it naturally: "As we discussed earlier..."
 
 EXAMPLE INTERACTIONS:
 
@@ -991,7 +1361,28 @@ User: "Det läcker vatten i rum 305"
 Thinking: The user is reporting a fault. I should propose creating a work order and ask for confirmation.
 → Respond: "Jag kan skapa en felanmälan: **Vattenläcka i rum 305**, prioritet hög. **Ska jag göra detta?**"
 User: "Ja"
-→ Call create_work_order(title, description, building_fm_guid, priority="high", space_name="305")`;
+→ Call create_work_order(title, description, building_fm_guid, priority="high", space_name="305")
+
+Example 5 — FM Access drawings:
+User: "Vilka ritningar finns det i Småviken?"
+→ Call query_building_settings to get fm_access_building_guid
+→ Call fm_access_get_drawings(fm_access_building_guid)
+→ Present grouped counts per tab
+→ Suggest: "Ska jag lista några av dem? Eller vill du se en specifik ritning?"
+
+Example 6 — 3D viewer control:
+User: "Visa mig 3D-sektion för våning 3"
+→ Call get_building_summary to find floor 3
+→ Call viewer_show_floor(building_fm_guid, floor_fm_guid, "Våning 3")
+→ Present action link + suggest model options
+
+Example 7 — Temperature by floor:
+User: "På vilka våningar har jag en högre snitttemperatur än 23 grader?"
+→ Call get_building_summary to list floors
+→ Call senslinc_get_indices for workspace_key
+→ Call senslinc_search_data for each floor with property_name=temperature
+→ Compare averages and list floors exceeding 23°C
+→ Offer: "Vill du se något av de våningarna i 3D?"`;
 }
 
 /* ─────────────────────────────────────────────
@@ -1023,7 +1414,6 @@ async function callAI(apiKey: string, messages: any[], options: { stream?: boole
     const t = await resp.text();
     console.error(`AI call error (${model}):`, resp.status, t);
 
-    // Fallback to flash if pro fails with 500
     if (resp.status >= 500 && model === AI_MODEL_PRIMARY) {
       console.log("Falling back to", AI_MODEL_FALLBACK);
       return callAI(apiKey, messages, { ...options, model: AI_MODEL_FALLBACK });
@@ -1062,7 +1452,6 @@ serve(async (req) => {
 
     const userId = auth.userId!;
 
-    // Fetch user profile and role in parallel
     const [profileResult, roleResult, previousConversation] = await Promise.all([
       supabase.from("profiles").select("display_name, avatar_url").eq("user_id", userId).maybeSingle(),
       supabase.from("user_roles").select("role").eq("user_id", userId).maybeSingle(),
@@ -1079,7 +1468,6 @@ serve(async (req) => {
       const buildingGuid = context.currentBuilding.fmGuid;
       const buildingName = context.currentBuilding.name;
 
-      // Quick parallel fetch for proactive insights
       const [openIssues, openWorkOrders] = await Promise.all([
         supabase.from("bcf_issues").select("title, priority, status", { count: "exact", head: false })
           .eq("building_fm_guid", buildingGuid).eq("status", "open").limit(5),
@@ -1115,12 +1503,10 @@ serve(async (req) => {
 
     let systemPrompt = await buildSystemPrompt(supabase, context, userProfile, previousConversation);
 
-    // If advisor mode, inject advisor instructions internally
     if (advisor && context?.currentBuilding) {
       systemPrompt += `\n\nADVISOR MODE ACTIVATED: The user clicked the "Get advice" button. Perform a comprehensive FM analysis of the current building "${context.currentBuilding.name}" (fm_guid: ${context.currentBuilding.fmGuid}). Follow the FM ADVISOR MODE instructions in your system prompt. Start by calling get_building_summary, then query_work_orders and query_issues, then aggregate_assets. Present a structured advisory report.`;
     }
 
-    // Build conversation with system prompt
     const conversation: any[] = [{ role: "system", content: systemPrompt }, ...messages];
 
     // ── Iterative tool-calling loop ──
@@ -1130,10 +1516,8 @@ serve(async (req) => {
       const choice = result.choices?.[0];
 
       if (!choice?.message?.tool_calls || choice.message.tool_calls.length === 0) {
-        // No more tool calls — stream the final response
         const streamResp = await callAI(LOVABLE_API_KEY, conversation, { stream: true });
 
-        // Save conversation memory in background (don't await)
         const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
         saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, userMsgs).catch(e =>
           console.error("Failed to save conversation:", e)
@@ -1144,14 +1528,11 @@ serve(async (req) => {
         });
       }
 
-      // Execute all tool calls for this round
       const toolCalls = choice.message.tool_calls;
       console.log(`Gunnar round ${round + 1}: executing ${toolCalls.length} tool(s):`, toolCalls.map((tc: any) => tc.function.name));
 
-      // Add assistant message with tool_calls to conversation
       conversation.push(choice.message);
 
-      // Execute tools in parallel
       const toolResults = await Promise.all(
         toolCalls.map(async (tc: any) => {
           const args = typeof tc.function.arguments === "string"
@@ -1178,10 +1559,8 @@ serve(async (req) => {
       conversation.push(...toolResults);
     }
 
-    // If we exhausted all rounds, stream whatever we have
     console.log("Gunnar: max tool rounds reached, streaming final answer");
 
-    // Save conversation memory
     const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
     saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, userMsgs).catch(e =>
       console.error("Failed to save conversation:", e)
