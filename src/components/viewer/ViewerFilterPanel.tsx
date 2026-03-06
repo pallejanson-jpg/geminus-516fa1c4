@@ -208,6 +208,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   }, [levels, apSources]);
 
   const spaces: SpaceItem[] = useMemo(() => {
+    const allSpaces = buildingData
+      .filter((a: any) => a.category === 'Space' || a.category === 'IfcSpace');
+
     // When levels are available from viewer, filter by visible levels
     // When no levels (viewer not ready), show ALL spaces for this building
     let visibleLevelGuids: Set<string> | null = null;
@@ -217,14 +220,22 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         : new Set(levels.map(l => normalizeGuid(l.fmGuid)));
     }
 
-    return buildingData
-      .filter((a: any) => {
-        const cat = a.category;
-        if (cat !== 'Space' && cat !== 'IfcSpace') return false;
-        if (!visibleLevelGuids) return true; // No levels loaded yet, show all
-        const levelGuid = normalizeGuid(a.levelFmGuid || a.level_fm_guid || '');
-        return visibleLevelGuids.has(levelGuid);
-      })
+    const filteredByLevel = allSpaces.filter((a: any) => {
+      if (!visibleLevelGuids) return true;
+      const levelGuid = normalizeGuid(a.levelFmGuid || a.level_fm_guid || '');
+      return visibleLevelGuids.has(levelGuid);
+    });
+
+    // Fallback: if viewer-level mapping is not ready/correct yet, still show spaces
+    // so the user can filter by room instead of getting an empty list.
+    const spacesSource = (
+      filteredByLevel.length === 0 &&
+      allSpaces.length > 0 &&
+      levels.length > 0 &&
+      checkedLevels.size === 0
+    ) ? allSpaces : filteredByLevel;
+
+    return spacesSource
       .map((a: any) => ({
         fmGuid: a.fmGuid || a.fm_guid,
         name: (a.commonName || a.common_name || a.name || 'Unnamed').replace(/^null$/, 'Unnamed'),
