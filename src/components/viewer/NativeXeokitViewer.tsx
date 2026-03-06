@@ -503,10 +503,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }
       }
 
-      // 6. Secondary/non-A auto-loading disabled in strict A-mode to avoid OOM/crashes
-      if (backgroundList.length > 0) {
-        console.log(`[NativeViewer] Secondary auto-load disabled (${backgroundList.length} models skipped)`);
-      }
+      // All models loaded in priority order above — no secondary queue needed
 
     } catch (e) {
       console.error('[NativeViewer] Init error:', e);
