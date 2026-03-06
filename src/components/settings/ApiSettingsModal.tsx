@@ -3040,6 +3040,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             syncButtonVariant="secondary"
                                         />
 
+                                        {syncCheck && (
                                             <div className="rounded-lg border bg-muted/30 p-3">
                                                 <div className="flex items-center justify-between text-sm">
                                                     <span className="text-muted-foreground">Total in local database:</span>
