@@ -452,22 +452,44 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         entity?: string;
         assetType?: string;
     }) => {
+        // Build a name-based color map for fallback matching in the viewer
+        // (fmGuids from Asset+ may differ from xeokit originalSystemId)
+        const nameColorMap: Record<string, [number, number, number]> = {};
+        const isFloorMode = opts.mode.startsWith('energy_floor');
+        const isRoomMode = opts.mode === 'room_spaces' || opts.mode === 'room_type' || opts.mode === 'room_types';
+        
+        if (isFloorMode) {
+            // Map storey names → colors
+            Object.entries(opts.colorMap).forEach(([fmGuid, rgb]) => {
+                const storey = buildingStoreys.find((s: any) => s.fmGuid === fmGuid);
+                if (storey) {
+                    const name = (storey.commonName || storey.name || '').toLowerCase().trim();
+                    if (name) nameColorMap[name] = rgb;
+                }
+            });
+        } else if (isRoomMode) {
+            // Map room names → colors
+            Object.entries(opts.colorMap).forEach(([fmGuid, rgb]) => {
+                const space = buildingSpaces.find((s: any) => s.fmGuid === fmGuid);
+                if (space) {
+                    const name = (space.commonName || space.name || '').toLowerCase().trim();
+                    if (name) nameColorMap[name] = rgb;
+                }
+            });
+        }
+
+        const detail = { mode: opts.mode, colorMap: opts.colorMap, nameColorMap };
+
         if (drawerMode) {
-            // In drawer mode (inside 3D viewer) — dispatch event for real-time colorization
-            window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, {
-                detail: { mode: opts.mode, colorMap: opts.colorMap },
-            }));
+            window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail }));
         } else if (isMobile) {
             navigateToInsights3D(opts);
         } else {
-            // Update inline viewer via event (same as drawerMode) — no remount needed
             setInlineInsightsMode(opts.mode);
             setInlineColorMap(opts.colorMap);
-            window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, {
-                detail: { mode: opts.mode, colorMap: opts.colorMap },
-            }));
+            window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail }));
         }
-    }, [isMobile, drawerMode, navigateToInsights3D]);
+    }, [isMobile, drawerMode, navigateToInsights3D, buildingStoreys, buildingSpaces]);
 
     // Fullscreen handler for inline viewer
     const handleInlineFullscreen = useCallback(() => {
