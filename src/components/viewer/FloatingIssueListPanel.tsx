@@ -89,7 +89,7 @@ const FloatingIssueListPanel: React.FC<FloatingIssueListPanelProps> = ({
   return (
     <div
       className={cn(
-        "fixed z-[61] border rounded-lg shadow-lg",
+        "fixed z-[70] border rounded-lg shadow-lg",
         "bg-card/80 backdrop-blur-md",
         "flex flex-col",
         "animate-in fade-in-0 slide-in-from-right-2 duration-200",
