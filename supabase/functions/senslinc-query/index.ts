@@ -235,9 +235,11 @@ async function senslincFetch(apiUrl: string, endpoint: string, token: string, to
 // Build dashboard URL from base URL and entity type
 function buildDashboardUrl(apiUrl: string, type: 'machine' | 'site' | 'line', pk: number): string {
   // Strip api. subdomain prefix and /api path suffix to get portal URL
+  // Many Senslinc instances use the same domain without the api. prefix,
+  // or use an app. prefix instead
   let portalUrl = apiUrl
-    .replace(/^(https?:\/\/)api\./, '$1')  // api.example.com → example.com
-    .replace(/\/api\/?$/, '');              // .../api/ → ...
+    .replace(/^(https?:\/\/)api\./, '$1app.')  // api.example.com → app.example.com
+    .replace(/\/api\/?$/, '');                  // .../api/ → ...
   portalUrl = portalUrl.replace(/\/$/, '');
 
   const pathMap = {
