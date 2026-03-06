@@ -6,47 +6,46 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-/** Download WASM files and copy to paths where web-ifc actually looks */
+/** Download WASM files and symlink so web-ifc can find them */
 async function ensureWasm(): Promise<string> {
   const dir = "/tmp/web-ifc-wasm";
-  // web-ifc in Deno edge runtime ignores wasmPath and resolves to this internal path
-  const altDir = "/var/tmp/sb-compile-edge-runtime/node_modules/localhost/web-ifc/0.0.57/tmp/web-ifc-wasm";
-
-  for (const d of [dir, altDir]) {
-    try { await Deno.mkdir(d, { recursive: true }); } catch (_) { /* exists */ }
-  }
+  try { await Deno.mkdir(dir, { recursive: true }); } catch (_) { /* exists */ }
 
   const files = ["web-ifc.wasm", "web-ifc-node.wasm"];
   const baseUrl = "https://unpkg.com/web-ifc@0.0.57";
 
   for (const file of files) {
     const dest = `${dir}/${file}`;
-    let bytes: Uint8Array | null = null;
     try {
       await Deno.stat(dest);
-      bytes = await Deno.readFile(dest);
     } catch {
       console.log(`Downloading ${file}...`);
       const resp = await fetch(`${baseUrl}/${file}`);
       if (resp.ok) {
-        bytes = new Uint8Array(await resp.arrayBuffer());
+        const bytes = new Uint8Array(await resp.arrayBuffer());
         await Deno.writeFile(dest, bytes);
         console.log(`Saved ${file} (${(bytes.length / 1024 / 1024).toFixed(1)} MB)`);
       } else {
         console.warn(`Could not download ${file}: ${resp.status}`);
       }
     }
-    // Also copy to the alternative path web-ifc resolves to
-    if (bytes) {
-      const altDest = `${altDir}/${file}`;
-      try { await Deno.stat(altDest); } catch {
-        await Deno.writeFile(altDest, bytes);
-        console.log(`Copied ${file} to alt path`);
-      }
-    }
   }
 
-  console.log(`WASM ready at ${dir}/ and ${altDir}/`);
+  // web-ifc in Deno edge runtime ignores wasmPath and resolves to an internal npm path.
+  // Create a symlink so it finds our /tmp files at the expected location.
+  const symlinkParent = "/var/tmp/sb-compile-edge-runtime/node_modules/localhost/web-ifc/0.0.57";
+  try {
+    await Deno.mkdir(symlinkParent, { recursive: true });
+    const symlinkTarget = `${symlinkParent}/tmp`;
+    try { await Deno.lstat(symlinkTarget); } catch {
+      await Deno.symlink("/tmp", symlinkTarget);
+      console.log(`Created symlink: ${symlinkTarget} -> /tmp`);
+    }
+  } catch (e) {
+    console.warn(`Could not create symlink (will try direct path): ${e}`);
+  }
+
+  console.log(`WASM ready at ${dir}/`);
   return dir + "/";
 }
 
