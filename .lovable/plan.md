@@ -1,80 +1,47 @@
 
 
-## Plan: System Support + Reconciliation Engine (IMPLEMENTED)
+## Analysis
 
-### Database tables created
-1. **`asset_external_ids`** — Maps external IDs (IFC GUID, ACC externalId, Revit UniqueId) to stable `fm_guid` for cross-source reconciliation
-2. **`systems`** — Technical systems (e.g., LB01 Supply Air) with `fm_guid`, `discipline`, `system_type`, `building_fm_guid`, hierarchical `parent_system_id`
-3. **`asset_system`** — Many-to-many relation between assets and systems with optional `role`
-4. **`asset_connections`** — Topology/flow between assets (`from_fm_guid` → `to_fm_guid`) with `connection_type` and `direction`
+### 1. IFC Import Error
 
-All tables have RLS: authenticated read, admin write. Indexes on common query patterns.
+The error is clear from logs:
+```
+path not found: readfile '/var/tmp/sb-compile-edge-runtime/node_modules/localhost/web-ifc/0.0.57/tmp/web-ifc-wasm/web-ifc-node.wasm'
+```
 
-### Edge function changes
-1. **`ifc-to-xkt/index.ts`** — Extended with system extraction:
-   - Identifies `IfcSystem` / `IfcDistributionSystem` meta objects
-   - Falls back to `SystemName` property grouping
-   - Extracts `IfcRelConnects*` for topology → `asset_connections`
-   - Stores all object IDs in `asset_external_ids`
-   - Persists systems, asset-system links, and connections in batches
+The `ensureWasm()` function downloads WASM files to `/tmp/web-ifc-wasm/`, but `web-ifc` is looking for them at a completely different path (`/var/tmp/sb-compile-edge-runtime/node_modules/localhost/web-ifc/0.0.57/tmp/web-ifc-wasm/`). The `wasmPath` parameter passed to `parseIFCIntoXKTModel` isn't being respected by the underlying `web-ifc` module — it's resolving its own path internally.
 
-2. **`acc-sync/index.ts`** — Extended with system support:
-   - Resolves `System Name`, `System Type`, `System Classification`, `System Abbreviation` property fields
-   - Groups instances by `SystemName` → auto-creates `systems` + `asset_system` rows
-   - Stores ACC `externalId` mappings in `asset_external_ids` for all levels, rooms, instances
-   - Infers discipline from system name (Ventilation, Heating, Cooling, Electrical, Plumbing, FireProtection)
+This is a known issue with `web-ifc` in Deno edge runtimes: the library ignores the provided `wasmPath` and tries to load from its npm module path, which doesn't exist in the edge function sandbox.
 
-### System activation for existing buildings
-- **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
-- **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
-- **Asset+-byggnader**: Kör `sync-systems` action via `asset-plus-sync` edge function → extraherar system från befintliga attribut (IMPLEMENTERAT)
+**Fix:** Instead of relying on `wasmPath`, we need to either:
+- Patch the WASM locator by copying the file to where `web-ifc` expects it (`/var/tmp/sb-compile-edge-runtime/node_modules/localhost/web-ifc/0.0.57/tmp/web-ifc-wasm/`)
+- Or use the `web-ifc` `IfcAPI.SetWasmPath()` approach before parsing
 
-### Frontend (future phase)
-- System tab on FacilityLandingPage
-- System badge on asset property dialogs
-- Manual system creation dialog
+### 2. Does IFC import handle systems and FMGUIDs?
+
+Looking at the code (lines 438-507): **Yes, systems are already extracted during IFC import** via `extractSystemsAndConnections()` and persisted via `persistSystemsAndConnections()`. So when a new building is created with IFC import, systems ARE handled.
+
+However, **FMGUID generation/write-back is NOT yet implemented** — that's the `enrich-guids` mode from the plan that hasn't been built yet.
 
 ---
 
-## Plan: Viewer Color Fix (IMPLEMENTED)
+## Plan
 
-### Changes made:
-1. **Window color** — Changed from blue-gray `[0.392, 0.490, 0.541]` (#647D8A) to neutral warm gray `[0.780, 0.780, 0.760]` (#C7C7C2) in:
-   - `src/lib/architect-colors.ts`
-   - `src/hooks/useArchitectViewMode.ts`
-   - Database `viewer_themes` table (both "Arkitektvy" and "Standard" themes)
-   - `ViewerFilterPanel.tsx` category palette
+### Fix 1: WASM path resolution in `ifc-to-xkt`
 
-2. **Space color** — Verified as correct neutral gray `[0.898, 0.894, 0.890]` (#E5E4E3). Changed category palette in ViewerFilterPanel from blue to neutral.
+Update `ensureWasm()` to also copy the WASM files to the path where `web-ifc` actually looks for them. The error path reveals the expected location: `/var/tmp/sb-compile-edge-runtime/node_modules/localhost/web-ifc/0.0.57/tmp/web-ifc-wasm/`. We should create that directory and copy files there as well, in addition to `/tmp/web-ifc-wasm/`.
 
-3. **Background** — Already correct gray gradient in NativeViewerShell.
+Alternatively, a more robust approach: parse the error path pattern and preemptively write to it. Since the Deno edge runtime resolves npm modules to `/var/tmp/sb-compile-edge-runtime/node_modules/...`, we can detect that path and ensure files exist there.
 
-4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
+### Fix 2: Apply same fix to `ifc-extract-systems`
 
-5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
+The new edge function has the same `ensureWasm()` pattern and will hit the same error. Apply the identical fix.
 
----
+### Summary of answers to user's questions:
 
-## Plan: IFC System-Only Import (IMPLEMENTED - Phase 1)
+1. **Does IFC import handle systems?** — Yes, the `ifc-to-xkt` function already extracts systems and connections from IFC metadata and persists them. This works when the import itself succeeds.
 
-### What was built
-1. **`ifc-extract-systems` edge function** — New lightweight edge function that:
-   - Downloads IFC from `ifc-uploads` bucket
-   - Parses metadata via `web-ifc` + `xeokit-convert` (same pipeline as `ifc-to-xkt`)
-   - Extracts systems (`IfcSystem`, `IfcDistributionSystem`, `SystemName` property grouping)
-   - Extracts connections (`IfcRelConnects*`)
-   - Reconciles IFC GUIDs with existing assets (3-step: exact match → name match → identity)
-   - Persists to `systems`, `asset_system`, `asset_connections`, `asset_external_ids`
-   - **Skips XKT generation** — much faster (~10-15s vs minutes)
-   - Supports 3 modes: `systems-only` (default), `enrich-guids` (future), `full` (delegates to `ifc-to-xkt`)
+2. **Does it handle FMGUIDs?** — Not yet. The `enrich-guids` mode (generating FMGUIDs for objects that lack them and writing back to IFC) is planned but not implemented.
 
-2. **UI in ApiSettingsModal** — "From IFC" button on the Technical Systems card:
-   - Building selector dropdown
-   - IFC file upload
-   - Mode radio: "Only systems (fast)" / "Systems + FMGUIDs (coming soon)" / "Full conversion"
-   - Progress tracking and result display
+3. **Why did the import fail?** — The WASM runtime path resolution is broken. `web-ifc` ignores the provided `wasmPath` parameter and looks for `.wasm` files at its npm module path, which doesn't exist in the edge function sandbox.
 
-### Still to implement
-- **`enrich-guids` mode** — FMGUID generation + IFC write-back via `web-ifc` property injection
-- **IFC archive** — Store enriched IFC in `ifc-uploads/{buildingFmGuid}/enriched/`
-- **ACC `enrich-guids` action** — Deterministic GUID generation for ACC-sourced models
