@@ -771,11 +771,18 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                     <Pie data={energyDistribution} cx="50%" cy="50%" innerRadius={isMobile ? 40 : 45} outerRadius={isMobile ? 65 : 75} paddingAngle={2} dataKey="value" label={renderPieLabel} labelLine={!isMobile}>
                                                         {energyDistribution.map((entry, index) => (
                                                             <Cell key={`cell-${index}`} fill={entry.color} style={{ cursor: 'pointer' }} onClick={() => {
-                                                                // Individual segment: color all floors with this category's color
-                                                                const colorMap: Record<string, [number, number, number]> = {};
+                                                                // Resolve all floors to child rooms for reliable 3D matching
                                                                 const categoryColor = hslStringToRgbFloat(entry.color);
-                                                                energyByFloor.forEach(f => { colorMap[f.fmGuid] = categoryColor; });
-                                                                handleInsightsClick({ mode: 'energy_floor', colorMap, entity: entry.name });
+                                                                const roomColorMap: Record<string, [number, number, number]> = {};
+                                                                energyByFloor.forEach(f => {
+                                                                    buildingSpaces.forEach((space: any) => {
+                                                                        if (space.levelFmGuid === f.fmGuid) {
+                                                                            roomColorMap[space.fmGuid] = categoryColor;
+                                                                        }
+                                                                    });
+                                                                    roomColorMap[f.fmGuid] = categoryColor;
+                                                                });
+                                                                handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
                                                             }} />
                                                         ))}
                                                     </Pie>
