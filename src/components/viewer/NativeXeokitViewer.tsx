@@ -664,27 +664,27 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           }
         });
       } else {
-        // Match by fmGuid via originalSystemId or mo.id
-        // For room_spaces mode: also make IfcSpace objects visible
+        // Match by fmGuid via originalSystemId or mo.id, with name-based fallback
         const isRoomMode = mode === 'room_spaces' || mode === 'room_type' || mode === 'room_types';
         const isFloorMode = mode.startsWith('energy_floor');
+        const nameColorMap = detail.nameColorMap || {};
 
         Object.values(metaObjects).forEach((mo: any) => {
           const sysId = norm(mo.originalSystemId || '');
           const moId = norm(mo.id || '');
-          const rgb = fmGuidLookup.get(sysId) || fmGuidLookup.get(moId);
+          const moName = (mo.name || '').toLowerCase().trim();
+          // Try fmGuid match first, then name-based fallback
+          let rgb = fmGuidLookup.get(sysId) || fmGuidLookup.get(moId);
+          if (!rgb && moName && nameColorMap[moName]) {
+            rgb = nameColorMap[moName];
+          }
           if (rgb) {
-            // For room modes, ensure IfcSpace objects are visible
             if (isRoomMode) {
               const entity = scene.objects?.[mo.id];
-              if (entity) {
-                entity.visible = true;
-                entity.pickable = true;
-              }
+              if (entity) { entity.visible = true; entity.pickable = true; }
             }
             colorizeEntity(mo, rgb);
             
-            // For floor modes, also colorize all children (all objects on that floor)
             if (isFloorMode) {
               const colorizeAllChildren = (obj: any) => {
                 obj.children?.forEach((child: any) => {
@@ -692,7 +692,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
                   if (childEntity) {
                     childEntity.xrayed = false;
                     childEntity.visible = true;
-                    childEntity.colorize = rgb;
+                    childEntity.colorize = rgb!;
                     childEntity.opacity = 0.85;
                     matchCount++;
                   }
