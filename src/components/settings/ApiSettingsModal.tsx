@@ -411,6 +411,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isSyncingAccToAp, setIsSyncingAccToAp] = useState(false);
     const [accToApResult, setAccToApResult] = useState<any>(null);
 
+    // System sync state
+    const [isSyncingSystems, setIsSyncingSystems] = useState(false);
+    const [systemCount, setSystemCount] = useState(0);
+    const [systemSyncResult, setSystemSyncResult] = useState<{ created: number; links: number } | null>(null);
+
     // Check Autodesk 3-legged auth status on mount
     useEffect(() => {
         const checkAccAuth = async () => {
