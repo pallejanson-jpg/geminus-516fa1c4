@@ -584,10 +584,16 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   // ── Listen for Insights color events (chart click → colorize model) ───
   useEffect(() => {
     const handler = (e: Event) => {
-      const viewer = viewerRef.current;
-      if (!viewer?.scene || !viewer?.metaScene) return;
       const detail = (e as CustomEvent<InsightsColorUpdateDetail>).detail;
       if (!detail?.colorMap) return;
+
+      const viewer = viewerRef.current;
+      if (!viewer?.scene || !viewer?.metaScene) {
+        // Viewer not ready yet — store for later
+        pendingInsightsColorRef.current = detail;
+        console.log('[NativeViewer] INSIGHTS_COLOR_UPDATE received but viewer not ready — queued');
+        return;
+      }
 
       const scene = viewer.scene;
       const colorMap = detail.colorMap;
