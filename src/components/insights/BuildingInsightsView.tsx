@@ -397,6 +397,63 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
 
     const sensorMetricDef = SENSOR_METRICS.find(m => m.key === sensorMetric)!;
 
+    // Helper: build color map from room values and push to 3D
+    const colorizeAllSensorRooms = useCallback(() => {
+        const roomColorMap: Record<string, [number, number, number]> = {};
+        sensorRoomValues.forEach((room: any) => {
+            if (room.value !== null) {
+                const rgb = getVisualizationColor(room.value, sensorMetric);
+                if (rgb) roomColorMap[room.fmGuid] = rgb;
+            }
+        });
+        handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
+    }, [sensorRoomValues, sensorMetric, handleInsightsClick]);
+
+    // Helper: colorize only selected rooms
+    const colorizeSelectedSensorRooms = useCallback((guids: Set<string>) => {
+        const roomColorMap: Record<string, [number, number, number]> = {};
+        sensorRoomValues.forEach((room: any) => {
+            if (guids.has(room.fmGuid) && room.value !== null) {
+                const rgb = getVisualizationColor(room.value, sensorMetric);
+                if (rgb) roomColorMap[room.fmGuid] = rgb;
+            }
+        });
+        handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
+    }, [sensorRoomValues, sensorMetric, handleInsightsClick]);
+
+    // Auto-colorize when switching metrics (if sensor tab is active)
+    useEffect(() => {
+        if (activeTab !== 'performance') return; // sensor section is inside performance tab
+        if (sensorRoomValues.length === 0) return;
+        // Only auto-colorize if the inline viewer is showing or in drawer mode
+        if (!drawerMode && isMobile) return;
+        // Build and dispatch color map automatically
+        const roomColorMap: Record<string, [number, number, number]> = {};
+        sensorRoomValues.forEach((room: any) => {
+            if (room.value !== null) {
+                const rgb = getVisualizationColor(room.value, sensorMetric);
+                if (rgb) roomColorMap[room.fmGuid] = rgb;
+            }
+        });
+        const nameColorMap: Record<string, [number, number, number]> = {};
+        sensorRoomValues.forEach((room: any) => {
+            if (room.value !== null) {
+                const name = (room.commonName || room.name || '').toLowerCase().trim();
+                const rgb = getVisualizationColor(room.value, sensorMetric);
+                if (name && rgb) nameColorMap[name] = rgb;
+            }
+        });
+        const detail = { mode: 'room_spaces', colorMap: roomColorMap, nameColorMap };
+        setInlineInsightsMode('room_spaces');
+        setInlineColorMap(roomColorMap);
+        window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail }));
+    }, [sensorMetric, sensorRoomValues, activeTab]);
+
+    // Clear selection when metric changes
+    useEffect(() => {
+        setSelectedSensorRooms(new Set());
+    }, [sensorMetric]);
+
 
     // Calculate actual stats from allData for this building (REAL for hierarchy, DB for assets)
     const stats = useMemo(() => {
