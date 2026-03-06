@@ -647,7 +647,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       'Wall': ['IfcWall', 'IfcWallStandardCase'],
       'Door': ['IfcDoor'],
       'Window': ['IfcWindow'],
-      'Slab': ['IfcSlab'],
+      'Slab': ['IfcSlab', 'IfcSlabStandardCase'],
       'Roof': ['IfcRoof'],
       'Stair': ['IfcStairFlight', 'IfcStair'],
       'Column': ['IfcColumn'],
@@ -655,6 +655,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       'Covering': ['IfcCovering'],
       'Railing': ['IfcRailing'],
       'Curtain Wall': ['IfcCurtainWall', 'IfcPlate'],
+      'Furnishing': ['IfcFurnishingElement'],
+      'Flow Terminal': ['IfcFlowTerminal'],
+      'Flow Segment': ['IfcFlowSegment'],
+      'Flow Fitting': ['IfcFlowFitting'],
+      'Flow Controller': ['IfcFlowController'],
+      'Pipe': ['IfcPipeSegment', 'IfcPipeFitting'],
+      'Duct': ['IfcDuctSegment', 'IfcDuctFitting'],
+      'Member': ['IfcMember'],
+      'Proxy': ['IfcBuildingElementProxy'],
     };
     for (const [cat, types] of Object.entries(mappings)) {
       map.set(cat, new Set(types));
