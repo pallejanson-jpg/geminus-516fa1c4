@@ -623,8 +623,8 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                     Asset
                                 </TabsTrigger>
                                 <TabsTrigger value="fm" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2 gap-1">
-                                    <Boxes className="h-3 w-3" />
-                                    FM
+                                    <Bell className="h-3 w-3" />
+                                    Alarms
                                     {alarmCount > 0 && (
                                         <Badge variant="destructive" className="text-[9px] h-4 px-1 ml-0.5">{alarmCount > 999 ? '999+' : alarmCount}</Badge>
                                     )}
