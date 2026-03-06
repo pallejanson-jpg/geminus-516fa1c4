@@ -120,9 +120,9 @@ const Mobile3DViewer: React.FC = () => {
   // Fullscreen 3D viewer - let MobileViewerOverlay handle the close button
   return (
     <div className="w-screen relative bg-background overflow-hidden" style={{ height: '100dvh', touchAction: 'none' }}>
-      {/* 3D Viewer - fullscreen */}
+      {/* 3D Viewer - fullscreen via NativeViewerShell (same as desktop) */}
       <ViewerErrorBoundary onReset={handleClose}>
-        <NativeXeokitViewer 
+        <NativeViewerShell 
           buildingFmGuid={selectedBuildingFmGuid} 
           onClose={handleClose}
         />
