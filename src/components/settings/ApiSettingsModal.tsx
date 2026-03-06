@@ -416,6 +416,15 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [systemCount, setSystemCount] = useState(0);
     const [systemSyncResult, setSystemSyncResult] = useState<{ created: number; links: number } | null>(null);
 
+    // IFC system import state
+    const [showIfcSystemImport, setShowIfcSystemImport] = useState(false);
+    const [ifcSystemFile, setIfcSystemFile] = useState<File | null>(null);
+    const [ifcSystemBuildingGuid, setIfcSystemBuildingGuid] = useState('');
+    const [ifcSystemMode, setIfcSystemMode] = useState<'systems-only' | 'enrich-guids' | 'full'>('systems-only');
+    const [isImportingIfcSystems, setIsImportingIfcSystems] = useState(false);
+    const [ifcSystemImportResult, setIfcSystemImportResult] = useState<any>(null);
+    const [ifcSystemBuildings, setIfcSystemBuildings] = useState<Array<{ fm_guid: string; name: string }>>([]);
+
     // Check Autodesk 3-legged auth status on mount
     useEffect(() => {
         const checkAccAuth = async () => {
