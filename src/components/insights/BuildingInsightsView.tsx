@@ -181,6 +181,14 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     // Controlled tabs
     const [activeTab, setActiveTab] = useState('performance');
 
+    // Reset 3D colorization when switching tabs (dispatch reset event, no full model reload)
+    useEffect(() => {
+        window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_RESET_EVENT));
+        // Also reset inline viewer state
+        setInlineInsightsMode(undefined);
+        setInlineColorMap(undefined);
+    }, [activeTab]);
+
     // Room metadata lookup from allData (for enriching alarm list)
     const roomLookup = useMemo(() => {
         const map = new Map<string, { name: string; commonName: string }>();
