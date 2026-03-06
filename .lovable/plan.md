@@ -1,54 +1,142 @@
 
 
-## Plan: System Support + Reconciliation Engine (IMPLEMENTED)
+## Plan: System Sync UI Button + Full System Navigation MVP
 
-### Database tables created
-1. **`asset_external_ids`** — Maps external IDs (IFC GUID, ACC externalId, Revit UniqueId) to stable `fm_guid` for cross-source reconciliation
-2. **`systems`** — Technical systems (e.g., LB01 Supply Air) with `fm_guid`, `discipline`, `system_type`, `building_fm_guid`, hierarchical `parent_system_id`
-3. **`asset_system`** — Many-to-many relation between assets and systems with optional `role`
-4. **`asset_connections`** — Topology/flow between assets (`from_fm_guid` → `to_fm_guid`) with `connection_type` and `direction`
-
-All tables have RLS: authenticated read, admin write. Indexes on common query patterns.
-
-### Edge function changes
-1. **`ifc-to-xkt/index.ts`** — Extended with system extraction:
-   - Identifies `IfcSystem` / `IfcDistributionSystem` meta objects
-   - Falls back to `SystemName` property grouping
-   - Extracts `IfcRelConnects*` for topology → `asset_connections`
-   - Stores all object IDs in `asset_external_ids`
-   - Persists systems, asset-system links, and connections in batches
-
-2. **`acc-sync/index.ts`** — Extended with system support:
-   - Resolves `System Name`, `System Type`, `System Classification`, `System Abbreviation` property fields
-   - Groups instances by `SystemName` → auto-creates `systems` + `asset_system` rows
-   - Stores ACC `externalId` mappings in `asset_external_ids` for all levels, rooms, instances
-   - Infers discipline from system name (Ventilation, Heating, Cooling, Electrical, Plumbing, FireProtection)
-
-### System activation for existing buildings
-- **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
-- **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
-- **Asset+-byggnader**: Kör `sync-systems` action via `asset-plus-sync` edge function → extraherar system från befintliga attribut (IMPLEMENTERAT)
-
-### Frontend (future phase)
-- System tab on FacilityLandingPage
-- System badge on asset property dialogs
-- Manual system creation dialog
+This is a large feature spanning UI sync controls, a new navigation paradigm, 3D viewer integration, and multiple new panels. The plan is structured in phases.
 
 ---
 
-## Plan: Viewer Color Fix (IMPLEMENTED)
+### Phase 1: Sync Systems Button in Settings
 
-### Changes made:
-1. **Window color** — Changed from blue-gray `[0.392, 0.490, 0.541]` (#647D8A) to neutral warm gray `[0.780, 0.780, 0.760]` (#C7C7C2) in:
-   - `src/lib/architect-colors.ts`
-   - `src/hooks/useArchitectViewMode.ts`
-   - Database `viewer_themes` table (both "Arkitektvy" and "Standard" themes)
-   - `ViewerFilterPanel.tsx` category palette
+**Where:** `ApiSettingsModal.tsx` — Sync tab, Asset+ accordion section, after the XKT Files `SyncProgressCard`.
 
-2. **Space color** — Verified as correct neutral gray `[0.898, 0.894, 0.890]` (#E5E4E3). Changed category palette in ViewerFilterPanel from blue to neutral.
+**What:**
+- Add a new `SyncProgressCard` for "Technical Systems" with a Network icon
+- Add state: `isSyncingSystems`, `systemSyncResult`
+- Add handler `handleSyncSystems` that calls `supabase.functions.invoke('asset-plus-sync', { body: { action: 'sync-systems' } })` with resumable loop (same pattern as assets/XKT sync)
+- Fetch system count from `systems` table to show local count
+- The edge function already supports `sync-systems` action and returns `{ systemsCreated, linksCreated, interrupted, progress }`
 
-3. **Background** — Already correct gray gradient in NativeViewerShell.
+---
 
-4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
+### Phase 2: System Navigation in Navigator
 
-5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
+**Where:** `NavigatorView.tsx`
+
+**What:**
+- Add a toggle button to switch between **Spatial** (existing tree) and **System** navigation views
+- System view fetches from `systems` table (with `asset_system` joins) and builds a tree:
+  ```
+  Systems
+   └ Ventilation
+       └ LB01 (12 assets)
+       └ LB02 (8 assets)
+   └ Heating
+       └ H01 (6 assets)
+  ```
+- Group by `discipline` field → system name → assets
+- Clicking a system dispatches the same 3D highlight event used by Insights (colorize system assets, dim rest)
+- Clicking an asset navigates to its spatial location
+
+---
+
+### Phase 3: System Filter in ViewerFilterPanel
+
+**Where:** `ViewerFilterPanel.tsx`
+
+**What:**
+- Add a new collapsible "Systems" section below Categories
+- Fetch systems for the current building from `systems` + `asset_system` tables
+- Each system row shows name, discipline badge, and asset count
+- Checking a system: highlights its assets in full color, dims everything else (x-ray mode)
+- Multiple systems can be checked simultaneously
+- Uses `normalizeGuid` matching against `metaScene` entities
+
+---
+
+### Phase 4: System Properties Panel
+
+**Where:** New component `src/components/viewer/SystemPropertiesPanel.tsx`
+
+**What:**
+- Triggered when a system is selected (from filter or navigator)
+- Shows: System name, type, discipline, asset count, rooms served, floors spanned
+- Lists all assets in the system with click-to-fly-to
+- "Trace System" button that sequentially highlights assets following `asset_connections` topology
+
+---
+
+### Phase 5: System Tab on FacilityLandingPage
+
+**Where:** `FacilityLandingPage.tsx`
+
+**What:**
+- Add a "Systems" section/tab showing all systems for the building
+- Card per system: name, discipline icon, asset count, room count
+- Click opens system detail or highlights in 3D
+- System coverage view: which rooms each system serves
+
+---
+
+### Phase 6: System Highlight in 3D
+
+**Where:** `NativeViewerShell.tsx` / `NativeXeokitViewer.tsx`
+
+**What:**
+- New event `SYSTEM_HIGHLIGHT_EVENT` in `viewer-events.ts`
+- When fired with system asset FMGUIDs:
+  - Set all non-system entities to 20% opacity (x-ray)
+  - Set system entities to full color with category-based palette
+- Reset event restores normal view
+- Works with existing `recolorArchitectObjects` infrastructure
+
+---
+
+### Phase 7: System Topology Graph (Advanced)
+
+**Where:** New component `src/components/viewer/SystemTopologyView.tsx`
+
+**What:**
+- Uses `asset_connections` table data (from_fm_guid → to_fm_guid, direction)
+- Renders a simple directed graph/tree showing flow direction
+- Split view: `[3D View] | [System Diagram]`
+- Click node in graph → fly to entity in 3D
+- Future: animate flow direction
+
+---
+
+### Phase 8: System Heatmaps (IoT Integration)
+
+**Where:** Extends existing Senslinc integration
+
+**What:**
+- When a system is selected and IoT data exists, color components by sensor status
+- Green = normal, Yellow = warning, Red = alarm
+- Leverages existing `INSIGHTS_COLOR_UPDATE_EVENT` infrastructure
+- System KPI panel: aggregated metrics (total flow, energy, efficiency)
+
+---
+
+### Phase 9: Cross-Navigation
+
+**What:**
+- From any asset property dialog, show "Part of System: LB01" with clickable link
+- From system view, click asset → navigate to spatial location (room, floor)
+- Bidirectional: Spatial → System and System → Spatial
+
+---
+
+### Technical Notes
+
+- All system data comes from existing `systems`, `asset_system`, and `asset_connections` tables (already created)
+- The `sync-systems` edge function already exists and is resumable
+- Entity matching in 3D uses `normalizeGuid` on `fm_guid` ↔ `originalSystemId`
+- No new database tables needed for the MVP (phases 1-6)
+- Phase 7 (topology) may benefit from a lightweight graph rendering library or simple SVG/CSS tree
+
+### Implementation Order
+
+Recommend implementing in this order: **Phase 1 → 3 → 6 → 2 → 4 → 5 → 9 → 7 → 8**
+
+Phase 1 (sync button) is the immediate request and can ship standalone.
+
