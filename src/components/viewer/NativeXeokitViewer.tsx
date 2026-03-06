@@ -537,6 +537,14 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         setPhase('ready');
         (window as any).__nativeXeokitViewer = viewer;
         onViewerReady?.(viewer);
+        // Re-apply any pending insights color event that arrived before models loaded
+        if (pendingInsightsColorRef.current) {
+          const pending = pendingInsightsColorRef.current;
+          pendingInsightsColorRef.current = null;
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail: pending }));
+          }, 200);
+        }
       }
 
       // 6. Secondary/non-A auto-loading disabled in strict A-mode to avoid OOM/crashes
