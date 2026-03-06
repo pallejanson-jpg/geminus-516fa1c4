@@ -238,7 +238,7 @@ function buildDashboardUrl(apiUrl: string, type: 'machine' | 'site' | 'line', pk
   // Many Senslinc instances use the same domain without the api. prefix,
   // or use an app. prefix instead
   let portalUrl = apiUrl
-    .replace(/^(https?:\/\/)api\./, '$1app.')  // api.example.com → app.example.com
+    .replace(/^(https?:\/\/)api\./, '$1')      // api.example.com → example.com (no app. prefix)
     .replace(/\/api\/?$/, '');                  // .../api/ → ...
   portalUrl = portalUrl.replace(/\/$/, '');
 

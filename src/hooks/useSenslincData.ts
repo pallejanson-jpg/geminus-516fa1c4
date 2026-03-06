@@ -143,20 +143,32 @@ function detectAvailableFields(timeSeries: SenslincTimePoint[], properties: any[
 
 // Generate plausible mock time-series for a room
 function generateMockTimeSeries(fmGuid: string, days = 7): SenslincTimePoint[] {
-  const hash = fmGuid.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  // Use the same hash formula as generateMockSensorData in visualization-utils.ts
+  // so the "current" derived value matches the room card value
+  const hash = fmGuid.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const baseRandom = (hash * 9301 + 49297) % 233280 / 233280;
   const pts: SenslincTimePoint[] = [];
   const now = new Date();
+
+  // Base values derived identically to generateMockSensorData
+  const baseTemp = 16 + baseRandom * 14;      // range 16-30
+  const baseCo2 = 400 + baseRandom * 1600;     // range 400-2000
+  const baseHum = 20 + baseRandom * 60;        // range 20-80
+  const baseOcc = baseRandom * 100;            // range 0-100
+  const baseLight = baseRandom * 2000;         // range 0-2000
+
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
-    const seed = (hash + i * 137) % 233280 / 233280;
+    // Small daily variation so the latest day matches the card value
+    const dayVariation = i === 0 ? 0 : ((hash + i * 137) % 100 - 50) / 100;
     pts.push({
       date: d.toISOString().substring(0, 10),
-      temperature: 18 + seed * 8,
-      co2: 400 + seed * 800,
-      humidity: 30 + seed * 40,
-      occupancy: Math.round(seed * 100),
-      light: 50 + seed * 800,
+      temperature: Math.round((baseTemp + dayVariation * 2) * 10) / 10,
+      co2: Math.round(baseCo2 + dayVariation * 100),
+      humidity: Math.round((baseHum + dayVariation * 5) * 10) / 10,
+      occupancy: Math.round(Math.max(0, Math.min(100, baseOcc + dayVariation * 10))),
+      light: Math.round(Math.max(0, baseLight + dayVariation * 100)),
     });
   }
   return pts;

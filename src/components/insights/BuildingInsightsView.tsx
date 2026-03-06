@@ -876,24 +876,16 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                  Room Heatmap – {sensorMetricDef.label}
                                              </CardTitle>
                                               <Button
-                                                  variant="outline"
-                                                  size="sm"
-                                                  className="h-7 px-2 text-[10px] gap-1"
-                                                  onClick={() => {
-                                                      // Use sensor heatmap colors matching the room cards
-                                                      const roomColorMap: Record<string, [number, number, number]> = {};
-                                                      sensorRoomValues.forEach((room: any) => {
-                                                          if (room.value !== null) {
-                                                              const rgb = getVisualizationColor(room.value, sensorMetric);
-                                                              roomColorMap[room.fmGuid] = rgb;
-                                                          }
-                                                      });
-                                                      handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
-                                                  }}
-                                              >
-                                                  <Eye className="h-3 w-3" />
-                                                   View rooms in 3D
-                                              </Button>
+                                                   variant="outline"
+                                                   size="sm"
+                                                   className="h-7 px-2 text-[10px] gap-1"
+                                                   onClick={() => {
+                                                       colorizeAllSensorRooms();
+                                                   }}
+                                               >
+                                                   <Eye className="h-3 w-3" />
+                                                   View all
+                                               </Button>
                                          </div>
                                          <CardDescription>
                                              {sensorRooms.length} of {spaceFloorFilter ? `rooms on ${spaceFloorFilter}` : `${buildingSpaces.length} rooms`} · click for sensor details
