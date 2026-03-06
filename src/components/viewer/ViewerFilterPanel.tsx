@@ -208,14 +208,20 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   }, [levels, apSources]);
 
   const spaces: SpaceItem[] = useMemo(() => {
-    const visibleLevelGuids = checkedLevels.size > 0
-      ? new Set(Array.from(checkedLevels).map(g => normalizeGuid(g)))
-      : new Set(levels.map(l => normalizeGuid(l.fmGuid)));
+    // When levels are available from viewer, filter by visible levels
+    // When no levels (viewer not ready), show ALL spaces for this building
+    let visibleLevelGuids: Set<string> | null = null;
+    if (levels.length > 0) {
+      visibleLevelGuids = checkedLevels.size > 0
+        ? new Set(Array.from(checkedLevels).map(g => normalizeGuid(g)))
+        : new Set(levels.map(l => normalizeGuid(l.fmGuid)));
+    }
 
     return buildingData
       .filter((a: any) => {
         const cat = a.category;
         if (cat !== 'Space' && cat !== 'IfcSpace') return false;
+        if (!visibleLevelGuids) return true; // No levels loaded yet, show all
         const levelGuid = normalizeGuid(a.levelFmGuid || a.level_fm_guid || '');
         return visibleLevelGuids.has(levelGuid);
       })
