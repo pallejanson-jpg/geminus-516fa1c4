@@ -685,7 +685,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         });
       }
 
-      console.log('[NativeViewer] Applied INSIGHTS_COLOR_UPDATE:', mode, Object.keys(colorMap).length, 'entries');
+      console.log('[NativeViewer] Applied INSIGHTS_COLOR_UPDATE:', mode, Object.keys(colorMap).length, 'entries,', matchCount, 'entities matched');
     };
 
     window.addEventListener(INSIGHTS_COLOR_UPDATE_EVENT, handler);
