@@ -675,14 +675,34 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         });
       } else {
         // Default: match by fmGuid (energy_floors, energy_floor, room_spaces, etc.)
+        // Build a lookup of normalized fmGuid → rgb for fast matching
+        const fmGuidLookup = new Map<string, [number, number, number]>();
         Object.entries(colorMap).forEach(([fmGuid, rgb]) => {
-          Object.values(metaObjects).forEach((mo: any) => {
-            const sysId = norm(mo.originalSystemId || '');
-            if (sysId === norm(fmGuid)) {
-              colorizeEntity(mo, rgb);
-            }
-          });
+          fmGuidLookup.set(norm(fmGuid), rgb);
         });
+
+        // For floor-level modes, also match all children of matching storeys
+        const isFloorMode = mode.startsWith('energy_floor');
+        
+        // First pass: find matching storeys/objects and colorize them + descendants
+        Object.values(metaObjects).forEach((mo: any) => {
+          const sysId = norm(mo.originalSystemId || '');
+          const moId = norm(mo.id || '');
+          const rgb = fmGuidLookup.get(sysId) || fmGuidLookup.get(moId);
+          if (rgb) {
+            colorizeEntity(mo, rgb);
+          }
+        });
+
+        // For floor modes with 0 matches: try matching storey names → child colorization
+        if (matchCount === 0 && isFloorMode) {
+          // Log sample metaObjects for debugging
+          const sampleMos = Object.values(metaObjects).slice(0, 5).map((mo: any) => ({
+            id: mo.id, type: mo.type, sysId: mo.originalSystemId, name: mo.name,
+          }));
+          console.log('[NativeViewer] DEBUG: Sample metaObjects:', sampleMos);
+          console.log('[NativeViewer] DEBUG: colorMap keys:', Object.keys(colorMap).slice(0, 5));
+        }
       }
 
       console.log('[NativeViewer] Applied INSIGHTS_COLOR_UPDATE:', mode, Object.keys(colorMap).length, 'entries,', matchCount, 'entities matched');
