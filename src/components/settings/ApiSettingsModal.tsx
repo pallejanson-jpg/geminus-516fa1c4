@@ -16,7 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
     Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2,
-    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles, FileText, FolderOpen, ChevronRight, ChevronDown as ChevronDownIcon, File, Database as DatabaseIcon, Cuboid, Bot
+    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles, FileText, FolderOpen, ChevronRight, ChevronDown as ChevronDownIcon, File, Database as DatabaseIcon, Cuboid, Bot, Network
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -410,6 +410,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isCheckingAccToAp, setIsCheckingAccToAp] = useState(false);
     const [isSyncingAccToAp, setIsSyncingAccToAp] = useState(false);
     const [accToApResult, setAccToApResult] = useState<any>(null);
+
+    // System sync state
+    const [isSyncingSystems, setIsSyncingSystems] = useState(false);
+    const [systemCount, setSystemCount] = useState(0);
+    const [systemSyncResult, setSystemSyncResult] = useState<{ created: number; links: number } | null>(null);
 
     // Check Autodesk 3-legged auth status on mount
     useEffect(() => {
@@ -987,9 +992,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     // Fetch sync status and asset count
     const fetchSyncStatus = async () => {
         try {
-            const [syncResult, countResult] = await Promise.all([
+            const [syncResult, countResult, systemCountResult] = await Promise.all([
                 supabase.from('asset_sync_state').select('*').order('subtree_name'),
-                supabase.from('assets').select('id', { count: 'exact', head: true })
+                supabase.from('assets').select('id', { count: 'exact', head: true }),
+                supabase.from('systems').select('id', { count: 'exact', head: true }),
             ]);
             
             if (syncResult.data) {
@@ -997,6 +1003,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             }
             if (countResult.count !== null) {
                 setAssetCount(countResult.count);
+            }
+            if (systemCountResult.count !== null) {
+                setSystemCount(systemCountResult.count);
             }
         } catch (error) {
             console.error('Failed to fetch sync status:', error);
@@ -1259,6 +1268,51 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             description: "Syncing 3D models for all buildings. This will complete automatically.",
         });
 
+        runResumableSync();
+    };
+
+    // Sync technical systems from Asset+
+    const handleSyncSystems = async () => {
+        setIsSyncingSystems(true);
+        setSystemSyncResult(null);
+        
+        const runResumableSync = async (): Promise<void> => {
+            try {
+                const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+                    body: { action: 'sync-systems' }
+                });
+
+                if (error) {
+                    console.error('System sync error:', error);
+                    toast({ variant: "destructive", title: "System Sync Error", description: error.message });
+                    setIsSyncingSystems(false);
+                    return;
+                }
+
+                await fetchSyncStatus();
+
+                if (data?.interrupted) {
+                    console.log(`System sync progress: ${data.systemsCreated} created, continuing...`);
+                    setTimeout(() => runResumableSync(), 1000);
+                } else {
+                    const created = data?.systemsCreated || 0;
+                    const links = data?.linksCreated || 0;
+                    setSystemSyncResult({ created, links });
+                    toast({
+                        title: "System Sync Complete",
+                        description: `${created} systems, ${links} asset links synced.`,
+                    });
+                    setIsSyncingSystems(false);
+                    await fetchSyncStatus();
+                }
+            } catch (error: any) {
+                console.error('System sync exception:', error);
+                toast({ variant: "destructive", title: "System Sync Failed", description: error.message });
+                setIsSyncingSystems(false);
+            }
+        };
+
+        toast({ title: "Starting System Sync", description: "Extracting technical systems from Asset+ attributes." });
         runResumableSync();
     };
 
@@ -2969,6 +3023,21 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             syncCompletedAt={syncCheck?.xkt?.syncState?.last_sync_completed_at}
                                             syncStatus={syncCheck?.xkt?.syncState?.sync_status}
                                             errorMessage={syncCheck?.xkt?.syncState?.error_message}
+                                        />
+
+                                        <SyncProgressCard
+                                            icon={<Network className="h-5 w-5 text-primary" />}
+                                            title="Technical Systems"
+                                            subtitle="Ventilation, heating, electrical systems from Asset+ attributes"
+                                            localCount={systemCount}
+                                            remoteLabel={systemSyncResult ? `${systemSyncResult.created} created, ${systemSyncResult.links} links` : undefined}
+                                            inSync={systemCount > 0 ? true : null}
+                                            isSyncing={isSyncingSystems}
+                                            isCheckingSync={isCheckingSync}
+                                            disabled={isSyncingStructure || isSyncingAssets || isSyncingXkt || isSyncingSystems}
+                                            onSync={handleSyncSystems}
+                                            syncButtonLabel="Sync Systems"
+                                            syncButtonVariant="secondary"
                                         />
 
                                         {syncCheck && (
