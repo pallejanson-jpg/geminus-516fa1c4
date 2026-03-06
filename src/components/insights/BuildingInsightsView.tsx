@@ -548,7 +548,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             .map(([name, value], i) => ({ name, value, color: colors[i % colors.length] }));
     }, [stats.assetCategories]);
 
-    // Prepare space type pie data (REAL)
+    // Prepare space type pie data (REAL - grouped by commonName)
     const spaceTypePie = useMemo(() => {
         const colors = [
             'hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))',
@@ -557,7 +557,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         return Object.entries(stats.spaceTypes)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 6)
-            .map(([name, value], i) => ({ name: name.length > 15 ? name.substring(0, 15) + '...' : name, value, color: colors[i % colors.length] }));
+            .map(([name, value], i) => ({ name: name.length > 18 ? name.substring(0, 18) + '...' : name, fullName: name, value, color: colors[i % colors.length] }));
     }, [stats.spaceTypes]);
 
     return (
