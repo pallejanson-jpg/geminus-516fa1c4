@@ -48,9 +48,18 @@ export const MINIMAP_TOGGLE_EVENT = 'MINIMAP_TOGGLE';
 /** Event dispatched when a deferred (non-A) model should be loaded on demand */
 export const MODEL_LOAD_REQUESTED_EVENT = 'MODEL_LOAD_REQUESTED';
 
+/** Event dispatched when visible BIM model selection changes */
+export const MODEL_VISIBILITY_CHANGED_EVENT = 'MODEL_VISIBILITY_CHANGED';
+
 /** Type for model load request event detail */
 export interface ModelLoadRequestedDetail {
   modelId: string;
+}
+
+/** Type for model visibility change event detail */
+export interface ModelVisibilityChangedDetail {
+  buildingFmGuid?: string;
+  visibleModelIds: string[];
 }
 
 /** Event dispatched when Insights drawer wants to update room colorization in 3D */
