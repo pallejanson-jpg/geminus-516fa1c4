@@ -131,3 +131,19 @@ export const SENSOR_ANNOTATIONS_TOGGLE_EVENT = 'SENSOR_ANNOTATIONS_TOGGLE';
 export interface SensorAnnotationsToggleDetail {
   visible: boolean;
 }
+
+/** Event dispatched when FM Access context changes (building/floor/room navigation) */
+export const FM_ACCESS_CONTEXT_CHANGED_EVENT = 'FM_ACCESS_CONTEXT_CHANGED';
+
+/** Type for FM Access context change event detail */
+export interface FmAccessContextChangedDetail {
+  objectId?: string;
+  objectType?: string;
+  buildingGuid?: string;
+  floorGuid?: string;
+  roomGuid?: string;
+  raw?: any;
+}
+
+/** Event dispatched to reset 3D colorization (clear xray + restore architect colors) */
+export const INSIGHTS_COLOR_RESET_EVENT = 'INSIGHTS_COLOR_RESET';
