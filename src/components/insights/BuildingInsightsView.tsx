@@ -404,12 +404,11 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             }
         });
 
-        // Space types (REAL from allData - hierarchy is always loaded)
+        // Space types grouped by commonName (REAL from allData)
         const spaceTypes: Record<string, number> = {};
         buildingSpaces.forEach((space: any) => {
-            const attrs = space.attributes || {};
-            const type = attrs.spaceType || attrs.roomType || 'Unknown';
-            spaceTypes[type] = (spaceTypes[type] || 0) + 1;
+            const name = space.commonName || space.name || 'Unknown';
+            spaceTypes[name] = (spaceTypes[name] || 0) + 1;
         });
 
         // Deduplicate floors: strip model suffix like " - 01", " - 02" and count unique
