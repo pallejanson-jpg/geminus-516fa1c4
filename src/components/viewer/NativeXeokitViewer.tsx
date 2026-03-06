@@ -14,7 +14,7 @@ import { AlertCircle, Box } from 'lucide-react';
 import { getModelFromMemory, storeModelInMemory, getMemoryStats } from '@/hooks/useXktPreload';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { applyArchitectColors } from '@/lib/architect-colors';
-import { INSIGHTS_COLOR_UPDATE_EVENT, type InsightsColorUpdateDetail } from '@/lib/viewer-events';
+import { INSIGHTS_COLOR_UPDATE_EVENT, INSIGHTS_COLOR_RESET_EVENT, ALARM_ANNOTATIONS_SHOW_EVENT, type InsightsColorUpdateDetail, type AlarmAnnotationsShowDetail } from '@/lib/viewer-events';
 
 const XEOKIT_CDN = '/lib/xeokit/xeokit-sdk.es.js';
 
@@ -710,6 +710,96 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
     window.addEventListener(INSIGHTS_COLOR_UPDATE_EVENT, handler);
     return () => window.removeEventListener(INSIGHTS_COLOR_UPDATE_EVENT, handler);
+  }, []);
+
+  // ── Listen for Insights color reset (tab change → restore architect colors) ───
+  useEffect(() => {
+    const handler = () => {
+      const viewer = viewerRef.current;
+      if (!viewer?.scene) return;
+      const scene = viewer.scene;
+      // Un-xray everything
+      scene.setObjectsXRayed(scene.objectIds, false);
+      // Restore architect color palette
+      applyArchitectColors(viewer);
+      console.log('[NativeViewer] INSIGHTS_COLOR_RESET — restored architect colors');
+    };
+    window.addEventListener(INSIGHTS_COLOR_RESET_EVENT, handler);
+    return () => window.removeEventListener(INSIGHTS_COLOR_RESET_EVENT, handler);
+  }, []);
+
+  // ── Listen for Alarm annotation events (fly-to + highlight alarm entities) ───
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<AlarmAnnotationsShowDetail>).detail;
+      if (!detail?.alarms?.length) return;
+
+      const viewer = viewerRef.current;
+      if (!viewer?.scene || !viewer?.metaScene) {
+        console.log('[NativeViewer] ALARM_ANNOTATIONS_SHOW received but viewer not ready');
+        return;
+      }
+
+      const scene = viewer.scene;
+      const metaObjects = viewer.metaScene.metaObjects;
+      if (!metaObjects) return;
+
+      const norm = (s: string) => (s || '').toLowerCase().replace(/-/g, '');
+
+      // Build lookup of alarm fmGuids and their room fmGuids
+      const alarmGuids = new Set(detail.alarms.map(a => norm(a.fmGuid)));
+      const roomGuids = new Set(detail.alarms.filter(a => a.roomFmGuid).map(a => norm(a.roomFmGuid!)));
+
+      // X-ray everything, then highlight matching entities
+      const xrayMat = scene.xrayMaterial;
+      if (xrayMat) {
+        xrayMat.fill = true;
+        xrayMat.fillAlpha = 0.15;
+        xrayMat.fillColor = [0.55, 0.55, 0.6];
+        xrayMat.edges = true;
+        xrayMat.edgeAlpha = 0.3;
+      }
+      scene.setObjectsXRayed(scene.objectIds, true);
+
+      const matchedIds: string[] = [];
+      const alarmColor: [number, number, number] = [0.9, 0.2, 0.15]; // Red
+      const roomColor: [number, number, number] = [1.0, 0.6, 0.2];   // Orange
+
+      Object.values(metaObjects).forEach((mo: any) => {
+        const sysId = norm(mo.originalSystemId || '');
+        const moId = norm(mo.id || '');
+
+        if (alarmGuids.has(sysId) || alarmGuids.has(moId)) {
+          const entity = scene.objects?.[mo.id];
+          if (entity) {
+            entity.xrayed = false;
+            entity.visible = true;
+            entity.colorize = alarmColor;
+            entity.opacity = 1.0;
+            matchedIds.push(mo.id);
+          }
+        } else if (roomGuids.has(sysId) || roomGuids.has(moId)) {
+          const entity = scene.objects?.[mo.id];
+          if (entity) {
+            entity.xrayed = false;
+            entity.visible = true;
+            entity.colorize = roomColor;
+            entity.opacity = 0.6;
+            matchedIds.push(mo.id);
+          }
+        }
+      });
+
+      // Fly to matched entities
+      if (detail.flyTo && matchedIds.length > 0) {
+        viewer.cameraFlight?.flyTo({ aabb: scene.getAABB(matchedIds), duration: 1.0 });
+      }
+
+      console.log('[NativeViewer] ALARM_ANNOTATIONS_SHOW:', detail.alarms.length, 'alarms,', matchedIds.length, 'entities matched');
+    };
+
+    window.addEventListener(ALARM_ANNOTATIONS_SHOW_EVENT, handler);
+    return () => window.removeEventListener(ALARM_ANNOTATIONS_SHOW_EVENT, handler);
   }, []);
 
   return (

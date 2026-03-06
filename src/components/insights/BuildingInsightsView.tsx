@@ -27,7 +27,7 @@ const NativeXeokitViewer = React.lazy(() => import('@/components/viewer/NativeXe
 import { useSenslincBuildingData } from '@/hooks/useSenslincData';
 import { cn } from '@/lib/utils';
 import RoomSensorDetailSheet from '@/components/insights/RoomSensorDetailSheet';
-import { INSIGHTS_COLOR_UPDATE_EVENT, ALARM_ANNOTATIONS_SHOW_EVENT } from '@/lib/viewer-events';
+import { INSIGHTS_COLOR_UPDATE_EVENT, ALARM_ANNOTATIONS_SHOW_EVENT, INSIGHTS_COLOR_RESET_EVENT } from '@/lib/viewer-events';
 
 
 const HIERARCHY_CATEGORIES = ['Building', 'Building Storey', 'Space', 'IfcBuilding', 'IfcBuildingStorey', 'IfcSpace'];
@@ -180,6 +180,14 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     const [alarmLevelFilter, setAlarmLevelFilter] = useState<string>('');
     // Controlled tabs
     const [activeTab, setActiveTab] = useState('performance');
+
+    // Reset 3D colorization when switching tabs (dispatch reset event, no full model reload)
+    useEffect(() => {
+        window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_RESET_EVENT));
+        // Also reset inline viewer state
+        setInlineInsightsMode(undefined);
+        setInlineColorMap(undefined);
+    }, [activeTab]);
 
     // Room metadata lookup from allData (for enriching alarm list)
     const roomLookup = useMemo(() => {
@@ -623,8 +631,8 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                     Asset
                                 </TabsTrigger>
                                 <TabsTrigger value="fm" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2 gap-1">
-                                    <Boxes className="h-3 w-3" />
-                                    FM
+                                    <Bell className="h-3 w-3" />
+                                    Alarms
                                     {alarmCount > 0 && (
                                         <Badge variant="destructive" className="text-[9px] h-4 px-1 ml-0.5">{alarmCount > 999 ? '999+' : alarmCount}</Badge>
                                     )}

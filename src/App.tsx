@@ -36,6 +36,8 @@ const Presentation = lazy(() => import("@/pages/Presentation"));
 const FmAccessDashboard = lazy(() => import("@/pages/FmAccessDashboard"));
 // Issue resolution page (public, accessed via token link)
 const IssueResolution = lazy(() => import("@/pages/IssueResolution"));
+// Standalone plugin page for external system integration
+const PluginPage = lazy(() => import("@/pages/PluginPage"));
 
 const queryClient = new QueryClient();
 
@@ -218,6 +220,16 @@ const App = () => {
                 <ProtectedRoute>
                   <FmAccessDashboard />
                 </ProtectedRoute>
+              </Suspense>
+            } 
+          />
+          
+          {/* Standalone Plugin page — minimal chrome, for companion windows */}
+          <Route 
+            path="/plugin" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <PluginPage />
               </Suspense>
             } 
           />
