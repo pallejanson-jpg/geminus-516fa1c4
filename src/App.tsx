@@ -38,7 +38,6 @@ const FmAccessDashboard = lazy(() => import("@/pages/FmAccessDashboard"));
 const IssueResolution = lazy(() => import("@/pages/IssueResolution"));
 // Standalone plugin page for external system integration
 const PluginPage = lazy(() => import("@/pages/PluginPage"));
-const IssueResolution = lazy(() => import("@/pages/IssueResolution"));
 
 const queryClient = new QueryClient();
 
