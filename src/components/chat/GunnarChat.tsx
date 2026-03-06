@@ -11,6 +11,7 @@ import { VIEW_MODE_REQUESTED_EVENT } from "@/lib/viewer-events";
 import { supabase } from "@/integrations/supabase/client";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
+import { useNavigate } from "react-router-dom";
 
 type Message = {
   role: "user" | "assistant";
@@ -46,6 +47,8 @@ interface GunnarAction {
   modelId?: string;
   visible?: boolean;
   fmGuid?: string;
+  buildingFmGuid?: string;
+  floorName?: string;
 }
 
 /** Extract follow-up suggestions from the AI response */
@@ -71,28 +74,29 @@ function getContextualGreeting(context?: GunnarContext): string {
   if (context?.activeApp === 'fma_plus' || context?.activeApp === 'fma_native') {
     const bName = context?.currentBuilding?.name;
     if (bName) {
-      return `Hej! Du arbetar i FM Access för **${bName}**. Fråga mig om rum, utrustning, dokument eller arbetsordrar!`;
+      return `Hej! Du arbetar i FM Access för **${bName}**. Fråga mig om rum, utrustning, dokument, ritningar eller arbetsordrar!`;
     }
     return `Hej! Du arbetar i FM Access. Välj en byggnad så kan jag svara på frågor om rum, dokument och utrustning.`;
   }
   if (context?.currentBuilding?.name) {
-    return `Hi! I see you're looking at **${context.currentBuilding.name}**. Ask me about floors, rooms, areas, assets, work orders, or issues!`;
+    return `Hej! Jag ser att du tittar på **${context.currentBuilding.name}**. Fråga mig om våningar, rum, ytor, tillgångar, ritningar, felanmälningar eller ärenden!`;
   }
   if (context?.activeApp === 'assetplus_viewer' || context?.activeApp === 'native_viewer') {
-    return `Hi! You're in the 3D viewer. I can help you navigate, explore floors, or find specific objects. Try asking "How many rooms are there?" or "Show floor 2".`;
+    return `Hej! Du är i 3D-viewern. Jag kan hjälpa dig navigera, utforska våningar, visa modeller eller hitta specifika objekt. Prova att fråga "Hur många rum finns det?" eller "Visa våning 2 i 3D".`;
   }
   if (context?.activeApp === 'navigator') {
-    return `Hi! You're in the Navigator. I can help you find rooms, assets, or building components. What are you looking for?`;
+    return `Hej! Du är i Navigatorn. Jag kan hjälpa dig hitta rum, tillgångar eller byggnadskomponenter. Vad letar du efter?`;
   }
   if (context?.activeApp === 'portfolio') {
-    return `Hi! I'm Gunnar, your property assistant. I can tell you about all buildings in the portfolio — ask about rooms, areas, floors, or specific assets!`;
+    return `Hej! Jag är Gunnar, din fastighetsassistent. Jag kan berätta om alla byggnader i portföljen — fråga om rum, ytor, våningar, ritningar eller specifika tillgångar!`;
   }
-  return `Hi! I'm Gunnar, your AI assistant for property data. Ask me about:\n\n• Buildings, floors, rooms, and areas\n• Equipment and assets\n• Work orders and issues\n• 3D model navigation\n• Fault reports\n\nWhat would you like to know?`;
+  return `Hej! Jag är Gunnar, din AI-assistent för fastighetsdata. Fråga mig om:\n\n• Byggnader, våningar, rum och ytor\n• Utrustning och tillgångar\n• Ritningar från FM Access\n• Felanmälningar och ärenden\n• 3D-modellnavigering\n• IoT-sensordata\n\nVad vill du veta?`;
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gunnar-chat`;
 
 export default function GunnarChat({ open, onClose, context, embedded }: GunnarChatProps) {
+  const navigate = useNavigate();
   const { setAiSelectedFmGuids, setActiveApp, clearAiSelection, setViewer3dFmGuid } = useApp();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -139,13 +143,11 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
     fetchInsights();
   }, [context?.currentBuilding?.fmGuid]);
 
-  // Only set greeting on initial mount or when building actually changes — don't reset on every context serialization change
   const currentBuildingRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     const buildingKey = context?.currentBuilding?.fmGuid;
     if (buildingKey !== currentBuildingRef.current) {
       currentBuildingRef.current = buildingKey;
-      // Only reset if building actually changed (not on minimize/restore)
       if (messages.length === 0 || (messages.length === 1 && messages[0].role === 'assistant')) {
         setMessages([{ role: "assistant", content: getContextualGreeting(context) }]);
         setSuggestedFollowups([]);
@@ -170,7 +172,6 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
         throw new Error("You must be logged in to use Gunnar.");
       }
 
-      // Create abort controller with 60s timeout
       const controller = new AbortController();
       abortRef.current = controller;
       const timeout = setTimeout(() => controller.abort(), 60000);
@@ -333,32 +334,96 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
           toast.success('Opening 3D viewer');
         }
         break;
+      case "showFloorIn3D":
+        if (action.buildingFmGuid && action.floorFmGuid) {
+          const floorName = action.floorName || '';
+          navigate(`/viewer?building=${action.buildingFmGuid}&mode=3d&floor=${action.floorFmGuid}&floorName=${encodeURIComponent(floorName)}`);
+          onClose();
+          toast.success(`Visar ${floorName || 'våning'} i 3D`);
+        }
+        break;
+      case "isolateModel":
+        if (action.buildingFmGuid && action.modelId) {
+          // Navigate to viewer and dispatch model isolation event
+          navigate(`/viewer?building=${action.buildingFmGuid}&mode=3d`);
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('GUNNAR_ISOLATE_MODEL', { detail: { modelId: action.modelId } }));
+          }, 500);
+          onClose();
+          toast.success(`Isolerar modell`);
+        }
+        break;
+      case "showDrawing":
+        if (action.buildingFmGuid) {
+          const floorName = action.floorName || '';
+          navigate(`/viewer?building=${action.buildingFmGuid}&mode=2d&floorName=${encodeURIComponent(floorName)}`);
+          onClose();
+          toast.success(`Visar ritning${floorName ? ` för ${floorName}` : ''}`);
+        }
+        break;
+      case "openViewer3D":
+        if (action.buildingFmGuid) {
+          const floorPart = action.floorFmGuid ? `&floor=${action.floorFmGuid}` : '';
+          navigate(`/viewer?building=${action.buildingFmGuid}&mode=3d${floorPart}`);
+          onClose();
+          toast.success('Öppnar 3D-viewer');
+        }
+        break;
     }
-  }, [setAiSelectedFmGuids, setActiveApp, onClose, setViewer3dFmGuid]);
+  }, [setAiSelectedFmGuids, setActiveApp, onClose, setViewer3dFmGuid, navigate]);
 
   /** Parse action:type:payload links and dispatch the appropriate action */
   const handleActionLink = useCallback((href: string) => {
-    const match = href.match(/^action:(\w+):(.*)$/);
-    if (!match) return;
-    const [, actionType, payload] = match;
+    const parts = href.replace(/^action:/, '').split(':');
+    const actionType = parts[0];
+    
     switch (actionType) {
       case "flyTo":
-        executeAction({ action: "flyTo", fmGuid: payload });
+        executeAction({ action: "flyTo", fmGuid: parts[1] });
         break;
       case "openViewer":
-        executeAction({ action: "openViewer", fmGuid: payload });
+        executeAction({ action: "openViewer", fmGuid: parts[1] });
         break;
       case "showFloor":
-        executeAction({ action: "showFloor", floorFmGuid: payload });
+        executeAction({ action: "showFloor", floorFmGuid: parts[1] });
         break;
       case "selectInTree":
-        executeAction({ action: "selectInTree", fmGuids: payload.split(",").filter(Boolean) });
+        executeAction({ action: "selectInTree", fmGuids: parts[1]?.split(",").filter(Boolean) });
         break;
       case "switchTo2D":
         executeAction({ action: "switchTo2D" });
         break;
       case "switchTo3D":
         executeAction({ action: "switchTo3D" });
+        break;
+      case "showFloorIn3D":
+        executeAction({ 
+          action: "showFloorIn3D", 
+          buildingFmGuid: parts[1], 
+          floorFmGuid: parts[2],
+          floorName: parts[3] ? decodeURIComponent(parts[3]) : undefined,
+        });
+        break;
+      case "isolateModel":
+        executeAction({ 
+          action: "isolateModel", 
+          buildingFmGuid: parts[1], 
+          modelId: parts[2],
+        });
+        break;
+      case "showDrawing":
+        executeAction({ 
+          action: "showDrawing", 
+          buildingFmGuid: parts[1], 
+          floorName: parts[2] ? decodeURIComponent(parts[2]) : undefined,
+        });
+        break;
+      case "openViewer3D":
+        executeAction({ 
+          action: "openViewer3D", 
+          buildingFmGuid: parts[1], 
+          floorFmGuid: parts[2],
+        });
         break;
     }
   }, [executeAction]);
@@ -478,7 +543,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
               onClick={() => sendMessage("", true)}
             >
               <Sparkles className="h-3 w-3" />
-              Get advice
+              Ge mig råd
             </Button>
           </div>
         )}
@@ -488,7 +553,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about your properties..."
+            placeholder="Fråga om dina fastigheter..."
             disabled={isLoading}
             className="flex-1"
           />
@@ -497,7 +562,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
           </Button>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Enter to send • Gunnar understands Swedish and English
+          Enter för att skicka • Gunnar förstår svenska och engelska
         </p>
       </div>
     </>
