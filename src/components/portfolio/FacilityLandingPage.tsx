@@ -11,6 +11,7 @@ import { Slider } from '@/components/ui/slider';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
 import { AppContext } from '@/context/AppContext';
 import { BUILDING_IMAGES } from '@/lib/constants';
 import BuildingMapPicker from '@/components/map/BuildingMapPicker';
@@ -132,19 +133,15 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   const isSpace = facility.category === 'Space';
 
   // Preload XKT models in background when viewing a building
-  // This significantly speeds up 3D viewer loading times
   const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid;
   useXktPreload(buildingGuid);
 
-  // 3D is always available — viewer loads directly from Asset+ API even without cached XKT
+  // 3D is always available
   const has3DModels = true;
-  // Check if FM Access (2D drawings) exist for this building
   const [hasFmAccess, setHasFmAccess] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
     if (!buildingGuid) return;
-    
-    // Check FM Access availability via building_settings
     supabase
       .from('building_settings')
       .select('fm_access_building_guid')
@@ -170,7 +167,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     return storeys;
   }, [allData, facility]);
 
-  // Get child spaces
+  // Get child spaces — for storey pages show rooms on this floor
   const childSpaces = useMemo(() => {
     if (!allData || (!isBuilding && !isStorey)) return [];
     return allData.filter(item => 
@@ -187,7 +184,6 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
       (item.in_room_fm_guid === facility.fmGuid || item.inRoomFmGuid === facility.fmGuid ||
        (item.levelFmGuid === facility.levelFmGuid && item.buildingFmGuid === facility.buildingFmGuid))
     );
-    // Deduplicate
     const seen = new Set<string>();
     return assets.filter((item: any) => {
       const guid = item.fmGuid || item.fm_guid;
@@ -213,7 +209,6 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     };
   }, [facility, childSpaces, childStoreys, isSpace]);
 
-  // Handler for 3D button - navigates to UnifiedViewer with mode=3d
   const handleToggle3D = () => {
     if (!facility.fmGuid) return;
     const bGuid = buildingGuid || facility.fmGuid;
@@ -222,7 +217,6 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     navigate(`/viewer?building=${bGuid}&mode=3d${floorParam}${entityParam}`);
   };
 
-  // Handler for 2D button - navigates to UnifiedViewer with mode=2d
   const handleToggle2D = () => {
     if (!facility.fmGuid) return;
     const bGuid = buildingGuid || facility.fmGuid;
@@ -231,10 +225,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     navigate(`/viewer?building=${bGuid}&mode=2d${floorParam}${entityParam}`);
   };
 
-  // Handler for Add Asset button
   const handleAddAsset = () => {
     if (onAddAsset && facility.fmGuid) {
-      // Convert Facility to NavigatorNode format for AddAssetDialog
       const parentNode: NavigatorNode = {
         fmGuid: facility.fmGuid,
         name: facility.name || '',
@@ -246,47 +238,39 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     }
   };
 
-  // Handler for Inventory button with prefill
   const handleInventory = (prefill: { buildingFmGuid?: string; levelFmGuid?: string; roomFmGuid?: string }) => {
     onClose();
     startInventory(prefill);
   };
 
-  // Handler for saving Ivion Site ID
   const handleSaveIvionSiteId = () => {
     updateIvionSiteId(ivionSiteIdInput || null);
   };
 
-  // Handler for saving map position
   const handleSaveMapPosition = () => {
     const lat = latitudeInput ? parseFloat(latitudeInput) : null;
     const lng = longitudeInput ? parseFloat(longitudeInput) : null;
     updateMapPosition(lat, lng);
   };
 
-  // Handler for saving rotation
   const handleSaveRotation = async () => {
     await updateRotation(rotationInput);
     onSettingsChanged?.();
   };
 
-  // Handler for showing entity insights
   const handleShowInsights = () => {
     openEntityInsights(facility);
   };
 
-  // Handler for hero image upload
   const handleHeroImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !facility.fmGuid) return;
     
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       toast.error('Endast bilder tillåtna');
       return;
     }
 
-    // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast.error('Bilden får max vara 5 MB');
       return;
@@ -298,21 +282,18 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
       const fileExt = file.name.split('.').pop();
       const fileName = `heroes/${facility.fmGuid}.${fileExt}`;
 
-      // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from('inventory-images')
         .upload(fileName, file, { upsert: true });
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
       const { data: urlData } = supabase.storage
         .from('inventory-images')
         .getPublicUrl(fileName);
 
       await updateHeroImage(urlData.publicUrl);
       toast.success('Hero-bild uppladdad!');
-      // Notify parent to refresh building settings cache (global event also dispatched by the hook)
       onSettingsChanged?.();
     } catch (error: any) {
       console.error('Upload error:', error);
@@ -325,18 +306,51 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     }
   };
 
-  // Fetch building settings map for hero image inheritance
   const { getHeroImage } = useAllBuildingSettings();
 
   const title = facility.commonName || facility.name || 'Unnamed Object';
   const subTitle = facility.designation || (isBuilding ? facility.address : 'No Designation') || facility.category || 'No Category';
   
-  // For rooms/storeys, inherit building's hero image if no own image
   const buildingHero = buildingGuid ? getHeroImage(buildingGuid, '') : '';
   const heroImage = settings?.heroImageUrl || facility.image || buildingHero || (isSpace 
     ? 'https://images.unsplash.com/photo-1611048264355-27a69db69042?q=80&w=1600' 
     : 'https://images.unsplash.com/photo-1515263487990-61b07816b324?q=80&w=1600'
   );
+
+  // Room helpers (used on storey page)
+  const getRoomNumber = (space: any): string => {
+    const attrs = space.attributes || {};
+    return attrs.roomNumber || attrs.RoomNumber || attrs.designation || space.name || '';
+  };
+
+  // Filtered & sorted rooms for storey page
+  const filteredRooms = useMemo(() => {
+    if (!isStorey) return [];
+    let rooms = [...childSpaces];
+
+    if (roomSearch) {
+      const q = roomSearch.toLowerCase();
+      rooms = rooms.filter((s: any) =>
+        (s.commonName || '').toLowerCase().includes(q) ||
+        (s.name || '').toLowerCase().includes(q) ||
+        getRoomNumber(s).toLowerCase().includes(q)
+      );
+    }
+
+    rooms.sort((a: any, b: any) => {
+      if (roomSortKey === 'number') return getRoomNumber(a).localeCompare(getRoomNumber(b), undefined, { numeric: true });
+      if (roomSortKey === 'area') return (b.grossArea || 0) - (a.grossArea || 0);
+      return (a.commonName || a.name || '').localeCompare(b.commonName || b.name || '', undefined, { numeric: true });
+    });
+
+    return rooms;
+  }, [childSpaces, isStorey, roomSearch, roomSortKey]);
+
+  // Max area for progress bar scaling on storey page
+  const maxRoomArea = useMemo(() => {
+    if (!isStorey || filteredRooms.length === 0) return 1;
+    return Math.max(...filteredRooms.map((r: any) => r.grossArea || 0), 1);
+  }, [filteredRooms, isStorey]);
 
   return (
     <div className="absolute inset-0 z-40 bg-background flex flex-col animate-in fade-in duration-300 overflow-hidden w-full max-w-full">
@@ -361,7 +375,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
         </Button>
       </div>
 
-      {/* Top-right floating actions (always visible including mobile) */}
+      {/* Top-right floating actions */}
       <div className="absolute top-3 sm:top-4 right-3 sm:right-4 z-50 flex items-center gap-1.5">
         <Button 
           onClick={toggleFavorite} 
@@ -386,10 +400,10 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
       
       {/* Scrollable Content */}
       <ScrollArea className="flex-1 z-10 pt-20 sm:pt-24 md:pt-32 overflow-x-hidden">
-        <div className="max-w-5xl mx-auto px-4 sm:px-4 md:px-6 pb-24 w-full min-w-0 overflow-hidden">
+        <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 pb-24 w-full min-w-0 overflow-hidden">
           {/* Breadcrumb Navigation */}
           {breadcrumbs && breadcrumbs.length > 1 && (
-            <nav className="flex items-center gap-1 text-xs text-white/60 mb-2 flex-wrap" aria-label="Breadcrumb">
+            <nav className="flex items-center gap-1 text-xs text-white/60 mb-2 flex-wrap min-w-0" aria-label="Breadcrumb">
               {breadcrumbs.map((crumb, i) => {
                 const isLast = i === breadcrumbs.length - 1;
                 return (
@@ -416,21 +430,21 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
             <div className="flex-1 min-w-0">
               <h1 className="text-xl sm:text-2xl md:text-4xl font-bold truncate">{title}</h1>
               <div className="flex items-center gap-2 text-xs sm:text-sm text-white/80 mt-1">
-                <MapPin size={12} className="sm:w-3.5 sm:h-3.5 text-primary" /> 
+                <MapPin size={12} className="sm:w-3.5 sm:h-3.5 text-primary shrink-0" /> 
                 <span className="truncate">{subTitle}</span>
               </div>
             </div>
           </header>
 
-          <div className="space-y-4 sm:space-y-6 mt-6 sm:mt-8">
+          <div className="space-y-4 sm:space-y-6 mt-6 sm:mt-8 min-w-0">
             {/* Basic Info Card */}
-            <Card className="overflow-hidden">
+            <Card className="overflow-hidden w-full">
               <CardHeader className="flex flex-row items-center justify-between p-3 sm:p-6 pb-2 sm:pb-4 min-w-0">
-                <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-                  <Info size={14} className="sm:w-4 sm:h-4 text-primary" />
+                <CardTitle className="text-sm sm:text-base flex items-center gap-2 truncate">
+                  <Info size={14} className="sm:w-4 sm:h-4 text-primary shrink-0" />
                   Basic Information
                 </CardTitle>
-                <div className="flex items-center gap-1 sm:gap-2">
+                <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                   <Button 
                     onClick={toggleFavorite} 
                     variant="ghost" 
@@ -459,19 +473,19 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="px-3 sm:px-6 min-w-0">
+              <CardContent className="px-3 sm:px-6 min-w-0 overflow-hidden">
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-3 sm:gap-y-4 gap-x-4 sm:gap-x-6 text-sm min-w-0">
-                  <div>
+                  <div className="min-w-0">
                     <label className="text-[11px] sm:text-xs uppercase font-bold text-muted-foreground">Name</label>
                     <p className="font-medium truncate">{title}</p>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <label className="text-[11px] sm:text-xs uppercase font-bold text-muted-foreground">
                       {isBuilding ? 'Address' : 'Designation'}
                     </label>
                     <p className="font-medium truncate">{subTitle}</p>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <label className="text-[11px] sm:text-xs uppercase font-bold text-muted-foreground">Category</label>
                     <p className="font-medium truncate">{facility.category || '-'}</p>
                   </div>
@@ -481,30 +495,30 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
 
             {/* Building Settings (collapsible) */}
             {showSettings && isBuilding && (
-              <Card className="animate-in fade-in duration-300 overflow-hidden">
+              <Card className="animate-in fade-in duration-300 overflow-hidden w-full">
                 <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
                   <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-                    <Settings2 size={14} className="sm:w-4 sm:h-4 text-primary" />
+                    <Settings2 size={14} className="sm:w-4 sm:h-4 text-primary shrink-0" />
                     Building Settings
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4 px-3 sm:px-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
+                <CardContent className="space-y-4 px-3 sm:px-6 overflow-hidden">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 min-w-0">
+                    <div className="space-y-2 min-w-0">
                       <Label htmlFor="ivionSiteId" className="text-xs">Ivion Site ID</Label>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 min-w-0">
                         <Input
                           id="ivionSiteId"
                           value={ivionSiteIdInput}
                           onChange={(e) => setIvionSiteIdInput(e.target.value)}
                           placeholder="e.g. site-123"
-                          className="h-8 text-sm"
+                          className="h-8 text-sm min-w-0 flex-1"
                         />
                         <Button 
                           size="sm" 
                           onClick={handleSaveIvionSiteId}
                           disabled={isSaving}
-                          className="h-8"
+                          className="h-8 shrink-0"
                         >
                           {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
                         </Button>
@@ -513,7 +527,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                         Used for 360° viewer integration
                       </p>
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-2 min-w-0">
                       <Label className="text-xs">Show on Home Page</Label>
                       <div className="flex items-center gap-3">
                         <Button
@@ -533,14 +547,13 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                     </div>
                   </div>
                   
-                  {/* Map Position Settings with Interactive Picker */}
-                  <div className="border-t pt-4">
+                  {/* Map Position Settings */}
+                  <div className="border-t pt-4 min-w-0 overflow-hidden">
                     <Label className="text-xs flex items-center gap-2 mb-3">
                       <Globe size={12} />
                       Map Position
                     </Label>
                     
-                    {/* Interactive Map Picker */}
                     <BuildingMapPicker
                       latitude={settings?.latitude ?? null}
                       longitude={settings?.longitude ?? null}
@@ -551,9 +564,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                       className="mb-3"
                     />
                     
-                    {/* Coordinate display and save */}
-                    <div className="flex items-center justify-between gap-2 bg-muted/30 rounded-md p-2">
-                      <div className="text-xs text-muted-foreground">
+                    <div className="flex items-center justify-between gap-2 bg-muted/30 rounded-md p-2 min-w-0">
+                      <div className="text-xs text-muted-foreground truncate min-w-0">
                         {latitudeInput && longitudeInput ? (
                           <span>
                             {parseFloat(latitudeInput).toFixed(4)}, {parseFloat(longitudeInput).toFixed(4)}
@@ -566,44 +578,44 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                         size="sm" 
                         onClick={handleSaveMapPosition}
                         disabled={isSaving || (!latitudeInput && !longitudeInput)}
-                        className="h-7 text-xs"
+                        className="h-7 text-xs shrink-0"
                       >
                         {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Spara'}
                       </Button>
                     </div>
                   </div>
 
-                  {/* Rotation Settings for 3D/360° sync */}
-                  <div className="border-t pt-4">
+                  {/* Rotation Settings */}
+                  <div className="border-t pt-4 min-w-0 overflow-hidden">
                     <Label className="text-xs flex items-center gap-2 mb-3">
                       <RotateCcw size={12} />
                       Rotation (för 3D/360° synk)
                     </Label>
                     
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-4">
+                    <div className="space-y-3 min-w-0">
+                      <div className="flex items-center gap-4 min-w-0">
                         <Slider
                           value={[rotationInput]}
                           onValueChange={(values) => setRotationInput(values[0])}
                           min={0}
                           max={360}
                           step={1}
-                          className="flex-1"
+                          className="flex-1 min-w-0"
                         />
-                        <div className="w-16 text-sm font-medium text-right">
+                        <div className="w-12 text-sm font-medium text-right shrink-0">
                           {rotationInput}°
                         </div>
                       </div>
                       
-                      <div className="flex items-center justify-between gap-2 bg-muted/30 rounded-md p-2">
-                        <p className="text-[11px] sm:text-xs text-muted-foreground">
+                      <div className="flex items-center justify-between gap-2 bg-muted/30 rounded-md p-2 min-w-0">
+                        <p className="text-[11px] sm:text-xs text-muted-foreground truncate min-w-0">
                           Byggnadens orientering relativt norr
                         </p>
                         <Button 
                           size="sm" 
                           onClick={handleSaveRotation}
                           disabled={isSaving || rotationInput === (settings?.rotation ?? 0)}
-                          className="h-7 text-xs"
+                          className="h-7 text-xs shrink-0"
                         >
                           {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Spara'}
                         </Button>
@@ -612,7 +624,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                   </div>
 
                   {/* Hero Image Settings */}
-                  <div className="border-t pt-4">
+                  <div className="border-t pt-4 min-w-0 overflow-hidden">
                     <Label className="text-xs flex items-center gap-2 mb-3">
                       <Image size={12} />
                       Hero Image
@@ -672,15 +684,15 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
             )}
 
             {/* KPI Cards */}
-            <Card className="overflow-hidden">
+            <Card className="overflow-hidden w-full">
               <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
                 <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-                  <BarChart size={14} className="sm:w-4 sm:h-4 text-accent" />
+                  <BarChart size={14} className="sm:w-4 sm:h-4 text-accent shrink-0" />
                   Key Metrics
                 </CardTitle>
               </CardHeader>
-              <CardContent className="px-3 sm:px-6">
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1 sm:gap-3">
+              <CardContent className="px-3 sm:px-6 overflow-hidden">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1 sm:gap-3 min-w-0 w-full">
                   {isBuilding && (
                     <KpiCard 
                       title="Floors" 
@@ -708,27 +720,28 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
               </CardContent>
             </Card>
 
-            {/* Series-style Floor Tabs + Room Grid */}
+            {/* Building: Floor carousel (no room grid — rooms moved to storey page) */}
             {isBuilding && childStoreys.length > 0 && (
-              <div className="mt-4 sm:mt-6 animate-in fade-in duration-500">
+              <div className="mt-4 sm:mt-6 animate-in fade-in duration-500 min-w-0 overflow-hidden">
                 <h3 className="text-base sm:text-lg font-bold mb-3 sm:mb-4">Våningar ({childStoreys.length})</h3>
                 
-                {/* Floor hero-image carousel */}
                 <Carousel opts={{ align: 'start', dragFree: true }} className="mb-4">
                   <CarouselContent className="-ml-2">
                     {childStoreys.map((storey, idx) => {
-                      // Stable pseudo-random image based on fmGuid hash
                       const hash = (storey.fmGuid || '').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
                       const img = BUILDING_IMAGES[hash % BUILDING_IMAGES.length];
-                      const isSelected = selectedFloorIdx === idx;
                       return (
                         <CarouselItem key={storey.fmGuid} className="pl-2 basis-auto">
                           <button
                             type="button"
-                            onClick={() => setSelectedFloorIdx(idx)}
-                            className={`relative w-36 h-24 rounded-xl overflow-hidden transition-all ${
-                              isSelected ? 'ring-2 ring-primary shadow-lg scale-[1.02]' : 'opacity-80 hover:opacity-100'
-                            }`}
+                            onClick={() => setSelectedFacility({
+                              fmGuid: storey.fmGuid,
+                              name: storey.name,
+                              commonName: storey.commonName,
+                              category: 'Building Storey',
+                              buildingFmGuid: facility.fmGuid,
+                            })}
+                            className="relative w-36 h-24 rounded-xl overflow-hidden transition-all opacity-90 hover:opacity-100 hover:ring-2 hover:ring-primary hover:shadow-lg"
                           >
                             <img src={img} alt="" className="w-full h-full object-cover" />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
@@ -741,159 +754,124 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                     })}
                   </CarouselContent>
                 </Carousel>
-
-                {/* Room grid - "Episode" cards for selected floor */}
-                {(() => {
-                  const selectedStorey = childStoreys[selectedFloorIdx];
-                  if (!selectedStorey) return null;
-                  let floorSpaces = allData.filter(
-                    (item: any) => item.category === 'Space' && item.levelFmGuid === selectedStorey.fmGuid
-                  );
-
-                  // Extract room number helper
-                  const getRoomNumber = (space: any): string => {
-                    const attrs = space.attributes || {};
-                    return attrs.roomNumber || attrs.RoomNumber || attrs.designation || space.name || '';
-                  };
-
-                  // Search filter
-                  if (roomSearch) {
-                    const q = roomSearch.toLowerCase();
-                    floorSpaces = floorSpaces.filter((s: any) =>
-                      (s.commonName || '').toLowerCase().includes(q) ||
-                      (s.name || '').toLowerCase().includes(q) ||
-                      getRoomNumber(s).toLowerCase().includes(q)
-                    );
-                  }
-
-                  // Sort
-                  floorSpaces = [...floorSpaces].sort((a: any, b: any) => {
-                    if (roomSortKey === 'number') return getRoomNumber(a).localeCompare(getRoomNumber(b), undefined, { numeric: true });
-                    if (roomSortKey === 'area') {
-                      const areaA = a.grossArea || 0;
-                      const areaB = b.grossArea || 0;
-                      return areaB - areaA;
-                    }
-                    return (a.commonName || a.name || '').localeCompare(b.commonName || b.name || '', undefined, { numeric: true });
-                  });
-                  
-                  return (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <p className="text-xs sm:text-sm text-muted-foreground">
-                          {floorSpaces.length} rum på {selectedStorey.commonName || selectedStorey.name}
-                        </p>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs gap-1"
-                          onClick={() => setSelectedFacility({
-                            fmGuid: selectedStorey.fmGuid,
-                            name: selectedStorey.name,
-                            commonName: selectedStorey.commonName,
-                            category: 'Building Storey',
-                            buildingFmGuid: facility.fmGuid,
-                          })}
-                        >
-                          Visa alla detaljer <ChevronRight size={12} />
-                        </Button>
-                      </div>
-
-                      {/* Search + Sort controls */}
-                      <div className="flex gap-2 items-center flex-wrap">
-                        <div className="relative flex-1 min-w-[120px] max-w-[200px] sm:max-w-[240px]">
-                          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                          <Input
-                            value={roomSearch}
-                            onChange={(e) => setRoomSearch(e.target.value)}
-                            placeholder="Sök rum..."
-                            className="h-7 pl-8 text-xs"
-                          />
-                        </div>
-                        <div className="flex gap-1">
-                          {([['name', 'Namn'], ['number', 'Nr'], ['area', 'Yta']] as const).map(([key, label]) => (
-                            <button
-                              key={key}
-                              type="button"
-                              onClick={() => setRoomSortKey(key)}
-                              className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
-                                roomSortKey === key ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'
-                              }`}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      
-                      {floorSpaces.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1 sm:gap-3 min-w-0">
-                          {floorSpaces.slice(0, 20).map((space: any) => {
-                            const spaceArea = space.attributes ? 
-                              Object.keys(space.attributes).find(k => k.toLowerCase().startsWith('nta')) : null;
-                            const areaVal = spaceArea && space.attributes[spaceArea]?.value;
-                            const roomNum = getRoomNumber(space);
-                            return (
-                              <button
-                                key={space.fmGuid}
-                                type="button"
-                                onClick={() => setSelectedFacility({
-                                  fmGuid: space.fmGuid,
-                                  name: space.name,
-                                  commonName: space.commonName,
-                                  category: 'Space',
-                                  levelFmGuid: space.levelFmGuid,
-                                  buildingFmGuid: space.buildingFmGuid,
-                                  attributes: space.attributes,
-                                })}
-                                className="w-full min-w-0 rounded-xl border border-border bg-card/80 p-2 sm:p-3 text-left transition-all hover:border-primary/50 hover:shadow-md active:scale-[0.98] group overflow-hidden"
-                              >
-                                <div className="flex items-center gap-2 mb-1.5">
-                                  <DoorOpen size={14} className="text-primary shrink-0" />
-                                  <span className="font-medium text-xs sm:text-sm truncate">
-                                    {space.commonName || space.name || '(namnlöst)'}
-                                  </span>
-                                </div>
-                                <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-muted-foreground gap-1">
-                                  {roomNum && <span className="font-mono truncate">{roomNum}</span>}
-                                  <span className="shrink-0">{areaVal ? `${typeof areaVal === 'number' ? areaVal.toFixed(1) : areaVal} m²` : ''}</span>
-                                </div>
-                              </button>
-                            );
-                          })}
-                          {floorSpaces.length > 20 && (
-                            <button
-                              type="button"
-                              onClick={() => onShowRooms(facility)}
-                              className="rounded-xl border border-dashed border-border bg-muted/30 p-3 flex items-center justify-center text-xs text-muted-foreground hover:bg-muted/50 transition-colors"
-                            >
-                              +{floorSpaces.length - 20} fler rum
-                            </button>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-center text-muted-foreground py-6 text-sm">
-                          {roomSearch ? 'Inga rum matchade sökningen' : 'Inga rum registrerade på denna våning'}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
               </div>
+            )}
+
+            {/* Storey page: Insights-style Room List */}
+            {isStorey && childSpaces.length > 0 && (
+              <Card className="overflow-hidden w-full">
+                <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
+                  <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                    <DoorOpen size={14} className="sm:w-4 sm:h-4 text-primary shrink-0" />
+                    Rum ({childSpaces.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-3 sm:px-6 overflow-hidden min-w-0">
+                  {/* Search + Sort controls */}
+                  <div className="flex gap-2 items-center flex-wrap mb-3 min-w-0">
+                    <div className="relative flex-1 min-w-0 max-w-[200px]">
+                      <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={roomSearch}
+                        onChange={(e) => setRoomSearch(e.target.value)}
+                        placeholder="Sök rum..."
+                        className="h-7 pl-8 text-xs"
+                      />
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      {([['name', 'Namn'], ['number', 'Nr'], ['area', 'Yta']] as const).map(([key, label]) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setRoomSortKey(key)}
+                          className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                            roomSortKey === key ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Insights-style compact room rows */}
+                  <div className="space-y-1 min-w-0">
+                    {filteredRooms.slice(0, 30).map((space: any) => {
+                      const roomNum = getRoomNumber(space);
+                      const area = space.grossArea || 0;
+                      const areaPercent = maxRoomArea > 0 ? (area / maxRoomArea) * 100 : 0;
+                      const spaceArea = space.attributes ? 
+                        Object.keys(space.attributes).find(k => k.toLowerCase().startsWith('nta')) : null;
+                      const ntaVal = spaceArea && space.attributes[spaceArea]?.value;
+                      const displayArea = ntaVal || (area > 0 ? area.toFixed(1) : null);
+
+                      return (
+                        <button
+                          key={space.fmGuid}
+                          type="button"
+                          onClick={() => setSelectedFacility({
+                            fmGuid: space.fmGuid,
+                            name: space.name,
+                            commonName: space.commonName,
+                            category: 'Space',
+                            levelFmGuid: space.levelFmGuid,
+                            buildingFmGuid: space.buildingFmGuid,
+                            attributes: space.attributes,
+                          })}
+                          className="w-full min-w-0 flex items-center gap-3 px-3 py-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-all active:scale-[0.99] text-left group"
+                        >
+                          <DoorOpen size={14} className="text-primary shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 min-w-0">
+                              <span className="font-medium text-xs sm:text-sm truncate">
+                                {space.commonName || space.name || '(namnlöst)'}
+                              </span>
+                              <span className="text-[10px] sm:text-xs text-muted-foreground shrink-0">
+                                {displayArea ? `${displayArea} m²` : ''}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5 min-w-0">
+                              {roomNum && <span className="text-[10px] font-mono text-muted-foreground truncate">{roomNum}</span>}
+                              <div className="flex-1 min-w-0">
+                                <Progress value={areaPercent} className="h-1" />
+                              </div>
+                            </div>
+                          </div>
+                          <ChevronRight size={12} className="text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </button>
+                      );
+                    })}
+                    {filteredRooms.length > 30 && (
+                      <button
+                        type="button"
+                        onClick={() => onShowRooms(facility)}
+                        className="w-full py-2 text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        +{filteredRooms.length - 30} fler rum
+                      </button>
+                    )}
+                    {filteredRooms.length === 0 && (
+                      <div className="text-center text-muted-foreground py-6 text-sm">
+                        {roomSearch ? 'Inga rum matchade sökningen' : 'Inga rum registrerade på denna våning'}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </div>
 
           {/* Assets list for Space (Room) pages */}
           {isSpace && childAssets.length > 0 && (
-            <Card className="mt-4 sm:mt-6">
+            <Card className="mt-4 sm:mt-6 overflow-hidden w-full">
               <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
                 <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-                  <Layers size={14} className="sm:w-4 sm:h-4 text-primary" />
+                  <Layers size={14} className="sm:w-4 sm:h-4 text-primary shrink-0" />
                   Tillgångar ({childAssets.length})
                 </CardTitle>
               </CardHeader>
-              <CardContent className="px-3 sm:px-6">
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1 sm:gap-3 min-w-0">
+              <CardContent className="px-3 sm:px-6 overflow-hidden">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1 sm:gap-3 min-w-0 w-full">
                   {childAssets.slice(0, 20).map((asset: any) => (
                     <button
                       key={asset.fmGuid || asset.fm_guid}
@@ -968,21 +946,21 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
 
           {/* Saved Views */}
           {isBuilding && savedViews.length > 0 && (
-           <Card className="mt-4 sm:mt-6">
+           <Card className="mt-4 sm:mt-6 overflow-hidden w-full">
               <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
                 <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-                  <Eye size={14} className="sm:w-4 sm:h-4 text-primary" />
+                  <Eye size={14} className="sm:w-4 sm:h-4 text-primary shrink-0" />
                   Sparade vyer
                 </CardTitle>
               </CardHeader>
-              <CardContent className="px-3 sm:px-6">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+              <CardContent className="px-3 sm:px-6 overflow-hidden">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 min-w-0 w-full">
                   {savedViews.map(view => (
                     <button
                       key={view.id}
                       type="button"
                       onClick={handleToggle3D}
-                      className="rounded-xl border border-border bg-card/80 overflow-hidden text-left transition-all hover:border-primary/50 hover:shadow-lg active:scale-[0.98] group"
+                      className="rounded-xl border border-border bg-card/80 overflow-hidden text-left transition-all hover:border-primary/50 hover:shadow-lg active:scale-[0.98] group w-full min-w-0"
                     >
                       <div className="h-24 sm:h-28 relative overflow-hidden bg-muted">
                         {view.screenshot_url ? (
@@ -1012,9 +990,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
         onClose={() => setShowPropertiesDialog(false)}
         fmGuids={facility.fmGuid || ''}
         category={facility.category}
-        onUpdate={() => {
-          // Refresh data if needed
-        }}
+        onUpdate={() => {}}
       />
     </div>
   );
