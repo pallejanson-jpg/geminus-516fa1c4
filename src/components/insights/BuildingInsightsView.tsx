@@ -750,15 +750,13 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                             <DoorOpen className="h-4 w-4 text-[hsl(var(--chart-3))]" />
                                             Room Types
                                             <span className="ml-auto cursor-pointer" onClick={() => {
-                                                const typeColorMap: Record<string, [number, number, number]> = {};
-                                                spaceTypePie.forEach(s => { typeColorMap[s.name] = hslStringToRgbFloat(s.color); });
-                                                // Resolve type names → room fmGuids so the viewer can match by fmGuid
+                                                // Build color map: room fmGuid → pie chart color based on commonName
+                                                const nameColorMap: Record<string, [number, number, number]> = {};
+                                                spaceTypePie.forEach(s => { nameColorMap[s.fullName] = hslStringToRgbFloat(s.color); });
                                                 const roomColorMap: Record<string, [number, number, number]> = {};
                                                 buildingSpaces.forEach((space: any) => {
-                                                    const attrs = space.attributes || {};
-                                                    const type = attrs.spaceType || attrs.roomType || 'Unknown';
-                                                    const truncated = type.length > 15 ? type.substring(0, 15) + '...' : type;
-                                                    const color = typeColorMap[type] || typeColorMap[truncated];
+                                                    const name = space.commonName || space.name || 'Unknown';
+                                                    const color = nameColorMap[name];
                                                     if (color) roomColorMap[space.fmGuid] = color;
                                                 });
                                                 handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
