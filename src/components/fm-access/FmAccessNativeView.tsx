@@ -13,6 +13,7 @@ import FmAccessTree from './FmAccessTree';
 import FmAccessObjectPanel from './FmAccessObjectPanel';
 import FmAccessSearch from './FmAccessSearch';
 import FmAccessDocuments from './FmAccessDocuments';
+import GeminusPluginMenu from '@/components/viewer/GeminusPluginMenu';
 
 const FmAccessNativeView: React.FC = () => {
   const { selectedFacility, navigatorTreeData } = useContext(AppContext);
