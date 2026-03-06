@@ -162,6 +162,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
 
     // Sensors tab state
     const [sensorMetric, setSensorMetric] = useState<VisualizationType>('temperature');
+    const [selectedSensorRooms, setSelectedSensorRooms] = useState<Set<string>>(new Set());
     const [sensorSheetOpen, setSensorSheetOpen] = useState(false);
     const [sensorSheetRoom, setSensorSheetRoom] = useState<{ fmGuid: string; name: string } | null>(null);
     const { data: buildingIoT, isLoading: iotLoading, isLive: iotLive } = useSenslincBuildingData(facility.fmGuid);
