@@ -117,13 +117,8 @@ const InsightsInlineViewer: React.FC<InsightsInlineViewerProps> = ({ fmGuid, ins
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />
                     </div>
                 }>
-                    <AssetPlusViewer
-                        fmGuid={fmGuid}
-                        suppressOverlay
-                        compactMode={!expanded}
-                        insightsColorMode={insightsColorMode}
-                        insightsColorMap={insightsColorMap}
-                        forceXray={!!insightsColorMode}
+                    <NativeXeokitViewer
+                        buildingFmGuid={fmGuid}
                     />
                 </React.Suspense>
             </div>
