@@ -1014,12 +1014,11 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                           return next;
                                                                       });
                                                                   } else {
-                                                                      // Single click: select only this room + colorize + open sheet
+                                                                      // Single click: select only this room + colorize (no auto-open sheet)
                                                                       const single = new Set([room.fmGuid]);
                                                                       setSelectedSensorRooms(single);
                                                                       colorizeSelectedSensorRooms(single);
                                                                       setSensorSheetRoom({ fmGuid: room.fmGuid, name: room.commonName || room.name || room.fmGuid });
-                                                                      setSensorSheetOpen(true);
                                                                   }
                                                               }}
                                                           >
