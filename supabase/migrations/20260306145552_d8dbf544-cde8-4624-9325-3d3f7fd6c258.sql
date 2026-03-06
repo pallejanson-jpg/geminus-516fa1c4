@@ -1,0 +1,4 @@
+UPDATE xkt_models SET model_name = 'A-modell' WHERE model_id = '042dba20-8b16-4e2d-b7cd-591e707b6395' AND building_fm_guid = 'a8fe5835-e293-4ba3-92c6-c7e36f675f23';
+UPDATE xkt_models SET model_name = 'E-modell' WHERE model_id = 'a57a7748-8147-443c-b376-c8758ceb376c' AND building_fm_guid = 'a8fe5835-e293-4ba3-92c6-c7e36f675f23';
+UPDATE xkt_models SET model_name = 'V-modell' WHERE model_id = '90be297d-aedc-4b08-8fcc-051c31b53ca9' AND building_fm_guid = 'a8fe5835-e293-4ba3-92c6-c7e36f675f23';
+UPDATE xkt_models SET model_name = 'B-modell' WHERE model_id = 'ee97a084-7454-4cbf-b5ab-e840eb670b9c' AND building_fm_guid = 'a8fe5835-e293-4ba3-92c6-c7e36f675f23';

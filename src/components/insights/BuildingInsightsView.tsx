@@ -13,7 +13,7 @@ import {
 import { 
     Building2, Zap, TrendingDown, TrendingUp, Leaf, 
     ThermometerSun, Droplets, Gauge, ArrowLeft, Layers, DoorOpen, Package, Eye, Maximize2, Expand, Shrink,
-    Loader2, Thermometer, Wind, Users, Wifi, WifiOff, Bell, Trash2, MapPin, Boxes, Search, X
+    Loader2, Thermometer, Wind, Users, Wifi, WifiOff, Bell, Trash2, MapPin, Boxes, Search, X, BarChart2
 } from 'lucide-react';
 import { Carousel, CarouselContent, CarouselItem } from '@/components/ui/carousel';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -973,11 +973,40 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                    View all
                                                </Button>
                                          </div>
-                                         <CardDescription>
-                                             {sensorRooms.length} of {spaceFloorFilter ? `rooms on ${spaceFloorFilter}` : `${buildingSpaces.length} rooms`} · click for sensor details
+                                          <CardDescription>
+                                             {sensorRooms.length} of {spaceFloorFilter ? `rooms on ${spaceFloorFilter}` : `${buildingSpaces.length} rooms`} · click to select · Ctrl+click for multi-select
                                          </CardDescription>
                                      </CardHeader>
                                      <CardContent>
+                                         {/* Show Dashboard button — appears when a room is selected */}
+                                         {selectedSensorRooms.size > 0 && sensorSheetRoom && (
+                                             <div className="mb-2 flex items-center gap-2">
+                                                 <Button
+                                                     variant="default"
+                                                     size="sm"
+                                                     className="h-7 px-3 text-[10px] gap-1"
+                                                     onClick={() => setSensorSheetOpen(true)}
+                                                 >
+                                                     <BarChart2 className="h-3 w-3" />
+                                                     Show Dashboard
+                                                     <span className="text-[9px] opacity-80 ml-1">({sensorSheetRoom.name})</span>
+                                                 </Button>
+                                                 <Button
+                                                     variant="ghost"
+                                                     size="sm"
+                                                     className="h-7 px-2 text-[10px]"
+                                                     onClick={() => {
+                                                         setSelectedSensorRooms(new Set());
+                                                         setSensorSheetRoom(null);
+                                                         // Reset 3D colors
+                                                         window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_RESET_EVENT));
+                                                     }}
+                                                 >
+                                                     <X className="h-3 w-3" />
+                                                     Clear
+                                                 </Button>
+                                             </div>
+                                         )}
                                          {sensorRooms.length === 0 ? (
                                              <p className="text-sm text-muted-foreground text-center py-8">No rooms found</p>
                                          ) : (
@@ -1014,12 +1043,11 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                           return next;
                                                                       });
                                                                   } else {
-                                                                      // Single click: select only this room + colorize + open sheet
+                                                                      // Single click: select only this room + colorize (no auto-open sheet)
                                                                       const single = new Set([room.fmGuid]);
                                                                       setSelectedSensorRooms(single);
                                                                       colorizeSelectedSensorRooms(single);
                                                                       setSensorSheetRoom({ fmGuid: room.fmGuid, name: room.commonName || room.name || room.fmGuid });
-                                                                      setSensorSheetOpen(true);
                                                                   }
                                                               }}
                                                           >

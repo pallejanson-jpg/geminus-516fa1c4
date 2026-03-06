@@ -1239,7 +1239,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   return (
     <div
       className={cn(
-        "fixed left-0 top-0 bottom-0 z-[65] w-[85%] max-w-[320px] sm:w-[320px]",
+        "fixed left-0 top-[44px] bottom-0 z-[65] w-[85%] max-w-[320px] sm:w-[320px]",
         "bg-card/95 backdrop-blur-xl border-r shadow-2xl text-foreground",
         "flex flex-col",
         "animate-in slide-in-from-left duration-200"

@@ -732,9 +732,9 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           <TooltipProvider delayDuration={300}>
             <div
               className={cn(
-                "fixed top-0 right-0 z-[60] border-l shadow-xl",
+                "fixed top-[44px] right-0 z-[60] border-l shadow-xl",
                 "bg-card/95 backdrop-blur-xl text-foreground",
-                "h-full w-72 sm:w-80",
+                "h-[calc(100%-44px)] w-72 sm:w-80",
                 "flex flex-col overflow-hidden",
                 "transition-transform duration-200",
               )}
