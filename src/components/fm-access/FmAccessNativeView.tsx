@@ -223,6 +223,17 @@ const FmAccessNativeView: React.FC = () => {
           />
         </ResizablePanel>
       </ResizablePanelGroup>
+
+      {/* Geminus Plugin Menu FAB */}
+      <GeminusPluginMenu
+        buildingFmGuid={buildingFmGuid}
+        buildingName={buildingName}
+        source="fma_native"
+        contextMetadata={{
+          selectedNodeGuid: selectedNode?.guid || selectedNode?.systemGuid,
+          selectedNodeName: selectedNode?.objectName,
+        }}
+      />
     </div>
   );
 };
