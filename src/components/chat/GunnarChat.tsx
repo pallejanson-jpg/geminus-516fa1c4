@@ -664,7 +664,86 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
   );
 
   if (embedded) {
-    return <div className="flex flex-col h-full">{chatContent}</div>;
+    // Skip the internal header — parent component provides its own header with close button
+    const embeddedContent = (
+      <>
+        {/* Messages */}
+        <ScrollArea className="flex-1 p-3" ref={scrollRef}>
+          <div className="space-y-3">
+            {messages.map((msg, i) => (
+              <div key={i} className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}>
+                <div className={cn(
+                  "max-w-[85%] rounded-lg px-3 py-2 text-sm",
+                  msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
+                )}>
+                  {msg.role === "assistant" ? (
+                    <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1">
+                      <ReactMarkdown components={markdownComponents}>{msg.content}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {proactiveInsights.length > 0 && messages.length <= 1 && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-1.5">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                  <Info className="h-3.5 w-3.5" />
+                  Aktuell status
+                </div>
+                {proactiveInsights.map((insight, i) => (
+                  <p key={i} className="text-sm text-foreground">{insight}</p>
+                ))}
+              </div>
+            )}
+
+            {isLoading && messages[messages.length - 1]?.role === "user" && (
+              <div className="flex justify-start">
+                <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Tänker...</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+
+        {/* Compact input */}
+        <div className="border-t border-border p-3 shrink-0">
+          {suggestedFollowups.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {suggestedFollowups.map((q, i) => (
+                <Button key={i} onClick={() => handleFollowupClick(q)} className="gap-1 text-xs h-7" variant="outline" size="sm">
+                  {q}
+                </Button>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Input
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Fråga om dina fastigheter..."
+              disabled={isLoading}
+              className="flex-1 h-9 text-sm"
+            />
+            {isVoiceSupported && (
+              <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" onClick={toggleListening} disabled={isLoading}>
+                {isListening ? <MicOff className="h-4 w-4 text-destructive" /> : <Mic className="h-4 w-4" />}
+              </Button>
+            )}
+            <Button onClick={handleSend} disabled={isLoading || !input.trim()} className="h-9 w-9 shrink-0" size="icon">
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </>
+    );
+    return <div className="flex flex-col h-full min-h-0">{embeddedContent}</div>;
   }
 
   return (
