@@ -102,18 +102,21 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gunnar-chat`
 
 export default function GunnarChat({ open, onClose, context, embedded }: GunnarChatProps) {
   const navigate = useNavigate();
-  const { setAiSelectedFmGuids, setActiveApp, clearAiSelection, setViewer3dFmGuid } = useApp();
+  const { setAiSelectedFmGuids, setActiveApp, setSelectedFacility, setViewer3dFmGuid } = useApp();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [suggestedFollowups, setSuggestedFollowups] = useState<string[]>([]);
   const [proactiveInsights, setProactiveInsights] = useState<string[]>([]);
+  const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast: toastHook } = useToast();
   const prevContextRef = useRef<string>("");
   const proactiveFetchedRef = useRef<string>("");
   const abortRef = useRef<AbortController | null>(null);
+  const spokenMessageKeyRef = useRef<string>("");
 
   // Fetch proactive insights when context has a building
   useEffect(() => {
