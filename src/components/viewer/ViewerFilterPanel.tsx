@@ -1503,7 +1503,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
           {/* Modification filter (moved / deleted assets) */}
           <FilterSection
-            title="Ändringar"
+            title="Modifications"
             count={modifiedAssets.length}
             selectedCount={(showMovedAssets ? 1 : 0) + (showDeletedAssets ? 1 : 0)}
             isOpen={modificationsOpen}
