@@ -648,7 +648,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Fråga om dina fastigheter..."
+            placeholder="Ask about your properties..."
             disabled={isLoading}
             className="flex-1"
           />
@@ -657,7 +657,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
           </Button>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Enter för att skicka • Gunnar förstår svenska och engelska
+          Press Enter to send • Gunnar understands Swedish and English
         </p>
       </div>
     </>
