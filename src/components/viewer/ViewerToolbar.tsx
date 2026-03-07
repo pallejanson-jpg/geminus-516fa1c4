@@ -265,16 +265,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     const handler = (e: CustomEvent<ViewMode2DToggledDetail>) => {
       if (e.detail.enabled) {
         if (!viewer?.scene) { pending2dRef.current = true; setViewMode('2d'); }
-        else handleViewModeChange('2d');
+        else handleViewModeChangeRef.current('2d');
       } else {
         pending2dRef.current = false;
-        handleViewModeChange('3d');
+        handleViewModeChangeRef.current('3d');
       }
     };
     window.addEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler as EventListener);
     return () => window.removeEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler as EventListener);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [viewer]);
 
   useEffect(() => {
     if (isReady && pending2dRef.current) {
