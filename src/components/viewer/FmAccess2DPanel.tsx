@@ -85,7 +85,7 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
         if (cancelled) return;
 
         if (fnError) {
-          setError(fnError.message || 'Kunde inte hämta konfiguration');
+          setError(fnError.message || 'Could not fetch configuration');
           setPhase('error');
           return;
         }
