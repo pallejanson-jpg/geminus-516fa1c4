@@ -16,6 +16,9 @@ interface ViewerContextMenuProps {
   onHideEntity?: () => void;
   onIsolateEntity?: () => void;
   onShowAll?: () => void;
+  onSelectEntity?: () => void;
+  onMoveObject?: () => void;
+  onDeleteObject?: () => void;
 }
 
 const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
