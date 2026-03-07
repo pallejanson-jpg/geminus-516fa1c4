@@ -555,6 +555,9 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           onHideEntity={contextMenu.entityId ? handleContextHide : undefined}
           onIsolateEntity={contextMenu.entityId ? handleContextIsolate : undefined}
           onShowAll={handleContextShowAll}
+          onSelectEntity={contextMenu.entityId ? handleContextSelect : undefined}
+          onMoveObject={contextMenu.entityId && contextMenu.fmGuid ? handleContextMove : undefined}
+          onDeleteObject={contextMenu.entityId && contextMenu.fmGuid ? handleContextDelete : undefined}
         />
       )}
 
