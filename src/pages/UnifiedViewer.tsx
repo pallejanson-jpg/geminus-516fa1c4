@@ -881,9 +881,9 @@ function MobileUnifiedViewer({
               variant="secondary"
               size="icon"
               onClick={onGoBack}
-              className="h-8 w-8 bg-card/95 backdrop-blur-sm shadow-md border"
+              className="h-7 w-7 bg-card/95 backdrop-blur-sm shadow-md border"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="h-3.5 w-3.5" />
             </Button>
             <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md rounded-lg p-0.5 border border-white/10 ml-1">
               {([
