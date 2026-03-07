@@ -1,80 +1,99 @@
 
 
-## Plan: System Support + Reconciliation Engine (IMPLEMENTED)
+## Plan: Feedback System with Email Notifications, Duplicate Detection, and BCF/Saved View Object Restoration
 
-### Database tables created
-1. **`asset_external_ids`** — Maps external IDs (IFC GUID, ACC externalId, Revit UniqueId) to stable `fm_guid` for cross-source reconciliation
-2. **`systems`** — Technical systems (e.g., LB01 Supply Air) with `fm_guid`, `discipline`, `system_type`, `building_fm_guid`, hierarchical `parent_system_id`
-3. **`asset_system`** — Many-to-many relation between assets and systems with optional `role`
-4. **`asset_connections`** — Topology/flow between assets (`from_fm_guid` → `to_fm_guid`) with `connection_type` and `direction`
+### Part 1: BCF Issue — Restore Selected Objects on Return
 
-All tables have RLS: authenticated read, admin write. Indexes on common query patterns.
+**Problem:** When returning to a BCF issue, the camera flies correctly but selected objects aren't highlighted because `handleGoToIssueViewpoint` only reads from `viewpoint.components.selection` — which may be empty. The issue's `selected_object_ids` column is not used as a fallback.
 
-### Edge function changes
-1. **`ifc-to-xkt/index.ts`** — Extended with system extraction:
-   - Identifies `IfcSystem` / `IfcDistributionSystem` meta objects
-   - Falls back to `SystemName` property grouping
-   - Extracts `IfcRelConnects*` for topology → `asset_connections`
-   - Stores all object IDs in `asset_external_ids`
-   - Persists systems, asset-system links, and connections in batches
+**Fix:**
+- **`handleGoToIssueViewpoint`** in both `VisualizationToolbar.tsx` and `ViewerRightPanel.tsx`: Accept a second parameter `fallbackObjectIds?: string[]`. If `viewpoint.components.selection` is empty, use `fallbackObjectIds` for selection + flash.
+- **`handleSelectIssue`** in both files: Pass `issue.selected_object_ids` as fallback.
+- **`IssueDetailSheet.tsx`**: Change `onGoToViewpoint` prop to also accept `selectedObjectIds`. When user clicks the screenshot, pass both `issue.viewpoint_json` and `issue.selected_object_ids`.
+- **`restoreViewpoint`** in `useBcfViewpoints.ts`: Delay selection restoration to run after camera fly completes (use `setTimeout` matching duration).
 
-2. **`acc-sync/index.ts`** — Extended with system support:
-   - Resolves `System Name`, `System Type`, `System Classification`, `System Abbreviation` property fields
-   - Groups instances by `SystemName` → auto-creates `systems` + `asset_system` rows
-   - Stores ACC `externalId` mappings in `asset_external_ids` for all levels, rooms, instances
-   - Infers discipline from system name (Ventilation, Heating, Cooling, Electrical, Plumbing, FireProtection)
+### Part 2: Saved Views — Remember Visible Models
 
-### System activation for existing buildings
-- **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
-- **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
-- **Asset+-byggnader**: Kör `sync-systems` action via `asset-plus-sync` edge function → extraherar system från befintliga attribut (IMPLEMENTERAT)
+The `saved_views` table already has `visible_model_ids` and `visible_floor_ids` columns, and `captureViewState` already captures them. This is working. No changes needed here — the capture/restore pipeline already handles multi-model state.
 
-### Frontend (future phase)
-- System tab on FacilityLandingPage
-- System badge on asset property dialogs
-- Manual system creation dialog
+### Part 3: Feedback System with Email + Duplicate Detection
 
----
+**New DB tables** (migration):
 
-## Plan: Viewer Color Fix (IMPLEMENTED)
+```sql
+CREATE TABLE public.feedback_threads (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  title text NOT NULL,
+  description text,
+  category text NOT NULL DEFAULT 'suggestion',
+  status text NOT NULL DEFAULT 'open',
+  vote_count integer DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
 
-### Changes made:
-1. **Window color** — Changed from blue-gray `[0.392, 0.490, 0.541]` (#647D8A) to neutral warm gray `[0.780, 0.780, 0.760]` (#C7C7C2) in:
-   - `src/lib/architect-colors.ts`
-   - `src/hooks/useArchitectViewMode.ts`
-   - Database `viewer_themes` table (both "Arkitektvy" and "Standard" themes)
-   - `ViewerFilterPanel.tsx` category palette
+CREATE TABLE public.feedback_comments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  thread_id uuid REFERENCES public.feedback_threads(id) ON DELETE CASCADE NOT NULL,
+  user_id uuid NOT NULL,
+  comment text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
 
-2. **Space color** — Verified as correct neutral gray `[0.898, 0.894, 0.890]` (#E5E4E3). Changed category palette in ViewerFilterPanel from blue to neutral.
+CREATE TABLE public.feedback_votes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  thread_id uuid REFERENCES public.feedback_threads(id) ON DELETE CASCADE NOT NULL,
+  user_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(thread_id, user_id)
+);
+```
+RLS: Authenticated users can CRUD own threads/comments/votes; admins can update thread status.
 
-3. **Background** — Already correct gray gradient in NativeViewerShell.
+**Email notification:** When a user creates a feedback thread, use the existing `send-issue-email` pattern — call Resend API to notify admins. Create a lightweight edge function `feedback-notify` that:
+1. Looks up all admin user_ids from `user_roles`
+2. Gets their emails from `auth.users` (via service role)
+3. Sends email via Resend with thread title, description, and link
 
-4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
+**Duplicate detection:** Before submitting, search existing `feedback_threads` + `help_doc_sources` (indexed docs) for similar content:
+- Query `feedback_threads` with `ilike` on title
+- Query `document_chunks` with `ilike` on content (for help docs)
+- Show matches in a panel: "Liknande ärenden finns redan" or "Denna funktion finns redan i Geminus"
+- User can still submit if they want
 
-5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
+**New UI files:**
+- `src/components/support/FeedbackView.tsx` — List with category filters, vote counts, status badges, "Ny idé" button
+- `src/components/support/FeedbackThreadDetail.tsx` — Sheet with comments, upvote, admin status control
+- `src/components/support/FeedbackCreateForm.tsx` — Form with title/description/category + live duplicate detection panel
 
----
+**Modified:**
+- `src/components/support/CustomerPortalView.tsx` — Add "Feedback" tab
 
-## Plan: IFC System-Only Import (IMPLEMENTED - Phase 1)
+### Part 4: Shared Viewpoint Capture Utility
 
-### What was built
-1. **`ifc-extract-systems` edge function** — New lightweight edge function that:
-   - Downloads IFC from `ifc-uploads` bucket
-   - Parses metadata via `web-ifc` + `xeokit-convert` (same pipeline as `ifc-to-xkt`)
-   - Extracts systems (`IfcSystem`, `IfcDistributionSystem`, `SystemName` property grouping)
-   - Extracts connections (`IfcRelConnects*`)
-   - Reconciles IFC GUIDs with existing assets (3-step: exact match → name match → identity)
-   - Persists to `systems`, `asset_system`, `asset_connections`, `asset_external_ids`
-   - **Skips XKT generation** — much faster (~10-15s vs minutes)
-   - Supports 3 modes: `systems-only` (default), `enrich-guids` (future), `full` (delegates to `ifc-to-xkt`)
+Both BCF issues and saved views capture camera + screenshot + model visibility. Extract a shared utility:
 
-2. **UI in ApiSettingsModal** — "From IFC" button on the Technical Systems card:
-   - Building selector dropdown
-   - IFC file upload
-   - Mode radio: "Only systems (fast)" / "Systems + FMGUIDs (coming soon)" / "Full conversion"
-   - Progress tracking and result display
+```typescript
+// src/lib/viewpoint-capture.ts
+export function captureViewerState(viewerRef): ViewerSnapshot {
+  // Returns: screenshot, camera, visibleModelIds, visibleFloorIds, selectedObjectIds, clipHeight, projection
+}
+```
 
-### Still to implement
-- **`enrich-guids` mode** — FMGUID generation + IFC write-back via `web-ifc` property injection
-- **IFC archive** — Store enriched IFC in `ifc-uploads/{buildingFmGuid}/enriched/`
-- **ACC `enrich-guids` action** — Deterministic GUID generation for ACC-sourced models
+Use this in both `captureViewState` (saved views) and `captureIssueState` (BCF issues) to avoid code duplication.
+
+### Files Modified/Created
+
+- **New migration** — `feedback_threads`, `feedback_comments`, `feedback_votes`
+- **New** — `supabase/functions/feedback-notify/index.ts`
+- **New** — `src/lib/viewpoint-capture.ts`
+- **New** — `src/components/support/FeedbackView.tsx`
+- **New** — `src/components/support/FeedbackThreadDetail.tsx`
+- **New** — `src/components/support/FeedbackCreateForm.tsx`
+- **Modified** — `src/components/support/CustomerPortalView.tsx` (add Feedback tab)
+- **Modified** — `src/hooks/useBcfViewpoints.ts` (delay selection after fly)
+- **Modified** — `src/components/viewer/VisualizationToolbar.tsx` (fallback object IDs)
+- **Modified** — `src/components/viewer/ViewerRightPanel.tsx` (fallback object IDs)
+- **Modified** — `src/components/viewer/IssueDetailSheet.tsx` (pass selected_object_ids)
+
