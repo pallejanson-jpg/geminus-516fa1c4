@@ -505,6 +505,25 @@ const tools = [
       },
     },
   },
+  // ── FM Access local search tool ──
+  {
+    type: "function",
+    function: {
+      name: "search_fm_access_local",
+      description: "Search locally synced FM Access data: drawings (ritningar), documents (dokument), and DoU (drift & underhåll) instructions. Much faster than live API calls. Use for questions about available drawings, documents, or maintenance instructions for a building.",
+      parameters: {
+        type: "object",
+        properties: {
+          building_fm_guid: { type: "string", description: "Filter by building fm_guid" },
+          search_term: { type: "string", description: "Text to search for in names, file names, content" },
+          data_type: { type: "string", enum: ["drawings", "documents", "dou", "all"], description: "Which type of data to search. Default: all" },
+          limit: { type: "number", description: "Max rows (default 20)" },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
   // ── Faciliate (SWG) tools ──
   {
     type: "function",
