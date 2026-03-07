@@ -399,9 +399,9 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
         entity.pickable = false;
       }
 
-      toast.success('Objekt markerat som borttaget', {
+      toast.success('Object marked as deleted', {
         action: {
-          label: 'Ångra',
+          label: 'Undo',
           onClick: () => undoDelete(fmGuid),
         },
       });

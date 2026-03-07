@@ -53,7 +53,7 @@ export default function Viewer() {
   if (viewer3dFmGuid && isLoadingData) {
     return (
       <div className="h-full flex items-center justify-center">
-        <div className="text-muted-foreground">Laddar byggnadsdata...</div>
+        <div className="text-muted-foreground">Loading building data...</div>
       </div>
     );
   }
