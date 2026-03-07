@@ -958,6 +958,56 @@ function MobileUnifiedViewer({
               }}
             />
           )}
+
+          {/* Mobile mode switcher + back button for non-split modes */}
+          <div
+            className="absolute top-0 left-0 right-0 z-40 flex items-center justify-between px-1.5 py-1"
+            style={{
+              paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4px)',
+              paddingLeft: 'max(env(safe-area-inset-left, 0px), 6px)',
+              paddingRight: 'max(env(safe-area-inset-right, 0px), 6px)',
+              background: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent)',
+            }}
+          >
+            <Button
+              variant="secondary"
+              size="icon"
+              onClick={onGoBack}
+              className="h-8 w-8 bg-card/95 backdrop-blur-sm shadow-md border"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md rounded-lg p-0.5 border border-white/10">
+              {([
+                { mode: 'split2d3d' as ViewMode, label: '2D/3D', Icon: LayoutPanelLeft },
+                { mode: '2d' as ViewMode, label: '2D', Icon: Square },
+                { mode: '3d' as ViewMode, label: '3D', Icon: Box },
+              ] as const).map(({ mode, label, Icon }) => (
+                <Button
+                  key={mode}
+                  size="sm"
+                  variant={viewMode === mode ? 'default' : 'ghost'}
+                  className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${viewMode !== mode ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+                  onClick={() => setViewMode(mode)}
+                >
+                  <Icon className="h-3 w-3" />
+                  {label}
+                </Button>
+              ))}
+              {hasIvion && (
+                <Button
+                  size="sm"
+                  variant={viewMode === '360' ? 'default' : 'ghost'}
+                  className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${viewMode !== '360' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+                  onClick={() => setViewMode('360')}
+                >
+                  <View className="h-3 w-3" />
+                  360°
+                </Button>
+              )}
+            </div>
+            <div className="w-8" /> {/* Spacer for balance */}
+          </div>
         </div>
       )}
     </div>
