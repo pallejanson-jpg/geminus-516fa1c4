@@ -1,106 +1,114 @@
 
 
-## Plan: System Support + Reconciliation Engine (IMPLEMENTED)
+# Plan: Mobile Split View, English UI & Desktop/Mobile Parity
 
-### Database tables created
-1. **`asset_external_ids`** — Maps external IDs (IFC GUID, ACC externalId, Revit UniqueId) to stable `fm_guid` for cross-source reconciliation
-2. **`systems`** — Technical systems (e.g., LB01 Supply Air) with `fm_guid`, `discipline`, `system_type`, `building_fm_guid`, hierarchical `parent_system_id`
-3. **`asset_system`** — Many-to-many relation between assets and systems with optional `role`
-4. **`asset_connections`** — Topology/flow between assets (`from_fm_guid` → `to_fm_guid`) with `connection_type` and `direction`
+## Context
+The user's reference image (Dalux FM) shows a **vertically stacked 2D/3D split** on mobile — floor plan on top, 3D model on bottom, with a drag handle between them. Our current mobile viewer has NO split mode; it only toggles between full-screen 2D or 3D. The desktop split (2D/3D) uses `SplitPlanView` side-by-side but it's basic and not available on mobile at all.
 
-All tables have RLS: authenticated read, admin write. Indexes on common query patterns.
+## Changes
 
-### Edge function changes
-1. **`ifc-to-xkt/index.ts`** — Extended with system extraction:
-   - Identifies `IfcSystem` / `IfcDistributionSystem` meta objects
-   - Falls back to `SystemName` property grouping
-   - Extracts `IfcRelConnects*` for topology → `asset_connections`
-   - Stores all object IDs in `asset_external_ids`
-   - Persists systems, asset-system links, and connections in batches
+### 1. Mobile Vertical Split View (Dalux-style)
+**File: `src/pages/UnifiedViewer.tsx` — `MobileUnifiedViewer` component (lines 737-816)**
 
-2. **`acc-sync/index.ts`** — Extended with system support:
-   - Resolves `System Name`, `System Type`, `System Classification`, `System Abbreviation` property fields
-   - Groups instances by `SystemName` → auto-creates `systems` + `asset_system` rows
-   - Stores ACC `externalId` mappings in `asset_external_ids` for all levels, rooms, instances
-   - Infers discipline from system name (Ventilation, Heating, Cooling, Electrical, Plumbing, FireProtection)
+Replace the current mobile layout with a vertically stacked split:
+- **Top half**: Canvas-based 2D plan view (`SplitPlanView`) showing floor plan
+- **Draggable divider**: A circular chevron handle (like Dalux's `^` button) to resize the split ratio
+- **Bottom half**: 3D `NativeViewerShell` viewer
+- Mode switcher in the header lets users toggle between: **Split** (2D+3D stacked), **3D only**, **2D only**, **360°** (if Ivion available)
+- Default mobile mode changes to `split2d3d` when a building is opened (matching Dalux behavior)
+- Touch-based resize: user drags the handle to adjust split ratio (30%-70% range)
 
-### System activation for existing buildings
-- **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
-- **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
-- **Asset+-byggnader**: Kör `sync-systems` action via `asset-plus-sync` edge function → extraherar system från befintliga attribut (IMPLEMENTERAT)
+**File: `src/components/viewer/SplitPlanView.tsx`**
+- Add touch event support (`onTouchStart`, `onTouchMove`, `onTouchEnd`) for pan and pinch-zoom on mobile
+- Remove Swedish text: `'Laddar planvy...'` → `'Loading plan...'`
+- Remove Swedish hint: `'Alt+drag = pan · Scroll = zoom'` → `'Pinch = zoom · Drag = pan'` on mobile
 
-### Frontend (future phase)
-- System tab on FacilityLandingPage
-- System badge on asset property dialogs
-- Manual system creation dialog
+### 2. Desktop Split Improvements
+**File: `src/pages/UnifiedViewer.tsx` — desktop split2d3d section (lines 607-620)**
+- Replace the fixed 40/60% split with a proper `ResizablePanelGroup` using two panels and a draggable handle
+- Add a subtle header label on each pane ("2D Plan" / "3D Model")
+- Ensure camera sync indicator (dot on 2D plan) updates in real-time
 
----
+### 3. All UI Text → English
+Multiple files need Swedish→English translation:
 
-## Plan: Viewer Color Fix (IMPLEMENTED)
+**`src/pages/UnifiedViewer.tsx`:**
+- `'Laddar viewer...'` → `'Loading viewer...'`
+- `'Byggnadsdata saknas'` → `'Building data not found'`
+- `'Tillbaka'` → `'Back'`
+- `'Split 3D/360°'`, `'Split 2D/3D'`, `'360° Panorama'`, `'2D Planvy'` → English equivalents
+- `'Synk aktiv'` → `'Sync active'`
+- All tooltip text (Kräver Ivion → Requires Ivion, etc.)
+- `'Försök ladda SDK igen'` → `'Retry SDK'`
+- `'Alignment-kalibrering'` → `'Alignment calibration'`
+- `'3D-modellens synlighet'` → `'3D model opacity'`
+- `'Byggnadsinsikter och analys'` → `'Building insights'`
 
-### Changes made:
-1. **Window color** — Changed from blue-gray `[0.392, 0.490, 0.541]` (#647D8A) to neutral warm gray `[0.780, 0.780, 0.760]` (#C7C7C2) in:
-   - `src/lib/architect-colors.ts`
-   - `src/hooks/useArchitectViewMode.ts`
-   - Database `viewer_themes` table (both "Arkitektvy" and "Standard" themes)
-   - `ViewerFilterPanel.tsx` category palette
+**`src/components/viewer/NativeViewerShell.tsx`:**
+- `title="Tillbaka"` → `title="Back"`
 
-2. **Space color** — Verified as correct neutral gray `[0.898, 0.894, 0.890]` (#E5E4E3). Changed category palette in ViewerFilterPanel from blue to neutral.
+**`src/components/viewer/SplitPlanView.tsx`:**
+- Canvas text to English
 
-3. **Background** — Already correct gray gradient in NativeViewerShell.
+**`src/components/viewer/ViewerFilterPanel.tsx`:**
+- `'Visa flyttade objekt'` → `'Show moved objects'`
+- `'Visa borttagna objekt'` → `'Show deleted objects'`
 
-4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
+**`src/components/viewer/VisualizationToolbar.tsx`:**
+- `'Visa rum'` → `'Show spaces'`
+- `'Visa ärenden'` → `'Show issues'`
+- `'Visa'` section header → `'Visibility'`
+- `'Laddar teman...'` → `'Loading themes...'` (ViewerThemeSelector)
 
-5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
+**`src/components/viewer/FmAccess2DPanel.tsx`:**
+- Various Swedish strings → English
 
----
+**`src/components/viewer/AlignmentPointPicker.tsx`:**
+- `'Ingen panoramaposition tillgänglig...'` → English
 
-## Plan: IFC System-Only Import (IMPLEMENTED - Phase 1)
+**`src/hooks/useObjectMoveMode.ts`:**
+- All toast messages to English (the undo toasts added recently)
 
-### What was built
-1. **`ifc-extract-systems` edge function** — New lightweight edge function that:
-   - Downloads IFC from `ifc-uploads` bucket
-   - Parses metadata via `web-ifc` + `xeokit-convert` (same pipeline as `ifc-to-xkt`)
-   - Extracts systems (`IfcSystem`, `IfcDistributionSystem`, `SystemName` property grouping)
-   - Extracts connections (`IfcRelConnects*`)
-   - Reconciles IFC GUIDs with existing assets (3-step: exact match → name match → identity)
-   - Persists to `systems`, `asset_system`, `asset_connections`, `asset_external_ids`
-   - **Skips XKT generation** — much faster (~10-15s vs minutes)
-   - Supports 3 modes: `systems-only` (default), `enrich-guids` (future), `full` (delegates to `ifc-to-xkt`)
+**`src/pages/NativeViewerPage.tsx` & `src/pages/Viewer.tsx`:**
+- `'Laddar byggnadsdata...'` → `'Loading building data...'`
 
-2. **UI in ApiSettingsModal** — "From IFC" button on the Technical Systems card:
-   - Building selector dropdown
-   - IFC file upload
-   - Mode radio: "Only systems (fast)" / "Systems + FMGUIDs (coming soon)" / "Full conversion"
-   - Progress tracking and result display
+### 4. Mobile/Desktop Parity Verification
+- Ensure `MobileViewerOverlay` mode switcher includes `split2d3d` option (add `LayoutPanelLeft` icon)
+- Ensure filter panel, floor switcher, and settings all work in split mode on mobile
+- The `SplitPlanView` must respect `safe-area-inset` on mobile
 
-### Still to implement
-- **`enrich-guids` mode** — FMGUID generation + IFC write-back via `web-ifc` property injection
-- **IFC archive** — Store enriched IFC in `ifc-uploads/{buildingFmGuid}/enriched/`
-- **ACC `enrich-guids` action** — Deterministic GUID generation for ACC-sourced models
+## Technical Approach
 
----
+The mobile split uses CSS `flex-col` with a percentage-based division controlled by state. The drag handle uses `onTouchMove` to update the split ratio. Both panels share the same xeokit viewer instance — the 2D plan reads from `window.__nativeXeokitViewer` (already supported by `SplitPlanView`).
 
-## Plan: Move & Delete Objects in 3D Viewer (IMPLEMENTED - Phase 1)
+```text
+┌─────────────────────┐
+│  ← Back   [2D|3D|Split]  ⚙ │  ← header
+├─────────────────────┤
+│                     │
+│   2D Floor Plan     │  ← SplitPlanView (canvas)
+│   (touch pan/zoom)  │
+│                     │
+├────────⌃────────────┤  ← draggable handle
+│                     │
+│   3D BIM Model      │  ← NativeViewerShell
+│   (touch rotate)    │
+│                     │
+└─────────────────────┘
+```
 
-### Database changes
-- Added columns to `assets`: `modification_status` (text), `moved_offset_x/y/z` (numeric), `original_room_fm_guid` (text), `modification_date` (timestamptz)
-- Partial index on `modification_status WHERE NOT NULL`
+## Files to modify
+| File | Change |
+|------|--------|
+| `src/pages/UnifiedViewer.tsx` | Mobile split layout, English text, desktop split improvement |
+| `src/components/viewer/SplitPlanView.tsx` | Touch support, English text |
+| `src/components/viewer/mobile/MobileViewerOverlay.tsx` | Add split mode option |
+| `src/components/viewer/NativeViewerShell.tsx` | English text |
+| `src/components/viewer/ViewerFilterPanel.tsx` | English text |
+| `src/components/viewer/VisualizationToolbar.tsx` | English text |
+| `src/components/viewer/FmAccess2DPanel.tsx` | English text |
+| `src/components/viewer/AlignmentPointPicker.tsx` | English text |
+| `src/hooks/useObjectMoveMode.ts` | English toast messages |
+| `src/pages/NativeViewerPage.tsx` | English text |
+| `src/pages/Viewer.tsx` | English text |
 
-### Viewer changes
-1. **`entityOffsetsEnabled: true`** in `NativeXeokitViewer.tsx` Viewer constructor
-2. **`useObjectMoveMode` hook** — drag-move logic with:
-   - World-space pick-surface delta calculation
-   - AABB-based room detection at new position
-   - Persists offset + `modification_status = 'moved'` + room changes to DB
-   - Applies saved offsets & hides deleted entities on model load
-   - ESC to cancel move
-3. **Context menu** — Added "Flytta objekt", "Ta bort objekt", "Markera" (select fix)
-4. **Filter panel** — New "Ändringar" section with toggles:
-   - "Visa flyttade objekt" → orange colorization (`[1, 0.6, 0.1]`)
-   - "Visa borttagna objekt" → red colorization (`[1, 0.2, 0.2]`), makes hidden deleted objects visible
-
-### Still to implement
-- **Rapport-export** — CSV export of all modified assets from Insights/Asset tab
-- **Asset+ sync reset** — Clear `modification_status` when `source_updated_at` changes in `asset-plus-sync`
-- **ContextMenuSettings panel** — Wire new items visibility to settings toggles
