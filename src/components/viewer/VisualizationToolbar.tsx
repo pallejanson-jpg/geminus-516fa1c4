@@ -1198,7 +1198,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           <SidePopPanel
             isOpen={activeSubMenu === 'models'}
             onClose={() => setActiveSubMenu(null)}
-            title="BIM-modeller"
+            title="BIM models"
             parentPosition={position}
             parentWidth={panelWidth}
           >
