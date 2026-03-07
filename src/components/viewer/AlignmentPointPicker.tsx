@@ -126,7 +126,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
         const picked: Vec3 = { x: worldPos[0], y: worldPos[1], z: worldPos[2] };
         setBimPoint(picked);
         setStep('done');
-        toast.success(`3D-punkt vald: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
+          toast.success(`3D point selected: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
       }
     };
     window.addEventListener('xeokit-pick', handlePick as EventListener);
