@@ -1,106 +1,109 @@
 
 
-## Plan: System Support + Reconciliation Engine (IMPLEMENTED)
+# Plan: Proper 2D Split View Using xeokit StoreyViewsPlugin
 
-### Database tables created
-1. **`asset_external_ids`** — Maps external IDs (IFC GUID, ACC externalId, Revit UniqueId) to stable `fm_guid` for cross-source reconciliation
-2. **`systems`** — Technical systems (e.g., LB01 Supply Air) with `fm_guid`, `discipline`, `system_type`, `building_fm_guid`, hierarchical `parent_system_id`
-3. **`asset_system`** — Many-to-many relation between assets and systems with optional `role`
-4. **`asset_connections`** — Topology/flow between assets (`from_fm_guid` → `to_fm_guid`) with `connection_type` and `direction`
+## Problem
+The split 2D/3D mode currently uses `SplitPlanView`, a custom canvas that manually draws room/wall AABBs — resulting in a crude, ugly representation. Meanwhile, xeokit's built-in **`StoreyViewsPlugin`** can generate proper orthographic 2D plan images with `createStoreyMap()` and support click-to-navigate with `pickStoreyMap()`. This is the industry-standard approach.
 
-All tables have RLS: authenticated read, admin write. Indexes on common query patterns.
+## Solution
 
-### Edge function changes
-1. **`ifc-to-xkt/index.ts`** — Extended with system extraction:
-   - Identifies `IfcSystem` / `IfcDistributionSystem` meta objects
-   - Falls back to `SystemName` property grouping
-   - Extracts `IfcRelConnects*` for topology → `asset_connections`
-   - Stores all object IDs in `asset_external_ids`
-   - Persists systems, asset-system links, and connections in batches
+Replace `SplitPlanView`'s custom canvas rendering with xeokit's `StoreyViewsPlugin.createStoreyMap()` for the 2D panel in split mode. This produces a high-quality rendered plan image directly from the BIM model — identical to what Dalux and other professional viewers use.
 
-2. **`acc-sync/index.ts`** — Extended with system support:
-   - Resolves `System Name`, `System Type`, `System Classification`, `System Abbreviation` property fields
-   - Groups instances by `SystemName` → auto-creates `systems` + `asset_system` rows
-   - Stores ACC `externalId` mappings in `asset_external_ids` for all levels, rooms, instances
-   - Infers discipline from system name (Ventilation, Heating, Cooling, Electrical, Plumbing, FireProtection)
+### Architecture
 
-### System activation for existing buildings
-- **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
-- **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
-- **Asset+-byggnader**: Kör `sync-systems` action via `asset-plus-sync` edge function → extraherar system från befintliga attribut (IMPLEMENTERAT)
+```text
+┌──────────────────────────────────────────────┐
+│  Desktop Split 2D/3D                         │
+│  ┌─────────────────┬─────────────────────┐   │
+│  │ StoreyMap image  │                     │   │
+│  │ (from xeokit     │   NativeViewerShell │   │
+│  │  createStoreyMap)│   (3D)              │   │
+│  │                  │                     │   │
+│  │ Click → pickSto- │                     │   │
+│  │ reyMap → flyTo   │                     │   │
+│  │                  │                     │   │
+│  │ Camera dot       │                     │   │
+│  │ overlay          │                     │   │
+│  └─────────────────┴─────────────────────┘   │
+│                                              │
+│  Mobile: Same but vertical stack             │
+└──────────────────────────────────────────────┘
+```
 
-### Frontend (future phase)
-- System tab on FacilityLandingPage
-- System badge on asset property dialogs
-- Manual system creation dialog
+### Changes
 
----
+#### 1. Rewrite `SplitPlanView.tsx` to use `StoreyViewsPlugin`
+- On mount, get the shared xeokit viewer from `window.__nativeXeokitViewer`
+- Create a `StoreyViewsPlugin` instance
+- Get current storey ID from metaScene (listen for `FLOOR_SELECTION_CHANGED_EVENT`)
+- Call `storeyViewsPlugin.createStoreyMap(storeyId, { width, format: 'png', useObjectStates: true })` to generate the plan image
+- Display the image in an `<img>` tag with CSS `object-contain`
+- On click: use `storeyViewsPlugin.pickStoreyMap(storeyMap, canvasPos)` to get the picked entity + world position, then `cameraFlight.flyTo()` to navigate the 3D view
+- Overlay a camera position indicator (small dot + direction line) using absolute-positioned CSS, calculated from camera world coords → image coords using the storeyMap's coordinate mapping
+- Re-generate the map when floor changes or viewer scene updates
+- Support pan/zoom via CSS `transform: scale() translate()` on the image container
+- Add touch support for mobile (pinch-zoom, drag-pan)
 
-## Plan: Viewer Color Fix (IMPLEMENTED)
+#### 2. Update `MinimapPanel.tsx` to use StoreyViewsPlugin too
+- Same approach as SplitPlanView but smaller — replace the crude canvas drawing with `createStoreyMap()`
+- This gives consistent, high-quality plan images in both the minimap and split view
+- Translate remaining Swedish strings ("Översikt" → "Overview", "Laddar karta..." → "Loading map...")
 
-### Changes made:
-1. **Window color** — Changed from blue-gray `[0.392, 0.490, 0.541]` (#647D8A) to neutral warm gray `[0.780, 0.780, 0.760]` (#C7C7C2) in:
-   - `src/lib/architect-colors.ts`
-   - `src/hooks/useArchitectViewMode.ts`
-   - Database `viewer_themes` table (both "Arkitektvy" and "Standard" themes)
-   - `ViewerFilterPanel.tsx` category palette
+#### 3. Desktop split layout (no change needed)
+The existing `ResizablePanelGroup` in `UnifiedViewer.tsx` is fine — just the content of the left panel (SplitPlanView) gets upgraded.
 
-2. **Space color** — Verified as correct neutral gray `[0.898, 0.894, 0.890]` (#E5E4E3). Changed category palette in ViewerFilterPanel from blue to neutral.
+#### 4. Mobile split layout (no change needed)
+The vertical stack layout is correct — just the SplitPlanView content gets upgraded.
 
-3. **Background** — Already correct gray gradient in NativeViewerShell.
+### Key xeokit API Usage
 
-4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
+```typescript
+// Import from the SDK (already loaded)
+const sdk = await import('/lib/xeokit/xeokit-sdk.es.js');
+const { StoreyViewsPlugin } = sdk;
 
-5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
+// Create plugin (once per viewer lifecycle)
+const storeyViewsPlugin = new StoreyViewsPlugin(viewer);
 
----
+// Get available storey IDs
+const storeyIds = Object.keys(storeyViewsPlugin.storeys);
 
-## Plan: IFC System-Only Import (IMPLEMENTED - Phase 1)
+// Generate plan image for a storey
+const storeyMap = storeyViewsPlugin.createStoreyMap(storeyId, {
+  width: containerWidth * devicePixelRatio,
+  format: 'png',
+  useObjectStates: true  // respects current visibility/coloring
+});
+// storeyMap.imageData = base64 PNG
+// storeyMap.width, storeyMap.height
 
-### What was built
-1. **`ifc-extract-systems` edge function** — New lightweight edge function that:
-   - Downloads IFC from `ifc-uploads` bucket
-   - Parses metadata via `web-ifc` + `xeokit-convert` (same pipeline as `ifc-to-xkt`)
-   - Extracts systems (`IfcSystem`, `IfcDistributionSystem`, `SystemName` property grouping)
-   - Extracts connections (`IfcRelConnects*`)
-   - Reconciles IFC GUIDs with existing assets (3-step: exact match → name match → identity)
-   - Persists to `systems`, `asset_system`, `asset_connections`, `asset_external_ids`
-   - **Skips XKT generation** — much faster (~10-15s vs minutes)
-   - Supports 3 modes: `systems-only` (default), `enrich-guids` (future), `full` (delegates to `ifc-to-xkt`)
+// Click navigation
+const pickResult = storeyViewsPlugin.pickStoreyMap(storeyMap, [mouseX, mouseY]);
+if (pickResult?.worldPos) {
+  viewer.cameraFlight.flyTo({
+    eye: [pickResult.worldPos[0], viewer.camera.eye[1], pickResult.worldPos[2]],
+    look: pickResult.worldPos,
+    duration: 0.8
+  });
+}
+```
 
-2. **UI in ApiSettingsModal** — "From IFC" button on the Technical Systems card:
-   - Building selector dropdown
-   - IFC file upload
-   - Mode radio: "Only systems (fast)" / "Systems + FMGUIDs (coming soon)" / "Full conversion"
-   - Progress tracking and result display
+### Coordinate mapping for camera overlay
+The StoreyMap has a known world-space extent that corresponds to the image pixels. We compute:
+```
+imageX = (camera.eye[0] - storeyMap.aabb[0]) / (storeyMap.aabb[3] - storeyMap.aabb[0]) * imageWidth
+imageY = (camera.eye[2] - storeyMap.aabb[2]) / (storeyMap.aabb[5] - storeyMap.aabb[2]) * imageHeight
+```
 
-### Still to implement
-- **`enrich-guids` mode** — FMGUID generation + IFC write-back via `web-ifc` property injection
-- **IFC archive** — Store enriched IFC in `ifc-uploads/{buildingFmGuid}/enriched/`
-- **ACC `enrich-guids` action** — Deterministic GUID generation for ACC-sourced models
+### Files to modify
 
----
+| File | Change |
+|------|--------|
+| `src/components/viewer/SplitPlanView.tsx` | Full rewrite: use StoreyViewsPlugin instead of manual canvas |
+| `src/components/viewer/MinimapPanel.tsx` | Rewrite to use StoreyViewsPlugin, translate Swedish → English |
 
-## Plan: Move & Delete Objects in 3D Viewer (IMPLEMENTED - Phase 1)
+### What stays the same
+- `UnifiedViewer.tsx` layout (ResizablePanelGroup desktop, vertical stack mobile) — no changes
+- `NativeViewerShell.tsx` — no changes
+- Click-to-navigate, camera sync, floor switching events — same API, better implementation
 
-### Database changes
-- Added columns to `assets`: `modification_status` (text), `moved_offset_x/y/z` (numeric), `original_room_fm_guid` (text), `modification_date` (timestamptz)
-- Partial index on `modification_status WHERE NOT NULL`
-
-### Viewer changes
-1. **`entityOffsetsEnabled: true`** in `NativeXeokitViewer.tsx` Viewer constructor
-2. **`useObjectMoveMode` hook** — drag-move logic with:
-   - World-space pick-surface delta calculation
-   - AABB-based room detection at new position
-   - Persists offset + `modification_status = 'moved'` + room changes to DB
-   - Applies saved offsets & hides deleted entities on model load
-   - ESC to cancel move
-3. **Context menu** — Added "Flytta objekt", "Ta bort objekt", "Markera" (select fix)
-4. **Filter panel** — New "Ändringar" section with toggles:
-   - "Visa flyttade objekt" → orange colorization (`[1, 0.6, 0.1]`)
-   - "Visa borttagna objekt" → red colorization (`[1, 0.2, 0.2]`), makes hidden deleted objects visible
-
-### Still to implement
-- **Rapport-export** — CSV export of all modified assets from Insights/Asset tab
-- **Asset+ sync reset** — Clear `modification_status` when `source_updated_at` changes in `asset-plus-sync`
-- **ContextMenuSettings panel** — Wire new items visibility to settings toggles
