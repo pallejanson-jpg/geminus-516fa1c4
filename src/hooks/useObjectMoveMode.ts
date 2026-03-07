@@ -286,7 +286,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
 
           if (totalDist < 0.01) {
             entity.offset = moveStateRef.current.originalOffset;
-            toast.info('Flytt avbruten');
+            toast.info('Move cancelled');
             cleanup();
             return;
           }
