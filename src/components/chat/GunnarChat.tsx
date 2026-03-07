@@ -48,6 +48,7 @@ interface GunnarAction {
   visible?: boolean;
   fmGuid?: string;
   buildingFmGuid?: string;
+  buildingName?: string;
   floorName?: string;
 }
 
