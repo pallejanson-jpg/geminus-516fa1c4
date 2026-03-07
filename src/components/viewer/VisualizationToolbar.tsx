@@ -841,7 +841,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                         >
                           <TreeDeciduous className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </div>
-                        <span className="text-xs sm:text-sm">Modellträd</span>
+                        <span className="text-xs sm:text-sm">Model tree</span>
                       </div>
                       <Switch 
                         checked={showTreeView} 
