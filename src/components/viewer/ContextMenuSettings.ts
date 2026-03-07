@@ -18,6 +18,8 @@ export const ALL_CONTEXT_MENU_ITEMS: ContextMenuItemConfig[] = [
   { id: 'isolate',         label: 'Isolate object',     visible: true, group: 'viewer' },
   { id: 'hideSelected',    label: 'Hide object',        visible: true, group: 'viewer' },
   { id: 'showAll',         label: 'Show all',           visible: true, group: 'viewer' },
+  { id: 'moveObject',      label: 'Move object',        visible: true, group: 'geminus' },
+  { id: 'deleteObject',    label: 'Delete object',      visible: true, group: 'geminus' },
 ];
 
 export function getContextMenuSettings(): ContextMenuItemConfig[] {
