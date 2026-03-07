@@ -238,7 +238,7 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
               className="gap-1.5"
             >
               <RefreshCw className="h-3.5 w-3.5" />
-              Försök igen
+              Retry
             </Button>
             {onChangeFloor && (
               <Button variant="outline" size="sm" onClick={onChangeFloor} className="gap-1.5">
