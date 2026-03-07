@@ -30,9 +30,11 @@ interface NativeViewerShellProps {
   onClose: () => void;
   /** Hide the desktop back button (when parent already has one, e.g. UnifiedViewer) */
   hideBackButton?: boolean;
+  /** Hide the mobile overlay (mode switcher, filter, settings) when parent provides its own */
+  hideMobileOverlay?: boolean;
 }
 
-const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, onClose, hideBackButton = false }) => {
+const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, onClose, hideBackButton = false, hideMobileOverlay = false }) => {
   const isMobile = useIsMobile();
   const { allData, isSidebarExpanded } = useContext(AppContext);
 
