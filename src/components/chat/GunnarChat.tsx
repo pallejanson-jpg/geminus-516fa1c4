@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { X, Send, Sparkles, Loader2, Navigation, Compass, Eye, Layers, MapPin, Search, AlertTriangle, Info } from "lucide-react";
+import { X, Send, Sparkles, Loader2, Info, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import { useNavigate } from "react-router-dom";
+import { useWebSpeechRecognition } from "@/hooks/useWebSpeechRecognition";
 
 type Message = {
   role: "user" | "assistant";
@@ -101,18 +102,21 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gunnar-chat`
 
 export default function GunnarChat({ open, onClose, context, embedded }: GunnarChatProps) {
   const navigate = useNavigate();
-  const { setAiSelectedFmGuids, setActiveApp, clearAiSelection, setViewer3dFmGuid } = useApp();
+  const { setAiSelectedFmGuids, setActiveApp, setSelectedFacility, setViewer3dFmGuid } = useApp();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [suggestedFollowups, setSuggestedFollowups] = useState<string[]>([]);
   const [proactiveInsights, setProactiveInsights] = useState<string[]>([]);
+  const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast: toastHook } = useToast();
   const prevContextRef = useRef<string>("");
   const proactiveFetchedRef = useRef<string>("");
   const abortRef = useRef<AbortController | null>(null);
+  const spokenMessageKeyRef = useRef<string>("");
 
   // Fetch proactive insights when context has a building
   useEffect(() => {
@@ -168,6 +172,27 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
   useEffect(() => {
     if (open && inputRef.current) setTimeout(() => inputRef.current?.focus(), 100);
   }, [open]);
+
+  const cleanSpeechText = useCallback((text: string) => {
+    return stripFollowups(text)
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
+      .replace(/[*_`#>-]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }, []);
+
+  const speakAssistant = useCallback((text: string) => {
+    if (!voiceOutputEnabled || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const cleaned = cleanSpeechText(text);
+    if (!cleaned) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(cleaned);
+    utterance.lang = "sv-SE";
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+  }, [cleanSpeechText, voiceOutputEnabled]);
 
   const streamChat = useCallback(
     async (userMessages: Message[], currentContext?: GunnarContext, advisorMode?: boolean) => {
@@ -296,6 +321,52 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
     sendMessage(question);
   };
 
+  const {
+    isListening,
+    interimTranscript,
+    isSupported: isVoiceSupported,
+    start: startListening,
+    stop: stopListening,
+  } = useWebSpeechRecognition({
+    language: 'sv-SE',
+    onResult: (transcript, isFinal) => {
+      if (isFinal) {
+        const text = transcript.trim();
+        if (text) void sendMessage(text);
+        setInput('');
+      } else {
+        setInput(transcript);
+      }
+    },
+    onError: (errorMessage) => {
+      toastHook({ variant: 'destructive', title: 'Röstfel', description: errorMessage });
+    },
+  });
+
+  const toggleListening = useCallback(() => {
+    if (!isVoiceSupported || isLoading) return;
+    if (isListening) stopListening();
+    else startListening();
+  }, [isListening, isLoading, isVoiceSupported, startListening, stopListening]);
+
+  useEffect(() => {
+    if (!open || !voiceOutputEnabled || isLoading) return;
+    const lastMessage = messages[messages.length - 1];
+    if (!lastMessage || lastMessage.role !== 'assistant') return;
+    const key = `${messages.length - 1}:${lastMessage.content.length}`;
+    if (spokenMessageKeyRef.current === key) return;
+    spokenMessageKeyRef.current = key;
+    speakAssistant(lastMessage.content);
+  }, [messages, isLoading, open, voiceOutputEnabled, speakAssistant]);
+
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
   const executeAction = useCallback((action: GunnarAction) => {
     switch (action.action) {
       case "selectInTree":
@@ -334,8 +405,9 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
         break;
       case "openViewer":
         if (action.fmGuid) {
-          setViewer3dFmGuid(action.fmGuid);
-          toast.success('Opening 3D viewer');
+          navigate(`/viewer?building=${action.fmGuid}&mode=3d`);
+          onClose();
+          toast.success('Öppnar 3D-viewer');
         }
         break;
       case "showFloorIn3D":
@@ -376,8 +448,13 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
       case "selectBuilding":
         if (action.buildingFmGuid) {
           const bName = action.buildingName || 'byggnaden';
-          // Auto-send a follow-up message to Gunnar with the selected building
-          sendMessage(`Jag menar ${bName}`);
+          setSelectedFacility({
+            fmGuid: action.buildingFmGuid,
+            name: bName,
+            commonName: bName,
+            category: 'Building',
+          });
+          void sendMessage(`Jag menar ${bName}`);
         }
         break;
     }
