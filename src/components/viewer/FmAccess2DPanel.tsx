@@ -105,7 +105,7 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
         setPhase('loading-iframe');
       } catch (err: any) {
         if (!cancelled) {
-          setError(err.message || 'Oväntat fel');
+          setError(err.message || 'Unexpected error');
           setPhase('error');
         }
       }
