@@ -638,7 +638,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
               onClick={() => sendMessage("", true)}
             >
               <Sparkles className="h-3 w-3" />
-              Ge mig råd
+              Give me advice
             </Button>
           </div>
         )}
