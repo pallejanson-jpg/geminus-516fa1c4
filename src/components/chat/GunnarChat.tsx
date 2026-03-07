@@ -638,7 +638,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
               onClick={() => sendMessage("", true)}
             >
               <Sparkles className="h-3 w-3" />
-              Ge mig råd
+              Give me advice
             </Button>
           </div>
         )}
@@ -648,7 +648,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Fråga om dina fastigheter..."
+            placeholder="Ask about your properties..."
             disabled={isLoading}
             className="flex-1"
           />
@@ -657,7 +657,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
           </Button>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Enter för att skicka • Gunnar förstår svenska och engelska
+          Press Enter to send • Gunnar understands Swedish and English
         </p>
       </div>
     </>
@@ -691,7 +691,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-1.5">
                 <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
                   <Info className="h-3.5 w-3.5" />
-                  Aktuell status
+                  Current status
                 </div>
                 {proactiveInsights.map((insight, i) => (
                   <p key={i} className="text-sm text-foreground">{insight}</p>
@@ -703,7 +703,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
               <div className="flex justify-start">
                 <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Tänker...</span>
+                  <span>Thinking...</span>
                 </div>
               </div>
             )}

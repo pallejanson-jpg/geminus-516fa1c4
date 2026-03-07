@@ -1,71 +1,106 @@
 
 
-# Fix Plan: Mobile Viewer Issues, Gunnar Problems & Swedish Text Cleanup
+## Plan: System Support + Reconciliation Engine (IMPLEMENTED)
 
-## Issues Found
+### Database tables created
+1. **`asset_external_ids`** — Maps external IDs (IFC GUID, ACC externalId, Revit UniqueId) to stable `fm_guid` for cross-source reconciliation
+2. **`systems`** — Technical systems (e.g., LB01 Supply Air) with `fm_guid`, `discipline`, `system_type`, `building_fm_guid`, hierarchical `parent_system_id`
+3. **`asset_system`** — Many-to-many relation between assets and systems with optional `role`
+4. **`asset_connections`** — Topology/flow between assets (`from_fm_guid` → `to_fm_guid`) with `connection_type` and `direction`
 
-### 1. 2D Mode Doesn't Work on Mobile
-**Root cause**: When mobile uses `NativeViewerShell` directly (in non-split modes, lines 900-906 of UnifiedViewer), it renders `NativeViewerShell` which includes `ViewerToolbar`. The `MobileViewerOverlay` dispatches `VIEW_MODE_REQUESTED_EVENT` via `handleChangeViewMode` (NativeViewerShell line 420-423), and `ViewerToolbar` listens for it (line 250-257) and calls `handleViewModeChange('2d')` which does the actual clipping + ortho camera.
+All tables have RLS: authenticated read, admin write. Indexes on common query patterns.
 
-**The actual problem**: In the mobile split view (`split2d3d` mode, lines 807-895), the top panel renders `SplitPlanView` (a canvas-based 2D representation), NOT the xeokit 2D mode with clipping. The `SplitPlanView` is a simplified canvas drawing of rooms/walls from AABB data — it's NOT the proper 2D floor plan mode. When the user selects "2D" mode (not split), it renders `NativeViewerShell` (line 901) which should dispatch `VIEW_MODE_REQUESTED_EVENT`, but the `MobileViewerOverlay` has a mode switcher that's rendered INSIDE the shell (line 456-468). The shell's `handleChangeViewMode` dispatches the event correctly.
+### Edge function changes
+1. **`ifc-to-xkt/index.ts`** — Extended with system extraction:
+   - Identifies `IfcSystem` / `IfcDistributionSystem` meta objects
+   - Falls back to `SystemName` property grouping
+   - Extracts `IfcRelConnects*` for topology → `asset_connections`
+   - Stores all object IDs in `asset_external_ids`
+   - Persists systems, asset-system links, and connections in batches
 
-**Likely issue**: The mobile mode switcher in the split overlay (lines 866-893) calls `setViewMode(mode)` on the parent `MobileUnifiedViewer`, but when switching from `split2d3d` to `2d`, the `NativeViewerShell` is mounted anew (line 901) and the `VIEW_MODE_REQUESTED_EVENT` needs to be dispatched AFTER the shell's `ViewerToolbar` has mounted. The `UnifiedViewer` dispatches 2D events (lines 254-265) with 1.5s and 3s delays, but only when `viewerReady` is true. There's likely a race condition where the viewer isn't ready yet when the event fires.
+2. **`acc-sync/index.ts`** — Extended with system support:
+   - Resolves `System Name`, `System Type`, `System Classification`, `System Abbreviation` property fields
+   - Groups instances by `SystemName` → auto-creates `systems` + `asset_system` rows
+   - Stores ACC `externalId` mappings in `asset_external_ids` for all levels, rooms, instances
+   - Infers discipline from system name (Ventilation, Heating, Cooling, Electrical, Plumbing, FireProtection)
 
-**Fix**: In `MobileUnifiedViewer`, when mode changes to `2d`, ensure `VIEW_MODE_REQUESTED_EVENT` and `VIEW_MODE_2D_TOGGLED_EVENT` are dispatched with proper delays after the NativeViewerShell has mounted. Also, when in `2d` mode on mobile, hide the `MobileViewerOverlay`'s own mode switcher to avoid the duplicate with NativeViewerShell's built-in one.
+### System activation for existing buildings
+- **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
+- **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
+- **Asset+-byggnader**: Kör `sync-systems` action via `asset-plus-sync` edge function → extraherar system från befintliga attribut (IMPLEMENTERAT)
 
-### 2. Split Screen Shows Regular 3D (No 2D Plan)
-**Root cause**: The split mode on mobile renders `SplitPlanView` on top and `NativeViewerShell` on bottom. `SplitPlanView` works by reading from `window.__nativeXeokitViewer` and drawing room AABBs on a canvas. If the viewer hasn't loaded yet or the `__nativeXeokitViewer` ref isn't set, it shows nothing useful. Additionally, the bottom `NativeViewerShell` shows normal 3D — there's no clipping applied because no 2D event was dispatched for it.
+### Frontend (future phase)
+- System tab on FacilityLandingPage
+- System badge on asset property dialogs
+- Manual system creation dialog
 
-**Fix**: The split mode should work correctly — `SplitPlanView` reads from the shared xeokit instance. The issue is likely that both panels create their own `NativeViewerShell` instances. The bottom NativeViewerShell creates a new viewer, but `SplitPlanView` tries to read from `window.__nativeXeokitViewer`. Since both panels mount simultaneously, the timing works if the bottom shell loads first. Need to verify this works or add a viewer-ready listener in SplitPlanView.
+---
 
-### 3. Duplicate Icons in Mobile Mode Switcher
-**Root cause**: When in non-split mobile mode (line 896-942), `NativeViewerShell` is rendered which includes its own `MobileViewerOverlay` (line 456-468). But `MobileUnifiedViewer` doesn't add any external mode switcher for non-split modes — the `MobileViewerOverlay` inside NativeViewerShell IS the only one. However, NativeViewerShell's `MobileViewerOverlay` includes `2D`, `3D`, `360°` but also `2D/3D` (split) — that's 4 buttons. Looking at the `MobileViewerOverlay` component (lines 63-101), it shows `2D/3D`, `2D`, `3D`, and optionally `360°`. That's correct.
+## Plan: Viewer Color Fix (IMPLEMENTED)
 
-**Wait** — the issue is that in split mode (lines 849-894), there's ANOTHER mode switcher rendered as `absolute top-0 right-0 z-40` with its own buttons. So when the user goes to split mode and then back to 3D, the NativeViewerShell's own MobileViewerOverlay also shows. These are two separate mode switchers competing.
+### Changes made:
+1. **Window color** — Changed from blue-gray `[0.392, 0.490, 0.541]` (#647D8A) to neutral warm gray `[0.780, 0.780, 0.760]` (#C7C7C2) in:
+   - `src/lib/architect-colors.ts`
+   - `src/hooks/useArchitectViewMode.ts`
+   - Database `viewer_themes` table (both "Arkitektvy" and "Standard" themes)
+   - `ViewerFilterPanel.tsx` category palette
 
-**Fix**: When `MobileUnifiedViewer` renders the NativeViewerShell in non-split mode, pass a prop to hide NativeViewerShell's `MobileViewerOverlay` mode switcher (since UnifiedViewer already handles mode switching). OR: don't render `MobileViewerOverlay` inside NativeViewerShell when `hideBackButton` is true (meaning parent has its own controls).
+2. **Space color** — Verified as correct neutral gray `[0.898, 0.894, 0.890]` (#E5E4E3). Changed category palette in ViewerFilterPanel from blue to neutral.
 
-### 4. Småviken 3D Crashes
-**Root cause**: From memory context, Småviken has heavy secondary models that caused persistent crashes. The xkt-cache invalidation was implemented for this. Need to check logs — the asset-plus-sync logs show "No working 3D endpoint found" which means the sync to Asset+ fails, but this shouldn't prevent loading locally cached XKT models. The crash may be a browser memory issue from loading too many large models.
+3. **Background** — Already correct gray gradient in NativeViewerShell.
 
-**Fix**: Add error handling in `NativeXeokitViewer` to catch per-model loading failures and continue with remaining models rather than failing entirely. Also limit model loading on mobile to A-models only for large buildings.
+4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
 
-### 5. Gunnar Not Responsive on Mobile
-**Root cause**: GunnarChat renders as a fixed full-height modal (line 750-754): `h-[92vh] sm:h-[90vh]`. The embedded version (from GeminusPluginMenu) is better sized. But the main GunnarButton renders as a draggable panel with fixed dimensions. On mobile, the `GunnarChat` non-embedded mode uses `fixed inset-0 z-50` which should be full screen.
+5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
 
-**Fix**: The Swedish text in GunnarChat needs to be translated to English. The mobile layout needs touch-optimized input area. Key areas: placeholder text (line 651), helper text (line 659-661), loading indicator (lines 706), advisor button (lines 633-643), proactive insights labels (lines 693-694).
+---
 
-### 6. Gunnar Shows GUIDs
-**Root cause**: The system prompt explicitly says never show GUIDs (line 1494), but the building directory (lines 1417-1424) includes `fm_guid:` in the listing. While the prompt says "for YOUR reference", sometimes the AI leaks these. Also, the `search_fm_access_local` tool returns raw data with `building_fm_guid` fields. The system prompt is thorough but the AI sometimes ignores it.
+## Plan: IFC System-Only Import (IMPLEMENTED - Phase 1)
 
-**Fix**: Strip fm_guid from visible building directory text in the system prompt. Move GUIDs to a separate lookup table reference. Add post-processing in the response to strip any GUID-like patterns before showing to user.
+### What was built
+1. **`ifc-extract-systems` edge function** — New lightweight edge function that:
+   - Downloads IFC from `ifc-uploads` bucket
+   - Parses metadata via `web-ifc` + `xeokit-convert` (same pipeline as `ifc-to-xkt`)
+   - Extracts systems (`IfcSystem`, `IfcDistributionSystem`, `SystemName` property grouping)
+   - Extracts connections (`IfcRelConnects*`)
+   - Reconciles IFC GUIDs with existing assets (3-step: exact match → name match → identity)
+   - Persists to `systems`, `asset_system`, `asset_connections`, `asset_external_ids`
+   - **Skips XKT generation** — much faster (~10-15s vs minutes)
+   - Supports 3 modes: `systems-only` (default), `enrich-guids` (future), `full` (delegates to `ifc-to-xkt`)
 
-### 7. Gunnar Says No FM Access Integration
-**Root cause**: The FM Access tools (`fm_access_get_drawings`, etc.) are referenced in `executeTool` (lines 1309-1312) but the actual **tool definitions** for these are NOT in the `tools` array (lines 14-563). Only `search_fm_access_local` is defined (lines 508-526). The AI model can only call tools that are in the `tools` array. So Gunnar literally cannot call `fm_access_get_drawings` etc. — the model doesn't know they exist.
+2. **UI in ApiSettingsModal** — "From IFC" button on the Technical Systems card:
+   - Building selector dropdown
+   - IFC file upload
+   - Mode radio: "Only systems (fast)" / "Systems + FMGUIDs (coming soon)" / "Full conversion"
+   - Progress tracking and result display
 
-The execution functions (`execFmAccessGetDrawings`, etc.) also **don't exist** in the file — they're referenced but never defined. So even if the model tried, they'd throw undefined errors.
+### Still to implement
+- **`enrich-guids` mode** — FMGUID generation + IFC write-back via `web-ifc` property injection
+- **IFC archive** — Store enriched IFC in `ifc-uploads/{buildingFmGuid}/enriched/`
+- **ACC `enrich-guids` action** — Deterministic GUID generation for ACC-sourced models
 
-**Fix**: Either add tool definitions for the FM Access API tools and implement the execution functions, OR rely on `search_fm_access_local` which queries locally synced data. The simplest fix: the system prompt already mentions FM Access workflow (lines 1592-1609) — but since the tools don't exist, Gunnar uses `search_fm_access_local` instead which works fine IF the data has been synced. If no data is synced, Gunnar says "no FM Access integration". 
+---
 
-Best approach: Remove the phantom `fm_access_get_*` entries from `executeTool`, and enhance the system prompt to always use `search_fm_access_local` for FM Access queries. Also add `query_building_settings` lookup instructions to find `fm_access_building_guid`.
+## Plan: Move & Delete Objects in 3D Viewer (IMPLEMENTED - Phase 1)
 
-## Implementation Plan
+### Database changes
+- Added columns to `assets`: `modification_status` (text), `moved_offset_x/y/z` (numeric), `original_room_fm_guid` (text), `modification_date` (timestamptz)
+- Partial index on `modification_status WHERE NOT NULL`
 
-### Files to modify:
+### Viewer changes
+1. **`entityOffsetsEnabled: true`** in `NativeXeokitViewer.tsx` Viewer constructor
+2. **`useObjectMoveMode` hook** — drag-move logic with:
+   - World-space pick-surface delta calculation
+   - AABB-based room detection at new position
+   - Persists offset + `modification_status = 'moved'` + room changes to DB
+   - Applies saved offsets & hides deleted entities on model load
+   - ESC to cancel move
+3. **Context menu** — Added "Flytta objekt", "Ta bort objekt", "Markera" (select fix)
+4. **Filter panel** — New "Ändringar" section with toggles:
+   - "Visa flyttade objekt" → orange colorization (`[1, 0.6, 0.1]`)
+   - "Visa borttagna objekt" → red colorization (`[1, 0.2, 0.2]`), makes hidden deleted objects visible
 
-| File | Changes |
-|------|---------|
-| `src/pages/UnifiedViewer.tsx` | Fix mobile 2D mode dispatch timing; avoid double mode switcher |
-| `src/components/viewer/NativeViewerShell.tsx` | Accept `hideMobileOverlay` prop to prevent duplicate controls |
-| `src/components/viewer/mobile/MobileViewerOverlay.tsx` | No changes needed |
-| `src/components/chat/GunnarChat.tsx` | Translate ALL Swedish text to English |
-| `src/components/viewer/NativeXeokitViewer.tsx` | Add per-model error handling for crash resilience |
-| `supabase/functions/gunnar-chat/index.ts` | Fix FM Access tool references, strip GUIDs from building directory, translate Swedish in system prompt |
-
-### Priority order:
-1. Fix 2D mode on mobile (dispatch timing + duplicate controls)
-2. Fix Gunnar FM Access tools (remove phantom tools, update prompt)
-3. Translate Gunnar UI to English
-4. Småviken crash resilience
-5. Gunnar GUID stripping
-
+### Still to implement
+- **Rapport-export** — CSV export of all modified assets from Insights/Asset tab
+- **Asset+ sync reset** — Clear `modification_status` when `source_updated_at` changes in `asset-plus-sync`
+- **ContextMenuSettings panel** — Wire new items visibility to settings toggles
