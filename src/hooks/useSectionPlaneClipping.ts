@@ -508,7 +508,7 @@ export function useSectionPlaneClipping(
     destroyPlane(ceilingPlaneRef);
     
     const topClipY = baseHeight + floorCutHeightRef.current;
-    const bottomClipY = baseHeight + 0.1;
+    const bottomClipY = baseHeight - 0.3;
     currentFloorMinYRef.current = baseHeight;
 
     destroyPlane(topPlaneRef);
