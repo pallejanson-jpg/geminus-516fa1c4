@@ -629,8 +629,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         const nameColorMap = detail.nameColorMap || {};
 
         Object.values(metaObjects).forEach((mo: any) => {
-          const sysId = norm(mo.originalSystemId || '');
-          const moId = norm(mo.id || '');
+          const sysId = normalizeGuid(mo.originalSystemId || '');
+          const moId = normalizeGuid(mo.id || '');
           const moName = (mo.name || '').toLowerCase().trim();
           // Try fmGuid match first, then name-based fallback
           let rgb = fmGuidLookup.get(sysId) || fmGuidLookup.get(moId);
