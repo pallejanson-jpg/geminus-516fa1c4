@@ -72,6 +72,9 @@ function stripFollowups(content: string): string {
 }
 
 function getContextualGreeting(context?: GunnarContext): string {
+  if (context?.activeApp === 'support') {
+    return `Hej! Du är i supportsektionen. Fråga mig om hur plattformen fungerar, vilka funktioner som finns, eller hur du löser ett specifikt problem!`;
+  }
   if (context?.activeApp === 'fma_plus' || context?.activeApp === 'fma_native') {
     const bName = context?.currentBuilding?.name;
     if (bName) {
@@ -91,7 +94,7 @@ function getContextualGreeting(context?: GunnarContext): string {
   if (context?.activeApp === 'portfolio') {
     return `Hej! Jag är Gunnar, din fastighetsassistent. Jag kan berätta om alla byggnader i portföljen — fråga om rum, ytor, våningar, ritningar eller specifika tillgångar!`;
   }
-  return `Hej! Jag är Gunnar, din AI-assistent för fastighetsdata. Fråga mig om:\n\n• Byggnader, våningar, rum och ytor\n• Utrustning och tillgångar\n• Ritningar från FM Access\n• Felanmälningar och ärenden\n• 3D-modellnavigering\n• IoT-sensordata\n\nVad vill du veta?`;
+  return `Hej! Jag är Gunnar, din AI-assistent för fastighetsdata. Fråga mig om:\n\n• Byggnader, våningar, rum och ytor\n• Utrustning och tillgångar\n• Ritningar från FM Access\n• Felanmälningar och ärenden\n• 3D-modellnavigering\n• IoT-sensordata\n• Hjälp med plattformen\n\nVad vill du veta?`;
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gunnar-chat`;
