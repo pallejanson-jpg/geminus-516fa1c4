@@ -143,7 +143,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
       .eq('fm_guid', fmGuid);
 
     if (error) {
-      toast.error('Kunde inte ångra raderingen');
+      toast.error('Could not undo deletion');
       return;
     }
 
