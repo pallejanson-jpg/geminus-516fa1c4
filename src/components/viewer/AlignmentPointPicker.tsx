@@ -228,7 +228,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
               {step === 'picking360' && (
                 <div className="flex items-center gap-1.5 text-primary">
                   <MousePointerClick className="h-3 w-3" />
-                  <span className="text-[11px] font-medium animate-pulse">Väntar på klick i 360°...</span>
+                  <span className="text-[11px] font-medium animate-pulse">Waiting for click in 360°...</span>
                 </div>
               )}
               {captureError && (
