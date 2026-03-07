@@ -370,6 +370,13 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
           toast.success('Öppnar 3D-viewer');
         }
         break;
+      case "selectBuilding":
+        if (action.buildingFmGuid) {
+          const bName = action.buildingName || 'byggnaden';
+          // Auto-send a follow-up message to Gunnar with the selected building
+          sendMessage(`Jag menar ${bName}`);
+        }
+        break;
     }
   }, [setAiSelectedFmGuids, setActiveApp, onClose, setViewer3dFmGuid, navigate]);
 
