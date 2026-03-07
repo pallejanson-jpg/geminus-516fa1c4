@@ -277,9 +277,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
   useEffect(() => {
     if (isReady && pending2dRef.current) {
       pending2dRef.current = false;
-      handleViewModeChange('2d');
+      handleViewModeChangeRef.current?.('2d');
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady]);
 
   // ── On-hover highlight logic ─────────────────────────────────────────────
