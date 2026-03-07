@@ -93,7 +93,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
           <CardTitle className="text-sm sm:text-base">Quick Actions</CardTitle>
         </CardHeader>
         <CardContent className="px-3 sm:px-6">
-          <div className="grid grid-cols-2 sm:grid-cols-4 items-stretch gap-0.5 sm:gap-2 md:gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 auto-rows-fr items-stretch gap-1 sm:gap-2 md:gap-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <Skeleton key={i} className="h-12 rounded-lg" />
             ))}
