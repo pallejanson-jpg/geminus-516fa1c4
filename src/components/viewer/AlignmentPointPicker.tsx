@@ -75,7 +75,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           setIvionPoint(pt);
           setStep('picking3D');
           setCaptureError(null);
-          toast.success(`360°-position fångad: (${pt.x.toFixed(1)}, ${pt.y.toFixed(1)}, ${pt.z.toFixed(1)})`);
+          toast.success(`360° position captured: (${pt.x.toFixed(1)}, ${pt.y.toFixed(1)}, ${pt.z.toFixed(1)})`);
           console.log('[AlignmentPicker] 360° position captured on click:', loc);
         } else {
           setCaptureError('Ingen panoramaposition tillgänglig. Navigera till en bild först.');
