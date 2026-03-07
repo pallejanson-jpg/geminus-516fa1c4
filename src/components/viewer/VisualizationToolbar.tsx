@@ -742,7 +742,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             >
               {/* Header */}
               <div className="flex items-center justify-between px-3 py-3 border-b shrink-0">
-                <span className="font-medium text-sm">Visning</span>
+                <span className="font-medium text-sm">Display</span>
                 <Button
                   variant="ghost"
                   size="icon"
