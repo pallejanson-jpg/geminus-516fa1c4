@@ -560,6 +560,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         viewer.cameraFlight.flyTo({ eye: [lookX, lookY + dist, lookZ], look: [lookX, lookY, lookZ], up: [0, 0, -1], duration: 0.5 });
       }
     } else {
+      // Restore all entities modified during 2D mode
       if (colorizedFor2dRef.current.size > 0) {
         colorizedFor2dRef.current.forEach((orig, id) => {
           const entity = scene.objects?.[id];
@@ -578,8 +579,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         delete (viewerShimRef.current as any).__orig2dEdge;
       }
 
-      removeSectionPlane();
-      if (currentFloorId) applyCeilingClipping(currentFloorId);
+      // Re-apply architect color palette to ensure spaces are hidden and colors correct
+      try { applyArchitectColors(viewer); } catch {}
+
+      try { removeSectionPlane(); } catch {}
+      if (currentFloorId) { try { applyCeilingClipping(currentFloorId); } catch {} }
 
       const camera = viewer.camera;
       if (camera) {
