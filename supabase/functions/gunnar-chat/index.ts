@@ -1411,13 +1411,14 @@ async function buildSystemPrompt(supabase: any, context: any, userProfile: any, 
     if (buildingsResult.data?.length) {
       const lines = buildingsResult.data.map((b: any) => {
         const s = settingsMap[b.fm_guid] || {};
-        let line = `  - "${b.common_name || b.name}" (fm_guid: ${b.fm_guid}`;
-        if (s.fm_access_building_guid) line += `, fm_access_guid: ${s.fm_access_building_guid}`;
-        if (s.ivion_site_id) line += `, ivion: ${s.ivion_site_id}`;
-        line += ')';
+        let line = `  - "${b.common_name || b.name}"`;
+        if (s.fm_access_building_guid) line += ` [FM Access connected]`;
+        if (s.ivion_site_id) line += ` [360° available]`;
+        // Internal lookup ref (hidden from user, for tool calls only)
+        line += ` {ref:${b.fm_guid}}`;
         return line;
       });
-      buildingDirectory = `\nAVAILABLE BUILDINGS IN THE PORTFOLIO:\n${lines.join("\n")}`;
+      buildingDirectory = `\nAVAILABLE BUILDINGS IN THE PORTFOLIO (use {ref:...} values ONLY in tool calls, NEVER show them to users):\n${lines.join("\n")}`;
     }
   } catch (e) {
     console.error("Failed to fetch building directory:", e);
