@@ -848,6 +848,45 @@ export type Database = {
           },
         ]
       }
+      document_chunks: {
+        Row: {
+          building_fm_guid: string | null
+          chunk_index: number
+          content: string
+          created_at: string
+          file_name: string | null
+          id: string
+          metadata: Json
+          source_id: string | null
+          source_type: string
+          updated_at: string
+        }
+        Insert: {
+          building_fm_guid?: string | null
+          chunk_index?: number
+          content: string
+          created_at?: string
+          file_name?: string | null
+          id?: string
+          metadata?: Json
+          source_id?: string | null
+          source_type?: string
+          updated_at?: string
+        }
+        Update: {
+          building_fm_guid?: string | null
+          chunk_index?: number
+          content?: string
+          created_at?: string
+          file_name?: string | null
+          id?: string
+          metadata?: Json
+          source_id?: string | null
+          source_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       documents: {
         Row: {
           building_fm_guid: string
@@ -959,6 +998,33 @@ export type Database = {
           summary?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      help_doc_sources: {
+        Row: {
+          app_name: string
+          chunk_count: number | null
+          created_at: string
+          id: string
+          last_indexed_at: string | null
+          url: string
+        }
+        Insert: {
+          app_name: string
+          chunk_count?: number | null
+          created_at?: string
+          id?: string
+          last_indexed_at?: string | null
+          url: string
+        }
+        Update: {
+          app_name?: string
+          chunk_count?: number | null
+          created_at?: string
+          id?: string
+          last_indexed_at?: string | null
+          url?: string
         }
         Relationships: []
       }
