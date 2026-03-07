@@ -390,7 +390,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
 
       if (error) {
         console.error('[ObjectMove] Delete failed:', error);
-        toast.error('Kunde inte markera objektet som borttaget');
+        toast.error('Could not mark object as deleted');
         return;
       }
 
