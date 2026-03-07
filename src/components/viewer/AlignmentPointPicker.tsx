@@ -148,7 +148,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           }
           setBimPoint(picked);
           setStep('done');
-          toast.success(`3D-punkt vald: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
+          toast.success(`3D point selected: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
           console.log('[AlignmentPicker] 3D point picked:', picked);
         } else {
           toast.warning('Ingen yta träffad. Klicka direkt på en synlig vägg, golv eller pelare.');
