@@ -598,7 +598,7 @@ const UnifiedViewerContent: React.FC<{
           }}
         />
 
-        {/* ── Split 2D/3D: ResizablePanelGroup ── */}
+        {/* ── Split 2D/3D: Single viewer + SplitPlanView overlay ── */}
         {isSplit2D3D ? (
           <ResizablePanelGroup direction="horizontal" className="h-full">
             <ResizablePanel defaultSize={40} minSize={20} maxSize={60}>
@@ -618,6 +618,7 @@ const UnifiedViewerContent: React.FC<{
                 <div className="absolute top-2 left-2 z-10 bg-card/80 backdrop-blur-sm text-foreground text-[10px] px-2 py-0.5 rounded border border-border/50">
                   3D Model
                 </div>
+                {/* Reuse the single NativeViewerShell — rendered here via portal-like approach */}
                 <NativeViewerShell
                   buildingFmGuid={buildingData.fmGuid}
                   onClose={handleGoBack}
