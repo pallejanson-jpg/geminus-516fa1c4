@@ -173,6 +173,27 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
     if (open && inputRef.current) setTimeout(() => inputRef.current?.focus(), 100);
   }, [open]);
 
+  const cleanSpeechText = useCallback((text: string) => {
+    return stripFollowups(text)
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
+      .replace(/[*_`#>-]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }, []);
+
+  const speakAssistant = useCallback((text: string) => {
+    if (!voiceOutputEnabled || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const cleaned = cleanSpeechText(text);
+    if (!cleaned) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(cleaned);
+    utterance.lang = "sv-SE";
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+  }, [cleanSpeechText, voiceOutputEnabled]);
+
   const streamChat = useCallback(
     async (userMessages: Message[], currentContext?: GunnarContext, advisorMode?: boolean) => {
       const { data: { session } } = await supabase.auth.getSession();
