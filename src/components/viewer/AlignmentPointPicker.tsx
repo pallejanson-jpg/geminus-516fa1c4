@@ -223,7 +223,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           ) : (
             <div className="mt-0.5 space-y-1.5">
               <p className="text-foreground/70 leading-snug">
-                Navigera till en punkt du kan identifiera i 3D (hörn, dörr, pelare) och <strong>klicka direkt</strong> i 360°-bilden.
+                Navigate to a point you can identify in 3D (corner, door, column) and <strong>click directly</strong> in the 360° image.
               </p>
               {step === 'picking360' && (
                 <div className="flex items-center gap-1.5 text-primary">
