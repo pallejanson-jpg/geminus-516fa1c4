@@ -130,22 +130,28 @@ export default function GeminusPluginMenu({
   return (
     <>
       {/* ── FAB + expandable menu ── */}
-      <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2">
+      <div
+        className="fixed right-4 z-40 flex flex-col items-end gap-2"
+        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}
+      >
         {/* Action items — shown when expanded */}
         {expanded && (
-          <div className="flex flex-col gap-1.5 mb-1 animate-in slide-in-from-bottom-2 fade-in duration-200">
+          <div className={cn(
+            "flex flex-col gap-1.5 mb-1 animate-in slide-in-from-bottom-2 fade-in duration-200",
+            isMobile && "max-h-[60dvh] overflow-y-auto"
+          )}>
             {MENU_ITEMS.map((item) => (
               <button
                 key={item.id}
                 onClick={() => handleOpen(item.id)}
                 className={cn(
-                  'flex items-center gap-2 px-3 py-2 rounded-lg',
+                  'flex items-center gap-2 px-3 py-2.5 rounded-lg min-h-[44px]',
                   'bg-card/90 backdrop-blur-md border border-border shadow-lg',
                   'text-sm text-foreground hover:bg-accent transition-colors',
                   'whitespace-nowrap'
                 )}
               >
-                <item.icon className="h-4 w-4 text-primary" />
+                <item.icon className="h-4 w-4 text-primary shrink-0" />
                 {item.label}
               </button>
             ))}
@@ -233,40 +239,52 @@ export default function GeminusPluginMenu({
         />
       )}
 
-      {/* Gunnar Chat — with FM Access context */}
+      {/* Gunnar Chat — fullscreen on mobile, floating panel on desktop */}
       {activePanel === 'gunnar' && (
-        <div className="fixed bottom-24 right-6 z-50 w-[380px] max-h-[70vh] bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
-          <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/50">
+        <div className={cn(
+          "fixed z-50 bg-card/95 backdrop-blur-md border border-border shadow-2xl flex flex-col overflow-hidden animate-in fade-in duration-200",
+          isMobile
+            ? "inset-0 slide-in-from-bottom-4"
+            : "bottom-24 right-6 w-[380px] max-h-[70vh] rounded-xl slide-in-from-bottom-4"
+        )}>
+          <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50 shrink-0">
             <span className="text-sm font-medium flex items-center gap-2">
               <Bot className="h-4 w-4 text-primary" />
               Gunnar
             </span>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleClose}>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClose}>
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <div className="flex-1 overflow-hidden" style={{ minHeight: 300 }}>
+          <div className="flex-1 overflow-hidden min-h-0">
             <GunnarChat open={true} onClose={handleClose} context={gunnarContext} embedded />
           </div>
         </div>
       )}
 
-      {/* Ilean — real document Q&A chat */}
+      {/* Ilean — fullscreen on mobile, floating panel on desktop */}
       {activePanel === 'ilean' && (
-        <div className="fixed bottom-24 right-6 z-50 w-[380px] max-h-[70vh] bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
-          <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/50">
+        <div className={cn(
+          "fixed z-50 bg-card/95 backdrop-blur-md border border-border shadow-2xl flex flex-col overflow-hidden animate-in fade-in duration-200",
+          isMobile
+            ? "inset-0 slide-in-from-bottom-4"
+            : "bottom-24 right-6 w-[380px] max-h-[70vh] rounded-xl slide-in-from-bottom-4"
+        )}>
+          <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50 shrink-0">
             <span className="text-sm font-medium flex items-center gap-2">
               <FileText className="h-4 w-4 text-primary" />
               Ilean — Dokument
             </span>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleClose}>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClose}>
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <IleanEmbeddedChat
-            buildingFmGuid={buildingFmGuid}
-            buildingName={buildingName}
-          />
+          <div className="flex-1 overflow-hidden min-h-0">
+            <IleanEmbeddedChat
+              buildingFmGuid={buildingFmGuid}
+              buildingName={buildingName}
+            />
+          </div>
         </div>
       )}
     </>
