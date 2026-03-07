@@ -1252,9 +1252,16 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       if (!entity) return;
       if (showMovedAssets) {
         entity.colorize = [1, 0.6, 0.1]; // Orange
+      } else {
+        // Explicitly reset color when toggle is off
+        entity.colorize = null;
       }
-      // If not showing moved, colors are reset by architect theme (no action needed)
     });
+
+    // Restore architect colors for non-modified entities when toggling off
+    if (!showMovedAssets && !showDeletedAssets && viewer) {
+      recolorArchitectObjects(viewer);
+    }
 
     // Apply deleted visualization
     deletedGuids.forEach(g => {

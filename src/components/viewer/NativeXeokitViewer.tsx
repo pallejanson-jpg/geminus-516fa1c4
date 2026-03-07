@@ -497,6 +497,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         setPhase('ready');
         (window as any).__nativeXeokitViewer = viewer;
         onViewerReady?.(viewer);
+        // Dispatch VIEWER_MODELS_LOADED for hooks like useObjectMoveMode
+        window.dispatchEvent(new CustomEvent('VIEWER_MODELS_LOADED', { detail: { buildingFmGuid } }));
         // Re-apply any pending insights color event that arrived before models loaded
         if (pendingInsightsColorRef.current) {
           const pending = pendingInsightsColorRef.current;
