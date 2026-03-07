@@ -254,12 +254,16 @@ div[class*="dx-context-menu"],
   padding: 4px 8px !important;
 }
 
-/* Hide Asset+ internal orange spinner to avoid duplicate loading indicators */
+/* Hide Asset+ internal orange spinner to avoid duplicate loading indicators.
+   NOTE: DevExtreme load panels can mount outside #AssetPlusViewer as body overlays. */
 #AssetPlusViewer .dx-loadindicator,
 #AssetPlusViewer .dx-loadpanel,
 #AssetPlusViewer .dx-loadpanel-content,
 #AssetPlusViewer .dx-loadpanel-wrapper,
-#AssetPlusViewer .dx-loadpanel-indicator {
+#AssetPlusViewer .dx-loadpanel-indicator,
+.dx-overlay-wrapper.dx-loadpanel-wrapper,
+.dx-overlay-content .dx-loadpanel-content,
+.dx-overlay-content .dx-loadindicator {
   display: none !important;
   visibility: hidden !important;
   opacity: 0 !important;

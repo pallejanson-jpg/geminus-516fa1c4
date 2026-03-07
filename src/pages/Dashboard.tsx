@@ -109,28 +109,28 @@ export default function Dashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-3">
-              <button className="flex items-center gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:bg-muted">
-                <Building2 className="h-5 w-5 text-primary" />
-                <div>
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+              <button className="flex min-h-[44px] min-w-0 flex-col items-start gap-1 rounded-lg border border-border p-3 text-left transition-colors hover:bg-muted sm:flex-row sm:items-center sm:gap-3">
+                <Building2 className="h-5 w-5 text-primary shrink-0" />
+                <div className="min-w-0">
                   <p className="text-sm font-medium">Add property</p>
                   <p className="text-xs text-muted-foreground">
                     Register a new property
                   </p>
                 </div>
               </button>
-              <button className="flex items-center gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:bg-muted">
-                <FileText className="h-5 w-5 text-primary" />
-                <div>
+              <button className="flex min-h-[44px] min-w-0 flex-col items-start gap-1 rounded-lg border border-border p-3 text-left transition-colors hover:bg-muted sm:flex-row sm:items-center sm:gap-3">
+                <FileText className="h-5 w-5 text-primary shrink-0" />
+                <div className="min-w-0">
                   <p className="text-sm font-medium">Upload document</p>
                   <p className="text-xs text-muted-foreground">
                     Add drawings or documents
                   </p>
                 </div>
               </button>
-              <button className="flex items-center gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:bg-muted">
-                <Users className="h-5 w-5 text-primary" />
-                <div>
+              <button className="flex min-h-[44px] min-w-0 flex-col items-start gap-1 rounded-lg border border-border p-3 text-left transition-colors hover:bg-muted sm:flex-row sm:items-center sm:gap-3">
+                <Users className="h-5 w-5 text-primary shrink-0" />
+                <div className="min-w-0">
                   <p className="text-sm font-medium">Invite user</p>
                   <p className="text-xs text-muted-foreground">
                     Add team members
