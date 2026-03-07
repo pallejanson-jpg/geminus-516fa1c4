@@ -1305,12 +1305,7 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
     case "senslinc_get_sites": return execSenslincGetSites(args);
     case "senslinc_search_data": return execSenslincSearchData(args);
     case "senslinc_get_indices": return execSenslincGetIndices();
-    // FM Access tools
-    case "fm_access_get_drawings": return execFmAccessGetDrawings(args);
-    case "fm_access_get_hierarchy": return execFmAccessGetHierarchy(args);
-    case "fm_access_search_objects": return execFmAccessSearchObjects(args);
-    case "fm_access_get_floors": return execFmAccessGetFloors(args);
-    // FM Access local search
+    // FM Access local search (replaces phantom fm_access_get_* tools)
     case "search_fm_access_local": return execSearchFmAccessLocal(supabase, args);
     // Document content Q&A
     case "ask_about_documents": return execAskAboutDocuments(supabase, args, apiKey!);
