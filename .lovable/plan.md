@@ -1,80 +1,66 @@
 
 
-## Plan: System Support + Reconciliation Engine (IMPLEMENTED)
+## Plan: Faciliate REST API Integration + GeminusPluginMenu Fix
 
-### Database tables created
-1. **`asset_external_ids`** — Maps external IDs (IFC GUID, ACC externalId, Revit UniqueId) to stable `fm_guid` for cross-source reconciliation
-2. **`systems`** — Technical systems (e.g., LB01 Supply Air) with `fm_guid`, `discipline`, `system_type`, `building_fm_guid`, hierarchical `parent_system_id`
-3. **`asset_system`** — Many-to-many relation between assets and systems with optional `role`
-4. **`asset_connections`** — Topology/flow between assets (`from_fm_guid` → `to_fm_guid`) with `connection_type` and `direction`
+### Context from Uploaded Documents
 
-All tables have RLS: authenticated read, admin write. Indexes on common query patterns.
+The Faciliate API (by Service Works Global / SWG) is a REST API with:
+- **Auth**: JWT login via `POST /api/v2/login` (username + password → JWT token)
+- **CRUD**: `GET /api/v2/<object>` (read with filter/sort/take/skip), `PUT /api/v2/<object>/<guid>` (update), `POST /api/v2/<object>` (create)
+- **Swagger**: Available at `GET /api/v2/system/swagger` for discovering available objects
+- **Filtering**: Supports simple (`ID eq "1234"`) and advanced JSON-based filtering with AND/OR/IN operators
+- **Load levels**: `guid`, `basic`, `simple`, `fullprimary`, `loadmax`
 
-### Edge function changes
-1. **`ifc-to-xkt/index.ts`** — Extended with system extraction:
-   - Identifies `IfcSystem` / `IfcDistributionSystem` meta objects
-   - Falls back to `SystemName` property grouping
-   - Extracts `IfcRelConnects*` for topology → `asset_connections`
-   - Stores all object IDs in `asset_external_ids`
-   - Persists systems, asset-system links, and connections in batches
+SWG secrets (`SWG_SUPPORT_URL`, `SWG_SUPPORT_USERNAME`, `SWG_SUPPORT_PASSWORD`) are already configured — the existing `support-proxy` edge function already authenticates against this same SWG platform for support cases.
 
-2. **`acc-sync/index.ts`** — Extended with system support:
-   - Resolves `System Name`, `System Type`, `System Classification`, `System Abbreviation` property fields
-   - Groups instances by `SystemName` → auto-creates `systems` + `asset_system` rows
-   - Stores ACC `externalId` mappings in `asset_external_ids` for all levels, rooms, instances
-   - Infers discipline from system name (Ventilation, Heating, Cooling, Electrical, Plumbing, FireProtection)
+### Part 1: Fix GeminusPluginMenu Not Showing in FMA+
 
-### System activation for existing buildings
-- **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
-- **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
-- **Asset+-byggnader**: Kör `sync-systems` action via `asset-plus-sync` edge function → extraherar system från befintliga attribut (IMPLEMENTERAT)
+**File:** `src/components/viewer/FmaInternalView.tsx`
+- Line 112: Change condition from `{!isLoading && !loadError && buildingFmGuid && (` to `{!isLoading && !loadError && (`
+- The plugin menu already handles undefined `buildingFmGuid` gracefully
+- Ensure FAB z-index (z-40) sits above the iframe
 
-### Frontend (future phase)
-- System tab on FacilityLandingPage
-- System badge on asset property dialogs
-- Manual system creation dialog
+### Part 2: Faciliate API Proxy Edge Function
 
----
+Create `supabase/functions/faciliate-proxy/index.ts` — a general-purpose proxy to the Faciliate REST API, reusing the SWG credentials already configured.
 
-## Plan: Viewer Color Fix (IMPLEMENTED)
+**Actions:**
+- `login` — Authenticate and cache JWT
+- `list` — `GET /api/v2/<object>?take=&skip=&filter=&sort=&loadlevel=`
+- `get` — `GET /api/v2/<object>/<guid>`
+- `create` — `POST /api/v2/<object>`
+- `update` — `PUT /api/v2/<object>/<guid>`
+- `swagger` — `GET /api/v2/system/swagger` (discover available objects)
 
-### Changes made:
-1. **Window color** — Changed from blue-gray `[0.392, 0.490, 0.541]` (#647D8A) to neutral warm gray `[0.780, 0.780, 0.760]` (#C7C7C2) in:
-   - `src/lib/architect-colors.ts`
-   - `src/hooks/useArchitectViewMode.ts`
-   - Database `viewer_themes` table (both "Arkitektvy" and "Standard" themes)
-   - `ViewerFilterPanel.tsx` category palette
+Uses the same `SWG_SUPPORT_URL` / `SWG_SUPPORT_USERNAME` / `SWG_SUPPORT_PASSWORD` secrets. Auth pattern mirrors `support-proxy` (JWT caching, auto-login on 401).
 
-2. **Space color** — Verified as correct neutral gray `[0.898, 0.894, 0.890]` (#E5E4E3). Changed category palette in ViewerFilterPanel from blue to neutral.
+### Part 3: Faciliate Data in Geminus
 
-3. **Background** — Already correct gray gradient in NativeViewerShell.
+Once the proxy exists, Faciliate data (work orders, buildings, customers, spaces) becomes available to:
 
-4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
+1. **Gunnar AI** — Add a `query_faciliate` tool in `gunnar-chat/index.ts` so Gunnar can search work orders, buildings, and other Faciliate objects via natural language
+2. **Sidebar integration** — A new "Faciliate" section or option under existing views to browse Faciliate objects within Geminus
+3. **Plugin route** — The `/plugin` route already works for external embedding; Faciliate's PC app can open this URL in an embedded browser (CEF) with context parameters
 
-5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
+### Part 4: Plugin URL for Publishing
 
----
+No code changes needed. The published URL for external embedding:
 
-## Plan: IFC System-Only Import (IMPLEMENTED - Phase 1)
+```
+https://gemini-spark-glow.lovable.app/plugin?building=<GUID>&floor=<GUID>&room=<GUID>&source=faciliate
+```
 
-### What was built
-1. **`ifc-extract-systems` edge function** — New lightweight edge function that:
-   - Downloads IFC from `ifc-uploads` bucket
-   - Parses metadata via `web-ifc` + `xeokit-convert` (same pipeline as `ifc-to-xkt`)
-   - Extracts systems (`IfcSystem`, `IfcDistributionSystem`, `SystemName` property grouping)
-   - Extracts connections (`IfcRelConnects*`)
-   - Reconciles IFC GUIDs with existing assets (3-step: exact match → name match → identity)
-   - Persists to `systems`, `asset_system`, `asset_connections`, `asset_external_ids`
-   - **Skips XKT generation** — much faster (~10-15s vs minutes)
-   - Supports 3 modes: `systems-only` (default), `enrich-guids` (future), `full` (delegates to `ifc-to-xkt`)
+### Files Modified/Created
 
-2. **UI in ApiSettingsModal** — "From IFC" button on the Technical Systems card:
-   - Building selector dropdown
-   - IFC file upload
-   - Mode radio: "Only systems (fast)" / "Systems + FMGUIDs (coming soon)" / "Full conversion"
-   - Progress tracking and result display
+| File | Action |
+|------|--------|
+| `src/components/viewer/FmaInternalView.tsx` | Fix: remove `buildingFmGuid` condition for plugin menu |
+| `supabase/functions/faciliate-proxy/index.ts` | New: general Faciliate REST API proxy |
+| `supabase/config.toml` | Add faciliate-proxy function config |
+| `supabase/functions/gunnar-chat/index.ts` | Add `query_faciliate` tool definition + execution |
+| `docs/api/README.md` | Add Faciliate to integrated systems table |
 
-### Still to implement
-- **`enrich-guids` mode** — FMGUID generation + IFC write-back via `web-ifc` property injection
-- **IFC archive** — Store enriched IFC in `ifc-uploads/{buildingFmGuid}/enriched/`
-- **ACC `enrich-guids` action** — Deterministic GUID generation for ACC-sourced models
+### Secrets
+
+No new secrets needed — reuses existing `SWG_SUPPORT_URL`, `SWG_SUPPORT_USERNAME`, `SWG_SUPPORT_PASSWORD`.
+
