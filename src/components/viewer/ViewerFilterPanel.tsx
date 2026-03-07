@@ -138,6 +138,12 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   const [annotationsOpen, setAnnotationsOpen] = useState(false);
   const [checkedAnnotations, setCheckedAnnotations] = useState<Set<string>>(new Set());
   const [annotationCategories, setAnnotationCategories] = useState<Array<{ category: string; count: number; color: string }>>([]);
+
+  // Modification filter state
+  const [modificationsOpen, setModificationsOpen] = useState(false);
+  const [showMovedAssets, setShowMovedAssets] = useState(false);
+  const [showDeletedAssets, setShowDeletedAssets] = useState(false);
+  const [modifiedAssets, setModifiedAssets] = useState<Array<{ fm_guid: string; modification_status: string }>>([]);
   // Cache: level fmGuid → xeokit entity IDs (built once when viewer ready)
   const entityMapRef = useRef<Map<string, string[]>>(new Map());
   const entityMapBuilt = useRef(false);
