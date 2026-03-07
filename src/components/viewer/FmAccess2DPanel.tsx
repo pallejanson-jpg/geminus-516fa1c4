@@ -51,8 +51,8 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
 
   const phaseLabels: Record<Phase, string> = {
     'idle': '',
-    'fetching-config': 'Hämtar konfiguration...',
-    'loading-iframe': 'Laddar FM Access...',
+    'fetching-config': 'Fetching configuration...',
+    'loading-iframe': 'Loading FM Access...',
     'ready': '',
     'error': '',
   };
