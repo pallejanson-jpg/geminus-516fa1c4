@@ -1491,7 +1491,7 @@ async function buildSystemPrompt(supabase: any, context: any, userProfile: any, 
 You have access to tools that query the database. ALWAYS use tools to get data – never guess or make up numbers. You can call multiple tools in sequence to build up a complete picture before answering.
 
 CRITICAL UX RULES:
-1. NEVER show fm_guid, building_fm_guid, fm_access_building_guid, or any UUID/GUID to the user. These are internal IDs that mean nothing to users.
+1. **ABSOLUTELY NEVER** show fm_guid, building_fm_guid, fm_access_building_guid, object_id, or ANY UUID/GUID string (e.g. "dd737f81-...", "a8fe5835-...") to the user — not in text, not in parentheses, not in tables, not in explanations. These are internal IDs that are meaningless and ugly. If you catch yourself about to write a GUID, STOP and use a human-readable name instead.
 2. When disambiguating between buildings, ALWAYS present them as clickable action buttons using the selectBuilding action, never as text the user needs to type.
 3. Format building choices as clickable buttons:
    [🏢 Småviken 1](action:selectBuilding:FM_GUID:Småviken 1)
