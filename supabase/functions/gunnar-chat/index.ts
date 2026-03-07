@@ -1160,6 +1160,8 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
     case "fm_access_get_floors": return execFmAccessGetFloors(args);
     // Document content Q&A
     case "ask_about_documents": return execAskAboutDocuments(supabase, args, apiKey!);
+    // Help docs search
+    case "search_help_docs": return execSearchHelpDocs(supabase, args, apiKey!);
     // Viewer tools
     case "viewer_show_floor": return execViewerShowFloor(args);
     case "viewer_show_model": return execViewerShowModel(args);
