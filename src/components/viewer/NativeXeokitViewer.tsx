@@ -63,19 +63,44 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
     const t0 = performance.now();
 
     try {
-      // 1. Load xeokit SDK
+      // 1. Load SDK + fetch model metadata in PARALLEL
       setPhase('loading_sdk');
-      console.log('[NativeViewer] Loading xeokit SDK...');
-      const sdkResponse = await fetch(XEOKIT_CDN);
-      const sdkText = await sdkResponse.text();
-      const sdkBlob = new Blob([sdkText], { type: 'application/javascript' });
-      const sdkBlobUrl = URL.createObjectURL(sdkBlob);
-      const sdk = await import(/* @vite-ignore */ sdkBlobUrl);
-      URL.revokeObjectURL(sdkBlobUrl);
-      if (!mountedRef.current) return;
-      console.log(`[NativeViewer] SDK loaded in ${Math.round(performance.now() - t0)}ms`);
+      console.log('[NativeViewer] Loading SDK + metadata in parallel...');
 
-      // 2. Create viewer
+      const sdkPromise = (async () => {
+        const sdkResponse = await fetch(XEOKIT_CDN);
+        const sdkText = await sdkResponse.text();
+        const sdkBlob = new Blob([sdkText], { type: 'application/javascript' });
+        const sdkBlobUrl = URL.createObjectURL(sdkBlob);
+        const sdk = await import(/* @vite-ignore */ sdkBlobUrl);
+        URL.revokeObjectURL(sdkBlobUrl);
+        return sdk;
+      })();
+
+      const dbPromise = supabase
+        .from('xkt_models')
+        .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at')
+        .eq('building_fm_guid', buildingFmGuid)
+        .order('file_size', { ascending: true });
+
+      const storagePromise = supabase.storage
+        .from('xkt-models')
+        .list(buildingFmGuid, { limit: 1000, sortBy: { column: 'name', order: 'asc' } });
+
+      const storeyPromise = supabase
+        .from('assets')
+        .select('attributes')
+        .eq('building_fm_guid', buildingFmGuid)
+        .eq('category', 'Building Storey');
+
+      const [sdk, dbResult, storageResult, storeyResult] = await Promise.all([
+        sdkPromise, dbPromise, storagePromise, storeyPromise,
+      ]);
+
+      if (!mountedRef.current) return;
+      console.log(`[NativeViewer] SDK + metadata loaded in ${Math.round(performance.now() - t0)}ms`);
+
+      // 2. Create viewer immediately
       setPhase('creating_viewer');
       const viewer = new sdk.Viewer({
         canvasElement: canvasRef.current,
