@@ -654,6 +654,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         camera.projection = 'perspective';
         viewer.cameraFlight.flyTo({ eye: [lookX - offset, lookY + offset, lookZ - offset], look: [lookX, lookY, lookZ], up: [0, 1, 0], duration: 0.5 });
       }
+
+      // Restore default background when leaving 2D
+      window.dispatchEvent(new CustomEvent(ARCHITECT_BACKGROUND_CHANGED_EVENT, { detail: { presetId: 'light-gray' } }));
     }
   }, [viewer, currentFloorId, currentFloorBounds, calculateFloorBounds, applyFloorPlanClipping, applyGlobalFloorPlanClipping, applyCeilingClipping, removeSectionPlane]);
 
