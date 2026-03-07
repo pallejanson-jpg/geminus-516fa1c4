@@ -799,6 +799,24 @@ function MobileUnifiedViewer({
     isDraggingRef.current = false;
   }, []);
 
+  // Dispatch 2D mode events when switching to 2D on mobile
+  useEffect(() => {
+    if (viewMode === '2d' && viewerReady) {
+      const dispatch2D = () => {
+        window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '2d' } }));
+      };
+      const t1 = setTimeout(dispatch2D, 800);
+      const t2 = setTimeout(dispatch2D, 2000);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
+    } else if (viewMode === '3d' && viewerReady) {
+      const dispatch3D = () => {
+        window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
+      };
+      const t = setTimeout(dispatch3D, 500);
+      return () => clearTimeout(t);
+    }
+  }, [viewMode, viewerReady]);
+
   return (
     <div ref={containerRef} className="fixed inset-0 bg-black z-40 overflow-hidden flex flex-col"
       onTouchMove={isSplit ? handleTouchMove : undefined}
