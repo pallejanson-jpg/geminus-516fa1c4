@@ -445,11 +445,11 @@ const UnifiedViewerContent: React.FC<{
   const viewerContainerStyle: React.CSSProperties = isSplit2D3D ? {
     position: 'absolute',
     top: 0,
-    left: 0,
+    right: 0,
     height: '100%',
-    display: needs3D ? 'flex' : 'none',
+    display: 'flex',
     flexDirection: 'column',
-    width: '100%',
+    width: '60%',
     zIndex: 5,
     pointerEvents: 'auto',
   } : {
