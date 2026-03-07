@@ -1028,7 +1028,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                           onValueChange={handleRoomLabelConfigSelect}
                         >
                           <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Av" />
+                            <SelectValue placeholder="Off" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="off">Av</SelectItem>
