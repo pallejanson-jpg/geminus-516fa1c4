@@ -477,7 +477,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
       setPendingViewState(null);
     } catch (err) {
       console.error('Failed to save view:', err);
-      toast({ title: "Fel", description: "Kunde inte spara vyn", variant: "destructive" });
+      toast({ title: "Error", description: "Could not save view", variant: "destructive" });
       throw err;
     } finally {
       setIsSavingView(false);
