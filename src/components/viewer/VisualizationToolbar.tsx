@@ -863,7 +863,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                         >
                           <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </div>
-                        <span className="text-xs sm:text-sm">Visa rum</span>
+                        <span className="text-xs sm:text-sm">Show spaces</span>
                       </div>
                       <Switch checked={showSpaces} onCheckedChange={handleToggleSpaces} />
                     </div>
