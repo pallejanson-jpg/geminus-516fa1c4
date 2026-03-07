@@ -130,7 +130,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
         }
       }
     }
-    toast.success('Flytt ångrad');
+    toast.success('Move undone');
   }, [viewer]);
 
   const undoDelete = useCallback(async (fmGuid: string) => {
