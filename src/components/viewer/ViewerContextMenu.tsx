@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Type, MessageSquarePlus, MessageSquare, Tags, Scan, EyeOff, Eye, ZoomIn, Info } from 'lucide-react';
+import { Type, MessageSquarePlus, MessageSquare, Tags, Scan, EyeOff, Eye, ZoomIn, Info, Move, Trash2, MousePointer } from 'lucide-react';
 
 interface ViewerContextMenuProps {
   position: { x: number; y: number };
