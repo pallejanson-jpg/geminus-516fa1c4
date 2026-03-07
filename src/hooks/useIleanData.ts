@@ -155,6 +155,8 @@ export function useIleanData() {
     setContextLevel('room');
   };
 
+  const isContextAvailable = !!(contextFmGuid && entityInfo.pk);
+
   return {
     messages,
     sendMessage,
@@ -165,5 +167,6 @@ export function useIleanData() {
     contextLevel,
     contextFmGuid,
     setRoomContext,
+    isContextAvailable,
   };
 }

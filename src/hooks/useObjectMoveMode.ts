@@ -9,9 +9,11 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { normalizeGuid } from '@/lib/utils';
 
 export const OBJECT_MOVE_MODE_EVENT = 'OBJECT_MOVE_MODE';
 export const OBJECT_DELETE_EVENT = 'OBJECT_DELETE';
+export const VIEWER_MODELS_LOADED_EVENT = 'VIEWER_MODELS_LOADED';
 
 interface MoveState {
   entityId: string;
@@ -38,7 +40,6 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
     if (!modified || modified.length === 0) return;
 
     const metaObjects = viewer.metaScene?.metaObjects || {};
-    const normalizeGuid = (g: string) => (g || '').toLowerCase().replace(/-/g, '');
 
     // Build lookup: normalizedGuid → entity ID
     const guidToEntityId = new Map<string, string>();
@@ -76,13 +77,92 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
     }
   }, [viewer, buildingFmGuid]);
 
-  // Apply on viewer ready
+  // Apply on VIEWER_MODELS_LOADED event instead of hardcoded delay
   useEffect(() => {
     if (!viewer?.scene) return;
-    // Small delay to let models finish loading
-    const timer = setTimeout(applyModifications, 2000);
-    return () => clearTimeout(timer);
-  }, [viewer, applyModifications]);
+
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.buildingFmGuid === buildingFmGuid) {
+        applyModifications();
+      }
+    };
+
+    window.addEventListener(VIEWER_MODELS_LOADED_EVENT, handler);
+
+    // Fallback: also apply if models are already loaded (viewer is ready)
+    if (viewer.scene.numObjects > 0) {
+      applyModifications();
+    }
+
+    return () => window.removeEventListener(VIEWER_MODELS_LOADED_EVENT, handler);
+  }, [viewer, applyModifications, buildingFmGuid]);
+
+  // ── Undo helpers ─────────────────────────────────────────────────────
+  const undoMove = useCallback(async (fmGuid: string, originalOffset: [number, number, number], originalRoom: string | null) => {
+    // Restore in DB
+    const { error } = await supabase
+      .from('assets')
+      .update({
+        modification_status: null,
+        moved_offset_x: null,
+        moved_offset_y: null,
+        moved_offset_z: null,
+        in_room_fm_guid: originalRoom,
+        original_room_fm_guid: null,
+        modification_date: null,
+      })
+      .eq('fm_guid', fmGuid);
+
+    if (error) {
+      toast.error('Kunde inte ångra flytten');
+      return;
+    }
+
+    // Restore in viewer
+    if (viewer?.scene?.metaScene?.metaObjects) {
+      const metaObjects = viewer.metaScene.metaObjects;
+      for (const mo of Object.values(metaObjects) as any[]) {
+        if (normalizeGuid(mo.originalSystemId || mo.id) === normalizeGuid(fmGuid)) {
+          const entity = viewer.scene.objects?.[mo.id];
+          if (entity) entity.offset = originalOffset;
+          break;
+        }
+      }
+    }
+    toast.success('Flytt ångrad');
+  }, [viewer]);
+
+  const undoDelete = useCallback(async (fmGuid: string) => {
+    const { error } = await supabase
+      .from('assets')
+      .update({
+        modification_status: null,
+        modification_date: null,
+      })
+      .eq('fm_guid', fmGuid);
+
+    if (error) {
+      toast.error('Kunde inte ångra raderingen');
+      return;
+    }
+
+    // Restore visibility in viewer
+    if (viewer?.scene?.metaScene?.metaObjects) {
+      const metaObjects = viewer.metaScene.metaObjects;
+      for (const mo of Object.values(metaObjects) as any[]) {
+        if (normalizeGuid(mo.originalSystemId || mo.id) === normalizeGuid(fmGuid)) {
+          const entity = viewer.scene.objects?.[mo.id];
+          if (entity) {
+            entity.visible = true;
+            entity.pickable = true;
+          }
+          break;
+        }
+      }
+    }
+    toast.success('Radering ångrad');
+  }, [viewer]);
 
   // ── Detect room at position ──────────────────────────────────────────
   const detectRoomAtPosition = useCallback((worldPos: [number, number, number]): { fmGuid: string; name: string } | null => {
@@ -96,7 +176,6 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
 
       const [x, y, z] = worldPos;
       const aabb = entity.aabb;
-      // Check if position is within the AABB (with some tolerance)
       if (x >= aabb[0] - 0.5 && x <= aabb[3] + 0.5 &&
           y >= aabb[1] - 0.5 && y <= aabb[4] + 0.5 &&
           z >= aabb[2] - 0.5 && z <= aabb[5] + 0.5) {
@@ -149,7 +228,6 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
         ev.preventDefault();
         ev.stopPropagation();
 
-        // Pick surface position for start reference
         const pick = viewer.scene.pick({
           canvasPos: [ev.offsetX, ev.offsetY],
           pickSurface: true,
@@ -167,7 +245,6 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
         if (!activeRef.current || !moveStateRef.current || !lastPickPos) return;
         ev.preventDefault();
 
-        // Pick new surface position
         const pick = viewer.scene.pick({
           canvasPos: [ev.offsetX, ev.offsetY],
           pickSurface: true,
@@ -175,7 +252,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
 
         if (pick?.worldPos) {
           const dx = pick.worldPos[0] - lastPickPos[0];
-          const dy = 0; // Keep Y (height) constant
+          const dy = 0;
           const dz = pick.worldPos[2] - lastPickPos[2];
 
           if (Math.abs(dx) > 0.001 || Math.abs(dz) > 0.001) {
@@ -195,14 +272,11 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
         if (!activeRef.current || !moveStateRef.current) return;
         ev.preventDefault();
 
-        // Re-enable camera
         if (viewer.cameraControl) {
           viewer.cameraControl.pointerEnabled = true;
         }
 
         if (!hasMoved) {
-          // Click without move = place at current position
-          // If no movement at all, cancel
           const totalOffset = entity.offset || [0, 0, 0];
           const totalDist = Math.sqrt(
             Math.pow(totalOffset[0] - moveStateRef.current.originalOffset[0], 2) +
@@ -211,7 +285,6 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
           );
 
           if (totalDist < 0.01) {
-            // No real movement, cancel
             entity.offset = moveStateRef.current.originalOffset;
             toast.info('Flytt avbruten');
             cleanup();
@@ -219,8 +292,9 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
           }
         }
 
-        // Save the move
         const finalOffset = entity.offset || [0, 0, 0];
+        const savedOriginalOffset = [...moveStateRef.current.originalOffset] as [number, number, number];
+        const savedFmGuid = moveStateRef.current.fmGuid;
 
         // Detect new room
         const entityCenter = entity.aabb ? [
@@ -231,16 +305,14 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
 
         const newRoom = detectRoomAtPosition(entityCenter);
 
-        // Get current room before update
         const { data: currentAsset } = await supabase
           .from('assets')
           .select('in_room_fm_guid')
-          .eq('fm_guid', moveStateRef.current.fmGuid)
+          .eq('fm_guid', savedFmGuid)
           .maybeSingle();
 
         const originalRoom = currentAsset?.in_room_fm_guid || null;
 
-        // Persist to DB
         const { error } = await supabase
           .from('assets')
           .update({
@@ -252,15 +324,20 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
             in_room_fm_guid: newRoom?.fmGuid || originalRoom,
             modification_date: new Date().toISOString(),
           })
-          .eq('fm_guid', moveStateRef.current.fmGuid);
+          .eq('fm_guid', savedFmGuid);
 
         if (error) {
           console.error('[ObjectMove] Save failed:', error);
           toast.error('Kunde inte spara flytten');
-          entity.offset = moveStateRef.current.originalOffset;
+          entity.offset = savedOriginalOffset;
         } else {
           const roomMsg = newRoom ? ` → ${newRoom.name}` : '';
-          toast.success(`Objekt flyttat${roomMsg}`);
+          toast.success(`Objekt flyttat${roomMsg}`, {
+            action: {
+              label: 'Ångra',
+              onClick: () => undoMove(savedFmGuid, savedOriginalOffset, originalRoom),
+            },
+          });
         }
 
         cleanup();
@@ -297,9 +374,12 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
       const { entityId, fmGuid } = e.detail || {};
       if (!entityId || !fmGuid || !viewer?.scene) return;
 
+      // Confirmation dialog
+      const confirmed = window.confirm('Vill du markera detta objekt som borttaget? Ändringen kan ångras.');
+      if (!confirmed) return;
+
       const entity = viewer.scene.objects?.[entityId];
 
-      // Mark as deleted in DB
       const { error } = await supabase
         .from('assets')
         .update({
@@ -314,13 +394,17 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
         return;
       }
 
-      // Hide in viewer
       if (entity) {
         entity.visible = false;
         entity.pickable = false;
       }
 
-      toast.success('Objekt markerat som borttaget');
+      toast.success('Objekt markerat som borttaget', {
+        action: {
+          label: 'Ångra',
+          onClick: () => undoDelete(fmGuid),
+        },
+      });
     };
 
     window.addEventListener(OBJECT_MOVE_MODE_EVENT, handleMoveEvent as EventListener);
@@ -330,7 +414,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
       window.removeEventListener(OBJECT_MOVE_MODE_EVENT, handleMoveEvent as EventListener);
       window.removeEventListener(OBJECT_DELETE_EVENT, handleDeleteEvent as EventListener);
     };
-  }, [viewer, buildingFmGuid, detectRoomAtPosition]);
+  }, [viewer, buildingFmGuid, detectRoomAtPosition, undoMove, undoDelete]);
 
   return { applyModifications };
 }

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { FileQuestion, GripHorizontal, X, Minimize2, Maximize2, Move, Loader2, ExternalLink, Building2, Layers, DoorOpen, Send, Trash2 } from 'lucide-react';
+import { FileQuestion, GripHorizontal, X, Minimize2, Maximize2, Move, Loader2, ExternalLink, Building2, Layers, DoorOpen, Send, Trash2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { getIleanSettings, saveIleanSettings } from '@/components/settings/IleanSettings';
 import { useIleanData } from '@/hooks/useIleanData';
@@ -18,14 +19,21 @@ const STARTER_QUESTIONS = [
   'Vilken utrustning är dokumenterad?',
 ];
 
+const ContextIcon = ({ type }: { type: string | null }) => {
+  if (type === 'building') return <Building2 className="h-3.5 w-3.5" />;
+  if (type === 'floor') return <Layers className="h-3.5 w-3.5" />;
+  if (type === 'room') return <DoorOpen className="h-3.5 w-3.5" />;
+  return <Building2 className="h-3.5 w-3.5 opacity-40" />;
+};
+
 /**
  * Floating Ilean AI assistant — Document Q&A chat via Senslinc API.
- * Native Geminus UI, no iframe. Similar pattern to GunnarChat.
+ * Native Geminus UI. Similar pattern to GunnarChat.
  */
 export default function IleanButton() {
   const {
     messages, sendMessage, clearMessages, isLoading, isSending,
-    contextEntity, contextLevel,
+    contextEntity, contextLevel, isContextAvailable,
   } = useIleanData();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -218,7 +226,7 @@ export default function IleanButton() {
               )}
             </div>
           </TooltipTrigger>
-          <TooltipContent side="right" className="font-medium">Open Ilean (drag to move)</TooltipContent>
+          <TooltipContent side="right" className="font-medium">Öppna Ilean (dra för att flytta)</TooltipContent>
         </Tooltip>
       </div>
 
@@ -243,73 +251,75 @@ export default function IleanButton() {
           ref={panelRef}
           className={cn(
             "fixed z-[60] flex flex-col",
-            "border rounded-lg shadow-xl",
-            "bg-card/70 backdrop-blur-lg",
+            "border rounded-xl shadow-2xl overflow-hidden",
+            "bg-card/80 backdrop-blur-xl",
             isDragging && "cursor-grabbing select-none"
           )}
           style={isMobile ? { inset: 0, width: '100%', height: '100%', borderRadius: 0 } : { left: position.x, top: position.y, width: panelWidth, height: panelHeight }}
         >
-          {/* Header */}
+          {/* Header — glassy gradient */}
           <div
             className={cn(
-              "flex items-center justify-between px-3 py-2",
-              "border-b border-border/50",
-              !isMobile && "rounded-t-lg cursor-grab",
-              "bg-gradient-to-r from-cyan-500/10 to-teal-500/10",
+              "flex items-center justify-between px-4 py-2.5",
+              "border-b border-border/30",
+              !isMobile && "cursor-grab",
+              "bg-gradient-to-r from-cyan-500/15 via-teal-500/10 to-transparent",
               isDragging && "cursor-grabbing"
             )}
             onMouseDown={isMobile ? undefined : handleDragStart}
             onTouchStart={isMobile ? undefined : handleDragStart}
           >
-            <div className="flex items-center gap-2">
-              {!isMobile && <GripHorizontal className="h-4 w-4 text-muted-foreground" />}
-              <div className="flex items-center gap-1.5">
-                <FileQuestion className="h-4 w-4 text-cyan-500" />
-                <span className="font-medium text-sm">Ilean</span>
-                <span className="text-[10px] text-muted-foreground">Document Q&A</span>
+            <div className="flex items-center gap-2.5">
+              {!isMobile && <GripHorizontal className="h-4 w-4 text-muted-foreground/50" />}
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center shadow-sm">
+                  <FileQuestion className="h-4 w-4 text-white" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-semibold text-sm leading-tight">Ilean</span>
+                  <span className="text-[10px] text-muted-foreground leading-tight">Dokument-AI</span>
+                </div>
               </div>
-              {contextEntity.entityName && (
-                <span className="text-xs text-muted-foreground flex items-center gap-1 ml-1">
-                  {contextEntity.entityType === 'building' && <Building2 className="h-3 w-3" />}
-                  {contextEntity.entityType === 'floor' && <Layers className="h-3 w-3" />}
-                  {contextEntity.entityType === 'room' && <DoorOpen className="h-3 w-3" />}
-                  <span className="max-w-24 truncate">{contextEntity.entityName}</span>
-                </span>
-              )}
             </div>
-            <div className="flex items-center gap-1">
+
+            {/* Context badge */}
+            <div className="flex items-center gap-1.5">
+              {contextEntity.entityName ? (
+                <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted/60 text-xs text-muted-foreground">
+                  <ContextIcon type={contextEntity.entityType} />
+                  <span className="max-w-28 truncate">{contextEntity.entityName}</span>
+                </div>
+              ) : isLoading ? (
+                <Skeleton className="h-5 w-20 rounded-full" />
+              ) : null}
+
               {contextEntity.dashboardUrl && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-muted/50" onClick={handleOpenExternal}>
-                      <ExternalLink className="h-4 w-4" />
+                      <ExternalLink className="h-3.5 w-3.5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="text-xs">Open in Senslinc</TooltipContent>
+                  <TooltipContent side="bottom" className="text-xs">Öppna i Senslinc</TooltipContent>
                 </Tooltip>
               )}
               {messages.length > 0 && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-muted/50" onClick={clearMessages}>
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="text-xs">Clear conversation</TooltipContent>
+                  <TooltipContent side="bottom" className="text-xs">Rensa konversation</TooltipContent>
                 </Tooltip>
               )}
               {!isMobile && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-muted/50" onClick={() => setIsMinimized(true)}>
-                      <Minimize2 className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="text-xs">Minimize</TooltipContent>
-                </Tooltip>
+                <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-muted/50" onClick={() => setIsMinimized(true)}>
+                  <Minimize2 className="h-3.5 w-3.5" />
+                </Button>
               )}
               <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-muted/50" onClick={() => setIsOpen(false)}>
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5" />
               </Button>
             </div>
           </div>
@@ -319,19 +329,27 @@ export default function IleanButton() {
             <div className="space-y-3">
               {messages.length === 0 && !isLoading && (
                 <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-                  <FileQuestion className="h-12 w-12 text-muted-foreground/40 mb-3" />
-                   <h3 className="font-semibold text-sm mb-1">Fråga Ilean om dokument</h3>
-                   <p className="text-xs text-muted-foreground mb-4 max-w-xs">
-                     Ilean svarar på frågor om dokument i Senslinc för{' '}
-                     {contextEntity.entityName || 'denna byggnad'}.
-                   </p>
+                  <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-teal-600/20 flex items-center justify-center mb-3">
+                    <FileQuestion className="h-7 w-7 text-cyan-500/60" />
+                  </div>
+                  <h3 className="font-semibold text-sm mb-1">Fråga Ilean om dokument</h3>
+                  <p className="text-xs text-muted-foreground mb-4 max-w-xs">
+                    Ilean svarar på frågor om dokument i Senslinc för{' '}
+                    {contextEntity.entityName || 'denna byggnad'}.
+                  </p>
+                  {!isContextAvailable && (
+                    <div className="flex items-center gap-1.5 text-xs text-amber-500/80 mb-3 px-3 py-1.5 rounded-lg bg-amber-500/10">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                      <span>Ingen Senslinc-koppling hittad för denna kontext</span>
+                    </div>
+                  )}
                   <div className="flex flex-col gap-2 w-full max-w-xs">
                     {STARTER_QUESTIONS.map((q, i) => (
                       <Button
                         key={i}
                         variant="outline"
                         size="sm"
-                        className="text-xs justify-start h-auto py-2 px-3 text-left whitespace-normal"
+                        className="text-xs justify-start h-auto py-2 px-3 text-left whitespace-normal hover:bg-cyan-500/5 hover:border-cyan-500/30 transition-colors"
                         onClick={() => sendMessage(q)}
                       >
                         {q}
@@ -344,10 +362,10 @@ export default function IleanButton() {
               {messages.map((msg, i) => (
                 <div key={i} className={cn("flex", msg.role === 'user' ? "justify-end" : "justify-start")}>
                   <div className={cn(
-                    "max-w-[85%] rounded-lg px-3 py-2 text-sm",
+                    "max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm",
                     msg.role === 'user'
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
+                      ? "bg-gradient-to-br from-cyan-500 to-teal-600 text-white shadow-sm"
+                      : "bg-muted/70 border border-border/30"
                   )}>
                     {msg.role === 'assistant' ? (
                       <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1">
@@ -362,17 +380,17 @@ export default function IleanButton() {
 
               {isSending && messages[messages.length - 1]?.role === 'user' && (
                 <div className="flex justify-start">
-                  <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Searching documents...</span>
+                  <div className="flex items-center gap-2.5 rounded-xl bg-muted/70 border border-border/30 px-3.5 py-2.5 text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin text-cyan-500" />
+                    <span className="text-muted-foreground">Söker i dokument...</span>
                   </div>
                 </div>
               )}
             </div>
           </ScrollArea>
 
-          {/* Input area */}
-          <div className="border-t border-border/50 p-3">
+          {/* Input area — sticky at bottom */}
+          <div className="border-t border-border/30 p-3 bg-card/50 backdrop-blur-sm">
             <div className="flex items-center gap-2">
               <Input
                 ref={inputRef}
@@ -381,13 +399,13 @@ export default function IleanButton() {
                 onKeyDown={handleKeyDown}
                 placeholder="Fråga om dokument..."
                 disabled={isSending}
-                className="flex-1 h-9 text-sm"
+                className="flex-1 h-9 text-sm rounded-lg border-border/50 focus-visible:ring-cyan-500/30"
               />
               <Button
                 onClick={handleSend}
                 disabled={!input.trim() || isSending}
                 size="icon"
-                className="h-9 w-9 shrink-0 bg-gradient-to-br from-cyan-500 to-teal-600 hover:from-cyan-500/90 hover:to-teal-600/90"
+                className="h-9 w-9 shrink-0 rounded-lg bg-gradient-to-br from-cyan-500 to-teal-600 hover:from-cyan-500/90 hover:to-teal-600/90 shadow-sm"
               >
                 <Send className="h-4 w-4 text-white" />
               </Button>
