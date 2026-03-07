@@ -215,7 +215,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
         viewer.cameraControl.pointerEnabled = false;
       }
 
-      toast.info('Klicka och dra för att flytta objektet. Klicka för att placera.');
+      toast.info('Click and drag to move the object. Click to place.');
 
       const canvas = viewer.scene.canvas?.canvas;
       if (!canvas) return;
