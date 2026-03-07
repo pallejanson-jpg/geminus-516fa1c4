@@ -167,7 +167,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       ctx.fillStyle = colors.mutedFg;
       ctx.font = '14px system-ui';
       ctx.textAlign = 'center';
-      ctx.fillText('Laddar planvy...', cw / 2, ch / 2);
+      ctx.fillText('Loading plan...', cw / 2, ch / 2);
       return;
     }
     lastAabbRef.current = aabb;
