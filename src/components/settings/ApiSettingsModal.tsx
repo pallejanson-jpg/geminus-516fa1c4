@@ -3275,6 +3275,18 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 {isSyncingFmAccess ? 'Syncing...' : 'Sync with FM Access ↔'}
                                             </Button>
                                         </div>
+
+                                        {/* FM Access Document/Drawing Sync */}
+                                        <div className="border-t pt-3 mt-3">
+                                            <h4 className="text-sm font-medium mb-2 flex items-center gap-1.5">
+                                                <FileText className="h-3.5 w-3.5" />
+                                                Synka dokument &amp; ritningar
+                                            </h4>
+                                            <p className="text-xs text-muted-foreground mb-3">
+                                                Synkar ritningar, dokument och DoU-instruktioner från FM Access till lokal databas för snabb sökning via Gunnar.
+                                            </p>
+                                            <FmAccessDocSyncPanel />
+                                        </div>
                                     </div>
                                 </AccordionContent>
                             </AccordionItem>
