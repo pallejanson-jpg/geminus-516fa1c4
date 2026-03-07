@@ -192,6 +192,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, floorHandler);
     return () => {
       clearTimeout(timeout);
+      clearTimeout(retry1);
+      clearTimeout(retry2);
       window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, floorHandler);
       if (modelLoadedSub !== null && viewer?.scene) {
         viewer.scene.off(modelLoadedSub);
