@@ -22,6 +22,7 @@ import { Switch } from '@/components/ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { applyArchitectColors } from '@/lib/architect-colors';
+import { ARCHITECT_BACKGROUND_CHANGED_EVENT } from '@/hooks/useArchitectViewMode';
 import {
   useSectionPlaneClipping,
   FLOOR_SELECTION_CHANGED_EVENT,
@@ -615,6 +616,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         camera.ortho.scale = dist * 1.2;
         viewer.cameraFlight.flyTo({ eye: [lookX, lookY + dist, lookZ], look: [lookX, lookY, lookZ], up: [0, 0, -1], duration: 0.5 });
       }
+
+      // Set white background for 2D mode
+      window.dispatchEvent(new CustomEvent(ARCHITECT_BACKGROUND_CHANGED_EVENT, { detail: { presetId: 'white' } }));
     } else {
       // Restore all entities modified during 2D mode
       if (colorizedFor2dRef.current.size > 0) {
@@ -650,6 +654,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         camera.projection = 'perspective';
         viewer.cameraFlight.flyTo({ eye: [lookX - offset, lookY + offset, lookZ - offset], look: [lookX, lookY, lookZ], up: [0, 1, 0], duration: 0.5 });
       }
+
+      // Restore default background when leaving 2D
+      window.dispatchEvent(new CustomEvent(ARCHITECT_BACKGROUND_CHANGED_EVENT, { detail: { presetId: 'light-gray' } }));
     }
   }, [viewer, currentFloorId, currentFloorBounds, calculateFloorBounds, applyFloorPlanClipping, applyGlobalFloorPlanClipping, applyCeilingClipping, removeSectionPlane]);
 

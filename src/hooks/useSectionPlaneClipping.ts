@@ -95,8 +95,8 @@ function extractSectionPlaneClass(viewer: any): any {
   const scene = viewer?.scene;
   if (!scene) return null;
 
-  // Strategy 1: Check global scope (unlikely but cheap)
-  const globalClass = (window as any).xeokit?.SectionPlane || (window as any).SectionPlane;
+  // Strategy 1: Check global scope
+  const globalClass = (window as any).__xeokitSectionPlaneClass || (window as any).xeokit?.SectionPlane || (window as any).SectionPlane;
   if (globalClass) {
     cachedSectionPlaneClass = globalClass;
     console.log('[SectionPlane] Found class globally');

@@ -137,7 +137,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
     const storeyId = findCurrentStoreyId();
     if (!storeyId) {
-      setError('No storeys found in model');
+      // Don't set permanent error — storeys may not be loaded yet
+      console.debug('[SplitPlanView] No storeys found yet, will retry on model load');
       return;
     }
 
@@ -154,6 +155,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         setStoreyMap(map);
         storeyMapRef.current = map;
         setError(null);
+        setIsLoading(false);
       } else {
         setError('Could not generate plan');
       }
@@ -167,8 +169,11 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   useEffect(() => {
     if (!storeyPlugin) return;
 
-    // Wait a bit for models to load their metaobjects
-    const timeout = setTimeout(generateMap, 800);
+    // Wait longer for models to fully load their metaobjects
+    const timeout = setTimeout(generateMap, 2000);
+    // Also retry a couple more times
+    const retry1 = setTimeout(generateMap, 4000);
+    const retry2 = setTimeout(generateMap, 7000);
 
     const floorHandler = () => {
       setPanZoom({ offsetX: 0, offsetY: 0, scale: 1 });
@@ -187,6 +192,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, floorHandler);
     return () => {
       clearTimeout(timeout);
+      clearTimeout(retry1);
+      clearTimeout(retry2);
       window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, floorHandler);
       if (modelLoadedSub !== null && viewer?.scene) {
         viewer.scene.off(modelLoadedSub);
