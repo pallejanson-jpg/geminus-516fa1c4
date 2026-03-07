@@ -172,7 +172,7 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
             <Input id="title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Kort beskrivning av ärendet" />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Typ av ärende</Label>
               <Select value={category} onValueChange={setCategory}>
@@ -220,7 +220,7 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="location">Plats / Utrymme</Label>
               <Input id="location" value={locationDescription} onChange={e => setLocationDescription(e.target.value)} placeholder="T.ex. Plan 3, rum 301" />
@@ -257,7 +257,7 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
             </Popover>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="email">Kontakt e-post</Label>
               <Input id="email" type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} placeholder="din@epost.se" />

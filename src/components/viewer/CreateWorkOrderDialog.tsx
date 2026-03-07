@@ -208,7 +208,7 @@ const CreateWorkOrderDialog: React.FC<CreateWorkOrderDialogProps> = ({
           {!isMobile && <GripHorizontal className="h-4 w-4 text-muted-foreground" />}
           <Wrench className="h-5 w-5 text-primary" />
           <span className="font-semibold flex-1">Create Work Order</span>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose} disabled={isSubmitting}>
+          <Button variant="ghost" size="icon" className="h-9 w-9 min-h-[44px] min-w-[44px]" onClick={onClose} disabled={isSubmitting}>
             <X className="h-4 w-4" />
           </Button>
         </div>

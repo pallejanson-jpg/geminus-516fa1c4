@@ -244,15 +244,17 @@ export default function GeminusPluginMenu({
         <div className={cn(
           "fixed z-50 bg-card/95 backdrop-blur-md border border-border shadow-2xl flex flex-col overflow-hidden animate-in fade-in duration-200",
           isMobile
-            ? "inset-0 slide-in-from-bottom-4"
+            ? "inset-x-0 top-0 slide-in-from-bottom-4"
             : "bottom-24 right-6 w-[380px] max-h-[70vh] rounded-xl slide-in-from-bottom-4"
-        )}>
-          <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50 shrink-0">
+        )}
+        style={isMobile ? { bottom: 0, paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' } : undefined}
+        >
+          <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/50 shrink-0">
             <span className="text-sm font-medium flex items-center gap-2">
               <Bot className="h-4 w-4 text-primary" />
               Gunnar
             </span>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClose}>
+            <Button variant="ghost" size="icon" className="h-9 w-9 min-h-[44px] min-w-[44px]" onClick={handleClose}>
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -267,15 +269,17 @@ export default function GeminusPluginMenu({
         <div className={cn(
           "fixed z-50 bg-card/95 backdrop-blur-md border border-border shadow-2xl flex flex-col overflow-hidden animate-in fade-in duration-200",
           isMobile
-            ? "inset-0 slide-in-from-bottom-4"
+            ? "inset-x-0 top-0 slide-in-from-bottom-4"
             : "bottom-24 right-6 w-[380px] max-h-[70vh] rounded-xl slide-in-from-bottom-4"
-        )}>
-          <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50 shrink-0">
+        )}
+        style={isMobile ? { bottom: 0, paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' } : undefined}
+        >
+          <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/50 shrink-0">
             <span className="text-sm font-medium flex items-center gap-2">
               <FileText className="h-4 w-4 text-primary" />
               Ilean — Dokument
             </span>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClose}>
+            <Button variant="ghost" size="icon" className="h-9 w-9 min-h-[44px] min-w-[44px]" onClick={handleClose}>
               <X className="h-4 w-4" />
             </Button>
           </div>
