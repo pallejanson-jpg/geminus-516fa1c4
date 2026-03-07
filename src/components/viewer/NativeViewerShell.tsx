@@ -40,6 +40,9 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const [xeokitViewer, setXeokitViewer] = useState<any>(null);
   const [isViewerReady, setIsViewerReady] = useState(false);
 
+  // Object move/delete mode hook
+  useObjectMoveMode(xeokitViewer, buildingFmGuid);
+
   // UI state
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [viewMode, setViewMode] = useState<'2d' | '3d' | '360'>('3d');
