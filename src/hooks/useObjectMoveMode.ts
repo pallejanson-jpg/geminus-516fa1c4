@@ -161,7 +161,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
         }
       }
     }
-    toast.success('Radering ångrad');
+    toast.success('Deletion undone');
   }, [viewer]);
 
   // ── Detect room at position ──────────────────────────────────────────
