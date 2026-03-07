@@ -62,3 +62,6 @@ verify_jwt = false
 
 [functions.feedback-notify]
 verify_jwt = false
+
+[functions.faciliate-proxy]
+verify_jwt = false
