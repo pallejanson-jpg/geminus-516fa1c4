@@ -1068,6 +1068,105 @@ export type Database = {
           },
         ]
       }
+      fm_access_documents: {
+        Row: {
+          building_fm_guid: string
+          class_name: string | null
+          document_id: string | null
+          file_name: string | null
+          id: string
+          name: string | null
+          object_id: string | null
+          synced_at: string
+        }
+        Insert: {
+          building_fm_guid: string
+          class_name?: string | null
+          document_id?: string | null
+          file_name?: string | null
+          id?: string
+          name?: string | null
+          object_id?: string | null
+          synced_at?: string
+        }
+        Update: {
+          building_fm_guid?: string
+          class_name?: string | null
+          document_id?: string | null
+          file_name?: string | null
+          id?: string
+          name?: string | null
+          object_id?: string | null
+          synced_at?: string
+        }
+        Relationships: []
+      }
+      fm_access_dou: {
+        Row: {
+          building_fm_guid: string | null
+          content: string | null
+          doc_type: string | null
+          id: string
+          object_fm_guid: string
+          synced_at: string
+          title: string | null
+        }
+        Insert: {
+          building_fm_guid?: string | null
+          content?: string | null
+          doc_type?: string | null
+          id?: string
+          object_fm_guid: string
+          synced_at?: string
+          title?: string | null
+        }
+        Update: {
+          building_fm_guid?: string | null
+          content?: string | null
+          doc_type?: string | null
+          id?: string
+          object_fm_guid?: string
+          synced_at?: string
+          title?: string | null
+        }
+        Relationships: []
+      }
+      fm_access_drawings: {
+        Row: {
+          building_fm_guid: string
+          class_name: string | null
+          drawing_id: string | null
+          floor_name: string | null
+          id: string
+          name: string | null
+          object_id: string | null
+          synced_at: string
+          tab_name: string | null
+        }
+        Insert: {
+          building_fm_guid: string
+          class_name?: string | null
+          drawing_id?: string | null
+          floor_name?: string | null
+          id?: string
+          name?: string | null
+          object_id?: string | null
+          synced_at?: string
+          tab_name?: string | null
+        }
+        Update: {
+          building_fm_guid?: string
+          class_name?: string | null
+          drawing_id?: string | null
+          floor_name?: string | null
+          id?: string
+          name?: string | null
+          object_id?: string | null
+          synced_at?: string
+          tab_name?: string | null
+        }
+        Relationships: []
+      }
       gunnar_conversations: {
         Row: {
           building_fm_guid: string | null
