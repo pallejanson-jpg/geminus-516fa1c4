@@ -321,6 +321,52 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
     sendMessage(question);
   };
 
+  const {
+    isListening,
+    interimTranscript,
+    isSupported: isVoiceSupported,
+    start: startListening,
+    stop: stopListening,
+  } = useWebSpeechRecognition({
+    language: 'sv-SE',
+    onResult: (transcript, isFinal) => {
+      if (isFinal) {
+        const text = transcript.trim();
+        if (text) void sendMessage(text);
+        setInput('');
+      } else {
+        setInput(transcript);
+      }
+    },
+    onError: (errorMessage) => {
+      toastHook({ variant: 'destructive', title: 'Röstfel', description: errorMessage });
+    },
+  });
+
+  const toggleListening = useCallback(() => {
+    if (!isVoiceSupported || isLoading) return;
+    if (isListening) stopListening();
+    else startListening();
+  }, [isListening, isLoading, isVoiceSupported, startListening, stopListening]);
+
+  useEffect(() => {
+    if (!open || !voiceOutputEnabled || isLoading) return;
+    const lastMessage = messages[messages.length - 1];
+    if (!lastMessage || lastMessage.role !== 'assistant') return;
+    const key = `${messages.length - 1}:${lastMessage.content.length}`;
+    if (spokenMessageKeyRef.current === key) return;
+    spokenMessageKeyRef.current = key;
+    speakAssistant(lastMessage.content);
+  }, [messages, isLoading, open, voiceOutputEnabled, speakAssistant]);
+
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
   const executeAction = useCallback((action: GunnarAction) => {
     switch (action.action) {
       case "selectInTree":
