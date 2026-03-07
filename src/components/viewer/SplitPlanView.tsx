@@ -61,7 +61,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       }
 
       try {
-        const sdk = await import('/lib/xeokit/xeokit-sdk.es.js');
+        const sdk = await (Function('return import("/lib/xeokit/xeokit-sdk.es.js")')() as Promise<any>);
         const { StoreyViewsPlugin } = sdk;
 
         // Check if plugin already exists

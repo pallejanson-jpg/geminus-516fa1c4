@@ -97,7 +97,7 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
       }
 
       try {
-        const sdk = await import('/lib/xeokit/xeokit-sdk.es.js');
+        const sdk = await (Function('return import("/lib/xeokit/xeokit-sdk.es.js")')() as Promise<any>);
         const { StoreyViewsPlugin } = sdk;
 
         let plugin = viewer.plugins?.StoreyViews;
