@@ -1137,7 +1137,7 @@ function execViewerShowDrawing(args: any) {
    Tool dispatcher
    ───────────────────────────────────────────── */
 
-async function executeTool(supabase: any, name: string, args: any) {
+async function executeTool(supabase: any, name: string, args: any, apiKey?: string) {
   switch (name) {
     case "query_assets": return execQueryAssets(supabase, args);
     case "aggregate_assets": return execAggregateAssets(supabase, args);
@@ -1161,6 +1161,8 @@ async function executeTool(supabase: any, name: string, args: any) {
     case "fm_access_get_hierarchy": return execFmAccessGetHierarchy(args);
     case "fm_access_search_objects": return execFmAccessSearchObjects(args);
     case "fm_access_get_floors": return execFmAccessGetFloors(args);
+    // Document content Q&A
+    case "ask_about_documents": return execAskAboutDocuments(supabase, args, apiKey!);
     // Viewer tools
     case "viewer_show_floor": return execViewerShowFloor(args);
     case "viewer_show_model": return execViewerShowModel(args);
