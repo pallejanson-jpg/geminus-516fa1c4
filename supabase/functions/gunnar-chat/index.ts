@@ -953,6 +953,150 @@ async function execFmAccessGetFloors(args: any) {
   return result.data || [];
 }
 
+/* ── Document content Q&A execution ── */
+
+async function execAskAboutDocuments(supabase: any, args: any, apiKey: string) {
+  // 1. Find matching documents
+  let query = supabase.from("documents").select("id, file_name, file_path, mime_type, file_size, building_fm_guid, metadata");
+  if (args.building_fm_guid) query = query.eq("building_fm_guid", args.building_fm_guid);
+  if (args.file_name_filter) query = query.ilike("file_name", `%${args.file_name_filter}%`);
+  // Only fetch text-readable documents
+  query = query.or("mime_type.ilike.%pdf%,mime_type.ilike.%text%,mime_type.is.null");
+  query = query.order("created_at", { ascending: false }).limit(5);
+
+  const { data: docs, error } = await query;
+  if (error) throw error;
+  if (!docs?.length) return { error: "Inga dokument hittades som matchar sökningen.", documents_searched: 0 };
+
+  // 2. Download and extract text from each document
+  const documentTexts: { name: string; content: string }[] = [];
+  const maxTotalChars = 30000; // limit to avoid token overflow
+  let totalChars = 0;
+
+  for (const doc of docs) {
+    if (totalChars >= maxTotalChars) break;
+
+    try {
+      const { data: fileData, error: dlError } = await supabase.storage
+        .from("documents")
+        .download(doc.file_path);
+
+      if (dlError || !fileData) {
+        console.error(`Failed to download ${doc.file_name}:`, dlError);
+        continue;
+      }
+
+      let text = "";
+      const mimeType = (doc.mime_type || "").toLowerCase();
+
+      if (mimeType.includes("text") || doc.file_name?.endsWith(".txt")) {
+        text = await fileData.text();
+      } else if (mimeType.includes("pdf") || doc.file_name?.endsWith(".pdf")) {
+        // For PDFs, we read raw bytes and extract visible text heuristically
+        const bytes = new Uint8Array(await fileData.arrayBuffer());
+        text = extractPdfText(bytes);
+      }
+
+      if (text.trim()) {
+        const remaining = maxTotalChars - totalChars;
+        const trimmed = text.slice(0, remaining);
+        documentTexts.push({ name: doc.file_name, content: trimmed });
+        totalChars += trimmed.length;
+      }
+    } catch (e) {
+      console.error(`Error processing ${doc.file_name}:`, e);
+    }
+  }
+
+  if (documentTexts.length === 0) {
+    return { error: "Kunde inte extrahera text från de hittade dokumenten.", documents_found: docs.length };
+  }
+
+  // 3. Use AI to answer the question based on document content
+  const docContext = documentTexts.map(d => `--- DOCUMENT: ${d.name} ---\n${d.content}`).join("\n\n");
+
+  const aiResp = await fetch(AI_GATEWAY, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: AI_MODEL_PRIMARY,
+      messages: [
+        {
+          role: "system",
+          content: `You are a document analysis assistant. Answer the user's question based ONLY on the provided document content. If the answer is not in the documents, say so. Respond in the same language as the question. Be concise and reference which document the information comes from.`,
+        },
+        {
+          role: "user",
+          content: `Documents:\n\n${docContext}\n\n---\nQuestion: ${args.question}`,
+        },
+      ],
+      max_tokens: 1000,
+      temperature: 0.2,
+    }),
+  });
+
+  if (!aiResp.ok) {
+    console.error("Doc Q&A AI error:", aiResp.status);
+    return { error: "Kunde inte analysera dokumentinnehållet.", documents_searched: documentTexts.length };
+  }
+
+  const aiResult = await aiResp.json();
+  const answer = aiResult.choices?.[0]?.message?.content || "Inget svar kunde genereras.";
+
+  return {
+    answer,
+    documents_searched: documentTexts.length,
+    document_names: documentTexts.map(d => d.name),
+  };
+}
+
+/** Simple PDF text extraction — pulls text between BT/ET blocks and parenthesized strings */
+function extractPdfText(bytes: Uint8Array): string {
+  // Convert to string for regex parsing (works for text-based PDFs)
+  const decoder = new TextDecoder("latin1");
+  const raw = decoder.decode(bytes);
+
+  const texts: string[] = [];
+
+  // Extract text from Tj/TJ operators and parenthesized strings
+  const patterns = [
+    /\(([^)]*)\)\s*Tj/g,
+    /\[([^\]]*)\]\s*TJ/g,
+  ];
+
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(raw)) !== null) {
+      let extracted = match[1];
+      // For TJ arrays, extract parenthesized parts
+      if (pattern.source.includes("TJ")) {
+        const parts: string[] = [];
+        const partPattern = /\(([^)]*)\)/g;
+        let partMatch;
+        while ((partMatch = partPattern.exec(extracted)) !== null) {
+          parts.push(partMatch[1]);
+        }
+        extracted = parts.join("");
+      }
+      // Decode PDF escape sequences
+      extracted = extracted
+        .replace(/\\n/g, "\n")
+        .replace(/\\r/g, "\r")
+        .replace(/\\t/g, "\t")
+        .replace(/\\\(/g, "(")
+        .replace(/\\\)/g, ")")
+        .replace(/\\\\/g, "\\");
+
+      if (extracted.trim()) texts.push(extracted);
+    }
+  }
+
+  return texts.join(" ").replace(/\s+/g, " ").trim();
+}
+
 /* ── Viewer control tool execution ── */
 
 function execViewerShowFloor(args: any) {
