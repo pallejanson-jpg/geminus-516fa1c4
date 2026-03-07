@@ -717,7 +717,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           <Button
             variant="secondary"
             size="icon"
-            title="Visning"
+            title="Display"
             onClick={() => handleSetIsOpen(true)}
             className={cn(
               "shadow-lg bg-card/95 backdrop-blur-sm border",
