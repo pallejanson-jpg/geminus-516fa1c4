@@ -272,8 +272,9 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
           const fetchBatch = async (batch: typeof models, concurrency: number) => {
             const activePromises = new Set<Promise<void>>();
             for (const model of batch) {
+              const url = model.file_url || signedUrlMap.get(model.model_id);
               let promise: Promise<void>;
-              promise = fetchModel(model).finally(() => activePromises.delete(promise));
+              promise = fetchModel(model, url).finally(() => activePromises.delete(promise));
               activePromises.add(promise);
               if (activePromises.size >= concurrency) {
                 await Promise.race(activePromises);
