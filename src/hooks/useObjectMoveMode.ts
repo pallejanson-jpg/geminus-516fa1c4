@@ -332,9 +332,9 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
           entity.offset = savedOriginalOffset;
         } else {
           const roomMsg = newRoom ? ` → ${newRoom.name}` : '';
-          toast.success(`Objekt flyttat${roomMsg}`, {
+          toast.success(`Object moved${roomMsg}`, {
             action: {
-              label: 'Ångra',
+              label: 'Undo',
               onClick: () => undoMove(savedFmGuid, savedOriginalOffset, originalRoom),
             },
           });
