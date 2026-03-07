@@ -405,8 +405,9 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
         break;
       case "openViewer":
         if (action.fmGuid) {
-          setViewer3dFmGuid(action.fmGuid);
-          toast.success('Opening 3D viewer');
+          navigate(`/viewer?building=${action.fmGuid}&mode=3d`);
+          onClose();
+          toast.success('Öppnar 3D-viewer');
         }
         break;
       case "showFloorIn3D":
@@ -447,8 +448,13 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
       case "selectBuilding":
         if (action.buildingFmGuid) {
           const bName = action.buildingName || 'byggnaden';
-          // Auto-send a follow-up message to Gunnar with the selected building
-          sendMessage(`Jag menar ${bName}`);
+          setSelectedFacility({
+            fmGuid: action.buildingFmGuid,
+            name: bName,
+            commonName: bName,
+            category: 'Building',
+          });
+          void sendMessage(`Jag menar ${bName}`);
         }
         break;
     }
