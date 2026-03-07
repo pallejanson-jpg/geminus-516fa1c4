@@ -296,7 +296,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       if (dbError || !models || models.length === 0) {
         console.warn('[NativeViewer] No models found for building', buildingFmGuid, 'dbError:', dbError);
-        setErrorMsg(`Inga XKT-modeller hittades för byggnad ${buildingFmGuid.substring(0, 8)}. Kontrollera att modeller har synkats.`);
+        setErrorMsg(`No XKT models found for building ${buildingFmGuid.substring(0, 8)}. Ensure models have been synced.`);
         setPhase('error');
         return;
       }
