@@ -445,11 +445,11 @@ const UnifiedViewerContent: React.FC<{
   const viewerContainerStyle: React.CSSProperties = isSplit2D3D ? {
     position: 'absolute',
     top: 0,
-    left: 0,
+    right: 0,
     height: '100%',
-    display: needs3D ? 'flex' : 'none',
+    display: 'flex',
     flexDirection: 'column',
-    width: '100%',
+    width: '60%',
     zIndex: 5,
     pointerEvents: 'auto',
   } : {
@@ -598,66 +598,48 @@ const UnifiedViewerContent: React.FC<{
           }}
         />
 
-        {/* ── Split 2D/3D: ResizablePanelGroup ── */}
-        {isSplit2D3D ? (
-          <ResizablePanelGroup direction="horizontal" className="h-full">
-            <ResizablePanel defaultSize={40} minSize={20} maxSize={60}>
-              <div className="relative h-full">
-                <div className="absolute top-2 left-2 z-10 bg-card/80 backdrop-blur-sm text-foreground text-[10px] px-2 py-0.5 rounded border border-border/50">
-                  2D Plan
-                </div>
-                <SplitPlanView
-                  viewerRef={viewerInstanceRef}
-                  buildingFmGuid={buildingData.fmGuid}
-                />
-              </div>
-            </ResizablePanel>
-            <ResizableHandle withHandle />
-            <ResizablePanel defaultSize={60} minSize={30}>
-              <div className="relative h-full">
-                <div className="absolute top-2 left-2 z-10 bg-card/80 backdrop-blur-sm text-foreground text-[10px] px-2 py-0.5 rounded border border-border/50">
-                  3D Model
-                </div>
-                <NativeViewerShell
-                  buildingFmGuid={buildingData.fmGuid}
-                  onClose={handleGoBack}
-                  hideBackButton
-                />
-              </div>
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        ) : (
-          <>
-            {/* ── SINGLE 3D Viewer — always mounted, CSS-controlled ── */}
-            <div style={viewerContainerStyle}>
-              {shouldUseNative3D ? (
-                <NativeViewerShell
-                  buildingFmGuid={buildingData.fmGuid}
-                  onClose={is3DMode ? handleGoBack : () => {}}
-                  hideBackButton
-                />
-              ) : (
-                <React.Suspense fallback={<div className="flex items-center justify-center h-full bg-black"><Loader2 className="h-8 w-8 animate-spin text-white/50" /></div>}>
-                  <AssetPlusViewer
-                    fmGuid={buildingData.fmGuid}
-                    initialFmGuidToFocus={entityFmGuid || undefined}
-                    initialVisualization={visualizationParam || undefined}
-                    insightsColorMode={insightsModeParam || undefined}
-                    forceXray={xrayParam || undefined}
-                    transparentBackground={isVTMode}
-                    ghostOpacity={isVTMode ? ghostOpacity / 100 : undefined}
-                    suppressOverlay={isVTMode}
-                    onClose={is3DMode ? handleGoBack : undefined}
-                    syncEnabled={isSplitMode ? syncLocked : false}
-                    onCameraChange={isSplitMode ? handle3DCameraChange : undefined}
-                    syncPosition={isSplitMode ? sync3DPosition : undefined}
-                    syncHeading={isSplitMode ? sync3DHeading : undefined}
-                    syncPitch={isSplitMode ? sync3DPitch : undefined}
-                  />
-                </React.Suspense>
-              )}
+        {/* ── SINGLE 3D Viewer — always mounted ── */}
+        <div style={viewerContainerStyle}>
+          {shouldUseNative3D ? (
+            <NativeViewerShell
+              buildingFmGuid={buildingData.fmGuid}
+              onClose={is3DMode ? handleGoBack : () => {}}
+              hideBackButton
+            />
+          ) : (
+            <React.Suspense fallback={<div className="flex items-center justify-center h-full bg-black"><Loader2 className="h-8 w-8 animate-spin text-white/50" /></div>}>
+              <AssetPlusViewer
+                fmGuid={buildingData.fmGuid}
+                initialFmGuidToFocus={entityFmGuid || undefined}
+                initialVisualization={visualizationParam || undefined}
+                insightsColorMode={insightsModeParam || undefined}
+                forceXray={xrayParam || undefined}
+                transparentBackground={isVTMode}
+                ghostOpacity={isVTMode ? ghostOpacity / 100 : undefined}
+                suppressOverlay={isVTMode}
+                onClose={is3DMode ? handleGoBack : undefined}
+                syncEnabled={isSplitMode ? syncLocked : false}
+                onCameraChange={isSplitMode ? handle3DCameraChange : undefined}
+                syncPosition={isSplitMode ? sync3DPosition : undefined}
+                syncHeading={isSplitMode ? sync3DHeading : undefined}
+                syncPitch={isSplitMode ? sync3DPitch : undefined}
+              />
+            </React.Suspense>
+          )}
+        </div>
+
+        {/* ── Split 2D/3D: SplitPlanView overlay on left side ── */}
+        {isSplit2D3D && (
+          <div className="absolute top-0 left-0 z-20 border-r border-border/50" style={{ width: '40%', height: '100%' }}>
+            <div className="absolute top-2 left-2 z-10 bg-card/80 backdrop-blur-sm text-foreground text-[10px] px-2 py-0.5 rounded border border-border/50">
+              2D Plan
             </div>
-          </>
+            <SplitPlanView
+              viewerRef={viewerInstanceRef}
+              buildingFmGuid={buildingData.fmGuid}
+              className="h-full"
+            />
+          </div>
         )}
 
         {/* Crosshair overlay for alignment in VT mode */}

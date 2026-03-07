@@ -247,13 +247,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
   }, [update3DCeilingOffset]);
 
   // ── View mode request events ──────────────────────────────────────────────
+  // Keep a ref to the latest handleViewModeChange so event handlers always call the current version
+  const handleViewModeChangeRef = useRef<((mode: ViewMode) => void) | null>(null);
+
   useEffect(() => {
     const handler = (e: CustomEvent<ViewModeRequestedDetail>) => {
-      if (e.detail.mode === '2d' || e.detail.mode === '3d') handleViewModeChange(e.detail.mode);
+      if (e.detail.mode === '2d' || e.detail.mode === '3d') handleViewModeChangeRef.current?.(e.detail.mode);
     };
     window.addEventListener(VIEW_MODE_REQUESTED_EVENT, handler as EventListener);
     return () => window.removeEventListener(VIEW_MODE_REQUESTED_EVENT, handler as EventListener);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── External 2D toggle ───────────────────────────────────────────────────
@@ -262,23 +264,21 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     const handler = (e: CustomEvent<ViewMode2DToggledDetail>) => {
       if (e.detail.enabled) {
         if (!viewer?.scene) { pending2dRef.current = true; setViewMode('2d'); }
-        else handleViewModeChange('2d');
+        else handleViewModeChangeRef.current?.('2d');
       } else {
         pending2dRef.current = false;
-        handleViewModeChange('3d');
+        handleViewModeChangeRef.current?.('3d');
       }
     };
     window.addEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler as EventListener);
     return () => window.removeEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler as EventListener);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [viewer]);
 
   useEffect(() => {
     if (isReady && pending2dRef.current) {
       pending2dRef.current = false;
-      handleViewModeChange('2d');
+      handleViewModeChangeRef.current?.('2d');
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady]);
 
   // ── On-hover highlight logic ─────────────────────────────────────────────
@@ -593,7 +593,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     }
   }, [viewer, currentFloorId, currentFloorBounds, calculateFloorBounds, applyFloorPlanClipping, applyGlobalFloorPlanClipping, applyCeilingClipping, removeSectionPlane]);
 
-  // ── Toggle tool in config ────────────────────────────────────────────────
+  // Keep ref in sync with latest handleViewModeChange
+  useEffect(() => { handleViewModeChangeRef.current = handleViewModeChange; }, [handleViewModeChange]);
+
   const toggleTool = useCallback((toolId: string) => {
     setEnabledTools(prev => {
       const next = prev.includes(toolId) 
