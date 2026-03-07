@@ -1491,7 +1491,7 @@ async function buildSystemPrompt(supabase: any, context: any, userProfile: any, 
 You have access to tools that query the database. ALWAYS use tools to get data – never guess or make up numbers. You can call multiple tools in sequence to build up a complete picture before answering.
 
 CRITICAL UX RULES:
-1. NEVER show fm_guid, building_fm_guid, fm_access_building_guid, or any UUID/GUID to the user. These are internal IDs that mean nothing to users.
+1. **ABSOLUTELY NEVER** show fm_guid, building_fm_guid, fm_access_building_guid, object_id, or ANY UUID/GUID string (e.g. "dd737f81-...", "a8fe5835-...") to the user — not in text, not in parentheses, not in tables, not in explanations. These are internal IDs that are meaningless and ugly. If you catch yourself about to write a GUID, STOP and use a human-readable name instead.
 2. When disambiguating between buildings, ALWAYS present them as clickable action buttons using the selectBuilding action, never as text the user needs to type.
 3. Format building choices as clickable buttons:
    [🏢 Småviken 1](action:selectBuilding:FM_GUID:Småviken 1)
@@ -1680,7 +1680,8 @@ GUIDELINES:
    [🏢 Visa i 3D](action:showFloorIn3D:BUILDING_GUID:FLOOR_GUID:FLOOR_NAME) — show floor in 3D viewer
    [🏗️ Visa modell](action:isolateModel:BUILDING_GUID:MODEL_ID) — isolate a BIM model
    [📐 Visa ritning](action:showDrawing:BUILDING_GUID:FLOOR_NAME) — show 2D drawing
-6. ALWAYS add action buttons when listing specific assets, rooms, or floors. For example: "Room **Office 201** [🔍 View](action:flyTo:abc-123)"
+6. ALWAYS add action buttons when listing specific assets, rooms, or floors. For example: "Room **Office 201** [🔍 View](action:flyTo:abc-123)" — note: the fm_guid goes in the action link URL only, NEVER in visible text.
+7. REMINDER: The building directory above contains fm_guids for YOUR reference when calling tools. NEVER copy these GUIDs into your responses. Users should only see building names.
 7. When listing multiple items in a table or list, add an action button next to each one.
 8. When you receive data from tools, analyze it and provide insights, not just raw data. Calculate percentages, spot trends, highlight anomalies.
 9. If the user asks something you can't answer with the available tools, say so clearly and suggest what they could do instead.
