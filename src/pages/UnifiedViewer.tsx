@@ -843,6 +843,7 @@ function MobileUnifiedViewer({
               buildingFmGuid={buildingData.fmGuid}
               onClose={onGoBack}
               hideBackButton
+              hideMobileOverlay
             />
           </div>
 
