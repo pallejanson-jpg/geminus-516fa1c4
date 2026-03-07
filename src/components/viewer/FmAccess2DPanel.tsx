@@ -242,8 +242,8 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
             </Button>
             {onChangeFloor && (
               <Button variant="outline" size="sm" onClick={onChangeFloor} className="gap-1.5">
-                <ArrowLeft className="h-3.5 w-3.5" />
-                Byt våning
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Change floor
               </Button>
             )}
           </div>
