@@ -115,7 +115,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
       .eq('fm_guid', fmGuid);
 
     if (error) {
-      toast.error('Kunde inte ångra flytten');
+      toast.error('Could not undo move');
       return;
     }
 
@@ -130,7 +130,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
         }
       }
     }
-    toast.success('Flytt ångrad');
+    toast.success('Move undone');
   }, [viewer]);
 
   const undoDelete = useCallback(async (fmGuid: string) => {
@@ -143,7 +143,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
       .eq('fm_guid', fmGuid);
 
     if (error) {
-      toast.error('Kunde inte ångra raderingen');
+      toast.error('Could not undo deletion');
       return;
     }
 
@@ -161,7 +161,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
         }
       }
     }
-    toast.success('Radering ångrad');
+    toast.success('Deletion undone');
   }, [viewer]);
 
   // ── Detect room at position ──────────────────────────────────────────
@@ -196,7 +196,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
 
       const entity = viewer.scene.objects?.[entityId];
       if (!entity) {
-        toast.error('Objektet kunde inte hittas i 3D-scenen');
+        toast.error('Object not found in 3D scene');
         return;
       }
 
@@ -215,7 +215,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
         viewer.cameraControl.pointerEnabled = false;
       }
 
-      toast.info('Klicka och dra för att flytta objektet. Klicka för att placera.');
+      toast.info('Click and drag to move the object. Click to place.');
 
       const canvas = viewer.scene.canvas?.canvas;
       if (!canvas) return;
@@ -286,7 +286,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
 
           if (totalDist < 0.01) {
             entity.offset = moveStateRef.current.originalOffset;
-            toast.info('Flytt avbruten');
+            toast.info('Move cancelled');
             cleanup();
             return;
           }
@@ -328,13 +328,13 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
 
         if (error) {
           console.error('[ObjectMove] Save failed:', error);
-          toast.error('Kunde inte spara flytten');
+          toast.error('Could not save move');
           entity.offset = savedOriginalOffset;
         } else {
           const roomMsg = newRoom ? ` → ${newRoom.name}` : '';
-          toast.success(`Objekt flyttat${roomMsg}`, {
+          toast.success(`Object moved${roomMsg}`, {
             action: {
-              label: 'Ångra',
+              label: 'Undo',
               onClick: () => undoMove(savedFmGuid, savedOriginalOffset, originalRoom),
             },
           });
@@ -347,7 +347,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
         if (ev.key === 'Escape' && activeRef.current) {
           entity.offset = moveStateRef.current?.originalOffset || [0, 0, 0];
           if (viewer.cameraControl) viewer.cameraControl.pointerEnabled = true;
-          toast.info('Flytt avbruten');
+          toast.info('Move cancelled');
           cleanup();
         }
       };
@@ -375,7 +375,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
       if (!entityId || !fmGuid || !viewer?.scene) return;
 
       // Confirmation dialog
-      const confirmed = window.confirm('Vill du markera detta objekt som borttaget? Ändringen kan ångras.');
+      const confirmed = window.confirm('Mark this object as deleted? This can be undone.');
       if (!confirmed) return;
 
       const entity = viewer.scene.objects?.[entityId];
@@ -390,7 +390,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
 
       if (error) {
         console.error('[ObjectMove] Delete failed:', error);
-        toast.error('Kunde inte markera objektet som borttaget');
+        toast.error('Could not mark object as deleted');
         return;
       }
 
@@ -399,9 +399,9 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
         entity.pickable = false;
       }
 
-      toast.success('Objekt markerat som borttaget', {
+      toast.success('Object marked as deleted', {
         action: {
-          label: 'Ångra',
+          label: 'Undo',
           onClick: () => undoDelete(fmGuid),
         },
       });

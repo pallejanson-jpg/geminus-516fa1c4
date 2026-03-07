@@ -1,8 +1,8 @@
 import React from 'react';
-import { ArrowLeft, Settings2, Filter, Square, Box, View } from 'lucide-react';
+import { ArrowLeft, Settings2, Filter, Square, Box, View, LayoutPanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-type ViewMode = '2d' | '3d' | '360';
+type ViewMode = '2d' | '3d' | '360' | 'split2d3d';
 
 interface MobileViewerOverlayProps {
   onClose?: () => void;
@@ -23,7 +23,6 @@ interface MobileViewerOverlayProps {
 /**
  * Slim mobile overlay for the 3D viewer.
  * Header bar with back, mode switcher, filter and settings buttons.
- * Building name removed per design decision.
  */
 const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
   onClose,
@@ -61,6 +60,15 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
         {/* Center: Mode switcher */}
         {onChangeViewMode && (
           <div className="mx-auto flex max-w-full min-w-0 items-center gap-0.5 overflow-x-auto bg-black/50 backdrop-blur-md rounded-lg p-0.5 border border-white/10">
+            <Button
+              size="sm"
+              variant={viewMode === 'split2d3d' ? 'default' : 'ghost'}
+              className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${viewMode !== 'split2d3d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+              onClick={() => onChangeViewMode('split2d3d')}
+            >
+              <LayoutPanelLeft className="h-3 w-3" />
+              2D/3D
+            </Button>
             <Button
               size="sm"
               variant={viewMode === '2d' ? 'default' : 'ghost'}

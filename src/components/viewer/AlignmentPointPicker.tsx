@@ -75,13 +75,13 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           setIvionPoint(pt);
           setStep('picking3D');
           setCaptureError(null);
-          toast.success(`360°-position fångad: (${pt.x.toFixed(1)}, ${pt.y.toFixed(1)}, ${pt.z.toFixed(1)})`);
+          toast.success(`360° position captured: (${pt.x.toFixed(1)}, ${pt.y.toFixed(1)}, ${pt.z.toFixed(1)})`);
           console.log('[AlignmentPicker] 360° position captured on click:', loc);
         } else {
-          setCaptureError('Ingen panoramaposition tillgänglig. Navigera till en bild först.');
+          setCaptureError('No panorama position available. Navigate to an image first.');
         }
       } catch (e: any) {
-        setCaptureError(`Fel: ${e.message}`);
+        setCaptureError(`Error: ${e.message}`);
       }
     };
 
@@ -126,7 +126,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
         const picked: Vec3 = { x: worldPos[0], y: worldPos[1], z: worldPos[2] };
         setBimPoint(picked);
         setStep('done');
-        toast.success(`3D-punkt vald: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
+          toast.success(`3D point selected: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
       }
     };
     window.addEventListener('xeokit-pick', handlePick as EventListener);
@@ -148,10 +148,10 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           }
           setBimPoint(picked);
           setStep('done');
-          toast.success(`3D-punkt vald: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
+          toast.success(`3D point selected: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
           console.log('[AlignmentPicker] 3D point picked:', picked);
         } else {
-          toast.warning('Ingen yta träffad. Klicka direkt på en synlig vägg, golv eller pelare.');
+          toast.warning('No surface hit. Click directly on a visible wall, floor, or column.');
         }
       });
     }
@@ -177,7 +177,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
       offsetZ: parseFloat((bimPoint.z - rotated.z).toFixed(2)),
     };
     console.log('[AlignmentPicker] Calculated offsets:', offsets);
-    toast.success('Offset beräknad och applicerad');
+    toast.success('Offset calculated and applied');
     onOffsetsCalculated(offsets);
   }, [ivionPoint, bimPoint, transform, onOffsetsCalculated]);
 
@@ -195,13 +195,13 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium flex items-center gap-1.5">
           <Crosshair className="h-3.5 w-3.5 text-primary" />
-          Punktkalibrering
+          Point calibration
         </span>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={reset} title="Börja om">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={reset} title="Restart">
             <RotateCcw className="h-3 w-3" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose} title="Avbryt">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose} title="Cancel">
             <X className="h-3 w-3" />
           </Button>
         </div>
@@ -217,18 +217,18 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           {ivionPoint ? <Check className="h-3 w-3" /> : '1'}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-foreground">Klicka i 360°-vyn</p>
+          <p className="font-medium text-foreground">Click in the 360° view</p>
           {ivionPoint ? (
             <p className="text-green-400 font-mono text-[10px] mt-1.5">✓ {formatCoord(ivionPoint)}</p>
           ) : (
             <div className="mt-0.5 space-y-1.5">
               <p className="text-foreground/70 leading-snug">
-                Navigera till en punkt du kan identifiera i 3D (hörn, dörr, pelare) och <strong>klicka direkt</strong> i 360°-bilden.
+                Navigate to a point you can identify in 3D (corner, door, column) and <strong>click directly</strong> in the 360° image.
               </p>
               {step === 'picking360' && (
                 <div className="flex items-center gap-1.5 text-primary">
                   <MousePointerClick className="h-3 w-3" />
-                  <span className="text-[11px] font-medium animate-pulse">Väntar på klick i 360°...</span>
+                  <span className="text-[11px] font-medium animate-pulse">Waiting for click in 360°...</span>
                 </div>
               )}
               {captureError && (
@@ -252,21 +252,21 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           {bimPoint ? <Check className="h-3 w-3" /> : '2'}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-foreground">Klicka på samma punkt i 3D</p>
+          <p className="font-medium text-foreground">Click the same point in 3D</p>
           {bimPoint ? (
             <p className="text-green-400 font-mono text-[10px] mt-1">✓ {formatCoord(bimPoint)}</p>
           ) : step === 'picking3D' ? (
             <div className="mt-1 space-y-1">
               <p className="text-foreground/70 leading-snug">
-                Klicka nu på <strong>exakt samma punkt</strong> i 3D-modellen till vänster.
+                Now click on <strong>the exact same point</strong> in the 3D model on the left.
               </p>
               <div className="flex items-center gap-1.5 text-primary">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                <span className="text-[11px] font-medium animate-pulse">Väntar på klick i 3D-vyn...</span>
+                <span className="text-[11px] font-medium animate-pulse">Waiting for click in 3D view...</span>
               </div>
             </div>
           ) : (
-            <p className="text-foreground/60 mt-1">Klicka i 360° först (steg 1)</p>
+            <p className="text-foreground/60 mt-1">Click in 360° first (step 1)</p>
           )}
         </div>
       </div>
@@ -286,7 +286,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           </div>
           <Button size="sm" className="w-full h-7 text-xs gap-1.5" onClick={applyOffsets}>
             <Check className="h-3 w-3" />
-            Applicera beräknad offset
+             Applicera beräknad offset
           </Button>
         </div>
       )}

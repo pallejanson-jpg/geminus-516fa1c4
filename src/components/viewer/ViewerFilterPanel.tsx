@@ -1503,7 +1503,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
           {/* Modification filter (moved / deleted assets) */}
           <FilterSection
-            title="Ändringar"
+            title="Modifications"
             count={modifiedAssets.length}
             selectedCount={(showMovedAssets ? 1 : 0) + (showDeletedAssets ? 1 : 0)}
             isOpen={modificationsOpen}
@@ -1516,7 +1516,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 onClick={(e) => e.stopPropagation()}
                 onCheckedChange={(v) => setShowMovedAssets(!!v)} />
               <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: '#FF9919' }} />
-              <span className="text-sm truncate flex-1 text-foreground">Visa flyttade objekt</span>
+              <span className="text-sm truncate flex-1 text-foreground">Show moved objects</span>
               <span className="text-xs text-muted-foreground shrink-0">
                 {modifiedAssets.filter(a => a.modification_status === 'moved').length}
               </span>
@@ -1527,7 +1527,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 onClick={(e) => e.stopPropagation()}
                 onCheckedChange={(v) => setShowDeletedAssets(!!v)} />
               <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: '#FF3333' }} />
-              <span className="text-sm truncate flex-1 text-foreground">Visa borttagna objekt</span>
+              <span className="text-sm truncate flex-1 text-foreground">Show deleted objects</span>
               <span className="text-xs text-muted-foreground shrink-0">
                 {modifiedAssets.filter(a => a.modification_status === 'deleted').length}
               </span>
