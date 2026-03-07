@@ -251,18 +251,40 @@ const UnifiedViewerContent: React.FC<{
     return () => clearInterval(interval);
   }, [buildingData]);
 
-  // ─── Re-dispatch 2D event once viewer is ready ─
+  // ─── Re-dispatch 2D event once viewer is ready, and also on VIEWER_MODELS_LOADED ─
   useEffect(() => {
     if (viewerReady && viewMode === '2d') {
       const dispatch2D = () => {
         window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } }));
         window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '2d' } }));
+        if (floorFmGuid) {
+          window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+            detail: {
+              floorId: null,
+              floorName: null,
+              bounds: null,
+              visibleMetaFloorIds: [],
+              visibleFloorFmGuids: [floorFmGuid],
+              isAllFloorsVisible: false,
+              isSoloFloor: true,
+            },
+          }));
+        }
       };
       const t1 = setTimeout(dispatch2D, 1500);
       const t2 = setTimeout(dispatch2D, 3000);
-      return () => { clearTimeout(t1); clearTimeout(t2); };
+
+      // Also listen for models loaded to re-dispatch
+      const modelsLoadedHandler = () => setTimeout(dispatch2D, 500);
+      window.addEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
+
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        window.removeEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
+      };
     }
-  }, [viewerReady, viewMode]);
+  }, [viewerReady, viewMode, floorFmGuid]);
 
   // ─── Pointer-events toggle for VT overlay ──────────────────────────
   const [overlayInteractive, setOverlayInteractive] = useState(false);
