@@ -196,7 +196,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
 
       const entity = viewer.scene.objects?.[entityId];
       if (!entity) {
-        toast.error('Objektet kunde inte hittas i 3D-scenen');
+        toast.error('Object not found in 3D scene');
         return;
       }
 
