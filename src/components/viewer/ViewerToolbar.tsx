@@ -665,8 +665,14 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
       // Re-apply architect color palette to ensure spaces are hidden and colors correct
       try { applyArchitectColors(viewer); } catch {}
 
-      try { removeSectionPlane(); } catch {}
+      // Remove 2D clipping planes, restore 3D ceiling clip if a floor is selected
+      try { remove2DClipping(); } catch {}
       if (currentFloorId) { try { applyCeilingClipping(currentFloorId); } catch {} }
+
+      // Restore navigation: orbit mode
+      if (viewer.cameraControl) {
+        viewer.cameraControl.navMode = 'orbit';
+      }
 
       const camera = viewer.camera;
       if (camera) {
