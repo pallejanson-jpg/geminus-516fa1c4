@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { X, Send, Sparkles, Loader2, Navigation, Compass, Eye, Layers, MapPin, Search, AlertTriangle, Info } from "lucide-react";
+import { X, Send, Sparkles, Loader2, Info, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import { useNavigate } from "react-router-dom";
+import { useWebSpeechRecognition } from "@/hooks/useWebSpeechRecognition";
 
 type Message = {
   role: "user" | "assistant";
