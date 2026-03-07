@@ -1121,7 +1121,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               {/* Actions section */}
               <div>
                 <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1.5 sm:mb-2 block">
-                  Åtgärder
+                   Actions
                 </Label>
 
                 <div className="space-y-1">
