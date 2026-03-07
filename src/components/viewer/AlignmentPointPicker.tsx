@@ -198,7 +198,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           Point calibration
         </span>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={reset} title="Börja om">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={reset} title="Restart">
             <RotateCcw className="h-3 w-3" />
           </Button>
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose} title="Avbryt">
