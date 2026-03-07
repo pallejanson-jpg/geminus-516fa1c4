@@ -137,7 +137,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
     const storeyId = findCurrentStoreyId();
     if (!storeyId) {
-      setError('No storeys found in model');
+      // Don't set permanent error — storeys may not be loaded yet
+      console.debug('[SplitPlanView] No storeys found yet, will retry on model load');
       return;
     }
 
@@ -154,6 +155,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         setStoreyMap(map);
         storeyMapRef.current = map;
         setError(null);
+        setIsLoading(false);
       } else {
         setError('Could not generate plan');
       }
