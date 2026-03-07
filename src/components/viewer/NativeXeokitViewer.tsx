@@ -158,96 +158,66 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       // XKT Loader
       const xktLoader = new sdk.XKTLoaderPlugin(viewer);
 
-      // 3. Fetch model list from DB
+      // 3. Process pre-fetched model metadata (already loaded in parallel above)
       setPhase('loading_models');
-      const { data: modelsFromDb, error: dbErrorRaw } = await supabase
-        .from('xkt_models')
-        .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at')
-        .eq('building_fm_guid', buildingFmGuid)
-        .order('file_size', { ascending: true });
-      let dbError: any = dbErrorRaw;
-      let models: ModelCandidate[] = ((modelsFromDb as any[]) ?? []).map((m) => ({
+      let dbError: any = dbResult.error;
+      let models: ModelCandidate[] = ((dbResult.data as any[]) ?? []).map((m) => ({
         ...m,
         source: 'db' as const,
       }));
 
-      // Supplement from storage folder to avoid stale/missing DB metadata
-      // (xkt_models can lag behind actual files in xkt-models bucket)
+      // Merge storage files
       const mergedModels = new Map<string, ModelCandidate>();
       models.forEach((m) => mergedModels.set(m.model_id, m));
 
-      try {
-        const { data: storageFiles, error: storageListError } = await supabase.storage
-          .from('xkt-models')
-          .list(buildingFmGuid, {
-            limit: 1000,
-            sortBy: { column: 'name', order: 'asc' },
-          });
+      if (!storageResult.error && storageResult.data) {
+        const xktFiles = storageResult.data.filter((f: any) =>
+          f.name?.toLowerCase().endsWith('.xkt') && !f.name?.toLowerCase().endsWith('_xkt.xkt')
+        );
 
-        if (!storageListError && storageFiles) {
-          const xktFiles = storageFiles.filter((f: any) =>
-            f.name?.toLowerCase().endsWith('.xkt') && !f.name?.toLowerCase().endsWith('_xkt.xkt')
-          );
+        xktFiles.forEach((file: any) => {
+          const modelId = file.name.replace(/\.xkt$/i, '');
+          if (!mergedModels.has(modelId)) {
+            mergedModels.set(modelId, {
+              model_id: modelId,
+              model_name: modelId,
+              storage_path: `${buildingFmGuid}/${file.name}`,
+              file_size: file.metadata?.size ?? null,
+              storey_fm_guid: null,
+              synced_at: null,
+              source: 'storage',
+            });
+          }
+        });
 
-          xktFiles.forEach((file: any) => {
-            const modelId = file.name.replace(/\.xkt$/i, '');
-            if (!mergedModels.has(modelId)) {
-              mergedModels.set(modelId, {
-                model_id: modelId,
-                model_name: modelId,
-                storage_path: `${buildingFmGuid}/${file.name}`,
-                file_size: file.metadata?.size ?? null,
-                storey_fm_guid: null,
-                synced_at: null,
-                source: 'storage',
-              });
-            }
-          });
-
-          models = Array.from(mergedModels.values());
-          console.log(`[NativeViewer] Model sources → DB: ${(models || []).filter((m: any) => !!m.synced_at).length}, Storage: ${xktFiles.length}, Merged: ${models.length}`);
-        } else if (storageListError) {
-          console.warn('[NativeViewer] Storage list failed, continuing with DB models only:', storageListError.message);
-        }
-      } catch (storageError) {
-        console.warn('[NativeViewer] Storage list fallback failed, continuing with DB models only:', storageError);
+        models = Array.from(mergedModels.values());
+        console.log(`[NativeViewer] Model sources → DB: ${(models || []).filter((m: any) => !!m.synced_at).length}, Storage: ${xktFiles.length}, Merged: ${models.length}`);
+      } else if (storageResult.error) {
+        console.warn('[NativeViewer] Storage list failed, continuing with DB models only:', storageResult.error.message);
       }
 
-      // Resolve model names from Asset+ Building Storey objects (same logic as useModelNames)
-      // XKT files store GUIDs, but the real model names (like "A-40.1") are in the assets table
-      if (models.length > 0) {
-        try {
-          const { data: storeys } = await supabase
-            .from('assets')
-            .select('attributes')
-            .eq('building_fm_guid', buildingFmGuid)
-            .eq('category', 'Building Storey');
-
-          if (storeys && storeys.length > 0) {
-            const assetPlusNames = new Map<string, string>();
-            storeys.forEach((s: any) => {
-              const attrs = typeof s.attributes === 'string' ? JSON.parse(s.attributes) : (s.attributes || {});
-              const guid = attrs.parentBimObjectId;
-              const name = attrs.parentCommonName;
-              if (guid && name && !/^[0-9a-f]{8}-/i.test(name)) {
-                assetPlusNames.set(guid, name);
-                assetPlusNames.set(guid.toLowerCase(), name);
-              }
-            });
-
-            if (assetPlusNames.size > 0) {
-              console.log(`[NativeViewer] Resolved ${assetPlusNames.size / 2} model names from Asset+ storeys`);
-              models.forEach((m) => {
-                const resolved = assetPlusNames.get(m.model_id) || assetPlusNames.get(m.model_id.toLowerCase());
-                if (resolved && resolved !== m.model_name) {
-                  console.log(`[NativeViewer] Name resolution: "${m.model_name}" → "${resolved}"`);
-                  m.model_name = resolved;
-                }
-              });
-            }
+      // Resolve model names from pre-fetched storey data
+      if (models.length > 0 && storeyResult.data && storeyResult.data.length > 0) {
+        const assetPlusNames = new Map<string, string>();
+        storeyResult.data.forEach((s: any) => {
+          const attrs = typeof s.attributes === 'string' ? JSON.parse(s.attributes) : (s.attributes || {});
+          const guid = attrs.parentBimObjectId;
+          const name = attrs.parentCommonName;
+          if (guid && name && !/^[0-9a-f]{8}-/i.test(name)) {
+            assetPlusNames.set(guid, name);
+            assetPlusNames.set(guid.toLowerCase(), name);
           }
-        } catch (e) {
-          console.debug('[NativeViewer] Asset+ name resolution failed, continuing with DB names:', e);
+        });
+
+        if (assetPlusNames.size > 0) {
+          console.log(`[NativeViewer] Resolved ${assetPlusNames.size / 2} model names from Asset+ storeys`);
+          models.forEach((m) => {
+            const resolved = assetPlusNames.get(m.model_id) || assetPlusNames.get(m.model_id.toLowerCase());
+            if (resolved && resolved !== m.model_name) {
+              console.log(`[NativeViewer] Name resolution: "${m.model_name}" → "${resolved}"`);
+              m.model_name = resolved;
+            }
+          });
         }
       }
 
