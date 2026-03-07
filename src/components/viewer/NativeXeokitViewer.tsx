@@ -345,6 +345,17 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         return (a.model_name || a.model_id).localeCompare((b.model_name || b.model_id), 'sv');
       });
 
+      // On mobile, limit to A-models only for buildings with many models to prevent OOM crashes
+      const MAX_MOBILE_MODELS = 3;
+      if (isMobile && loadList.length > MAX_MOBILE_MODELS) {
+        const aModels = loadList.filter(m => isArchitectural(m.model_name));
+        if (aModels.length > 0) {
+          console.log(`[NativeViewer] Mobile: limiting from ${loadList.length} to ${aModels.length} A-models to prevent OOM`);
+          loadList.length = 0;
+          loadList.push(...aModels);
+        }
+      }
+
       if (loadList.length === 0) {
         console.warn('[NativeViewer] No models found at all for building', buildingFmGuid);
         setErrorMsg('No XKT models found for this building.');
