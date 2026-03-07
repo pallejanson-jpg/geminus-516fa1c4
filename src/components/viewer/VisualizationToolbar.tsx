@@ -609,9 +609,9 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     setSelectedIssue(issue);
     setShowIssueDetail(true);
     
-    // Navigate to the viewpoint if available with flash effect
+    // Navigate to the viewpoint if available with flash effect, pass selected_object_ids as fallback
     if (issue.viewpoint_json) {
-      handleGoToIssueViewpoint(issue.viewpoint_json);
+      handleGoToIssueViewpoint(issue.viewpoint_json, issue.selected_object_ids);
     }
   }, [handleGoToIssueViewpoint]);
 
