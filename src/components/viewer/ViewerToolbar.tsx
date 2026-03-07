@@ -501,7 +501,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
   // ── 2D / 3D toggle ───────────────────────────────────────────────────────
 
   const handleViewModeChange = useCallback((mode: ViewMode) => {
-    if (!viewer?.scene) return;
+    if (!viewer?.scene) {
+      console.warn('[ViewerToolbar] handleViewModeChange: viewer not ready, skipping');
+      return;
+    }
     const scene = viewer.scene;
 
     setViewMode(mode);
