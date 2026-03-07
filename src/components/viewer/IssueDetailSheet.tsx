@@ -133,7 +133,7 @@ interface IssueDetailSheetProps {
   issue: BcfIssue | null;
   open: boolean;
   onClose: () => void;
-  onGoToViewpoint?: (viewpoint: any) => void;
+  onGoToViewpoint?: (viewpoint: any, selectedObjectIds?: string[] | null) => void;
   isAdmin?: boolean;
 }
 
@@ -279,7 +279,7 @@ const IssueDetailSheet: React.FC<IssueDetailSheetProps> = ({
               {issue.screenshot_url && (
                 <div 
                   className="rounded-lg overflow-hidden border cursor-pointer hover:opacity-90 transition-opacity"
-                  onClick={() => issue.viewpoint_json && onGoToViewpoint?.(issue.viewpoint_json)}
+                  onClick={() => issue.viewpoint_json && onGoToViewpoint?.(issue.viewpoint_json, issue.selected_object_ids)}
                 >
                   <img
                     src={issue.screenshot_url}
