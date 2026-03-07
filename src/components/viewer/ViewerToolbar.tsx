@@ -549,7 +549,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
       }
 
       // Remove ALL existing section planes first to avoid duplicates
-      removeAllClippingPlanes();
+      try { removeSectionPlane(); } catch {}
 
       if (targetFloorId) {
         applyFloorPlanClipping(targetFloorId);
