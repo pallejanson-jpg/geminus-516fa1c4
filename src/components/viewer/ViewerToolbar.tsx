@@ -248,8 +248,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
   // ── View mode request events ──────────────────────────────────────────────
   // Keep a ref to the latest handleViewModeChange so event handlers always call the current version
-  const handleViewModeChangeRef = useRef(handleViewModeChange);
-  useEffect(() => { handleViewModeChangeRef.current = handleViewModeChange; }, [handleViewModeChange]);
+  const handleViewModeChangeRef = useRef<((mode: ViewMode) => void) | null>(null);
 
   useEffect(() => {
     const handler = (e: CustomEvent<ViewModeRequestedDetail>) => {
