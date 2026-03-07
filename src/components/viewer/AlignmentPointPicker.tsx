@@ -81,7 +81,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           setCaptureError('No panorama position available. Navigate to an image first.');
         }
       } catch (e: any) {
-        setCaptureError(`Fel: ${e.message}`);
+        setCaptureError(`Error: ${e.message}`);
       }
     };
 
