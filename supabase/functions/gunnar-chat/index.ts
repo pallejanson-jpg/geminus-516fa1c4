@@ -1680,7 +1680,8 @@ GUIDELINES:
    [🏢 Visa i 3D](action:showFloorIn3D:BUILDING_GUID:FLOOR_GUID:FLOOR_NAME) — show floor in 3D viewer
    [🏗️ Visa modell](action:isolateModel:BUILDING_GUID:MODEL_ID) — isolate a BIM model
    [📐 Visa ritning](action:showDrawing:BUILDING_GUID:FLOOR_NAME) — show 2D drawing
-6. ALWAYS add action buttons when listing specific assets, rooms, or floors. For example: "Room **Office 201** [🔍 View](action:flyTo:abc-123)"
+6. ALWAYS add action buttons when listing specific assets, rooms, or floors. For example: "Room **Office 201** [🔍 View](action:flyTo:abc-123)" — note: the fm_guid goes in the action link URL only, NEVER in visible text.
+7. REMINDER: The building directory above contains fm_guids for YOUR reference when calling tools. NEVER copy these GUIDs into your responses. Users should only see building names.
 7. When listing multiple items in a table or list, add an action button next to each one.
 8. When you receive data from tools, analyze it and provide insights, not just raw data. Calculate percentages, spot trends, highlight anomalies.
 9. If the user asks something you can't answer with the available tools, say so clearly and suggest what they could do instead.
