@@ -1495,6 +1495,39 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             ))}
           </FilterSection>
 
+          {/* Modification filter (moved / deleted assets) */}
+          <FilterSection
+            title="Ändringar"
+            count={modifiedAssets.length}
+            selectedCount={(showMovedAssets ? 1 : 0) + (showDeletedAssets ? 1 : 0)}
+            isOpen={modificationsOpen}
+            onToggle={() => setModificationsOpen(!modificationsOpen)}
+            onReset={() => handleResetSection('modifications')}
+          >
+            <div className="flex items-center gap-2 px-3 py-1.5 hover:bg-accent/30 transition-colors cursor-pointer"
+              onClick={() => setShowMovedAssets(p => !p)}>
+              <Checkbox checked={showMovedAssets} className="h-4 w-4 shrink-0"
+                onClick={(e) => e.stopPropagation()}
+                onCheckedChange={(v) => setShowMovedAssets(!!v)} />
+              <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: '#FF9919' }} />
+              <span className="text-sm truncate flex-1 text-foreground">Visa flyttade objekt</span>
+              <span className="text-xs text-muted-foreground shrink-0">
+                {modifiedAssets.filter(a => a.modification_status === 'moved').length}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 hover:bg-accent/30 transition-colors cursor-pointer"
+              onClick={() => setShowDeletedAssets(p => !p)}>
+              <Checkbox checked={showDeletedAssets} className="h-4 w-4 shrink-0"
+                onClick={(e) => e.stopPropagation()}
+                onCheckedChange={(v) => setShowDeletedAssets(!!v)} />
+              <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: '#FF3333' }} />
+              <span className="text-sm truncate flex-1 text-foreground">Visa borttagna objekt</span>
+              <span className="text-xs text-muted-foreground shrink-0">
+                {modifiedAssets.filter(a => a.modification_status === 'deleted').length}
+              </span>
+            </div>
+          </FilterSection>
+
           {/* Annotations (non-modeled assets) */}
           {annotationCategories.length > 0 && (
             <FilterSection
