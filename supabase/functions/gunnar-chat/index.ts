@@ -1166,9 +1166,58 @@ function execViewerShowDrawing(args: any) {
   };
 }
 
-/* ─────────────────────────────────────────────
-   Tool dispatcher
-   ───────────────────────────────────────────── */
+/* ── Faciliate (SWG) tool execution ── */
+
+async function execQueryFaciliate(args: any) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY")!;
+
+  const res = await fetch(`${supabaseUrl}/functions/v1/faciliate-proxy`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${serviceKey}`,
+    },
+    body: JSON.stringify({
+      action: "list",
+      objectType: args.objectType,
+      filter: args.filter || undefined,
+      take: args.take || 20,
+      loadlevel: args.loadlevel || "simple",
+    }),
+  });
+
+  const data = await res.json();
+  if (data.status && data.status >= 400) {
+    return { error: `Faciliate returned status ${data.status}`, details: data.data };
+  }
+  return data.data || data;
+}
+
+async function execGetFaciliateObject(args: any) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY")!;
+
+  const res = await fetch(`${supabaseUrl}/functions/v1/faciliate-proxy`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${serviceKey}`,
+    },
+    body: JSON.stringify({
+      action: "get",
+      objectType: args.objectType,
+      guid: args.guid,
+      loadlevel: args.loadlevel || "fullprimary",
+    }),
+  });
+
+  const data = await res.json();
+  if (data.status && data.status >= 400) {
+    return { error: `Faciliate returned status ${data.status}`, details: data.data };
+  }
+  return data.data || data;
+}
 
 async function executeTool(supabase: any, name: string, args: any, apiKey?: string) {
   switch (name) {
