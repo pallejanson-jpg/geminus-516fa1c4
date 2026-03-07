@@ -247,13 +247,16 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
   }, [update3DCeilingOffset]);
 
   // ── View mode request events ──────────────────────────────────────────────
+  // Keep a ref to the latest handleViewModeChange so event handlers always call the current version
+  const handleViewModeChangeRef = useRef(handleViewModeChange);
+  useEffect(() => { handleViewModeChangeRef.current = handleViewModeChange; }, [handleViewModeChange]);
+
   useEffect(() => {
     const handler = (e: CustomEvent<ViewModeRequestedDetail>) => {
-      if (e.detail.mode === '2d' || e.detail.mode === '3d') handleViewModeChange(e.detail.mode);
+      if (e.detail.mode === '2d' || e.detail.mode === '3d') handleViewModeChangeRef.current(e.detail.mode);
     };
     window.addEventListener(VIEW_MODE_REQUESTED_EVENT, handler as EventListener);
     return () => window.removeEventListener(VIEW_MODE_REQUESTED_EVENT, handler as EventListener);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── External 2D toggle ───────────────────────────────────────────────────
