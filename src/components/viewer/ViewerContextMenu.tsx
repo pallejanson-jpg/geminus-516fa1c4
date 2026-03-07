@@ -35,6 +35,9 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   onHideEntity,
   onIsolateEntity,
   onShowAll,
+  onSelectEntity,
+  onMoveObject,
+  onDeleteObject,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
