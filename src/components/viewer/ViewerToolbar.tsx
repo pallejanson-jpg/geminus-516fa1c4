@@ -252,7 +252,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
   useEffect(() => {
     const handler = (e: CustomEvent<ViewModeRequestedDetail>) => {
-      if (e.detail.mode === '2d' || e.detail.mode === '3d') handleViewModeChangeRef.current(e.detail.mode);
+      if (e.detail.mode === '2d' || e.detail.mode === '3d') handleViewModeChangeRef.current?.(e.detail.mode);
     };
     window.addEventListener(VIEW_MODE_REQUESTED_EVENT, handler as EventListener);
     return () => window.removeEventListener(VIEW_MODE_REQUESTED_EVENT, handler as EventListener);
