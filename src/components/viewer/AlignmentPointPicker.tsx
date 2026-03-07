@@ -252,7 +252,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           {bimPoint ? <Check className="h-3 w-3" /> : '2'}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-foreground">Klicka på samma punkt i 3D</p>
+          <p className="font-medium text-foreground">Click the same point in 3D</p>
           {bimPoint ? (
             <p className="text-green-400 font-mono text-[10px] mt-1">✓ {formatCoord(bimPoint)}</p>
           ) : step === 'picking3D' ? (
