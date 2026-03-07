@@ -636,13 +636,14 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
       }
 
       // Show canvas after 2D setup is complete (clipping + camera + colors all applied)
-      requestAnimationFrame(() => {
+      // Use a longer delay to ensure clipping planes are fully applied before revealing
+      setTimeout(() => {
         const canvasEl = scene.canvas?.canvas;
         if (canvasEl) {
-          canvasEl.style.transition = 'opacity 0.2s ease-in';
+          canvasEl.style.transition = 'opacity 0.3s ease-in';
           canvasEl.style.opacity = '1';
         }
-      });
+      }, 150);
     } else {
       // Restore all entities modified during 2D mode
       if (colorizedFor2dRef.current.size > 0) {
