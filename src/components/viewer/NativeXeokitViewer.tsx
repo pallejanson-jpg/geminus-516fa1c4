@@ -354,8 +354,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       console.log(`[NativeViewer] Loading ${loadList.length}/${models.length} models (A-models prioritized)`);
       setLoadProgress({ loaded: 0, total: loadList.length });
 
-      // 4. Load models with strict sequential loading (prevents xeokit parser OOM/crashes on large files)
-      const CONCURRENT = 1;
+      // 4. Load models — desktop uses 2 concurrent, mobile stays at 1
+      const CONCURRENT = isMobile ? 1 : 2;
       let loaded = 0;
       const queue = [...loadList] as ModelInfo[];
 
