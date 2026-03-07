@@ -472,7 +472,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
         throw insertError;
       }
 
-      toast({ title: "Vy sparad!", description: `"${name}" har sparats` });
+      toast({ title: "View saved!", description: `"${name}" has been saved` });
       setShowCreateViewDialog(false);
       setPendingViewState(null);
     } catch (err) {
