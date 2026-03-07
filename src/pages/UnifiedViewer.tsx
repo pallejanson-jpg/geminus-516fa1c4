@@ -17,7 +17,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Layers, Move3D, Maximize2, Minimize2, Eye,
   RefreshCw, View, Box, Combine, SplitSquareHorizontal,
-  Loader2, Square, BarChart2, LayoutPanelLeft,
+  Loader2, Square, BarChart2, LayoutPanelLeft, GripHorizontal,
 } from 'lucide-react';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { supabase } from '@/integrations/supabase/client';
@@ -68,8 +68,6 @@ const UnifiedViewerContent: React.FC<{
   const visualizationParam = searchParams.get('visualization') as import('@/lib/visualization-utils').VisualizationType | null;
   const insightsModeParam = searchParams.get('insightsMode') || null;
   const xrayParam = searchParams.get('xray') === 'true';
-  
-  // 3D/2D ska alltid använda native xeokit för stabil laddning på både desktop och mobil
 
   // ─── Building data (shared) ────────────────────────────────────────
   const { buildingData, isLoading, error } = useBuildingViewerData(buildingFmGuid);
@@ -115,7 +113,7 @@ const UnifiedViewerContent: React.FC<{
   const prevModeParamRef = useRef(modeParam);
   useEffect(() => {
     if (!modeParam) return;
-    if (modeParam === prevModeParamRef.current) return; // only react to URL changes
+    if (modeParam === prevModeParamRef.current) return;
     prevModeParamRef.current = modeParam;
     const validModes: ViewMode[] = ['2d', '3d', 'split', 'split2d3d', 'vt', '360'];
     if (!validModes.includes(modeParam)) return;
@@ -126,7 +124,6 @@ const UnifiedViewerContent: React.FC<{
   }, [modeParam]);
 
   // ─── Dispatch mode events when viewMode changes ────────────────
-  // Use a sentinel so the first render always fires the event when starting in 2D
   const prevViewModeRef = useRef<ViewMode | '__init__'>(viewMode === '2d' ? '__init__' : viewMode);
   useEffect(() => {
     const prev = prevViewModeRef.current;
@@ -136,15 +133,12 @@ const UnifiedViewerContent: React.FC<{
       window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: viewMode } }));
     }
 
-    // Mark user-initiated mode changes (not the initial dispatch)
     if (prev !== '__init__' && prev !== viewMode) {
       userChangedModeRef.current = true;
     }
 
     if (viewMode === '2d' && prev !== '2d') {
       window.dispatchEvent(new CustomEvent<ViewMode2DToggledDetail>(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } }));
-      // If a floor was specified in URL, dispatch floor selection after a short delay
-      // so that ViewerToolbar and FloatingFloorSwitcher can pick it up
       if (floorFmGuid) {
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
@@ -178,10 +172,9 @@ const UnifiedViewerContent: React.FC<{
   });
 
   useEffect(() => {
-    // Only force 3D for modes that actually require the 360° SDK
     if (sdkStatus === 'failed' && (viewMode === 'vt' || viewMode === 'split' || viewMode === '360')) {
       setViewMode('3d');
-      toast.error('360° SDK kunde inte laddas. Visar 3D-modell.');
+      toast.error('360° SDK failed to load. Showing 3D model.');
     }
   }, [sdkStatus, viewMode]);
 
@@ -191,7 +184,6 @@ const UnifiedViewerContent: React.FC<{
   const [ghostOpacity, setGhostOpacity] = useState(30);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [transform, setTransform] = useState<IvionBimTransform>(IDENTITY_TRANSFORM);
-  // Insights drawer — auto-open if insightsModeParam is set in URL
   const [insightsPanelOpen, setInsightsPanelOpen] = useState(!!insightsModeParam);
 
   useEffect(() => {
@@ -205,15 +197,11 @@ const UnifiedViewerContent: React.FC<{
   useEffect(() => {
     const sv = buildingData?.startView;
     if (!sv || !buildingData) return;
-    // Only apply once per building
     if (startViewAppliedRef.current === buildingData.fmGuid) return;
     startViewAppliedRef.current = buildingData.fmGuid;
 
-    // Dispatch after a delay to allow model loading
     const timer = setTimeout(() => {
-      // Read current mode from ref to avoid stale closure
       const currentMode = viewModeRef.current;
-      // If user has already manually changed mode, respect their choice
       const resolvedViewMode = userChangedModeRef.current
         ? currentMode
         : ((sv.viewMode as '2d' | '3d') || '3d');
@@ -236,7 +224,6 @@ const UnifiedViewerContent: React.FC<{
           visualizationMockData: false,
         },
       }));
-      // If start view is 2D (and user hasn't overridden), also switch mode
       if (resolvedViewMode === '2d') setViewMode('2d');
     }, 2000);
     return () => clearTimeout(timer);
@@ -264,10 +251,9 @@ const UnifiedViewerContent: React.FC<{
     return () => clearInterval(interval);
   }, [buildingData]);
 
-  // ─── Re-dispatch 2D event once viewer is ready (fixes mobile + desktop init) ─
+  // ─── Re-dispatch 2D event once viewer is ready ─
   useEffect(() => {
     if (viewerReady && viewMode === '2d') {
-      // Fire at 1.5s and again at 3s as fallback for slow mobile loads
       const dispatch2D = () => {
         window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } }));
         window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '2d' } }));
@@ -319,11 +305,10 @@ const UnifiedViewerContent: React.FC<{
     updateFrom3D(position, heading, pitch);
   }, [syncLocked, updateFrom3D, viewMode]);
 
-  // ─── Ivion camera sync for split mode (polls SDK position) ─────────
+  // ─── Ivion camera sync for split mode ─────────
   const dummyIframeRef = useRef<HTMLIFrameElement>(null);
   const isSplitMode = viewMode === 'split';
 
-  // ─── Camera sync for split view (3D↔360° bidirectional via native xeokit) ──
   useViewerCameraSync({
     viewerRef: viewerInstanceRef,
     enabled: isSplitMode && syncLocked && viewerReady,
@@ -350,7 +335,7 @@ const UnifiedViewerContent: React.FC<{
     setSync3DPitch(syncState.pitch);
   }, [syncLocked, syncState, viewMode]);
 
-  // ─── Ghost opacity — change-driven (no rAF loop) ──
+  // ─── Ghost opacity ──
   useEffect(() => {
     if (viewMode !== 'vt') return;
     try {
@@ -393,12 +378,10 @@ const UnifiedViewerContent: React.FC<{
   }, [retrySDK, hasIvion, initialMode]);
 
   // ─── Loading / Error states ────────────────────────────────────────
-  // NOTE: No separate loading spinner here — NativeXeokitViewer handles
-  // its own loading phases (SDK, models) to avoid double spinners.
   if (isLoading) {
     return (
       <div className="h-screen flex items-center justify-center bg-black">
-        <p className="text-sm text-muted-foreground">Laddar viewer...</p>
+        <p className="text-sm text-muted-foreground">Loading viewer...</p>
       </div>
     );
   }
@@ -416,8 +399,8 @@ const UnifiedViewerContent: React.FC<{
       <div className="h-screen flex items-center justify-center p-4 bg-background">
         <div className="text-center max-w-md">
           <Layers className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <p className="text-destructive font-medium mb-2">{error || 'Byggnadsdata saknas'}</p>
-          <Button variant="outline" onClick={handleGoBack}>Tillbaka</Button>
+          <p className="text-destructive font-medium mb-2">{error || 'Building data not found'}</p>
+          <Button variant="outline" onClick={handleGoBack}>Back</Button>
         </div>
       </div>
     );
@@ -446,25 +429,37 @@ const UnifiedViewerContent: React.FC<{
       insightsMode={insightsModeParam}
       forceXray={xrayParam}
       onGoBack={handleGoBack}
+      viewerInstanceRef={viewerInstanceRef}
+      viewerReady={viewerReady}
     />;
   }
 
   // ─── Compute AssetPlusViewer container style per mode ──────────────
   const is2DMode = viewMode === '2d';
-  const needs3D = viewMode !== '360'; // 2D now uses xeokit too
+  const needs3D = viewMode !== '360';
   const is3DMode = viewMode === '3d';
   const isVTMode = viewMode === 'vt';
   const isSplit2D3D = viewMode === 'split2d3d';
   const shouldUseNative3D = true;
 
-  const viewerContainerStyle: React.CSSProperties = {
+  const viewerContainerStyle: React.CSSProperties = isSplit2D3D ? {
     position: 'absolute',
     top: 0,
-    left: isSplit2D3D ? '40%' : 0,
+    left: 0,
     height: '100%',
     display: needs3D ? 'flex' : 'none',
     flexDirection: 'column',
-    width: isSplit2D3D ? '60%' : (isSplitMode ? '50%' : '100%'),
+    width: '100%',
+    zIndex: 5,
+    pointerEvents: 'auto',
+  } : {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    height: '100%',
+    display: needs3D ? 'flex' : 'none',
+    flexDirection: 'column',
+    width: isSplitMode ? '50%' : '100%',
     zIndex: is3DMode || is2DMode ? 10 : isVTMode ? 10 : 5,
     pointerEvents: isVTMode ? (overlayInteractive ? 'auto' : 'none') : 'auto',
   };
@@ -472,7 +467,7 @@ const UnifiedViewerContent: React.FC<{
   // ─── Desktop Render ────────────────────────────────────────────────
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-black">
-      {/* ─── Header toolbar — in document flow, pushes content down ─── */}
+      {/* ─── Header toolbar ─── */}
       <div className="shrink-0 flex items-center justify-between p-2 bg-black/80 backdrop-blur-sm z-40">
         {/* Left: Back + building name */}
         <div className="flex items-center gap-3">
@@ -482,7 +477,7 @@ const UnifiedViewerContent: React.FC<{
             className="text-white hover:bg-white/20 gap-1.5"
           >
             <ArrowLeft className="h-4 w-4" />
-            <span className="hidden sm:inline">Tillbaka</span>
+            <span className="hidden sm:inline">Back</span>
           </Button>
           <div className="h-5 w-px bg-white/30" />
           <div className="flex items-center gap-2">
@@ -494,7 +489,7 @@ const UnifiedViewerContent: React.FC<{
                  viewMode === 'split' ? 'Split 3D/360°' :
                  viewMode === 'split2d3d' ? 'Split 2D/3D' :
                  viewMode === '360' ? '360° Panorama' :
-                 viewMode === '2d' ? '2D Planvy' : '3D Viewer'}
+                 viewMode === '2d' ? '2D Plan View' : '3D Viewer'}
               </p>
             </div>
           </div>
@@ -522,14 +517,13 @@ const UnifiedViewerContent: React.FC<{
                   <RefreshCw className="h-3.5 w-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Försök ladda SDK igen</TooltipContent>
+              <TooltipContent>Retry SDK</TooltipContent>
             </Tooltip>
           )}
         </div>
 
         {/* Right: Controls */}
         <div className="flex items-center gap-1">
-          {/* Insights drawer toggle — desktop only */}
           {!isMobile && buildingFmGuid && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -542,14 +536,14 @@ const UnifiedViewerContent: React.FC<{
                   Insights
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Byggnadsinsikter och analys</TooltipContent>
+              <TooltipContent>Building insights & analytics</TooltipContent>
             </Tooltip>
           )}
 
           {viewMode === 'vt' && vtSyncActive && (
             <span className="text-xs text-green-400 bg-green-900/40 px-2 py-0.5 rounded flex items-center gap-1 mr-2">
               <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
-              Synk aktiv
+              Sync active
             </span>
           )}
 
@@ -562,7 +556,7 @@ const UnifiedViewerContent: React.FC<{
                   <span className="text-xs text-white/70 w-8 text-right shrink-0">{ghostOpacity}%</span>
                 </div>
               </TooltipTrigger>
-              <TooltipContent>3D-modellens synlighet</TooltipContent>
+              <TooltipContent>3D model opacity</TooltipContent>
             </Tooltip>
           )}
 
@@ -577,7 +571,7 @@ const UnifiedViewerContent: React.FC<{
                   <Move3D className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Alignment-kalibrering</TooltipContent>
+              <TooltipContent>Alignment calibration</TooltipContent>
             </Tooltip>
           )}
 
@@ -587,9 +581,9 @@ const UnifiedViewerContent: React.FC<{
         </div>
       </div>
 
-      {/* ─── Content area — fills remaining space ─── */}
+      {/* ─── Content area ─── */}
       <div className="flex-1 min-h-0 relative">
-        {/* SDK container — visible for vt and 360 modes */}
+        {/* SDK container */}
         <div
           ref={sdkContainerRef}
           className="absolute z-0 transition-opacity duration-300"
@@ -604,53 +598,67 @@ const UnifiedViewerContent: React.FC<{
           }}
         />
 
-        {/* ── Split 2D/3D: left panel with 2D plan view ── */}
-        {isSplit2D3D && (
-          <div className="absolute top-0 left-0 h-full z-20" style={{ width: '40%' }}>
-            <ResizablePanelGroup direction="horizontal" className="h-full">
-              <ResizablePanel defaultSize={100} minSize={100}>
+        {/* ── Split 2D/3D: ResizablePanelGroup ── */}
+        {isSplit2D3D ? (
+          <ResizablePanelGroup direction="horizontal" className="h-full">
+            <ResizablePanel defaultSize={40} minSize={20} maxSize={60}>
+              <div className="relative h-full">
+                <div className="absolute top-2 left-2 z-10 bg-card/80 backdrop-blur-sm text-foreground text-[10px] px-2 py-0.5 rounded border border-border/50">
+                  2D Plan
+                </div>
                 <SplitPlanView
                   viewerRef={viewerInstanceRef}
                   buildingFmGuid={buildingData.fmGuid}
                 />
-              </ResizablePanel>
-              <ResizableHandle withHandle />
-            </ResizablePanelGroup>
-          </div>
+              </div>
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel defaultSize={60} minSize={30}>
+              <div className="relative h-full">
+                <div className="absolute top-2 left-2 z-10 bg-card/80 backdrop-blur-sm text-foreground text-[10px] px-2 py-0.5 rounded border border-border/50">
+                  3D Model
+                </div>
+                <NativeViewerShell
+                  buildingFmGuid={buildingData.fmGuid}
+                  onClose={handleGoBack}
+                  hideBackButton
+                />
+              </div>
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        ) : (
+          <>
+            {/* ── SINGLE 3D Viewer — always mounted, CSS-controlled ── */}
+            <div style={viewerContainerStyle}>
+              {shouldUseNative3D ? (
+                <NativeViewerShell
+                  buildingFmGuid={buildingData.fmGuid}
+                  onClose={is3DMode ? handleGoBack : () => {}}
+                  hideBackButton
+                />
+              ) : (
+                <React.Suspense fallback={<div className="flex items-center justify-center h-full bg-black"><Loader2 className="h-8 w-8 animate-spin text-white/50" /></div>}>
+                  <AssetPlusViewer
+                    fmGuid={buildingData.fmGuid}
+                    initialFmGuidToFocus={entityFmGuid || undefined}
+                    initialVisualization={visualizationParam || undefined}
+                    insightsColorMode={insightsModeParam || undefined}
+                    forceXray={xrayParam || undefined}
+                    transparentBackground={isVTMode}
+                    ghostOpacity={isVTMode ? ghostOpacity / 100 : undefined}
+                    suppressOverlay={isVTMode}
+                    onClose={is3DMode ? handleGoBack : undefined}
+                    syncEnabled={isSplitMode ? syncLocked : false}
+                    onCameraChange={isSplitMode ? handle3DCameraChange : undefined}
+                    syncPosition={isSplitMode ? sync3DPosition : undefined}
+                    syncHeading={isSplitMode ? sync3DHeading : undefined}
+                    syncPitch={isSplitMode ? sync3DPitch : undefined}
+                  />
+                </React.Suspense>
+              )}
+            </div>
+          </>
         )}
-
-        {/* ── SINGLE 3D Viewer — always mounted, CSS-controlled ── */}
-        <div style={viewerContainerStyle}>
-          {shouldUseNative3D ? (
-            <NativeViewerShell
-              buildingFmGuid={buildingData.fmGuid}
-              onClose={is3DMode ? handleGoBack : () => {}}
-              hideBackButton
-            />
-          ) : (
-            <React.Suspense fallback={<div className="flex items-center justify-center h-full bg-black"><Loader2 className="h-8 w-8 animate-spin text-white/50" /></div>}>
-              <AssetPlusViewer
-                fmGuid={buildingData.fmGuid}
-                initialFmGuidToFocus={entityFmGuid || undefined}
-                initialVisualization={visualizationParam || undefined}
-                insightsColorMode={insightsModeParam || undefined}
-                forceXray={xrayParam || undefined}
-                transparentBackground={isVTMode}
-                ghostOpacity={isVTMode ? ghostOpacity / 100 : undefined}
-                suppressOverlay={isVTMode}
-                onClose={is3DMode ? handleGoBack : undefined}
-                syncEnabled={isSplitMode ? syncLocked : false}
-                onCameraChange={isSplitMode ? handle3DCameraChange : undefined}
-                syncPosition={isSplitMode ? sync3DPosition : undefined}
-                syncHeading={isSplitMode ? sync3DHeading : undefined}
-                syncPitch={isSplitMode ? sync3DPitch : undefined}
-              />
-            </React.Suspense>
-          )}
-        </div>
-
-        {/* ── Split: 360° panel on the right half ── */}
-        {/* Split mode: SDK container above handles the 360° panel */}
 
         {/* Crosshair overlay for alignment in VT mode */}
         {isVTMode && showAlignment && showCrosshair && (
@@ -680,7 +688,7 @@ const UnifiedViewerContent: React.FC<{
         )}
       </div>
 
-      {/* ─── Insights bottom-sheet panel — desktop only ─── */}
+      {/* ─── Insights bottom-sheet panel ─── */}
       {!isMobile && buildingFmGuid && (
         <InsightsDrawerPanel
           buildingFmGuid={buildingFmGuid}
@@ -721,24 +729,25 @@ function ModeButton({ mode, current, disabled, onClick, icon, label }: {
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        {disabled ? 'Kräver Ivion-konfiguration' :
-         mode === '3d' ? 'Enbart 3D BIM-modell' :
-         mode === 'split' ? '3D + 360° sida vid sida' :
-         mode === 'split2d3d' ? '2D planvy + 3D sida vid sida' :
-         mode === 'vt' ? 'Virtual Twin — 3D overlay på 360°' :
-         mode === '2d' ? 'Xeokit 2D planvy' :
-         'Enbart 360° panorama'}
+        {disabled ? 'Requires Ivion configuration' :
+         mode === '3d' ? '3D BIM model only' :
+         mode === 'split' ? '3D + 360° side by side' :
+         mode === 'split2d3d' ? '2D plan + 3D side by side' :
+         mode === 'vt' ? 'Virtual Twin — 3D overlay on 360°' :
+         mode === '2d' ? 'Xeokit 2D plan view' :
+         '360° panorama only'}
       </TooltipContent>
     </Tooltip>
   );
 }
 
-/** Mobile layout — simplified tab switcher */
+/** Mobile layout — vertical split support (Dalux-style) */
 function MobileUnifiedViewer({
   buildingData, viewMode, setViewMode, sdkStatus, ivApiRef,
   sdkContainerRef, transform,
   handle3DCameraChange, sync3DPosition, sync3DHeading, sync3DPitch,
   hasIvion, hasFmAccess, floorFmGuid, floorName, entityFmGuid, visualizationParam, insightsMode, forceXray, onGoBack,
+  viewerInstanceRef, viewerReady,
 }: {
   buildingData: NonNullable<ReturnType<typeof useBuildingViewerData>['buildingData']>;
   viewMode: ViewMode;
@@ -760,57 +769,177 @@ function MobileUnifiedViewer({
   insightsMode: string | null;
   forceXray: boolean;
   onGoBack: () => void;
+  viewerInstanceRef: React.MutableRefObject<any>;
+  viewerReady: boolean;
 }) {
-  // 2D now uses xeokit, so activePanel is '3d' for both '2d' and '3d' modes
+  const isSplit = viewMode === 'split2d3d';
   const activePanel = viewMode === '360' || viewMode === 'vt' ? '360' : '3d';
 
+  // Split ratio state for draggable divider (percentage for top panel)
+  const [splitRatio, setSplitRatio] = useState(45);
+  const isDraggingRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    e.stopPropagation();
+    isDraggingRef.current = true;
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isDraggingRef.current || !containerRef.current) return;
+    e.stopPropagation();
+    const touch = e.touches[0];
+    const rect = containerRef.current.getBoundingClientRect();
+    const y = touch.clientY - rect.top;
+    const pct = Math.max(25, Math.min(75, (y / rect.height) * 100));
+    setSplitRatio(pct);
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    isDraggingRef.current = false;
+  }, []);
+
   return (
-    <div className="fixed inset-0 bg-black z-40 overflow-hidden">
-      {/* Canvas layer — fills entire screen, behind header */}
-      <div className="absolute inset-0">
-        {/* 3D/2D viewer — always mounted, hidden when 360 active */}
-        <div style={{ display: activePanel === '3d' ? 'flex' : 'none', flexDirection: 'column', height: '100%', position: 'relative' }}>
-          {viewMode === '3d' || viewMode === '2d' ? (
+    <div ref={containerRef} className="fixed inset-0 bg-black z-40 overflow-hidden flex flex-col"
+      onTouchMove={isSplit ? handleTouchMove : undefined}
+      onTouchEnd={isSplit ? handleTouchEnd : undefined}
+    >
+      {isSplit ? (
+        /* ── Split 2D/3D: Vertical stack ── */
+        <>
+          {/* Top: 2D Plan */}
+          <div
+            className="relative overflow-hidden"
+            style={{
+              height: `${splitRatio}%`,
+              paddingTop: 'env(safe-area-inset-top, 0px)',
+            }}
+          >
+            <div className="absolute top-[calc(env(safe-area-inset-top,0px)+6px)] left-2 z-10 bg-card/80 backdrop-blur-sm text-foreground text-[10px] px-2 py-0.5 rounded border border-border/50">
+              2D Plan
+            </div>
+            <SplitPlanView
+              viewerRef={viewerInstanceRef}
+              buildingFmGuid={buildingData.fmGuid}
+              className="h-full"
+            />
+          </div>
+
+          {/* Draggable divider */}
+          <div
+            className="relative z-30 flex items-center justify-center bg-card/90 backdrop-blur-sm border-y border-border/50 touch-none select-none"
+            style={{ height: '28px', cursor: 'row-resize' }}
+            onTouchStart={handleTouchStart}
+          >
+            <GripHorizontal className="h-4 w-4 text-muted-foreground" />
+          </div>
+
+          {/* Bottom: 3D Model */}
+          <div className="flex-1 relative overflow-hidden">
+            <div className="absolute top-2 left-2 z-10 bg-card/80 backdrop-blur-sm text-foreground text-[10px] px-2 py-0.5 rounded border border-border/50">
+              3D Model
+            </div>
             <NativeViewerShell
               buildingFmGuid={buildingData.fmGuid}
               onClose={onGoBack}
               hideBackButton
             />
-          ) : (
-            <React.Suspense fallback={<div className="flex items-center justify-center h-full bg-black"><Loader2 className="h-8 w-8 animate-spin text-white/50" /></div>}>
-              <AssetPlusViewer
-                fmGuid={buildingData.fmGuid}
-                initialFmGuidToFocus={entityFmGuid || undefined}
-                initialVisualization={visualizationParam || undefined}
-                insightsColorMode={insightsMode || undefined}
-                forceXray={forceXray || undefined}
-                syncEnabled={false}
-                onCameraChange={handle3DCameraChange}
-                syncPosition={sync3DPosition}
-                syncHeading={sync3DHeading}
-                syncPitch={sync3DPitch}
+          </div>
+
+          {/* Mobile mode switcher overlay — top-right corner */}
+          <div
+            className="absolute top-0 right-0 z-40 flex items-center gap-0.5 p-1"
+            style={{
+              paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4px)',
+              paddingRight: 'max(env(safe-area-inset-right, 0px), 6px)',
+            }}
+          >
+            <Button
+              variant="secondary"
+              size="icon"
+              onClick={onGoBack}
+              className="h-8 w-8 bg-card/95 backdrop-blur-sm shadow-md border"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md rounded-lg p-0.5 border border-white/10 ml-1">
+              {([
+                { mode: 'split2d3d' as ViewMode, label: '2D/3D', Icon: LayoutPanelLeft },
+                { mode: '3d' as ViewMode, label: '3D', Icon: Box },
+                { mode: '2d' as ViewMode, label: '2D', Icon: Square },
+              ] as const).map(({ mode, label, Icon }) => (
+                <Button
+                  key={mode}
+                  size="sm"
+                  variant={viewMode === mode ? 'default' : 'ghost'}
+                  className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${viewMode !== mode ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+                  onClick={() => setViewMode(mode)}
+                >
+                  <Icon className="h-3 w-3" />
+                  {label}
+                </Button>
+              ))}
+              {hasIvion && (
+                <Button
+                  size="sm"
+                  variant={viewMode === '360' ? 'default' : 'ghost'}
+                  className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${viewMode !== '360' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+                  onClick={() => setViewMode('360')}
+                >
+                  <View className="h-3 w-3" />
+                  360°
+                </Button>
+              )}
+            </div>
+          </div>
+        </>
+      ) : (
+        /* ── Non-split: existing layout ── */
+        <div className="absolute inset-0">
+          {/* 3D/2D viewer — always mounted, hidden when 360 active */}
+          <div style={{ display: activePanel === '3d' ? 'flex' : 'none', flexDirection: 'column', height: '100%', position: 'relative' }}>
+            {viewMode === '3d' || viewMode === '2d' ? (
+              <NativeViewerShell
+                buildingFmGuid={buildingData.fmGuid}
                 onClose={onGoBack}
-                mobileViewMode="3d"
-                onMobileChangeViewMode={(m) => setViewMode(m as ViewMode)}
-                mobileHasIvion={hasIvion}
+                hideBackButton
               />
-            </React.Suspense>
+            ) : (
+              <React.Suspense fallback={<div className="flex items-center justify-center h-full bg-black"><Loader2 className="h-8 w-8 animate-spin text-white/50" /></div>}>
+                <AssetPlusViewer
+                  fmGuid={buildingData.fmGuid}
+                  initialFmGuidToFocus={entityFmGuid || undefined}
+                  initialVisualization={visualizationParam || undefined}
+                  insightsColorMode={insightsMode || undefined}
+                  forceXray={forceXray || undefined}
+                  syncEnabled={false}
+                  onCameraChange={handle3DCameraChange}
+                  syncPosition={sync3DPosition}
+                  syncHeading={sync3DHeading}
+                  syncPitch={sync3DPitch}
+                  onClose={onGoBack}
+                  mobileViewMode="3d"
+                  onMobileChangeViewMode={(m) => setViewMode(m as ViewMode)}
+                  mobileHasIvion={hasIvion}
+                />
+              </React.Suspense>
+            )}
+          </div>
+
+          {/* 360 SDK container */}
+          {hasIvion && (
+            <div
+              ref={sdkContainerRef}
+              style={{
+                display: activePanel === '360' ? 'block' : 'none',
+                position: 'absolute',
+                inset: 0,
+                height: '100%',
+              }}
+            />
           )}
         </div>
-
-        {/* 360 SDK container */}
-        {hasIvion && (
-          <div
-            ref={sdkContainerRef}
-            style={{
-              display: activePanel === '360' ? 'block' : 'none',
-              position: 'absolute',
-              inset: 0,
-              height: '100%',
-            }}
-          />
-        )}
-      </div>
+      )}
     </div>
   );
 }

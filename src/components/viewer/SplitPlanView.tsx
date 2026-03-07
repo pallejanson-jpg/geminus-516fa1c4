@@ -497,7 +497,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
       {/* Zoom indicator */}
       <div className="absolute bottom-3 right-3 text-[10px] text-muted-foreground/60 pointer-events-none">
-        {Math.round(panZoom.scale * 100)}% · Alt+drag = pan · Scroll = zoom
+        {Math.round(panZoom.scale * 100)}% · Drag = pan · Scroll = zoom
       </div>
     </div>
   );
