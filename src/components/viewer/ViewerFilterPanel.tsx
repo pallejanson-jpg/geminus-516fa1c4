@@ -1184,7 +1184,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }
   }, [getXeokitViewer, onNodeSelect]);
 
-  const handleResetSection = useCallback((section: 'sources' | 'levels' | 'spaces' | 'categories' | 'annotations') => {
+  const handleResetSection = useCallback((section: 'sources' | 'levels' | 'spaces' | 'categories' | 'annotations' | 'modifications') => {
     switch (section) {
       case 'sources': setCheckedSources(new Set()); break;
       case 'levels': setCheckedLevels(new Set()); break;
@@ -1193,6 +1193,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       case 'annotations': 
         setCheckedAnnotations(new Set());
         window.dispatchEvent(new CustomEvent(ANNOTATION_FILTER_EVENT, { detail: { visibleCategories: [] } }));
+        break;
+      case 'modifications':
+        setShowMovedAssets(false);
+        setShowDeletedAssets(false);
         break;
     }
   }, []);
@@ -1203,8 +1207,71 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     setCheckedSpaces(new Set());
     setCheckedCategories(new Set());
     setCheckedAnnotations(new Set());
+    setShowMovedAssets(false);
+    setShowDeletedAssets(false);
     window.dispatchEvent(new CustomEvent(ANNOTATION_FILTER_EVENT, { detail: { visibleCategories: [] } }));
   }, []);
+
+  // ── Fetch modified assets when modifications section opens ───────────
+  useEffect(() => {
+    if (!modificationsOpen || !buildingFmGuid) return;
+    const fetchModified = async () => {
+      const { data } = await supabase
+        .from('assets')
+        .select('fm_guid, modification_status')
+        .eq('building_fm_guid', buildingFmGuid)
+        .not('modification_status', 'is', null);
+      setModifiedAssets(data || []);
+    };
+    fetchModified();
+  }, [modificationsOpen, buildingFmGuid]);
+
+  // ── Apply modification visualization ────────────────────────────────
+  useEffect(() => {
+    const viewer = getXeokitViewer();
+    if (!viewer?.scene || !viewer?.metaScene?.metaObjects) return;
+
+    const metaObjects = viewer.metaScene.metaObjects;
+    const normGuid = (g: string) => (g || '').toLowerCase().replace(/-/g, '');
+
+    // Build lookup
+    const guidToEntityId = new Map<string, string>();
+    Object.values(metaObjects).forEach((mo: any) => {
+      const sysId = mo.originalSystemId || mo.id || '';
+      guidToEntityId.set(normGuid(sysId), mo.id);
+    });
+
+    const movedGuids = new Set(modifiedAssets.filter(a => a.modification_status === 'moved').map(a => normGuid(a.fm_guid)));
+    const deletedGuids = new Set(modifiedAssets.filter(a => a.modification_status === 'deleted').map(a => normGuid(a.fm_guid)));
+
+    // Apply moved coloring
+    movedGuids.forEach(g => {
+      const eid = guidToEntityId.get(g);
+      if (!eid) return;
+      const entity = viewer.scene.objects?.[eid];
+      if (!entity) return;
+      if (showMovedAssets) {
+        entity.colorize = [1, 0.6, 0.1]; // Orange
+      }
+      // If not showing moved, colors are reset by architect theme (no action needed)
+    });
+
+    // Apply deleted visualization
+    deletedGuids.forEach(g => {
+      const eid = guidToEntityId.get(g);
+      if (!eid) return;
+      const entity = viewer.scene.objects?.[eid];
+      if (!entity) return;
+      if (showDeletedAssets) {
+        entity.visible = true;
+        entity.pickable = true;
+        entity.colorize = [1, 0.2, 0.2]; // Red
+      } else {
+        entity.visible = false;
+        entity.pickable = false;
+      }
+    });
+  }, [showMovedAssets, showDeletedAssets, modifiedAssets, getXeokitViewer]);
 
   const handleAnnotationToggle = useCallback((category: string, checked: boolean) => {
     setCheckedAnnotations(prev => {
