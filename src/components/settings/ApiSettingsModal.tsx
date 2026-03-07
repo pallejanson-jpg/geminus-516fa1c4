@@ -31,6 +31,7 @@ import IvionConnectionModal from './IvionConnectionModal';
 import GunnarSettings from './GunnarSettings';
 import IleanSettings from './IleanSettings';
 import { getFastNavEnabled, setFastNavEnabled } from './VoiceSettings';
+import KnowledgeBaseSettings from './KnowledgeBaseSettings';
 import { SyncProgressCard } from './SyncProgressCard';
 import ConversionProgressOverlay from './ConversionProgressOverlay';
 import CreateBuildingPanel from './CreateBuildingPanel';
