@@ -571,15 +571,16 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   }, [pendingIssueState, user, buildingFmGuid, buildingName, allData]);
 
   // Handle navigating to issue viewpoint with flash effect for selected objects
-  const handleGoToIssueViewpoint = useCallback((viewpoint: any) => {
+  const handleGoToIssueViewpoint = useCallback((viewpoint: any, fallbackObjectIds?: string[] | null) => {
     if (!viewpoint) return;
     
     restoreViewpoint(viewpoint, { duration: 1.0 });
     
-    // Ensure objects are visible, selected, and flashed after camera animation completes
-    if (viewpoint.components?.selection?.length > 0) {
-      const selectedIds = viewpoint.components.selection.map((s: any) => s.ifc_guid);
-      
+    // Use BCF viewpoint selection if available, otherwise fall back to issue.selected_object_ids
+    const bcfSelection = viewpoint.components?.selection?.map((s: any) => s.ifc_guid) || [];
+    const selectedIds = bcfSelection.length > 0 ? bcfSelection : (fallbackObjectIds || []);
+    
+    if (selectedIds.length > 0) {
       setTimeout(() => {
         const xeokitViewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
         if (xeokitViewer?.scene) {
@@ -595,11 +596,11 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           // 3. Flash for visual feedback
           flashEntitiesByIds(scene, selectedIds, { 
             duration: 3000,
-            color1: [1, 0.2, 0.2],  // Red
-            color2: [1, 1, 1],       // White
+            color1: [1, 0.2, 0.2],
+            color2: [1, 1, 1],
           });
         }
-      }, 1100); // After camera animation
+      }, 1100);
     }
   }, [restoreViewpoint, viewerRef, flashEntitiesByIds]);
 
