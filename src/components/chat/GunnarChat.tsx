@@ -691,7 +691,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-1.5">
                 <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
                   <Info className="h-3.5 w-3.5" />
-                  Aktuell status
+                  Current status
                 </div>
                 {proactiveInsights.map((insight, i) => (
                   <p key={i} className="text-sm text-foreground">{insight}</p>
