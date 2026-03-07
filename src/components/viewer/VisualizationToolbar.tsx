@@ -559,7 +559,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
       if (insertError) throw insertError;
 
-      toast({ title: "Ärende skapat!", description: `"${data.title}" har skickats` });
+      toast({ title: "Issue created!", description: `"${data.title}" has been submitted` });
       setShowCreateIssueDialog(false);
       setPendingIssueState(null);
     } catch (err) {
