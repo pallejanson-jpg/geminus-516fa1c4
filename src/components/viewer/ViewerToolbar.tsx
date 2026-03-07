@@ -594,7 +594,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     }
   }, [viewer, currentFloorId, currentFloorBounds, calculateFloorBounds, applyFloorPlanClipping, applyGlobalFloorPlanClipping, applyCeilingClipping, removeSectionPlane]);
 
-  // ── Toggle tool in config ────────────────────────────────────────────────
+  // Keep ref in sync with latest handleViewModeChange
+  useEffect(() => { handleViewModeChangeRef.current = handleViewModeChange; }, [handleViewModeChange]);
+
   const toggleTool = useCallback((toolId: string) => {
     setEnabledTools(prev => {
       const next = prev.includes(toolId) 
