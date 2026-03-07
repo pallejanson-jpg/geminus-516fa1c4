@@ -195,17 +195,28 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
       const visibleFloorFmGuids = (e.detail as any).visibleFloorFmGuids as string[] | undefined;
 
       if (!floorId && visibleFloorFmGuids?.length && !visibleMetaFloorIds?.length) {
-        const metaObjects = viewer?.scene?.metaScene?.metaObjects || {};
-        const fmGuidSet = new Set(visibleFloorFmGuids.map((g: string) => g.toLowerCase()));
+        const metaObjects = viewer?.metaScene?.metaObjects || viewer?.scene?.metaScene?.metaObjects || {};
+        const normalizeGuid = (value: string) => value.toLowerCase().replace(/-/g, '');
+        const fmGuidSet = new Set(visibleFloorFmGuids.map((g: string) => normalizeGuid(String(g))));
+
         for (const mo of Object.values(metaObjects) as any[]) {
-          const t = mo.type?.toLowerCase() || '';
-          if (t === 'ifcbuildingstorey' && mo.attributes) {
-            const fmAttr = mo.attributes?.FmGuid || mo.attributes?.fmGuid || mo.attributes?.fmguid;
-            if (fmAttr && fmGuidSet.has(String(fmAttr).toLowerCase())) {
-              floorId = mo.id;
-              visibleMetaFloorIds = [mo.id];
-              break;
-            }
+          const t = mo?.type?.toLowerCase() || '';
+          if (t !== 'ifcbuildingstorey') continue;
+
+          const candidates = [
+            mo.originalSystemId,
+            mo.attributes?.FmGuid,
+            mo.attributes?.fmGuid,
+            mo.attributes?.fmguid,
+            mo.id,
+          ]
+            .filter(Boolean)
+            .map((value) => normalizeGuid(String(value)));
+
+          if (candidates.some((candidate) => fmGuidSet.has(candidate))) {
+            floorId = mo.id;
+            visibleMetaFloorIds = [mo.id];
+            break;
           }
         }
       }
