@@ -1305,12 +1305,7 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
     case "senslinc_get_sites": return execSenslincGetSites(args);
     case "senslinc_search_data": return execSenslincSearchData(args);
     case "senslinc_get_indices": return execSenslincGetIndices();
-    // FM Access tools
-    case "fm_access_get_drawings": return execFmAccessGetDrawings(args);
-    case "fm_access_get_hierarchy": return execFmAccessGetHierarchy(args);
-    case "fm_access_search_objects": return execFmAccessSearchObjects(args);
-    case "fm_access_get_floors": return execFmAccessGetFloors(args);
-    // FM Access local search
+    // FM Access local search (replaces phantom fm_access_get_* tools)
     case "search_fm_access_local": return execSearchFmAccessLocal(supabase, args);
     // Document content Q&A
     case "ask_about_documents": return execAskAboutDocuments(supabase, args, apiKey!);
@@ -1416,13 +1411,14 @@ async function buildSystemPrompt(supabase: any, context: any, userProfile: any, 
     if (buildingsResult.data?.length) {
       const lines = buildingsResult.data.map((b: any) => {
         const s = settingsMap[b.fm_guid] || {};
-        let line = `  - "${b.common_name || b.name}" (fm_guid: ${b.fm_guid}`;
-        if (s.fm_access_building_guid) line += `, fm_access_guid: ${s.fm_access_building_guid}`;
-        if (s.ivion_site_id) line += `, ivion: ${s.ivion_site_id}`;
-        line += ')';
+        let line = `  - "${b.common_name || b.name}"`;
+        if (s.fm_access_building_guid) line += ` [FM Access connected]`;
+        if (s.ivion_site_id) line += ` [360° available]`;
+        // Internal lookup ref (hidden from user, for tool calls only)
+        line += ` {ref:${b.fm_guid}}`;
         return line;
       });
-      buildingDirectory = `\nAVAILABLE BUILDINGS IN THE PORTFOLIO:\n${lines.join("\n")}`;
+      buildingDirectory = `\nAVAILABLE BUILDINGS IN THE PORTFOLIO (use {ref:...} values ONLY in tool calls, NEVER show them to users):\n${lines.join("\n")}`;
     }
   } catch (e) {
     console.error("Failed to fetch building directory:", e);
@@ -1589,24 +1585,23 @@ When the user asks for advice ("ge mig råd", "vad bör jag göra", "advisor"), 
    - 🔴 Risks / deficiencies
    - 📋 Recommended actions with priority
 
-FM ACCESS (RITNINGAR / DRAWINGS / HDC):
-You have tools to query FM Access (Tessel HDC) for drawings, hierarchy, and object search.
+FM ACCESS (DRAWINGS / DOCUMENTS / HDC):
+You have access to locally synced FM Access data via the search_fm_access_local tool. This searches drawings, documents, and DoU (operation & maintenance) instructions that have been synced to the local database.
 
 WORKFLOW for FM Access questions:
-1. First, find the fm_access_building_guid from query_building_settings (it's listed in the building directory above).
-2. Then use the appropriate FM Access tool:
-   - "Vilka ritningar finns?" → fm_access_get_drawings(fm_access_building_guid)
-   - "Hur många objekt?" → fm_access_get_hierarchy(fm_access_building_guid)
-   - "Sök objekt" → fm_access_search_objects(query)
-   - "Vilka våningar?" → fm_access_get_floors(fm_access_building_guid)
-3. Present the results with counts grouped by discipline/tab.
+1. First, check the building directory above for "[FM Access connected]" to verify FM Access is available.
+2. Use search_fm_access_local with the building's {ref:...} guid and a search term:
+   - "Which drawings exist?" → search_fm_access_local(building_fm_guid, data_type="drawings")
+   - "Find ventilation documents" → search_fm_access_local(building_fm_guid, search_term="ventilation", data_type="documents")
+   - "Maintenance instructions" → search_fm_access_local(building_fm_guid, data_type="dou")
+3. Present the results grouped by type/discipline.
 4. Offer to show drawings using viewer_show_drawing action links.
+5. If no FM Access data is found, inform the user that the building needs to have FM Access data synced first via Settings.
 
 EXAMPLE FM Access interaction:
-User: "Vilka ritningar finns det i Småviken?"
-→ Call query_building_settings to get fm_access_building_guid for Småviken
-→ Call fm_access_get_drawings(fm_access_building_guid)
-→ Present: "Det finns X ritningar fördelat på dessa discipliner:\n- Arkitekt: 8 st\n- El: 12 st\n- VVS: 7 st\nSka jag lista dem?"
+User: "Which drawings are available for Småviken?"
+→ Call search_fm_access_local(building_fm_guid, data_type="drawings")
+→ Present: "There are X drawings available:\n- Architecture: 8\n- Electrical: 12\n- HVAC: 7\nWould you like me to list them?"
 
 DOCUMENT CONTENT Q&A:
 You can answer questions about the CONTENT of stored documents (PDFs, text files) using the ask_about_documents tool.
