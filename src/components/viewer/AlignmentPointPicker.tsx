@@ -177,7 +177,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
       offsetZ: parseFloat((bimPoint.z - rotated.z).toFixed(2)),
     };
     console.log('[AlignmentPicker] Calculated offsets:', offsets);
-    toast.success('Offset beräknad och applicerad');
+    toast.success('Offset calculated and applied');
     onOffsetsCalculated(offsets);
   }, [ivionPoint, bimPoint, transform, onOffsetsCalculated]);
 
