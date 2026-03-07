@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Type, MessageSquarePlus, MessageSquare, Tags, Scan, EyeOff, Eye, ZoomIn, Info } from 'lucide-react';
+import { Type, MessageSquarePlus, MessageSquare, Tags, Scan, EyeOff, Eye, ZoomIn, Info, Move, Trash2, MousePointer } from 'lucide-react';
 
 interface ViewerContextMenuProps {
   position: { x: number; y: number };
@@ -16,6 +16,9 @@ interface ViewerContextMenuProps {
   onHideEntity?: () => void;
   onIsolateEntity?: () => void;
   onShowAll?: () => void;
+  onSelectEntity?: () => void;
+  onMoveObject?: () => void;
+  onDeleteObject?: () => void;
 }
 
 const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
@@ -32,6 +35,9 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   onHideEntity,
   onIsolateEntity,
   onShowAll,
+  onSelectEntity,
+  onMoveObject,
+  onDeleteObject,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -58,9 +64,12 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   // Entity-specific actions
   if (entityId) {
     if (onShowProperties) items.push({ icon: Info, label: 'Egenskaper', action: onShowProperties, entityOnly: true });
+    if (onSelectEntity) items.push({ icon: MousePointer, label: 'Markera', action: onSelectEntity, entityOnly: true });
     if (onZoomTo) items.push({ icon: ZoomIn, label: 'Zooma till', action: onZoomTo, entityOnly: true });
     if (onIsolateEntity) items.push({ icon: Scan, label: 'Isolera', action: onIsolateEntity, entityOnly: true });
     if (onHideEntity) items.push({ icon: EyeOff, label: 'Dölj', action: onHideEntity, entityOnly: true });
+    if (onMoveObject) items.push({ icon: Move, label: 'Flytta objekt', action: onMoveObject, entityOnly: true });
+    if (onDeleteObject) items.push({ icon: Trash2, label: 'Ta bort objekt', action: onDeleteObject, entityOnly: true });
   }
 
   // Always-available actions

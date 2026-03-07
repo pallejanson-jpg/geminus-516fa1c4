@@ -138,6 +138,12 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   const [annotationsOpen, setAnnotationsOpen] = useState(false);
   const [checkedAnnotations, setCheckedAnnotations] = useState<Set<string>>(new Set());
   const [annotationCategories, setAnnotationCategories] = useState<Array<{ category: string; count: number; color: string }>>([]);
+
+  // Modification filter state
+  const [modificationsOpen, setModificationsOpen] = useState(false);
+  const [showMovedAssets, setShowMovedAssets] = useState(false);
+  const [showDeletedAssets, setShowDeletedAssets] = useState(false);
+  const [modifiedAssets, setModifiedAssets] = useState<Array<{ fm_guid: string; modification_status: string }>>([]);
   // Cache: level fmGuid → xeokit entity IDs (built once when viewer ready)
   const entityMapRef = useRef<Map<string, string[]>>(new Map());
   const entityMapBuilt = useRef(false);
@@ -1178,7 +1184,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }
   }, [getXeokitViewer, onNodeSelect]);
 
-  const handleResetSection = useCallback((section: 'sources' | 'levels' | 'spaces' | 'categories' | 'annotations') => {
+  const handleResetSection = useCallback((section: 'sources' | 'levels' | 'spaces' | 'categories' | 'annotations' | 'modifications') => {
     switch (section) {
       case 'sources': setCheckedSources(new Set()); break;
       case 'levels': setCheckedLevels(new Set()); break;
@@ -1187,6 +1193,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       case 'annotations': 
         setCheckedAnnotations(new Set());
         window.dispatchEvent(new CustomEvent(ANNOTATION_FILTER_EVENT, { detail: { visibleCategories: [] } }));
+        break;
+      case 'modifications':
+        setShowMovedAssets(false);
+        setShowDeletedAssets(false);
         break;
     }
   }, []);
@@ -1197,8 +1207,71 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     setCheckedSpaces(new Set());
     setCheckedCategories(new Set());
     setCheckedAnnotations(new Set());
+    setShowMovedAssets(false);
+    setShowDeletedAssets(false);
     window.dispatchEvent(new CustomEvent(ANNOTATION_FILTER_EVENT, { detail: { visibleCategories: [] } }));
   }, []);
+
+  // ── Fetch modified assets when modifications section opens ───────────
+  useEffect(() => {
+    if (!modificationsOpen || !buildingFmGuid) return;
+    const fetchModified = async () => {
+      const { data } = await supabase
+        .from('assets')
+        .select('fm_guid, modification_status')
+        .eq('building_fm_guid', buildingFmGuid)
+        .not('modification_status', 'is', null);
+      setModifiedAssets(data || []);
+    };
+    fetchModified();
+  }, [modificationsOpen, buildingFmGuid]);
+
+  // ── Apply modification visualization ────────────────────────────────
+  useEffect(() => {
+    const viewer = getXeokitViewer();
+    if (!viewer?.scene || !viewer?.metaScene?.metaObjects) return;
+
+    const metaObjects = viewer.metaScene.metaObjects;
+    const normGuid = (g: string) => (g || '').toLowerCase().replace(/-/g, '');
+
+    // Build lookup
+    const guidToEntityId = new Map<string, string>();
+    Object.values(metaObjects).forEach((mo: any) => {
+      const sysId = mo.originalSystemId || mo.id || '';
+      guidToEntityId.set(normGuid(sysId), mo.id);
+    });
+
+    const movedGuids = new Set(modifiedAssets.filter(a => a.modification_status === 'moved').map(a => normGuid(a.fm_guid)));
+    const deletedGuids = new Set(modifiedAssets.filter(a => a.modification_status === 'deleted').map(a => normGuid(a.fm_guid)));
+
+    // Apply moved coloring
+    movedGuids.forEach(g => {
+      const eid = guidToEntityId.get(g);
+      if (!eid) return;
+      const entity = viewer.scene.objects?.[eid];
+      if (!entity) return;
+      if (showMovedAssets) {
+        entity.colorize = [1, 0.6, 0.1]; // Orange
+      }
+      // If not showing moved, colors are reset by architect theme (no action needed)
+    });
+
+    // Apply deleted visualization
+    deletedGuids.forEach(g => {
+      const eid = guidToEntityId.get(g);
+      if (!eid) return;
+      const entity = viewer.scene.objects?.[eid];
+      if (!entity) return;
+      if (showDeletedAssets) {
+        entity.visible = true;
+        entity.pickable = true;
+        entity.colorize = [1, 0.2, 0.2]; // Red
+      } else {
+        entity.visible = false;
+        entity.pickable = false;
+      }
+    });
+  }, [showMovedAssets, showDeletedAssets, modifiedAssets, getXeokitViewer]);
 
   const handleAnnotationToggle = useCallback((category: string, checked: boolean) => {
     setCheckedAnnotations(prev => {
@@ -1420,6 +1493,39 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 onColorChange={autoColorCategories ? (c) => setCategoryColors(prev => new Map(prev).set(cat.name, c)) : undefined}
               />
             ))}
+          </FilterSection>
+
+          {/* Modification filter (moved / deleted assets) */}
+          <FilterSection
+            title="Ändringar"
+            count={modifiedAssets.length}
+            selectedCount={(showMovedAssets ? 1 : 0) + (showDeletedAssets ? 1 : 0)}
+            isOpen={modificationsOpen}
+            onToggle={() => setModificationsOpen(!modificationsOpen)}
+            onReset={() => handleResetSection('modifications')}
+          >
+            <div className="flex items-center gap-2 px-3 py-1.5 hover:bg-accent/30 transition-colors cursor-pointer"
+              onClick={() => setShowMovedAssets(p => !p)}>
+              <Checkbox checked={showMovedAssets} className="h-4 w-4 shrink-0"
+                onClick={(e) => e.stopPropagation()}
+                onCheckedChange={(v) => setShowMovedAssets(!!v)} />
+              <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: '#FF9919' }} />
+              <span className="text-sm truncate flex-1 text-foreground">Visa flyttade objekt</span>
+              <span className="text-xs text-muted-foreground shrink-0">
+                {modifiedAssets.filter(a => a.modification_status === 'moved').length}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 hover:bg-accent/30 transition-colors cursor-pointer"
+              onClick={() => setShowDeletedAssets(p => !p)}>
+              <Checkbox checked={showDeletedAssets} className="h-4 w-4 shrink-0"
+                onClick={(e) => e.stopPropagation()}
+                onCheckedChange={(v) => setShowDeletedAssets(!!v)} />
+              <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: '#FF3333' }} />
+              <span className="text-sm truncate flex-1 text-foreground">Visa borttagna objekt</span>
+              <span className="text-xs text-muted-foreground shrink-0">
+                {modifiedAssets.filter(a => a.modification_status === 'deleted').length}
+              </span>
+            </div>
           </FilterSection>
 
           {/* Annotations (non-modeled assets) */}
