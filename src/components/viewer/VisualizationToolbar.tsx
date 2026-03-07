@@ -491,7 +491,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     const selectedObjects = getSelectedObjectIds();
 
     if (!screenshot) {
-      toast({ title: "Kunde inte ta skärmdump", variant: "destructive" });
+      toast({ title: "Could not capture screenshot", variant: "destructive" });
       return;
     }
 
