@@ -81,6 +81,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         canvasElement: canvasRef.current,
         transparent: true,
         saoEnabled: true,
+        entityOffsetsEnabled: true,
       });
       viewerRef.current = viewer;
 
