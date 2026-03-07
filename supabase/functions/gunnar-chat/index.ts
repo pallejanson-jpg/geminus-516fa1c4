@@ -505,6 +505,42 @@ const tools = [
       },
     },
   },
+  // ── Faciliate (SWG) tools ──
+  {
+    type: "function",
+    function: {
+      name: "query_faciliate",
+      description: "Query the Faciliate (SWG) system for work orders, buildings, spaces, equipment, and other facility management objects. Faciliate is a desktop FM system — use this to look up data that may not be in the Geminus database. Supports filtering and sorting.",
+      parameters: {
+        type: "object",
+        properties: {
+          objectType: { type: "string", description: "The Faciliate object type to query, e.g. 'workorder', 'building', 'space', 'equipment', 'customer', 'contract'. Case-insensitive." },
+          filter: { type: "string", description: "Filter expression, e.g. 'Status eq \"Active\"' or 'Description like \"%brand%\"'. Uses Faciliate REST API filter syntax." },
+          take: { type: "number", description: "Max rows to return (default 20)" },
+          loadlevel: { type: "string", enum: ["guid", "basic", "simple", "fullprimary", "loadmax"], description: "How much detail to load. Default: simple" },
+        },
+        required: ["objectType"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_faciliate_object",
+      description: "Get a single object from Faciliate by its GUID. Use after query_faciliate to get full details of a specific work order, building, etc.",
+      parameters: {
+        type: "object",
+        properties: {
+          objectType: { type: "string", description: "The Faciliate object type" },
+          guid: { type: "string", description: "The GUID of the object" },
+          loadlevel: { type: "string", enum: ["guid", "basic", "simple", "fullprimary", "loadmax"], description: "Detail level. Default: fullprimary" },
+        },
+        required: ["objectType", "guid"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 /* ─────────────────────────────────────────────
@@ -1130,9 +1166,58 @@ function execViewerShowDrawing(args: any) {
   };
 }
 
-/* ─────────────────────────────────────────────
-   Tool dispatcher
-   ───────────────────────────────────────────── */
+/* ── Faciliate (SWG) tool execution ── */
+
+async function execQueryFaciliate(args: any) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY")!;
+
+  const res = await fetch(`${supabaseUrl}/functions/v1/faciliate-proxy`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${serviceKey}`,
+    },
+    body: JSON.stringify({
+      action: "list",
+      objectType: args.objectType,
+      filter: args.filter || undefined,
+      take: args.take || 20,
+      loadlevel: args.loadlevel || "simple",
+    }),
+  });
+
+  const data = await res.json();
+  if (data.status && data.status >= 400) {
+    return { error: `Faciliate returned status ${data.status}`, details: data.data };
+  }
+  return data.data || data;
+}
+
+async function execGetFaciliateObject(args: any) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY")!;
+
+  const res = await fetch(`${supabaseUrl}/functions/v1/faciliate-proxy`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${serviceKey}`,
+    },
+    body: JSON.stringify({
+      action: "get",
+      objectType: args.objectType,
+      guid: args.guid,
+      loadlevel: args.loadlevel || "fullprimary",
+    }),
+  });
+
+  const data = await res.json();
+  if (data.status && data.status >= 400) {
+    return { error: `Faciliate returned status ${data.status}`, details: data.data };
+  }
+  return data.data || data;
+}
 
 async function executeTool(supabase: any, name: string, args: any, apiKey?: string) {
   switch (name) {
@@ -1170,6 +1255,9 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
     // Write tools
     case "create_work_order": return execCreateWorkOrder(supabase, args);
     case "update_issue_status": return execUpdateIssueStatus(supabase, args);
+    // Faciliate tools
+    case "query_faciliate": return execQueryFaciliate(args);
+    case "get_faciliate_object": return execGetFaciliateObject(args);
     default: return { error: `Unknown tool: ${name}` };
   }
 }
