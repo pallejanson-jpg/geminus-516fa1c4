@@ -221,7 +221,7 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
       <div className={`flex items-center justify-center h-full bg-background ${className}`}>
         <div className="text-center max-w-sm">
           <AlertCircle className="h-10 w-10 text-destructive mx-auto mb-3" />
-          <p className="text-sm font-medium text-foreground mb-1">Kunde inte ladda 2D-ritning</p>
+          <p className="text-sm font-medium text-foreground mb-1">Could not load 2D drawing</p>
           {(buildingName || floorName) && (
             <p className="text-xs text-muted-foreground mb-1">
               {buildingName && floorName
