@@ -488,7 +488,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
               <Button
                 variant={showFilterPanel ? 'default' : 'secondary'}
                 size="icon"
-                className={`absolute ${hideBackButton ? 'top-3' : 'top-3'} ${sidebarOffset} z-40 h-9 w-9 bg-card/95 backdrop-blur-sm shadow-md border`}
+                className={`absolute ${hideBackButton ? 'top-2' : 'top-3'} ${sidebarOffset} z-40 h-9 w-9 bg-card/95 backdrop-blur-sm shadow-md border`}
                 onClick={() => setShowFilterPanel(p => !p)}
               >
                 <Filter className="h-4 w-4" />
