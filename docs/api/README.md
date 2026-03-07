@@ -10,6 +10,7 @@ This folder contains documentation for all external systems that Geminus integra
 | [Ivion](./ivion/) | 360° panorama & POI | JWT Token | Active |
 | [FM Access](./fm-access/) | Facility management data | Basic Auth | Active |
 | [Senslinc](./senslinc/) | IoT sensor data | Bearer Token | Active |
+| [Faciliate](./faciliate/) | Desktop FM system (SWG) | JWT (v2 REST API) | Active |
 | [Congeria](./congeria/) | Document management | Session-based | Planned |
 
 ## Quick Reference

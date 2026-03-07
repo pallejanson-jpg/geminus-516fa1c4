@@ -1255,6 +1255,9 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
     // Write tools
     case "create_work_order": return execCreateWorkOrder(supabase, args);
     case "update_issue_status": return execUpdateIssueStatus(supabase, args);
+    // Faciliate tools
+    case "query_faciliate": return execQueryFaciliate(args);
+    case "get_faciliate_object": return execGetFaciliateObject(args);
     default: return { error: `Unknown tool: ${name}` };
   }
 }
