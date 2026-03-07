@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import SupportCaseList from './SupportCaseList';
 import CreateSupportCase from './CreateSupportCase';
+import FeedbackView from './FeedbackView';
 
 const CustomerPortalView: React.FC = () => {
   const [showCreate, setShowCreate] = useState(false);
@@ -19,7 +20,7 @@ const CustomerPortalView: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Support</h1>
-          <p className="text-sm text-muted-foreground">Ärenden och kontakt med SWG</p>
+          <p className="text-sm text-muted-foreground">Ärenden, feedback och kontakt med SWG</p>
         </div>
         <Button onClick={() => setShowCreate(true)} size="sm">
           <Plus className="h-4 w-4 mr-1" />
@@ -30,11 +31,16 @@ const CustomerPortalView: React.FC = () => {
       <Tabs defaultValue="cases">
         <TabsList>
           <TabsTrigger value="cases">Ärenden</TabsTrigger>
+          <TabsTrigger value="feedback">Feedback</TabsTrigger>
           <TabsTrigger value="contact">Kontakt</TabsTrigger>
         </TabsList>
 
         <TabsContent value="cases">
           <SupportCaseList key={refreshKey} />
+        </TabsContent>
+
+        <TabsContent value="feedback">
+          <FeedbackView />
         </TabsContent>
 
         <TabsContent value="contact">
