@@ -169,8 +169,11 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   useEffect(() => {
     if (!storeyPlugin) return;
 
-    // Wait a bit for models to load their metaobjects
-    const timeout = setTimeout(generateMap, 800);
+    // Wait longer for models to fully load their metaobjects
+    const timeout = setTimeout(generateMap, 2000);
+    // Also retry a couple more times
+    const retry1 = setTimeout(generateMap, 4000);
+    const retry2 = setTimeout(generateMap, 7000);
 
     const floorHandler = () => {
       setPanZoom({ offsetX: 0, offsetY: 0, scale: 1 });
