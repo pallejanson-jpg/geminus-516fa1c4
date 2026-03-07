@@ -328,7 +328,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
 
         if (error) {
           console.error('[ObjectMove] Save failed:', error);
-          toast.error('Kunde inte spara flytten');
+          toast.error('Could not save move');
           entity.offset = savedOriginalOffset;
         } else {
           const roomMsg = newRoom ? ` → ${newRoom.name}` : '';
