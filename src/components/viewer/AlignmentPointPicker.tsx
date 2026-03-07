@@ -266,7 +266,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
               </div>
             </div>
           ) : (
-            <p className="text-foreground/60 mt-1">Klicka i 360° först (steg 1)</p>
+            <p className="text-foreground/60 mt-1">Click in 360° first (step 1)</p>
           )}
         </div>
       </div>
