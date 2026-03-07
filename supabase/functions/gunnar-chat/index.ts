@@ -1703,7 +1703,7 @@ serve(async (req) => {
             ? JSON.parse(tc.function.arguments)
             : tc.function.arguments;
           try {
-            const result = await executeTool(supabase, tc.function.name, args);
+            const result = await executeTool(supabase, tc.function.name, args, LOVABLE_API_KEY);
             return {
               role: "tool" as const,
               tool_call_id: tc.id,
