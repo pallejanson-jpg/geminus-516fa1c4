@@ -432,18 +432,34 @@ const tools = [
       },
     },
   },
-  // ── Document content Q&A tool ──
+  // ── Document content Q&A tool (pre-indexed) ──
   {
     type: "function",
     function: {
       name: "ask_about_documents",
-      description: "Ask a question about the CONTENT of documents (PDFs, text files) stored for a building. Fetches relevant documents from storage, extracts text, and answers questions about their content. Use when users ask 'what does document X say?', 'find info about Y in the documents', 'summarize the radon report', etc. Only works with PDF and text documents.",
+      description: "Ask a question about the CONTENT of documents (PDFs, text files) stored for a building. Searches pre-indexed document chunks in the database. Use when users ask 'what does document X say?', 'find info about Y in the documents', 'summarize the radon report', etc.",
       parameters: {
         type: "object",
         properties: {
           building_fm_guid: { type: "string", description: "Building fm_guid to scope documents" },
           question: { type: "string", description: "The question to answer about the document content" },
           file_name_filter: { type: "string", description: "Optional: filter to specific document(s) by name (partial match)" },
+        },
+        required: ["question"],
+        additionalProperties: false,
+      },
+    },
+  },
+  // ── Help docs search tool ──
+  {
+    type: "function",
+    function: {
+      name: "search_help_docs",
+      description: "Search the platform's help documentation and knowledge base. Use when users ask about how to use Geminus, what features are available, how integrations work, or any platform usage questions. Also useful for support-related questions.",
+      parameters: {
+        type: "object",
+        properties: {
+          question: { type: "string", description: "The question about platform usage or features" },
         },
         required: ["question"],
         additionalProperties: false,
