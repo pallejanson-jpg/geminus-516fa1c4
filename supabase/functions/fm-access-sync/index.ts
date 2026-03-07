@@ -63,6 +63,27 @@ serve(async (req) => {
       );
     }
 
+    // ── Helper: recursively collect nodes by classId from perspective tree ──
+    function collectByClassId(node: any, classId: number, results: any[], parentFloorName?: string) {
+      const nodeClassId = node.classId || node.ClassId;
+      const nodeName = node.objectName || node.ObjectName || node.name || "";
+      
+      // Track floor name for drawings under floors
+      let currentFloorName = parentFloorName;
+      if (nodeClassId === 105) {
+        currentFloorName = nodeName;
+      }
+      
+      if (nodeClassId === classId) {
+        results.push({ ...node, _parentFloorName: currentFloorName });
+      }
+      
+      const children = node.children || node.Children || [];
+      for (const child of children) {
+        collectByClassId(child, classId, results, currentFloorName);
+      }
+    }
+
     switch (action) {
       case "sync-drawings": {
         await updateSyncState("fm_access_drawings", "running");
@@ -71,26 +92,41 @@ serve(async (req) => {
 
         for (const b of buildings) {
           try {
-            const result = await callFmAccess("get-drawings", { buildingId: b.fm_access_building_guid });
-            if (!result?.success) {
-              console.log(`Drawings failed for ${b.fm_guid}:`, result?.error);
+            // Use perspective tree (perspectiveId=8) to find drawings (classId 106)
+            const treeResult = await callFmAccess("get-perspective-tree", {
+              guid: b.fm_access_building_guid,
+              perspectiveId: "8",
+            });
+            
+            if (!treeResult?.success) {
+              console.log(`Perspective tree failed for ${b.fm_guid}:`, treeResult?.error);
               continue;
             }
 
-            const drawings = result.data || [];
+            // Extract drawings (classId 106) from tree
+            const drawings: any[] = [];
+            const treeData = treeResult.data;
+            if (Array.isArray(treeData)) {
+              treeData.forEach((n: any) => collectByClassId(n, 106, drawings));
+            } else if (treeData) {
+              collectByClassId(treeData, 106, drawings);
+            }
+
+            console.log(`FM Access sync: Found ${drawings.length} drawings for building ${b.fm_guid}`);
+
             for (const d of drawings) {
-              const drawingId = String(d.objectId || d.drawingId || d.id || "");
+              const drawingId = String(d.objectId || d.ObjectId || d.id || "");
               if (!drawingId) continue;
 
               await supabase.from("fm_access_drawings").upsert(
                 {
                   building_fm_guid: b.fm_guid,
                   drawing_id: drawingId,
-                  object_id: String(d.objectId || ""),
-                  name: d.objectName || d.name || "",
-                  class_name: d.className || "",
-                  floor_name: d.floorName || "",
-                  tab_name: d.tabName || d.className || "",
+                  object_id: drawingId,
+                  name: d.objectName || d.ObjectName || d.name || "",
+                  class_name: "Ritning",
+                  floor_name: d._parentFloorName || "",
+                  tab_name: d._parentFloorName || "Ritningar",
                   synced_at: new Date().toISOString(),
                 },
                 { onConflict: "building_fm_guid,drawing_id" }
@@ -116,25 +152,53 @@ serve(async (req) => {
 
         for (const b of buildings) {
           try {
-            const result = await callFmAccess("get-documents", { buildingId: b.fm_access_building_guid });
-            if (!result?.success) {
-              console.log(`Documents failed for ${b.fm_guid}:`, result?.error);
+            // Use perspective tree to find all objects, then check for documents
+            // Documents in HDC are typically classId 108 or attached to objects
+            const treeResult = await callFmAccess("get-perspective-tree", {
+              guid: b.fm_access_building_guid,
+              perspectiveId: "8",
+            });
+            
+            if (!treeResult?.success) {
+              console.log(`Perspective tree failed for ${b.fm_guid}:`, treeResult?.error);
               continue;
             }
 
-            const documents = result.data || [];
-            for (const doc of documents) {
-              const documentId = String(doc.objectId || doc.documentId || doc.id || "");
+            // Collect all nodes to check for document-like objects
+            // Documents in HDC can be various classIds, collect everything non-structural
+            const allNodes: any[] = [];
+            const treeData = treeResult.data;
+            
+            function collectAllNodes(node: any) {
+              const classId = node.classId || node.ClassId;
+              // Collect nodes that aren't structural (buildings=103/104, floors=105, drawings=106, rooms=107)
+              if (classId && ![103, 104, 105, 106, 107].includes(classId)) {
+                allNodes.push(node);
+              }
+              const children = node.children || node.Children || [];
+              for (const child of children) collectAllNodes(child);
+            }
+            
+            if (Array.isArray(treeData)) {
+              treeData.forEach((n: any) => collectAllNodes(n));
+            } else if (treeData) {
+              collectAllNodes(treeData);
+            }
+
+            console.log(`FM Access sync: Found ${allNodes.length} document-candidate nodes for building ${b.fm_guid}`);
+
+            for (const doc of allNodes) {
+              const documentId = String(doc.objectId || doc.ObjectId || doc.id || "");
               if (!documentId) continue;
 
               await supabase.from("fm_access_documents").upsert(
                 {
                   building_fm_guid: b.fm_guid,
                   document_id: documentId,
-                  object_id: String(doc.objectId || ""),
-                  name: doc.objectName || doc.name || "",
-                  file_name: doc.fileName || "",
-                  class_name: doc.className || "",
+                  object_id: documentId,
+                  name: doc.objectName || doc.ObjectName || doc.name || "",
+                  file_name: doc.objectName || doc.ObjectName || "",
+                  class_name: doc.className || `classId:${doc.classId || doc.ClassId || ""}`,
                   synced_at: new Date().toISOString(),
                 },
                 { onConflict: "building_fm_guid,document_id" }
@@ -142,25 +206,32 @@ serve(async (req) => {
               totalSynced++;
             }
 
-            // Index document metadata into document_chunks for semantic search
-            for (const doc of documents) {
+            // Also index drawings as document_chunks for semantic search
+            const drawings: any[] = [];
+            if (Array.isArray(treeData)) {
+              treeData.forEach((n: any) => collectByClassId(n, 106, drawings));
+            } else if (treeData) {
+              collectByClassId(treeData, 106, drawings);
+            }
+
+            for (const d of drawings) {
               const content = [
-                doc.objectName || doc.name || "",
-                doc.fileName || "",
-                doc.className || "",
-                doc.description || "",
+                d.objectName || d.ObjectName || "",
+                d._parentFloorName || "",
+                "Ritning",
               ].filter(Boolean).join(" | ");
 
               if (content.trim()) {
+                const sourceId = String(d.objectId || d.ObjectId || "");
                 await supabase.from("document_chunks").upsert(
                   {
                     source_type: "fm_access",
-                    source_id: String(doc.objectId || doc.documentId || ""),
+                    source_id: `drawing-${sourceId}`,
                     building_fm_guid: b.fm_guid,
-                    file_name: doc.objectName || doc.name || doc.fileName || "FM Access dokument",
+                    file_name: d.objectName || d.ObjectName || "FM Access ritning",
                     content,
                     chunk_index: 0,
-                    metadata: { system: "fm_access", type: "document", className: doc.className },
+                    metadata: { system: "fm_access", type: "drawing", floor: d._parentFloorName },
                   },
                   { onConflict: "source_type,source_id,chunk_index", ignoreDuplicates: false }
                 );
@@ -186,19 +257,25 @@ serve(async (req) => {
         for (const b of buildings) {
           try {
             // Get hierarchy to find objects, then get DoU for each
-            const hierResult = await callFmAccess("get-hierarchy", { buildingFmGuid: b.fm_access_building_guid });
+            const hierResult = await callFmAccess("get-perspective-tree", {
+              guid: b.fm_access_building_guid,
+              perspectiveId: "8",
+            });
             if (!hierResult?.success) continue;
 
             // Collect guids from hierarchy
             function collectGuids(node: any, guids: string[]) {
               const guid = node.systemGuid || node.objectGuid || node.guid;
               if (guid) guids.push(guid);
-              for (const child of node.children || []) collectGuids(child, guids);
+              const children = node.children || node.Children || [];
+              for (const child of children) collectGuids(child, guids);
             }
             const guids: string[] = [];
             const data = hierResult.data;
             if (Array.isArray(data)) data.forEach((n: any) => collectGuids(n, guids));
-            else collectGuids(data, guids);
+            else if (data) collectGuids(data, guids);
+
+            console.log(`FM Access sync: Found ${guids.length} GUIDs for DoU lookup (building ${b.fm_guid}), checking first 100`);
 
             // For each object, try to get DoU via proxy
             for (const guid of guids.slice(0, 100)) {
