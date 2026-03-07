@@ -998,10 +998,10 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                         className="w-full"
                         disabled={is2DMode || !isSoloFloor}
                       />
-                      <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
-                        {isSoloFloor && !is2DMode 
-                          ? "Offset från nästa vånings golv" 
-                          : "Aktiveras när en våning är isolerad i 3D"}
+                       <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+                         {isSoloFloor && !is2DMode 
+                           ? "Offset from next floor level" 
+                           : "Enabled when a single floor is isolated in 3D"}
                       </p>
                     </div>
                   </div>
