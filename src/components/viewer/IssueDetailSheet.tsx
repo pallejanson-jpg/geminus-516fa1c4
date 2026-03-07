@@ -133,7 +133,7 @@ interface IssueDetailSheetProps {
   issue: BcfIssue | null;
   open: boolean;
   onClose: () => void;
-  onGoToViewpoint?: (viewpoint: any) => void;
+  onGoToViewpoint?: (viewpoint: any, selectedObjectIds?: string[] | null) => void;
   isAdmin?: boolean;
 }
 

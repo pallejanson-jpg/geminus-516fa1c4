@@ -463,7 +463,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
   const handleSelectIssue = useCallback((issue: BcfIssue) => {
     setSelectedIssue(issue);
     setShowIssueDetail(true);
-    if (issue.viewpoint_json) handleGoToIssueViewpoint(issue.viewpoint_json);
+    if (issue.viewpoint_json) handleGoToIssueViewpoint(issue.viewpoint_json, issue.selected_object_ids);
   }, [handleGoToIssueViewpoint]);
 
   // Listen for issue marker clicks from 3D viewer annotations
