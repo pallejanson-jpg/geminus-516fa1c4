@@ -439,11 +439,14 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
     }
   }, [pendingIssueState, user, buildingFmGuid, buildingName, allData]);
 
-  const handleGoToIssueViewpoint = useCallback((viewpoint: any) => {
+  const handleGoToIssueViewpoint = useCallback((viewpoint: any, fallbackObjectIds?: string[] | null) => {
     if (!viewpoint) return;
     restoreViewpoint(viewpoint, { duration: 1.0 });
-    if (viewpoint.components?.selection?.length > 0) {
-      const selectedIds = viewpoint.components.selection.map((s: any) => s.ifc_guid);
+    
+    const bcfSelection = viewpoint.components?.selection?.map((s: any) => s.ifc_guid) || [];
+    const selectedIds = bcfSelection.length > 0 ? bcfSelection : (fallbackObjectIds || []);
+    
+    if (selectedIds.length > 0) {
       setTimeout(() => {
         const xeokitViewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
         if (xeokitViewer?.scene) {
@@ -460,7 +463,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
   const handleSelectIssue = useCallback((issue: BcfIssue) => {
     setSelectedIssue(issue);
     setShowIssueDetail(true);
-    if (issue.viewpoint_json) handleGoToIssueViewpoint(issue.viewpoint_json);
+    if (issue.viewpoint_json) handleGoToIssueViewpoint(issue.viewpoint_json, issue.selected_object_ids);
   }, [handleGoToIssueViewpoint]);
 
   // Listen for issue marker clicks from 3D viewer annotations
