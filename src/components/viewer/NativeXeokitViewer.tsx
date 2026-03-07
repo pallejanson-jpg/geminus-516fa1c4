@@ -703,11 +703,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       const metaObjects = viewer.metaScene.metaObjects;
       if (!metaObjects) return;
 
-      const norm = (s: string) => (s || '').toLowerCase().replace(/-/g, '');
-
       // Build lookup of alarm fmGuids and their room fmGuids
-      const alarmGuids = new Set(detail.alarms.map(a => norm(a.fmGuid)));
-      const roomGuids = new Set(detail.alarms.filter(a => a.roomFmGuid).map(a => norm(a.roomFmGuid!)));
+      const alarmGuids = new Set(detail.alarms.map(a => normalizeGuid(a.fmGuid)));
+      const roomGuids = new Set(detail.alarms.filter(a => a.roomFmGuid).map(a => normalizeGuid(a.roomFmGuid!)));
 
       // X-ray everything, then highlight matching entities
       const xrayMat = scene.xrayMaterial;
