@@ -123,6 +123,16 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       viewer.camera.up = [0, 1, 0];
       viewer.camera.projection = 'perspective';
 
+      // Slow down touch/mouse navigation for smoother control (Dalux-like feel)
+      if (viewer.cameraControl) {
+        const cc = viewer.cameraControl;
+        cc.dollyRate = 10;           // was default ~15-20
+        cc.panRate = 0.3;            // was default ~0.5
+        cc.rotationInertia = 0.7;    // add inertia for smoother orbiting
+        if (cc.touchDollyRate !== undefined) cc.touchDollyRate = 0.15;  // pinch zoom speed
+        if (cc.touchPanRate !== undefined) cc.touchPanRate = 0.3;       // finger pan speed
+      }
+
       // NavCube — load custom neutral-styled plugin via script tag
       {
         const navCubeCanvas = document.createElement('canvas');
