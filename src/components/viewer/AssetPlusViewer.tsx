@@ -2739,22 +2739,37 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         console.log('[ContextMenu] Capturing listener attached to #AssetPlusViewer');
       }
 
-      // MutationObserver to nuke any DevExtreme context menus that slip through
+      // MutationObserver to remove any DevExtreme context menus/load spinners that slip through
       if (!(window as any).__dxContextMenuObserver) {
         const observer = new MutationObserver((mutations) => {
+          const hasAssetPlusViewer = !!document.getElementById('AssetPlusViewer');
+          if (!hasAssetPlusViewer) return;
+
           for (const m of mutations) {
             m.addedNodes.forEach((node) => {
               if (!(node instanceof HTMLElement)) return;
-              const className = node.className || '';
+              const className = String(node.className || '');
+
               const containsCtx =
-                className.toString().includes('dx-context-menu') ||
+                className.includes('dx-context-menu') ||
                 node.matches('.dx-context-menu, .dx-context-menu-container, [class*="dx-context-menu"]') ||
                 !!node.querySelector('.dx-context-menu, [class*="dx-context-menu"]');
 
-              if (containsCtx) {
+              const containsLoadSpinner =
+                className.includes('dx-loadpanel') ||
+                className.includes('dx-loadindicator') ||
+                node.matches('.dx-loadpanel, .dx-loadpanel-wrapper, .dx-loadpanel-content, .dx-loadindicator, [class*="dx-loadpanel"], [class*="dx-loadindicator"]') ||
+                !!node.querySelector('.dx-loadpanel, .dx-loadpanel-wrapper, .dx-loadpanel-content, .dx-loadindicator, [class*="dx-loadpanel"], [class*="dx-loadindicator"]');
+
+              if (containsCtx || containsLoadSpinner) {
                 node.style.cssText = 'display:none!important;visibility:hidden!important;pointer-events:none!important;opacity:0!important;';
                 node.remove();
-                console.log('[ContextMenu] Removed Asset+ DevExtreme context menu from DOM');
+                if (containsCtx) {
+                  console.log('[ContextMenu] Removed Asset+ DevExtreme context menu from DOM');
+                }
+                if (containsLoadSpinner) {
+                  console.log('[AssetPlusViewer] Removed Asset+ internal load spinner from DOM');
+                }
               }
             });
           }
