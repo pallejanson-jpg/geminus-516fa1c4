@@ -375,7 +375,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
       if (!entityId || !fmGuid || !viewer?.scene) return;
 
       // Confirmation dialog
-      const confirmed = window.confirm('Vill du markera detta objekt som borttaget? Ändringen kan ångras.');
+      const confirmed = window.confirm('Mark this object as deleted? This can be undone.');
       if (!confirmed) return;
 
       const entity = viewer.scene.objects?.[entityId];
