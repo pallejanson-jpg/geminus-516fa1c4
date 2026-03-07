@@ -195,13 +195,13 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
       <div className={`flex items-center justify-center h-full bg-background ${className}`}>
         <div className="text-center max-w-sm">
           <MapPin className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-sm font-medium text-foreground mb-1">Ingen våning vald</p>
+          <p className="text-sm font-medium text-foreground mb-1">No floor selected</p>
           <p className="text-xs text-muted-foreground mb-1">
-            {buildingName ? `Byggnad: ${buildingName}` : 'Välj en våning för att visa 2D-ritningen.'}
+            {buildingName ? `Building: ${buildingName}` : 'Select a floor to view the 2D drawing.'}
           </p>
           {buildingName && (
             <p className="text-xs text-muted-foreground mb-3">
-              Välj en våning i 3D-vyn för att visa ritningen.
+              Select a floor in the 3D view to show the drawing.
             </p>
           )}
           {onChangeFloor && (
