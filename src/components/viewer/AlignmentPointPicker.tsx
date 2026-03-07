@@ -201,7 +201,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={reset} title="Restart">
             <RotateCcw className="h-3 w-3" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose} title="Avbryt">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose} title="Cancel">
             <X className="h-3 w-3" />
           </Button>
         </div>
