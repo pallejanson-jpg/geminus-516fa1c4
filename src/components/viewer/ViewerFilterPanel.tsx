@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
+import { cn, normalizeGuid } from '@/lib/utils';
 import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
@@ -82,8 +82,7 @@ const hexToRgb01 = (hex: string): [number, number, number] => {
 const isGuid = (str: string): boolean =>
   !!str && str.length >= 20 && /^[0-9a-f]{8}[-]?[0-9a-f]{4}/i.test(str);
 
-const normalizeGuid = (value?: string | null): string =>
-  (value || '').toLowerCase().replace(/-/g, '');
+// normalizeGuid imported from '@/lib/utils'
 
 const getDescendantIds = (viewer: any, rootId: string): string[] => {
   const metaObj = viewer?.metaScene?.metaObjects?.[rootId];
@@ -1252,9 +1251,16 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       if (!entity) return;
       if (showMovedAssets) {
         entity.colorize = [1, 0.6, 0.1]; // Orange
+      } else {
+        // Explicitly reset color when toggle is off
+        entity.colorize = null;
       }
-      // If not showing moved, colors are reset by architect theme (no action needed)
     });
+
+    // Restore architect colors for non-modified entities when toggling off
+    if (!showMovedAssets && !showDeletedAssets && viewer) {
+      recolorArchitectObjects(viewer);
+    }
 
     // Apply deleted visualization
     deletedGuids.forEach(g => {

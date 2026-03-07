@@ -227,49 +227,54 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
 
           console.log(`XKT Preload: ${aModels.length} A-models (priority), ${secondaryModels.length} secondary`);
 
-          const fetchModel = async (model: typeof models[0]) => {
+          // Batch-generate all signed URLs in parallel, then fetch binary data
+          const fetchModel = async (model: typeof models[0], signedUrl?: string) => {
             try {
               const modelSize = model.file_size || 0;
 
-              if (modelSize > MAX_SINGLE_MODEL_BYTES) {
-                return;
-              }
-              if (modelSize > 0 && modelSize < 50_000) {
-                return;
-              }
-              if (isModelInMemory(model.model_id, buildingFmGuid)) {
-                return;
-              }
+              if (modelSize > MAX_SINGLE_MODEL_BYTES) return;
+              if (modelSize > 0 && modelSize < 50_000) return;
+              if (isModelInMemory(model.model_id, buildingFmGuid)) return;
 
-              let url = model.file_url;
-              if (!url && model.storage_path) {
-                const { data: urlData } = await supabase.storage
-                  .from('xkt-models')
-                  .createSignedUrl(model.storage_path, 3600);
-                url = urlData?.signedUrl;
-              }
+              const url = signedUrl || model.file_url;
+              if (!url) return;
 
-              if (url) {
-                const response = await fetch(url);
-                if (response.ok) {
-                  const data = await response.arrayBuffer();
-                  const firstByte = data.byteLength > 0 ? String.fromCharCode(new Uint8Array(data)[0]) : '';
-                  if (data.byteLength < 50_000 || firstByte === '<' || firstByte === '{') {
-                    return;
-                  }
-                  storeModelInMemory(model.model_id, buildingFmGuid, data);
-                }
+              const response = await fetch(url);
+              if (response.ok) {
+                const data = await response.arrayBuffer();
+                const firstByte = data.byteLength > 0 ? String.fromCharCode(new Uint8Array(data)[0]) : '';
+                if (data.byteLength < 50_000 || firstByte === '<' || firstByte === '{') return;
+                storeModelInMemory(model.model_id, buildingFmGuid, data);
               }
             } catch (e) {
               console.warn(`XKT Preload: Failed to fetch ${model.model_id}:`, e);
             }
           };
 
+          // Pre-generate all signed URLs in one parallel batch
+          const modelsNeedingUrl = [...aModels, ...secondaryModels].filter(
+            (m: any) => !m.file_url && m.storage_path && !isModelInMemory(m.model_id, buildingFmGuid)
+              && (m.file_size || 0) <= MAX_SINGLE_MODEL_BYTES && (m.file_size || 0) >= 50_000
+          );
+
+          const signedUrlMap = new Map<string, string>();
+          if (modelsNeedingUrl.length > 0) {
+            const urlPromises = modelsNeedingUrl.map(async (m: any) => {
+              const { data: urlData } = await supabase.storage
+                .from('xkt-models')
+                .createSignedUrl(m.storage_path, 3600);
+              if (urlData?.signedUrl) signedUrlMap.set(m.model_id, urlData.signedUrl);
+            });
+            await Promise.allSettled(urlPromises);
+            console.log(`XKT Preload: Batch-generated ${signedUrlMap.size} signed URLs`);
+          }
+
           const fetchBatch = async (batch: typeof models, concurrency: number) => {
             const activePromises = new Set<Promise<void>>();
             for (const model of batch) {
+              const url = model.file_url || signedUrlMap.get(model.model_id);
               let promise: Promise<void>;
-              promise = fetchModel(model).finally(() => activePromises.delete(promise));
+              promise = fetchModel(model, url).finally(() => activePromises.delete(promise));
               activePromises.add(promise);
               if (activePromises.size >= concurrency) {
                 await Promise.race(activePromises);

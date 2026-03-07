@@ -9,6 +9,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { normalizeGuid } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 import { AlertCircle, Box } from 'lucide-react';
 import { getModelFromMemory, storeModelInMemory, getMemoryStats } from '@/hooks/useXktPreload';
@@ -63,19 +64,44 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
     const t0 = performance.now();
 
     try {
-      // 1. Load xeokit SDK
+      // 1. Load SDK + fetch model metadata in PARALLEL
       setPhase('loading_sdk');
-      console.log('[NativeViewer] Loading xeokit SDK...');
-      const sdkResponse = await fetch(XEOKIT_CDN);
-      const sdkText = await sdkResponse.text();
-      const sdkBlob = new Blob([sdkText], { type: 'application/javascript' });
-      const sdkBlobUrl = URL.createObjectURL(sdkBlob);
-      const sdk = await import(/* @vite-ignore */ sdkBlobUrl);
-      URL.revokeObjectURL(sdkBlobUrl);
-      if (!mountedRef.current) return;
-      console.log(`[NativeViewer] SDK loaded in ${Math.round(performance.now() - t0)}ms`);
+      console.log('[NativeViewer] Loading SDK + metadata in parallel...');
 
-      // 2. Create viewer
+      const sdkPromise = (async () => {
+        const sdkResponse = await fetch(XEOKIT_CDN);
+        const sdkText = await sdkResponse.text();
+        const sdkBlob = new Blob([sdkText], { type: 'application/javascript' });
+        const sdkBlobUrl = URL.createObjectURL(sdkBlob);
+        const sdk = await import(/* @vite-ignore */ sdkBlobUrl);
+        URL.revokeObjectURL(sdkBlobUrl);
+        return sdk;
+      })();
+
+      const dbPromise = supabase
+        .from('xkt_models')
+        .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at')
+        .eq('building_fm_guid', buildingFmGuid)
+        .order('file_size', { ascending: true });
+
+      const storagePromise = supabase.storage
+        .from('xkt-models')
+        .list(buildingFmGuid, { limit: 1000, sortBy: { column: 'name', order: 'asc' } });
+
+      const storeyPromise = supabase
+        .from('assets')
+        .select('attributes')
+        .eq('building_fm_guid', buildingFmGuid)
+        .eq('category', 'Building Storey');
+
+      const [sdk, dbResult, storageResult, storeyResult] = await Promise.all([
+        sdkPromise, dbPromise, storagePromise, storeyPromise,
+      ]);
+
+      if (!mountedRef.current) return;
+      console.log(`[NativeViewer] SDK + metadata loaded in ${Math.round(performance.now() - t0)}ms`);
+
+      // 2. Create viewer immediately
       setPhase('creating_viewer');
       const viewer = new sdk.Viewer({
         canvasElement: canvasRef.current,
@@ -133,96 +159,66 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       // XKT Loader
       const xktLoader = new sdk.XKTLoaderPlugin(viewer);
 
-      // 3. Fetch model list from DB
+      // 3. Process pre-fetched model metadata (already loaded in parallel above)
       setPhase('loading_models');
-      const { data: modelsFromDb, error: dbErrorRaw } = await supabase
-        .from('xkt_models')
-        .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at')
-        .eq('building_fm_guid', buildingFmGuid)
-        .order('file_size', { ascending: true });
-      let dbError: any = dbErrorRaw;
-      let models: ModelCandidate[] = ((modelsFromDb as any[]) ?? []).map((m) => ({
+      let dbError: any = dbResult.error;
+      let models: ModelCandidate[] = ((dbResult.data as any[]) ?? []).map((m) => ({
         ...m,
         source: 'db' as const,
       }));
 
-      // Supplement from storage folder to avoid stale/missing DB metadata
-      // (xkt_models can lag behind actual files in xkt-models bucket)
+      // Merge storage files
       const mergedModels = new Map<string, ModelCandidate>();
       models.forEach((m) => mergedModels.set(m.model_id, m));
 
-      try {
-        const { data: storageFiles, error: storageListError } = await supabase.storage
-          .from('xkt-models')
-          .list(buildingFmGuid, {
-            limit: 1000,
-            sortBy: { column: 'name', order: 'asc' },
-          });
+      if (!storageResult.error && storageResult.data) {
+        const xktFiles = storageResult.data.filter((f: any) =>
+          f.name?.toLowerCase().endsWith('.xkt') && !f.name?.toLowerCase().endsWith('_xkt.xkt')
+        );
 
-        if (!storageListError && storageFiles) {
-          const xktFiles = storageFiles.filter((f: any) =>
-            f.name?.toLowerCase().endsWith('.xkt') && !f.name?.toLowerCase().endsWith('_xkt.xkt')
-          );
+        xktFiles.forEach((file: any) => {
+          const modelId = file.name.replace(/\.xkt$/i, '');
+          if (!mergedModels.has(modelId)) {
+            mergedModels.set(modelId, {
+              model_id: modelId,
+              model_name: modelId,
+              storage_path: `${buildingFmGuid}/${file.name}`,
+              file_size: file.metadata?.size ?? null,
+              storey_fm_guid: null,
+              synced_at: null,
+              source: 'storage',
+            });
+          }
+        });
 
-          xktFiles.forEach((file: any) => {
-            const modelId = file.name.replace(/\.xkt$/i, '');
-            if (!mergedModels.has(modelId)) {
-              mergedModels.set(modelId, {
-                model_id: modelId,
-                model_name: modelId,
-                storage_path: `${buildingFmGuid}/${file.name}`,
-                file_size: file.metadata?.size ?? null,
-                storey_fm_guid: null,
-                synced_at: null,
-                source: 'storage',
-              });
-            }
-          });
-
-          models = Array.from(mergedModels.values());
-          console.log(`[NativeViewer] Model sources → DB: ${(models || []).filter((m: any) => !!m.synced_at).length}, Storage: ${xktFiles.length}, Merged: ${models.length}`);
-        } else if (storageListError) {
-          console.warn('[NativeViewer] Storage list failed, continuing with DB models only:', storageListError.message);
-        }
-      } catch (storageError) {
-        console.warn('[NativeViewer] Storage list fallback failed, continuing with DB models only:', storageError);
+        models = Array.from(mergedModels.values());
+        console.log(`[NativeViewer] Model sources → DB: ${(models || []).filter((m: any) => !!m.synced_at).length}, Storage: ${xktFiles.length}, Merged: ${models.length}`);
+      } else if (storageResult.error) {
+        console.warn('[NativeViewer] Storage list failed, continuing with DB models only:', storageResult.error.message);
       }
 
-      // Resolve model names from Asset+ Building Storey objects (same logic as useModelNames)
-      // XKT files store GUIDs, but the real model names (like "A-40.1") are in the assets table
-      if (models.length > 0) {
-        try {
-          const { data: storeys } = await supabase
-            .from('assets')
-            .select('attributes')
-            .eq('building_fm_guid', buildingFmGuid)
-            .eq('category', 'Building Storey');
-
-          if (storeys && storeys.length > 0) {
-            const assetPlusNames = new Map<string, string>();
-            storeys.forEach((s: any) => {
-              const attrs = typeof s.attributes === 'string' ? JSON.parse(s.attributes) : (s.attributes || {});
-              const guid = attrs.parentBimObjectId;
-              const name = attrs.parentCommonName;
-              if (guid && name && !/^[0-9a-f]{8}-/i.test(name)) {
-                assetPlusNames.set(guid, name);
-                assetPlusNames.set(guid.toLowerCase(), name);
-              }
-            });
-
-            if (assetPlusNames.size > 0) {
-              console.log(`[NativeViewer] Resolved ${assetPlusNames.size / 2} model names from Asset+ storeys`);
-              models.forEach((m) => {
-                const resolved = assetPlusNames.get(m.model_id) || assetPlusNames.get(m.model_id.toLowerCase());
-                if (resolved && resolved !== m.model_name) {
-                  console.log(`[NativeViewer] Name resolution: "${m.model_name}" → "${resolved}"`);
-                  m.model_name = resolved;
-                }
-              });
-            }
+      // Resolve model names from pre-fetched storey data
+      if (models.length > 0 && storeyResult.data && storeyResult.data.length > 0) {
+        const assetPlusNames = new Map<string, string>();
+        storeyResult.data.forEach((s: any) => {
+          const attrs = typeof s.attributes === 'string' ? JSON.parse(s.attributes) : (s.attributes || {});
+          const guid = attrs.parentBimObjectId;
+          const name = attrs.parentCommonName;
+          if (guid && name && !/^[0-9a-f]{8}-/i.test(name)) {
+            assetPlusNames.set(guid, name);
+            assetPlusNames.set(guid.toLowerCase(), name);
           }
-        } catch (e) {
-          console.debug('[NativeViewer] Asset+ name resolution failed, continuing with DB names:', e);
+        });
+
+        if (assetPlusNames.size > 0) {
+          console.log(`[NativeViewer] Resolved ${assetPlusNames.size / 2} model names from Asset+ storeys`);
+          models.forEach((m) => {
+            const resolved = assetPlusNames.get(m.model_id) || assetPlusNames.get(m.model_id.toLowerCase());
+            if (resolved && resolved !== m.model_name) {
+              console.log(`[NativeViewer] Name resolution: "${m.model_name}" → "${resolved}"`);
+              m.model_name = resolved;
+            }
+          });
         }
       }
 
@@ -305,22 +301,30 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         return;
       }
 
-      // Staleness check: if oldest model > 7 days, trigger background refresh
-      const STALE_MS = 7 * 24 * 60 * 60 * 1000;
-      const oldestSync = models.reduce((oldest: string | null, m: any) => {
-        if (!oldest || (m.synced_at && m.synced_at < oldest)) return m.synced_at;
-        return oldest;
-      }, null as string | null);
-      
-      if (oldestSync && (Date.now() - new Date(oldestSync).getTime()) > STALE_MS) {
-        console.log('[NativeViewer] Models are stale (>7d), triggering background refresh...');
-        supabase.functions.invoke('asset-plus-sync', {
-          body: { action: 'sync-xkt-building', buildingFmGuid, force: true }
-        }).then(({ data }) => {
-          if (data?.synced > 0) {
-            console.log(`[NativeViewer] Background refresh: ${data.synced} models updated`);
-          }
-        }).catch(() => {});
+      // Staleness check: deferred to avoid competing with model loading
+      const deferStalenessCheck = () => {
+        const STALE_MS = 7 * 24 * 60 * 60 * 1000;
+        const oldestSync = models.reduce((oldest: string | null, m: any) => {
+          if (!oldest || (m.synced_at && m.synced_at < oldest)) return m.synced_at;
+          return oldest;
+        }, null as string | null);
+        
+        if (oldestSync && (Date.now() - new Date(oldestSync).getTime()) > STALE_MS) {
+          console.log('[NativeViewer] Models are stale (>7d), triggering background refresh...');
+          supabase.functions.invoke('asset-plus-sync', {
+            body: { action: 'sync-xkt-building', buildingFmGuid, force: true }
+          }).then(({ data }) => {
+            if (data?.synced > 0) {
+              console.log(`[NativeViewer] Background refresh: ${data.synced} models updated`);
+            }
+          }).catch(() => {});
+        }
+      };
+      // Defer staleness check to after models are loaded
+      if (typeof requestIdleCallback === 'function') {
+        requestIdleCallback(deferStalenessCheck, { timeout: 10000 });
+      } else {
+        setTimeout(deferStalenessCheck, 5000);
       }
 
       // Load all available models, but prioritize architectural models first in queue.
@@ -351,8 +355,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       console.log(`[NativeViewer] Loading ${loadList.length}/${models.length} models (A-models prioritized)`);
       setLoadProgress({ loaded: 0, total: loadList.length });
 
-      // 4. Load models with strict sequential loading (prevents xeokit parser OOM/crashes on large files)
-      const CONCURRENT = 1;
+      // 4. Load models — desktop uses 2 concurrent, mobile stays at 1
+      const CONCURRENT = isMobile ? 1 : 2;
       let loaded = 0;
       const queue = [...loadList] as ModelInfo[];
 
@@ -494,6 +498,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         setPhase('ready');
         (window as any).__nativeXeokitViewer = viewer;
         onViewerReady?.(viewer);
+        // Dispatch VIEWER_MODELS_LOADED for hooks like useObjectMoveMode
+        window.dispatchEvent(new CustomEvent('VIEWER_MODELS_LOADED', { detail: { buildingFmGuid } }));
         // Re-apply any pending insights color event that arrived before models loaded
         if (pendingInsightsColorRef.current) {
           const pending = pendingInsightsColorRef.current;
@@ -593,13 +599,12 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         collectDescendants(mo);
       };
 
-      // Normalize a guid for comparison (lowercase, no dashes)
-      const norm = (s: string) => (s || '').toLowerCase().replace(/-/g, '');
+      // Use shared normalizeGuid for comparison
 
       // Build a lookup of normalized fmGuid → rgb for fast matching
       const fmGuidLookup = new Map<string, [number, number, number]>();
       Object.entries(colorMap).forEach(([key, rgb]) => {
-        fmGuidLookup.set(norm(key), rgb);
+        fmGuidLookup.set(normalizeGuid(key), rgb);
       });
 
       if (mode === 'asset_category' || mode === 'asset_categories') {
@@ -624,8 +629,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         const nameColorMap = detail.nameColorMap || {};
 
         Object.values(metaObjects).forEach((mo: any) => {
-          const sysId = norm(mo.originalSystemId || '');
-          const moId = norm(mo.id || '');
+          const sysId = normalizeGuid(mo.originalSystemId || '');
+          const moId = normalizeGuid(mo.id || '');
           const moName = (mo.name || '').toLowerCase().trim();
           // Try fmGuid match first, then name-based fallback
           let rgb = fmGuidLookup.get(sysId) || fmGuidLookup.get(moId);
@@ -698,11 +703,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       const metaObjects = viewer.metaScene.metaObjects;
       if (!metaObjects) return;
 
-      const norm = (s: string) => (s || '').toLowerCase().replace(/-/g, '');
-
       // Build lookup of alarm fmGuids and their room fmGuids
-      const alarmGuids = new Set(detail.alarms.map(a => norm(a.fmGuid)));
-      const roomGuids = new Set(detail.alarms.filter(a => a.roomFmGuid).map(a => norm(a.roomFmGuid!)));
+      const alarmGuids = new Set(detail.alarms.map(a => normalizeGuid(a.fmGuid)));
+      const roomGuids = new Set(detail.alarms.filter(a => a.roomFmGuid).map(a => normalizeGuid(a.roomFmGuid!)));
 
       // X-ray everything, then highlight matching entities
       const xrayMat = scene.xrayMaterial;
@@ -720,8 +723,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       const roomColor: [number, number, number] = [1.0, 0.6, 0.2];   // Orange
 
       Object.values(metaObjects).forEach((mo: any) => {
-        const sysId = norm(mo.originalSystemId || '');
-        const moId = norm(mo.id || '');
+        const sysId = normalizeGuid(mo.originalSystemId || '');
+        const moId = normalizeGuid(mo.id || '');
 
         if (alarmGuids.has(sysId) || alarmGuids.has(moId)) {
           const entity = scene.objects?.[mo.id];
