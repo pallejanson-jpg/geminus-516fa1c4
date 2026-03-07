@@ -91,7 +91,7 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
         }
 
         if (!data?.success) {
-          setError(data?.error || 'FM Access är inte konfigurerat');
+          setError(data?.error || 'FM Access is not configured');
           setPhase('error');
           return;
         }
