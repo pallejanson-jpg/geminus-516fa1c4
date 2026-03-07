@@ -432,18 +432,34 @@ const tools = [
       },
     },
   },
-  // ── Document content Q&A tool ──
+  // ── Document content Q&A tool (pre-indexed) ──
   {
     type: "function",
     function: {
       name: "ask_about_documents",
-      description: "Ask a question about the CONTENT of documents (PDFs, text files) stored for a building. Fetches relevant documents from storage, extracts text, and answers questions about their content. Use when users ask 'what does document X say?', 'find info about Y in the documents', 'summarize the radon report', etc. Only works with PDF and text documents.",
+      description: "Ask a question about the CONTENT of documents (PDFs, text files) stored for a building. Searches pre-indexed document chunks in the database. Use when users ask 'what does document X say?', 'find info about Y in the documents', 'summarize the radon report', etc.",
       parameters: {
         type: "object",
         properties: {
           building_fm_guid: { type: "string", description: "Building fm_guid to scope documents" },
           question: { type: "string", description: "The question to answer about the document content" },
           file_name_filter: { type: "string", description: "Optional: filter to specific document(s) by name (partial match)" },
+        },
+        required: ["question"],
+        additionalProperties: false,
+      },
+    },
+  },
+  // ── Help docs search tool ──
+  {
+    type: "function",
+    function: {
+      name: "search_help_docs",
+      description: "Search the platform's help documentation and knowledge base. Use when users ask about how to use Geminus, what features are available, how integrations work, or any platform usage questions. Also useful for support-related questions.",
+      parameters: {
+        type: "object",
+        properties: {
+          question: { type: "string", description: "The question about platform usage or features" },
         },
         required: ["question"],
         additionalProperties: false,
@@ -953,148 +969,129 @@ async function execFmAccessGetFloors(args: any) {
   return result.data || [];
 }
 
-/* ── Document content Q&A execution ── */
+/* ── Document content Q&A execution (pre-indexed) ── */
 
 async function execAskAboutDocuments(supabase: any, args: any, apiKey: string) {
-  // 1. Find matching documents
-  let query = supabase.from("documents").select("id, file_name, file_path, mime_type, file_size, building_fm_guid, metadata");
+  // Search pre-indexed document chunks
+  let query = supabase
+    .from("document_chunks")
+    .select("content, file_name, chunk_index, metadata")
+    .eq("source_type", "document");
+
   if (args.building_fm_guid) query = query.eq("building_fm_guid", args.building_fm_guid);
   if (args.file_name_filter) query = query.ilike("file_name", `%${args.file_name_filter}%`);
-  // Only fetch text-readable documents
-  query = query.or("mime_type.ilike.%pdf%,mime_type.ilike.%text%,mime_type.is.null");
-  query = query.order("created_at", { ascending: false }).limit(5);
 
-  const { data: docs, error } = await query;
+  // Search by question keywords in content
+  const keywords = args.question
+    .replace(/[?!.,]/g, "")
+    .split(/\s+/)
+    .filter((w: string) => w.length > 2)
+    .slice(0, 5);
+
+  if (keywords.length > 0) {
+    const orClauses = keywords.map((kw: string) => `content.ilike.%${kw}%`).join(",");
+    query = query.or(orClauses);
+  }
+
+  query = query.order("chunk_index").limit(15);
+  const { data: chunks, error } = await query;
   if (error) throw error;
-  if (!docs?.length) return { error: "Inga dokument hittades som matchar sökningen.", documents_searched: 0 };
 
-  // 2. Download and extract text from each document
-  const documentTexts: { name: string; content: string }[] = [];
-  const maxTotalChars = 30000; // limit to avoid token overflow
-  let totalChars = 0;
-
-  for (const doc of docs) {
-    if (totalChars >= maxTotalChars) break;
-
-    try {
-      const { data: fileData, error: dlError } = await supabase.storage
-        .from("documents")
-        .download(doc.file_path);
-
-      if (dlError || !fileData) {
-        console.error(`Failed to download ${doc.file_name}:`, dlError);
-        continue;
-      }
-
-      let text = "";
-      const mimeType = (doc.mime_type || "").toLowerCase();
-
-      if (mimeType.includes("text") || doc.file_name?.endsWith(".txt")) {
-        text = await fileData.text();
-      } else if (mimeType.includes("pdf") || doc.file_name?.endsWith(".pdf")) {
-        // For PDFs, we read raw bytes and extract visible text heuristically
-        const bytes = new Uint8Array(await fileData.arrayBuffer());
-        text = extractPdfText(bytes);
-      }
-
-      if (text.trim()) {
-        const remaining = maxTotalChars - totalChars;
-        const trimmed = text.slice(0, remaining);
-        documentTexts.push({ name: doc.file_name, content: trimmed });
-        totalChars += trimmed.length;
-      }
-    } catch (e) {
-      console.error(`Error processing ${doc.file_name}:`, e);
+  if (!chunks?.length) {
+    // Fallback without keyword filter
+    let fb = supabase.from("document_chunks").select("content, file_name, chunk_index, metadata").eq("source_type", "document");
+    if (args.building_fm_guid) fb = fb.eq("building_fm_guid", args.building_fm_guid);
+    if (args.file_name_filter) fb = fb.ilike("file_name", `%${args.file_name_filter}%`);
+    fb = fb.order("chunk_index").limit(10);
+    const { data: fbChunks } = await fb;
+    if (!fbChunks?.length) {
+      return { error: "Inga indexerade dokument hittades. Administratören kan indexera dokument i Inställningar.", documents_searched: 0 };
     }
+    return await answerFromChunks(fbChunks, args.question, apiKey);
   }
 
-  if (documentTexts.length === 0) {
-    return { error: "Kunde inte extrahera text från de hittade dokumenten.", documents_found: docs.length };
+  return await answerFromChunks(chunks, args.question, apiKey);
+}
+
+async function answerFromChunks(chunks: any[], question: string, apiKey: string) {
+  const maxChars = 25000;
+  let totalChars = 0;
+  const selected: { name: string; content: string }[] = [];
+
+  for (const chunk of chunks) {
+    if (totalChars >= maxChars) break;
+    const remaining = maxChars - totalChars;
+    const content = chunk.content.slice(0, remaining);
+    selected.push({ name: chunk.file_name || "Okänt dokument", content });
+    totalChars += content.length;
   }
 
-  // 3. Use AI to answer the question based on document content
-  const docContext = documentTexts.map(d => `--- DOCUMENT: ${d.name} ---\n${d.content}`).join("\n\n");
+  const docContext = selected.map(d => `--- DOCUMENT: ${d.name} ---\n${d.content}`).join("\n\n");
 
   const aiResp = await fetch(AI_GATEWAY, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: AI_MODEL_PRIMARY,
       messages: [
-        {
-          role: "system",
-          content: `You are a document analysis assistant. Answer the user's question based ONLY on the provided document content. If the answer is not in the documents, say so. Respond in the same language as the question. Be concise and reference which document the information comes from.`,
-        },
-        {
-          role: "user",
-          content: `Documents:\n\n${docContext}\n\n---\nQuestion: ${args.question}`,
-        },
+        { role: "system", content: "You are a document analysis assistant. Answer based ONLY on the provided document content. If the answer is not in the documents, say so. Respond in the same language as the question. Be concise and reference which document the information comes from." },
+        { role: "user", content: `Documents:\n\n${docContext}\n\n---\nQuestion: ${question}` },
       ],
       max_tokens: 1000,
       temperature: 0.2,
     }),
   });
 
-  if (!aiResp.ok) {
-    console.error("Doc Q&A AI error:", aiResp.status);
-    return { error: "Kunde inte analysera dokumentinnehållet.", documents_searched: documentTexts.length };
-  }
-
+  if (!aiResp.ok) return { error: "Kunde inte analysera dokumentinnehållet.", documents_searched: selected.length };
   const aiResult = await aiResp.json();
   const answer = aiResult.choices?.[0]?.message?.content || "Inget svar kunde genereras.";
-
-  return {
-    answer,
-    documents_searched: documentTexts.length,
-    document_names: documentTexts.map(d => d.name),
-  };
+  const docNames = [...new Set(selected.map(d => d.name))];
+  return { answer, documents_searched: selected.length, document_names: docNames };
 }
 
-/** Simple PDF text extraction — pulls text between BT/ET blocks and parenthesized strings */
-function extractPdfText(bytes: Uint8Array): string {
-  // Convert to string for regex parsing (works for text-based PDFs)
-  const decoder = new TextDecoder("latin1");
-  const raw = decoder.decode(bytes);
+/* ── Help docs search execution ── */
 
-  const texts: string[] = [];
+async function execSearchHelpDocs(supabase: any, args: any, apiKey: string) {
+  const keywords = args.question
+    .replace(/[?!.,]/g, "")
+    .split(/\s+/)
+    .filter((w: string) => w.length > 2)
+    .slice(0, 6);
 
-  // Extract text from Tj/TJ operators and parenthesized strings
-  const patterns = [
-    /\(([^)]*)\)\s*Tj/g,
-    /\[([^\]]*)\]\s*TJ/g,
-  ];
+  let query = supabase.from("document_chunks").select("content, file_name, metadata").eq("source_type", "help_doc");
+  if (keywords.length > 0) {
+    const orClauses = keywords.map((kw: string) => `content.ilike.%${kw}%`).join(",");
+    query = query.or(orClauses);
+  }
+  query = query.limit(10);
+  const { data: chunks, error } = await query;
+  if (error) throw error;
 
-  for (const pattern of patterns) {
-    let match;
-    while ((match = pattern.exec(raw)) !== null) {
-      let extracted = match[1];
-      // For TJ arrays, extract parenthesized parts
-      if (pattern.source.includes("TJ")) {
-        const parts: string[] = [];
-        const partPattern = /\(([^)]*)\)/g;
-        let partMatch;
-        while ((partMatch = partPattern.exec(extracted)) !== null) {
-          parts.push(partMatch[1]);
-        }
-        extracted = parts.join("");
-      }
-      // Decode PDF escape sequences
-      extracted = extracted
-        .replace(/\\n/g, "\n")
-        .replace(/\\r/g, "\r")
-        .replace(/\\t/g, "\t")
-        .replace(/\\\(/g, "(")
-        .replace(/\\\)/g, ")")
-        .replace(/\\\\/g, "\\");
-
-      if (extracted.trim()) texts.push(extracted);
-    }
+  if (!chunks?.length) {
+    return { answer: "Ingen hjälpdokumentation hittades i kunskapsbasen. Administratören kan lägga till hjälp-URL:er i Inställningar → AI Assistants → Knowledge Base.", sources: [] };
   }
 
-  return texts.join(" ").replace(/\s+/g, " ").trim();
+  const docContext = chunks.map((c: any) => `--- ${c.file_name || c.metadata?.app_name || "Help"} ---\n${c.content}`).join("\n\n");
+
+  const aiResp = await fetch(AI_GATEWAY, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: AI_MODEL_PRIMARY,
+      messages: [
+        { role: "system", content: "You are a platform help assistant for Geminus. Answer based on the provided help documentation. Be helpful and specific. Respond in the same language as the question." },
+        { role: "user", content: `Help documentation:\n\n${docContext}\n\n---\nQuestion: ${args.question}` },
+      ],
+      max_tokens: 1000,
+      temperature: 0.2,
+    }),
+  });
+
+  if (!aiResp.ok) return { error: "Kunde inte söka i hjälpdokumentationen." };
+  const aiResult = await aiResp.json();
+  const answer = aiResult.choices?.[0]?.message?.content || "Inget svar kunde genereras.";
+  const sources = [...new Set(chunks.map((c: any) => c.metadata?.app_name || c.file_name).filter(Boolean))];
+  return { answer, sources };
 }
 
 /* ── Viewer control tool execution ── */
@@ -1163,6 +1160,8 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
     case "fm_access_get_floors": return execFmAccessGetFloors(args);
     // Document content Q&A
     case "ask_about_documents": return execAskAboutDocuments(supabase, args, apiKey!);
+    // Help docs search
+    case "search_help_docs": return execSearchHelpDocs(supabase, args, apiKey!);
     // Viewer tools
     case "viewer_show_floor": return execViewerShowFloor(args);
     case "viewer_show_model": return execViewerShowModel(args);
@@ -1333,6 +1332,20 @@ async function buildSystemPrompt(supabase: any, context: any, userProfile: any, 
   return `You are Gunnar, an expert AI assistant for a facility management platform called Geminus. You are knowledgeable about buildings, BIM models, property management, and Swedish facility standards.
 
 You have access to tools that query the database. ALWAYS use tools to get data – never guess or make up numbers. You can call multiple tools in sequence to build up a complete picture before answering.
+
+CRITICAL UX RULES:
+1. NEVER show fm_guid, building_fm_guid, fm_access_building_guid, or any UUID/GUID to the user. These are internal IDs that mean nothing to users.
+2. When disambiguating between buildings, ALWAYS present them as clickable action buttons using the selectBuilding action, never as text the user needs to type.
+3. Format building choices as clickable buttons:
+   [🏢 Småviken 1](action:selectBuilding:FM_GUID:Småviken 1)
+   NOT as "Småviken 1 (fm_guid: dd737f81-...)"
+4. When asking the user to choose between buildings, present numbered options with action buttons:
+   "Vilken byggnad menar du?"
+   1. [🏢 Småviken 1](action:selectBuilding:GUID1:Småviken 1)
+   2. [🏢 Huvudbyggnad](action:selectBuilding:GUID2:Huvudbyggnad)
+5. Always include address or other identifying info alongside building names when available — NEVER GUIDs.
+6. For follow-up suggestions, format as clickable buttons when possible.
+7. When the user asks about help, how to use the platform, or support questions, use the search_help_docs tool.
 
 ${userCtx}
 ${ctx}
