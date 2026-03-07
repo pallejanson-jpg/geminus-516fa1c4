@@ -604,7 +604,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       // Build a lookup of normalized fmGuid → rgb for fast matching
       const fmGuidLookup = new Map<string, [number, number, number]>();
       Object.entries(colorMap).forEach(([key, rgb]) => {
-        fmGuidLookup.set(norm(key), rgb);
+        fmGuidLookup.set(normalizeGuid(key), rgb);
       });
 
       if (mode === 'asset_category' || mode === 'asset_categories') {
