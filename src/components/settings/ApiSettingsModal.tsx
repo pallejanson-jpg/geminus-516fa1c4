@@ -271,6 +271,97 @@ const AccFolderNode: React.FC<{
         </div>
     );
 };
+// FM Access Document/Drawing sync sub-panel
+const FmAccessDocSyncPanel: React.FC = () => {
+    const { toast } = useToast();
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [syncAction, setSyncAction] = useState<string | null>(null);
+    const [status, setStatus] = useState<{
+        counts: { drawings: number; documents: number; dou: number };
+        syncStates: any[];
+    } | null>(null);
+
+    const fetchStatus = async () => {
+        try {
+            const { data, error } = await supabase.functions.invoke('fm-access-sync', {
+                body: { action: 'get-status' },
+            });
+            if (!error && data?.success) setStatus(data);
+        } catch {}
+    };
+
+    useEffect(() => { fetchStatus(); }, []);
+
+    const handleSync = async (action: string) => {
+        setIsSyncing(true);
+        setSyncAction(action);
+        try {
+            const { data, error } = await supabase.functions.invoke('fm-access-sync', {
+                body: { action },
+            });
+            if (error) throw error;
+            toast({
+                title: 'FM Access-synk klar',
+                description: action === 'sync-all'
+                    ? `Ritningar: ${data?.results?.['sync-drawings']?.synced || 0}, Dokument: ${data?.results?.['sync-documents']?.synced || 0}, DoU: ${data?.results?.['sync-dou']?.synced || 0}`
+                    : `${data?.synced || 0} objekt synkade.`,
+            });
+            fetchStatus();
+        } catch (err: any) {
+            toast({ variant: 'destructive', title: 'Synkfel', description: err.message });
+        } finally {
+            setIsSyncing(false);
+            setSyncAction(null);
+        }
+    };
+
+    const lastSync = status?.syncStates?.find(s => s.last_sync_completed_at)?.last_sync_completed_at;
+
+    return (
+        <div className="space-y-3">
+            {status && (
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="rounded border p-2 text-center">
+                        <div className="font-medium text-lg">{status.counts.drawings}</div>
+                        <div className="text-muted-foreground">Ritningar</div>
+                    </div>
+                    <div className="rounded border p-2 text-center">
+                        <div className="font-medium text-lg">{status.counts.documents}</div>
+                        <div className="text-muted-foreground">Dokument</div>
+                    </div>
+                    <div className="rounded border p-2 text-center">
+                        <div className="font-medium text-lg">{status.counts.dou}</div>
+                        <div className="text-muted-foreground">DoU</div>
+                    </div>
+                </div>
+            )}
+            {lastSync && (
+                <p className="text-xs text-muted-foreground">
+                    Senaste synk: {new Date(lastSync).toLocaleString('sv-SE')}
+                </p>
+            )}
+            <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" className="gap-1 h-7 text-[10px]" disabled={isSyncing} onClick={() => handleSync('sync-drawings')}>
+                    {isSyncing && syncAction === 'sync-drawings' ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
+                    Ritningar
+                </Button>
+                <Button size="sm" variant="outline" className="gap-1 h-7 text-[10px]" disabled={isSyncing} onClick={() => handleSync('sync-documents')}>
+                    {isSyncing && syncAction === 'sync-documents' ? <Loader2 className="h-3 w-3 animate-spin" /> : <File className="h-3 w-3" />}
+                    Dokument
+                </Button>
+                <Button size="sm" variant="outline" className="gap-1 h-7 text-[10px]" disabled={isSyncing} onClick={() => handleSync('sync-dou')}>
+                    {isSyncing && syncAction === 'sync-dou' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wrench className="h-3 w-3" />}
+                    DoU
+                </Button>
+                <Button size="sm" className="gap-1 h-7 text-[10px]" disabled={isSyncing} onClick={() => handleSync('sync-all')}>
+                    {isSyncing && syncAction === 'sync-all' ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                    Synka allt
+                </Button>
+            </div>
+        </div>
+    );
+};
+
 const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) => {
 
     const { toast } = useToast();
