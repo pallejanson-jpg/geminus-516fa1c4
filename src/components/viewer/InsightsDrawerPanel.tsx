@@ -56,14 +56,19 @@ export default function InsightsDrawerPanel({
     return null;
   }, [navigatorTreeData, buildingFmGuid, buildingName]);
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
   if (!open || !facility) return null;
 
   const displayName = facility.commonName || facility.name || buildingName || '';
 
   return (
     <div
-      className="shrink-0 border-t border-white/10 bg-background/95 backdrop-blur-md overflow-hidden flex flex-col"
-      style={{ height: '400px' }}
+      className={cn(
+        "border-t border-white/10 bg-background/95 backdrop-blur-md overflow-hidden flex flex-col",
+        isMobile ? "fixed inset-0 z-50" : "shrink-0"
+      )}
+      style={isMobile ? undefined : { height: '400px' }}
     >
       {/* Header bar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border/50 shrink-0">

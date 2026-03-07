@@ -34,9 +34,9 @@ export default function IleanEmbeddedChat({ buildingFmGuid, buildingName }: Ilea
   };
 
   return (
-    <div className="flex flex-col flex-1" style={{ minHeight: 300 }}>
+    <div className="flex flex-col flex-1 min-h-0">
       {/* Context indicator */}
-      <div className="px-3 py-1.5 text-xs text-muted-foreground border-b border-border/50 bg-muted/30">
+      <div className="px-3 py-1.5 text-xs text-muted-foreground border-b border-border/50 bg-muted/30 shrink-0">
         {contextEntity.entityName
           ? `Kontext: ${contextEntity.entityName} (${contextEntity.entityType})`
           : buildingName
@@ -45,7 +45,7 @@ export default function IleanEmbeddedChat({ buildingFmGuid, buildingName }: Ilea
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3" style={{ maxHeight: 'calc(70vh - 140px)' }}>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
         {messages.length === 0 && (
           <div className="text-center space-y-3 pt-4">
             <FileText className="h-8 w-8 mx-auto text-muted-foreground/40" />
