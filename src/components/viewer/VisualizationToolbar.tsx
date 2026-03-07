@@ -1231,7 +1231,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           <SidePopPanel
             isOpen={activeSubMenu === 'annotations'}
             onClose={() => setActiveSubMenu(null)}
-            title="Annotationstyper"
+            title="Annotation types"
             parentPosition={position}
             parentWidth={panelWidth}
           >
