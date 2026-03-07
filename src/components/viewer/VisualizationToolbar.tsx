@@ -1031,7 +1031,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                             <SelectValue placeholder="Off" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="off">Av</SelectItem>
+                            <SelectItem value="off">Off</SelectItem>
                             {roomLabelConfigs.map((config) => (
                               <SelectItem key={config.id} value={config.id}>
                                 {config.name}{config.is_default ? ' (standard)' : ''}
