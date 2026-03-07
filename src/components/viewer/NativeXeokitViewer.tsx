@@ -111,6 +111,12 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       });
       viewerRef.current = viewer;
 
+      // Expose SectionPlane class globally so useSectionPlaneClipping can create planes
+      if (sdk.SectionPlane) {
+        (window as any).__xeokitSectionPlaneClass = sdk.SectionPlane;
+        console.log('[NativeViewer] SectionPlane class exposed globally');
+      }
+
       // Camera defaults
       viewer.camera.eye = [0, 20, 40];
       viewer.camera.look = [0, 0, 0];
