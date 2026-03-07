@@ -286,7 +286,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           </div>
           <Button size="sm" className="w-full h-7 text-xs gap-1.5" onClick={applyOffsets}>
             <Check className="h-3 w-3" />
-            Applicera beräknad offset
+             Applicera beräknad offset
           </Button>
         </div>
       )}
