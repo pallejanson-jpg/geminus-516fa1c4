@@ -183,6 +183,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     applyGlobalFloorPlanClipping,
     applyCeilingClipping,
     removeSectionPlane,
+    remove2DClipping,
     remove3DClipping,
     calculateFloorBounds,
     updateFloorCutHeight,
