@@ -393,6 +393,30 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     });
   }, [contextMenu]);
 
+  const handleContextSelect = useCallback(() => {
+    if (!contextMenu?.entityId || !xeokitViewer?.scene) return;
+    const entity = xeokitViewer.scene.objects?.[contextMenu.entityId];
+    if (entity) {
+      // Deselect all first
+      xeokitViewer.scene.setObjectsSelected(xeokitViewer.scene.selectedObjectIds, false);
+      entity.selected = true;
+    }
+  }, [contextMenu, xeokitViewer]);
+
+  const handleContextMove = useCallback(() => {
+    if (!contextMenu?.entityId || !contextMenu?.fmGuid) return;
+    window.dispatchEvent(new CustomEvent(OBJECT_MOVE_MODE_EVENT, {
+      detail: { entityId: contextMenu.entityId, fmGuid: contextMenu.fmGuid },
+    }));
+  }, [contextMenu]);
+
+  const handleContextDelete = useCallback(() => {
+    if (!contextMenu?.entityId || !contextMenu?.fmGuid) return;
+    window.dispatchEvent(new CustomEvent(OBJECT_DELETE_EVENT, {
+      detail: { entityId: contextMenu.entityId, fmGuid: contextMenu.fmGuid },
+    }));
+  }, [contextMenu]);
+
   const handleChangeViewMode = useCallback((mode: '2d' | '3d' | '360') => {
     setViewMode(mode);
     window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode } }));
