@@ -1185,6 +1185,54 @@ function execViewerShowDrawing(args: any) {
   };
 }
 
+/* ── FM Access local search execution ── */
+
+async function execSearchFmAccessLocal(supabase: any, args: any) {
+  const dataType = args.data_type || "all";
+  const limit = args.limit || 20;
+  const results: Record<string, any> = {};
+
+  if (dataType === "all" || dataType === "drawings") {
+    let q = supabase.from("fm_access_drawings").select("drawing_id, name, class_name, floor_name, tab_name, building_fm_guid");
+    if (args.building_fm_guid) q = q.eq("building_fm_guid", args.building_fm_guid);
+    if (args.search_term) q = q.or(`name.ilike.%${args.search_term}%,class_name.ilike.%${args.search_term}%,floor_name.ilike.%${args.search_term}%`);
+    q = q.limit(limit);
+    const { data } = await q;
+    results.drawings = data || [];
+  }
+
+  if (dataType === "all" || dataType === "documents") {
+    let q = supabase.from("fm_access_documents").select("document_id, name, file_name, class_name, building_fm_guid");
+    if (args.building_fm_guid) q = q.eq("building_fm_guid", args.building_fm_guid);
+    if (args.search_term) q = q.or(`name.ilike.%${args.search_term}%,file_name.ilike.%${args.search_term}%,class_name.ilike.%${args.search_term}%`);
+    q = q.limit(limit);
+    const { data } = await q;
+    results.documents = data || [];
+  }
+
+  if (dataType === "all" || dataType === "dou") {
+    let q = supabase.from("fm_access_dou").select("title, content, doc_type, object_fm_guid, building_fm_guid");
+    if (args.building_fm_guid) q = q.eq("building_fm_guid", args.building_fm_guid);
+    if (args.search_term) q = q.or(`title.ilike.%${args.search_term}%,content.ilike.%${args.search_term}%`);
+    q = q.limit(limit);
+    const { data } = await q;
+    results.dou = data || [];
+  }
+
+  // Also search document_chunks for semantic matches
+  if (args.search_term) {
+    let chunkQ = supabase.from("document_chunks").select("content, file_name, metadata")
+      .eq("source_type", "fm_access")
+      .ilike("content", `%${args.search_term}%`)
+      .limit(5);
+    if (args.building_fm_guid) chunkQ = chunkQ.eq("building_fm_guid", args.building_fm_guid);
+    const { data: chunks } = await chunkQ;
+    if (chunks?.length) results.semantic_matches = chunks;
+  }
+
+  return results;
+}
+
 /* ── Faciliate (SWG) tool execution ── */
 
 async function execQueryFaciliate(args: any) {
