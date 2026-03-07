@@ -300,22 +300,30 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         return;
       }
 
-      // Staleness check: if oldest model > 7 days, trigger background refresh
-      const STALE_MS = 7 * 24 * 60 * 60 * 1000;
-      const oldestSync = models.reduce((oldest: string | null, m: any) => {
-        if (!oldest || (m.synced_at && m.synced_at < oldest)) return m.synced_at;
-        return oldest;
-      }, null as string | null);
-      
-      if (oldestSync && (Date.now() - new Date(oldestSync).getTime()) > STALE_MS) {
-        console.log('[NativeViewer] Models are stale (>7d), triggering background refresh...');
-        supabase.functions.invoke('asset-plus-sync', {
-          body: { action: 'sync-xkt-building', buildingFmGuid, force: true }
-        }).then(({ data }) => {
-          if (data?.synced > 0) {
-            console.log(`[NativeViewer] Background refresh: ${data.synced} models updated`);
-          }
-        }).catch(() => {});
+      // Staleness check: deferred to avoid competing with model loading
+      const deferStalenessCheck = () => {
+        const STALE_MS = 7 * 24 * 60 * 60 * 1000;
+        const oldestSync = models.reduce((oldest: string | null, m: any) => {
+          if (!oldest || (m.synced_at && m.synced_at < oldest)) return m.synced_at;
+          return oldest;
+        }, null as string | null);
+        
+        if (oldestSync && (Date.now() - new Date(oldestSync).getTime()) > STALE_MS) {
+          console.log('[NativeViewer] Models are stale (>7d), triggering background refresh...');
+          supabase.functions.invoke('asset-plus-sync', {
+            body: { action: 'sync-xkt-building', buildingFmGuid, force: true }
+          }).then(({ data }) => {
+            if (data?.synced > 0) {
+              console.log(`[NativeViewer] Background refresh: ${data.synced} models updated`);
+            }
+          }).catch(() => {});
+        }
+      };
+      // Defer staleness check to after models are loaded
+      if (typeof requestIdleCallback === 'function') {
+        requestIdleCallback(deferStalenessCheck, { timeout: 10000 });
+      } else {
+        setTimeout(deferStalenessCheck, 5000);
       }
 
       // Load all available models, but prioritize architectural models first in queue.
