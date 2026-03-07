@@ -838,7 +838,7 @@ function MobileUnifiedViewer({
             }}
           >
             <div className="absolute top-[calc(env(safe-area-inset-top,0px)+4px)] left-1.5 z-10 bg-card/80 backdrop-blur-sm text-foreground text-[9px] px-1.5 py-0.5 rounded border border-border/50">
-              2D</div>
+              2D
             </div>
             <SplitPlanView
               viewerRef={viewerInstanceRef}
