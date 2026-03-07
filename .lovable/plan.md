@@ -78,3 +78,29 @@ All tables have RLS: authenticated read, admin write. Indexes on common query pa
 - **`enrich-guids` mode** — FMGUID generation + IFC write-back via `web-ifc` property injection
 - **IFC archive** — Store enriched IFC in `ifc-uploads/{buildingFmGuid}/enriched/`
 - **ACC `enrich-guids` action** — Deterministic GUID generation for ACC-sourced models
+
+---
+
+## Plan: Move & Delete Objects in 3D Viewer (IMPLEMENTED - Phase 1)
+
+### Database changes
+- Added columns to `assets`: `modification_status` (text), `moved_offset_x/y/z` (numeric), `original_room_fm_guid` (text), `modification_date` (timestamptz)
+- Partial index on `modification_status WHERE NOT NULL`
+
+### Viewer changes
+1. **`entityOffsetsEnabled: true`** in `NativeXeokitViewer.tsx` Viewer constructor
+2. **`useObjectMoveMode` hook** — drag-move logic with:
+   - World-space pick-surface delta calculation
+   - AABB-based room detection at new position
+   - Persists offset + `modification_status = 'moved'` + room changes to DB
+   - Applies saved offsets & hides deleted entities on model load
+   - ESC to cancel move
+3. **Context menu** — Added "Flytta objekt", "Ta bort objekt", "Markera" (select fix)
+4. **Filter panel** — New "Ändringar" section with toggles:
+   - "Visa flyttade objekt" → orange colorization (`[1, 0.6, 0.1]`)
+   - "Visa borttagna objekt" → red colorization (`[1, 0.2, 0.2]`), makes hidden deleted objects visible
+
+### Still to implement
+- **Rapport-export** — CSV export of all modified assets from Insights/Asset tab
+- **Asset+ sync reset** — Clear `modification_status` when `source_updated_at` changes in `asset-plus-sync`
+- **ContextMenuSettings panel** — Wire new items visibility to settings toggles
