@@ -217,7 +217,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           {ivionPoint ? <Check className="h-3 w-3" /> : '1'}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-foreground">Klicka i 360°-vyn</p>
+          <p className="font-medium text-foreground">Click in the 360° view</p>
           {ivionPoint ? (
             <p className="text-green-400 font-mono text-[10px] mt-1.5">✓ {formatCoord(ivionPoint)}</p>
           ) : (
