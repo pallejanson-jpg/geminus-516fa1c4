@@ -505,6 +505,42 @@ const tools = [
       },
     },
   },
+  // ── Faciliate (SWG) tools ──
+  {
+    type: "function",
+    function: {
+      name: "query_faciliate",
+      description: "Query the Faciliate (SWG) system for work orders, buildings, spaces, equipment, and other facility management objects. Faciliate is a desktop FM system — use this to look up data that may not be in the Geminus database. Supports filtering and sorting.",
+      parameters: {
+        type: "object",
+        properties: {
+          objectType: { type: "string", description: "The Faciliate object type to query, e.g. 'workorder', 'building', 'space', 'equipment', 'customer', 'contract'. Case-insensitive." },
+          filter: { type: "string", description: "Filter expression, e.g. 'Status eq \"Active\"' or 'Description like \"%brand%\"'. Uses Faciliate REST API filter syntax." },
+          take: { type: "number", description: "Max rows to return (default 20)" },
+          loadlevel: { type: "string", enum: ["guid", "basic", "simple", "fullprimary", "loadmax"], description: "How much detail to load. Default: simple" },
+        },
+        required: ["objectType"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_faciliate_object",
+      description: "Get a single object from Faciliate by its GUID. Use after query_faciliate to get full details of a specific work order, building, etc.",
+      parameters: {
+        type: "object",
+        properties: {
+          objectType: { type: "string", description: "The Faciliate object type" },
+          guid: { type: "string", description: "The GUID of the object" },
+          loadlevel: { type: "string", enum: ["guid", "basic", "simple", "fullprimary", "loadmax"], description: "Detail level. Default: fullprimary" },
+        },
+        required: ["objectType", "guid"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 /* ─────────────────────────────────────────────
