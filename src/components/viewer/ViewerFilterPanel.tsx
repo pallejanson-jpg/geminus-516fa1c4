@@ -82,8 +82,7 @@ const hexToRgb01 = (hex: string): [number, number, number] => {
 const isGuid = (str: string): boolean =>
   !!str && str.length >= 20 && /^[0-9a-f]{8}[-]?[0-9a-f]{4}/i.test(str);
 
-const normalizeGuid = (value?: string | null): string =>
-  (value || '').toLowerCase().replace(/-/g, '');
+// normalizeGuid imported from '@/lib/utils'
 
 const getDescendantIds = (viewer: any, rootId: string): string[] => {
   const metaObj = viewer?.metaScene?.metaObjects?.[rootId];
