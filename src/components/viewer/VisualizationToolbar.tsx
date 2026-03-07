@@ -1135,7 +1135,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                     <div className="p-1 sm:p-1.5 rounded-md bg-primary/10 text-primary">
                       <Camera className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     </div>
-                    <span className="text-xs sm:text-sm">Skapa vy</span>
+                    <span className="text-xs sm:text-sm">Create view</span>
                   </Button>
 
                   {/* Create Issue button - NEW */}
