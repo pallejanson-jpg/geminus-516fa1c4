@@ -178,29 +178,37 @@ const CreateWorkOrderDialog: React.FC<CreateWorkOrderDialogProps> = ({
 
   if (!open) return null;
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
   return (
     <>
       <div className="fixed inset-0 z-[70] bg-black/20" onClick={onClose} />
       <div
         className={cn(
-          "fixed z-[71] border rounded-lg shadow-xl bg-card",
-          "w-[440px] max-w-[calc(100vw-40px)]",
-          "animate-in fade-in-0 zoom-in-95 duration-200",
-          isDragging && "cursor-grabbing"
+          "fixed z-[71] border shadow-xl bg-card",
+          "animate-in fade-in-0 duration-200",
+          isMobile
+            ? "inset-x-0 bottom-0 rounded-t-2xl max-h-[90dvh] w-full slide-in-from-bottom-10"
+            : cn(
+                "rounded-lg w-[440px] max-w-[calc(100vw-40px)] zoom-in-95",
+                isDragging && "cursor-grabbing"
+              )
         )}
-        style={{ left: position.x, top: position.y }}
+        style={isMobile ? undefined : { left: position.x, top: position.y }}
       >
         <div
           className={cn(
-            "flex items-center gap-2 px-4 py-3 border-b cursor-grab select-none",
+            "flex items-center gap-2 px-4 py-3 border-b",
+            !isMobile && "cursor-grab select-none",
             isDragging && "cursor-grabbing"
           )}
-          onMouseDown={handleDragStart}
+          onMouseDown={isMobile ? undefined : handleDragStart}
         >
-          <GripHorizontal className="h-4 w-4 text-muted-foreground" />
+          {isMobile && <div className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 bg-muted-foreground/30 rounded-full" />}
+          {!isMobile && <GripHorizontal className="h-4 w-4 text-muted-foreground" />}
           <Wrench className="h-5 w-5 text-primary" />
           <span className="font-semibold flex-1">Create Work Order</span>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose} disabled={isSubmitting}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose} disabled={isSubmitting}>
             <X className="h-4 w-4" />
           </Button>
         </div>
