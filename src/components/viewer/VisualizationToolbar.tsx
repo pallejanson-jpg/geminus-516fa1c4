@@ -1164,7 +1164,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                       )}>
                         <MessageSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
-                      <span className="text-xs sm:text-sm">Visa ärenden</span>
+                      <span className="text-xs sm:text-sm">Show issues</span>
                     </div>
                     <ChevronRight className={cn(
                       "h-3 w-3 transition-transform",
