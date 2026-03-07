@@ -548,8 +548,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         }
       }
 
-      // Remove ALL existing section planes first to avoid duplicates
-      try { removeSectionPlane(); } catch {}
+      // Remove any existing 3D ceiling clipping first
+      try { remove3DClipping(); } catch {}
 
       if (targetFloorId) {
         applyFloorPlanClipping(targetFloorId);
@@ -617,6 +617,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
       colorizedFor2dRef.current = colorized;
       (viewerShimRef.current as any).__orig2dEdge = { origEdgeColor, origEdgeAlpha, origEdgeWidth };
 
+      // Lock camera: orthographic top-down, no rotation allowed
       const camera = viewer.camera;
       if (camera) {
         const lookX = camera.look[0], lookY = camera.look[1], lookZ = camera.look[2];
@@ -624,8 +625,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
         camera.projection = 'ortho';
         camera.ortho.scale = dist * 1.2;
-        // Set camera instantly (duration: 0) then fade in canvas
+        // Set camera instantly to top-down view
         viewer.cameraFlight.flyTo({ eye: [lookX, lookY + dist, lookZ], look: [lookX, lookY, lookZ], up: [0, 0, -1], duration: 0 });
+      }
+
+      // Lock navigation: planView mode prevents rotation, only pan + zoom
+      if (viewer.cameraControl) {
+        viewer.cameraControl.navMode = 'planView';
       }
 
       // Show canvas after 2D setup is complete (clipping + camera + colors all applied)
