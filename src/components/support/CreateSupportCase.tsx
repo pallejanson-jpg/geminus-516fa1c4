@@ -172,7 +172,7 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
             <Input id="title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Kort beskrivning av ärendet" />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Typ av ärende</Label>
               <Select value={category} onValueChange={setCategory}>
