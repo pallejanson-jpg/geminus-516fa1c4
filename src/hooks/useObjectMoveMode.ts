@@ -347,7 +347,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
         if (ev.key === 'Escape' && activeRef.current) {
           entity.offset = moveStateRef.current?.originalOffset || [0, 0, 0];
           if (viewer.cameraControl) viewer.cameraControl.pointerEnabled = true;
-          toast.info('Flytt avbruten');
+          toast.info('Move cancelled');
           cleanup();
         }
       };
