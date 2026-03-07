@@ -723,8 +723,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       const roomColor: [number, number, number] = [1.0, 0.6, 0.2];   // Orange
 
       Object.values(metaObjects).forEach((mo: any) => {
-        const sysId = norm(mo.originalSystemId || '');
-        const moId = norm(mo.id || '');
+        const sysId = normalizeGuid(mo.originalSystemId || '');
+        const moId = normalizeGuid(mo.id || '');
 
         if (alarmGuids.has(sysId) || alarmGuids.has(moId)) {
           const entity = scene.objects?.[mo.id];
