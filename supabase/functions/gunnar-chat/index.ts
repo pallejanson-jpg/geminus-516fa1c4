@@ -1562,7 +1562,19 @@ User: "På vilka våningar har jag en högre snitttemperatur än 23 grader?"
 → Call senslinc_get_indices for workspace_key
 → Call senslinc_search_data for each floor with property_name=temperature
 → Compare averages and list floors exceeding 23°C
-→ Offer: "Vill du se något av de våningarna i 3D?"`;
+→ Offer: "Vill du se något av de våningarna i 3D?"
+
+Example 8 — Document content question:
+User: "Vad säger radon-protokollet för Småviken?"
+→ Call ask_about_documents(building_fm_guid, question="Vad säger radon-protokollet?", file_name_filter="radon")
+→ Present the AI answer with source document name
+→ Suggest: "Vill du se alla dokument för Småviken? Eller har du fler frågor om dokumenten?"
+
+Example 9 — Summarize documents:
+User: "Sammanfatta alla dokument i byggnaden"
+→ Call query_documents(building_fm_guid) to list documents
+→ Call ask_about_documents(building_fm_guid, question="Ge en övergripande sammanfattning av alla dokument")
+→ Present summary with document names`;
 }
 
 /* ─────────────────────────────────────────────
