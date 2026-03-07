@@ -784,7 +784,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                   <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
                     <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </div>
-                  <span className="text-xs sm:text-sm">Våningsplan</span>
+                  <span className="text-xs sm:text-sm">Floors</span>
                 </div>
                 <Button
                   variant={activeSubMenu === 'floors' ? "secondary" : "ghost"}
