@@ -539,7 +539,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
       // Get building name
       const building = allData.find((b: any) => b.fmGuid === buildingFmGuid && b.category === 'Building');
-      const resolvedBuildingName = buildingName || building?.commonName || building?.name || 'Okänd byggnad';
+      const resolvedBuildingName = buildingName || building?.commonName || building?.name || 'Unknown building';
 
       // Insert issue
       const { error: insertError } = await supabase.from('bcf_issues').insert({
