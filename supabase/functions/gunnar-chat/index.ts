@@ -505,6 +505,25 @@ const tools = [
       },
     },
   },
+  // ── FM Access local search tool ──
+  {
+    type: "function",
+    function: {
+      name: "search_fm_access_local",
+      description: "Search locally synced FM Access data: drawings (ritningar), documents (dokument), and DoU (drift & underhåll) instructions. Much faster than live API calls. Use for questions about available drawings, documents, or maintenance instructions for a building.",
+      parameters: {
+        type: "object",
+        properties: {
+          building_fm_guid: { type: "string", description: "Filter by building fm_guid" },
+          search_term: { type: "string", description: "Text to search for in names, file names, content" },
+          data_type: { type: "string", enum: ["drawings", "documents", "dou", "all"], description: "Which type of data to search. Default: all" },
+          limit: { type: "number", description: "Max rows (default 20)" },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
   // ── Faciliate (SWG) tools ──
   {
     type: "function",
@@ -1166,6 +1185,54 @@ function execViewerShowDrawing(args: any) {
   };
 }
 
+/* ── FM Access local search execution ── */
+
+async function execSearchFmAccessLocal(supabase: any, args: any) {
+  const dataType = args.data_type || "all";
+  const limit = args.limit || 20;
+  const results: Record<string, any> = {};
+
+  if (dataType === "all" || dataType === "drawings") {
+    let q = supabase.from("fm_access_drawings").select("drawing_id, name, class_name, floor_name, tab_name, building_fm_guid");
+    if (args.building_fm_guid) q = q.eq("building_fm_guid", args.building_fm_guid);
+    if (args.search_term) q = q.or(`name.ilike.%${args.search_term}%,class_name.ilike.%${args.search_term}%,floor_name.ilike.%${args.search_term}%`);
+    q = q.limit(limit);
+    const { data } = await q;
+    results.drawings = data || [];
+  }
+
+  if (dataType === "all" || dataType === "documents") {
+    let q = supabase.from("fm_access_documents").select("document_id, name, file_name, class_name, building_fm_guid");
+    if (args.building_fm_guid) q = q.eq("building_fm_guid", args.building_fm_guid);
+    if (args.search_term) q = q.or(`name.ilike.%${args.search_term}%,file_name.ilike.%${args.search_term}%,class_name.ilike.%${args.search_term}%`);
+    q = q.limit(limit);
+    const { data } = await q;
+    results.documents = data || [];
+  }
+
+  if (dataType === "all" || dataType === "dou") {
+    let q = supabase.from("fm_access_dou").select("title, content, doc_type, object_fm_guid, building_fm_guid");
+    if (args.building_fm_guid) q = q.eq("building_fm_guid", args.building_fm_guid);
+    if (args.search_term) q = q.or(`title.ilike.%${args.search_term}%,content.ilike.%${args.search_term}%`);
+    q = q.limit(limit);
+    const { data } = await q;
+    results.dou = data || [];
+  }
+
+  // Also search document_chunks for semantic matches
+  if (args.search_term) {
+    let chunkQ = supabase.from("document_chunks").select("content, file_name, metadata")
+      .eq("source_type", "fm_access")
+      .ilike("content", `%${args.search_term}%`)
+      .limit(5);
+    if (args.building_fm_guid) chunkQ = chunkQ.eq("building_fm_guid", args.building_fm_guid);
+    const { data: chunks } = await chunkQ;
+    if (chunks?.length) results.semantic_matches = chunks;
+  }
+
+  return results;
+}
+
 /* ── Faciliate (SWG) tool execution ── */
 
 async function execQueryFaciliate(args: any) {
@@ -1243,6 +1310,8 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
     case "fm_access_get_hierarchy": return execFmAccessGetHierarchy(args);
     case "fm_access_search_objects": return execFmAccessSearchObjects(args);
     case "fm_access_get_floors": return execFmAccessGetFloors(args);
+    // FM Access local search
+    case "search_fm_access_local": return execSearchFmAccessLocal(supabase, args);
     // Document content Q&A
     case "ask_about_documents": return execAskAboutDocuments(supabase, args, apiKey!);
     // Help docs search
