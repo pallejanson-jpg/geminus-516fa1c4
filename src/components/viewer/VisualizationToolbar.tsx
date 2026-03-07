@@ -983,7 +983,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                       )}>
                         <Box className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
-                      <span className="text-xs sm:text-sm">Takklipp (3D Solo)</span>
+                      <span className="text-xs sm:text-sm">Ceiling clip (3D solo)</span>
                       <span className="text-xs font-medium ml-auto">
                         {clipHeight3D >= 0 ? '+' : ''}{clipHeight3D.toFixed(1)}m
                       </span>
