@@ -151,7 +151,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           toast.success(`3D point selected: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
           console.log('[AlignmentPicker] 3D point picked:', picked);
         } else {
-          toast.warning('Ingen yta träffad. Klicka direkt på en synlig vägg, golv eller pelare.');
+          toast.warning('No surface hit. Click directly on a visible wall, floor, or column.');
         }
       });
     }
