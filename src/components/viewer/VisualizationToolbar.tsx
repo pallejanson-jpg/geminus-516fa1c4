@@ -1181,7 +1181,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                       <div className="p-1 sm:p-1.5 rounded-md bg-primary/10 text-primary">
                         <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
-                      <span className="text-xs sm:text-sm">Registrera tillgång</span>
+                      <span className="text-xs sm:text-sm">Register asset</span>
                     </Button>
                   )}
                 </div>
