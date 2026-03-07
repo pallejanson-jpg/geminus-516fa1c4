@@ -347,7 +347,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       if (loadList.length === 0) {
         console.warn('[NativeViewer] No models found at all for building', buildingFmGuid);
-        setErrorMsg('Inga XKT-modeller hittades för denna byggnad.');
+        setErrorMsg('No XKT models found for this building.');
         setPhase('error');
         return;
       }

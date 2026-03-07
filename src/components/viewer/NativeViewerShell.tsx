@@ -454,8 +454,8 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         <ViewerToolbar viewer={xeokitViewer} />
       )}
 
-      {/* Mobile header overlay */}
-      {isMobile && isViewerReady && (
+      {/* Mobile header overlay — hidden when parent (UnifiedViewer) provides its own */}
+      {isMobile && isViewerReady && !hideMobileOverlay && (
         <MobileViewerOverlay
           onClose={onClose}
           viewerInstanceRef={viewerShimRef}
