@@ -3552,6 +3552,17 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                     <VoiceSettings />
                                 </AccordionContent>
                             </AccordionItem>
+                            <AccordionItem value="knowledge-base" className="border rounded-lg px-4">
+                                <AccordionTrigger className="py-3">
+                                    <div className="flex items-center gap-2">
+                                        <DatabaseIcon className="h-4 w-4" />
+                                        <span>Knowledge Base Sources</span>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    <KnowledgeBaseSettings />
+                                </AccordionContent>
+                            </AccordionItem>
                         </Accordion>
                     </TabsContent>
 
