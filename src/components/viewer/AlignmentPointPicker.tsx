@@ -262,7 +262,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
               </p>
               <div className="flex items-center gap-1.5 text-primary">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                <span className="text-[11px] font-medium animate-pulse">Väntar på klick i 3D-vyn...</span>
+                <span className="text-[11px] font-medium animate-pulse">Waiting for click in 3D view...</span>
               </div>
             </div>
           ) : (
