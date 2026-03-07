@@ -1,8 +1,14 @@
-import React, { useState, useRef, useCallback, useEffect, useContext } from 'react';
-import { X, Maximize2, Minimize2, RefreshCw, GripVertical } from 'lucide-react';
+/**
+ * MinimapPanel — Draggable/resizable minimap using xeokit StoreyViewsPlugin.
+ *
+ * Uses StoreyViewsPlugin.createStoreyMap() for high-quality plan images
+ * and shows a live camera position indicator.
+ */
+
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { X, RefreshCw, GripVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { AppContext } from '@/context/AppContext';
 
 interface MinimapPanelProps {
   viewerRef: React.MutableRefObject<any>;
@@ -16,30 +22,31 @@ type SizePreset = 'mini' | 'medium' | 'large';
 const SIZE_PRESETS: Record<SizePreset, { width: number; height: number }> = {
   mini: { width: 240, height: 200 },
   medium: { width: 400, height: 350 },
-  large: { width: 0, height: 0 }, // Calculated dynamically from viewport
+  large: { width: 0, height: 0 },
 };
 
 const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClose, onRoomClick }) => {
-  const { allData } = useContext(AppContext);
-  const minimapContainerRef = useRef<HTMLDivElement>(null);
-  const minimapImageRef = useRef<HTMLImageElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const [size, setSize] = useState({ width: 240, height: 200 });
   const [sizePreset, setSizePreset] = useState<SizePreset>('mini');
-  const [storeyMapData, setStoreyMapData] = useState<{ imageData: string; width: number; height: number } | null>(null);
+  const [mapData, setMapData] = useState<{ imageData: string; width: number; height: number } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [cameraPos, setCameraPos] = useState<{ x: number; y: number } | null>(null);
   const isResizingRef = useRef(false);
   const resizeStartRef = useRef({ x: 0, y: 0, w: 0, h: 0 });
+  const pluginRef = useRef<any>(null);
+  const storeyMapRef = useRef<any>(null);
 
   const getXeokitViewer = useCallback(() => {
     try {
-      return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-    } catch (e) {
-      return null;
-    }
+      return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer
+        ?? (window as any).__nativeXeokitViewer
+        ?? null;
+    } catch { return null; }
   }, [viewerRef]);
 
-  // Calculate large preset from viewport
   const getLargeSize = useCallback(() => ({
     width: Math.floor(window.innerWidth * 0.48),
     height: Math.floor(window.innerHeight * 0.48),
@@ -47,14 +54,10 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
 
   const applyPreset = useCallback((preset: SizePreset) => {
     setSizePreset(preset);
-    if (preset === 'large') {
-      setSize(getLargeSize());
-    } else {
-      setSize(SIZE_PRESETS[preset]);
-    }
+    setSize(preset === 'large' ? getLargeSize() : SIZE_PRESETS[preset]);
   }, [getLargeSize]);
 
-  // Drag-to-resize handler
+  // Resize handle
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -81,185 +84,173 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
     window.addEventListener('mouseup', handleUp);
   }, [size]);
 
-  // Generate minimap from scene AABB + spaces
-  const generateStoreyMap = useCallback(async () => {
-    const xeokitViewer = getXeokitViewer();
-    if (!xeokitViewer) {
-      setIsLoading(false);
+  // Initialize StoreyViewsPlugin
+  useEffect(() => {
+    if (!isVisible) return;
+    let mounted = true;
+
+    const tryInit = async () => {
+      const viewer = getXeokitViewer();
+      if (!viewer?.scene) {
+        setTimeout(tryInit, 500);
+        return;
+      }
+
+      try {
+        const sdk = await (Function('return import("/lib/xeokit/xeokit-sdk.es.js")')() as Promise<any>);
+        const { StoreyViewsPlugin } = sdk;
+
+        let plugin = viewer.plugins?.StoreyViews;
+        if (!plugin) {
+          plugin = new StoreyViewsPlugin(viewer, { fitStoreyMaps: true });
+        }
+
+        if (mounted) {
+          pluginRef.current = plugin;
+        }
+      } catch (e) {
+        console.warn('MinimapPanel: StoreyViewsPlugin init failed:', e);
+      }
+    };
+
+    tryInit();
+    return () => { mounted = false; };
+  }, [isVisible, getXeokitViewer]);
+
+  // Find current storey
+  const findCurrentStoreyId = useCallback((): string | null => {
+    const plugin = pluginRef.current;
+    if (!plugin?.storeys) return null;
+    const storeyIds = Object.keys(plugin.storeys);
+    if (storeyIds.length === 0) return null;
+
+    const viewer = getXeokitViewer();
+    if (!viewer?.scene) return storeyIds[0];
+
+    let bestId = storeyIds[0];
+    let bestCount = 0;
+    for (const id of storeyIds) {
+      const storey = plugin.storeys[id];
+      if (!storey) continue;
+      const sAABB = storey.storeyAABB;
+      let count = 0;
+      const metaScene = viewer.metaScene;
+      if (metaScene?.metaObjects) {
+        for (const moId in metaScene.metaObjects) {
+          const mo = metaScene.metaObjects[moId];
+          if (mo?.type?.toLowerCase() !== 'ifcspace') continue;
+          const obj = viewer.scene.objects?.[mo.id];
+          if (!obj?.visible || !obj?.aabb) continue;
+          const objY = (obj.aabb[1] + obj.aabb[4]) / 2;
+          if (objY >= sAABB[1] && objY <= sAABB[4]) count++;
+        }
+      }
+      if (count > bestCount) { bestCount = count; bestId = id; }
+    }
+    return bestId;
+  }, [getXeokitViewer]);
+
+  // Generate map
+  const generateMap = useCallback(() => {
+    const plugin = pluginRef.current;
+    const viewer = getXeokitViewer();
+    if (!plugin || !viewer?.scene) {
+      setIsLoading(true);
       return;
     }
 
     setIsLoading(true);
     setError(null);
 
-    try {
-      const scene = xeokitViewer.scene;
-      if (!scene) { setError('Scene ej tillgänglig'); setIsLoading(false); return; }
-
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) { setError('Canvas ej tillgänglig'); setIsLoading(false); return; }
-
-      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = size.width * pixelRatio;
-      canvas.height = (size.height - 40) * pixelRatio;
-
-      // Build tight AABB from only visible IfcSpace objects so minimap zooms to active floor
-      let tightAabb: number[] | null = null;
-      const metaSceneForAabb = xeokitViewer.metaScene;
-      if (metaSceneForAabb?.metaObjects) {
-        let minX = Infinity, minY = Infinity, minZ = Infinity;
-        let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-        let hasVisible = false;
-        Object.values(metaSceneForAabb.metaObjects).forEach((metaObject: any) => {
-          if (metaObject?.type?.toLowerCase() !== 'ifcspace') return;
-          const sceneObj = scene.objects?.[metaObject.id];
-          if (!sceneObj?.visible || !sceneObj?.aabb) return;
-          const [ax, ay, az, bx, by, bz] = sceneObj.aabb;
-          minX = Math.min(minX, ax); minY = Math.min(minY, ay); minZ = Math.min(minZ, az);
-          maxX = Math.max(maxX, bx); maxY = Math.max(maxY, by); maxZ = Math.max(maxZ, bz);
-          hasVisible = true;
-        });
-        if (hasVisible && isFinite(minX)) tightAabb = [minX, minY, minZ, maxX, maxY, maxZ];
-      }
-      const aabb = tightAabb || scene.getAABB?.() || scene.aabb;
-      if (!aabb || aabb.length < 6 || !isFinite(aabb[0])) {
-        setError('Laddar modell...');
-        setIsLoading(false);
-        return;
-      }
-
-      const modelWidth = aabb[3] - aabb[0];
-      const modelDepth = aabb[5] - aabb[2];
-      const padding = 20 * pixelRatio;
-      const scaleX = (canvas.width - padding * 2) / modelWidth;
-      const scaleZ = (canvas.height - padding * 2) / modelDepth;
-      const scale = Math.min(scaleX, scaleZ);
-      const offsetX = padding + (canvas.width - padding * 2 - modelWidth * scale) / 2;
-      const offsetZ = padding + (canvas.height - padding * 2 - modelDepth * scale) / 2;
-
-      ctx.fillStyle = '#1a1a2e';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      ctx.strokeStyle = '#3a3a5a';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(offsetX, offsetZ, modelWidth * scale, modelDepth * scale);
-
-      // Draw rooms
-      const metaScene = xeokitViewer.metaScene;
-      if (metaScene?.metaObjects) {
-        Object.values(metaScene.metaObjects).forEach((metaObject: any) => {
-          if (metaObject?.type?.toLowerCase() === 'ifcspace') {
-            const sceneObject = scene.objects?.[metaObject.id];
-            if (!sceneObject?.visible) return;
-            try {
-              const objAABB = sceneObject.aabb;
-              if (objAABB && objAABB.length >= 6) {
-                const x = offsetX + (objAABB[0] - aabb[0]) * scale;
-                const z = offsetZ + (objAABB[2] - aabb[2]) * scale;
-                const w = (objAABB[3] - objAABB[0]) * scale;
-                const h = (objAABB[5] - objAABB[2]) * scale;
-
-                ctx.fillStyle = 'rgba(100, 120, 180, 0.25)';
-                ctx.fillRect(x, z, w, h);
-                ctx.strokeStyle = 'rgba(150, 170, 220, 0.6)';
-                ctx.lineWidth = 1;
-                ctx.strokeRect(x, z, w, h);
-
-                if (w > 30 && h > 15) {
-                  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-                  ctx.font = `${10 * pixelRatio}px system-ui`;
-                  ctx.textAlign = 'center';
-                  ctx.textBaseline = 'middle';
-                  const name = metaObject.name || '';
-                  const maxChars = Math.floor(w / (6 * pixelRatio));
-                  const displayName = name.length > maxChars ? name.substring(0, maxChars - 1) + '…' : name;
-                  ctx.fillText(displayName, x + w / 2, z + h / 2);
-                }
-              }
-            } catch (e) { /* skip */ }
-          }
-        });
-      }
-
-      // Camera indicator
-      const camera = xeokitViewer.camera;
-      if (camera?.eye && camera?.look) {
-        const camX = offsetX + (camera.eye[0] - aabb[0]) * scale;
-        const camZ = offsetZ + (camera.eye[2] - aabb[2]) * scale;
-        const lookX = offsetX + (camera.look[0] - aabb[0]) * scale;
-        const lookZ = offsetZ + (camera.look[2] - aabb[2]) * scale;
-
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(camX, camZ);
-        ctx.lineTo(lookX, lookZ);
-        ctx.stroke();
-
-        ctx.fillStyle = '#60a5fa';
-        ctx.beginPath();
-        ctx.arc(camX, camZ, 6 * pixelRatio, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
-
-      setStoreyMapData({
-        imageData: canvas.toDataURL('image/png'),
-        width: canvas.width,
-        height: canvas.height,
-      });
+    const storeyId = findCurrentStoreyId();
+    if (!storeyId) {
+      setError('Loading model...');
       setIsLoading(false);
+      return;
+    }
+
+    try {
+      const mapWidth = Math.min(size.width * 2, 800);
+      const map = plugin.createStoreyMap(storeyId, { width: mapWidth, format: 'png' });
+
+      if (map?.imageData) {
+        setMapData({ imageData: map.imageData, width: map.width, height: map.height });
+        storeyMapRef.current = map;
+        setError(null);
+      } else {
+        setError('Could not generate map');
+      }
     } catch (e) {
       console.warn('Minimap generation failed:', e);
-      setError('Kunde ej generera karta');
-      setIsLoading(false);
+      setError('Map generation failed');
     }
-  }, [getXeokitViewer, size]);
-
-  // Click to navigate
-  const handleMinimapClick = useCallback((e: React.MouseEvent<HTMLImageElement>) => {
-    const xeokitViewer = getXeokitViewer();
-    const img = minimapImageRef.current;
-    if (!xeokitViewer || !img || !storeyMapData) return;
-
-    const rect = img.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-
-    const scene = xeokitViewer.scene;
-    const aabb = scene?.getAABB?.() || scene?.aabb;
-    if (!aabb || aabb.length < 6) return;
-
-    const worldX = aabb[0] + x * (aabb[3] - aabb[0]);
-    const worldZ = aabb[2] + y * (aabb[5] - aabb[2]);
-    const worldY = (aabb[1] + aabb[4]) / 2;
-
-    if (xeokitViewer.cameraFlight) {
-      xeokitViewer.cameraFlight.flyTo({
-        eye: [worldX, xeokitViewer.camera.eye[1], worldZ],
-        look: [worldX, worldY, worldZ],
-        up: [0, 1, 0],
-        duration: 0.8,
-      });
-    }
-  }, [getXeokitViewer, storeyMapData]);
+    setIsLoading(false);
+  }, [getXeokitViewer, findCurrentStoreyId, size.width]);
 
   // Periodic update
   useEffect(() => {
     if (!isVisible) return;
-    const timeout = setTimeout(generateStoreyMap, 500);
-    const interval = setInterval(generateStoreyMap, 2000);
+    const timeout = setTimeout(generateMap, 800);
+    const interval = setInterval(generateMap, 3000);
     return () => { clearTimeout(timeout); clearInterval(interval); };
-  }, [isVisible, generateStoreyMap]);
+  }, [isVisible, generateMap]);
+
+  // Camera position
+  useEffect(() => {
+    if (!isVisible) return;
+    const update = () => {
+      const viewer = getXeokitViewer();
+      const map = storeyMapRef.current;
+      const plugin = pluginRef.current;
+      if (!viewer?.camera?.eye || !map || !plugin) return;
+
+      const storey = plugin.storeys[map.storeyId];
+      if (!storey) return;
+
+      const aabb = plugin._fitStoreyMaps ? storey.storeyAABB : storey.modelAABB;
+      const eye = viewer.camera.eye;
+      const normX = (eye[0] - aabb[0]) / (aabb[3] - aabb[0]);
+      const normZ = (eye[2] - aabb[2]) / (aabb[5] - aabb[2]);
+
+      setCameraPos({
+        x: (1.0 - normX) * 100,
+        y: (1.0 - normZ) * 100,
+      });
+    };
+
+    const interval = setInterval(update, 200);
+    update();
+    return () => clearInterval(interval);
+  }, [isVisible, getXeokitViewer]);
+
+  // Click to navigate
+  const handleClick = useCallback((e: React.MouseEvent<HTMLImageElement>) => {
+    const plugin = pluginRef.current;
+    const map = storeyMapRef.current;
+    const img = imgRef.current;
+    const viewer = getXeokitViewer();
+    if (!plugin || !map || !img || !viewer) return;
+
+    const rect = img.getBoundingClientRect();
+    const imgX = (e.clientX - rect.left) / rect.width * map.width;
+    const imgY = (e.clientY - rect.top) / rect.height * map.height;
+
+    const worldPos = plugin.storeyMapToWorldPos(map, [imgX, imgY]);
+    if (worldPos && viewer.cameraFlight) {
+      viewer.cameraFlight.flyTo({
+        eye: [worldPos[0], viewer.camera.eye[1], worldPos[2]],
+        look: [worldPos[0], worldPos[1], worldPos[2]],
+        up: [0, 1, 0],
+        duration: 0.8,
+      });
+    }
+  }, [getXeokitViewer]);
 
   if (!isVisible) return null;
 
   return (
     <div
-      ref={minimapContainerRef}
+      ref={containerRef}
       className={cn(
         "absolute top-14 left-3 z-20",
         "bg-card/95 backdrop-blur-md border border-border/50 rounded-lg shadow-xl",
@@ -269,12 +260,11 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
     >
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b border-border/30">
-        <span className="text-xs font-medium text-foreground/90">Översikt</span>
+        <span className="text-xs font-medium text-foreground/90">Overview</span>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={generateStoreyMap} title="Uppdatera">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={generateMap} title="Refresh">
             <RefreshCw className={cn("h-3 w-3", isLoading && "animate-spin")} />
           </Button>
-          {/* Size presets */}
           {(['mini', 'medium', 'large'] as SizePreset[]).map(preset => (
             <Button
               key={preset}
@@ -282,49 +272,58 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
               size="icon"
               className="h-6 w-6 text-[10px] font-bold"
               onClick={() => applyPreset(preset)}
-              title={preset === 'mini' ? 'Mini' : preset === 'medium' ? 'Medel' : 'Stor (~50%)'}
+              title={preset === 'mini' ? 'Small' : preset === 'medium' ? 'Medium' : 'Large (~50%)'}
             >
               {preset === 'mini' ? 'S' : preset === 'medium' ? 'M' : 'L'}
             </Button>
           ))}
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose} title="Stäng">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose} title="Close">
             <X className="h-3 w-3" />
           </Button>
         </div>
       </div>
 
       {/* Map content */}
-      <div className="relative w-full bg-[#1a1a2e]" style={{ height: size.height - 40 }}>
-        {isLoading && !storeyMapData && (
+      <div className="relative w-full bg-background" style={{ height: size.height - 40 }}>
+        {isLoading && !mapData && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="flex flex-col items-center gap-2 text-muted-foreground">
               <RefreshCw className="h-5 w-5 animate-spin" />
-              <span className="text-xs">Laddar karta...</span>
+              <span className="text-xs">Loading map...</span>
             </div>
           </div>
         )}
-        {error && !storeyMapData && (
+        {error && !mapData && (
           <div className="absolute inset-0 flex items-center justify-center">
             <span className="text-xs text-muted-foreground">{error}</span>
           </div>
         )}
-        {storeyMapData && (
-          <img
-            ref={minimapImageRef}
-            src={storeyMapData.imageData}
-            alt="Floor plan minimap"
-            className="w-full h-full object-contain cursor-crosshair"
-            onClick={handleMinimapClick}
-            draggable={false}
-          />
+        {mapData && (
+          <div className="relative w-full h-full">
+            <img
+              ref={imgRef}
+              src={mapData.imageData}
+              alt="Floor plan minimap"
+              className="w-full h-full object-contain cursor-crosshair"
+              onClick={handleClick}
+              draggable={false}
+            />
+            {/* Camera dot */}
+            {cameraPos && (
+              <div
+                className="absolute w-2.5 h-2.5 rounded-full bg-primary border border-primary-foreground shadow-md pointer-events-none -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${cameraPos.x}%`, top: `${cameraPos.y}%` }}
+              />
+            )}
+          </div>
         )}
       </div>
 
-      {/* Resize handle (bottom-right corner) */}
+      {/* Resize handle */}
       <div
         className="absolute bottom-0 right-0 w-5 h-5 cursor-se-resize flex items-center justify-center opacity-50 hover:opacity-100 transition-opacity"
         onMouseDown={handleResizeStart}
-        title="Dra för att ändra storlek"
+        title="Drag to resize"
       >
         <GripVertical className="h-3 w-3 text-muted-foreground rotate-[-45deg]" />
       </div>
