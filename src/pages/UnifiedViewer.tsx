@@ -822,7 +822,7 @@ function MobileUnifiedViewer({
   }, [viewMode, viewerReady]);
 
   return (
-    <div ref={containerRef} className="fixed inset-0 bg-black z-40 overflow-hidden flex flex-col"
+    <div ref={containerRef} className="fixed inset-0 bg-black z-40 overflow-hidden flex flex-col" style={{ height: '100dvh' }}
       onTouchMove={isSplit ? handleTouchMove : undefined}
       onTouchEnd={isSplit ? handleTouchEnd : undefined}
     >
@@ -837,8 +837,8 @@ function MobileUnifiedViewer({
               paddingTop: 'env(safe-area-inset-top, 0px)',
             }}
           >
-            <div className="absolute top-[calc(env(safe-area-inset-top,0px)+6px)] left-2 z-10 bg-card/80 backdrop-blur-sm text-foreground text-[10px] px-2 py-0.5 rounded border border-border/50">
-              2D Plan
+            <div className="absolute top-[calc(env(safe-area-inset-top,0px)+4px)] left-1.5 z-10 bg-card/80 backdrop-blur-sm text-foreground text-[9px] px-1.5 py-0.5 rounded border border-border/50">
+              2D
             </div>
             <SplitPlanView
               viewerRef={viewerInstanceRef}
@@ -850,16 +850,16 @@ function MobileUnifiedViewer({
           {/* Draggable divider */}
           <div
             className="relative z-30 flex items-center justify-center bg-card/90 backdrop-blur-sm border-y border-border/50 touch-none select-none"
-            style={{ height: '28px', cursor: 'row-resize' }}
+            style={{ height: '20px', cursor: 'row-resize' }}
             onTouchStart={handleTouchStart}
           >
-            <GripHorizontal className="h-4 w-4 text-muted-foreground" />
+            <GripHorizontal className="h-3 w-3 text-muted-foreground" />
           </div>
 
           {/* Bottom: 3D Model */}
           <div className="flex-1 relative overflow-hidden">
-            <div className="absolute top-2 left-2 z-10 bg-card/80 backdrop-blur-sm text-foreground text-[10px] px-2 py-0.5 rounded border border-border/50">
-              3D Model
+            <div className="absolute top-1.5 left-1.5 z-10 bg-card/80 backdrop-blur-sm text-foreground text-[9px] px-1.5 py-0.5 rounded border border-border/50">
+              3D
             </div>
             <NativeViewerShell
               buildingFmGuid={buildingData.fmGuid}
@@ -881,9 +881,9 @@ function MobileUnifiedViewer({
               variant="secondary"
               size="icon"
               onClick={onGoBack}
-              className="h-8 w-8 bg-card/95 backdrop-blur-sm shadow-md border"
+              className="h-7 w-7 bg-card/95 backdrop-blur-sm shadow-md border"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="h-3.5 w-3.5" />
             </Button>
             <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md rounded-lg p-0.5 border border-white/10 ml-1">
               {([

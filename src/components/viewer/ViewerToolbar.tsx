@@ -523,11 +523,18 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     window.dispatchEvent(new CustomEvent(VIEW_MODE_CHANGED_EVENT, { detail: { mode, floorId: currentFloorId } }));
 
     if (mode === '2d') {
+      // Hide canvas immediately to avoid 3D flash while we set up 2D
+      const canvas = scene.canvas?.canvas;
+      if (canvas) canvas.style.opacity = '0';
+
+      // Set white background FIRST
+      window.dispatchEvent(new CustomEvent(ARCHITECT_BACKGROUND_CHANGED_EVENT, { detail: { presetId: 'white' } }));
+
       let targetFloorId = currentFloorId;
 
       if (!targetFloorId) {
-        const metaObjects = viewer?.metaScene?.metaObjects || {};
-        const storeys = Object.values(metaObjects)
+        const metaObjects2 = viewer?.metaScene?.metaObjects || {};
+        const storeys = Object.values(metaObjects2)
           .filter((mo: any) => mo?.type?.toLowerCase() === 'ifcbuildingstorey')
           .map((mo: any) => {
             const bounds = calculateFloorBounds(mo.id);
@@ -540,6 +547,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
           targetFloorId = storeys[0].id;
         }
       }
+
+      // Remove ALL existing section planes first to avoid duplicates
+      try { removeSectionPlane(); } catch {}
 
       if (targetFloorId) {
         applyFloorPlanClipping(targetFloorId);
@@ -614,11 +624,18 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
         camera.projection = 'ortho';
         camera.ortho.scale = dist * 1.2;
-        viewer.cameraFlight.flyTo({ eye: [lookX, lookY + dist, lookZ], look: [lookX, lookY, lookZ], up: [0, 0, -1], duration: 0.5 });
+        // Set camera instantly (duration: 0) then fade in canvas
+        viewer.cameraFlight.flyTo({ eye: [lookX, lookY + dist, lookZ], look: [lookX, lookY, lookZ], up: [0, 0, -1], duration: 0 });
       }
 
-      // Set white background for 2D mode
-      window.dispatchEvent(new CustomEvent(ARCHITECT_BACKGROUND_CHANGED_EVENT, { detail: { presetId: 'white' } }));
+      // Show canvas after 2D setup is complete (clipping + camera + colors all applied)
+      requestAnimationFrame(() => {
+        const canvasEl = scene.canvas?.canvas;
+        if (canvasEl) {
+          canvasEl.style.transition = 'opacity 0.2s ease-in';
+          canvasEl.style.opacity = '1';
+        }
+      });
     } else {
       // Restore all entities modified during 2D mode
       if (colorizedFor2dRef.current.size > 0) {

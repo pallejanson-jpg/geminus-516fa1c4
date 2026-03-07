@@ -475,7 +475,7 @@ export function useSectionPlaneClipping(
     currentFloorMinYRef.current = bounds.minY;
 
     const topClipY = bounds.minY + floorCutHeight;
-    const bottomClipY = bounds.minY + 0.1;
+    const bottomClipY = bounds.minY - 0.3; // Below floor level to include floor objects
 
     destroyPlane(topPlaneRef);
     destroyPlane(bottomPlaneRef);
@@ -508,7 +508,7 @@ export function useSectionPlaneClipping(
     destroyPlane(ceilingPlaneRef);
     
     const topClipY = baseHeight + floorCutHeightRef.current;
-    const bottomClipY = baseHeight + 0.1;
+    const bottomClipY = baseHeight - 0.3;
     currentFloorMinYRef.current = baseHeight;
 
     destroyPlane(topPlaneRef);
