@@ -8,6 +8,7 @@
  */
 
 import React, { useContext, useMemo, useState } from 'react';
+import { cn } from '@/lib/utils';
 import { ChevronDown, ChevronUp, BarChart2, X } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
