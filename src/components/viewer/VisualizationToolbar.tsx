@@ -804,8 +804,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
               {/* Visibility section - "Visa" */}
               <div>
-                <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1.5 sm:mb-2 block">
-                  Visa
+                 <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1.5 sm:mb-2 block">
+                   Visibility
                 </Label>
 
                 <div className="space-y-2 sm:space-y-3">
