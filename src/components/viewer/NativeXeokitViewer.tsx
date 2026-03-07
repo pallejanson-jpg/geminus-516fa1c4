@@ -599,8 +599,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         collectDescendants(mo);
       };
 
-      // Normalize a guid for comparison (lowercase, no dashes)
-      const norm = (s: string) => (s || '').toLowerCase().replace(/-/g, '');
+      // Use shared normalizeGuid for comparison
 
       // Build a lookup of normalized fmGuid → rgb for fast matching
       const fmGuidLookup = new Map<string, [number, number, number]>();
