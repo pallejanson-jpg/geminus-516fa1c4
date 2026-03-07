@@ -522,8 +522,50 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     window.dispatchEvent(new CustomEvent(VIEW_MODE_CHANGED_EVENT, { detail: { mode, floorId: currentFloorId } }));
 
     if (mode === '2d') {
-      if (currentFloorId) applyFloorPlanClipping(currentFloorId);
-      else {
+      let targetFloorId = currentFloorId;
+
+      if (!targetFloorId) {
+        const metaObjects = viewer?.metaScene?.metaObjects || {};
+        const storeys = Object.values(metaObjects)
+          .filter((mo: any) => mo?.type?.toLowerCase() === 'ifcbuildingstorey')
+          .map((mo: any) => {
+            const bounds = calculateFloorBounds(mo.id);
+            return bounds ? { id: mo.id, minY: bounds.minY } : null;
+          })
+          .filter(Boolean) as Array<{ id: string; minY: number }>;
+
+        if (storeys.length > 0) {
+          storeys.sort((a, b) => a.minY - b.minY);
+          targetFloorId = storeys[0].id;
+        }
+      }
+
+      if (targetFloorId) {
+        applyFloorPlanClipping(targetFloorId);
+
+        if (targetFloorId !== currentFloorId) {
+          const floorMeta = viewer?.metaScene?.metaObjects?.[targetFloorId];
+          const floorFmGuid =
+            floorMeta?.originalSystemId ||
+            floorMeta?.attributes?.FmGuid ||
+            floorMeta?.attributes?.fmGuid ||
+            floorMeta?.attributes?.fmguid ||
+            targetFloorId;
+
+          setCurrentFloorId(targetFloorId);
+          window.dispatchEvent(new CustomEvent<FloorSelectionEventDetail>(FLOOR_SELECTION_CHANGED_EVENT, {
+            detail: {
+              floorId: targetFloorId,
+              floorName: floorMeta?.name || null,
+              bounds: calculateFloorBounds(targetFloorId) || null,
+              visibleMetaFloorIds: [targetFloorId],
+              visibleFloorFmGuids: [String(floorFmGuid)],
+              isAllFloorsVisible: false,
+              isSoloFloor: true,
+            },
+          }));
+        }
+      } else {
         const sceneAABB = scene.getAABB?.();
         if (sceneAABB) applyGlobalFloorPlanClipping(sceneAABB[1]);
       }
