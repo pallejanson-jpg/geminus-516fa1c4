@@ -433,6 +433,13 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
           floorFmGuid: parts[2],
         });
         break;
+      case "selectBuilding":
+        executeAction({
+          action: "selectBuilding",
+          buildingFmGuid: parts[1],
+          buildingName: parts[2] ? decodeURIComponent(parts[2]) : undefined,
+        });
+        break;
     }
   }, [executeAction]);
 
