@@ -1213,7 +1213,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           <SidePopPanel
             isOpen={activeSubMenu === 'floors'}
             onClose={() => setActiveSubMenu(null)}
-            title="Våningsplan"
+            title="Floors"
             parentPosition={position}
             parentWidth={panelWidth}
           >
