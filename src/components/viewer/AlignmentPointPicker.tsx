@@ -258,7 +258,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           ) : step === 'picking3D' ? (
             <div className="mt-1 space-y-1">
               <p className="text-foreground/70 leading-snug">
-                Klicka nu på <strong>exakt samma punkt</strong> i 3D-modellen till vänster.
+                Now click on <strong>the exact same point</strong> in the 3D model on the left.
               </p>
               <div className="flex items-center gap-1.5 text-primary">
                 <Loader2 className="h-3 w-3 animate-spin" />
