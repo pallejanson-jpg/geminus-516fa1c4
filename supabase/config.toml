@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.ifc-extract-systems]
 verify_jwt = false
+
+[functions.index-documents]
+verify_jwt = false

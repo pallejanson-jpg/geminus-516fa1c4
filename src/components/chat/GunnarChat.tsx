@@ -48,6 +48,7 @@ interface GunnarAction {
   visible?: boolean;
   fmGuid?: string;
   buildingFmGuid?: string;
+  buildingName?: string;
   floorName?: string;
 }
 
@@ -71,6 +72,9 @@ function stripFollowups(content: string): string {
 }
 
 function getContextualGreeting(context?: GunnarContext): string {
+  if (context?.activeApp === 'support') {
+    return `Hej! Du är i supportsektionen. Fråga mig om hur plattformen fungerar, vilka funktioner som finns, eller hur du löser ett specifikt problem!`;
+  }
   if (context?.activeApp === 'fma_plus' || context?.activeApp === 'fma_native') {
     const bName = context?.currentBuilding?.name;
     if (bName) {
@@ -90,7 +94,7 @@ function getContextualGreeting(context?: GunnarContext): string {
   if (context?.activeApp === 'portfolio') {
     return `Hej! Jag är Gunnar, din fastighetsassistent. Jag kan berätta om alla byggnader i portföljen — fråga om rum, ytor, våningar, ritningar eller specifika tillgångar!`;
   }
-  return `Hej! Jag är Gunnar, din AI-assistent för fastighetsdata. Fråga mig om:\n\n• Byggnader, våningar, rum och ytor\n• Utrustning och tillgångar\n• Ritningar från FM Access\n• Felanmälningar och ärenden\n• 3D-modellnavigering\n• IoT-sensordata\n\nVad vill du veta?`;
+  return `Hej! Jag är Gunnar, din AI-assistent för fastighetsdata. Fråga mig om:\n\n• Byggnader, våningar, rum och ytor\n• Utrustning och tillgångar\n• Ritningar från FM Access\n• Felanmälningar och ärenden\n• 3D-modellnavigering\n• IoT-sensordata\n• Hjälp med plattformen\n\nVad vill du veta?`;
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gunnar-chat`;
@@ -369,6 +373,13 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
           toast.success('Öppnar 3D-viewer');
         }
         break;
+      case "selectBuilding":
+        if (action.buildingFmGuid) {
+          const bName = action.buildingName || 'byggnaden';
+          // Auto-send a follow-up message to Gunnar with the selected building
+          sendMessage(`Jag menar ${bName}`);
+        }
+        break;
     }
   }, [setAiSelectedFmGuids, setActiveApp, onClose, setViewer3dFmGuid, navigate]);
 
@@ -423,6 +434,13 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
           action: "openViewer3D", 
           buildingFmGuid: parts[1], 
           floorFmGuid: parts[2],
+        });
+        break;
+      case "selectBuilding":
+        executeAction({
+          action: "selectBuilding",
+          buildingFmGuid: parts[1],
+          buildingName: parts[2] ? decodeURIComponent(parts[2]) : undefined,
         });
         break;
     }
