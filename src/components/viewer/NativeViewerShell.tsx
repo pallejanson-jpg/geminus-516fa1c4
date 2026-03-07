@@ -434,7 +434,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           size="icon"
           onClick={onClose}
           className="absolute top-3 left-3 z-40 h-9 w-9 bg-card/80 backdrop-blur-sm shadow-md border"
-          title="Tillbaka"
+          title="Back"
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>

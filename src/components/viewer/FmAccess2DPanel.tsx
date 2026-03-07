@@ -51,8 +51,8 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
 
   const phaseLabels: Record<Phase, string> = {
     'idle': '',
-    'fetching-config': 'Hämtar konfiguration...',
-    'loading-iframe': 'Laddar FM Access...',
+    'fetching-config': 'Fetching configuration...',
+    'loading-iframe': 'Loading FM Access...',
     'ready': '',
     'error': '',
   };
@@ -85,13 +85,13 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
         if (cancelled) return;
 
         if (fnError) {
-          setError(fnError.message || 'Kunde inte hämta konfiguration');
+          setError(fnError.message || 'Could not fetch configuration');
           setPhase('error');
           return;
         }
 
         if (!data?.success) {
-          setError(data?.error || 'FM Access är inte konfigurerat');
+          setError(data?.error || 'FM Access is not configured');
           setPhase('error');
           return;
         }
@@ -105,7 +105,7 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
         setPhase('loading-iframe');
       } catch (err: any) {
         if (!cancelled) {
-          setError(err.message || 'Oväntat fel');
+          setError(err.message || 'Unexpected error');
           setPhase('error');
         }
       }
@@ -195,19 +195,19 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
       <div className={`flex items-center justify-center h-full bg-background ${className}`}>
         <div className="text-center max-w-sm">
           <MapPin className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-sm font-medium text-foreground mb-1">Ingen våning vald</p>
+          <p className="text-sm font-medium text-foreground mb-1">No floor selected</p>
           <p className="text-xs text-muted-foreground mb-1">
-            {buildingName ? `Byggnad: ${buildingName}` : 'Välj en våning för att visa 2D-ritningen.'}
+            {buildingName ? `Building: ${buildingName}` : 'Select a floor to view the 2D drawing.'}
           </p>
           {buildingName && (
             <p className="text-xs text-muted-foreground mb-3">
-              Välj en våning i 3D-vyn för att visa ritningen.
+              Select a floor in the 3D view to show the drawing.
             </p>
           )}
           {onChangeFloor && (
             <Button variant="outline" size="sm" onClick={onChangeFloor} className="gap-1.5">
               <ArrowLeft className="h-3.5 w-3.5" />
-              Välj våning i 3D
+              Select floor in 3D
             </Button>
           )}
         </div>
@@ -221,7 +221,7 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
       <div className={`flex items-center justify-center h-full bg-background ${className}`}>
         <div className="text-center max-w-sm">
           <AlertCircle className="h-10 w-10 text-destructive mx-auto mb-3" />
-          <p className="text-sm font-medium text-foreground mb-1">Kunde inte ladda 2D-ritning</p>
+          <p className="text-sm font-medium text-foreground mb-1">Could not load 2D drawing</p>
           {(buildingName || floorName) && (
             <p className="text-xs text-muted-foreground mb-1">
               {buildingName && floorName
@@ -238,12 +238,12 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
               className="gap-1.5"
             >
               <RefreshCw className="h-3.5 w-3.5" />
-              Försök igen
+              Retry
             </Button>
             {onChangeFloor && (
               <Button variant="outline" size="sm" onClick={onChangeFloor} className="gap-1.5">
-                <ArrowLeft className="h-3.5 w-3.5" />
-                Byt våning
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Change floor
               </Button>
             )}
           </div>
@@ -261,7 +261,7 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
           <div className="text-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-3" />
             <p className="text-sm text-muted-foreground">
-              {phaseLabels[phase] || 'Laddar 2D-ritning...'}
+              {phaseLabels[phase] || 'Loading 2D drawing...'}
             </p>
           </div>
         </div>
