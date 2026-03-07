@@ -1527,7 +1527,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 onClick={(e) => e.stopPropagation()}
                 onCheckedChange={(v) => setShowDeletedAssets(!!v)} />
               <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: '#FF3333' }} />
-              <span className="text-sm truncate flex-1 text-foreground">Visa borttagna objekt</span>
+              <span className="text-sm truncate flex-1 text-foreground">Show deleted objects</span>
               <span className="text-xs text-muted-foreground shrink-0">
                 {modifiedAssets.filter(a => a.modification_status === 'deleted').length}
               </span>
