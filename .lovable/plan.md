@@ -1,50 +1,125 @@
 
 
-## Problem Summary
-1. **10-12s load time** — viewer component itself takes too long to initialize
-2. **No fit-view after load** — camera stays at default `[0, 20, 40]` after removing auto-fit, building not visible
-3. **2D mode (standalone) broken** — nothing renders
-4. **Split 2D/3D slow on first load** — StoreyViewsPlugin polling up to 90 retries × 300ms
-5. **Room labels in 2D split** — need black text on transparent/white background (no dark badge)
+## Plan: System Support + Reconciliation Engine (IMPLEMENTED)
 
-## Root Causes
+### Database tables created
+1. **`asset_external_ids`** — Maps external IDs (IFC GUID, ACC externalId, Revit UniqueId) to stable `fm_guid` for cross-source reconciliation
+2. **`systems`** — Technical systems (e.g., LB01 Supply Air) with `fm_guid`, `discipline`, `system_type`, `building_fm_guid`, hierarchical `parent_system_id`
+3. **`asset_system`** — Many-to-many relation between assets and systems with optional `role`
+4. **`asset_connections`** — Topology/flow between assets (`from_fm_guid` → `to_fm_guid`) with `connection_type` and `direction`
 
-### A) No fit-view
-In `NativeXeokitViewer.tsx` line 454, we removed ALL camera adjustment. When no saved start view exists, camera stays at `[0, 20, 40]` looking at origin — building is likely off-screen. **Fix**: Add a simple `viewFit` (instant, no animation) to `scene.aabb` as fallback when no `LOAD_SAVED_VIEW_EVENT` arrives within 500ms after models load.
+All tables have RLS: authenticated read, admin write. Indexes on common query patterns.
 
-### B) 2D mode broken
-The standalone 2D mode (`viewMode === '2d'`) dispatches `VIEW_MODE_REQUESTED_EVENT` which triggers ceiling clipping + ortho in the toolbar. But the NativeViewerShell's `VIEW_MODE_REQUESTED_EVENT` handler relies on the toolbar being mounted. On mobile, when `viewMode === '2d'`, the same `NativeViewerShell` is used (line 945-951 in UnifiedViewer). The 2D logic in the toolbar needs the viewer ready + models loaded. The issue is likely timing — 2D events dispatched before models load. Need to re-dispatch after `VIEWER_MODELS_LOADED`.
+### Edge function changes
+1. **`ifc-to-xkt/index.ts`** — Extended with system extraction:
+   - Identifies `IfcSystem` / `IfcDistributionSystem` meta objects
+   - Falls back to `SystemName` property grouping
+   - Extracts `IfcRelConnects*` for topology → `asset_connections`
+   - Stores all object IDs in `asset_external_ids`
+   - Persists systems, asset-system links, and connections in batches
 
-### C) Split 2D slow
-StoreyViewsPlugin init polls every 300ms up to 90 times (27 seconds max). It also waits for `metaStoreyCount > 0`. The `VIEWER_MODELS_LOADED` event handler resets attempts and retries — but the initial `tryInit()` on mount races before models are loaded. **Fix**: Don't start polling on mount; only start on `VIEWER_MODELS_LOADED`.
+2. **`acc-sync/index.ts`** — Extended with system support:
+   - Resolves `System Name`, `System Type`, `System Classification`, `System Abbreviation` property fields
+   - Groups instances by `SystemName` → auto-creates `systems` + `asset_system` rows
+   - Stores ACC `externalId` mappings in `asset_external_ids` for all levels, rooms, instances
+   - Infers discipline from system name (Ventilation, Heating, Cooling, Electrical, Plumbing, FireProtection)
 
-### D) Room labels styling
-Line 418 in `useRoomLabels.ts`: `background: hsl(var(--background) / 0.6)` with border and shadow. User wants: black text, white/transparent background, no badge look.
+### System activation for existing buildings
+- **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
+- **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
+- **Asset+-byggnader**: Kör `sync-systems` action via `asset-plus-sync` edge function → extraherar system från befintliga attribut (IMPLEMENTERAT)
 
-## Plan
+### Frontend (future phase)
+- System tab on FacilityLandingPage
+- System badge on asset property dialogs
+- Manual system creation dialog
 
-### 1. Add instant viewFit fallback (`NativeXeokitViewer.tsx`)
-After line 487 (VIEWER_MODELS_LOADED dispatch), add a delayed check: if no `LOAD_SAVED_VIEW_EVENT` is received within 500ms, do `viewer.cameraFlight.flyTo({ aabb: viewer.scene.aabb, duration: 0 })` — instant fit, no animation/rotation.
+---
 
-### 2. Fix SplitPlanView init speed (`SplitPlanView.tsx`)
-- Remove the initial `tryInit()` call on mount (line 147)
-- Only start init when `VIEWER_MODELS_LOADED` fires
-- Reduce max retry attempts from 90 to 20
-- Reduce retry interval from 300ms/1000ms to 200ms
+## Plan: Viewer Color Fix (IMPLEMENTED)
 
-### 3. Fix standalone 2D mode (`UnifiedViewer.tsx`)
-The 2D dispatch logic at line 260-293 already re-dispatches on `VIEWER_MODELS_LOADED`. Check that the timing is correct. The real issue may be that 2D mode needs section plane clipping which requires the viewer to have storeys. Ensure the `VIEW_MODE_2D_TOGGLED_EVENT` fires after models are loaded, not before.
+### Changes made:
+1. **Window color** — Changed from blue-gray `[0.392, 0.490, 0.541]` (#647D8A) to neutral warm gray `[0.780, 0.780, 0.760]` (#C7C7C2) in:
+   - `src/lib/architect-colors.ts`
+   - `src/hooks/useArchitectViewMode.ts`
+   - Database `viewer_themes` table (both "Arkitektvy" and "Standard" themes)
+   - `ViewerFilterPanel.tsx` category palette
 
-### 4. Room labels: black text, no background (`useRoomLabels.ts`)
-Change the label style at line 414-435:
-- `background: transparent` (or `background: none`)
-- `color: #000` (black text)  
-- Remove `border` and `box-shadow`
-- Keep `text-shadow: 0 0 3px white, 0 0 3px white` for readability on plan
+2. **Space color** — Verified as correct neutral gray `[0.898, 0.894, 0.890]` (#E5E4E3). Changed category palette in ViewerFilterPanel from blue to neutral.
 
-## Files to Edit
-- `src/components/viewer/NativeXeokitViewer.tsx` — add instant viewFit fallback
-- `src/components/viewer/SplitPlanView.tsx` — event-driven init only
-- `src/hooks/useRoomLabels.ts` — transparent labels with black text
-- `src/pages/UnifiedViewer.tsx` — ensure 2D mode fires after models loaded
+3. **Background** — Already correct gray gradient in NativeViewerShell.
 
+4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
+
+5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
+
+---
+
+## Plan: IFC System-Only Import (IMPLEMENTED - Phase 1)
+
+### What was built
+1. **`ifc-extract-systems` edge function** — New lightweight edge function that:
+   - Downloads IFC from `ifc-uploads` bucket
+   - Parses metadata via `web-ifc` + `xeokit-convert` (same pipeline as `ifc-to-xkt`)
+   - Extracts systems (`IfcSystem`, `IfcDistributionSystem`, `SystemName` property grouping)
+   - Extracts connections (`IfcRelConnects*`)
+   - Reconciles IFC GUIDs with existing assets (3-step: exact match → name match → identity)
+   - Persists to `systems`, `asset_system`, `asset_connections`, `asset_external_ids`
+   - **Skips XKT generation** — much faster (~10-15s vs minutes)
+   - Supports 3 modes: `systems-only` (default), `enrich-guids` (future), `full` (delegates to `ifc-to-xkt`)
+
+2. **UI in ApiSettingsModal** — "From IFC" button on the Technical Systems card:
+   - Building selector dropdown
+   - IFC file upload
+   - Mode radio: "Only systems (fast)" / "Systems + FMGUIDs (coming soon)" / "Full conversion"
+   - Progress tracking and result display
+
+### Still to implement
+- **`enrich-guids` mode** — FMGUID generation + IFC write-back via `web-ifc` property injection
+- **IFC archive** — Store enriched IFC in `ifc-uploads/{buildingFmGuid}/enriched/`
+- **ACC `enrich-guids` action** — Deterministic GUID generation for ACC-sourced models
+
+---
+
+## Plan: Remove Separate Technical Systems UI (IMPLEMENTED)
+
+### Changes made
+1. **Removed standalone Technical Systems UI** from `ApiSettingsModal.tsx` Sync tab:
+   - Removed `SyncProgressCard` for Technical Systems
+   - Removed IFC System Import panel (file upload, building selector, mode radio)
+   - Removed state variables: `isSyncingSystems`, `systemSyncResult`, `ifcSystemFile`, `ifcSystemBuildingGuid`, `ifcSystemMode`, `isImportingIfcSystems`, `ifcSystemImportResult`, `ifcSystemBuildings`, `showIfcSystemImport`
+   - Removed `handleSyncSystems` and `handleImportIfcSystems` functions
+   - Added lightweight system count display in the sync status section
+
+2. **Auto-trigger system sync** after existing flows:
+   - After Asset+ asset sync completes → calls `sync-systems` automatically
+   - After ACC BIM sync completes → calls `sync-systems` automatically
+   - IFC flow already extracts systems in `ifc-to-xkt` edge function (no change needed)
+
+3. **System count** shown inline in sync status when systems exist (no separate card)
+
+---
+
+## Plan: Move & Delete Objects in 3D Viewer (IMPLEMENTED - Phase 1)
+
+### Database changes
+- Added columns to `assets`: `modification_status` (text), `moved_offset_x/y/z` (numeric), `original_room_fm_guid` (text), `modification_date` (timestamptz)
+- Partial index on `modification_status WHERE NOT NULL`
+
+### Viewer changes
+1. **`entityOffsetsEnabled: true`** in `NativeXeokitViewer.tsx` Viewer constructor
+2. **`useObjectMoveMode` hook** — drag-move logic with:
+   - World-space pick-surface delta calculation
+   - AABB-based room detection at new position
+   - Persists offset + `modification_status = 'moved'` + room changes to DB
+   - Applies saved offsets & hides deleted entities on model load
+   - ESC to cancel move
+3. **Context menu** — Added "Flytta objekt", "Ta bort objekt", "Markera" (select fix)
+4. **Filter panel** — New "Ändringar" section with toggles:
+   - "Visa flyttade objekt" → orange colorization (`[1, 0.6, 0.1]`)
+   - "Visa borttagna objekt" → red colorization (`[1, 0.2, 0.2]`), makes hidden deleted objects visible
+
+### Still to implement
+- **Rapport-export** — CSV export of all modified assets from Insights/Asset tab
+- **Asset+ sync reset** — Clear `modification_status` when `source_updated_at` changes in `asset-plus-sync`
+- **ContextMenuSettings panel** — Wire new items visibility to settings toggles
