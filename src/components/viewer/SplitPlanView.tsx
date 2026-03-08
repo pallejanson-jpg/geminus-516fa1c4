@@ -179,31 +179,48 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const container = containerRef.current;
       const width = container ? Math.min(container.clientWidth * 2, 1600) : 800;
 
-      // Temporarily make all objects visible for storey map rendering
-      // (IfcSpace objects are hidden by default in our viewer but needed for plan rendering)
+      // Temporarily make all objects renderable for storey map rendering.
+      // This avoids blank maps when IfcSpace is hidden, LOD has culled entities,
+      // or 2D clipping section planes are active.
       const scene = viewer.scene;
       const hiddenIds: string[] = [];
+      const culledIds: string[] = [];
+      const sectionPlanes = Object.values(scene.sectionPlanes || {}) as any[];
+      const activeSectionPlanes = sectionPlanes.filter((sp) => sp?.active);
+
+      activeSectionPlanes.forEach((sp) => { sp.active = false; });
+
       const objectIds = scene.objectIds || [];
       objectIds.forEach((id: string) => {
         const entity = scene.objects?.[id];
-        if (entity && !entity.visible) {
+        if (!entity) return;
+        if (!entity.visible) {
           hiddenIds.push(id);
           entity.visible = true;
         }
+        if (entity.culled) {
+          culledIds.push(id);
+          entity.culled = false;
+        }
       });
 
-      console.debug(`[SplitPlanView] Generating map for storey ${storeyId}, temporarily showing ${hiddenIds.length} hidden objects`);
+      console.debug(`[SplitPlanView] Generating map for storey ${storeyId}, restoring hidden=${hiddenIds.length}, culled=${culledIds.length}, disabledPlanes=${activeSectionPlanes.length}`);
 
       const map = plugin.createStoreyMap(storeyId, {
         width,
         format: 'png',
       });
 
-      // Restore hidden objects
+      // Restore prior state
       hiddenIds.forEach(id => {
         const entity = scene.objects?.[id];
         if (entity) entity.visible = false;
       });
+      culledIds.forEach(id => {
+        const entity = scene.objects?.[id];
+        if (entity) entity.culled = true;
+      });
+      activeSectionPlanes.forEach((sp) => { sp.active = true; });
 
       if (map?.imageData) {
         console.debug('[SplitPlanView] Map generated successfully');
