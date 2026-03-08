@@ -534,129 +534,131 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     window.dispatchEvent(new CustomEvent(VIEW_MODE_CHANGED_EVENT, { detail: { mode, floorId: currentFloorId } }));
 
     if (mode === '2d') {
-      // Hide canvas immediately to avoid 3D flash while we set up 2D
-      const canvas = scene.canvas?.canvas;
-      if (canvas) canvas.style.opacity = '0';
-
-      // Set white background FIRST
-      window.dispatchEvent(new CustomEvent(ARCHITECT_BACKGROUND_CHANGED_EVENT, { detail: { presetId: 'white' } }));
-
-      let targetFloorId = currentFloorId;
-
-      if (!targetFloorId) {
-        const metaObjects2 = viewer?.metaScene?.metaObjects || {};
-        const storeys = Object.values(metaObjects2)
-          .filter((mo: any) => mo?.type?.toLowerCase() === 'ifcbuildingstorey')
-          .map((mo: any) => {
-            const bounds = calculateFloorBounds(mo.id);
-            return bounds ? { id: mo.id, minY: bounds.minY } : null;
-          })
-          .filter(Boolean) as Array<{ id: string; minY: number }>;
-
-        if (storeys.length > 0) {
-          storeys.sort((a, b) => a.minY - b.minY);
-          targetFloorId = storeys[0].id;
-        }
-      }
-
-      // Remove any existing 3D ceiling clipping first
-      try { remove3DClipping(); } catch {}
-
-      if (targetFloorId) {
-        applyFloorPlanClipping(targetFloorId);
-
-        if (targetFloorId !== currentFloorId) {
-          const floorMeta = viewer?.metaScene?.metaObjects?.[targetFloorId];
-          const floorFmGuid =
-            floorMeta?.originalSystemId ||
-            floorMeta?.attributes?.FmGuid ||
-            floorMeta?.attributes?.fmGuid ||
-            floorMeta?.attributes?.fmguid ||
-            targetFloorId;
-
-          setCurrentFloorId(targetFloorId);
-          window.dispatchEvent(new CustomEvent<FloorSelectionEventDetail>(FLOOR_SELECTION_CHANGED_EVENT, {
-            detail: {
-              floorId: targetFloorId,
-              floorName: floorMeta?.name || null,
-              bounds: calculateFloorBounds(targetFloorId) || null,
-              visibleMetaFloorIds: [targetFloorId],
-              visibleFloorFmGuids: [String(floorFmGuid)],
-              isAllFloorsVisible: false,
-              isSoloFloor: true,
-            },
-          }));
-        }
-      } else {
-        const sceneAABB = scene.getAABB?.();
-        if (sceneAABB) applyGlobalFloorPlanClipping(sceneAABB[1]);
-      }
-
-      const edgeMat = scene.edgeMaterial;
-      const origEdgeColor = edgeMat?.edgeColor ? [...edgeMat.edgeColor] : [0.2, 0.2, 0.2];
-      const origEdgeAlpha = edgeMat?.edgeAlpha ?? 0.5;
-      const origEdgeWidth = edgeMat?.edgeWidth ?? 1;
-
-      const SLAB_TYPES = new Set(['ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase', 'ifcroof', 'ifccovering', 'ifcplate']);
-      const WALL_TYPES = new Set(['ifcwall', 'ifcwallstandardcase']);
-      const SUBDUED_TYPES = new Set(['ifcdoor', 'ifcwindow', 'ifcfurnishingelement', 'ifcrailing', 'ifcstair', 'ifcstairflight']);
-      const SPACE_TYPES = new Set(['ifcspace']);
-      const metaObjects = scene?.metaScene?.metaObjects || {};
-      const colorized = new Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean }>();
-
-      Object.values(metaObjects).forEach((mo: any) => {
-        const typeLower = mo.type?.toLowerCase() || '';
-        const entity = scene.objects?.[mo.id];
-        if (!entity) return;
-
-        if (SLAB_TYPES.has(typeLower)) {
-          colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
-          entity.visible = true; entity.pickable = false; entity.opacity = 0; entity.edges = false;
-        } else if (SPACE_TYPES.has(typeLower)) {
-          colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
-          entity.visible = true; entity.pickable = true; entity.opacity = 0.02; entity.colorize = [0.5, 0.7, 0.9];
-        } else if (WALL_TYPES.has(typeLower)) {
-          colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
-          entity.colorize = [0.2, 0.2, 0.2]; entity.opacity = 1.0; entity.edges = true;
-        } else if (SUBDUED_TYPES.has(typeLower)) {
-          colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
-          entity.colorize = [0.75, 0.75, 0.75]; entity.opacity = 0.6;
-        }
-      });
-
-      if (edgeMat) { edgeMat.edgeColor = [0.15, 0.15, 0.15]; edgeMat.edgeAlpha = 1.0; edgeMat.edgeWidth = 2; }
-      colorizedFor2dRef.current = colorized;
-      (viewerShimRef.current as any).__orig2dEdge = { origEdgeColor, origEdgeAlpha, origEdgeWidth };
-
-      // Lock camera: orthographic top-down, no rotation allowed
-      const camera = viewer.camera;
-      if (camera) {
-        const lookX = camera.look[0], lookY = camera.look[1], lookZ = camera.look[2];
-        const dx = camera.eye[0] - lookX, dy = camera.eye[1] - lookY, dz = camera.eye[2] - lookZ;
-        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        camera.projection = 'ortho';
-        camera.ortho.scale = dist * 1.2;
-        // Set camera instantly to top-down view
-        viewer.cameraFlight.flyTo({ eye: [lookX, lookY + dist, lookZ], look: [lookX, lookY, lookZ], up: [0, 0, -1], duration: 0 });
-      }
-
-      // Lock navigation: planView mode prevents rotation, only pan + zoom
-      if (viewer.cameraControl) {
-        viewer.cameraControl.navMode = 'planView';
-      }
-
-      // Show canvas after 2D setup is complete (clipping + camera + colors all applied)
-      // Use a longer delay to ensure clipping planes are fully applied before revealing
+      const canvas = scene.canvas?.canvas as HTMLCanvasElement | undefined;
       const revealCanvas = () => {
-        const canvasEl = scene.canvas?.canvas;
-        if (canvasEl) {
-          canvasEl.style.transition = 'opacity 0.3s ease-in';
-          canvasEl.style.opacity = '1';
-        }
+        if (!canvas) return;
+        canvas.style.transition = 'opacity 0.25s ease-in';
+        canvas.style.opacity = '1';
       };
-      setTimeout(revealCanvas, 200);
-      // Safety: ensure canvas is always shown even if something above failed
-      setTimeout(revealCanvas, 1000);
+
+      try {
+        // Hide canvas immediately to avoid 3D flash while we set up 2D
+        if (canvas) canvas.style.opacity = '0';
+
+        // Set white background FIRST
+        window.dispatchEvent(new CustomEvent(ARCHITECT_BACKGROUND_CHANGED_EVENT, { detail: { presetId: 'white' } }));
+
+        let targetFloorId = currentFloorId;
+
+        if (!targetFloorId) {
+          const metaObjects2 = viewer?.metaScene?.metaObjects || {};
+          const storeys = Object.values(metaObjects2)
+            .filter((mo: any) => mo?.type?.toLowerCase() === 'ifcbuildingstorey')
+            .map((mo: any) => {
+              const bounds = calculateFloorBounds(mo.id);
+              return bounds ? { id: mo.id, minY: bounds.minY } : null;
+            })
+            .filter(Boolean) as Array<{ id: string; minY: number }>;
+
+          if (storeys.length > 0) {
+            storeys.sort((a, b) => a.minY - b.minY);
+            targetFloorId = storeys[0].id;
+          }
+        }
+
+        // Remove any existing 3D ceiling clipping first
+        try { remove3DClipping(); } catch {}
+
+        if (targetFloorId) {
+          applyFloorPlanClipping(targetFloorId);
+
+          if (targetFloorId !== currentFloorId) {
+            const floorMeta = viewer?.metaScene?.metaObjects?.[targetFloorId];
+            const floorFmGuid =
+              floorMeta?.originalSystemId ||
+              floorMeta?.attributes?.FmGuid ||
+              floorMeta?.attributes?.fmGuid ||
+              floorMeta?.attributes?.fmguid ||
+              targetFloorId;
+
+            setCurrentFloorId(targetFloorId);
+            window.dispatchEvent(new CustomEvent<FloorSelectionEventDetail>(FLOOR_SELECTION_CHANGED_EVENT, {
+              detail: {
+                floorId: targetFloorId,
+                floorName: floorMeta?.name || null,
+                bounds: calculateFloorBounds(targetFloorId) || null,
+                visibleMetaFloorIds: [targetFloorId],
+                visibleFloorFmGuids: [String(floorFmGuid)],
+                isAllFloorsVisible: false,
+                isSoloFloor: true,
+              },
+            }));
+          }
+        } else {
+          const sceneAABB = scene.getAABB?.();
+          if (sceneAABB) applyGlobalFloorPlanClipping(sceneAABB[1]);
+        }
+
+        const edgeMat = scene.edgeMaterial;
+        const origEdgeColor = edgeMat?.edgeColor ? [...edgeMat.edgeColor] : [0.2, 0.2, 0.2];
+        const origEdgeAlpha = edgeMat?.edgeAlpha ?? 0.5;
+        const origEdgeWidth = edgeMat?.edgeWidth ?? 1;
+
+        const SLAB_TYPES = new Set(['ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase', 'ifcroof', 'ifccovering', 'ifcplate']);
+        const WALL_TYPES = new Set(['ifcwall', 'ifcwallstandardcase']);
+        const SUBDUED_TYPES = new Set(['ifcdoor', 'ifcwindow', 'ifcfurnishingelement', 'ifcrailing', 'ifcstair', 'ifcstairflight']);
+        const SPACE_TYPES = new Set(['ifcspace']);
+        const metaObjects = scene?.metaScene?.metaObjects || {};
+        const colorized = new Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean }>();
+
+        Object.values(metaObjects).forEach((mo: any) => {
+          const typeLower = mo.type?.toLowerCase() || '';
+          const entity = scene.objects?.[mo.id];
+          if (!entity) return;
+
+          if (SLAB_TYPES.has(typeLower)) {
+            colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
+            entity.visible = true; entity.pickable = false; entity.opacity = 0; entity.edges = false;
+          } else if (SPACE_TYPES.has(typeLower)) {
+            colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
+            entity.visible = true; entity.pickable = true; entity.opacity = 0.02; entity.colorize = [0.5, 0.7, 0.9];
+          } else if (WALL_TYPES.has(typeLower)) {
+            colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
+            entity.colorize = [0.2, 0.2, 0.2]; entity.opacity = 1.0; entity.edges = true;
+          } else if (SUBDUED_TYPES.has(typeLower)) {
+            colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
+            entity.colorize = [0.75, 0.75, 0.75]; entity.opacity = 0.6;
+          }
+        });
+
+        if (edgeMat) { edgeMat.edgeColor = [0.15, 0.15, 0.15]; edgeMat.edgeAlpha = 1.0; edgeMat.edgeWidth = 2; }
+        colorizedFor2dRef.current = colorized;
+        (viewerShimRef.current as any).__orig2dEdge = { origEdgeColor, origEdgeAlpha, origEdgeWidth };
+
+        // Lock camera: orthographic top-down, no rotation allowed
+        const camera = viewer.camera;
+        if (camera) {
+          const lookX = camera.look[0], lookY = camera.look[1], lookZ = camera.look[2];
+          const dx = camera.eye[0] - lookX, dy = camera.eye[1] - lookY, dz = camera.eye[2] - lookZ;
+          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          camera.projection = 'ortho';
+          camera.ortho.scale = dist * 1.2;
+          // Set camera instantly to top-down view
+          viewer.cameraFlight.flyTo({ eye: [lookX, lookY + dist, lookZ], look: [lookX, lookY, lookZ], up: [0, 0, -1], duration: 0 });
+        }
+
+        // Lock navigation: planView mode prevents rotation, only pan + zoom
+        if (viewer.cameraControl) {
+          viewer.cameraControl.navMode = 'planView';
+        }
+      } catch (err) {
+        console.warn('[ViewerToolbar] Failed to enter 2D mode cleanly:', err);
+        try { remove2DClipping(); } catch {}
+        try { remove3DClipping(); } catch {}
+      } finally {
+        setTimeout(revealCanvas, 80);
+        setTimeout(revealCanvas, 600);
+      }
     } else {
       // Restore all entities modified during 2D mode
       if (colorizedFor2dRef.current.size > 0) {
