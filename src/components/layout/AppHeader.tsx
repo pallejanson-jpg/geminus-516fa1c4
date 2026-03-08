@@ -186,7 +186,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             <CommandSearch open={isCommandOpen} onOpenChange={setIsCommandOpen} />
 
             {/* Right section */}
-            <div className="flex items-center gap-1 sm:gap-2">
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                 <AppButton
                     onClick={toggleRightSidebar}
                     variant="ghost"
