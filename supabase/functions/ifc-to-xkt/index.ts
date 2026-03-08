@@ -31,41 +31,21 @@ async function ensureWasm(): Promise<string> {
     }
   }
 
-  // web-ifc in Deno edge runtime ignores wasmPath and resolves to an internal npm path.
-  // Try symlink first, then fall back to copying WASM files directly.
-  const symlinkParent = "/var/tmp/sb-compile-edge-runtime/node_modules/localhost/web-ifc/0.0.57";
-  let wasmLinked = false;
-  try {
-    await Deno.mkdir(symlinkParent, { recursive: true });
-    const symlinkTarget = `${symlinkParent}/tmp`;
-    try { await Deno.lstat(symlinkTarget); wasmLinked = true; } catch {
-      await Deno.symlink("/tmp", symlinkTarget);
-      console.log(`Created symlink: ${symlinkTarget} -> /tmp`);
-      wasmLinked = true;
+  // web-ifc in Deno edge runtime resolves WASM to an internal npm path we can't write to.
+  // Intercept file reads to redirect from the expected path to our /tmp copy.
+  const expectedPrefix = "/var/tmp/sb-compile-edge-runtime/node_modules/localhost/web-ifc/0.0.57/tmp/web-ifc-wasm/";
+  const originalReadFileSync = Deno.readFileSync;
+  // @ts-ignore - monkey-patching for WASM resolution
+  Deno.readFileSync = (path: string | URL) => {
+    const p = typeof path === "string" ? path : path.toString();
+    if (p.startsWith(expectedPrefix)) {
+      const fileName = p.substring(expectedPrefix.length);
+      const redirected = `${dir}/${fileName}`;
+      console.log(`WASM redirect: ${p} -> ${redirected}`);
+      return originalReadFileSync(redirected);
     }
-  } catch (e) {
-    console.warn(`Could not create symlink (will try direct copy): ${e}`);
-  }
-
-  // Fallback: copy WASM files directly to the path web-ifc expects
-  if (!wasmLinked) {
-    const expectedWasmDir = `${symlinkParent}/tmp/web-ifc-wasm`;
-    try {
-      await Deno.mkdir(expectedWasmDir, { recursive: true });
-      for (const file of files) {
-        const src = `${dir}/${file}`;
-        const dest = `${expectedWasmDir}/${file}`;
-        try { await Deno.stat(dest); } catch {
-          const bytes = await Deno.readFile(src);
-          await Deno.writeFile(dest, bytes);
-          console.log(`Copied ${file} to ${dest}`);
-        }
-      }
-      wasmLinked = true;
-    } catch (e2) {
-      console.warn(`Could not copy WASM files to expected path: ${e2}`);
-    }
-  }
+    return originalReadFileSync(path);
+  };
 
   console.log(`WASM ready at ${dir}/`);
   return dir + "/";
