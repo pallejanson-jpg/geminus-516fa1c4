@@ -453,6 +453,8 @@ const UnifiedViewerContent: React.FC<{
       onGoBack={handleGoBack}
       viewerInstanceRef={viewerInstanceRef}
       viewerReady={viewerReady}
+      insightsPanelOpen={insightsPanelOpen}
+      setInsightsPanelOpen={setInsightsPanelOpen}
     />;
   }
 
