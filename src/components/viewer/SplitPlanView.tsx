@@ -691,7 +691,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     touchStartRef.current = null;
   }, [handleClick]);
 
-  const isDev = import.meta.env.DEV;
+  
 
   return (
     <div
