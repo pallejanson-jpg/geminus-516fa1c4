@@ -777,16 +777,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         <RefreshCw className="h-3.5 w-3.5" />
       </button>
 
-      {/* Dev diagnostics overlay */}
-      {isDev && (
-        <div className="absolute bottom-3 left-3 text-[8px] font-mono text-black/50 bg-white/70 px-1 py-0.5 rounded pointer-events-none z-20 leading-tight">
-          V:{diag.viewerReady ? '✓' : '✗'} MS:{diag.metaStoreyCount} PS:{diag.pluginStoreyCount}
-          {diag.lastTriedStoreyId && <> S:{diag.lastTriedStoreyId.substring(0, 8)}</>}
-          {diag.imageDataLength > 0 && <> I:{diag.imageDataLength}</>}
-          {diag.lastError && <> E:{diag.lastError}</>}
-          {usedFallbackRef.current && <> FB</>}
-        </div>
-      )}
     </div>
   );
 };
