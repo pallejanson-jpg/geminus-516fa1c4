@@ -108,8 +108,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       }
 
       if (metaStoreyCount === 0) {
-        if (initAttemptRef.current++ < 90) {
-          retryTimer = setTimeout(tryInit, 300);
+        if (initAttemptRef.current++ < 20) {
+          retryTimer = setTimeout(tryInit, 200);
         }
         return;
       }
