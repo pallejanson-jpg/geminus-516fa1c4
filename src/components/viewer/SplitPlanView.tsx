@@ -318,6 +318,34 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       ? [preferredStoreyId, ...storeyKeys.filter((id) => id !== preferredStoreyId)]
       : storeyKeys;
 
+    // Temporarily colorize walls/slabs black for high-contrast plan output
+    const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifccurtainwall', 'ifcslab', 'ifccolumn', 'ifcbeam', 'ifcrailing', 'ifcstair', 'ifcstairflight']);
+    const metaObjects = viewer?.metaScene?.metaObjects || {};
+    const originalColors: { id: string; color: number[] | null }[] = [];
+
+    const applyBlackWalls = () => {
+      const scene = viewer.scene;
+      for (const [id, mo] of Object.entries(metaObjects) as [string, any][]) {
+        const t = (mo?.type || '').toLowerCase();
+        const entity = scene.objects?.[id];
+        if (!entity) continue;
+        if (wallTypes.has(t)) {
+          originalColors.push({ id, color: entity.colorize ? [...entity.colorize] : null });
+          entity.colorize = [0, 0, 0]; // black
+        }
+      }
+    };
+
+    const restoreColors = () => {
+      const scene = viewer.scene;
+      for (const { id, color } of originalColors) {
+        const entity = scene.objects?.[id];
+        if (!entity) continue;
+        if (color) { entity.colorize = color; } else { entity.colorize = null; }
+      }
+      originalColors.length = 0;
+    };
+
     const tryCreateStoreyMap = (storeyId: string, forceRenderable: boolean) => {
       const container = containerRef.current;
       const width = container ? Math.min(container.clientWidth * 2, 1600) : 800;
@@ -325,7 +353,12 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       setDiag(prev => ({ ...prev, lastTriedStoreyId: storeyId }));
 
       if (!forceRenderable) {
-        return plugin.createStoreyMap(storeyId, { width, format: 'png' });
+        applyBlackWalls();
+        try {
+          return plugin.createStoreyMap(storeyId, { width, format: 'png' });
+        } finally {
+          restoreColors();
+        }
       }
 
       const scene = viewer.scene;
@@ -343,9 +376,11 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         if (entity.culled) { culledIds.push(id); entity.culled = false; }
       });
 
+      applyBlackWalls();
       try {
         return plugin.createStoreyMap(storeyId, { width, format: 'png' });
       } finally {
+        restoreColors();
         hiddenIds.forEach(id => { const e = scene.objects?.[id]; if (e) e.visible = false; });
         culledIds.forEach(id => { const e = scene.objects?.[id]; if (e) e.culled = true; });
         activeSectionPlanes.forEach((sp) => { sp.active = true; });
