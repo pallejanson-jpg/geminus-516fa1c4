@@ -16,7 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
     Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2,
-    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles, FileText, FolderOpen, ChevronRight, ChevronDown as ChevronDownIcon, File, Database as DatabaseIcon, Cuboid, Bot, Network, Upload
+    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles, FileText, FolderOpen, ChevronRight, ChevronDown as ChevronDownIcon, File, Database as DatabaseIcon, Cuboid, Bot, Network
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -503,19 +503,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isSyncingAccToAp, setIsSyncingAccToAp] = useState(false);
     const [accToApResult, setAccToApResult] = useState<any>(null);
 
-    // System sync state
-    const [isSyncingSystems, setIsSyncingSystems] = useState(false);
+    // System count (displayed in sync status)
     const [systemCount, setSystemCount] = useState(0);
-    const [systemSyncResult, setSystemSyncResult] = useState<{ created: number; links: number } | null>(null);
-
-    // IFC system import state
-    const [showIfcSystemImport, setShowIfcSystemImport] = useState(false);
-    const [ifcSystemFile, setIfcSystemFile] = useState<File | null>(null);
-    const [ifcSystemBuildingGuid, setIfcSystemBuildingGuid] = useState('');
-    const [ifcSystemMode, setIfcSystemMode] = useState<'systems-only' | 'enrich-guids' | 'full'>('systems-only');
-    const [isImportingIfcSystems, setIsImportingIfcSystems] = useState(false);
-    const [ifcSystemImportResult, setIfcSystemImportResult] = useState<any>(null);
-    const [ifcSystemBuildings, setIfcSystemBuildings] = useState<Array<{ fm_guid: string; name: string }>>([]);
 
     // Check Autodesk 3-legged auth status on mount
     useEffect(() => {
@@ -962,6 +951,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 description: `${totalLevels} våningsplan, ${totalRooms} rum, ${totalInstances} instanser från ${bimItems.length - failures.length}/${bimItems.length} fil(er)`,
             });
             handleCheckAccStatus();
+            // Auto-extract technical systems from synced BIM data
+            handleAutoSyncSystems();
         } else if (failures.length === 0) {
             // All files processed but no levels/rooms found
             toast({
@@ -1253,6 +1244,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     });
                     setIsSyncingAssets(false);
                     await checkSyncStatus();
+                    // Auto-extract technical systems from synced attributes
+                    handleAutoSyncSystems();
                 }
             } catch (error: any) {
                 console.error('Asset sync exception:', error);
@@ -1372,107 +1365,29 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         runResumableSync();
     };
 
-    // Sync technical systems from Asset+
-    const handleSyncSystems = async () => {
-        setIsSyncingSystems(true);
-        setSystemSyncResult(null);
-        
-        const runResumableSync = async (): Promise<void> => {
-            try {
-                const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
-                    body: { action: 'sync-systems' }
-                });
-
-                if (error) {
-                    console.error('System sync error:', error);
-                    toast({ variant: "destructive", title: "System Sync Error", description: error.message });
-                    setIsSyncingSystems(false);
-                    return;
-                }
-
-                await fetchSyncStatus();
-
-                if (data?.interrupted) {
-                    console.log(`System sync progress: ${data.systemsCreated} created, continuing...`);
-                    setTimeout(() => runResumableSync(), 1000);
-                } else {
-                    const created = data?.systemsCreated || 0;
-                    const links = data?.linksCreated || 0;
-                    setSystemSyncResult({ created, links });
-                    toast({
-                        title: "System Sync Complete",
-                        description: `${created} systems, ${links} asset links synced.`,
-                    });
-                    setIsSyncingSystems(false);
-                    await fetchSyncStatus();
-                }
-            } catch (error: any) {
-                console.error('System sync exception:', error);
-                toast({ variant: "destructive", title: "System Sync Failed", description: error.message });
-                setIsSyncingSystems(false);
-            }
-        };
-
-        toast({ title: "Starting System Sync", description: "Extracting technical systems from Asset+ attributes." });
-        runResumableSync();
-    };
-
-    // Import systems from IFC file
-    const handleImportIfcSystems = async () => {
-        if (!ifcSystemFile || !ifcSystemBuildingGuid) {
-            toast({ variant: "destructive", title: "Missing fields", description: "Select a building and upload an IFC file." });
-            return;
-        }
-        setIsImportingIfcSystems(true);
-        setIfcSystemImportResult(null);
-
+    // Auto-trigger system sync (called after asset sync completes)
+    const handleAutoSyncSystems = async () => {
         try {
-            // 1. Upload IFC to storage
-            const storagePath = `${ifcSystemBuildingGuid}/system-import-${Date.now()}.ifc`;
-            const { error: uploadError } = await supabase.storage
-                .from('ifc-uploads')
-                .upload(storagePath, ifcSystemFile, { contentType: 'application/octet-stream', upsert: true });
-
-            if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
-
-            toast({ title: "IFC Uploaded", description: "Extracting systems from IFC..." });
-
-            // 2. Call edge function
-            const { data, error } = await supabase.functions.invoke('ifc-extract-systems', {
-                body: {
-                    ifcStoragePath: storagePath,
-                    buildingFmGuid: ifcSystemBuildingGuid,
-                    mode: ifcSystemMode,
-                },
+            const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+                body: { action: 'sync-systems' }
             });
 
-            if (error) throw error;
+            if (error) {
+                console.error('Auto system sync error:', error);
+                return;
+            }
 
-            setIfcSystemImportResult(data);
-            toast({
-                title: "IFC System Import Complete",
-                description: `${data?.systemsCount || 0} systems, ${data?.linksCount || 0} links, ${data?.connectionsCount || 0} connections found.`,
-            });
+            const created = data?.systemsCreated || 0;
+            const links = data?.linksCreated || 0;
+            if (created > 0 || links > 0) {
+                toast({
+                    title: "Tekniska system synkade",
+                    description: `${created} system, ${links} kopplingar extraherade.`,
+                });
+            }
             await fetchSyncStatus();
         } catch (error: any) {
-            console.error('IFC system import error:', error);
-            toast({ variant: "destructive", title: "Import Failed", description: error.message });
-        } finally {
-            setIsImportingIfcSystems(false);
-        }
-    };
-
-    // Fetch buildings for IFC system import dropdown
-    const fetchIfcSystemBuildings = async () => {
-        const { data } = await supabase
-            .from('assets')
-            .select('fm_guid, common_name, name')
-            .eq('category', 'Building');
-        if (data) {
-            setIfcSystemBuildings(data.map(b => ({ fm_guid: b.fm_guid, name: b.common_name || b.name || b.fm_guid })));
-            if (data.length > 0 && !ifcSystemBuildingGuid) {
-                setIfcSystemBuildingGuid(data[0].fm_guid);
-            }
+            console.error('Auto system sync exception:', error);
         }
     };
 
@@ -3185,125 +3100,13 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             errorMessage={syncCheck?.xkt?.syncState?.error_message}
                                         />
 
-                                        <SyncProgressCard
-                                            icon={<Network className="h-5 w-5 text-primary" />}
-                                            title="Technical Systems"
-                                            subtitle="Ventilation, heating, electrical systems"
-                                            localCount={systemCount}
-                                            remoteLabel={systemSyncResult ? `${systemSyncResult.created} created, ${systemSyncResult.links} links` : (ifcSystemImportResult ? `${ifcSystemImportResult.systemsCount} systems from IFC` : undefined)}
-                                            inSync={systemCount > 0 ? true : null}
-                                            isSyncing={isSyncingSystems || isImportingIfcSystems}
-                                            isCheckingSync={isCheckingSync}
-                                            disabled={isSyncingStructure || isSyncingAssets || isSyncingXkt || isSyncingSystems || isImportingIfcSystems}
-                                            onSync={handleSyncSystems}
-                                            syncButtonLabel="From Asset+"
-                                            syncButtonVariant="secondary"
-                                            extraActions={
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="gap-1 h-8"
-                                                    disabled={isImportingIfcSystems || isSyncingSystems}
-                                                    onClick={() => {
-                                                        setShowIfcSystemImport(!showIfcSystemImport);
-                                                        if (!showIfcSystemImport) fetchIfcSystemBuildings();
-                                                    }}
-                                                >
-                                                    <Upload className="h-3 w-3" />
-                                                    From IFC
-                                                </Button>
-                                            }
-                                        />
-
-                                        {/* IFC System Import Panel */}
-                                        {showIfcSystemImport && (
-                                            <div className="border rounded-lg p-4 space-y-3 bg-muted/20">
-                                                <h4 className="text-sm font-medium flex items-center gap-2">
-                                                    <Upload className="h-4 w-4" />
-                                                    Import Systems from IFC
-                                                </h4>
-                                                <p className="text-xs text-muted-foreground">
-                                                    Upload an IFC file to extract technical systems (IfcSystem, SystemName properties) and link them to existing assets.
-                                                </p>
-
-                                                {/* Building selector */}
-                                                <div className="space-y-1">
-                                                    <Label className="text-xs">Target Building</Label>
-                                                    <select
-                                                        className="w-full h-8 rounded-md border border-input bg-background px-2 text-sm"
-                                                        value={ifcSystemBuildingGuid}
-                                                        onChange={(e) => setIfcSystemBuildingGuid(e.target.value)}
-                                                        disabled={isImportingIfcSystems}
-                                                    >
-                                                        {ifcSystemBuildings.length === 0 && <option value="">No buildings found</option>}
-                                                        {ifcSystemBuildings.map((b) => (
-                                                            <option key={b.fm_guid} value={b.fm_guid}>{b.name}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-
-                                                {/* File input */}
-                                                <div className="space-y-1">
-                                                    <Label className="text-xs">IFC File</Label>
-                                                    <Input
-                                                        type="file"
-                                                        accept=".ifc"
-                                                        className="h-8 text-xs"
-                                                        disabled={isImportingIfcSystems}
-                                                        onChange={(e) => setIfcSystemFile(e.target.files?.[0] || null)}
-                                                    />
-                                                </div>
-
-                                                {/* Mode selector */}
-                                                <div className="space-y-1">
-                                                    <Label className="text-xs">Import Mode</Label>
-                                                    <div className="space-y-1.5">
-                                                        <label className="flex items-center gap-2 text-xs cursor-pointer">
-                                                            <input type="radio" name="ifcMode" value="systems-only" checked={ifcSystemMode === 'systems-only'} onChange={() => setIfcSystemMode('systems-only')} className="accent-primary" />
-                                                            <span><strong>Only systems</strong> — fast, ~10-15s</span>
-                                                        </label>
-                                                        <label className="flex items-center gap-2 text-xs cursor-pointer opacity-50" title="Coming soon">
-                                                            <input type="radio" name="ifcMode" value="enrich-guids" disabled className="accent-primary" />
-                                                            <span><strong>Systems + FMGUIDs</strong> — generate & write back (coming soon)</span>
-                                                        </label>
-                                                        <label className="flex items-center gap-2 text-xs cursor-pointer">
-                                                            <input type="radio" name="ifcMode" value="full" checked={ifcSystemMode === 'full'} onChange={() => setIfcSystemMode('full')} className="accent-primary" />
-                                                            <span><strong>Full conversion</strong> — systems + 3D model</span>
-                                                        </label>
-                                                    </div>
-                                                </div>
-
-                                                {/* Action buttons */}
-                                                <div className="flex items-center gap-2 pt-1">
-                                                    <Button
-                                                        size="sm"
-                                                        className="gap-1 h-8"
-                                                        onClick={handleImportIfcSystems}
-                                                        disabled={isImportingIfcSystems || !ifcSystemFile || !ifcSystemBuildingGuid}
-                                                    >
-                                                        {isImportingIfcSystems ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-                                                        {isImportingIfcSystems ? 'Importing...' : 'Start Import'}
-                                                    </Button>
-                                                    <Button size="sm" variant="ghost" className="h-8" onClick={() => setShowIfcSystemImport(false)}>
-                                                        Cancel
-                                                    </Button>
-                                                </div>
-
-                                                {/* Result */}
-                                                {ifcSystemImportResult && (
-                                                    <div className="rounded border p-2 bg-background text-xs space-y-1">
-                                                        <div className="flex items-center gap-1 text-green-600 font-medium">
-                                                            <CheckCircle2 className="h-3 w-3" />
-                                                            Import complete
-                                                        </div>
-                                                        <div className="text-muted-foreground">
-                                                            {ifcSystemImportResult.systemsCount} systems • {ifcSystemImportResult.linksCount} links • {ifcSystemImportResult.connectionsCount} connections
-                                                        </div>
-                                                        <div className="text-muted-foreground">
-                                                            {ifcSystemImportResult.objectsFound} objects • {ifcSystemImportResult.levelsFound} levels • {ifcSystemImportResult.spacesFound} spaces found in IFC
-                                                        </div>
-                                                    </div>
-                                                )}
+                                        {/* System count in status summary */}
+                                        {systemCount > 0 && (
+                                            <div className="flex items-center gap-2 rounded-lg border p-3 bg-muted/20">
+                                                <Network className="h-4 w-4 text-primary" />
+                                                <span className="text-sm text-muted-foreground">Tekniska system:</span>
+                                                <span className="text-sm font-medium">{systemCount}</span>
+                                                <span className="text-xs text-muted-foreground ml-auto">Synkas automatiskt med Asset+ / IFC</span>
                                             </div>
                                         )}
 
