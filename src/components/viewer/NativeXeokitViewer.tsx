@@ -540,7 +540,33 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }
       }
 
-      // All models loaded in priority order above — no secondary queue needed
+      // 6. Lazy-load secondary models on mobile (brand, el, VVS) after viewer is ready
+      if (secondaryQueue.length > 0 && mountedRef.current) {
+        console.log(`[NativeViewer] Scheduling ${secondaryQueue.length} secondary models for lazy loading...`);
+        const lazyLoad = async () => {
+          for (const model of secondaryQueue) {
+            if (!mountedRef.current) break;
+            try {
+              await loadModel(model);
+              // Re-apply architect colors after each secondary model loads
+              if (mountedRef.current && viewer.scene) {
+                applyArchitectColors(viewer);
+              }
+            } catch (e) {
+              console.warn(`[NativeViewer] Secondary model failed: ${model.model_id}`, e);
+            }
+          }
+          console.log(`%c[NativeViewer] 🎉 All secondary models loaded`, 'color:#3b82f6;font-weight:bold');
+        };
+        // Delay 2s after ready to let user interact first
+        setTimeout(() => {
+          if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(() => lazyLoad(), { timeout: 5000 });
+          } else {
+            lazyLoad();
+          }
+        }, 2000);
+      }
 
     } catch (e) {
       console.error('[NativeViewer] Init error:', e);

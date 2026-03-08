@@ -142,7 +142,8 @@ export function usePerformancePlugins({ viewerRef, ready, isMobile }: UsePerform
                 const dist = Math.sqrt(
                   (eye[0] - cx) ** 2 + (eye[1] - cy) ** 2 + (eye[2] - cz) ** 2
                 );
-                entity.culled = dist > LOD_FAR_DISTANCE;
+                const lodDist = isMobile ? LOD_FAR_DISTANCE_MOBILE : LOD_FAR_DISTANCE_DESKTOP;
+                entity.culled = dist > lodDist;
               }
               if (i < ids.length) {
                 requestIdleCallback(processBatch, { timeout: 200 });
