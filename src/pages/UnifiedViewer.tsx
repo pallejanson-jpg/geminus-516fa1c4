@@ -1014,9 +1014,26 @@ function MobileUnifiedViewer({
                 </Button>
               )}
             </div>
-            <div className="w-8" /> {/* Spacer for balance */}
+            <Button
+              size="sm"
+              variant="ghost"
+              className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${insightsPanelOpen ? 'bg-white/20 text-white' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
+              onClick={() => setInsightsPanelOpen(!insightsPanelOpen)}
+            >
+              <BarChart2 className="h-3 w-3" />
+            </Button>
           </div>
         </div>
+      )}
+
+      {/* Insights panel (mobile) */}
+      {insightsPanelOpen && (
+        <InsightsDrawerPanel
+          buildingFmGuid={buildingData.fmGuid}
+          buildingName={buildingData.name}
+          open={insightsPanelOpen}
+          onClose={() => setInsightsPanelOpen(false)}
+        />
       )}
     </div>
   );
