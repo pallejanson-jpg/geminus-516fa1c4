@@ -193,9 +193,12 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
     // Wait longer for models to fully load their metaobjects
     const timeout = setTimeout(generateMap, 2000);
-    // Also retry a couple more times
     const retry1 = setTimeout(generateMap, 4000);
     const retry2 = setTimeout(generateMap, 7000);
+
+    // Also listen for VIEWER_MODELS_LOADED (fired by NativeXeokitViewer)
+    const modelsLoadedHandler = () => setTimeout(generateMap, 1000);
+    window.addEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
 
     const floorHandler = () => {
       setPanZoom({ offsetX: 0, offsetY: 0, scale: 1 });
