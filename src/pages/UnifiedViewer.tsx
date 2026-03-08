@@ -886,7 +886,7 @@ function MobileUnifiedViewer({
   }, [viewMode, viewerReady]);
 
   return (
-    <div ref={containerRef} className="fixed inset-0 bg-background z-40 overflow-hidden flex flex-col" style={{ height: '100dvh', width: '100vw', touchAction: 'none', overscrollBehavior: 'none' }}
+    <div ref={containerRef} className="fixed inset-0 z-40 flex w-screen min-h-0 flex-col overflow-hidden bg-background" style={{ height: '100dvh', minHeight: '100svh', width: '100vw', touchAction: 'none', overscrollBehavior: 'none' }}
       onTouchMove={isSplit ? handleTouchMove : undefined}
       onTouchEnd={isSplit ? handleTouchEnd : undefined}
     >
@@ -895,7 +895,7 @@ function MobileUnifiedViewer({
         <>
           {/* Top: 2D Plan */}
           <div
-            className="relative overflow-hidden"
+            className="relative min-h-0 overflow-hidden"
             style={{
               height: `${splitRatio}%`,
               touchAction: 'none',
@@ -911,24 +911,26 @@ function MobileUnifiedViewer({
 
           {/* Draggable divider */}
           <div
-            className="relative z-30 flex items-center justify-center border-y border-border/30 touch-none select-none"
-            style={{ height: '8px', cursor: 'row-resize' }}
+            className="relative z-30 flex items-center justify-center touch-none select-none"
+            style={{ height: '4px', cursor: 'row-resize' }}
             onTouchStart={handleTouchStart}
           >
-            <div className="h-1 w-8 rounded-full bg-muted-foreground/40" />
+            <div className="h-0.5 w-6 rounded-full bg-muted-foreground/30" />
           </div>
 
           {/* Bottom: 3D Model */}
-          <div className="flex-1 relative overflow-hidden">
+          <div className="relative flex-1 min-h-0 overflow-hidden">
             {/* Label removed for cleaner mobile UI */}
-            <NativeViewerShell
-              buildingFmGuid={buildingData.fmGuid}
-              onClose={onGoBack}
-              hideBackButton
-              hideMobileOverlay
-              hideToolbar={!showViewerControls}
-              hideFloorSwitcher={!showViewerControls}
-            />
+            <div className="h-full w-full">
+              <NativeViewerShell
+                buildingFmGuid={buildingData.fmGuid}
+                onClose={onGoBack}
+                hideBackButton
+                hideMobileOverlay
+                hideToolbar={!showViewerControls}
+                hideFloorSwitcher={!showViewerControls}
+              />
+            </div>
           </div>
 
           {/* 3-dot menu to toggle toolbar/floor-switcher — bottom-right */}
@@ -943,7 +945,7 @@ function MobileUnifiedViewer({
 
           {/* Mobile mode switcher overlay — top-right corner */}
           <div
-            className="absolute top-0 right-0 z-40 flex items-center gap-0.5 p-1"
+            className="pointer-events-none absolute top-0 right-0 z-40 flex items-center gap-0.5 p-1"
             style={{
               paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4px)',
               paddingRight: 'max(env(safe-area-inset-right, 0px), 6px)',
@@ -953,11 +955,11 @@ function MobileUnifiedViewer({
               variant="secondary"
               size="icon"
               onClick={onGoBack}
-              className="h-6 w-6 bg-card/95 backdrop-blur-sm shadow-md border"
+              className="pointer-events-auto h-6 w-6 bg-card/95 backdrop-blur-sm shadow-md border"
             >
               <ArrowLeft className="h-3 w-3" />
             </Button>
-            <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md rounded-lg p-0.5 border border-white/10 ml-1">
+            <div className="pointer-events-auto ml-1 flex items-center gap-0.5 rounded-lg border border-border bg-card/90 p-0.5 backdrop-blur-md">
               {([
                 { mode: 'split2d3d' as ViewMode, label: '2D/3D', Icon: LayoutPanelLeft },
                 { mode: '3d' as ViewMode, label: '3D', Icon: Box },
@@ -990,16 +992,18 @@ function MobileUnifiedViewer({
         </>
       ) : (
         /* ── Non-split: existing layout ── */
-        <div className="absolute inset-0 h-full w-full">
+        <div className="absolute inset-0 h-full w-full min-h-0 overflow-hidden">
           {/* 3D/2D viewer — always mounted, hidden when 360 active */}
-          <div style={{ display: activePanel === '3d' ? 'flex' : 'none', flexDirection: 'column', height: '100%', position: 'relative' }}>
+          <div style={{ display: activePanel === '3d' ? 'flex' : 'none', flexDirection: 'column', height: '100%', width: '100%', minHeight: 0, position: 'relative' }}>
             {viewMode === '3d' || viewMode === '2d' ? (
-              <NativeViewerShell
-                buildingFmGuid={buildingData.fmGuid}
-                onClose={onGoBack}
-                hideBackButton
-                hideMobileOverlay
-              />
+              <div className="h-full w-full">
+                <NativeViewerShell
+                  buildingFmGuid={buildingData.fmGuid}
+                  onClose={onGoBack}
+                  hideBackButton
+                  hideMobileOverlay
+                />
+              </div>
             ) : (
               <React.Suspense fallback={<div className="flex items-center justify-center h-full bg-black"><Loader2 className="h-8 w-8 animate-spin text-white/50" /></div>}>
                 <AssetPlusViewer
