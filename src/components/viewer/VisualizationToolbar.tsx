@@ -1235,7 +1235,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             />
           </SidePopPanel>
           
-          {/* Floating Issue List Panel - independent, positioned next to toolbar */}
+          {/* Floating Issue List Panel */}
           <FloatingIssueListPanel
             isOpen={showIssueList}
             onClose={() => setShowIssueList(false)}
@@ -1284,7 +1284,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             isAdmin={isAdmin}
           />
         </TooltipProvider>
-          </>
+        </>
       )}
     </div>
   );
