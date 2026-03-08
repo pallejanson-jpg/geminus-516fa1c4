@@ -451,7 +451,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       }
       await Promise.allSettled(Array.from(active));
 
-      // 5. Camera: NO auto-fit/flyTo — only saved start view (dispatched via LOAD_SAVED_VIEW_EVENT) applies.
+      // 5. Camera: instant viewFit as fallback (no animation) if no saved start view arrives within 500ms
       if (mountedRef.current && viewer.scene) {
         // Enable SAO after load
         if (viewer.scene.sao) {
