@@ -36,6 +36,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   const [cameraPos, setCameraPos] = useState<{ x: number; y: number; angle: number } | null>(null);
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null);
   const [imgError, setImgError] = useState(false);
+  const [roomLabels, setRoomLabels] = useState<Array<{ id: string; name: string; number: string; x: number; y: number }>>([]);
   const panStartRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   const clickStartRef = useRef<{ x: number; y: number } | null>(null);
   const storeyMapRef = useRef<any>(null);
@@ -480,6 +481,75 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     return () => clearInterval(interval);
   }, [getXeokitViewer]);
 
+  // Compute room labels for 2D overlay
+  useEffect(() => {
+    const map = storeyMapRef.current;
+    const plugin = pluginRef.current;
+    const viewer = getXeokitViewer();
+    if (!map || !viewer?.metaScene || usedFallbackRef.current) {
+      setRoomLabels([]);
+      return;
+    }
+
+    const metaObjects = viewer.metaScene.metaObjects || {};
+    const storey = plugin?.storeys?.[map.storeyId];
+    const aabb = storey
+      ? (plugin._fitStoreyMaps ? storey.storeyAABB : storey.modelAABB)
+      : viewer.scene?.aabb;
+    if (!aabb) {
+      setRoomLabels([]);
+      return;
+    }
+
+    const roomTypes = new Set(['ifcspace', 'ifcroom']);
+    const labels: Array<{ id: string; name: string; number: string; x: number; y: number }> = [];
+
+    // Find the current storey metaObject to filter rooms
+    const storeyMeta = metaObjects[map.storeyId];
+    const storeyChildren = new Set<string>();
+    if (storeyMeta) {
+      const stack = [...(storeyMeta.children || [])];
+      while (stack.length > 0) {
+        const node = stack.pop();
+        if (!node) continue;
+        storeyChildren.add(node.id);
+        if (node.children?.length) stack.push(...node.children);
+      }
+    }
+
+    for (const [id, mo] of Object.entries(metaObjects) as [string, any][]) {
+      const t = (mo?.type || '').toLowerCase();
+      if (!roomTypes.has(t)) continue;
+
+      // If we have storey children, filter to only rooms on this floor
+      if (storeyChildren.size > 0 && !storeyChildren.has(id)) continue;
+
+      const entity = viewer.scene.objects?.[id];
+      if (!entity) continue;
+
+      // Get center of room from entity AABB
+      const entityAabb = entity.aabb;
+      if (!entityAabb) continue;
+
+      const cx = (entityAabb[0] + entityAabb[3]) / 2;
+      const cz = (entityAabb[2] + entityAabb[5]) / 2;
+
+      // Map world coords to normalized image position (inverted like StoreyViewsPlugin)
+      const normX = (cx - aabb[0]) / (aabb[3] - aabb[0]);
+      const normZ = (cz - aabb[2]) / (aabb[5] - aabb[2]);
+      const imgX = (1.0 - normX) * 100;
+      const imgY = (1.0 - normZ) * 100;
+
+      // Extract name and number
+      const name = mo.name || '';
+      const number = mo.LongName || mo.longName || mo.attributes?.LongName || '';
+
+      labels.push({ id, name, number, x: imgX, y: imgY });
+    }
+
+    setRoomLabels(labels);
+  }, [storeyMap, getXeokitViewer]);
+
   // Click to navigate
   const handleClick = useCallback((e: React.MouseEvent) => {
     if (clickStartRef.current) {
@@ -498,6 +568,13 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const imgX = (e.clientX - rect.left) / rect.width * map.width;
     const imgY = (e.clientY - rect.top) / rect.height * map.height;
 
+    // Cancel any ongoing flight to ensure this click is honored
+    viewer.cameraFlight?.cancel?.();
+
+    // Fixed camera height (8m above floor) and 45° pitch offset
+    const HEIGHT_OFFSET = 8;
+    const PITCH_OFFSET = 6; // horizontal offset for ~45° angle
+
     // For fallback, compute world pos from scene AABB
     if (usedFallbackRef.current || !plugin) {
       const aabb = viewer.scene?.aabb;
@@ -506,23 +583,24 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const normZ = (e.clientY - rect.top) / rect.height;
       const worldX = aabb[0] + normX * (aabb[3] - aabb[0]);
       const worldZ = aabb[2] + normZ * (aabb[5] - aabb[2]);
-      const worldY = (aabb[1] + aabb[4]) / 2;
+      const floorY = aabb[1];
       viewer.cameraFlight?.flyTo({
-        eye: [worldX, viewer.camera.eye[1], worldZ],
-        look: [worldX, worldY, worldZ],
+        eye: [worldX + PITCH_OFFSET, floorY + HEIGHT_OFFSET, worldZ + PITCH_OFFSET],
+        look: [worldX, floorY, worldZ],
         up: [0, 1, 0],
-        duration: 0.8,
+        duration: 0,
       });
       return;
     }
 
     const worldPos = plugin.storeyMapToWorldPos(map, [imgX, imgY]);
     if (worldPos && viewer.cameraFlight) {
+      const floorY = worldPos[1];
       viewer.cameraFlight.flyTo({
-        eye: [worldPos[0], viewer.camera.eye[1], worldPos[2]],
-        look: [worldPos[0], worldPos[1], worldPos[2]],
+        eye: [worldPos[0] + PITCH_OFFSET, floorY + HEIGHT_OFFSET, worldPos[2] + PITCH_OFFSET],
+        look: [worldPos[0], floorY, worldPos[2]],
         up: [0, 1, 0],
-        duration: 0.8,
+        duration: 0,
       });
     }
   }, [getXeokitViewer]);
@@ -685,10 +763,10 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         </div>
       )}
 
-      {/* Plan image */}
+      {/* Plan image with room labels overlay */}
       {storeyMap && (
         <div
-          className="w-full h-full flex items-center justify-center"
+          className="w-full h-full flex items-center justify-center relative"
           style={{
             transform: `translate(${panZoom.offsetX}px, ${panZoom.offsetY}px) scale(${panZoom.scale})`,
             transformOrigin: '0 0',
@@ -706,6 +784,42 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
               setImgError(true);
             }}
           />
+          {/* Room labels overlay */}
+          {roomLabels.length > 0 && imgRef.current && (
+            <div 
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                width: imgRef.current.clientWidth,
+                height: imgRef.current.clientHeight,
+                left: '50%',
+                top: '50%',
+                transform: 'translate(-50%, -50%)',
+              }}
+            >
+              {roomLabels.map((label) => (
+                <div
+                  key={label.id}
+                  className="absolute text-center pointer-events-none"
+                  style={{
+                    left: `${label.x}%`,
+                    top: `${label.y}%`,
+                    transform: 'translate(-50%, -50%)',
+                    fontSize: '9px',
+                    fontWeight: 500,
+                    color: '#000000',
+                    textShadow: '0 0 3px white, 0 0 3px white, 0 0 5px white',
+                    whiteSpace: 'nowrap',
+                    maxWidth: '80px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {label.number && <div style={{ fontWeight: 600 }}>{label.number}</div>}
+                  {label.name && <div style={{ fontSize: '8px', opacity: 0.85 }}>{label.name}</div>}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
