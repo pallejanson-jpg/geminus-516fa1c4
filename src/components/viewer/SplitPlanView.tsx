@@ -763,10 +763,10 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         </div>
       )}
 
-      {/* Plan image */}
+      {/* Plan image with room labels overlay */}
       {storeyMap && (
         <div
-          className="w-full h-full flex items-center justify-center"
+          className="w-full h-full flex items-center justify-center relative"
           style={{
             transform: `translate(${panZoom.offsetX}px, ${panZoom.offsetY}px) scale(${panZoom.scale})`,
             transformOrigin: '0 0',
@@ -784,6 +784,42 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
               setImgError(true);
             }}
           />
+          {/* Room labels overlay */}
+          {roomLabels.length > 0 && imgRef.current && (
+            <div 
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                width: imgRef.current.clientWidth,
+                height: imgRef.current.clientHeight,
+                left: '50%',
+                top: '50%',
+                transform: 'translate(-50%, -50%)',
+              }}
+            >
+              {roomLabels.map((label) => (
+                <div
+                  key={label.id}
+                  className="absolute text-center pointer-events-none"
+                  style={{
+                    left: `${label.x}%`,
+                    top: `${label.y}%`,
+                    transform: 'translate(-50%, -50%)',
+                    fontSize: '9px',
+                    fontWeight: 500,
+                    color: '#000000',
+                    textShadow: '0 0 3px white, 0 0 3px white, 0 0 5px white',
+                    whiteSpace: 'nowrap',
+                    maxWidth: '80px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {label.number && <div style={{ fontWeight: 600 }}>{label.number}</div>}
+                  {label.name && <div style={{ fontSize: '8px', opacity: 0.85 }}>{label.name}</div>}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
