@@ -344,7 +344,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     // Dispatch floor selection to keep 3D in sync (deduped)
     dispatchFloorSync(preferredStoreyId);
 
-    setSelectedFloorId(preferredStoreyId);
+    const selectedFloor = resolveFloorFromStoreyId(preferredStoreyId);
+    setSelectedFloorId(selectedFloor?.id ?? preferredStoreyId);
 
     // Check cache
     const cacheKey = preferredStoreyId;
@@ -365,9 +366,10 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const maxWidth = isMobile ? 900 : 1600;
     const width = container ? Math.min(container.clientWidth * (isMobile ? 1.5 : 2), maxWidth) : 800;
 
-    // Precompute wall IDs (cached)
+    // Precompute wall IDs once (shared across floors)
+    const wallCacheKey = '__global_wall_ids__';
     const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifccurtainwall', 'ifccolumn', 'ifccolumnstandardcase', 'ifcbeam', 'ifcbeamstandardcase']);
-    let wallIds = wallIdCacheRef.current.get(preferredStoreyId);
+    let wallIds = wallIdCacheRef.current.get(wallCacheKey);
     if (!wallIds) {
       wallIds = [];
       const metaObjects = viewer.metaScene?.metaObjects || {};
