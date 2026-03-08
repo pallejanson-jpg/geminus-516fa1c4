@@ -491,9 +491,9 @@ const UnifiedViewerContent: React.FC<{
 
   // ─── Desktop Render ────────────────────────────────────────────────
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-black">
-      {/* ─── Header toolbar ─── */}
-      <div className="shrink-0 flex items-center justify-between p-2 bg-black/80 backdrop-blur-sm z-40">
+    <div className="fixed inset-0 overflow-hidden bg-black" style={{ height: '100dvh' }}>
+      {/* ─── Header toolbar — floating overlay ─── */}
+      <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-2 bg-black/80 backdrop-blur-sm z-40">
         {/* Left: Back + building name */}
         <div className="flex items-center gap-3">
           <Button
@@ -817,9 +817,12 @@ function MobileUnifiedViewer({
       const dispatch2D = () => {
         window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '2d' } }));
       };
-      const t1 = setTimeout(dispatch2D, 800);
-      const t2 = setTimeout(dispatch2D, 2000);
-      return () => { clearTimeout(t1); clearTimeout(t2); };
+      // Multiple attempts to ensure toolbar has mounted and is listening
+      const t1 = setTimeout(dispatch2D, 300);
+      const t2 = setTimeout(dispatch2D, 800);
+      const t3 = setTimeout(dispatch2D, 2000);
+      const t4 = setTimeout(dispatch2D, 4000);
+      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
     } else if (viewMode === '3d' && viewerReady) {
       const dispatch3D = () => {
         window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
@@ -830,7 +833,7 @@ function MobileUnifiedViewer({
   }, [viewMode, viewerReady]);
 
   return (
-    <div ref={containerRef} className="fixed inset-0 bg-black z-40 overflow-hidden flex flex-col" style={{ height: '100dvh' }}
+    <div ref={containerRef} className="fixed inset-0 bg-black z-40 overflow-hidden flex flex-col" style={{ height: '100dvh', width: '100vw' }}
       onTouchMove={isSplit ? handleTouchMove : undefined}
       onTouchEnd={isSplit ? handleTouchEnd : undefined}
     >
