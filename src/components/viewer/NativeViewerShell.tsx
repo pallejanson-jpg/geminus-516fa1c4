@@ -32,9 +32,13 @@ interface NativeViewerShellProps {
   hideBackButton?: boolean;
   /** Hide the mobile overlay (mode switcher, filter, settings) when parent provides its own */
   hideMobileOverlay?: boolean;
+  /** Hide the bottom toolbar (used in split-screen compact mode) */
+  hideToolbar?: boolean;
+  /** Hide the floating floor switcher (used when parent shows its own) */
+  hideFloorSwitcher?: boolean;
 }
 
-const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, onClose, hideBackButton = false, hideMobileOverlay = false }) => {
+const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, onClose, hideBackButton = false, hideMobileOverlay = false, hideToolbar = false, hideFloorSwitcher = false }) => {
   const isMobile = useIsMobile();
   const { allData, isSidebarExpanded } = useContext(AppContext);
 
@@ -450,7 +454,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       />
 
       {/* Bottom toolbar */}
-      {isViewerReady && xeokitViewer && (
+      {isViewerReady && xeokitViewer && !hideToolbar && (
         <ViewerToolbar viewer={xeokitViewer} />
       )}
 
@@ -471,7 +475,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       )}
 
       {/* Floor switcher */}
-      {isViewerReady && (
+      {isViewerReady && !hideFloorSwitcher && (
         <FloatingFloorSwitcher
           viewerRef={viewerShimRef}
           buildingFmGuid={buildingFmGuid}
