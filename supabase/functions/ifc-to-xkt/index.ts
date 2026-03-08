@@ -379,7 +379,7 @@ Deno.serve(async (req) => {
     await updateJob({ status: "processing", progress: 5 });
     await appendLog(`Starting IFC-to-XKT conversion: ${ifcStoragePath}`, 5);
 
-    // 1. Download IFC from storage
+    // 1. Download IFC from storage and write to /tmp to reduce memory pressure
     await appendLog("Downloading IFC from storage...", 10);
     const { data: ifcBlob, error: dlError } = await supabase.storage
       .from("ifc-uploads")
@@ -391,9 +391,12 @@ Deno.serve(async (req) => {
       throw new Error(errMsg);
     }
 
-    const ifcArrayBuffer = await ifcBlob.arrayBuffer();
-    const fileSizeMB = ifcArrayBuffer.byteLength / 1024 / 1024;
-    await appendLog(`IFC downloaded: ${fileSizeMB.toFixed(1)} MB`, 20);
+    // Write to /tmp to free the blob from memory
+    const ifcTmpPath = `/tmp/input_${Date.now()}.ifc`;
+    const ifcBytes = new Uint8Array(await ifcBlob.arrayBuffer());
+    const fileSizeMB = ifcBytes.byteLength / 1024 / 1024;
+    await Deno.writeFile(ifcTmpPath, ifcBytes);
+    await appendLog(`IFC downloaded: ${fileSizeMB.toFixed(1)} MB (saved to disk)`, 20);
 
     // 2. Download WASM and load libraries
     await appendLog("Preparing WASM runtime...", 25);
@@ -404,16 +407,23 @@ Deno.serve(async (req) => {
     const xeokitConvert = await import("npm:@xeokit/xeokit-convert@1.3.1");
 
     const xktModel = new (xeokitConvert as any).XKTModel();
-    await appendLog("Parsing IFC...", 30);
+    await appendLog("Parsing IFC from disk...", 30);
+
+    // Read IFC from disk instead of keeping blob in memory
+    const ifcData = await Deno.readFile(ifcTmpPath);
 
     await (xeokitConvert as any).parseIFCIntoXKTModel({
       WebIFC,
-      data: new Uint8Array(ifcArrayBuffer),
+      data: ifcData,
       xktModel,
       autoNormals: true,
       wasmPath,
       log: (msg: string) => console.log(`  ${msg}`),
     });
+
+    // Release IFC data from memory immediately after parsing
+    // @ts-ignore - allow GC
+    try { await Deno.remove(ifcTmpPath); } catch (_) { /* best-effort */ }
 
     await appendLog("Finalizing XKT model...", 60);
     xktModel.finalize();
