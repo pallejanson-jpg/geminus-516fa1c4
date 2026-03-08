@@ -886,7 +886,7 @@ function MobileUnifiedViewer({
   }, [viewMode, viewerReady]);
 
   return (
-    <div ref={containerRef} className="fixed inset-0 bg-black z-40 overflow-hidden flex flex-col" style={{ height: '100dvh', width: '100vw', touchAction: 'none', overscrollBehavior: 'none' }}
+    <div ref={containerRef} className="fixed inset-0 bg-background z-40 overflow-hidden flex flex-col" style={{ height: '100dvh', width: '100vw', touchAction: 'none', overscrollBehavior: 'none' }}
       onTouchMove={isSplit ? handleTouchMove : undefined}
       onTouchEnd={isSplit ? handleTouchEnd : undefined}
     >
