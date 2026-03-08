@@ -36,6 +36,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   const [cameraPos, setCameraPos] = useState<{ x: number; y: number; angle: number } | null>(null);
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null);
   const [imgError, setImgError] = useState(false);
+  const [roomLabels, setRoomLabels] = useState<Array<{ id: string; name: string; number: string; x: number; y: number }>>([]);
   const panStartRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   const clickStartRef = useRef<{ x: number; y: number } | null>(null);
   const storeyMapRef = useRef<any>(null);
