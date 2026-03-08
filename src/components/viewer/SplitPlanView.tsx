@@ -9,7 +9,8 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
-import { RefreshCw, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface SplitPlanViewProps {
   viewerRef: React.MutableRefObject<any>;
@@ -23,18 +24,10 @@ interface PanZoom {
   scale: number;
 }
 
-interface DiagInfo {
-  viewerReady: boolean;
-  metaStoreyCount: number;
-  pluginStoreyCount: number;
-  lastTriedStoreyId: string | null;
-  imageDataLength: number;
-  lastError: string | null;
-}
-
 const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid, className }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const isMobile = useIsMobile();
   const [storeyMap, setStoreyMap] = useState<any>(null);
   const [storeyPlugin, setStoreyPlugin] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,10 +36,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   const [cameraPos, setCameraPos] = useState<{ x: number; y: number; angle: number } | null>(null);
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null);
   const [imgError, setImgError] = useState(false);
-  const [diag, setDiag] = useState<DiagInfo>({
-    viewerReady: false, metaStoreyCount: 0, pluginStoreyCount: 0,
-    lastTriedStoreyId: null, imageDataLength: 0, lastError: null,
-  });
   const panStartRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   const clickStartRef = useRef<{ x: number; y: number } | null>(null);
   const storeyMapRef = useRef<any>(null);
@@ -56,6 +45,10 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   const initAttemptRef = useRef(0);
   // Track whether we used the fallback snapshot
   const usedFallbackRef = useRef(false);
+  // Cache for generated storey maps
+  const mapCacheRef = useRef<Map<string, any>>(new Map());
+  // Precomputed wall entity IDs per storey (for black-wall coloring)
+  const wallIdCacheRef = useRef<Map<string, string[]>>(new Map());
 
   const normalizeGuidKey = useCallback((value?: string | null) => (value || '').toLowerCase().replace(/-/g, ''), []);
 
@@ -90,7 +83,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     return () => { mounted = false; };
   }, []);
 
-  // Initialize StoreyViewsPlugin — keep retrying until viewer has models with metaObjects
+  // Initialize StoreyViewsPlugin — triggered by VIEWER_MODELS_LOADED event
   useEffect(() => {
     let mounted = true;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -100,24 +93,16 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const viewer = getXeokitViewer();
       const sdk = sdkRef.current;
 
-      // Update diagnostics
       const metaObjects = viewer?.metaScene?.metaObjects || {};
       const metaStoreyCount = Object.values(metaObjects).filter(
         (mo: any) => mo?.type?.toLowerCase() === 'ifcbuildingstorey'
       ).length;
-      setDiag(prev => ({
-        ...prev,
-        viewerReady: !!viewer?.scene,
-        metaStoreyCount,
-      }));
 
       if (!viewer?.scene || !sdk?.StoreyViewsPlugin) {
         if (initAttemptRef.current++ < 90) {
           retryTimer = setTimeout(tryInit, 300);
         } else if (mounted) {
-          const msg = !viewer?.scene ? 'Viewer not available' : 'SDK StoreyViewsPlugin missing';
-          setError(msg);
-          setDiag(prev => ({ ...prev, lastError: msg }));
+          setError(!viewer?.scene ? 'Viewer not available' : 'SDK StoreyViewsPlugin missing');
         }
         return;
       }
@@ -150,14 +135,11 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
           setStoreyPlugin(plugin);
           pluginRef.current = plugin;
           setIsLoading(false);
-          setDiag(prev => ({ ...prev, pluginStoreyCount: storeyKeys.length }));
         }
       } catch (e) {
-        const msg = 'Could not initialize plan view';
         console.warn('StoreyViewsPlugin init failed:', e);
         if (mounted) {
-          setError(msg);
-          setDiag(prev => ({ ...prev, lastError: msg }));
+          setError('Could not initialize plan view');
         }
       }
     };
@@ -298,7 +280,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     }
   }, [getXeokitViewer]);
 
-  // Generate storey map
+  // Generate storey map — with caching and mobile resolution optimization
   const generateMap = useCallback(() => {
     const plugin = pluginRef.current;
     const viewer = getXeokitViewer();
@@ -306,141 +288,108 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
     const storeyKeys = Object.keys(plugin.storeys || {});
     if (storeyKeys.length === 0) {
-      // Fallback: generate snapshot
       generateFallbackSnapshot();
+      return;
+    }
+
+    const preferredStoreyId = findCurrentStoreyId();
+    if (!preferredStoreyId) return;
+
+    // Check cache first
+    const cacheKey = preferredStoreyId;
+    const cached = mapCacheRef.current.get(cacheKey);
+    if (cached) {
+      setStoreyMap(cached);
+      storeyMapRef.current = cached;
+      setIsLoading(false);
+      setError(null);
+      setImgError(false);
+      usedFallbackRef.current = false;
       return;
     }
 
     setIsLoading(true);
 
-    const preferredStoreyId = findCurrentStoreyId();
-    const candidateStoreys = preferredStoreyId
-      ? [preferredStoreyId, ...storeyKeys.filter((id) => id !== preferredStoreyId)]
-      : storeyKeys;
-
-    // Temporarily colorize walls/slabs black for high-contrast plan output
-    const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifccurtainwall', 'ifcslab', 'ifccolumn', 'ifcbeam', 'ifcrailing', 'ifcstair', 'ifcstairflight']);
-    const metaObjects = viewer?.metaScene?.metaObjects || {};
-    const originalColors: { id: string; color: number[] | null }[] = [];
-
-    const applyBlackWalls = () => {
-      const scene = viewer.scene;
-      for (const [id, mo] of Object.entries(metaObjects) as [string, any][]) {
-        const t = (mo?.type || '').toLowerCase();
-        const entity = scene.objects?.[id];
-        if (!entity) continue;
-        if (wallTypes.has(t)) {
-          originalColors.push({ id, color: entity.colorize ? [...entity.colorize] : null });
-          entity.colorize = [0, 0, 0]; // black
-        }
-      }
-    };
-
-    const restoreColors = () => {
-      const scene = viewer.scene;
-      for (const { id, color } of originalColors) {
-        const entity = scene.objects?.[id];
-        if (!entity) continue;
-        if (color) { entity.colorize = color; } else { entity.colorize = null; }
-      }
-      originalColors.length = 0;
-    };
-
-    const tryCreateStoreyMap = (storeyId: string, forceRenderable: boolean) => {
+    // Use requestIdleCallback so UI can render "Loading…" first
+    const doGenerate = () => {
       const container = containerRef.current;
-      const width = container ? Math.min(container.clientWidth * 2, 1600) : 800;
+      // Lower resolution on mobile for speed
+      const maxWidth = isMobile ? 900 : 1600;
+      const width = container ? Math.min(container.clientWidth * (isMobile ? 1.5 : 2), maxWidth) : 800;
 
-      setDiag(prev => ({ ...prev, lastTriedStoreyId: storeyId }));
-
-      if (!forceRenderable) {
-        applyBlackWalls();
-        try {
-          return plugin.createStoreyMap(storeyId, { width, format: 'png' });
-        } finally {
-          restoreColors();
+      // Precompute wall IDs for this storey (cached)
+      const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifccurtainwall', 'ifcslab', 'ifccolumn', 'ifcbeam', 'ifcrailing', 'ifcstair', 'ifcstairflight']);
+      let wallIds = wallIdCacheRef.current.get(preferredStoreyId);
+      if (!wallIds) {
+        wallIds = [];
+        const metaObjects = viewer.metaScene?.metaObjects || {};
+        for (const [id, mo] of Object.entries(metaObjects) as [string, any][]) {
+          const t = (mo?.type || '').toLowerCase();
+          if (wallTypes.has(t) && viewer.scene.objects?.[id]) {
+            wallIds.push(id);
+          }
         }
+        wallIdCacheRef.current.set(preferredStoreyId, wallIds);
       }
 
+      // Apply black walls
       const scene = viewer.scene;
-      const hiddenIds: string[] = [];
-      const culledIds: string[] = [];
-      const sectionPlanes = Object.values(scene.sectionPlanes || {}) as any[];
-      const activeSectionPlanes = sectionPlanes.filter((sp) => sp?.active);
-      activeSectionPlanes.forEach((sp) => { sp.active = false; });
-
-      const objectIds = scene.objectIds || [];
-      objectIds.forEach((id: string) => {
+      const originalColors: { id: string; color: number[] | null }[] = [];
+      for (const id of wallIds) {
         const entity = scene.objects?.[id];
-        if (!entity) return;
-        if (!entity.visible) { hiddenIds.push(id); entity.visible = true; }
-        if (entity.culled) { culledIds.push(id); entity.culled = false; }
-      });
+        if (!entity) continue;
+        originalColors.push({ id, color: entity.colorize ? [...entity.colorize] : null });
+        entity.colorize = [0, 0, 0];
+      }
 
-      applyBlackWalls();
+      const restoreColors = () => {
+        for (const { id, color } of originalColors) {
+          const entity = scene.objects?.[id];
+          if (!entity) continue;
+          if (color) { entity.colorize = color; } else { entity.colorize = null; }
+        }
+      };
+
       try {
-        return plugin.createStoreyMap(storeyId, { width, format: 'png' });
-      } finally {
+        const map = plugin.createStoreyMap(preferredStoreyId, { width, format: 'png' });
         restoreColors();
-        hiddenIds.forEach(id => { const e = scene.objects?.[id]; if (e) e.visible = false; });
-        culledIds.forEach(id => { const e = scene.objects?.[id]; if (e) e.culled = true; });
-        activeSectionPlanes.forEach((sp) => { sp.active = true; });
+
+        if (map?.imageData && map.imageData.length > 200) {
+          console.log(`[SplitPlanView] Map generated: storey=${preferredStoreyId}, size=${map.imageData.length}`);
+          mapCacheRef.current.set(cacheKey, map);
+          setStoreyMap(map);
+          storeyMapRef.current = map;
+          setError(null);
+          setImgError(false);
+          usedFallbackRef.current = false;
+        } else {
+          console.warn('[SplitPlanView] StoreyMap empty, trying fallback');
+          generateFallbackSnapshot();
+        }
+      } catch (e) {
+        restoreColors();
+        console.warn('[SplitPlanView] createStoreyMap failed:', e);
+        generateFallbackSnapshot();
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    try {
-      let map: any = null;
-      for (const storeyId of candidateStoreys.slice(0, 6)) {
-        map = tryCreateStoreyMap(storeyId, false);
-        if (map?.imageData && map.imageData.length > 200) break;
-        map = tryCreateStoreyMap(storeyId, true);
-        if (map?.imageData && map.imageData.length > 200) break;
-      }
-
-      if (map?.imageData && map.imageData.length > 200) {
-        console.log(`[SplitPlanView] Map generated: storey=${map.storeyId || preferredStoreyId}, imageDataLength=${map.imageData.length}`);
-        setStoreyMap(map);
-        storeyMapRef.current = map;
-        setError(null);
-        setImgError(false);
-        usedFallbackRef.current = false;
-        setDiag(prev => ({ ...prev, imageDataLength: map.imageData.length, lastError: null }));
-      } else {
-        console.warn('[SplitPlanView] StoreyMap imageData empty/tiny, trying fallback snapshot');
-        setDiag(prev => ({ ...prev, lastError: 'imageData empty', imageDataLength: map?.imageData?.length || 0 }));
-        generateFallbackSnapshot();
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Map generation failed';
-      console.warn('[SplitPlanView] createStoreyMap failed:', e);
-      setDiag(prev => ({ ...prev, lastError: msg }));
-      // Try fallback
-      generateFallbackSnapshot();
-    } finally {
-      setIsLoading(false);
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(() => doGenerate(), { timeout: 3000 });
+    } else {
+      setTimeout(doGenerate, 50);
     }
-  }, [getXeokitViewer, findCurrentStoreyId, generateFallbackSnapshot]);
+  }, [getXeokitViewer, findCurrentStoreyId, generateFallbackSnapshot, isMobile]);
 
-  // Generate map when plugin is ready and on floor changes
+  // Generate map once when plugin is ready, and on floor changes (no polling/retry intervals)
   useEffect(() => {
     if (!storeyPlugin) return;
 
-    const t0 = setTimeout(generateMap, 100);
-    const t1 = setTimeout(generateMap, 1000);
-    const t2 = setTimeout(generateMap, 3000);
-    const t3 = setTimeout(generateMap, 6000);
+    // Single initial generation
+    const t0 = setTimeout(generateMap, 200);
 
-    const retryInterval = setInterval(() => {
-      if (!storeyMapRef.current) {
-        generateMap();
-      }
-    }, 2500);
-
-    const modelsLoadedHandler = () => {
-      setTimeout(generateMap, 300);
-      setTimeout(generateMap, 1500);
-    };
-    window.addEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
-
+    // Listen for floor changes
     const floorHandler = (event: Event) => {
       const detail = (event as CustomEvent<FloorSelectionEventDetail>).detail;
       selectedFloorRef.current = {
@@ -451,23 +400,23 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       setTimeout(generateMap, 100);
     };
 
-    const viewer = getXeokitViewer();
-    let modelLoadedSub: any = null;
-    if (viewer?.scene) {
-      modelLoadedSub = viewer.scene.on('modelLoaded', () => {
-        setTimeout(generateMap, 500);
-      });
-    }
+    // Listen for models loaded (re-generate once)
+    const modelsLoadedHandler = () => {
+      // Invalidate cache since new models loaded
+      mapCacheRef.current.clear();
+      wallIdCacheRef.current.clear();
+      setTimeout(generateMap, 500);
+    };
 
     window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, floorHandler);
+    window.addEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
+
     return () => {
-      clearTimeout(t0); clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
-      clearInterval(retryInterval);
+      clearTimeout(t0);
       window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, floorHandler);
       window.removeEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
-      if (modelLoadedSub !== null && viewer?.scene) viewer.scene.off(modelLoadedSub);
     };
-  }, [storeyPlugin, generateMap, getXeokitViewer]);
+  }, [storeyPlugin, generateMap]);
 
   // If no plugin after 15 seconds, try fallback snapshot directly
   useEffect(() => {
@@ -527,7 +476,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       });
     };
 
-    const interval = setInterval(updateCamera, 100);
+    const interval = setInterval(updateCamera, isMobile ? 350 : 150);
     updateCamera();
     return () => clearInterval(interval);
   }, [getXeokitViewer]);
@@ -715,7 +664,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       {isLoading && !storeyMap && (
         <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: '#ffffff' }}>
           <div className="flex flex-col items-center gap-2 text-muted-foreground">
-            <RefreshCw className="h-5 w-5 animate-spin" />
+            <div className="h-5 w-5 border-2 border-muted-foreground border-t-transparent rounded-full animate-spin" />
             <span className="text-xs">Loading plan view...</span>
           </div>
         </div>
@@ -756,7 +705,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
             onError={() => {
               console.error('[SplitPlanView] img onError — imageData URL failed to render');
               setImgError(true);
-              setDiag(prev => ({ ...prev, lastError: 'img onError' }));
             }}
           />
         </div>
@@ -799,22 +747,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         </div>
       )}
 
-      {/* Hovered entity tooltip */}
-      {hoveredEntity && (
-        <div className="absolute top-3 left-3 bg-card/90 backdrop-blur-sm text-foreground text-xs px-3 py-1.5 rounded-md border border-border/50 pointer-events-none z-20">
-          {hoveredEntity}
-        </div>
-      )}
-
-
-      {/* Refresh button */}
-      <button
-        className="absolute top-3 right-3 p-1.5 rounded-md bg-card/80 backdrop-blur-sm border border-border/50 text-muted-foreground hover:text-foreground transition-colors z-20"
-        onClick={(e) => { e.stopPropagation(); generateMap(); }}
-        title="Refresh plan"
-      >
-        <RefreshCw className="h-3.5 w-3.5" />
-      </button>
+      {/* Hovered entity tooltip removed for cleaner UI */}
 
     </div>
   );

@@ -193,15 +193,18 @@ const UnifiedViewerContent: React.FC<{
     }
   }, [buildingData?.transform]);
 
-  // ─── Apply start view when building data is ready ──────────────────
+  // ─── Apply start view ONLY when startView exists, triggered by VIEWER_MODELS_LOADED ──
   const startViewAppliedRef = useRef<string | null>(null);
   useEffect(() => {
     const sv = buildingData?.startView;
     if (!sv || !buildingData) return;
     if (startViewAppliedRef.current === buildingData.fmGuid) return;
-    startViewAppliedRef.current = buildingData.fmGuid;
 
-    const timer = setTimeout(() => {
+    // Wait for VIEWER_MODELS_LOADED instead of a hardcoded timeout
+    const handler = () => {
+      if (startViewAppliedRef.current === buildingData.fmGuid) return;
+      startViewAppliedRef.current = buildingData.fmGuid;
+
       const currentMode = viewModeRef.current;
       const resolvedViewMode = userChangedModeRef.current
         ? currentMode
@@ -226,8 +229,10 @@ const UnifiedViewerContent: React.FC<{
         },
       }));
       if (resolvedViewMode === '2d') setViewMode('2d');
-    }, 2000);
-    return () => clearTimeout(timer);
+    };
+
+    window.addEventListener('VIEWER_MODELS_LOADED', handler);
+    return () => window.removeEventListener('VIEWER_MODELS_LOADED', handler);
   }, [buildingData]);
 
   // ─── Viewer instance ref (for xeokit) ──────────────────────────────
@@ -656,9 +661,6 @@ const UnifiedViewerContent: React.FC<{
         {/* ── Split 2D/3D: SplitPlanView overlay on left side ── */}
         {isSplit2D3D && (
           <div className="absolute top-0 left-0 z-20 border-r border-border/50" style={{ width: '40%', height: '100%' }}>
-            <div className="absolute top-2 left-2 z-10 bg-card/80 backdrop-blur-sm text-foreground text-[10px] px-2 py-0.5 rounded border border-border/50">
-              2D Plan
-            </div>
             <SplitPlanView
               viewerRef={viewerInstanceRef}
               buildingFmGuid={buildingData.fmGuid}

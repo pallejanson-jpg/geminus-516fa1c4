@@ -1,92 +1,125 @@
 
-## Mål
-1) Sluta med “auto-rotation/auto-fit” efter 30–45s (endast applicera sparad startvy).  
-2) Ta bort “auto-sync vid start” som just nu triggar onödiga server-anrop + loggspam och kan kännas som att allt hänger.  
-3) Gör Split 2D-planen snabb: sluta generera planbilden om och om igen, minska upplösning på mobil, och gör init mer event-driven.  
-4) Ta bort “stöd-/hjälp-overlay” högst upp i 2D-planen (labels/tooltip/knappar som stör).
 
-## Vad jag ser i koden som orsakar trögheten
-- **Plötslig kamerarotation**: `NativeXeokitViewer` gör alltid `viewer.cameraFlight.flyTo({ aabb: viewer.scene.aabb })` efter att modeller laddats (rotation/”snurr” när den auto-fittar).
-- **Auto-sync**: `NativeXeokitViewer` triggar `asset-plus-sync` när det saknas A-modeller/inga modeller. Edge-loggar visar “❌ No working 3D endpoint found” → detta blir bara extra latency + arbete utan nytta.
-- **SplitPlanView kör för mycket jobb**:
-  - init-polling + flera timeouts (100ms/1s/3s/6s) + `setInterval` retry var 2.5s + extra triggers på `modelLoaded` → kan innebära *många* `createStoreyMap()`-körningar.
-  - `applyBlackWalls()` loopar över **alla metaObjects** varje gång planbild genereras (dyrt i stora modeller).
-  - kameraoverlay uppdateras var 100ms (onödigt tätt på mobil).
+## Plan: System Support + Reconciliation Engine (IMPLEMENTED)
 
-## Klargjort val (från dina svar)
-- **Kamerastart**: *Endast sparad startvy*  
-- **Synkstrategi**: *Ingen auto-sync vid start*
+### Database tables created
+1. **`asset_external_ids`** — Maps external IDs (IFC GUID, ACC externalId, Revit UniqueId) to stable `fm_guid` for cross-source reconciliation
+2. **`systems`** — Technical systems (e.g., LB01 Supply Air) with `fm_guid`, `discipline`, `system_type`, `building_fm_guid`, hierarchical `parent_system_id`
+3. **`asset_system`** — Many-to-many relation between assets and systems with optional `role`
+4. **`asset_connections`** — Topology/flow between assets (`from_fm_guid` → `to_fm_guid`) with `connection_type` and `direction`
 
-## Design/Implementation (föreslagen lösning)
+All tables have RLS: authenticated read, admin write. Indexes on common query patterns.
 
-### A) Kamerabeteende: endast sparad startvy (ingen auto-fit)
-**Fil:** `src/components/viewer/NativeXeokitViewer.tsx`
-1. Ta bort/disable den automatiska `cameraFlight.flyTo({ aabb: ... })` som körs efter modell-laddning.
-2. Låt kameran ligga kvar i sin initiala default (eller den som redan sätts), tills en sparad startvy appliceras.
+### Edge function changes
+1. **`ifc-to-xkt/index.ts`** — Extended with system extraction:
+   - Identifies `IfcSystem` / `IfcDistributionSystem` meta objects
+   - Falls back to `SystemName` property grouping
+   - Extracts `IfcRelConnects*` for topology → `asset_connections`
+   - Stores all object IDs in `asset_external_ids`
+   - Persists systems, asset-system links, and connections in batches
 
-**Fil:** `src/components/viewer/NativeViewerShell.tsx` (eller alternativt `NativeXeokitViewer.tsx`)
-3. Implementera stöd för `LOAD_SAVED_VIEW_EVENT` även i native-viewern:
-   - Lyssna på `window.addEventListener(LOAD_SAVED_VIEW_EVENT, ...)`.
-   - Om viewer ännu inte är redo: spara eventet i en `useRef` som “pending”.
-   - När viewer är redo + modeller laddade: applicera:
-     - `viewer.camera.eye/look/up` från event
-     - `viewer.camera.projection` (perspective/ortho)
-     - om eventets `viewMode` är `2d` eller `3d`: dispatcha `VIEW_MODE_REQUESTED_EVENT` så att `ViewerToolbar` tar hand om 2D/3D-läget konsekvent.
-   - Detta gör att UnifiedViewer’s start_view_id faktiskt fungerar även när vi använder native-motorn.
+2. **`acc-sync/index.ts`** — Extended with system support:
+   - Resolves `System Name`, `System Type`, `System Classification`, `System Abbreviation` property fields
+   - Groups instances by `SystemName` → auto-creates `systems` + `asset_system` rows
+   - Stores ACC `externalId` mappings in `asset_external_ids` for all levels, rooms, instances
+   - Infers discipline from system name (Ventilation, Heating, Cooling, Electrical, Plumbing, FireProtection)
 
-**Fil:** `src/pages/UnifiedViewer.tsx`
-4. Skärp startvy-logiken:
-   - Dispatcha `LOAD_SAVED_VIEW_EVENT` **endast** om `buildingData.startView` finns.
-   - Ta bort/undvik “fallback” som kan byta vy-läge utan startvy.
-   - Synka tajming bättre: hellre trigga när `VIEWER_MODELS_LOADED` kommer (eller när native viewer signalerar ready) än en hårdkodad 2s timeout, för att undvika att startvyn appliceras mitt i tung parsing.
+### System activation for existing buildings
+- **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
+- **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
+- **Asset+-byggnader**: Kör `sync-systems` action via `asset-plus-sync` edge function → extraherar system från befintliga attribut (IMPLEMENTERAT)
 
-### B) Ingen auto-sync vid start (men behåll manuell fallback)
-**Fil:** `src/components/viewer/NativeXeokitViewer.tsx`
-5. Ändra `needsSync`-logiken så att den **inte** auto-invokar `asset-plus-sync` vid start.
-   - Om modeller saknas: visa tydligt fel/empty state med en **Manuell “Sync models”**-knapp (admin-only om ni vill), som användaren kan trycka vid behov.
-6. Extra: när `asset-plus-sync` misslyckas med endpoint discovery (HTML istället för JSON), logga en kort varning men försök inte igen automatiskt i en loop.
+### Frontend (future phase)
+- System tab on FacilityLandingPage
+- System badge on asset property dialogs
+- Manual system creation dialog
 
-### C) Split 2D-plan: gör den mycket lättare (en generation, caching, debounce)
-**Fil:** `src/components/viewer/SplitPlanView.tsx`
-7. Byt från “polling + många triggers” till en enklare state-machine:
-   - Vänta in `VIEWER_MODELS_LOADED` → init StoreyViewsPlugin en gång.
-   - Generera planbild **en gång** för aktuell storey (och sen igen endast när användaren byter våning).
-   - Ta bort `retryInterval` samt de flesta multipla `setTimeout(generateMap, ...)` (behåll max 1–2 försök med debounce).
-8. Inför caching:
-   - `const mapCacheRef = useRef<Map<string, StoreyMap>>()`
-   - Key = `${storeyId}:${width}` (eller bara storeyId om vi kör fast width på mobil)
-   - Om cache finns: `setStoreyMap(cached)` direkt utan `createStoreyMap`.
-9. Sänk kostnad per generation (mobil):
-   - På mobil: sätt `width` lägre (ex 600–900) istället för `containerWidth*2` upp till 1600.
-   - Kör `createStoreyMap` i `requestIdleCallback` (fallback `setTimeout`) så UI hinner rita “Loading…” innan den blockerande delen startar.
-10. Optimera “svarta väggar”:
-   - Precomputea en lista av entity-IDs att färga (endast wall/slab/beam/column) **en gång per storey** istället för att loopa alla metaObjects varje gång.
-   - Alternativt: begränsa till storey-subtree (traversera children från metaStorey och samla ids).
-11. Minska overlay-uppdateringar:
-   - Ändra kameraoverlay från `setInterval(..., 100)` till t.ex. 250–500ms på mobil.
+---
 
-### D) Ta bort “stödmeddelanden i toppen” i 2D-planen
-**Fil:** `src/components/viewer/SplitPlanView.tsx`
-12. Ta bort/disable UI-element som ligger överst och stör:
-   - `Hovered entity tooltip` (top-left)
-   - `Refresh button` (top-right) eller göm den bakom långtryck/meny om ni vill behålla funktionen
-   - Behåll endast en minimal loading/erroryta när det behövs, annars ren plan.
+## Plan: Viewer Color Fix (IMPLEMENTED)
 
-## Hur vi verifierar (efter implementation)
-1. Mobil: öppna `/viewer?building=...&mode=3d` och mät:
-   - Tid tills första render (utan att UI fryser helt).
-   - Ingen plötslig “snurr/rotation” efter 30–45s.
-2. Mobil: växla till `split2d3d`:
-   - Planbild ska genereras max 1 gång initialt (och sen bara vid våningsbyte).
-   - Ingen krasch vid pinch/pan.
-3. Med start_view_id satt (t.ex. Centralstationen): verifiera att kameran direkt hamnar i sparad vy och inte auto-fittar.
+### Changes made:
+1. **Window color** — Changed from blue-gray `[0.392, 0.490, 0.541]` (#647D8A) to neutral warm gray `[0.780, 0.780, 0.760]` (#C7C7C2) in:
+   - `src/lib/architect-colors.ts`
+   - `src/hooks/useArchitectViewMode.ts`
+   - Database `viewer_themes` table (both "Arkitektvy" and "Standard" themes)
+   - `ViewerFilterPanel.tsx` category palette
 
-## Filer som kommer ändras
-- `src/components/viewer/NativeXeokitViewer.tsx` (ta bort auto-fit + disable auto-sync)
-- `src/components/viewer/NativeViewerShell.tsx` (implementera LOAD_SAVED_VIEW_EVENT för native och applicera sparad vy)
-- `src/pages/UnifiedViewer.tsx` (dispatcha startvy mer korrekt/inte via hårdkodad timeout)
-- `src/components/viewer/SplitPlanView.tsx` (stora prestandafixar + ta bort top-overlays)
+2. **Space color** — Verified as correct neutral gray `[0.898, 0.894, 0.890]` (#E5E4E3). Changed category palette in ViewerFilterPanel from blue to neutral.
 
-## Tekniska noter (så du vet vad som händer)
-- Edge-loggarna “No working 3D endpoint found” kommer från auto-sync-försök. När vi tar bort auto-sync vid start ska de i princip försvinna vid normal användning.
-- `StoreyViewsPlugin.createStoreyMap()` är CPU-tung; den måste behandlas som en “dyr operation”: körs sällan, cache:as, och helst i idle.
+3. **Background** — Already correct gray gradient in NativeViewerShell.
+
+4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
+
+5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
+
+---
+
+## Plan: IFC System-Only Import (IMPLEMENTED - Phase 1)
+
+### What was built
+1. **`ifc-extract-systems` edge function** — New lightweight edge function that:
+   - Downloads IFC from `ifc-uploads` bucket
+   - Parses metadata via `web-ifc` + `xeokit-convert` (same pipeline as `ifc-to-xkt`)
+   - Extracts systems (`IfcSystem`, `IfcDistributionSystem`, `SystemName` property grouping)
+   - Extracts connections (`IfcRelConnects*`)
+   - Reconciles IFC GUIDs with existing assets (3-step: exact match → name match → identity)
+   - Persists to `systems`, `asset_system`, `asset_connections`, `asset_external_ids`
+   - **Skips XKT generation** — much faster (~10-15s vs minutes)
+   - Supports 3 modes: `systems-only` (default), `enrich-guids` (future), `full` (delegates to `ifc-to-xkt`)
+
+2. **UI in ApiSettingsModal** — "From IFC" button on the Technical Systems card:
+   - Building selector dropdown
+   - IFC file upload
+   - Mode radio: "Only systems (fast)" / "Systems + FMGUIDs (coming soon)" / "Full conversion"
+   - Progress tracking and result display
+
+### Still to implement
+- **`enrich-guids` mode** — FMGUID generation + IFC write-back via `web-ifc` property injection
+- **IFC archive** — Store enriched IFC in `ifc-uploads/{buildingFmGuid}/enriched/`
+- **ACC `enrich-guids` action** — Deterministic GUID generation for ACC-sourced models
+
+---
+
+## Plan: Remove Separate Technical Systems UI (IMPLEMENTED)
+
+### Changes made
+1. **Removed standalone Technical Systems UI** from `ApiSettingsModal.tsx` Sync tab:
+   - Removed `SyncProgressCard` for Technical Systems
+   - Removed IFC System Import panel (file upload, building selector, mode radio)
+   - Removed state variables: `isSyncingSystems`, `systemSyncResult`, `ifcSystemFile`, `ifcSystemBuildingGuid`, `ifcSystemMode`, `isImportingIfcSystems`, `ifcSystemImportResult`, `ifcSystemBuildings`, `showIfcSystemImport`
+   - Removed `handleSyncSystems` and `handleImportIfcSystems` functions
+   - Added lightweight system count display in the sync status section
+
+2. **Auto-trigger system sync** after existing flows:
+   - After Asset+ asset sync completes → calls `sync-systems` automatically
+   - After ACC BIM sync completes → calls `sync-systems` automatically
+   - IFC flow already extracts systems in `ifc-to-xkt` edge function (no change needed)
+
+3. **System count** shown inline in sync status when systems exist (no separate card)
+
+---
+
+## Plan: Move & Delete Objects in 3D Viewer (IMPLEMENTED - Phase 1)
+
+### Database changes
+- Added columns to `assets`: `modification_status` (text), `moved_offset_x/y/z` (numeric), `original_room_fm_guid` (text), `modification_date` (timestamptz)
+- Partial index on `modification_status WHERE NOT NULL`
+
+### Viewer changes
+1. **`entityOffsetsEnabled: true`** in `NativeXeokitViewer.tsx` Viewer constructor
+2. **`useObjectMoveMode` hook** — drag-move logic with:
+   - World-space pick-surface delta calculation
+   - AABB-based room detection at new position
+   - Persists offset + `modification_status = 'moved'` + room changes to DB
+   - Applies saved offsets & hides deleted entities on model load
+   - ESC to cancel move
+3. **Context menu** — Added "Flytta objekt", "Ta bort objekt", "Markera" (select fix)
+4. **Filter panel** — New "Ändringar" section with toggles:
+   - "Visa flyttade objekt" → orange colorization (`[1, 0.6, 0.1]`)
+   - "Visa borttagna objekt" → red colorization (`[1, 0.2, 0.2]`), makes hidden deleted objects visible
+
+### Still to implement
+- **Rapport-export** — CSV export of all modified assets from Insights/Asset tab
+- **Asset+ sync reset** — Clear `modification_status` when `source_updated_at` changes in `asset-plus-sync`
+- **ContextMenuSettings panel** — Wire new items visibility to settings toggles
