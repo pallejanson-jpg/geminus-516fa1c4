@@ -73,8 +73,10 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         const sdkText = await sdkResponse.text();
         const sdkBlob = new Blob([sdkText], { type: 'application/javascript' });
         const sdkBlobUrl = URL.createObjectURL(sdkBlob);
-        const sdk = await import(/* @vite-ignore */ sdkBlobUrl);
+      const sdk = await import(/* @vite-ignore */ sdkBlobUrl);
         URL.revokeObjectURL(sdkBlobUrl);
+        // Expose SDK globally so SplitPlanView can reuse the same module
+        (window as any).__xeokitSdk = sdk;
         return sdk;
       })();
 
