@@ -714,7 +714,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
             onError={() => {
               console.error('[SplitPlanView] img onError — imageData URL failed to render');
               setImgError(true);
-              setDiag(prev => ({ ...prev, lastError: 'img onError' }));
             }}
           />
         </div>
