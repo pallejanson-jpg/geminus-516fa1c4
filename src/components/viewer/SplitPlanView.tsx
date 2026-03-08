@@ -489,7 +489,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     return () => clearTimeout(timer);
   }, [storeyMap]);
 
-  // Camera position overlay
+  // Camera position overlay — uses percentage of image
   useEffect(() => {
     const updateCamera = () => {
       const viewer = getXeokitViewer();
@@ -497,39 +497,39 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const plugin = pluginRef.current;
       if (!viewer?.camera?.eye || !map) return;
 
-      if (usedFallbackRef.current || !plugin) {
-        const aabb = viewer.scene?.aabb;
-        if (!aabb) return;
-        const eye = viewer.camera.eye;
-        const look = viewer.camera.look;
-        const normX = (eye[0] - aabb[0]) / (aabb[3] - aabb[0]);
-        const normZ = (eye[2] - aabb[2]) / (aabb[5] - aabb[2]);
-        const dx = look[0] - eye[0];
-        const dz = look[2] - eye[2];
-        const angle = Math.atan2(-dz, -dx);
-        setCameraPos({ x: normX * 100, y: normZ * 100, angle });
-        return;
-      }
-
-      const storey = plugin.storeys[map.storeyId];
-      if (!storey) return;
-
-      const aabb = plugin._fitStoreyMaps ? storey.storeyAABB : storey.modelAABB;
       const eye = viewer.camera.eye;
       const look = viewer.camera.look;
-
-      const normX = (eye[0] - aabb[0]) / (aabb[3] - aabb[0]);
-      const normZ = (eye[2] - aabb[2]) / (aabb[5] - aabb[2]);
-      const imgX = (1.0 - normX) * map.width;
-      const imgY = (1.0 - normZ) * map.height;
-
       const dx = look[0] - eye[0];
       const dz = look[2] - eye[2];
       const angle = Math.atan2(-dz, -dx);
 
+      if (usedFallbackRef.current || !plugin) {
+        const aabb = viewer.scene?.aabb;
+        if (!aabb) return;
+        const normX = (eye[0] - aabb[0]) / (aabb[3] - aabb[0]);
+        const normZ = (eye[2] - aabb[2]) / (aabb[5] - aabb[2]);
+        setCameraPos({ x: normX * 100, y: normZ * 100, angle });
+        return;
+      }
+
+      const storey = plugin.storeys?.[map.storeyId];
+      if (!storey) {
+        // Fallback: use scene AABB
+        const aabb = viewer.scene?.aabb;
+        if (!aabb) return;
+        const normX = (eye[0] - aabb[0]) / (aabb[3] - aabb[0]);
+        const normZ = (eye[2] - aabb[2]) / (aabb[5] - aabb[2]);
+        setCameraPos({ x: normX * 100, y: normZ * 100, angle });
+        return;
+      }
+
+      const aabb = plugin._fitStoreyMaps ? storey.storeyAABB : storey.modelAABB;
+      const normX = (eye[0] - aabb[0]) / (aabb[3] - aabb[0]);
+      const normZ = (eye[2] - aabb[2]) / (aabb[5] - aabb[2]);
+
       setCameraPos({
-        x: (imgX / map.width) * 100,
-        y: (imgY / map.height) * 100,
+        x: (1.0 - normX) * 100,
+        y: (1.0 - normZ) * 100,
         angle,
       });
     };
@@ -537,7 +537,58 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const interval = setInterval(updateCamera, isMobile ? 350 : 150);
     updateCamera();
     return () => clearInterval(interval);
-  }, [getXeokitViewer]);
+  }, [getXeokitViewer, storeyMap]);
+
+  // Dalux-style: Lock 3D camera Y to selected floor's height range
+  useEffect(() => {
+    const viewer = getXeokitViewer();
+    const plugin = pluginRef.current;
+    if (!viewer?.scene || !plugin) return;
+
+    let tickSub: any = null;
+
+    const clampToFloor = () => {
+      const map = storeyMapRef.current;
+      if (!map?.storeyId) return;
+      const storey = plugin.storeys?.[map.storeyId];
+      if (!storey) return;
+
+      const sAABB = storey.storeyAABB;
+      if (!sAABB) return;
+
+      const floorMinY = sAABB[1];
+      const floorMaxY = sAABB[4];
+      const floorRange = floorMaxY - floorMinY;
+      // Allow camera to be within floor range + generous margin above/below
+      const margin = Math.max(floorRange * 0.5, 2);
+      const minY = floorMinY - margin;
+      const maxY = floorMaxY + floorRange * 2 + margin;
+
+      const eye = viewer.camera.eye;
+      const look = viewer.camera.look;
+
+      let needsClamp = false;
+      const newLookY = Math.max(minY, Math.min(maxY, look[1]));
+      const newEyeY = Math.max(minY, Math.min(maxY + floorRange * 3, eye[1]));
+
+      if (Math.abs(newLookY - look[1]) > 0.01 || Math.abs(newEyeY - eye[1]) > 0.01) {
+        needsClamp = true;
+      }
+
+      if (needsClamp) {
+        viewer.camera.eye = [eye[0], newEyeY, eye[2]];
+        viewer.camera.look = [look[0], newLookY, look[2]];
+      }
+    };
+
+    tickSub = viewer.scene.on('tick', clampToFloor);
+
+    return () => {
+      if (tickSub !== undefined && tickSub !== null) {
+        try { viewer.scene.off?.(tickSub); } catch {}
+      }
+    };
+  }, [getXeokitViewer, storeyMap, storeyPlugin]);
 
   // Compute room labels for 2D overlay
   useEffect(() => {
@@ -903,20 +954,45 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
                     left: `${label.x}%`,
                     top: `${label.y}%`,
                     transform: 'translate(-50%, -50%)',
-                    fontSize: '9px',
+                    fontSize: '6px',
                     fontWeight: 500,
                     color: '#000000',
-                    textShadow: '0 0 3px white, 0 0 3px white, 0 0 5px white',
+                    textShadow: '0 0 2px white, 0 0 2px white',
                     whiteSpace: 'nowrap',
-                    maxWidth: '80px',
+                    maxWidth: '60px',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                   }}
                 >
                   {label.number && <div style={{ fontWeight: 600 }}>{label.number}</div>}
-                  {label.name && <div style={{ fontSize: '8px', opacity: 0.85 }}>{label.name}</div>}
+                  {label.name && <div style={{ fontSize: '5px', opacity: 0.85 }}>{label.name}</div>}
                 </div>
               ))}
+            </div>
+          )}
+          {/* Camera position indicator (inside transformed container) */}
+          {cameraPos && (
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                left: `${cameraPos.x}%`,
+                top: `${cameraPos.y}%`,
+              }}
+            >
+              {/* FOV cone */}
+              <div
+                className="absolute"
+                style={{
+                  width: 0, height: 0,
+                  borderLeft: '12px solid transparent',
+                  borderRight: '12px solid transparent',
+                  borderBottom: '22px solid hsl(var(--primary) / 0.2)',
+                  transform: `translate(-50%, -50%) rotate(${cameraPos.angle - Math.PI / 2}rad)`,
+                  transformOrigin: 'center bottom',
+                }}
+              />
+              {/* Camera dot */}
+              <div className="absolute w-2.5 h-2.5 rounded-full bg-primary border-2 border-primary-foreground shadow-lg" style={{ transform: 'translate(-50%, -50%)' }} />
             </div>
           )}
         </div>
@@ -933,40 +1009,11 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         </div>
       )}
 
-      {/* Camera position overlay */}
-      {storeyMap && !imgError && cameraPos && imgRef.current && (
-        (() => {
-          const imgEl = imgRef.current;
-          const containerEl = containerRef.current;
-          if (!imgEl || !containerEl) return null;
-          const imgRect = imgEl.getBoundingClientRect();
-          const containerRect = containerEl.getBoundingClientRect();
-          const screenX = imgRect.left + (cameraPos.x / 100) * imgRect.width;
-          const screenY = imgRect.top + (cameraPos.y / 100) * imgRect.height;
-          const relX = screenX - containerRect.left;
-          const relY = screenY - containerRect.top;
-          return (
-            <div
-              className="absolute pointer-events-none z-10"
-              style={{ left: `${relX}px`, top: `${relY}px` }}
-            >
-              {/* FOV cone */}
-              <div
-                className="absolute -translate-x-1/2 -translate-y-1/2"
-                style={{
-                  width: 0, height: 0,
-                  borderLeft: '20px solid transparent',
-                  borderRight: '20px solid transparent',
-                  borderBottom: '35px solid hsl(var(--primary) / 0.15)',
-                  transform: `translate(-50%, -50%) rotate(${cameraPos.angle - Math.PI / 2}rad)`,
-                  transformOrigin: 'center bottom',
-                }}
-              />
-              {/* Camera dot */}
-              <div className="absolute w-3 h-3 rounded-full bg-primary border-2 border-primary-foreground shadow-lg -translate-x-1/2 -translate-y-1/2" />
-            </div>
-          );
-        })()
+      {/* Hovered entity tooltip */}
+      {hoveredEntity && (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 px-2 py-0.5 bg-card/90 backdrop-blur-sm rounded text-[10px] text-foreground border border-border shadow-sm pointer-events-none">
+          {hoveredEntity}
+        </div>
       )}
     </div>
   );
