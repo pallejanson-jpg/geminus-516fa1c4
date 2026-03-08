@@ -12,8 +12,9 @@ import { useEffect, useRef } from 'react';
 
 const XEOKIT_CDN = '/lib/xeokit/xeokit-sdk.es.js';
 
-// Distance thresholds for LOD culling
-const LOD_FAR_DISTANCE = 50;
+// Distance thresholds for LOD culling (shorter on mobile for performance)
+const LOD_FAR_DISTANCE_DESKTOP = 50;
+const LOD_FAR_DISTANCE_MOBILE = 30;
 const LOD_CHECK_INTERVAL_MS = 500;
 
 interface UsePerformancePluginsOptions {
