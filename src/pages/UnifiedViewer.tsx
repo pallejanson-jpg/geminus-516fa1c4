@@ -693,7 +693,7 @@ const UnifiedViewerContent: React.FC<{
       </div>
 
       {/* ─── Insights bottom-sheet panel ─── */}
-      {!isMobile && buildingFmGuid && (
+      {buildingFmGuid && (
         <InsightsDrawerPanel
           buildingFmGuid={buildingFmGuid}
           buildingName={buildingData?.name}
