@@ -664,16 +664,20 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     e.preventDefault();
-    if (e.touches.length === 1 && touchStartRef.current && !touchStartRef.current.dist) {
-      const dx = e.touches[0].clientX - touchStartRef.current.x;
-      const dy = e.touches[0].clientY - touchStartRef.current.y;
-      setPanZoom(pz => ({ ...pz, offsetX: touchStartRef.current!.ox + dx, offsetY: touchStartRef.current!.oy + dy }));
-    } else if (e.touches.length === 2 && touchStartRef.current?.dist) {
+    const ts = touchStartRef.current;
+    if (!ts) return;
+    if (e.touches.length === 1 && !ts.dist) {
+      const dx = e.touches[0].clientX - ts.x;
+      const dy = e.touches[0].clientY - ts.y;
+      const newOx = ts.ox + dx;
+      const newOy = ts.oy + dy;
+      setPanZoom(pz => ({ ...pz, offsetX: newOx, offsetY: newOy }));
+    } else if (e.touches.length === 2 && ts.dist) {
       const dx = e.touches[1].clientX - e.touches[0].clientX;
       const dy = e.touches[1].clientY - e.touches[0].clientY;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const scaleFactor = dist / touchStartRef.current.dist;
-      const newScale = Math.max(0.3, Math.min(10, (touchStartRef.current.scale || 1) * scaleFactor));
+      const scaleFactor = dist / ts.dist;
+      const newScale = Math.max(0.3, Math.min(10, (ts.scale || 1) * scaleFactor));
       setPanZoom(pz => ({ ...pz, scale: newScale }));
     }
   }, []);
