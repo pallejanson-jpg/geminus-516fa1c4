@@ -132,9 +132,9 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     ];
 
     return (
-        <header className={`sticky top-0 z-30 h-14 sm:h-16 ${t.bgSec} border-b ${t.border} flex items-center justify-between px-2 sm:px-4 gap-2 sm:gap-4`}>
+        <header className={`sticky top-0 z-30 h-14 sm:h-16 ${t.bgSec} border-b ${t.border} flex items-center justify-between px-2 sm:px-4 gap-1 sm:gap-4 overflow-hidden`}>
             {/* Left section */}
-            <div className="flex items-center gap-1 sm:gap-2">
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                 <AppButton 
                     onClick={onToggleMobileMenu} 
                     variant="ghost" 
@@ -169,7 +169,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             </div>
 
             {/* Center - Search (click opens command palette) */}
-            <div className="flex-1 max-w-xs sm:max-w-md relative">
+            <div className="flex-1 min-w-0 max-w-xs sm:max-w-md relative">
                 <button
                     type="button"
                     onClick={() => setIsCommandOpen(true)}
@@ -186,7 +186,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             <CommandSearch open={isCommandOpen} onOpenChange={setIsCommandOpen} />
 
             {/* Right section */}
-            <div className="flex items-center gap-1 sm:gap-2">
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                 <AppButton
                     onClick={toggleRightSidebar}
                     variant="ghost"
