@@ -990,7 +990,7 @@ function MobileUnifiedViewer({
         </>
       ) : (
         /* ── Non-split: existing layout ── */
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 h-full w-full">
           {/* 3D/2D viewer — always mounted, hidden when 360 active */}
           <div style={{ display: activePanel === '3d' ? 'flex' : 'none', flexDirection: 'column', height: '100%', position: 'relative' }}>
             {viewMode === '3d' || viewMode === '2d' ? (
@@ -1037,23 +1037,22 @@ function MobileUnifiedViewer({
 
           {/* Mobile mode switcher + back button for non-split modes */}
           <div
-            className="absolute top-0 left-0 right-0 z-40 flex items-center justify-between px-1.5 py-1"
+            className="absolute top-0 left-0 right-0 z-40 flex items-center justify-between px-1.5 py-1 pointer-events-none"
             style={{
               paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4px)',
               paddingLeft: 'max(env(safe-area-inset-left, 0px), 6px)',
               paddingRight: 'max(env(safe-area-inset-right, 0px), 6px)',
-              background: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent)',
             }}
           >
             <Button
               variant="secondary"
               size="icon"
               onClick={onGoBack}
-              className="h-7 w-7 bg-card/95 backdrop-blur-sm shadow-md border"
+              className="h-7 w-7 bg-card/95 backdrop-blur-sm shadow-md border pointer-events-auto"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
             </Button>
-            <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md rounded-lg p-0.5 border border-white/10">
+            <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md rounded-lg p-0.5 border border-white/10 pointer-events-auto">
               {([
                 { mode: 'split2d3d' as ViewMode, label: '2D/3D', Icon: LayoutPanelLeft },
                 { mode: '2d' as ViewMode, label: '2D', Icon: Square },

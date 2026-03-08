@@ -1,76 +1,125 @@
 
 
-# Fix: Fullscreen mobile, floor selector, 2D→3D camera sync
+## Plan: System Support + Reconciliation Engine (IMPLEMENTED)
 
-## Problem Analysis
+### Database tables created
+1. **`asset_external_ids`** — Maps external IDs (IFC GUID, ACC externalId, Revit UniqueId) to stable `fm_guid` for cross-source reconciliation
+2. **`systems`** — Technical systems (e.g., LB01 Supply Air) with `fm_guid`, `discipline`, `system_type`, `building_fm_guid`, hierarchical `parent_system_id`
+3. **`asset_system`** — Many-to-many relation between assets and systems with optional `role`
+4. **`asset_connections`** — Topology/flow between assets (`from_fm_guid` → `to_fm_guid`) with `connection_type` and `direction`
 
-### 1. Fullscreen mobile not working for all modes
-The `MobileUnifiedViewer` root div uses `fixed inset-0` with `height: 100dvh` — this IS fullscreen. But the non-split modes (line 993) use `absolute inset-0` inside it, which should also be fine. The issue is likely that the `NativeViewerShell` or its parent has padding/margins or that the back-button overlay gradient bar at the top (lines 1039-1045) creates visual black edges. Need to verify `NativeViewerShell` gets `h-full` in non-split mode.
+All tables have RLS: authenticated read, admin write. Indexes on common query patterns.
 
-### 2. Floor selector showing wrong names
-The `pluginFloors` fallback (line 74) uses `storey.storeyId` as the name — these are internal xeokit IDs (often GUIDs), hence "konstiga våningsplannamn". When `useFloorData` returns empty (timing issue), the fallback shows raw IDs. Fix: use the `floors` from `useFloorData` with the DB name resolution, and for the fallback, extract a cleaner name from the metaObject hierarchy.
+### Edge function changes
+1. **`ifc-to-xkt/index.ts`** — Extended with system extraction:
+   - Identifies `IfcSystem` / `IfcDistributionSystem` meta objects
+   - Falls back to `SystemName` property grouping
+   - Extracts `IfcRelConnects*` for topology → `asset_connections`
+   - Stores all object IDs in `asset_external_ids`
+   - Persists systems, asset-system links, and connections in batches
 
-### 3. Camera 2D→3D completely wrong
-**Root cause identified**: The `handleClick` function (line 667) computes `headUnit` from the CURRENT camera direction. On first click, the camera might be outside the building looking at an angle, so the new eye position is computed as `newLook - headUnit * viewDist` with `safeYOffset` of 2-20m — this places the eye far away from the building.
+2. **`acc-sync/index.ts`** — Extended with system support:
+   - Resolves `System Name`, `System Type`, `System Classification`, `System Abbreviation` property fields
+   - Groups instances by `SystemName` → auto-creates `systems` + `asset_system` rows
+   - Stores ACC `externalId` mappings in `asset_external_ids` for all levels, rooms, instances
+   - Infers discipline from system name (Ventilation, Heating, Cooling, Electrical, Plumbing, FireProtection)
 
-**Compare with working MinimapPanel** (line 238-246): MinimapPanel simply does:
-```
-eye: [worldPos[0], viewer.camera.eye[1], worldPos[2]]
-look: [worldPos[0], worldPos[1], worldPos[2]]
-```
-This keeps eye directly ABOVE the look point at the current camera height — simple and correct.
+### System activation for existing buildings
+- **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
+- **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
+- **Asset+-byggnader**: Kör `sync-systems` action via `asset-plus-sync` edge function → extraherar system från befintliga attribut (IMPLEMENTERAT)
 
-The SplitPlanView tries to preserve heading, which puts the camera at a distance from the clicked point. This is wrong for a top-down 2D plan view.
+### Frontend (future phase)
+- System tab on FacilityLandingPage
+- System badge on asset property dialogs
+- Manual system creation dialog
 
-## Plan
+---
 
-### File 1: `src/components/viewer/SplitPlanView.tsx`
+## Plan: Viewer Color Fix (IMPLEMENTED)
 
-**A) Fix handleClick — copy MinimapPanel's proven approach:**
-Replace the complex heading-preserving logic (lines 686-743) with:
-```typescript
-const worldPos = plugin.storeyMapToWorldPos(map, [imgX, imgY]);
-if (worldPos && viewer.cameraFlight) {
-  viewer.cameraFlight.flyTo({
-    eye: [worldPos[0], viewer.camera.eye[1], worldPos[2]],
-    look: [worldPos[0], worldPos[1], worldPos[2]],
-    up: [0, 1, 0],
-    duration: 0.5,
-  });
-}
-```
-Keep the fallback path for when plugin is unavailable.
+### Changes made:
+1. **Window color** — Changed from blue-gray `[0.392, 0.490, 0.541]` (#647D8A) to neutral warm gray `[0.780, 0.780, 0.760]` (#C7C7C2) in:
+   - `src/lib/architect-colors.ts`
+   - `src/hooks/useArchitectViewMode.ts`
+   - Database `viewer_themes` table (both "Arkitektvy" and "Standard" themes)
+   - `ViewerFilterPanel.tsx` category palette
 
-**B) Fix floor selector names:**
-Change `pluginFloors` (line 74) to resolve names from the viewer metaScene:
-```typescript
-const pluginFloors = useMemo(() => {
-  const plugin = pluginRef.current;
-  const viewer = getXeokitViewer();
-  if (!plugin?.storeys) return [];
-  return Object.entries(plugin.storeys).map(([id, storey]: [string, any]) => {
-    const mo = viewer?.metaScene?.metaObjects?.[id];
-    const rawName = mo?.name || storey.storeyId || id;
-    // Clean GUID-like names
-    const name = rawName.match(/^[0-9A-Fa-f-]{30,}$/) ? `Plan` : rawName;
-    const shortMatch = name.match(/(\d+)/);
-    const shortName = shortMatch ? shortMatch[1] : name.substring(0, 10);
-    return { id, name, shortName };
-  });
-}, [storeyPlugin]);
-```
+2. **Space color** — Verified as correct neutral gray `[0.898, 0.894, 0.890]` (#E5E4E3). Changed category palette in ViewerFilterPanel from blue to neutral.
 
-Also display `f.name` instead of `f.shortName` in the Select dropdown for clarity.
+3. **Background** — Already correct gray gradient in NativeViewerShell.
 
-**C) Fix camera marker — match MinimapPanel's approach using `camera.eye`:**
-The MinimapPanel (line 212) uses `eye` for marker position, not `look`. The SplitPlanView uses `look` (line 506). Since the user is navigating from a top-down 2D view, using `eye` is more intuitive (shows where you are, not where you're looking). Change to use `eye` like MinimapPanel.
+4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
 
-### File 2: `src/pages/UnifiedViewer.tsx`
+5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
 
-**D) Fullscreen for all modes:**
-The non-split container (line 993 `<div className="absolute inset-0">`) needs to ensure the NativeViewerShell fills it completely. Add explicit `h-full w-full` and ensure no extra padding. The mode-switcher overlay should use `pointer-events-none` on its container with `pointer-events-auto` only on buttons, to avoid blocking the viewer canvas.
+---
 
-## Files to change
-1. `src/components/viewer/SplitPlanView.tsx` — camera click, floor names, marker
-2. `src/pages/UnifiedViewer.tsx` — fullscreen layout for all mobile modes
+## Plan: IFC System-Only Import (IMPLEMENTED - Phase 1)
 
+### What was built
+1. **`ifc-extract-systems` edge function** — New lightweight edge function that:
+   - Downloads IFC from `ifc-uploads` bucket
+   - Parses metadata via `web-ifc` + `xeokit-convert` (same pipeline as `ifc-to-xkt`)
+   - Extracts systems (`IfcSystem`, `IfcDistributionSystem`, `SystemName` property grouping)
+   - Extracts connections (`IfcRelConnects*`)
+   - Reconciles IFC GUIDs with existing assets (3-step: exact match → name match → identity)
+   - Persists to `systems`, `asset_system`, `asset_connections`, `asset_external_ids`
+   - **Skips XKT generation** — much faster (~10-15s vs minutes)
+   - Supports 3 modes: `systems-only` (default), `enrich-guids` (future), `full` (delegates to `ifc-to-xkt`)
+
+2. **UI in ApiSettingsModal** — "From IFC" button on the Technical Systems card:
+   - Building selector dropdown
+   - IFC file upload
+   - Mode radio: "Only systems (fast)" / "Systems + FMGUIDs (coming soon)" / "Full conversion"
+   - Progress tracking and result display
+
+### Still to implement
+- **`enrich-guids` mode** — FMGUID generation + IFC write-back via `web-ifc` property injection
+- **IFC archive** — Store enriched IFC in `ifc-uploads/{buildingFmGuid}/enriched/`
+- **ACC `enrich-guids` action** — Deterministic GUID generation for ACC-sourced models
+
+---
+
+## Plan: Remove Separate Technical Systems UI (IMPLEMENTED)
+
+### Changes made
+1. **Removed standalone Technical Systems UI** from `ApiSettingsModal.tsx` Sync tab:
+   - Removed `SyncProgressCard` for Technical Systems
+   - Removed IFC System Import panel (file upload, building selector, mode radio)
+   - Removed state variables: `isSyncingSystems`, `systemSyncResult`, `ifcSystemFile`, `ifcSystemBuildingGuid`, `ifcSystemMode`, `isImportingIfcSystems`, `ifcSystemImportResult`, `ifcSystemBuildings`, `showIfcSystemImport`
+   - Removed `handleSyncSystems` and `handleImportIfcSystems` functions
+   - Added lightweight system count display in the sync status section
+
+2. **Auto-trigger system sync** after existing flows:
+   - After Asset+ asset sync completes → calls `sync-systems` automatically
+   - After ACC BIM sync completes → calls `sync-systems` automatically
+   - IFC flow already extracts systems in `ifc-to-xkt` edge function (no change needed)
+
+3. **System count** shown inline in sync status when systems exist (no separate card)
+
+---
+
+## Plan: Move & Delete Objects in 3D Viewer (IMPLEMENTED - Phase 1)
+
+### Database changes
+- Added columns to `assets`: `modification_status` (text), `moved_offset_x/y/z` (numeric), `original_room_fm_guid` (text), `modification_date` (timestamptz)
+- Partial index on `modification_status WHERE NOT NULL`
+
+### Viewer changes
+1. **`entityOffsetsEnabled: true`** in `NativeXeokitViewer.tsx` Viewer constructor
+2. **`useObjectMoveMode` hook** — drag-move logic with:
+   - World-space pick-surface delta calculation
+   - AABB-based room detection at new position
+   - Persists offset + `modification_status = 'moved'` + room changes to DB
+   - Applies saved offsets & hides deleted entities on model load
+   - ESC to cancel move
+3. **Context menu** — Added "Flytta objekt", "Ta bort objekt", "Markera" (select fix)
+4. **Filter panel** — New "Ändringar" section with toggles:
+   - "Visa flyttade objekt" → orange colorization (`[1, 0.6, 0.1]`)
+   - "Visa borttagna objekt" → red colorization (`[1, 0.2, 0.2]`), makes hidden deleted objects visible
+
+### Still to implement
+- **Rapport-export** — CSV export of all modified assets from Insights/Asset tab
+- **Asset+ sync reset** — Clear `modification_status` when `source_updated_at` changes in `asset-plus-sync`
+- **ContextMenuSettings panel** — Wire new items visibility to settings toggles
