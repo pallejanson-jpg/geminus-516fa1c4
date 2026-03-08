@@ -363,7 +363,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const width = container ? Math.min(container.clientWidth * (isMobile ? 1.5 : 2), maxWidth) : 800;
 
     // Precompute wall IDs (cached)
-    const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifccurtainwall', 'ifcslab', 'ifccolumn', 'ifcbeam', 'ifcrailing', 'ifcstair', 'ifcstairflight']);
+    const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifccurtainwall', 'ifccolumn', 'ifccolumnstandardcase', 'ifcbeam', 'ifcbeamstandardcase']);
     let wallIds = wallIdCacheRef.current.get(preferredStoreyId);
     if (!wallIds) {
       wallIds = [];
