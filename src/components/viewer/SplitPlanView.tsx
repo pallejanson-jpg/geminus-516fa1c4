@@ -8,7 +8,7 @@
  * Dalux-style: 3D camera Y is locked to the selected floor's height range.
  */
 
-import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { AlertTriangle } from 'lucide-react';
@@ -67,24 +67,14 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
   const { floors } = useFloorData(viewerRef, buildingFmGuid);
 
-  // Fallback floor list from plugin when useFloorData is empty
-  const pluginFloors = useMemo(() => {
-    const plugin = pluginRef.current;
-    const viewer = (window as any).__nativeXeokitViewer;
-    if (!plugin?.storeys) return [];
-    let guidCounter = 0;
-    return Object.entries(plugin.storeys).map(([id, storey]: [string, any]) => {
-      const mo = viewer?.metaScene?.metaObjects?.[id];
-      const rawName = mo?.name || storey.storeyId || id;
-      const isGuid = rawName.match(/^[0-9A-Fa-f-]{30,}$/);
-      const name = isGuid ? `Plan ${++guidCounter}` : rawName;
-      const shortMatch = name.match(/(\d+)/);
-      const shortName = shortMatch ? shortMatch[1] : name.substring(0, 10);
-      return { id, name, shortName };
-    });
-  }, [storeyPlugin]);
+  // Use shared floor source of truth (same method as other viewer floor selectors)
+  const effectiveFloors = floors;
 
-  const effectiveFloors = floors.length > 0 ? floors : pluginFloors;
+  const resolveFloorFromStoreyId = useCallback((storeyId: string) => {
+    return effectiveFloors.find(
+      (floor) => floor.id === storeyId || floor.metaObjectIds.includes(storeyId)
+    ) ?? null;
+  }, [effectiveFloors]);
 
   const normalizeGuidKey = useCallback((value?: string | null) => (value || '').toLowerCase().replace(/-/g, ''), []);
 
@@ -254,18 +244,25 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const viewer = getXeokitViewer();
     if (!viewer?.metaScene) return;
 
+    const floor = resolveFloorFromStoreyId(storeyId);
     const mo = viewer.metaScene.metaObjects?.[storeyId];
-    const fmGuid = mo?.originalSystemId || mo?.id || storeyId;
+
+    const visibleMetaFloorIds = floor?.metaObjectIds?.length ? floor.metaObjectIds : [storeyId];
+    const visibleFloorFmGuids = floor?.databaseLevelFmGuids?.length
+      ? floor.databaseLevelFmGuids
+      : [mo?.originalSystemId || mo?.id || storeyId];
 
     const detail: FloorSelectionEventDetail & { source?: string } = {
-      floorId: storeyId,
-      visibleFloorFmGuids: [fmGuid],
-      visibleMetaFloorIds: [storeyId],
+      floorId: floor?.id || storeyId,
+      floorName: floor?.name || mo?.name || null,
+      visibleFloorFmGuids,
+      visibleMetaFloorIds,
+      isAllFloorsVisible: false,
       source: SPLIT_PLAN_SOURCE,
     };
 
     window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail }));
-  }, [getXeokitViewer]);
+  }, [getXeokitViewer, resolveFloorFromStoreyId]);
 
   // Generate fallback snapshot
   const generateFallbackSnapshot = useCallback(() => {
@@ -347,7 +344,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     // Dispatch floor selection to keep 3D in sync (deduped)
     dispatchFloorSync(preferredStoreyId);
 
-    setSelectedFloorId(preferredStoreyId);
+    const selectedFloor = resolveFloorFromStoreyId(preferredStoreyId);
+    setSelectedFloorId(selectedFloor?.id ?? preferredStoreyId);
 
     // Check cache
     const cacheKey = preferredStoreyId;
@@ -368,9 +366,10 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const maxWidth = isMobile ? 900 : 1600;
     const width = container ? Math.min(container.clientWidth * (isMobile ? 1.5 : 2), maxWidth) : 800;
 
-    // Precompute wall IDs (cached)
+    // Precompute wall IDs once (shared across floors)
+    const wallCacheKey = '__global_wall_ids__';
     const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifccurtainwall', 'ifccolumn', 'ifccolumnstandardcase', 'ifcbeam', 'ifcbeamstandardcase']);
-    let wallIds = wallIdCacheRef.current.get(preferredStoreyId);
+    let wallIds = wallIdCacheRef.current.get(wallCacheKey);
     if (!wallIds) {
       wallIds = [];
       const metaObjects = viewer.metaScene?.metaObjects || {};
@@ -380,7 +379,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
           wallIds.push(id);
         }
       }
-      wallIdCacheRef.current.set(preferredStoreyId, wallIds);
+      wallIdCacheRef.current.set(wallCacheKey, wallIds);
     }
 
     // Apply black walls for high-contrast plan
@@ -422,7 +421,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     } finally {
       setIsLoading(false);
     }
-  }, [getXeokitViewer, findCurrentStoreyId, generateFallbackSnapshot, isMobile, dispatchFloorSync]);
+  }, [getXeokitViewer, findCurrentStoreyId, generateFallbackSnapshot, isMobile, dispatchFloorSync, resolveFloorFromStoreyId]);
 
   // Generate map once plugin ready + listen for external floor changes
   useEffect(() => {
@@ -699,14 +698,18 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     }
 
     if (!worldPos) {
-      const aabb = viewer.scene?.aabb;
+      const storey = plugin?.storeys?.[map.storeyId];
+      const aabb = storey
+        ? (plugin._fitStoreyMaps ? storey.storeyAABB : storey.modelAABB)
+        : viewer.scene?.aabb;
       if (!aabb) return;
+
       const normX = (e.clientX - rect.left) / rect.width;
       const normZ = (e.clientY - rect.top) / rect.height;
       worldPos = [
-        aabb[0] + normX * (aabb[3] - aabb[0]),
+        aabb[0] + (1 - normX) * (aabb[3] - aabb[0]),
         aabb[1],
-        aabb[2] + normZ * (aabb[5] - aabb[2]),
+        aabb[2] + (1 - normZ) * (aabb[5] - aabb[2]),
       ];
     }
 
@@ -838,16 +841,18 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
   // Handle floor dropdown change
   const handleFloorChange = useCallback((floorId: string) => {
-    const floor = effectiveFloors.find((f: any) => f.id === floorId);
-    const fmGuid = (floor as any)?.databaseLevelFmGuids?.[0] ?? null;
+    const floor = effectiveFloors.find((f) => f.id === floorId);
+    const targetStoreyId = floor?.metaObjectIds.find((id) => pluginRef.current?.storeys?.[id]) || floorId;
+    const fmGuid = floor?.databaseLevelFmGuids?.[0] ?? null;
+
     selectedFloorRef.current = {
-      floorId: floorId,
+      floorId: targetStoreyId,
       floorFmGuid: fmGuid,
     };
-    setSelectedFloorId(floorId);
+    setSelectedFloorId(floor?.id ?? floorId);
     initialCenterApplied.current = false;
     lastDispatchedFloorRef.current = null; // allow new dispatch
-    mapCacheRef.current.delete(floorId);
+    mapCacheRef.current.delete(targetStoreyId);
     generateMap();
   }, [effectiveFloors, generateMap]);
 
