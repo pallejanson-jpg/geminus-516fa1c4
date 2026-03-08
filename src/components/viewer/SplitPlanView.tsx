@@ -259,9 +259,14 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     };
     window.addEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
 
-    const floorHandler = () => {
+    const floorHandler = (event: Event) => {
+      const detail = (event as CustomEvent<FloorSelectionEventDetail>).detail;
+      selectedFloorRef.current = {
+        floorId: detail?.floorId ?? null,
+        floorFmGuid: detail?.visibleFloorFmGuids?.[0] ?? null,
+      };
       setPanZoom({ offsetX: 0, offsetY: 0, scale: 1 });
-      setTimeout(generateMap, 300);
+      setTimeout(generateMap, 150);
     };
 
     // Listen for model loaded events to regenerate
