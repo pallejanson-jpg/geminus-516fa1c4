@@ -244,18 +244,25 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const viewer = getXeokitViewer();
     if (!viewer?.metaScene) return;
 
+    const floor = resolveFloorFromStoreyId(storeyId);
     const mo = viewer.metaScene.metaObjects?.[storeyId];
-    const fmGuid = mo?.originalSystemId || mo?.id || storeyId;
+
+    const visibleMetaFloorIds = floor?.metaObjectIds?.length ? floor.metaObjectIds : [storeyId];
+    const visibleFloorFmGuids = floor?.databaseLevelFmGuids?.length
+      ? floor.databaseLevelFmGuids
+      : [mo?.originalSystemId || mo?.id || storeyId];
 
     const detail: FloorSelectionEventDetail & { source?: string } = {
-      floorId: storeyId,
-      visibleFloorFmGuids: [fmGuid],
-      visibleMetaFloorIds: [storeyId],
+      floorId: floor?.id || storeyId,
+      floorName: floor?.name || mo?.name || null,
+      visibleFloorFmGuids,
+      visibleMetaFloorIds,
+      isAllFloorsVisible: false,
       source: SPLIT_PLAN_SOURCE,
     };
 
     window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail }));
-  }, [getXeokitViewer]);
+  }, [getXeokitViewer, resolveFloorFromStoreyId]);
 
   // Generate fallback snapshot
   const generateFallbackSnapshot = useCallback(() => {
