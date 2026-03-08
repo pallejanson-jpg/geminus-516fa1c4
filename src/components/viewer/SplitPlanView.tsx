@@ -24,15 +24,6 @@ interface PanZoom {
   scale: number;
 }
 
-interface DiagInfo {
-  viewerReady: boolean;
-  metaStoreyCount: number;
-  pluginStoreyCount: number;
-  lastTriedStoreyId: string | null;
-  imageDataLength: number;
-  lastError: string | null;
-}
-
 const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid, className }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
