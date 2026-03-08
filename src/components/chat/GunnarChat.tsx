@@ -753,4 +753,6 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       </div>
     </div>
   );
-}
+});
+
+export default GunnarChat;
