@@ -996,12 +996,14 @@ function MobileUnifiedViewer({
           {/* 3D/2D viewer — always mounted, hidden when 360 active */}
           <div style={{ display: activePanel === '3d' ? 'flex' : 'none', flexDirection: 'column', height: '100%', width: '100%', minHeight: 0, position: 'relative' }}>
             {viewMode === '3d' || viewMode === '2d' ? (
-              <NativeViewerShell
-                buildingFmGuid={buildingData.fmGuid}
-                onClose={onGoBack}
-                hideBackButton
-                hideMobileOverlay
-              />
+              <div className="h-full w-full">
+                <NativeViewerShell
+                  buildingFmGuid={buildingData.fmGuid}
+                  onClose={onGoBack}
+                  hideBackButton
+                  hideMobileOverlay
+                />
+              </div>
             ) : (
               <React.Suspense fallback={<div className="flex items-center justify-center h-full bg-black"><Loader2 className="h-8 w-8 animate-spin text-white/50" /></div>}>
                 <AssetPlusViewer
