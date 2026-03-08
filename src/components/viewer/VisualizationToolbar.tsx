@@ -1284,7 +1284,6 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             onGoToViewpoint={handleGoToIssueViewpoint}
             isAdmin={isAdmin}
           />
-        </TooltipProvider>
         </>
       )}
     </div>
