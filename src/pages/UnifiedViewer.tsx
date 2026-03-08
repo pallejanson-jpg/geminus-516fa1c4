@@ -501,39 +501,6 @@ const UnifiedViewerContent: React.FC<{
     />;
   }
 
-  // Draggable split ratio for desktop split2d3d (percentage for left/2D panel)
-  const [desktopSplitRatio, setDesktopSplitRatio] = useState(40);
-  const desktopDragRef = useRef(false);
-  const contentRef = useRef<HTMLDivElement>(null);
-
-  // Desktop split divider drag handlers
-  const handleDesktopDividerDown = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    desktopDragRef.current = true;
-  }, []);
-
-  useEffect(() => {
-    if (!isSplit2D3D) return;
-    const handleMove = (e: MouseEvent | TouchEvent) => {
-      if (!desktopDragRef.current || !contentRef.current) return;
-      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-      const rect = contentRef.current.getBoundingClientRect();
-      const pct = Math.max(20, Math.min(70, ((clientX - rect.left) / rect.width) * 100));
-      setDesktopSplitRatio(pct);
-    };
-    const handleUp = () => { desktopDragRef.current = false; };
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-    window.addEventListener('touchmove', handleMove);
-    window.addEventListener('touchend', handleUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
-      window.removeEventListener('touchmove', handleMove);
-      window.removeEventListener('touchend', handleUp);
-    };
-  }, [isSplit2D3D]);
 
   const viewerContainerStyle: React.CSSProperties = isSplit2D3D ? {
     position: 'absolute',
