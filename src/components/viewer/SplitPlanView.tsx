@@ -363,7 +363,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const width = container ? Math.min(container.clientWidth * (isMobile ? 1.5 : 2), maxWidth) : 800;
 
     // Precompute wall IDs (cached)
-    const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifccurtainwall', 'ifcslab', 'ifccolumn', 'ifcbeam', 'ifcrailing', 'ifcstair', 'ifcstairflight']);
+    const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifccurtainwall', 'ifccolumn', 'ifccolumnstandardcase', 'ifcbeam', 'ifcbeamstandardcase']);
     let wallIds = wallIdCacheRef.current.get(preferredStoreyId);
     if (!wallIds) {
       wallIds = [];
@@ -481,21 +481,10 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const imgW = img.naturalWidth || img.clientWidth;
       const imgH = img.naturalHeight || img.clientHeight;
 
-      const scale = 0.75;
-      const containerAspect = cRect.width / cRect.height;
-      const imgAspect = imgW / imgH;
-
-      let renderedW: number, renderedH: number;
-      if (imgAspect > containerAspect) {
-        renderedW = cRect.width;
-        renderedH = cRect.width / imgAspect;
-      } else {
-        renderedH = cRect.height;
-        renderedW = cRect.height * imgAspect;
-      }
-
-      const scaledW = renderedW * scale;
-      const scaledH = renderedH * scale;
+      // Auto-fit: contain the plan image within the container
+      const scale = Math.min(cRect.width / imgW, cRect.height / imgH) * 0.92;
+      const scaledW = imgW * scale;
+      const scaledH = imgH * scale;
       const ox = (cRect.width - scaledW) / 2;
       const oy = (cRect.height - scaledH) / 2;
 
