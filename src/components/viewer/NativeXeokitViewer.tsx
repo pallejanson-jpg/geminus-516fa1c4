@@ -128,9 +128,10 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         const cc = viewer.cameraControl;
         cc.dollyRate = 10;           // was default ~15-20
         cc.panRate = 0.3;            // was default ~0.5
-        cc.rotationInertia = 0.7;    // add inertia for smoother orbiting
+        cc.rotationInertia = 0.85;   // high inertia for smoother orbiting stop
+        if (cc.dragRotateRate !== undefined) cc.dragRotateRate = 100; // default 360 — critical for mobile touch
         if (cc.touchDollyRate !== undefined) cc.touchDollyRate = 0.15;  // pinch zoom speed
-        if (cc.touchPanRate !== undefined) cc.touchPanRate = 0.3;       // finger pan speed
+        if (cc.touchPanRate !== undefined) cc.touchPanRate = 0.2;       // finger pan speed (lowered from 0.3)
       }
 
       // NavCube — load custom neutral-styled plugin via script tag
@@ -361,12 +362,14 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         return (a.model_name || a.model_id).localeCompare((b.model_name || b.model_id), 'sv');
       });
 
-      // On mobile, limit to A-models only for buildings with many models to prevent OOM crashes
-      const MAX_MOBILE_MODELS = 3;
-      if (isMobile && loadList.length > MAX_MOBILE_MODELS) {
+      // On mobile, split into primary (A-models) and secondary (rest) for lazy loading
+      let secondaryQueue: ModelInfo[] = [];
+      if (isMobile && loadList.length > 1) {
         const aModels = loadList.filter(m => isArchitectural(m.model_name));
-        if (aModels.length > 0) {
-          console.log(`[NativeViewer] Mobile: limiting from ${loadList.length} to ${aModels.length} A-models to prevent OOM`);
+        const nonAModels = loadList.filter(m => !isArchitectural(m.model_name));
+        if (aModels.length > 0 && nonAModels.length > 0) {
+          console.log(`[NativeViewer] Mobile: loading ${aModels.length} A-models first, ${nonAModels.length} secondary models will lazy-load`);
+          secondaryQueue = nonAModels;
           loadList.length = 0;
           loadList.push(...aModels);
         }
@@ -537,7 +540,33 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }
       }
 
-      // All models loaded in priority order above — no secondary queue needed
+      // 6. Lazy-load secondary models on mobile (brand, el, VVS) after viewer is ready
+      if (secondaryQueue.length > 0 && mountedRef.current) {
+        console.log(`[NativeViewer] Scheduling ${secondaryQueue.length} secondary models for lazy loading...`);
+        const lazyLoad = async () => {
+          for (const model of secondaryQueue) {
+            if (!mountedRef.current) break;
+            try {
+              await loadModel(model);
+              // Re-apply architect colors after each secondary model loads
+              if (mountedRef.current && viewer.scene) {
+                applyArchitectColors(viewer);
+              }
+            } catch (e) {
+              console.warn(`[NativeViewer] Secondary model failed: ${model.model_id}`, e);
+            }
+          }
+          console.log(`%c[NativeViewer] 🎉 All secondary models loaded`, 'color:#3b82f6;font-weight:bold');
+        };
+        // Delay 2s after ready to let user interact first
+        setTimeout(() => {
+          if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(() => lazyLoad(), { timeout: 5000 });
+          } else {
+            lazyLoad();
+          }
+        }, 2000);
+      }
 
     } catch (e) {
       console.error('[NativeViewer] Init error:', e);
