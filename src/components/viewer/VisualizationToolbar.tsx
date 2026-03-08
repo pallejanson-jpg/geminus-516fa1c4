@@ -1186,6 +1186,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
              {/* Always-visible edge indicator on the panel's right edge */}
              <EdgeScrollIndicator viewport={scrollViewportEl} />
            </div>
+            </TooltipProvider>
           </div>
           
           {/* Side-pop panel for BIM Models */}
