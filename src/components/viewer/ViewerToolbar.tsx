@@ -414,34 +414,40 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
   const handleResetView = useCallback(() => {
     if (!viewer?.cameraFlight) return;
+    const scene = viewer.scene;
     // Clear selection
-    const selected = viewer.scene?.selectedObjectIds || [];
-    if (selected.length > 0) viewer.scene.setObjectsSelected(selected, false);
+    const selected = scene?.selectedObjectIds || [];
+    if (selected.length > 0) scene.setObjectsSelected(selected, false);
     // Clear section planes
-    const planes = Object.values(viewer.scene.sectionPlanes || {});
+    const planes = Object.values(scene.sectionPlanes || {});
     planes.forEach((sp: any) => { try { sp.destroy(); } catch {} });
-    // Reset visibility and re-apply architect colors
-    const allIds = viewer.scene.objectIds || [];
+    // Reset visibility — use batch API which is faster
+    const allIds = scene.objectIds || [];
     if (allIds.length > 0) {
-      viewer.scene.setObjectsVisible(allIds, true);
-      viewer.scene.setObjectsXRayed(allIds, false);
-      // Re-apply architect color palette (includes hiding spaces)
-      applyArchitectColors(viewer);
+      scene.setObjectsVisible(allIds, true);
+      scene.setObjectsXRayed(allIds, false);
     }
-    // Fly to initial camera or scene bounds
+    // Fly to initial camera IMMEDIATELY (before slow color reapply)
     if (initialCameraRef.current) {
       viewer.cameraFlight.flyTo({
         eye: initialCameraRef.current.eye,
         look: initialCameraRef.current.look,
         up: initialCameraRef.current.up,
-        duration: 0.5,
+        duration: 0.3,
       });
     } else {
-      viewer.cameraFlight.flyTo({ aabb: viewer.scene.aabb, duration: 0.5 });
+      viewer.cameraFlight.flyTo({ aabb: scene.aabb, duration: 0.3 });
     }
     // Reset x-ray
     setIsXrayActive(false);
-  }, [viewer]);
+    // Re-apply architect color palette asynchronously to avoid blocking interaction
+    requestAnimationFrame(() => {
+      applyArchitectColors(viewer);
+    });
+    // Remove any 3D clipping
+    try { remove3DClipping(); } catch {}
+    try { remove2DClipping(); } catch {}
+  }, [viewer, remove3DClipping, remove2DClipping]);
 
   const handleNavModeChange = useCallback((mode: NavMode) => {
     if (!viewer?.cameraControl) return;
