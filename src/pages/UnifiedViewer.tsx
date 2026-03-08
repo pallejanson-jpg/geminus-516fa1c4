@@ -789,6 +789,9 @@ function MobileUnifiedViewer({
   const isDraggingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // 3-dot menu state: show/hide toolbar and floor-switcher in split mode
+  const [showViewerControls, setShowViewerControls] = useState(false);
+
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     e.stopPropagation();
     isDraggingRef.current = true;
