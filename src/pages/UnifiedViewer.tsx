@@ -867,9 +867,7 @@ function MobileUnifiedViewer({
 
           {/* Bottom: 3D Model */}
           <div className="flex-1 relative overflow-hidden">
-            <div className="absolute top-1.5 left-1.5 z-10 bg-card/80 backdrop-blur-sm text-foreground text-[9px] px-1.5 py-0.5 rounded border border-border/50">
-              3D
-            </div>
+            {/* Label removed for cleaner mobile UI */}
             <NativeViewerShell
               buildingFmGuid={buildingData.fmGuid}
               onClose={onGoBack}
