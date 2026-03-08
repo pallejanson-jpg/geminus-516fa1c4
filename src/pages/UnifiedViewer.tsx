@@ -874,8 +874,23 @@ function MobileUnifiedViewer({
               onClose={onGoBack}
               hideBackButton
               hideMobileOverlay
+              hideToolbar={!showViewerControls}
+              hideFloorSwitcher={!showViewerControls}
             />
           </div>
+
+          {/* 3-dot menu to toggle toolbar/floor-switcher — bottom-right */}
+          <Button
+            variant="secondary"
+            size="icon"
+            onClick={() => setShowViewerControls(v => !v)}
+            className={cn(
+              'absolute bottom-[calc(env(safe-area-inset-bottom,0px)+8px)] right-2 z-50 h-8 w-8 rounded-full shadow-lg border',
+              showViewerControls ? 'bg-primary text-primary-foreground' : 'bg-card/95 backdrop-blur-sm'
+            )}
+          >
+            <MoreVertical className="h-4 w-4" />
+          </Button>
 
           {/* Mobile mode switcher overlay — top-right corner */}
           <div
