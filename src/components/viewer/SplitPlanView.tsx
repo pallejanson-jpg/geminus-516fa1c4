@@ -767,10 +767,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         </div>
       )}
 
-      {/* Controls info */}
-      <div className="absolute bottom-3 right-3 text-[10px] text-muted-foreground/60 pointer-events-none z-20">
-        {Math.round(panZoom.scale * 100)}%
-      </div>
 
       {/* Refresh button */}
       <button
