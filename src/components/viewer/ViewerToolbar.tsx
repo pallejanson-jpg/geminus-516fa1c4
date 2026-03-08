@@ -523,14 +523,22 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
   // ── 2D / 3D toggle ───────────────────────────────────────────────────────
 
+  // Guard ref to prevent re-entrant 2D transitions
+  const mode2dTransitionRef = useRef(false);
+
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     if (!viewer?.scene) {
       console.warn('[ViewerToolbar] handleViewModeChange: viewer not ready, skipping');
       return;
     }
+    // Idempotency: skip if already in target mode
+    if (mode === viewModeRef.current) return;
+    // Prevent overlapping 2D transitions
+    if (mode === '2d' && mode2dTransitionRef.current) return;
     const scene = viewer.scene;
 
     setViewMode(mode);
+    if (mode === '2d') mode2dTransitionRef.current = true;
     window.dispatchEvent(new CustomEvent(VIEW_MODE_CHANGED_EVENT, { detail: { mode, floorId: currentFloorId } }));
 
     if (mode === '2d') {
