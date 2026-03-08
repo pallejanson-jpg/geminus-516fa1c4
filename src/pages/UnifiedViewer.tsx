@@ -665,6 +665,7 @@ const UnifiedViewerContent: React.FC<{
               buildingFmGuid={buildingData.fmGuid}
               onClose={is3DMode ? handleGoBack : () => {}}
               hideBackButton
+              showGeminusMenu={viewMode === '3d'}
             />
           ) : (
             <React.Suspense fallback={<div className="flex items-center justify-center h-full bg-black"><Loader2 className="h-8 w-8 animate-spin text-white/50" /></div>}>

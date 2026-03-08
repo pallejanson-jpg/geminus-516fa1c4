@@ -685,7 +685,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   }, [storeyMap, getXeokitViewer]);
 
   // Click to navigate — use storeyMapToWorldPos for accurate position,
-  // preserve camera heading, clamp Y to storey AABB
+  // then translate current camera offset to avoid disorienting jumps/invalid poses
   const handleClick = useCallback((e: React.MouseEvent) => {
     if (clickStartRef.current) {
       const dx = Math.abs(e.clientX - clickStartRef.current.x);
@@ -705,14 +705,17 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
     viewer.cameraFlight?.cancel?.();
 
-    // Use storeyMapToWorldPos (same as working MinimapPanel)
-    let worldPos: number[] | null = null;
+    let worldPos: [number, number, number] | null = null;
 
     if (!usedFallbackRef.current && plugin) {
       try {
         const wp = plugin.storeyMapToWorldPos(map, [imgX, imgY]);
-        if (wp) worldPos = [wp[0], wp[1], wp[2]];
-      } catch {}
+        if (Array.isArray(wp) && wp.length >= 3 && wp.slice(0, 3).every((v) => Number.isFinite(v))) {
+          worldPos = [wp[0], wp[1], wp[2]];
+        }
+      } catch {
+        // ignore and use fallback mapping below
+      }
     }
 
     if (!worldPos) {
@@ -724,33 +727,58 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
       const normX = (e.clientX - rect.left) / rect.width;
       const normZ = (e.clientY - rect.top) / rect.height;
-      worldPos = [
+      const fallbackWorldPos: [number, number, number] = [
         aabb[0] + (1 - normX) * (aabb[3] - aabb[0]),
         aabb[1],
         aabb[2] + (1 - normZ) * (aabb[5] - aabb[2]),
       ];
-    }
 
-    if (worldPos && viewer.cameraFlight) {
-      // Compute a sensible eye height: storey center Y + offset for first-person-like view
-      const storey = plugin?.storeys?.[map.storeyId];
-      const sAABB = storey?.storeyAABB;
-      let eyeY = viewer.camera.eye[1];
-      if (sAABB) {
-        const floorY = sAABB[1];
-        const ceilY = sAABB[4];
-        const floorHeight = ceilY - floorY;
-        // Place eye at floor level + 1.6m (eye height), clamped within storey
-        eyeY = floorY + Math.min(1.6, floorHeight * 0.6);
+      if (fallbackWorldPos.every((v) => Number.isFinite(v))) {
+        worldPos = fallbackWorldPos;
       }
-
-      viewer.cameraFlight.flyTo({
-        eye: [worldPos[0], eyeY, worldPos[2]],
-        look: [worldPos[0], worldPos[1], worldPos[2]],
-        up: [0, 1, 0],
-        duration: 0.5,
-      });
     }
+
+    if (!worldPos || !viewer.cameraFlight) return;
+
+    const currentEye = viewer.camera.eye || [0, 0, 0];
+    const currentLook = viewer.camera.look || [0, 0, 0];
+
+    const offsetX = Number.isFinite(currentEye[0]) && Number.isFinite(currentLook[0])
+      ? currentEye[0] - currentLook[0]
+      : 0;
+    const offsetY = Number.isFinite(currentEye[1]) && Number.isFinite(currentLook[1])
+      ? currentEye[1] - currentLook[1]
+      : 1.6;
+    const offsetZ = Number.isFinite(currentEye[2]) && Number.isFinite(currentLook[2])
+      ? currentEye[2] - currentLook[2]
+      : 0;
+
+    let nextLookY = Number.isFinite(worldPos[1]) ? worldPos[1] : currentLook[1];
+    let nextEyeY = nextLookY + offsetY;
+
+    const storey = plugin?.storeys?.[map.storeyId];
+    const sAABB = storey?.storeyAABB;
+    if (Array.isArray(sAABB) && sAABB.length === 6 && sAABB.every((v) => Number.isFinite(v))) {
+      const floorY = sAABB[1];
+      const ceilY = sAABB[4];
+      const preferredEyeY = floorY + 1.6;
+      nextEyeY = Math.max(floorY + 0.8, Math.min(ceilY - 0.2, preferredEyeY));
+      nextLookY = Math.max(floorY + 0.2, Math.min(ceilY - 0.5, nextLookY));
+    }
+
+    const nextEye: [number, number, number] = [worldPos[0] + offsetX, nextEyeY, worldPos[2] + offsetZ];
+    const nextLook: [number, number, number] = [worldPos[0], nextLookY, worldPos[2]];
+
+    if (!nextEye.every((v) => Number.isFinite(v)) || !nextLook.every((v) => Number.isFinite(v))) {
+      return;
+    }
+
+    viewer.cameraFlight.flyTo({
+      eye: nextEye,
+      look: nextLook,
+      up: [0, 1, 0],
+      duration: 0,
+    });
   }, [getXeokitViewer]);
 
   // Mouse move for hover
