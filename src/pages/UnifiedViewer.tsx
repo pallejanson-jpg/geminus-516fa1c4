@@ -665,6 +665,7 @@ const UnifiedViewerContent: React.FC<{
               buildingFmGuid={buildingData.fmGuid}
               onClose={is3DMode ? handleGoBack : () => {}}
               hideBackButton
+              showGeminusMenu={viewMode === '3d'}
             />
           ) : (
             <React.Suspense fallback={<div className="flex items-center justify-center h-full bg-black"><Loader2 className="h-8 w-8 animate-spin text-white/50" /></div>}>
@@ -886,7 +887,17 @@ function MobileUnifiedViewer({
   }, [viewMode, viewerReady]);
 
   return (
-    <div ref={containerRef} className="fixed inset-0 z-40 flex w-screen min-h-0 flex-col overflow-hidden bg-background" style={{ height: '100dvh', minHeight: '100svh', width: '100vw', touchAction: 'none', overscrollBehavior: 'none' }}
+    <div
+      ref={containerRef}
+      className="fixed inset-x-0 top-0 bottom-0 z-40 flex w-screen min-h-0 flex-col overflow-hidden bg-background"
+      style={{
+        height: '100lvh',
+        minHeight: '100dvh',
+        maxHeight: '100lvh',
+        width: '100vw',
+        touchAction: 'none',
+        overscrollBehavior: 'none',
+      }}
       onTouchMove={isSplit ? handleTouchMove : undefined}
       onTouchEnd={isSplit ? handleTouchEnd : undefined}
     >
@@ -1008,6 +1019,7 @@ function MobileUnifiedViewer({
                   onClose={onGoBack}
                   hideBackButton
                   hideMobileOverlay
+                  showGeminusMenu={viewMode === '3d'}
                 />
               </div>
             ) : (
