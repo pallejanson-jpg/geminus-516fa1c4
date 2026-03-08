@@ -344,9 +344,10 @@ function BuildingCard({ building, onClick }: { building: RecentBuilding; onClick
   );
 }
 
-function ViewCard({ view, onClick }: { view: SavedView; onClick: () => void }) {
+const ViewCard = React.forwardRef<HTMLButtonElement, { view: SavedView; onClick: () => void }>(function ViewCard({ view, onClick }, ref) {
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onClick}
       className="rounded-xl border border-border bg-card/80 overflow-hidden text-left transition-all hover:border-primary/50 hover:shadow-lg active:scale-[0.98] group"
@@ -373,4 +374,4 @@ function ViewCard({ view, onClick }: { view: SavedView; onClick: () => void }) {
       </div>
     </button>
   );
-}
+});
