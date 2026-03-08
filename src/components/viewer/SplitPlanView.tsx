@@ -206,21 +206,24 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
       console.debug(`[SplitPlanView] Generating map for storey ${storeyId}, restoring hidden=${hiddenIds.length}, culled=${culledIds.length}, disabledPlanes=${activeSectionPlanes.length}`);
 
-      const map = plugin.createStoreyMap(storeyId, {
-        width,
-        format: 'png',
-      });
-
-      // Restore prior state
-      hiddenIds.forEach(id => {
-        const entity = scene.objects?.[id];
-        if (entity) entity.visible = false;
-      });
-      culledIds.forEach(id => {
-        const entity = scene.objects?.[id];
-        if (entity) entity.culled = true;
-      });
-      activeSectionPlanes.forEach((sp) => { sp.active = true; });
+      let map: any = null;
+      try {
+        map = plugin.createStoreyMap(storeyId, {
+          width,
+          format: 'png',
+        });
+      } finally {
+        // Restore prior state even if createStoreyMap throws
+        hiddenIds.forEach(id => {
+          const entity = scene.objects?.[id];
+          if (entity) entity.visible = false;
+        });
+        culledIds.forEach(id => {
+          const entity = scene.objects?.[id];
+          if (entity) entity.culled = true;
+        });
+        activeSectionPlanes.forEach((sp) => { sp.active = true; });
+      }
 
       if (map?.imageData) {
         console.debug('[SplitPlanView] Map generated successfully');
