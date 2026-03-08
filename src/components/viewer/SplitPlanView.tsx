@@ -954,20 +954,45 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
                     left: `${label.x}%`,
                     top: `${label.y}%`,
                     transform: 'translate(-50%, -50%)',
-                    fontSize: '9px',
+                    fontSize: '6px',
                     fontWeight: 500,
                     color: '#000000',
-                    textShadow: '0 0 3px white, 0 0 3px white, 0 0 5px white',
+                    textShadow: '0 0 2px white, 0 0 2px white',
                     whiteSpace: 'nowrap',
-                    maxWidth: '80px',
+                    maxWidth: '60px',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                   }}
                 >
                   {label.number && <div style={{ fontWeight: 600 }}>{label.number}</div>}
-                  {label.name && <div style={{ fontSize: '8px', opacity: 0.85 }}>{label.name}</div>}
+                  {label.name && <div style={{ fontSize: '5px', opacity: 0.85 }}>{label.name}</div>}
                 </div>
               ))}
+            </div>
+          )}
+          {/* Camera position indicator (inside transformed container) */}
+          {cameraPos && (
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                left: `${cameraPos.x}%`,
+                top: `${cameraPos.y}%`,
+              }}
+            >
+              {/* FOV cone */}
+              <div
+                className="absolute"
+                style={{
+                  width: 0, height: 0,
+                  borderLeft: '12px solid transparent',
+                  borderRight: '12px solid transparent',
+                  borderBottom: '22px solid hsl(var(--primary) / 0.2)',
+                  transform: `translate(-50%, -50%) rotate(${cameraPos.angle - Math.PI / 2}rad)`,
+                  transformOrigin: 'center bottom',
+                }}
+              />
+              {/* Camera dot */}
+              <div className="absolute w-2.5 h-2.5 rounded-full bg-primary border-2 border-primary-foreground shadow-lg" style={{ transform: 'translate(-50%, -50%)' }} />
             </div>
           )}
         </div>
