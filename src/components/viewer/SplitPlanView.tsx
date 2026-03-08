@@ -698,14 +698,18 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     }
 
     if (!worldPos) {
-      const aabb = viewer.scene?.aabb;
+      const storey = plugin?.storeys?.[map.storeyId];
+      const aabb = storey
+        ? (plugin._fitStoreyMaps ? storey.storeyAABB : storey.modelAABB)
+        : viewer.scene?.aabb;
       if (!aabb) return;
+
       const normX = (e.clientX - rect.left) / rect.width;
       const normZ = (e.clientY - rect.top) / rect.height;
       worldPos = [
-        aabb[0] + normX * (aabb[3] - aabb[0]),
+        aabb[0] + (1 - normX) * (aabb[3] - aabb[0]),
         aabb[1],
-        aabb[2] + normZ * (aabb[5] - aabb[2]),
+        aabb[2] + (1 - normZ) * (aabb[5] - aabb[2]),
       ];
     }
 
