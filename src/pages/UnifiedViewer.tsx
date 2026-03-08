@@ -401,6 +401,47 @@ const UnifiedViewerContent: React.FC<{
     if (hasIvion) setViewMode(initialMode !== '3d' ? initialMode : 'vt');
   }, [retrySDK, hasIvion, initialMode]);
 
+  // ─── Compute values used in render (must be before returns) ────────
+  const is2DMode = viewMode === '2d';
+  const needs3D = viewMode !== '360';
+  const is3DMode = viewMode === '3d';
+  const isVTMode = viewMode === 'vt';
+  const isSplit2D3D = viewMode === 'split2d3d';
+  const shouldUseNative3D = true;
+
+  // Draggable split ratio for desktop split2d3d
+  const [desktopSplitRatio, setDesktopSplitRatio] = useState(40);
+  const desktopDragRef = useRef(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const handleDesktopDividerDown = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    desktopDragRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!isSplit2D3D) return;
+    const handleMove = (e: MouseEvent | TouchEvent) => {
+      if (!desktopDragRef.current || !contentRef.current) return;
+      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+      const rect = contentRef.current.getBoundingClientRect();
+      const pct = Math.max(20, Math.min(70, ((clientX - rect.left) / rect.width) * 100));
+      setDesktopSplitRatio(pct);
+    };
+    const handleUp = () => { desktopDragRef.current = false; };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    window.addEventListener('touchmove', handleMove);
+    window.addEventListener('touchend', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+      window.removeEventListener('touchmove', handleMove);
+      window.removeEventListener('touchend', handleUp);
+    };
+  }, [isSplit2D3D]);
+
   // ─── Loading / Error states ────────────────────────────────────────
   if (isLoading) {
     return (
@@ -459,14 +500,6 @@ const UnifiedViewerContent: React.FC<{
       setInsightsPanelOpen={setInsightsPanelOpen}
     />;
   }
-
-  // ─── Compute AssetPlusViewer container style per mode ──────────────
-  const is2DMode = viewMode === '2d';
-  const needs3D = viewMode !== '360';
-  const is3DMode = viewMode === '3d';
-  const isVTMode = viewMode === 'vt';
-  const isSplit2D3D = viewMode === 'split2d3d';
-  const shouldUseNative3D = true;
 
   // Draggable split ratio for desktop split2d3d (percentage for left/2D panel)
   const [desktopSplitRatio, setDesktopSplitRatio] = useState(40);
