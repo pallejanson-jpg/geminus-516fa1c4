@@ -12,6 +12,7 @@ import ViewerFilterPanel from './ViewerFilterPanel';
 import ViewerContextMenu from './ViewerContextMenu';
 import ViewerToolbar from './ViewerToolbar';
 import VisualizationToolbar from './VisualizationToolbar';
+import GeminusPluginMenu from './GeminusPluginMenu';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { AppContext } from '@/context/AppContext';
 import { VIEW_MODE_REQUESTED_EVENT, LOAD_SAVED_VIEW_EVENT, type LoadSavedViewDetail } from '@/lib/viewer-events';
@@ -36,9 +37,11 @@ interface NativeViewerShellProps {
   hideToolbar?: boolean;
   /** Hide the floating floor switcher (used when parent shows its own) */
   hideFloorSwitcher?: boolean;
+  /** Show Geminus floating plugin menu (full 3D mode) */
+  showGeminusMenu?: boolean;
 }
 
-const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, onClose, hideBackButton = false, hideMobileOverlay = false, hideToolbar = false, hideFloorSwitcher = false }) => {
+const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, onClose, hideBackButton = false, hideMobileOverlay = false, hideToolbar = false, hideFloorSwitcher = false, showGeminusMenu = false }) => {
   const isMobile = useIsMobile();
   const { allData, isSidebarExpanded } = useContext(AppContext);
 
