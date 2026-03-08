@@ -1,125 +1,72 @@
 
 
-## Plan: System Support + Reconciliation Engine (IMPLEMENTED)
+# Root Cause Analysis & Fix Plan: 2D Mode and Split View
 
-### Database tables created
-1. **`asset_external_ids`** — Maps external IDs (IFC GUID, ACC externalId, Revit UniqueId) to stable `fm_guid` for cross-source reconciliation
-2. **`systems`** — Technical systems (e.g., LB01 Supply Air) with `fm_guid`, `discipline`, `system_type`, `building_fm_guid`, hierarchical `parent_system_id`
-3. **`asset_system`** — Many-to-many relation between assets and systems with optional `role`
-4. **`asset_connections`** — Topology/flow between assets (`from_fm_guid` → `to_fm_guid`) with `connection_type` and `direction`
+## What I Found (Live Runtime Testing)
 
-All tables have RLS: authenticated read, admin write. Indexes on common query patterns.
+### Split 2D/3D: Actually works (partially)
+- StoreyViewsPlugin initializes successfully with 23 storeys
+- Map image generates (93KB) and renders on white background
+- The plan image shows the building correctly
+- **Status**: Working, but slow to initialize (~45 sec total)
 
-### Edge function changes
-1. **`ifc-to-xkt/index.ts`** — Extended with system extraction:
-   - Identifies `IfcSystem` / `IfcDistributionSystem` meta objects
-   - Falls back to `SystemName` property grouping
-   - Extracts `IfcRelConnects*` for topology → `asset_connections`
-   - Stores all object IDs in `asset_external_ids`
-   - Persists systems, asset-system links, and connections in batches
+### Pure 2D Mode: Blank white screen
+I switched to 2D mode on mobile and saw a completely empty white/gray screen with only the floor switcher and toolbar visible. The canvas is there but shows nothing.
 
-2. **`acc-sync/index.ts`** — Extended with system support:
-   - Resolves `System Name`, `System Type`, `System Classification`, `System Abbreviation` property fields
-   - Groups instances by `SystemName` → auto-creates `systems` + `asset_system` rows
-   - Stores ACC `externalId` mappings in `asset_external_ids` for all levels, rooms, instances
-   - Infers discipline from system name (Ventilation, Heating, Cooling, Electrical, Plumbing, FireProtection)
+**Root cause identified**: The 2D mode styling in `ViewerToolbar.tsx` (lines 607-661) iterates over `scene.metaScene.metaObjects` to color walls/doors/furniture. But xeokit's `metaScene` is accessed from `scene.metaScene` which is incorrect -- it should be `viewer.metaScene`. The code at line 612 does:
 
-### System activation for existing buildings
-- **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
-- **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
-- **Asset+-byggnader**: Kör `sync-systems` action via `asset-plus-sync` edge function → extraherar system från befintliga attribut (IMPLEMENTERAT)
+```typescript
+const metaObjects = scene?.metaScene?.metaObjects || {};
+```
 
-### Frontend (future phase)
-- System tab on FacilityLandingPage
-- System badge on asset property dialogs
-- Manual system creation dialog
+In native xeokit, `metaScene` lives on the **viewer**, not the scene. `scene.metaScene` is undefined, so the entire loop over metaObjects produces zero iterations. The `visibleCount` stays at 0, triggering the safety rollback -- which restores original colors but doesn't undo the section plane clipping or white background. Result: white screen with clipped geometry but no 2D styling applied.
 
----
+Additionally, even if metaObjects were found, the code only handles a few IFC types (walls, doors, windows, furniture, spaces, slabs). Any object that doesn't match these types (beams, columns, stairs, railings, etc.) is left unchanged -- potentially invisible or oddly styled.
 
-## Plan: Viewer Color Fix (IMPLEMENTED)
+## Plan
 
-### Changes made:
-1. **Window color** — Changed from blue-gray `[0.392, 0.490, 0.541]` (#647D8A) to neutral warm gray `[0.780, 0.780, 0.760]` (#C7C7C2) in:
-   - `src/lib/architect-colors.ts`
-   - `src/hooks/useArchitectViewMode.ts`
-   - Database `viewer_themes` table (both "Arkitektvy" and "Standard" themes)
-   - `ViewerFilterPanel.tsx` category palette
+### 1. Fix metaScene access in ViewerToolbar 2D mode (critical)
+In `ViewerToolbar.tsx` line 612, change:
+```typescript
+const metaObjects = scene?.metaScene?.metaObjects || {};
+```
+to:
+```typescript
+const metaObjects = viewer?.metaScene?.metaObjects || scene?.metaScene?.metaObjects || {};
+```
 
-2. **Space color** — Verified as correct neutral gray `[0.898, 0.894, 0.890]` (#E5E4E3). Changed category palette in ViewerFilterPanel from blue to neutral.
+This single fix should make 2D mode work because all the wall/door/window styling will actually execute.
 
-3. **Background** — Already correct gray gradient in NativeViewerShell.
+### 2. Handle unmatched IFC types in 2D mode
+Add a catch-all else clause after the specific type checks: any visible object not matching a known type should still be styled (e.g., dark edges, moderate opacity) and remain pickable. This prevents "orphan" objects from showing as bright red/uncolored.
 
-4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
+### 3. Add metaScene fallback in useSectionPlaneClipping
+In `useSectionPlaneClipping.ts` line 169-175, add `window.__nativeXeokitViewer` as fallback:
+```typescript
+const getXeokitViewer = useCallback(() => {
+  try {
+    const v = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (v?.scene) return v;
+    return (window as any).__nativeXeokitViewer || null;
+  } catch { return null; }
+}, [viewerRef]);
+```
 
-5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
+### 4. Reduce SplitPlanView init delay
+Currently the StoreyViewsPlugin takes ~45 seconds to init because:
+- It waits for `__xeokitSdk` (set after SDK loads in NativeXeokitViewer)
+- Then waits for metaObjects to contain IfcBuildingStorey
+- Retries every 500ms up to 60 times
 
----
+Optimize by listening directly for `VIEWER_MODELS_LOADED` event instead of polling. Also reduce the fallback snapshot timer from 15s to 8s.
 
-## Plan: IFC System-Only Import (IMPLEMENTED - Phase 1)
+## Files to Edit
+1. `src/components/viewer/ViewerToolbar.tsx` -- fix metaScene access, add catch-all styling
+2. `src/hooks/useSectionPlaneClipping.ts` -- add global viewer fallback
+3. `src/components/viewer/SplitPlanView.tsx` -- reduce init delay
 
-### What was built
-1. **`ifc-extract-systems` edge function** — New lightweight edge function that:
-   - Downloads IFC from `ifc-uploads` bucket
-   - Parses metadata via `web-ifc` + `xeokit-convert` (same pipeline as `ifc-to-xkt`)
-   - Extracts systems (`IfcSystem`, `IfcDistributionSystem`, `SystemName` property grouping)
-   - Extracts connections (`IfcRelConnects*`)
-   - Reconciles IFC GUIDs with existing assets (3-step: exact match → name match → identity)
-   - Persists to `systems`, `asset_system`, `asset_connections`, `asset_external_ids`
-   - **Skips XKT generation** — much faster (~10-15s vs minutes)
-   - Supports 3 modes: `systems-only` (default), `enrich-guids` (future), `full` (delegates to `ifc-to-xkt`)
+## Expected Result
+- **2D mode**: Walls appear dark, doors/windows visible, furniture visible, objects clickable. No blank screen.
+- **Split 2D/3D**: Continues working, but loads faster.
+- **3D mode**: Unchanged.
 
-2. **UI in ApiSettingsModal** — "From IFC" button on the Technical Systems card:
-   - Building selector dropdown
-   - IFC file upload
-   - Mode radio: "Only systems (fast)" / "Systems + FMGUIDs (coming soon)" / "Full conversion"
-   - Progress tracking and result display
-
-### Still to implement
-- **`enrich-guids` mode** — FMGUID generation + IFC write-back via `web-ifc` property injection
-- **IFC archive** — Store enriched IFC in `ifc-uploads/{buildingFmGuid}/enriched/`
-- **ACC `enrich-guids` action** — Deterministic GUID generation for ACC-sourced models
-
----
-
-## Plan: Remove Separate Technical Systems UI (IMPLEMENTED)
-
-### Changes made
-1. **Removed standalone Technical Systems UI** from `ApiSettingsModal.tsx` Sync tab:
-   - Removed `SyncProgressCard` for Technical Systems
-   - Removed IFC System Import panel (file upload, building selector, mode radio)
-   - Removed state variables: `isSyncingSystems`, `systemSyncResult`, `ifcSystemFile`, `ifcSystemBuildingGuid`, `ifcSystemMode`, `isImportingIfcSystems`, `ifcSystemImportResult`, `ifcSystemBuildings`, `showIfcSystemImport`
-   - Removed `handleSyncSystems` and `handleImportIfcSystems` functions
-   - Added lightweight system count display in the sync status section
-
-2. **Auto-trigger system sync** after existing flows:
-   - After Asset+ asset sync completes → calls `sync-systems` automatically
-   - After ACC BIM sync completes → calls `sync-systems` automatically
-   - IFC flow already extracts systems in `ifc-to-xkt` edge function (no change needed)
-
-3. **System count** shown inline in sync status when systems exist (no separate card)
-
----
-
-## Plan: Move & Delete Objects in 3D Viewer (IMPLEMENTED - Phase 1)
-
-### Database changes
-- Added columns to `assets`: `modification_status` (text), `moved_offset_x/y/z` (numeric), `original_room_fm_guid` (text), `modification_date` (timestamptz)
-- Partial index on `modification_status WHERE NOT NULL`
-
-### Viewer changes
-1. **`entityOffsetsEnabled: true`** in `NativeXeokitViewer.tsx` Viewer constructor
-2. **`useObjectMoveMode` hook** — drag-move logic with:
-   - World-space pick-surface delta calculation
-   - AABB-based room detection at new position
-   - Persists offset + `modification_status = 'moved'` + room changes to DB
-   - Applies saved offsets & hides deleted entities on model load
-   - ESC to cancel move
-3. **Context menu** — Added "Flytta objekt", "Ta bort objekt", "Markera" (select fix)
-4. **Filter panel** — New "Ändringar" section with toggles:
-   - "Visa flyttade objekt" → orange colorization (`[1, 0.6, 0.1]`)
-   - "Visa borttagna objekt" → red colorization (`[1, 0.2, 0.2]`), makes hidden deleted objects visible
-
-### Still to implement
-- **Rapport-export** — CSV export of all modified assets from Insights/Asset tab
-- **Asset+ sync reset** — Clear `modification_status` when `source_updated_at` changes in `asset-plus-sync`
-- **ContextMenuSettings panel** — Wire new items visibility to settings toggles
