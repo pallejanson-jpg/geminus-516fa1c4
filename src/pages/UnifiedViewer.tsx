@@ -886,7 +886,7 @@ function MobileUnifiedViewer({
   }, [viewMode, viewerReady]);
 
   return (
-    <div ref={containerRef} className="fixed inset-0 bg-background z-40 overflow-hidden flex flex-col" style={{ height: '100dvh', width: '100vw', touchAction: 'none', overscrollBehavior: 'none' }}
+    <div ref={containerRef} className="fixed inset-0 z-40 flex w-screen min-h-0 flex-col overflow-hidden bg-background" style={{ height: '100dvh', minHeight: '100svh', width: '100vw', touchAction: 'none', overscrollBehavior: 'none' }}
       onTouchMove={isSplit ? handleTouchMove : undefined}
       onTouchEnd={isSplit ? handleTouchEnd : undefined}
     >
@@ -895,7 +895,7 @@ function MobileUnifiedViewer({
         <>
           {/* Top: 2D Plan */}
           <div
-            className="relative overflow-hidden"
+            className="relative min-h-0 overflow-hidden"
             style={{
               height: `${splitRatio}%`,
               touchAction: 'none',
@@ -911,15 +911,15 @@ function MobileUnifiedViewer({
 
           {/* Draggable divider */}
           <div
-            className="relative z-30 flex items-center justify-center border-y border-border/30 touch-none select-none"
-            style={{ height: '8px', cursor: 'row-resize' }}
+            className="relative z-30 flex items-center justify-center touch-none select-none"
+            style={{ height: '4px', cursor: 'row-resize' }}
             onTouchStart={handleTouchStart}
           >
-            <div className="h-1 w-8 rounded-full bg-muted-foreground/40" />
+            <div className="h-0.5 w-6 rounded-full bg-muted-foreground/30" />
           </div>
 
           {/* Bottom: 3D Model */}
-          <div className="flex-1 relative overflow-hidden">
+          <div className="relative flex-1 min-h-0 overflow-hidden">
             {/* Label removed for cleaner mobile UI */}
             <NativeViewerShell
               buildingFmGuid={buildingData.fmGuid}
