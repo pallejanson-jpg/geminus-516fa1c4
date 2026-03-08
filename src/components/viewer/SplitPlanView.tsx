@@ -67,6 +67,18 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
   const { floors } = useFloorData(viewerRef, buildingFmGuid);
 
+  const normalizeGuidKey = useCallback((value?: string | null) => (value || '').toLowerCase().replace(/-/g, ''), []);
+
+  const getXeokitViewer = useCallback(() => {
+    try {
+      const nativeViewer = (window as any).__nativeXeokitViewer;
+      if (nativeViewer?.scene) return nativeViewer;
+      const v = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      if (v) return v;
+      return null;
+    } catch { return null; }
+  }, [viewerRef]);
+
   // Plugin-based floors as immediate fallback (no DB wait)
   const pluginFloors = React.useMemo(() => {
     const plugin = pluginRef.current;
@@ -93,18 +105,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       (floor) => floor.id === storeyId || floor.metaObjectIds.includes(storeyId)
     ) ?? null;
   }, [effectiveFloors]);
-
-  const normalizeGuidKey = useCallback((value?: string | null) => (value || '').toLowerCase().replace(/-/g, ''), []);
-
-  const getXeokitViewer = useCallback(() => {
-    try {
-      const nativeViewer = (window as any).__nativeXeokitViewer;
-      if (nativeViewer?.scene) return nativeViewer;
-      const v = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-      if (v) return v;
-      return null;
-    } catch { return null; }
-  }, [viewerRef]);
 
   // Load SDK once
   useEffect(() => {
