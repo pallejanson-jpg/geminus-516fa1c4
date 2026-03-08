@@ -756,22 +756,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         </div>
       )}
 
-      {/* Hovered entity tooltip */}
-      {hoveredEntity && (
-        <div className="absolute top-3 left-3 bg-card/90 backdrop-blur-sm text-foreground text-xs px-3 py-1.5 rounded-md border border-border/50 pointer-events-none z-20">
-          {hoveredEntity}
-        </div>
-      )}
-
-
-      {/* Refresh button */}
-      <button
-        className="absolute top-3 right-3 p-1.5 rounded-md bg-card/80 backdrop-blur-sm border border-border/50 text-muted-foreground hover:text-foreground transition-colors z-20"
-        onClick={(e) => { e.stopPropagation(); generateMap(); }}
-        title="Refresh plan"
-      >
-        <RefreshCw className="h-3.5 w-3.5" />
-      </button>
+      {/* Hovered entity tooltip removed for cleaner UI */}
 
     </div>
   );
