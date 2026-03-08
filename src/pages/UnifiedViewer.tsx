@@ -884,10 +884,7 @@ function MobileUnifiedViewer({
             variant="secondary"
             size="icon"
             onClick={() => setShowViewerControls(v => !v)}
-            className={cn(
-              'absolute bottom-[calc(env(safe-area-inset-bottom,0px)+8px)] right-2 z-50 h-8 w-8 rounded-full shadow-lg border',
-              showViewerControls ? 'bg-primary text-primary-foreground' : 'bg-card/95 backdrop-blur-sm'
-            )}
+            className={`absolute bottom-[calc(env(safe-area-inset-bottom,0px)+8px)] right-2 z-50 h-8 w-8 rounded-full shadow-lg border ${showViewerControls ? 'bg-primary text-primary-foreground' : 'bg-card/95 backdrop-blur-sm'}`}
           >
             <MoreVertical className="h-4 w-4" />
           </Button>
