@@ -8,7 +8,7 @@
  * Dalux-style: 3D camera Y is locked to the selected floor's height range.
  */
 
-import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { AlertTriangle } from 'lucide-react';
