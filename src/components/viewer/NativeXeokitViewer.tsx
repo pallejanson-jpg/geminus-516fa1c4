@@ -362,12 +362,14 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         return (a.model_name || a.model_id).localeCompare((b.model_name || b.model_id), 'sv');
       });
 
-      // On mobile, limit to A-models only for buildings with many models to prevent OOM crashes
-      const MAX_MOBILE_MODELS = 3;
-      if (isMobile && loadList.length > MAX_MOBILE_MODELS) {
+      // On mobile, split into primary (A-models) and secondary (rest) for lazy loading
+      let secondaryQueue: ModelInfo[] = [];
+      if (isMobile && loadList.length > 1) {
         const aModels = loadList.filter(m => isArchitectural(m.model_name));
-        if (aModels.length > 0) {
-          console.log(`[NativeViewer] Mobile: limiting from ${loadList.length} to ${aModels.length} A-models to prevent OOM`);
+        const nonAModels = loadList.filter(m => !isArchitectural(m.model_name));
+        if (aModels.length > 0 && nonAModels.length > 0) {
+          console.log(`[NativeViewer] Mobile: loading ${aModels.length} A-models first, ${nonAModels.length} secondary models will lazy-load`);
+          secondaryQueue = nonAModels;
           loadList.length = 0;
           loadList.push(...aModels);
         }
