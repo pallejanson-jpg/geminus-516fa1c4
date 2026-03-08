@@ -87,54 +87,58 @@ const FloatingIssueListPanel: React.FC<FloatingIssueListPanelProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div
-      className={cn(
-        "fixed z-[70] border rounded-lg shadow-lg",
-        "bg-card/80 backdrop-blur-md",
-        "flex flex-col",
-        "animate-in fade-in-0 slide-in-from-right-2 duration-200",
-        isDragging && "cursor-grabbing"
-      )}
-      style={{ 
-        left: position.x, 
-        top: position.y,
-        width: panelWidth,
-        maxHeight: panelHeight,
-      }}
-    >
-      {/* Draggable Header */}
+    <>
+      {/* Backdrop — click to close */}
+      <div className="fixed inset-0 z-[69]" onClick={onClose} />
       <div
         className={cn(
-          "flex items-center justify-between px-3 py-2 border-b",
-          "cursor-grab select-none",
+          "fixed z-[70] border rounded-lg shadow-lg",
+          "bg-card/80 backdrop-blur-md",
+          "flex flex-col",
+          "animate-in fade-in-0 slide-in-from-right-2 duration-200",
           isDragging && "cursor-grabbing"
         )}
-        onMouseDown={handleDragStart}
+        style={{ 
+          left: position.x, 
+          top: position.y,
+          width: panelWidth,
+          maxHeight: panelHeight,
+        }}
       >
-        <div className="flex items-center gap-2">
-          <GripHorizontal className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Issues</span>
-        </div>
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          className="h-6 w-6 hover:bg-muted/50" 
-          onClick={onClose}
+        {/* Draggable Header */}
+        <div
+          className={cn(
+            "flex items-center justify-between px-3 py-2 border-b",
+            "cursor-grab select-none",
+            isDragging && "cursor-grabbing"
+          )}
+          onMouseDown={handleDragStart}
         >
-          <X className="h-4 w-4" />
-        </Button>
+          <div className="flex items-center gap-2">
+            <GripHorizontal className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium">Issues</span>
+          </div>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-6 w-6 hover:bg-muted/50" 
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        
+        {/* Issue List Content */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <IssueListPanel
+            buildingFmGuid={buildingFmGuid}
+            onSelectIssue={onSelectIssue}
+            onCreateIssue={onCreateIssue}
+            className="border-none shadow-none h-full"
+          />
+        </div>
       </div>
-      
-      {/* Issue List Content */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <IssueListPanel
-          buildingFmGuid={buildingFmGuid}
-          onSelectIssue={onSelectIssue}
-          onCreateIssue={onCreateIssue}
-          className="border-none shadow-none h-full"
-        />
-      </div>
-    </div>
+    </>
   );
 };
 

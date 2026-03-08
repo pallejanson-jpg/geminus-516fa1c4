@@ -730,16 +730,10 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
         {/* Fixed right sidebar panel */}
         {isOpen && (
-          <TooltipProvider delayDuration={300}>
-            <div
-              className={cn(
-                "fixed top-[44px] right-0 z-[60] border-l shadow-xl",
-                "bg-card/95 backdrop-blur-xl text-foreground",
-                "h-[calc(100%-44px)] w-72 sm:w-80",
-                "flex flex-col overflow-hidden",
-                "transition-transform duration-200",
-              )}
-            >
+          <>
+            {/* Backdrop — click outside to close */}
+            <div className="fixed inset-0 z-[59]" onClick={() => handleSetIsOpen(false)} />
+            <TooltipProvider delayDuration={300}>
               {/* Header */}
               <div className="flex items-center justify-between px-3 py-3 border-b shrink-0">
                 <span className="font-medium text-sm">Display</span>
@@ -1241,7 +1235,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             />
           </SidePopPanel>
           
-          {/* Floating Issue List Panel - independent, positioned next to toolbar */}
+          {/* Floating Issue List Panel */}
           <FloatingIssueListPanel
             isOpen={showIssueList}
             onClose={() => setShowIssueList(false)}
@@ -1290,6 +1284,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             isAdmin={isAdmin}
           />
         </TooltipProvider>
+        </>
       )}
     </div>
   );

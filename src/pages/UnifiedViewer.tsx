@@ -401,6 +401,47 @@ const UnifiedViewerContent: React.FC<{
     if (hasIvion) setViewMode(initialMode !== '3d' ? initialMode : 'vt');
   }, [retrySDK, hasIvion, initialMode]);
 
+  // ─── Compute values used in render (must be before returns) ────────
+  const is2DMode = viewMode === '2d';
+  const needs3D = viewMode !== '360';
+  const is3DMode = viewMode === '3d';
+  const isVTMode = viewMode === 'vt';
+  const isSplit2D3D = viewMode === 'split2d3d';
+  const shouldUseNative3D = true;
+
+  // Draggable split ratio for desktop split2d3d
+  const [desktopSplitRatio, setDesktopSplitRatio] = useState(40);
+  const desktopDragRef = useRef(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const handleDesktopDividerDown = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    desktopDragRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!isSplit2D3D) return;
+    const handleMove = (e: MouseEvent | TouchEvent) => {
+      if (!desktopDragRef.current || !contentRef.current) return;
+      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+      const rect = contentRef.current.getBoundingClientRect();
+      const pct = Math.max(20, Math.min(70, ((clientX - rect.left) / rect.width) * 100));
+      setDesktopSplitRatio(pct);
+    };
+    const handleUp = () => { desktopDragRef.current = false; };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    window.addEventListener('touchmove', handleMove);
+    window.addEventListener('touchend', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+      window.removeEventListener('touchmove', handleMove);
+      window.removeEventListener('touchend', handleUp);
+    };
+  }, [isSplit2D3D]);
+
   // ─── Loading / Error states ────────────────────────────────────────
   if (isLoading) {
     return (
@@ -460,13 +501,6 @@ const UnifiedViewerContent: React.FC<{
     />;
   }
 
-  // ─── Compute AssetPlusViewer container style per mode ──────────────
-  const is2DMode = viewMode === '2d';
-  const needs3D = viewMode !== '360';
-  const is3DMode = viewMode === '3d';
-  const isVTMode = viewMode === 'vt';
-  const isSplit2D3D = viewMode === 'split2d3d';
-  const shouldUseNative3D = true;
 
   const viewerContainerStyle: React.CSSProperties = isSplit2D3D ? {
     position: 'absolute',
@@ -475,7 +509,7 @@ const UnifiedViewerContent: React.FC<{
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
-    width: '60%',
+    width: `${100 - desktopSplitRatio}%`,
     zIndex: 5,
     pointerEvents: 'auto',
   } : {
@@ -608,7 +642,7 @@ const UnifiedViewerContent: React.FC<{
       </div>
 
       {/* ─── Content area ─── */}
-      <div className="flex-1 relative">
+      <div ref={contentRef} className="flex-1 relative">
         {/* SDK container */}
         <div
           ref={sdkContainerRef}
@@ -654,15 +688,36 @@ const UnifiedViewerContent: React.FC<{
           )}
         </div>
 
-        {/* ── Split 2D/3D: SplitPlanView overlay on left side ── */}
+        {/* ── Split 2D/3D: SplitPlanView on left + thin draggable divider ── */}
         {isSplit2D3D && (
-          <div className="absolute top-0 left-0 z-20 border-r border-border/50" style={{ width: '40%', height: '100%' }}>
-            <SplitPlanView
-              viewerRef={viewerInstanceRef}
-              buildingFmGuid={buildingData.fmGuid}
-              className="h-full"
-            />
-          </div>
+          <>
+            <div className="absolute top-0 left-0 z-20" style={{ width: `${desktopSplitRatio}%`, height: '100%' }}>
+              <SplitPlanView
+                viewerRef={viewerInstanceRef}
+                buildingFmGuid={buildingData.fmGuid}
+                className="h-full"
+              />
+            </div>
+            {/* Thin draggable divider */}
+            <div
+              className="absolute top-0 z-30 flex items-center justify-center cursor-col-resize group"
+              style={{
+                left: `${desktopSplitRatio}%`,
+                transform: 'translateX(-50%)',
+                width: '12px',
+                height: '100%',
+              }}
+              onMouseDown={handleDesktopDividerDown}
+              onTouchStart={handleDesktopDividerDown as any}
+            >
+              {/* Visual line — 2px visible, 12px hitbox */}
+              <div className="w-px h-full bg-border group-hover:bg-primary/50 transition-colors" />
+              {/* Center grip indicator */}
+              <div className="absolute top-1/2 -translate-y-1/2 flex items-center justify-center w-4 h-6 rounded bg-card/90 border border-border shadow-sm">
+                <GripHorizontal className="h-3 w-3 text-muted-foreground rotate-90" />
+              </div>
+            </div>
+          </>
         )}
 
         {/* Crosshair overlay for alignment in VT mode */}
