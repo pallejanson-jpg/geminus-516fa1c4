@@ -578,14 +578,14 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           }
           console.log(`%c[NativeViewer] 🎉 All secondary models loaded`, 'color:#3b82f6;font-weight:bold');
         };
-        // Delay 2s after ready to let user interact first
+        // Delay 10s after ready so A-model interaction is butter-smooth first
         setTimeout(() => {
           if (typeof requestIdleCallback !== 'undefined') {
-            requestIdleCallback(() => lazyLoad(), { timeout: 5000 });
+            requestIdleCallback(() => lazyLoad(), { timeout: 15000 });
           } else {
             lazyLoad();
           }
-        }, 2000);
+        }, 10000);
       }
 
     } catch (e) {
