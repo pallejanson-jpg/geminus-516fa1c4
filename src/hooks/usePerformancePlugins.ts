@@ -110,8 +110,8 @@ export function usePerformancePlugins({ viewerRef, ready, isMobile }: UsePerform
       }
 
       // 3. LOD distance culling — hide small entities when camera is far
-      // Skip entirely on mobile or if scene has >50k objects (too expensive)
-      if (!pluginsRef.current.lodInterval && !isMobile) {
+      // Enabled on all devices (mobile uses shorter distance)
+      if (!pluginsRef.current.lodInterval) {
         const scene = xeokitViewer.scene;
         const objectCount = scene?.objectIds?.length || Object.keys(scene?.objects || {}).length;
         if (objectCount <= 50000) {
