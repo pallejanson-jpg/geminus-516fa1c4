@@ -40,9 +40,13 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
   const getXeokitViewer = useCallback(() => {
     try {
+      // First try the native xeokit viewer (used by NativeViewerShell)
+      const nativeViewer = (window as any).__nativeXeokitViewer;
+      if (nativeViewer?.scene) return nativeViewer;
+      // Fallback to Asset+ viewer ref chain
       const v = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
       if (v) return v;
-      return (window as any).__nativeXeokitViewer ?? null;
+      return null;
     } catch { return null; }
   }, [viewerRef]);
 
@@ -137,7 +141,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
     const storeyId = findCurrentStoreyId();
     if (!storeyId) {
-      // Don't set permanent error — storeys may not be loaded yet
       console.debug('[SplitPlanView] No storeys found yet, will retry on model load');
       return;
     }
@@ -146,9 +149,28 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const container = containerRef.current;
       const width = container ? Math.min(container.clientWidth * 2, 1600) : 800;
 
+      // Temporarily make all objects visible for storey map rendering
+      // (IfcSpace objects are hidden by default in our viewer but needed for plan rendering)
+      const scene = viewer.scene;
+      const hiddenIds: string[] = [];
+      const objectIds = scene.objectIds || [];
+      objectIds.forEach((id: string) => {
+        const entity = scene.objects?.[id];
+        if (entity && !entity.visible) {
+          hiddenIds.push(id);
+          entity.visible = true;
+        }
+      });
+
       const map = plugin.createStoreyMap(storeyId, {
         width,
         format: 'png',
+      });
+
+      // Restore hidden objects
+      hiddenIds.forEach(id => {
+        const entity = scene.objects?.[id];
+        if (entity) entity.visible = false;
       });
 
       if (map?.imageData) {
@@ -171,9 +193,12 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
     // Wait longer for models to fully load their metaobjects
     const timeout = setTimeout(generateMap, 2000);
-    // Also retry a couple more times
     const retry1 = setTimeout(generateMap, 4000);
     const retry2 = setTimeout(generateMap, 7000);
+
+    // Also listen for VIEWER_MODELS_LOADED (fired by NativeXeokitViewer)
+    const modelsLoadedHandler = () => setTimeout(generateMap, 1000);
+    window.addEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
 
     const floorHandler = () => {
       setPanZoom({ offsetX: 0, offsetY: 0, scale: 1 });
@@ -195,6 +220,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       clearTimeout(retry1);
       clearTimeout(retry2);
       window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, floorHandler);
+      window.removeEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
       if (modelLoadedSub !== null && viewer?.scene) {
         viewer.scene.off(modelLoadedSub);
       }
