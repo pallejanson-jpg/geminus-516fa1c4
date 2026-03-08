@@ -879,7 +879,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
             <SelectContent>
               {effectiveFloors.map((f: any) => (
                 <SelectItem key={f.id} value={f.id} className="text-[11px]">
-                  {f.shortName || f.name}
+                  {f.name}
                 </SelectItem>
               ))}
             </SelectContent>
