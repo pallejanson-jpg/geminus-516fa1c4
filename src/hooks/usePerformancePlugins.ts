@@ -12,8 +12,9 @@ import { useEffect, useRef } from 'react';
 
 const XEOKIT_CDN = '/lib/xeokit/xeokit-sdk.es.js';
 
-// Distance thresholds for LOD culling
-const LOD_FAR_DISTANCE = 50;
+// Distance thresholds for LOD culling (shorter on mobile for performance)
+const LOD_FAR_DISTANCE_DESKTOP = 50;
+const LOD_FAR_DISTANCE_MOBILE = 30;
 const LOD_CHECK_INTERVAL_MS = 500;
 
 interface UsePerformancePluginsOptions {
@@ -110,8 +111,8 @@ export function usePerformancePlugins({ viewerRef, ready, isMobile }: UsePerform
       }
 
       // 3. LOD distance culling — hide small entities when camera is far
-      // Skip entirely on mobile or if scene has >50k objects (too expensive)
-      if (!pluginsRef.current.lodInterval && !isMobile) {
+      // Enabled on all devices (mobile uses shorter distance)
+      if (!pluginsRef.current.lodInterval) {
         const scene = xeokitViewer.scene;
         const objectCount = scene?.objectIds?.length || Object.keys(scene?.objects || {}).length;
         if (objectCount <= 50000) {
@@ -141,7 +142,8 @@ export function usePerformancePlugins({ viewerRef, ready, isMobile }: UsePerform
                 const dist = Math.sqrt(
                   (eye[0] - cx) ** 2 + (eye[1] - cy) ** 2 + (eye[2] - cz) ** 2
                 );
-                entity.culled = dist > LOD_FAR_DISTANCE;
+                const lodDist = isMobile ? LOD_FAR_DISTANCE_MOBILE : LOD_FAR_DISTANCE_DESKTOP;
+                entity.culled = dist > lodDist;
               }
               if (i < ids.length) {
                 requestIdleCallback(processBatch, { timeout: 200 });
