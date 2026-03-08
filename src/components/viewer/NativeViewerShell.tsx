@@ -45,6 +45,21 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   // Viewer instance
   const [xeokitViewer, setXeokitViewer] = useState<any>(null);
   const [isViewerReady, setIsViewerReady] = useState(false);
+  const pendingSavedViewRef = useRef<LoadSavedViewDetail | null>(null);
+
+  // Helper: apply a saved view to the xeokit viewer
+  const applySavedView = useCallback((viewer: any, detail: LoadSavedViewDetail) => {
+    if (!viewer?.camera) return;
+    console.log('[NativeViewerShell] Applying saved view:', detail.viewId);
+    viewer.camera.eye = detail.cameraEye;
+    viewer.camera.look = detail.cameraLook;
+    viewer.camera.up = detail.cameraUp;
+    viewer.camera.projection = detail.cameraProjection || 'perspective';
+    // Dispatch view mode if specified
+    if (detail.viewMode) {
+      window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: detail.viewMode } }));
+    }
+  }, []);
 
   // Object move/delete mode hook
   useObjectMoveMode(xeokitViewer, buildingFmGuid);
