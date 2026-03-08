@@ -921,14 +921,16 @@ function MobileUnifiedViewer({
           {/* Bottom: 3D Model */}
           <div className="relative flex-1 min-h-0 overflow-hidden">
             {/* Label removed for cleaner mobile UI */}
-            <NativeViewerShell
-              buildingFmGuid={buildingData.fmGuid}
-              onClose={onGoBack}
-              hideBackButton
-              hideMobileOverlay
-              hideToolbar={!showViewerControls}
-              hideFloorSwitcher={!showViewerControls}
-            />
+            <div className="h-full w-full">
+              <NativeViewerShell
+                buildingFmGuid={buildingData.fmGuid}
+                onClose={onGoBack}
+                hideBackButton
+                hideMobileOverlay
+                hideToolbar={!showViewerControls}
+                hideFloorSwitcher={!showViewerControls}
+              />
+            </div>
           </div>
 
           {/* 3-dot menu to toggle toolbar/floor-switcher — bottom-right */}
