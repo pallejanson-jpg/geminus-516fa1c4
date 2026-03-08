@@ -32,6 +32,10 @@ interface NativeViewerShellProps {
   hideBackButton?: boolean;
   /** Hide the mobile overlay (mode switcher, filter, settings) when parent provides its own */
   hideMobileOverlay?: boolean;
+  /** Hide the bottom toolbar (used in split-screen compact mode) */
+  hideToolbar?: boolean;
+  /** Hide the floating floor switcher (used when parent shows its own) */
+  hideFloorSwitcher?: boolean;
 }
 
 const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, onClose, hideBackButton = false, hideMobileOverlay = false }) => {
