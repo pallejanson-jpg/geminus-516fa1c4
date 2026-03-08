@@ -1242,6 +1242,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     });
                     setIsSyncingAssets(false);
                     await checkSyncStatus();
+                    // Auto-extract technical systems from synced attributes
+                    handleAutoSyncSystems();
                 }
             } catch (error: any) {
                 console.error('Asset sync exception:', error);
