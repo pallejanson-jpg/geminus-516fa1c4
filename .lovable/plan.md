@@ -1,125 +1,92 @@
 
 
-## Plan: System Support + Reconciliation Engine (IMPLEMENTED)
+## Djupanalys: 3D Viewer Prestanda & Roadmap mot Dalux-nivå
 
-### Database tables created
-1. **`asset_external_ids`** — Maps external IDs (IFC GUID, ACC externalId, Revit UniqueId) to stable `fm_guid` for cross-source reconciliation
-2. **`systems`** — Technical systems (e.g., LB01 Supply Air) with `fm_guid`, `discipline`, `system_type`, `building_fm_guid`, hierarchical `parent_system_id`
-3. **`asset_system`** — Many-to-many relation between assets and systems with optional `role`
-4. **`asset_connections`** — Topology/flow between assets (`from_fm_guid` → `to_fm_guid`) with `connection_type` and `direction`
+### Nuläge
 
-All tables have RLS: authenticated read, admin write. Indexes on common query patterns.
+**Motor:** xeokit SDK med XKTLoaderPlugin. Modeller lagras som XKT-binärer i Supabase Storage.
 
-### Edge function changes
-1. **`ifc-to-xkt/index.ts`** — Extended with system extraction:
-   - Identifies `IfcSystem` / `IfcDistributionSystem` meta objects
-   - Falls back to `SystemName` property grouping
-   - Extracts `IfcRelConnects*` for topology → `asset_connections`
-   - Stores all object IDs in `asset_external_ids`
-   - Persists systems, asset-system links, and connections in batches
+**Mobil touch-navigering:** Redan justerat (`dollyRate: 10`, `panRate: 0.3`, `touchDollyRate: 0.15`, `touchPanRate: 0.3`, `rotationInertia: 0.7`) men **saknar `dragRotateRate`** — den viktigaste parametern för att bromsa rotationshastigheten vid touch-svep. Dalux-känslan kräver lägre `dragRotateRate` (ca 80-120, default ~360).
 
-2. **`acc-sync/index.ts`** — Extended with system support:
-   - Resolves `System Name`, `System Type`, `System Classification`, `System Abbreviation` property fields
-   - Groups instances by `SystemName` → auto-creates `systems` + `asset_system` rows
-   - Stores ACC `externalId` mappings in `asset_external_ids` for all levels, rooms, instances
-   - Infers discipline from system name (Ventilation, Heating, Cooling, Electrical, Plumbing, FireProtection)
+**Mobil modell-begränsning:** Hård spärr: om >3 modeller laddas bara A-modeller. Sekundära modeller (brand, el, VVS) laddas aldrig.
 
-### System activation for existing buildings
-- **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
-- **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
-- **Asset+-byggnader**: Kör `sync-systems` action via `asset-plus-sync` edge function → extraherar system från befintliga attribut (IMPLEMENTERAT)
-
-### Frontend (future phase)
-- System tab on FacilityLandingPage
-- System badge on asset property dialogs
-- Manual system creation dialog
+**Dalux referens:** Hanterar 1M+ objekt, stödjer IFC nativt, använder eget binärt format (troligen liknande xeokits "SceneModel geometry batching"), split-per-storey, och progressiv streaming.
 
 ---
 
-## Plan: Viewer Color Fix (IMPLEMENTED)
+### Åtgärdsplan
 
-### Changes made:
-1. **Window color** — Changed from blue-gray `[0.392, 0.490, 0.541]` (#647D8A) to neutral warm gray `[0.780, 0.780, 0.760]` (#C7C7C2) in:
-   - `src/lib/architect-colors.ts`
-   - `src/hooks/useArchitectViewMode.ts`
-   - Database `viewer_themes` table (both "Arkitektvy" and "Standard" themes)
-   - `ViewerFilterPanel.tsx` category palette
+#### LÄTT (1-2h vardera)
 
-2. **Space color** — Verified as correct neutral gray `[0.898, 0.894, 0.890]` (#E5E4E3). Changed category palette in ViewerFilterPanel from blue to neutral.
+**1. Sänk touch-rotationshastighet ytterligare**
+- I `NativeXeokitViewer.tsx` rad ~127-134, lägg till:
+  - `cc.dragRotateRate = 100` (default 360 — detta är huvudproblemet)
+  - `cc.touchPanRate = 0.2` (ner från 0.3)
+  - `cc.rotationInertia = 0.85` (mer tröghet = lugnare stopp)
+- Effekt: Omedelbart Dalux-liknande känsla på mobil
 
-3. **Background** — Already correct gray gradient in NativeViewerShell.
+**2. Ta bort hård mobilspärr — lägg till lazy loading av sekundära modeller**
+- I `NativeXeokitViewer.tsx` rad 364-373: Istället för att trunkera `loadList`, ladda A-modeller först, sätt `phase: 'ready'`, sedan ladda sekundära modeller i bakgrunden via `requestIdleCallback`
+- Logik: Arch-modeller → viewer ready → event dispatched → efter 2s börja ladda brand/el/VVS sekventiellt (CONCURRENT=1)
+- Användaren ser modellen direkt, resterande discipliner "rinner in" successivt
 
-4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
+**3. Aktivera LOD-culling även på mobil (med lägre tröskel)**
+- I `usePerformancePlugins.ts` rad 114: Ta bort `!isMobile`-villkoret
+- Sätt `LOD_FAR_DISTANCE = 30` på mobil (istället för 50)
+- Effekt: Färre objekt renderas → bättre FPS
 
-5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
+**4. Justera FastNav mer aggressivt på mobil**
+- `scaleCanvasResolutionFactor: 0.35` (ner från 0.5) under kamerarörelse
+- Effekt: Märkbart snabbare orbit/pan på svagare enheter
+
+#### MEDEL (4-8h vardera)
+
+**5. XKT split-per-storey vid konvertering**
+- xeokit rekommenderar officiellt att dela IFC → flera XKT (20MB chunks) via manifest
+- Implementera i `ifc-to-xkt`: efter IFC→XKT-konvertering, splitta output per `IfcBuildingStorey`
+- Lagra varje chunk som separat rad i `xkt_models` med `storey_fm_guid`
+- Viewer laddar bara synligt våningsplan + angränsande, övriga cullas
+- Effekt: 60-80% minnesreduktion, möjliggör tunga byggnader på mobil
+
+**6. Progressiv streaming med manifest**
+- `XKTLoaderPlugin` stödjer `manifestSrc` — ladda en JSON-manifest som pekar ut alla chunks
+- Generera manifest vid konvertering, ladda via en signerad URL
+- Chunks laddas i prioritetsordning (valt våningsplan först)
+
+**7. Preload sekundära modeller i bakgrunden**
+- `useXktPreload` laddar idag bara A-modeller (`secondaryModels = []` rad 215)
+- Lägg till en fas 2 som triggas av `requestIdleCallback` efter A-modeller: hämta brand/el/VVS-binärer till `xktMemoryCache`
+- När användaren öppnar viewern finns sekundärdata redan i minnet
+
+#### SVÅRT (1-3 dagar vardera)
+
+**8. Eget komprimerat binärformat (som Asset+ gör)**
+- Asset+ konverterar XKT → eget binärt format med bättre geometri-batching och quantization
+- Alternativ: Använd xeokits `SceneModel` API för att generera batched geometry offline
+- Konverteringskedja: IFC → glTF → batched binary (serverside via edge function)
+- Effekt: Potentiellt 2-5x snabbare laddning, mindre filstorlekar
+
+**9. WebWorker-baserad dekompression**
+- Flytta XKT-dekompression (pako inflate) till en Web Worker
+- Main thread förblir responsiv under laddning
+- Kräver modifiering av XKTLoaderPlugin eller en wrapper
+
+**10. GPU instancing för repetitiva objekt**
+- xeokit stödjer instanced geometry (`createGeometry` + `createMesh` med `geometryId`)
+- Identifiera repetitiva IFC-typer (dörrar, fönster, armaturer) vid konvertering
+- Lagra en geometri + N transformmatriser istället för N kopior
+- Effekt: Dramatisk minnesreduktion för modeller med mycket upprepning
 
 ---
 
-## Plan: IFC System-Only Import (IMPLEMENTED - Phase 1)
+### Rekommenderad prioritetsordning
 
-### What was built
-1. **`ifc-extract-systems` edge function** — New lightweight edge function that:
-   - Downloads IFC from `ifc-uploads` bucket
-   - Parses metadata via `web-ifc` + `xeokit-convert` (same pipeline as `ifc-to-xkt`)
-   - Extracts systems (`IfcSystem`, `IfcDistributionSystem`, `SystemName` property grouping)
-   - Extracts connections (`IfcRelConnects*`)
-   - Reconciles IFC GUIDs with existing assets (3-step: exact match → name match → identity)
-   - Persists to `systems`, `asset_system`, `asset_connections`, `asset_external_ids`
-   - **Skips XKT generation** — much faster (~10-15s vs minutes)
-   - Supports 3 modes: `systems-only` (default), `enrich-guids` (future), `full` (delegates to `ifc-to-xkt`)
+```text
+Fas 1 (nu):    #1 Touch-rates   +  #2 Lazy-load sekundärmodeller  +  #3 Mobil LOD
+Fas 2 (vecka):  #5 XKT split-per-storey  +  #7 Preload sekundärmodeller  
+Fas 3 (månad): #8 Binärformat  +  #9 WebWorker  +  #10 Instancing
+```
 
-2. **UI in ApiSettingsModal** — "From IFC" button on the Technical Systems card:
-   - Building selector dropdown
-   - IFC file upload
-   - Mode radio: "Only systems (fast)" / "Systems + FMGUIDs (coming soon)" / "Full conversion"
-   - Progress tracking and result display
+### Sammanfattning
+Punkt #1 (dragRotateRate) och #2 (lazy loading) löser dina två mest akuta problem: för snabb touch-navigering och att sekundära modeller inte laddas alls på mobil. Dessa kan implementeras direkt.
 
-### Still to implement
-- **`enrich-guids` mode** — FMGUID generation + IFC write-back via `web-ifc` property injection
-- **IFC archive** — Store enriched IFC in `ifc-uploads/{buildingFmGuid}/enriched/`
-- **ACC `enrich-guids` action** — Deterministic GUID generation for ACC-sourced models
-
----
-
-## Plan: Remove Separate Technical Systems UI (IMPLEMENTED)
-
-### Changes made
-1. **Removed standalone Technical Systems UI** from `ApiSettingsModal.tsx` Sync tab:
-   - Removed `SyncProgressCard` for Technical Systems
-   - Removed IFC System Import panel (file upload, building selector, mode radio)
-   - Removed state variables: `isSyncingSystems`, `systemSyncResult`, `ifcSystemFile`, `ifcSystemBuildingGuid`, `ifcSystemMode`, `isImportingIfcSystems`, `ifcSystemImportResult`, `ifcSystemBuildings`, `showIfcSystemImport`
-   - Removed `handleSyncSystems` and `handleImportIfcSystems` functions
-   - Added lightweight system count display in the sync status section
-
-2. **Auto-trigger system sync** after existing flows:
-   - After Asset+ asset sync completes → calls `sync-systems` automatically
-   - After ACC BIM sync completes → calls `sync-systems` automatically
-   - IFC flow already extracts systems in `ifc-to-xkt` edge function (no change needed)
-
-3. **System count** shown inline in sync status when systems exist (no separate card)
-
----
-
-## Plan: Move & Delete Objects in 3D Viewer (IMPLEMENTED - Phase 1)
-
-### Database changes
-- Added columns to `assets`: `modification_status` (text), `moved_offset_x/y/z` (numeric), `original_room_fm_guid` (text), `modification_date` (timestamptz)
-- Partial index on `modification_status WHERE NOT NULL`
-
-### Viewer changes
-1. **`entityOffsetsEnabled: true`** in `NativeXeokitViewer.tsx` Viewer constructor
-2. **`useObjectMoveMode` hook** — drag-move logic with:
-   - World-space pick-surface delta calculation
-   - AABB-based room detection at new position
-   - Persists offset + `modification_status = 'moved'` + room changes to DB
-   - Applies saved offsets & hides deleted entities on model load
-   - ESC to cancel move
-3. **Context menu** — Added "Flytta objekt", "Ta bort objekt", "Markera" (select fix)
-4. **Filter panel** — New "Ändringar" section with toggles:
-   - "Visa flyttade objekt" → orange colorization (`[1, 0.6, 0.1]`)
-   - "Visa borttagna objekt" → red colorization (`[1, 0.2, 0.2]`), makes hidden deleted objects visible
-
-### Still to implement
-- **Rapport-export** — CSV export of all modified assets from Insights/Asset tab
-- **Asset+ sync reset** — Clear `modification_status` when `source_updated_at` changes in `asset-plus-sync`
-- **ContextMenuSettings panel** — Wire new items visibility to settings toggles
