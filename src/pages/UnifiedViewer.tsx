@@ -1037,12 +1037,11 @@ function MobileUnifiedViewer({
 
           {/* Mobile mode switcher + back button for non-split modes */}
           <div
-            className="absolute top-0 left-0 right-0 z-40 flex items-center justify-between px-1.5 py-1"
+            className="absolute top-0 left-0 right-0 z-40 flex items-center justify-between px-1.5 py-1 pointer-events-none"
             style={{
               paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4px)',
               paddingLeft: 'max(env(safe-area-inset-left, 0px), 6px)',
               paddingRight: 'max(env(safe-area-inset-right, 0px), 6px)',
-              background: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent)',
             }}
           >
             <Button
