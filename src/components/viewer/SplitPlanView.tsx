@@ -37,6 +37,9 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   const clickStartRef = useRef<{ x: number; y: number } | null>(null);
   const storeyMapRef = useRef<any>(null);
   const pluginRef = useRef<any>(null);
+  const selectedFloorRef = useRef<{ floorId: string | null; floorFmGuid: string | null }>({ floorId: null, floorFmGuid: null });
+
+  const normalizeGuidKey = (value?: string | null) => (value || '').toLowerCase().replace(/-/g, '');
 
   const getXeokitViewer = useCallback(() => {
     try {
