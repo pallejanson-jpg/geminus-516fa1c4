@@ -753,7 +753,7 @@ function MobileUnifiedViewer({
   sdkContainerRef, transform,
   handle3DCameraChange, sync3DPosition, sync3DHeading, sync3DPitch,
   hasIvion, hasFmAccess, floorFmGuid, floorName, entityFmGuid, visualizationParam, insightsMode, forceXray, onGoBack,
-  viewerInstanceRef, viewerReady,
+  viewerInstanceRef, viewerReady, insightsPanelOpen, setInsightsPanelOpen,
 }: {
   buildingData: NonNullable<ReturnType<typeof useBuildingViewerData>['buildingData']>;
   viewMode: ViewMode;
@@ -777,6 +777,8 @@ function MobileUnifiedViewer({
   onGoBack: () => void;
   viewerInstanceRef: React.MutableRefObject<any>;
   viewerReady: boolean;
+  insightsPanelOpen: boolean;
+  setInsightsPanelOpen: (v: boolean) => void;
 }) {
   const isSplit = viewMode === 'split2d3d';
   const activePanel = viewMode === '360' || viewMode === 'vt' ? '360' : '3d';
