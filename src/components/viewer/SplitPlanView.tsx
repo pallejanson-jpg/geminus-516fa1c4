@@ -124,8 +124,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         if (storeyKeys.length === 0) {
           console.debug('[SplitPlanView] Plugin has 0 storeys, retrying...');
           try { plugin.destroy?.(); } catch {}
-          if (initAttemptRef.current++ < 60) {
-            retryTimer = setTimeout(tryInit, 1000);
+          if (initAttemptRef.current++ < 20) {
+            retryTimer = setTimeout(tryInit, 200);
           }
           return;
         }
