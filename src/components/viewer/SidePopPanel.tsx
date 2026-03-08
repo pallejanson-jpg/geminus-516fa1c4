@@ -56,39 +56,42 @@ const SidePopPanel: React.FC<SidePopPanelProps> = ({
       };
 
   return (
-    <div
-      className={cn(
-        "fixed z-[61] border rounded-lg shadow-lg",
-        // Semi-transparent frosted glass effect - even more transparent than main panel
-        "bg-card/65 backdrop-blur-md",
-        "animate-in fade-in-0 slide-in-from-right-2 duration-200",
-        showOnLeft && "slide-in-from-left-2",
-        className
-      )}
-      style={{ 
-        left: position.left, 
-        top: position.top,
-        width: panelWidth,
-      }}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between p-2 border-b border-border/50">
-        <span className="text-xs font-medium">{title}</span>
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          className="h-5 w-5 hover:bg-muted/50" 
-          onClick={onClose}
-        >
-          <X className="h-3 w-3" />
-        </Button>
+    <>
+      {/* Backdrop — click to close */}
+      <div className="fixed inset-0 z-[60]" onClick={onClose} />
+      <div
+        className={cn(
+          "fixed z-[61] border rounded-lg shadow-lg",
+          "bg-card/65 backdrop-blur-md",
+          "animate-in fade-in-0 slide-in-from-right-2 duration-200",
+          showOnLeft && "slide-in-from-left-2",
+          className
+        )}
+        style={{ 
+          left: position.left, 
+          top: position.top,
+          width: panelWidth,
+        }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-2 border-b border-border/50">
+          <span className="text-xs font-medium">{title}</span>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-5 w-5 hover:bg-muted/50" 
+            onClick={onClose}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        </div>
+        
+        {/* Content */}
+        <div className="p-2 max-h-[50vh] overflow-y-auto">
+          {children}
+        </div>
       </div>
-      
-      {/* Content */}
-      <div className="p-2 max-h-[50vh] overflow-y-auto">
-        {children}
-      </div>
-    </div>
+    </>
   );
 };
 
