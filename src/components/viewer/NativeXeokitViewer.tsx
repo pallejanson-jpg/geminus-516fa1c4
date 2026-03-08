@@ -451,10 +451,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       }
       await Promise.allSettled(Array.from(active));
 
-      // 5. Fit camera to scene
+      // 5. Camera: NO auto-fit/flyTo — only saved start view (dispatched via LOAD_SAVED_VIEW_EVENT) applies.
       if (mountedRef.current && viewer.scene) {
-        viewer.cameraFlight.flyTo({ aabb: viewer.scene.aabb, duration: 0.5 });
-
         // Enable SAO after load
         if (viewer.scene.sao) {
           viewer.scene.sao.enabled = true;

@@ -238,6 +238,12 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     // Expose globally so UnifiedViewer, SplitPlanView, and sync hooks can find it
     (window as any).__assetPlusViewerInstance = viewerShimRef.current;
     (window as any).__nativeXeokitViewer = viewer;
+
+    // Apply any pending LOAD_SAVED_VIEW that arrived before viewer was ready
+    if (pendingSavedViewRef.current) {
+      applySavedView(viewer, pendingSavedViewRef.current);
+      pendingSavedViewRef.current = null;
+    }
   }, []);
 
   // Clean up global refs on unmount
