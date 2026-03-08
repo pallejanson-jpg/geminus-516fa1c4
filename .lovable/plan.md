@@ -1,125 +1,73 @@
 
+Mål: stabilisera 2D/3D split, få tillbaka korrekt 2D→3D navigation, visa mini-våningsväljare, förbättra menyresponsivitet/close-beteende, göra avdelaren tunn+draggable och ta bort 20s låsning i ren 2D.
 
-## Plan: System Support + Reconciliation Engine (IMPLEMENTED)
+1) Snabb logganalys + sannolik kraschorsak
+- Jag ser inga fångade console/network-fel i snapshot, vilket tyder på logisk loop/prestandalåsning snarare än ett tydligt exception.
+- Kritisk kodorsak i `SplitPlanView`: `generateMap()` dispatchar `FLOOR_SELECTION_CHANGED_EVENT`, samtidigt lyssnar samma komponent på samma event och triggar ny `generateMap()` igen. Det kan ge kontinuerlig regenerering (hög CPU/låsning/kraschkänsla).
 
-### Database tables created
-1. **`asset_external_ids`** — Maps external IDs (IFC GUID, ACC externalId, Revit UniqueId) to stable `fm_guid` for cross-source reconciliation
-2. **`systems`** — Technical systems (e.g., LB01 Supply Air) with `fm_guid`, `discipline`, `system_type`, `building_fm_guid`, hierarchical `parent_system_id`
-3. **`asset_system`** — Many-to-many relation between assets and systems with optional `role`
-4. **`asset_connections`** — Topology/flow between assets (`from_fm_guid` → `to_fm_guid`) with `connection_type` and `direction`
+2) Stabilisering av SplitPlanView (huvudfix)
+Fil: `src/components/viewer/SplitPlanView.tsx`
+- Bryt event-loop:
+  - Lägg `source` i event-detail (t.ex. `source: 'split-plan'`) och ignorera egna events i `floorHandler`.
+  - Dispatcha floor-sync endast när våning faktiskt ändrats (last-dispatched guard).
+- Fix 2D→3D-kamera (behåll riktning men korrekt position):
+  - Fortsätt bevara heading, men clampa avstånd/y-offset (annars kan eye hamna långt utanför byggnaden).
+  - Sätt `look` till klickpunkt, `eye` bakom look med begränsad distans.
+  - Fallback om `storeyMapToWorldPos` misslyckas: använd aktivt storey-AABB (inte globalt scene-AABB).
+- Fix kameramarkör i 2D:
+  - Beräkna markörposition från `camera.look` (inte `camera.eye`) så markören visar faktisk målpunkt i rummet.
+  - Använd `plugin.worldPosToStoreyMap()` i stället för manuell AABB-normalisering.
+  - Clampa till bildens bounds så markör aldrig “försvinner”.
+- Mini-våningsväljare:
+  - Visa även när `useFloorData` är tom genom fallback till `plugin.storeys`.
+  - Säkerställ att `selectedFloorId` alltid matchar options (ingen “tom value”-situation).
+- Dalux-likare 2D-grafik:
+  - Fintuning av text/linjer i snapshot-läget (mörkare linjer, mindre labels med vit halo).
+  - Aktivt rum: lägg grön semitransparent highlight-overlay för valt/pickat rum.
 
-All tables have RLS: authenticated read, admin write. Indexes on common query patterns.
+3) Robust våningsdata så dropdown alltid dyker upp
+Fil: `src/hooks/useFloorData.ts`
+- Lägg global viewer-fallback (`window.__nativeXeokitViewer`) i accessor.
+- Byt “hård timeout efter 20 polls” till event-driven refresh på `VIEWER_MODELS_LOADED` + fortsatt lätt polling tills viewer finns.
+- Detta löser fall där floors aldrig hinner laddas i split.
 
-### Edge function changes
-1. **`ifc-to-xkt/index.ts`** — Extended with system extraction:
-   - Identifies `IfcSystem` / `IfcDistributionSystem` meta objects
-   - Falls back to `SystemName` property grouping
-   - Extracts `IfcRelConnects*` for topology → `asset_connections`
-   - Stores all object IDs in `asset_external_ids`
-   - Persists systems, asset-system links, and connections in batches
+4) Menyer i split: bättre responsivitet + stäng med X och utanför
+Filer:
+- `src/components/viewer/VisualizationToolbar.tsx`
+- `src/components/viewer/ViewerFilterPanel.tsx`
+- `src/components/viewer/SidePopPanel.tsx`
+- `src/components/viewer/FloatingIssueListPanel.tsx`
+- `src/components/viewer/NativeViewerShell.tsx`
+- `src/pages/UnifiedViewer.tsx`
+Plan:
+- Inför “embedded split mode” för paneler (absolute inom 3D-panelen) istället för global `fixed` viewport-position.
+- Lägg semitransparent backdrop bakom paneler och stäng på backdrop-click.
+- Behåll X-knappstängning.
+- Resultat: hela panelen inkl. kryss blir synlig i split och går alltid att stänga.
 
-2. **`acc-sync/index.ts`** — Extended with system support:
-   - Resolves `System Name`, `System Type`, `System Classification`, `System Abbreviation` property fields
-   - Groups instances by `SystemName` → auto-creates `systems` + `asset_system` rows
-   - Stores ACC `externalId` mappings in `asset_external_ids` for all levels, rooms, instances
-   - Infers discipline from system name (Ventilation, Heating, Cooling, Electrical, Plumbing, FireProtection)
+5) Avdelare mellan 2D/3D: tunnare och dragbar
+Fil: `src/pages/UnifiedViewer.tsx`
+- Desktop split2d3d: gör ratio dragbar (inte statisk 40/60).
+- Mobil: minska visuell tjocklek (t.ex. 8–10px) men behåll större touch-hitbox.
+- Lägg pointer+touch-drag så det fungerar både mus och touch.
 
-### System activation for existing buildings
-- **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
-- **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
-- **Asset+-byggnader**: Kör `sync-systems` action via `asset-plus-sync` edge function → extraherar system från befintliga attribut (IMPLEMENTERAT)
+6) Ren 2D mode låser ~20s: prestandafix
+Fil: `src/components/viewer/ViewerToolbar.tsx`
+- Gör mode-switch idempotent (ignorera upprepade “gå till 2D” när redan i 2D).
+- Lägg transition-lock så tung 2D-setup inte kör parallellt flera gånger.
+- Cachea typ-grupperade entity-listor vid modell-laddning och återanvänd vid 2D-styling (undvik full scan varje gång).
+- Detta reducerar frysetider kraftigt och tar bort multipla tunga pass.
 
-### Frontend (future phase)
-- System tab on FacilityLandingPage
-- System badge on asset property dialogs
-- Manual system creation dialog
-
----
-
-## Plan: Viewer Color Fix (IMPLEMENTED)
-
-### Changes made:
-1. **Window color** — Changed from blue-gray `[0.392, 0.490, 0.541]` (#647D8A) to neutral warm gray `[0.780, 0.780, 0.760]` (#C7C7C2) in:
-   - `src/lib/architect-colors.ts`
-   - `src/hooks/useArchitectViewMode.ts`
-   - Database `viewer_themes` table (both "Arkitektvy" and "Standard" themes)
-   - `ViewerFilterPanel.tsx` category palette
-
-2. **Space color** — Verified as correct neutral gray `[0.898, 0.894, 0.890]` (#E5E4E3). Changed category palette in ViewerFilterPanel from blue to neutral.
-
-3. **Background** — Already correct gray gradient in NativeViewerShell.
-
-4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
-
-5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
-
----
-
-## Plan: IFC System-Only Import (IMPLEMENTED - Phase 1)
-
-### What was built
-1. **`ifc-extract-systems` edge function** — New lightweight edge function that:
-   - Downloads IFC from `ifc-uploads` bucket
-   - Parses metadata via `web-ifc` + `xeokit-convert` (same pipeline as `ifc-to-xkt`)
-   - Extracts systems (`IfcSystem`, `IfcDistributionSystem`, `SystemName` property grouping)
-   - Extracts connections (`IfcRelConnects*`)
-   - Reconciles IFC GUIDs with existing assets (3-step: exact match → name match → identity)
-   - Persists to `systems`, `asset_system`, `asset_connections`, `asset_external_ids`
-   - **Skips XKT generation** — much faster (~10-15s vs minutes)
-   - Supports 3 modes: `systems-only` (default), `enrich-guids` (future), `full` (delegates to `ifc-to-xkt`)
-
-2. **UI in ApiSettingsModal** — "From IFC" button on the Technical Systems card:
-   - Building selector dropdown
-   - IFC file upload
-   - Mode radio: "Only systems (fast)" / "Systems + FMGUIDs (coming soon)" / "Full conversion"
-   - Progress tracking and result display
-
-### Still to implement
-- **`enrich-guids` mode** — FMGUID generation + IFC write-back via `web-ifc` property injection
-- **IFC archive** — Store enriched IFC in `ifc-uploads/{buildingFmGuid}/enriched/`
-- **ACC `enrich-guids` action** — Deterministic GUID generation for ACC-sourced models
-
----
-
-## Plan: Remove Separate Technical Systems UI (IMPLEMENTED)
-
-### Changes made
-1. **Removed standalone Technical Systems UI** from `ApiSettingsModal.tsx` Sync tab:
-   - Removed `SyncProgressCard` for Technical Systems
-   - Removed IFC System Import panel (file upload, building selector, mode radio)
-   - Removed state variables: `isSyncingSystems`, `systemSyncResult`, `ifcSystemFile`, `ifcSystemBuildingGuid`, `ifcSystemMode`, `isImportingIfcSystems`, `ifcSystemImportResult`, `ifcSystemBuildings`, `showIfcSystemImport`
-   - Removed `handleSyncSystems` and `handleImportIfcSystems` functions
-   - Added lightweight system count display in the sync status section
-
-2. **Auto-trigger system sync** after existing flows:
-   - After Asset+ asset sync completes → calls `sync-systems` automatically
-   - After ACC BIM sync completes → calls `sync-systems` automatically
-   - IFC flow already extracts systems in `ifc-to-xkt` edge function (no change needed)
-
-3. **System count** shown inline in sync status when systems exist (no separate card)
-
----
-
-## Plan: Move & Delete Objects in 3D Viewer (IMPLEMENTED - Phase 1)
-
-### Database changes
-- Added columns to `assets`: `modification_status` (text), `moved_offset_x/y/z` (numeric), `original_room_fm_guid` (text), `modification_date` (timestamptz)
-- Partial index on `modification_status WHERE NOT NULL`
-
-### Viewer changes
-1. **`entityOffsetsEnabled: true`** in `NativeXeokitViewer.tsx` Viewer constructor
-2. **`useObjectMoveMode` hook** — drag-move logic with:
-   - World-space pick-surface delta calculation
-   - AABB-based room detection at new position
-   - Persists offset + `modification_status = 'moved'` + room changes to DB
-   - Applies saved offsets & hides deleted entities on model load
-   - ESC to cancel move
-3. **Context menu** — Added "Flytta objekt", "Ta bort objekt", "Markera" (select fix)
-4. **Filter panel** — New "Ändringar" section with toggles:
-   - "Visa flyttade objekt" → orange colorization (`[1, 0.6, 0.1]`)
-   - "Visa borttagna objekt" → red colorization (`[1, 0.2, 0.2]`), makes hidden deleted objects visible
-
-### Still to implement
-- **Rapport-export** — CSV export of all modified assets from Insights/Asset tab
-- **Asset+ sync reset** — Clear `modification_status` when `source_updated_at` changes in `asset-plus-sync`
-- **ContextMenuSettings panel** — Wire new items visibility to settings toggles
+7) Verifiering (efter implementation)
+- Split 2D/3D:
+  - 2D-klick ska flytta 3D konsekvent varje gång till rätt rum/position.
+  - Kameramarkör ska alltid synas och följa.
+  - Mini-våningsväljare ska synas och byta plan.
+- Menyer:
+  - Kryss synligt.
+  - Klick utanför stänger panel.
+  - Side-panels/issue-list inte klippta i split.
+- Divider:
+  - Tunn, dragbar, ratio ändras live.
+- Ren 2D:
+  - Växling ska inte låsa systemet i långa sekvenser.
