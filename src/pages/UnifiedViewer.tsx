@@ -909,13 +909,19 @@ function MobileUnifiedViewer({
             />
           </div>
 
-          {/* Draggable divider */}
+          {/* Draggable divider with grip handle */}
           <div
-            className="relative z-30 flex items-center justify-center touch-none select-none"
-            style={{ height: '4px', cursor: 'row-resize' }}
+            className="relative z-30 flex items-center justify-center touch-none select-none bg-border"
+            style={{ height: '8px', cursor: 'row-resize' }}
             onTouchStart={handleTouchStart}
           >
-            <div className="h-0.5 w-6 rounded-full bg-muted-foreground/30" />
+            <div className="flex items-center justify-center h-4 w-8 rounded-full bg-muted border border-border shadow-sm">
+              <div className="flex gap-0.5">
+                <div className="h-2.5 w-0.5 rounded-full bg-muted-foreground/40" />
+                <div className="h-2.5 w-0.5 rounded-full bg-muted-foreground/40" />
+                <div className="h-2.5 w-0.5 rounded-full bg-muted-foreground/40" />
+              </div>
+            </div>
           </div>
 
           {/* Bottom: 3D Model */}

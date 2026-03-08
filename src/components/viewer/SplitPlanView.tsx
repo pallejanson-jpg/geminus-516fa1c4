@@ -67,15 +67,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
   const { floors } = useFloorData(viewerRef, buildingFmGuid);
 
-  // Use shared floor source of truth (same method as other viewer floor selectors)
-  const effectiveFloors = floors;
-
-  const resolveFloorFromStoreyId = useCallback((storeyId: string) => {
-    return effectiveFloors.find(
-      (floor) => floor.id === storeyId || floor.metaObjectIds.includes(storeyId)
-    ) ?? null;
-  }, [effectiveFloors]);
-
   const normalizeGuidKey = useCallback((value?: string | null) => (value || '').toLowerCase().replace(/-/g, ''), []);
 
   const getXeokitViewer = useCallback(() => {
@@ -87,6 +78,33 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       return null;
     } catch { return null; }
   }, [viewerRef]);
+
+  // Plugin-based floors as immediate fallback (no DB wait)
+  const pluginFloors = React.useMemo(() => {
+    const plugin = pluginRef.current;
+    const viewer = getXeokitViewer();
+    if (!plugin?.storeys) return [];
+    let idx = 0;
+    return Object.entries(plugin.storeys).map(([id, storey]: [string, any]) => {
+      const mo = viewer?.metaScene?.metaObjects?.[id];
+      const rawName = mo?.name || (storey as any).storeyId || id;
+      const isGuid = /^[0-9A-Fa-f-]{30,}$/.test(rawName);
+      idx++;
+      const name = isGuid ? `Plan ${idx}` : rawName;
+      const shortMatch = name.match(/(\d+)/);
+      const shortName = shortMatch ? shortMatch[1] : name.substring(0, 10);
+      return { id, name, shortName, metaObjectIds: [id], databaseLevelFmGuids: [mo?.originalSystemId || id] };
+    });
+  }, [storeyPlugin, getXeokitViewer]);
+
+  // Prefer DB floors when available, fall back to plugin floors
+  const effectiveFloors = floors.length > 0 ? floors : pluginFloors;
+
+  const resolveFloorFromStoreyId = useCallback((storeyId: string) => {
+    return effectiveFloors.find(
+      (floor) => floor.id === storeyId || floor.metaObjectIds.includes(storeyId)
+    ) ?? null;
+  }, [effectiveFloors]);
 
   // Load SDK once
   useEffect(() => {
@@ -687,7 +705,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
     viewer.cameraFlight?.cancel?.();
 
-    // Simple MinimapPanel approach: eye directly above clicked point, keep current height
+    // Use storeyMapToWorldPos (same as working MinimapPanel)
     let worldPos: number[] | null = null;
 
     if (!usedFallbackRef.current && plugin) {
@@ -714,8 +732,20 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     }
 
     if (worldPos && viewer.cameraFlight) {
+      // Compute a sensible eye height: storey center Y + offset for first-person-like view
+      const storey = plugin?.storeys?.[map.storeyId];
+      const sAABB = storey?.storeyAABB;
+      let eyeY = viewer.camera.eye[1];
+      if (sAABB) {
+        const floorY = sAABB[1];
+        const ceilY = sAABB[4];
+        const floorHeight = ceilY - floorY;
+        // Place eye at floor level + 1.6m (eye height), clamped within storey
+        eyeY = floorY + Math.min(1.6, floorHeight * 0.6);
+      }
+
       viewer.cameraFlight.flyTo({
-        eye: [worldPos[0], viewer.camera.eye[1], worldPos[2]],
+        eye: [worldPos[0], eyeY, worldPos[2]],
         look: [worldPos[0], worldPos[1], worldPos[2]],
         up: [0, 1, 0],
         duration: 0.5,
