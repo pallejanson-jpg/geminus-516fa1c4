@@ -137,7 +137,17 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   const generateMap = useCallback(() => {
     const plugin = pluginRef.current;
     const viewer = getXeokitViewer();
-    if (!plugin || !viewer?.scene) return;
+    if (!plugin || !viewer?.scene) {
+      console.debug('[SplitPlanView] generateMap: no plugin or viewer');
+      return;
+    }
+
+    // Check if the plugin has any storeys registered
+    const storeyKeys = Object.keys(plugin.storeys || {});
+    if (storeyKeys.length === 0) {
+      console.debug('[SplitPlanView] No storeys registered in plugin yet, will retry');
+      return;
+    }
 
     const storeyId = findCurrentStoreyId();
     if (!storeyId) {
@@ -162,6 +172,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         }
       });
 
+      console.debug(`[SplitPlanView] Generating map for storey ${storeyId}, temporarily showing ${hiddenIds.length} hidden objects`);
+
       const map = plugin.createStoreyMap(storeyId, {
         width,
         format: 'png',
@@ -174,11 +186,13 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       });
 
       if (map?.imageData) {
+        console.debug('[SplitPlanView] Map generated successfully');
         setStoreyMap(map);
         storeyMapRef.current = map;
         setError(null);
         setIsLoading(false);
       } else {
+        console.warn('[SplitPlanView] createStoreyMap returned no imageData');
         setError('Could not generate plan');
       }
     } catch (e) {
@@ -195,9 +209,14 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const timeout = setTimeout(generateMap, 2000);
     const retry1 = setTimeout(generateMap, 4000);
     const retry2 = setTimeout(generateMap, 7000);
+    const retry3 = setTimeout(generateMap, 10000);
+    const retry4 = setTimeout(generateMap, 15000);
 
     // Also listen for VIEWER_MODELS_LOADED (fired by NativeXeokitViewer)
-    const modelsLoadedHandler = () => setTimeout(generateMap, 1000);
+    const modelsLoadedHandler = () => {
+      setTimeout(generateMap, 500);
+      setTimeout(generateMap, 2000);
+    };
     window.addEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
 
     const floorHandler = () => {
@@ -211,6 +230,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     if (viewer?.scene) {
       modelLoadedSub = viewer.scene.on('modelLoaded', () => {
         setTimeout(generateMap, 500);
+        setTimeout(generateMap, 2000);
       });
     }
 
@@ -219,6 +239,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       clearTimeout(timeout);
       clearTimeout(retry1);
       clearTimeout(retry2);
+      clearTimeout(retry3);
+      clearTimeout(retry4);
       window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, floorHandler);
       window.removeEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
       if (modelLoadedSub !== null && viewer?.scene) {
