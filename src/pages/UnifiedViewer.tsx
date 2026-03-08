@@ -661,9 +661,6 @@ const UnifiedViewerContent: React.FC<{
         {/* ── Split 2D/3D: SplitPlanView overlay on left side ── */}
         {isSplit2D3D && (
           <div className="absolute top-0 left-0 z-20 border-r border-border/50" style={{ width: '40%', height: '100%' }}>
-            <div className="absolute top-2 left-2 z-10 bg-card/80 backdrop-blur-sm text-foreground text-[10px] px-2 py-0.5 rounded border border-border/50">
-              2D Plan
-            </div>
             <SplitPlanView
               viewerRef={viewerInstanceRef}
               buildingFmGuid={buildingData.fmGuid}
