@@ -168,9 +168,12 @@ export function useSectionPlaneClipping(
 
   const getXeokitViewer = useCallback(() => {
     try {
-      return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      const v = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      if (v?.scene) return v;
+      // Fallback: use globally exposed viewer instance
+      return (window as any).__nativeXeokitViewer || null;
     } catch (e) {
-      return null;
+      return (window as any).__nativeXeokitViewer || null;
     }
   }, [viewerRef]);
 

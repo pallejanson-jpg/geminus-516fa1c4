@@ -112,8 +112,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       }));
 
       if (!viewer?.scene || !sdk?.StoreyViewsPlugin) {
-        if (initAttemptRef.current++ < 60) {
-          retryTimer = setTimeout(tryInit, 500);
+        if (initAttemptRef.current++ < 90) {
+          retryTimer = setTimeout(tryInit, 300);
         } else if (mounted) {
           const msg = !viewer?.scene ? 'Viewer not available' : 'SDK StoreyViewsPlugin missing';
           setError(msg);
