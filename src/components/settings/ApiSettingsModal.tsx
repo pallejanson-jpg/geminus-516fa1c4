@@ -3105,8 +3105,6 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 <span className="text-xs text-muted-foreground ml-auto">Synkas automatiskt med Asset+ / IFC</span>
                                             </div>
                                         )}
-                                            </div>
-                                        )}
 
                                         {syncCheck && (
                                             <div className="rounded-lg border bg-muted/30 p-3">
