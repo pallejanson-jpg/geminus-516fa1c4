@@ -1009,40 +1009,11 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         </div>
       )}
 
-      {/* Camera position overlay */}
-      {storeyMap && !imgError && cameraPos && imgRef.current && (
-        (() => {
-          const imgEl = imgRef.current;
-          const containerEl = containerRef.current;
-          if (!imgEl || !containerEl) return null;
-          const imgRect = imgEl.getBoundingClientRect();
-          const containerRect = containerEl.getBoundingClientRect();
-          const screenX = imgRect.left + (cameraPos.x / 100) * imgRect.width;
-          const screenY = imgRect.top + (cameraPos.y / 100) * imgRect.height;
-          const relX = screenX - containerRect.left;
-          const relY = screenY - containerRect.top;
-          return (
-            <div
-              className="absolute pointer-events-none z-10"
-              style={{ left: `${relX}px`, top: `${relY}px` }}
-            >
-              {/* FOV cone */}
-              <div
-                className="absolute -translate-x-1/2 -translate-y-1/2"
-                style={{
-                  width: 0, height: 0,
-                  borderLeft: '20px solid transparent',
-                  borderRight: '20px solid transparent',
-                  borderBottom: '35px solid hsl(var(--primary) / 0.15)',
-                  transform: `translate(-50%, -50%) rotate(${cameraPos.angle - Math.PI / 2}rad)`,
-                  transformOrigin: 'center bottom',
-                }}
-              />
-              {/* Camera dot */}
-              <div className="absolute w-3 h-3 rounded-full bg-primary border-2 border-primary-foreground shadow-lg -translate-x-1/2 -translate-y-1/2" />
-            </div>
-          );
-        })()
+      {/* Hovered entity tooltip */}
+      {hoveredEntity && (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 px-2 py-0.5 bg-card/90 backdrop-blur-sm rounded text-[10px] text-foreground border border-border shadow-sm pointer-events-none">
+          {hoveredEntity}
+        </div>
       )}
     </div>
   );
