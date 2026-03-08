@@ -130,17 +130,36 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       viewer.camera.up = [0, 1, 0];
       viewer.camera.projection = 'perspective';
 
-      // Slow down touch/mouse navigation for smoother control (Dalux-like feel)
+      // Slow down navigation for smoother control (extra aggressive on mobile one-finger)
       if (viewer.cameraControl) {
         const cc = viewer.cameraControl;
-        // Use correct xeokit CameraControl property names:
-        cc.dragRotationRate = 120;     // default 360 — critical for mobile touch rotation speed
-        cc.rotationInertia = 0.85;     // default 0 — high inertia for smoother orbiting stop
-        cc.touchPanRate = 0.3;         // default 1.0 — reduce finger pan speed
-        cc.panInertia = 0.7;           // default 0.5 — smooth pan stop
-        cc.touchDollyRate = 0.15;      // default 0.2 — pinch zoom speed
-        cc.mouseWheelDollyRate = 50;   // default 100 — slower scroll zoom
-        cc.keyboardDollyRate = 5;      // default 10
+        const navTuning = isMobile
+          ? {
+              dragRotationRate: 55,
+              rotationInertia: 0.9,
+              touchPanRate: 0.12,
+              panInertia: 0.82,
+              touchDollyRate: 0.08,
+              mouseWheelDollyRate: 35,
+              keyboardDollyRate: 4,
+            }
+          : {
+              dragRotationRate: 120,
+              rotationInertia: 0.85,
+              touchPanRate: 0.3,
+              panInertia: 0.7,
+              touchDollyRate: 0.15,
+              mouseWheelDollyRate: 50,
+              keyboardDollyRate: 5,
+            };
+
+        cc.dragRotationRate = navTuning.dragRotationRate;
+        cc.rotationInertia = navTuning.rotationInertia;
+        cc.touchPanRate = navTuning.touchPanRate;
+        cc.panInertia = navTuning.panInertia;
+        cc.touchDollyRate = navTuning.touchDollyRate;
+        cc.mouseWheelDollyRate = navTuning.mouseWheelDollyRate;
+        cc.keyboardDollyRate = navTuning.keyboardDollyRate;
       }
 
       // NavCube — load custom neutral-styled plugin via script tag
