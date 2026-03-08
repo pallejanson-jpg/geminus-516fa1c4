@@ -18,6 +18,7 @@ import {
   ArrowLeft, Layers, Move3D, Maximize2, Minimize2, Eye,
   RefreshCw, View, Box, Combine, SplitSquareHorizontal,
   Loader2, Square, BarChart2, LayoutPanelLeft, GripHorizontal,
+  MoreVertical,
 } from 'lucide-react';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { supabase } from '@/integrations/supabase/client';
