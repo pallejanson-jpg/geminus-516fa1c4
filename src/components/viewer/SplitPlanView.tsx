@@ -379,7 +379,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
           wallIds.push(id);
         }
       }
-      wallIdCacheRef.current.set(preferredStoreyId, wallIds);
+      wallIdCacheRef.current.set(wallCacheKey, wallIds);
     }
 
     // Apply black walls for high-contrast plan
