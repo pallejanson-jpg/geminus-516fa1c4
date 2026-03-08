@@ -92,7 +92,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     return () => { mounted = false; };
   }, [getXeokitViewer]);
 
-  // Find current storey ID based on visible floor
+  // Find current storey ID based on selected floor (preferred) or visible geometry fallback
   const findCurrentStoreyId = useCallback((): string | null => {
     const plugin = pluginRef.current;
     if (!plugin?.storeys) return null;
@@ -100,36 +100,53 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const storeyIds = Object.keys(plugin.storeys);
     if (storeyIds.length === 0) return null;
 
-    // Try to find the storey with the most visible objects
     const viewer = getXeokitViewer();
     if (!viewer?.scene) return storeyIds[0];
 
-    let bestId = storeyIds[0];
-    let bestCount = 0;
+    const metaObjects = viewer.metaScene?.metaObjects || {};
 
-    for (const id of storeyIds) {
-      const storey = plugin.storeys[id];
-      if (!storey) continue;
-      // Count visible objects in this storey's AABB range
-      const sAABB = storey.storeyAABB;
-      let count = 0;
-      const metaScene = viewer.metaScene;
-      if (metaScene?.metaObjects) {
-        for (const moId in metaScene.metaObjects) {
-          const mo = metaScene.metaObjects[moId];
-          if (mo?.type?.toLowerCase() !== 'ifcspace') continue;
-          const obj = viewer.scene.objects?.[mo.id];
-          if (!obj?.visible || !obj?.aabb) continue;
-          // Check if object's Y center is within storey Y range
-          const objYCenter = (obj.aabb[1] + obj.aabb[4]) / 2;
-          if (objYCenter >= sAABB[1] && objYCenter <= sAABB[4]) {
-            count++;
-          }
+    // 1) Use explicit selected floor from floor picker event when possible
+    const selectedFloorId = selectedFloorRef.current.floorId;
+    if (selectedFloorId && plugin.storeys[selectedFloorId]) {
+      return selectedFloorId;
+    }
+
+    const selectedFloorFmGuid = normalizeGuidKey(selectedFloorRef.current.floorFmGuid);
+    if (selectedFloorFmGuid) {
+      for (const storeyId of storeyIds) {
+        const mo = metaObjects[storeyId];
+        if (!mo) continue;
+        const storeyGuid = normalizeGuidKey(mo.originalSystemId || mo.id || '');
+        if (storeyGuid && storeyGuid === selectedFloorFmGuid) {
+          return storeyId;
         }
       }
-      if (count > bestCount) {
-        bestCount = count;
-        bestId = id;
+    }
+
+    // 2) Fallback: choose storey with most renderable descendants (not just IfcSpace)
+    let bestId = storeyIds[0];
+    let bestScore = -1;
+
+    const countDescendantObjects = (root: any): number => {
+      if (!root) return 0;
+      let count = 0;
+      const stack = [...(root.children || [])];
+      while (stack.length > 0) {
+        const node = stack.pop();
+        if (!node) continue;
+        if (viewer.scene.objects?.[node.id]) count++;
+        if (node.children?.length) stack.push(...node.children);
+      }
+      return count;
+    };
+
+    for (const storeyId of storeyIds) {
+      const mo = metaObjects[storeyId];
+      if (!mo) continue;
+      const descendantCount = countDescendantObjects(mo);
+      if (descendantCount > bestScore) {
+        bestScore = descendantCount;
+        bestId = storeyId;
       }
     }
 
