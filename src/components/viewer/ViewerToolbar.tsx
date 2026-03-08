@@ -538,6 +538,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     const scene = viewer.scene;
 
     setViewMode(mode);
+    if (mode === '2d') mode2dTransitionRef.current = true;
     window.dispatchEvent(new CustomEvent(VIEW_MODE_CHANGED_EVENT, { detail: { mode, floorId: currentFloorId } }));
 
     if (mode === '2d') {
