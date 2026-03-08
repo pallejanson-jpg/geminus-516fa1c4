@@ -498,6 +498,13 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const imgX = (e.clientX - rect.left) / rect.width * map.width;
     const imgY = (e.clientY - rect.top) / rect.height * map.height;
 
+    // Cancel any ongoing flight to ensure this click is honored
+    viewer.cameraFlight?.cancel?.();
+
+    // Fixed camera height (8m above floor) and 45° pitch offset
+    const HEIGHT_OFFSET = 8;
+    const PITCH_OFFSET = 6; // horizontal offset for ~45° angle
+
     // For fallback, compute world pos from scene AABB
     if (usedFallbackRef.current || !plugin) {
       const aabb = viewer.scene?.aabb;
@@ -506,23 +513,24 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const normZ = (e.clientY - rect.top) / rect.height;
       const worldX = aabb[0] + normX * (aabb[3] - aabb[0]);
       const worldZ = aabb[2] + normZ * (aabb[5] - aabb[2]);
-      const worldY = (aabb[1] + aabb[4]) / 2;
+      const floorY = aabb[1];
       viewer.cameraFlight?.flyTo({
-        eye: [worldX, viewer.camera.eye[1], worldZ],
-        look: [worldX, worldY, worldZ],
+        eye: [worldX + PITCH_OFFSET, floorY + HEIGHT_OFFSET, worldZ + PITCH_OFFSET],
+        look: [worldX, floorY, worldZ],
         up: [0, 1, 0],
-        duration: 0.8,
+        duration: 0,
       });
       return;
     }
 
     const worldPos = plugin.storeyMapToWorldPos(map, [imgX, imgY]);
     if (worldPos && viewer.cameraFlight) {
+      const floorY = worldPos[1];
       viewer.cameraFlight.flyTo({
-        eye: [worldPos[0], viewer.camera.eye[1], worldPos[2]],
-        look: [worldPos[0], worldPos[1], worldPos[2]],
+        eye: [worldPos[0] + PITCH_OFFSET, floorY + HEIGHT_OFFSET, worldPos[2] + PITCH_OFFSET],
+        look: [worldPos[0], floorY, worldPos[2]],
         up: [0, 1, 0],
-        duration: 0.8,
+        duration: 0,
       });
     }
   }, [getXeokitViewer]);
