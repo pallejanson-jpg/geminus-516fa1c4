@@ -277,16 +277,12 @@ const UnifiedViewerContent: React.FC<{
           }));
         }
       };
-      const t1 = setTimeout(dispatch2D, 1500);
-      const t2 = setTimeout(dispatch2D, 3000);
 
-      // Also listen for models loaded to re-dispatch
-      const modelsLoadedHandler = () => setTimeout(dispatch2D, 500);
+      // Only dispatch 2D mode after models are loaded — not on hardcoded timers
+      const modelsLoadedHandler = () => setTimeout(dispatch2D, 300);
       window.addEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
 
       return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
         window.removeEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
       };
     }

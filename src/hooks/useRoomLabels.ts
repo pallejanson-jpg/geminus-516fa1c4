@@ -415,8 +415,8 @@ export function useRoomLabels(
         position: absolute;
         left: 0;
         top: 0;
-        background: hsl(var(--background) / 0.6);
-        color: hsl(var(--foreground));
+        background: transparent;
+        color: #000;
         padding: 1px 3px;
         border-radius: 2px;
         font-size: ${config.fontSize}px;
@@ -426,8 +426,9 @@ export function useRoomLabels(
         white-space: nowrap;
         pointer-events: ${hasClickAction ? 'auto' : 'none'};
         cursor: ${hasClickAction ? 'pointer' : 'default'};
-        border: 1px solid hsl(var(--border) / 0.3);
-        box-shadow: 0 0 2px rgba(0,0,0,0.1);
+        border: none;
+        box-shadow: none;
+        text-shadow: 0 0 3px white, 0 0 3px white;
         display: none;
         z-index: 5;
         will-change: transform;

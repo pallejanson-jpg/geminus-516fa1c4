@@ -99,8 +99,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       ).length;
 
       if (!viewer?.scene || !sdk?.StoreyViewsPlugin) {
-        if (initAttemptRef.current++ < 90) {
-          retryTimer = setTimeout(tryInit, 300);
+        if (initAttemptRef.current++ < 20) {
+          retryTimer = setTimeout(tryInit, 200);
         } else if (mounted) {
           setError(!viewer?.scene ? 'Viewer not available' : 'SDK StoreyViewsPlugin missing');
         }
@@ -108,8 +108,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       }
 
       if (metaStoreyCount === 0) {
-        if (initAttemptRef.current++ < 90) {
-          retryTimer = setTimeout(tryInit, 300);
+        if (initAttemptRef.current++ < 20) {
+          retryTimer = setTimeout(tryInit, 200);
         }
         return;
       }
@@ -124,8 +124,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         if (storeyKeys.length === 0) {
           console.debug('[SplitPlanView] Plugin has 0 storeys, retrying...');
           try { plugin.destroy?.(); } catch {}
-          if (initAttemptRef.current++ < 60) {
-            retryTimer = setTimeout(tryInit, 1000);
+          if (initAttemptRef.current++ < 20) {
+            retryTimer = setTimeout(tryInit, 200);
           }
           return;
         }
@@ -144,11 +144,10 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       }
     };
 
-    tryInit();
-
+    // Don't start polling on mount — wait for VIEWER_MODELS_LOADED
     const modelsHandler = () => {
       initAttemptRef.current = 0;
-      retryTimer = setTimeout(tryInit, 300);
+      tryInit();
     };
     window.addEventListener('VIEWER_MODELS_LOADED', modelsHandler);
 

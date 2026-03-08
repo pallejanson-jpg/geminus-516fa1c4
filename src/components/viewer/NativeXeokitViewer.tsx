@@ -15,7 +15,7 @@ import { AlertCircle, Box } from 'lucide-react';
 import { getModelFromMemory, storeModelInMemory, getMemoryStats } from '@/hooks/useXktPreload';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { applyArchitectColors } from '@/lib/architect-colors';
-import { INSIGHTS_COLOR_UPDATE_EVENT, INSIGHTS_COLOR_RESET_EVENT, ALARM_ANNOTATIONS_SHOW_EVENT, type InsightsColorUpdateDetail, type AlarmAnnotationsShowDetail } from '@/lib/viewer-events';
+import { INSIGHTS_COLOR_UPDATE_EVENT, INSIGHTS_COLOR_RESET_EVENT, ALARM_ANNOTATIONS_SHOW_EVENT, LOAD_SAVED_VIEW_EVENT, type InsightsColorUpdateDetail, type AlarmAnnotationsShowDetail } from '@/lib/viewer-events';
 
 const XEOKIT_CDN = '/lib/xeokit/xeokit-sdk.es.js';
 
@@ -451,7 +451,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       }
       await Promise.allSettled(Array.from(active));
 
-      // 5. Camera: NO auto-fit/flyTo — only saved start view (dispatched via LOAD_SAVED_VIEW_EVENT) applies.
+      // 5. Camera: instant viewFit as fallback (no animation) if no saved start view arrives within 500ms
       if (mountedRef.current && viewer.scene) {
         // Enable SAO after load
         if (viewer.scene.sao) {
@@ -485,6 +485,25 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         onViewerReady?.(viewer);
         // Dispatch VIEWER_MODELS_LOADED for hooks like useObjectMoveMode
         window.dispatchEvent(new CustomEvent('VIEWER_MODELS_LOADED', { detail: { buildingFmGuid } }));
+
+        // Instant viewFit fallback: if no saved start view arrives within 500ms, fit to scene
+        const fitTimer = setTimeout(() => {
+          if (!mountedRef.current) return;
+          try {
+            const aabb = viewer.scene?.aabb;
+            if (aabb) {
+              viewer.cameraFlight.flyTo({ aabb, duration: 0 });
+              console.log('[NativeViewer] Applied instant viewFit fallback (no saved start view)');
+            }
+          } catch (e) { console.warn('[NativeViewer] viewFit fallback failed:', e); }
+        }, 500);
+
+        // Cancel fit if a saved view arrives
+        const savedViewHandler = () => { clearTimeout(fitTimer); };
+        window.addEventListener(LOAD_SAVED_VIEW_EVENT, savedViewHandler, { once: true });
+        // Cleanup after timeout passes
+        setTimeout(() => window.removeEventListener(LOAD_SAVED_VIEW_EVENT, savedViewHandler), 600);
+
         // Re-apply any pending insights color event that arrived before models loaded
         if (pendingInsightsColorRef.current) {
           const pending = pendingInsightsColorRef.current;
