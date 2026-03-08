@@ -951,6 +951,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 description: `${totalLevels} våningsplan, ${totalRooms} rum, ${totalInstances} instanser från ${bimItems.length - failures.length}/${bimItems.length} fil(er)`,
             });
             handleCheckAccStatus();
+            // Auto-extract technical systems from synced BIM data
+            handleAutoSyncSystems();
         } else if (failures.length === 0) {
             // All files processed but no levels/rooms found
             toast({
