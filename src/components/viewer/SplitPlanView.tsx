@@ -502,19 +502,19 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     return () => clearTimeout(timer);
   }, [storeyMap]);
 
-  // Camera position overlay — use camera.look (target point) not eye
+  // Camera position overlay — use camera.eye (position) like MinimapPanel
   useEffect(() => {
     const updateCamera = () => {
       const viewer = getXeokitViewer();
       const map = storeyMapRef.current;
       const plugin = pluginRef.current;
-      if (!viewer?.camera?.look || !map) return;
+      if (!viewer?.camera?.eye || !map) return;
 
-      const look = viewer.camera.look;
       const eye = viewer.camera.eye;
+      const look = viewer.camera.look;
       const dx = look[0] - eye[0];
       const dz = look[2] - eye[2];
-      const angle = Math.atan2(dx, -dz); // heading direction camera looks toward
+      const angle = Math.atan2(dx, -dz);
 
       if (usedFallbackRef.current || !plugin) {
         const aabb = viewer.scene?.aabb;
@@ -522,8 +522,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         const xRange = aabb[3] - aabb[0];
         const zRange = aabb[5] - aabb[2];
         if (xRange < 0.01 || zRange < 0.01) return;
-        const normX = (look[0] - aabb[0]) / xRange;
-        const normZ = (look[2] - aabb[2]) / zRange;
+        const normX = (eye[0] - aabb[0]) / xRange;
+        const normZ = (eye[2] - aabb[2]) / zRange;
         setCameraPos({ x: normX * 100, y: normZ * 100, angle });
         return;
       }
@@ -535,20 +535,19 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         const xRange = aabb[3] - aabb[0];
         const zRange = aabb[5] - aabb[2];
         if (xRange < 0.01 || zRange < 0.01) return;
-        const normX = (look[0] - aabb[0]) / xRange;
-        const normZ = (look[2] - aabb[2]) / zRange;
+        const normX = (eye[0] - aabb[0]) / xRange;
+        const normZ = (eye[2] - aabb[2]) / zRange;
         setCameraPos({ x: normX * 100, y: normZ * 100, angle });
         return;
       }
 
-      // Use storey AABB — StoreyViewsPlugin image maps X to (1-normX) and Z to (1-normZ)
       const aabb = plugin._fitStoreyMaps ? storey.storeyAABB : storey.modelAABB;
       const xRange = aabb[3] - aabb[0];
       const zRange = aabb[5] - aabb[2];
       if (xRange < 0.01 || zRange < 0.01) return;
 
-      const normX = (look[0] - aabb[0]) / xRange;
-      const normZ = (look[2] - aabb[2]) / zRange;
+      const normX = (eye[0] - aabb[0]) / xRange;
+      const normZ = (eye[2] - aabb[2]) / zRange;
 
       setCameraPos({
         x: (1.0 - normX) * 100,
