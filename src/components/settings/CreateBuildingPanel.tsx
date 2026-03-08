@@ -269,6 +269,9 @@ const CreateBuildingPanel: React.FC = () => {
         setConversionProgress(90);
         addLog(`XKT generated: ${convResult.xktSizeMB} MB`);
         addLog(`Hierarchy: ${convResult.levels?.length || 0} levels, ${convResult.spaces?.length || 0} spaces`);
+        if (convResult.systemsCount || convResult.connectionsCount) {
+          addLog(`Systems: ${convResult.systemsCount || 0} system, ${convResult.connectionsCount || 0} kopplingar extraherade`);
+        }
 
         // Create hierarchy in Asset+ if available
         const levels = convResult.levels || [];
