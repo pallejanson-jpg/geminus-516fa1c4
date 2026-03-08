@@ -899,6 +899,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
   // Handle floor dropdown change
   const handleFloorChange = useCallback((floorId: string) => {
+    if (selectedFloorId === floorId) return;
+
     const floor = effectiveFloors.find((f) => f.id === floorId);
     const targetStoreyId = floor?.metaObjectIds.find((id) => pluginRef.current?.storeys?.[id]) || floorId;
     const fmGuid = floor?.databaseLevelFmGuids?.[0] ?? null;
@@ -907,12 +909,25 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       floorId: targetStoreyId,
       floorFmGuid: fmGuid,
     };
+
     setSelectedFloorId(floor?.id ?? floorId);
     initialCenterApplied.current = false;
     lastDispatchedFloorRef.current = null; // allow new dispatch
-    mapCacheRef.current.delete(targetStoreyId);
+
+    const cachedMap = mapCacheRef.current.get(targetStoreyId);
+    if (cachedMap?.imageData) {
+      setStoreyMap(cachedMap);
+      storeyMapRef.current = cachedMap;
+      setIsLoading(false);
+      setError(null);
+      setImgError(false);
+      usedFallbackRef.current = false;
+      dispatchFloorSync(targetStoreyId);
+      return;
+    }
+
     generateMap();
-  }, [effectiveFloors, generateMap]);
+  }, [effectiveFloors, generateMap, selectedFloorId, dispatchFloorSync]);
 
   return (
     <div

@@ -1019,6 +1019,7 @@ function MobileUnifiedViewer({
                   onClose={onGoBack}
                   hideBackButton
                   hideMobileOverlay
+                  showGeminusMenu={viewMode === '3d'}
                 />
               </div>
             ) : (
