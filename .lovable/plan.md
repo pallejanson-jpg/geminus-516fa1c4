@@ -81,6 +81,25 @@ All tables have RLS: authenticated read, admin write. Indexes on common query pa
 
 ---
 
+## Plan: Remove Separate Technical Systems UI (IMPLEMENTED)
+
+### Changes made
+1. **Removed standalone Technical Systems UI** from `ApiSettingsModal.tsx` Sync tab:
+   - Removed `SyncProgressCard` for Technical Systems
+   - Removed IFC System Import panel (file upload, building selector, mode radio)
+   - Removed state variables: `isSyncingSystems`, `systemSyncResult`, `ifcSystemFile`, `ifcSystemBuildingGuid`, `ifcSystemMode`, `isImportingIfcSystems`, `ifcSystemImportResult`, `ifcSystemBuildings`, `showIfcSystemImport`
+   - Removed `handleSyncSystems` and `handleImportIfcSystems` functions
+   - Added lightweight system count display in the sync status section
+
+2. **Auto-trigger system sync** after existing flows:
+   - After Asset+ asset sync completes → calls `sync-systems` automatically
+   - After ACC BIM sync completes → calls `sync-systems` automatically
+   - IFC flow already extracts systems in `ifc-to-xkt` edge function (no change needed)
+
+3. **System count** shown inline in sync status when systems exist (no separate card)
+
+---
+
 ## Plan: Move & Delete Objects in 3D Viewer (IMPLEMENTED - Phase 1)
 
 ### Database changes
