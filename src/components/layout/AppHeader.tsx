@@ -169,7 +169,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             </div>
 
             {/* Center - Search (click opens command palette) */}
-            <div className="flex-1 max-w-xs sm:max-w-md relative">
+            <div className="flex-1 min-w-0 max-w-xs sm:max-w-md relative">
                 <button
                     type="button"
                     onClick={() => setIsCommandOpen(true)}
