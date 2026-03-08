@@ -898,7 +898,6 @@ function MobileUnifiedViewer({
             className="relative overflow-hidden"
             style={{
               height: `${splitRatio}%`,
-              paddingTop: 'env(safe-area-inset-top, 0px)',
               touchAction: 'none',
             }}
           >
