@@ -132,7 +132,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     ];
 
     return (
-        <header className={`sticky top-0 z-30 h-14 sm:h-16 ${t.bgSec} border-b ${t.border} flex items-center justify-between px-2 sm:px-4 gap-2 sm:gap-4`}>
+        <header className={`sticky top-0 z-30 h-14 sm:h-16 ${t.bgSec} border-b ${t.border} flex items-center justify-between px-2 sm:px-4 gap-1 sm:gap-4 overflow-hidden`}>
             {/* Left section */}
             <div className="flex items-center gap-1 sm:gap-2">
                 <AppButton 
