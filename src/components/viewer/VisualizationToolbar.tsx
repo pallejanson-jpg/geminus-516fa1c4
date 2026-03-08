@@ -1284,6 +1284,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             isAdmin={isAdmin}
           />
         </TooltipProvider>
+          </>
       )}
     </div>
   );
