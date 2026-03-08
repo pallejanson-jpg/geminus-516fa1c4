@@ -797,12 +797,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       {/* Loading overlay */}
       {phase !== 'ready' && phase !== 'error' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm z-10">
-          <Spinner className="h-8 w-8 mb-3" />
-          {phase === 'loading_models' && loadProgress.total > 0 && (
-            <p className="text-sm text-muted-foreground font-medium">
-              {loadProgress.loaded}/{loadProgress.total}
-            </p>
-          )}
+          <Spinner className="h-8 w-8" />
         </div>
       )}
 
