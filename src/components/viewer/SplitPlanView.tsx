@@ -36,6 +36,7 @@ interface DiagInfo {
 const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid, className }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const isMobile = useIsMobile();
   const [storeyMap, setStoreyMap] = useState<any>(null);
   const [storeyPlugin, setStoreyPlugin] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,10 +45,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   const [cameraPos, setCameraPos] = useState<{ x: number; y: number; angle: number } | null>(null);
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null);
   const [imgError, setImgError] = useState(false);
-  const [diag, setDiag] = useState<DiagInfo>({
-    viewerReady: false, metaStoreyCount: 0, pluginStoreyCount: 0,
-    lastTriedStoreyId: null, imageDataLength: 0, lastError: null,
-  });
   const panStartRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   const clickStartRef = useRef<{ x: number; y: number } | null>(null);
   const storeyMapRef = useRef<any>(null);
@@ -57,6 +54,10 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   const initAttemptRef = useRef(0);
   // Track whether we used the fallback snapshot
   const usedFallbackRef = useRef(false);
+  // Cache for generated storey maps
+  const mapCacheRef = useRef<Map<string, any>>(new Map());
+  // Precomputed wall entity IDs per storey (for black-wall coloring)
+  const wallIdCacheRef = useRef<Map<string, string[]>>(new Map());
 
   const normalizeGuidKey = useCallback((value?: string | null) => (value || '').toLowerCase().replace(/-/g, ''), []);
 

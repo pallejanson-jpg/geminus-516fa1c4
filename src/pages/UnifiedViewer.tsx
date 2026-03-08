@@ -193,15 +193,18 @@ const UnifiedViewerContent: React.FC<{
     }
   }, [buildingData?.transform]);
 
-  // ─── Apply start view when building data is ready ──────────────────
+  // ─── Apply start view ONLY when startView exists, triggered by VIEWER_MODELS_LOADED ──
   const startViewAppliedRef = useRef<string | null>(null);
   useEffect(() => {
     const sv = buildingData?.startView;
     if (!sv || !buildingData) return;
     if (startViewAppliedRef.current === buildingData.fmGuid) return;
-    startViewAppliedRef.current = buildingData.fmGuid;
 
-    const timer = setTimeout(() => {
+    // Wait for VIEWER_MODELS_LOADED instead of a hardcoded timeout
+    const handler = () => {
+      if (startViewAppliedRef.current === buildingData.fmGuid) return;
+      startViewAppliedRef.current = buildingData.fmGuid;
+
       const currentMode = viewModeRef.current;
       const resolvedViewMode = userChangedModeRef.current
         ? currentMode
@@ -226,8 +229,10 @@ const UnifiedViewerContent: React.FC<{
         },
       }));
       if (resolvedViewMode === '2d') setViewMode('2d');
-    }, 2000);
-    return () => clearTimeout(timer);
+    };
+
+    window.addEventListener('VIEWER_MODELS_LOADED', handler);
+    return () => window.removeEventListener('VIEWER_MODELS_LOADED', handler);
   }, [buildingData]);
 
   // ─── Viewer instance ref (for xeokit) ──────────────────────────────
