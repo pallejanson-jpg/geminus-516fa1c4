@@ -609,10 +609,17 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         const DOOR_WINDOW_TYPES = new Set(['ifcdoor', 'ifcwindow']);
         const FURNITURE_TYPES = new Set(['ifcfurnishingelement', 'ifcrailing', 'ifcstair', 'ifcstairflight']);
         const SPACE_TYPES = new Set(['ifcspace']);
-        const metaObjects = scene?.metaScene?.metaObjects || {};
+        // Fix: metaScene lives on the viewer, not scene
+        const metaObjects = viewer?.metaScene?.metaObjects || scene?.metaScene?.metaObjects || {};
+        const metaCount = Object.keys(metaObjects).length;
+        console.log(`[ViewerToolbar] 2D styling: found ${metaCount} metaObjects`);
         const colorized = new Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean }>();
 
         let visibleCount = 0;
+
+        const saveOrig = (entity: any, id: string) => {
+          colorized.set(id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
+        };
 
         Object.values(metaObjects).forEach((mo: any) => {
           const typeLower = mo.type?.toLowerCase() || '';
@@ -620,25 +627,28 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
           if (!entity) return;
 
           if (SLAB_TYPES.has(typeLower)) {
-            colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
+            saveOrig(entity, mo.id);
             entity.visible = true; entity.pickable = false; entity.opacity = 0; entity.edges = false;
           } else if (SPACE_TYPES.has(typeLower)) {
-            colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
+            saveOrig(entity, mo.id);
             entity.visible = true; entity.pickable = true; entity.opacity = 0.02; entity.colorize = [0.5, 0.7, 0.9];
             visibleCount++;
           } else if (WALL_TYPES.has(typeLower)) {
-            colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
+            saveOrig(entity, mo.id);
             entity.colorize = [0.2, 0.2, 0.2]; entity.opacity = 1.0; entity.edges = true; entity.pickable = true;
             visibleCount++;
           } else if (DOOR_WINDOW_TYPES.has(typeLower)) {
-            // Doors & windows: visible, pickable, slightly subdued color
-            colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
+            saveOrig(entity, mo.id);
             entity.colorize = [0.6, 0.6, 0.65]; entity.opacity = 0.8; entity.edges = true; entity.pickable = true;
             visibleCount++;
           } else if (FURNITURE_TYPES.has(typeLower)) {
-            // Furniture: visible, pickable, light color
-            colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
+            saveOrig(entity, mo.id);
             entity.colorize = [0.75, 0.75, 0.75]; entity.opacity = 0.6; entity.pickable = true;
+            visibleCount++;
+          } else {
+            // Catch-all: beams, columns, stairs, railings, etc. — keep visible and pickable
+            saveOrig(entity, mo.id);
+            entity.colorize = [0.5, 0.5, 0.5]; entity.opacity = 0.7; entity.edges = true; entity.pickable = true;
             visibleCount++;
           }
         });
