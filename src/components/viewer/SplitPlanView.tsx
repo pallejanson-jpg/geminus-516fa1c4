@@ -284,6 +284,13 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const t0 = setTimeout(generateMap, 100);
     const t1 = setTimeout(generateMap, 1000);
     const t2 = setTimeout(generateMap, 3000);
+    const t3 = setTimeout(generateMap, 6000);
+
+    const retryInterval = setInterval(() => {
+      if (!storeyMapRef.current) {
+        generateMap();
+      }
+    }, 2500);
 
     const modelsLoadedHandler = () => {
       setTimeout(generateMap, 300);
@@ -311,7 +318,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
     window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, floorHandler);
     return () => {
-      clearTimeout(t0); clearTimeout(t1); clearTimeout(t2);
+      clearTimeout(t0); clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
+      clearInterval(retryInterval);
       window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, floorHandler);
       window.removeEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
       if (modelLoadedSub !== null && viewer?.scene) viewer.scene.off(modelLoadedSub);

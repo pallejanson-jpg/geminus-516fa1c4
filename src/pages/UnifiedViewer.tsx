@@ -997,9 +997,9 @@ function MobileUnifiedViewer({
               variant="secondary"
               size="icon"
               onClick={onGoBack}
-              className="h-8 w-8 bg-card/95 backdrop-blur-sm shadow-md border"
+              className="h-7 w-7 bg-card/95 backdrop-blur-sm shadow-md border"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="h-3.5 w-3.5" />
             </Button>
             <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md rounded-lg p-0.5 border border-white/10">
               {([
@@ -1011,10 +1011,10 @@ function MobileUnifiedViewer({
                   key={mode}
                   size="sm"
                   variant={viewMode === mode ? 'default' : 'ghost'}
-                  className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${viewMode !== mode ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+                  className={`h-5 px-1 text-[8px] rounded-md gap-0.5 ${viewMode !== mode ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
                   onClick={() => setViewMode(mode)}
                 >
-                  <Icon className="h-3 w-3" />
+                  <Icon className="h-2.5 w-2.5" />
                   {label}
                 </Button>
               ))}
@@ -1022,10 +1022,10 @@ function MobileUnifiedViewer({
                 <Button
                   size="sm"
                   variant={viewMode === '360' ? 'default' : 'ghost'}
-                  className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${viewMode !== '360' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+                  className={`h-5 px-1 text-[8px] rounded-md gap-0.5 ${viewMode !== '360' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
                   onClick={() => setViewMode('360')}
                 >
-                  <View className="h-3 w-3" />
+                  <View className="h-2.5 w-2.5" />
                   360°
                 </Button>
               )}
@@ -1033,10 +1033,10 @@ function MobileUnifiedViewer({
             <Button
               size="sm"
               variant="ghost"
-              className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${insightsPanelOpen ? 'bg-white/20 text-white' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
+              className={`h-5 px-1 text-[8px] rounded-md gap-0.5 ${insightsPanelOpen ? 'bg-white/20 text-white' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
               onClick={() => setInsightsPanelOpen(!insightsPanelOpen)}
             >
-              <BarChart2 className="h-3 w-3" />
+              <BarChart2 className="h-2.5 w-2.5" />
             </Button>
           </div>
         </div>
