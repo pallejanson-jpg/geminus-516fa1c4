@@ -673,7 +673,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       {isLoading && !storeyMap && (
         <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: '#ffffff' }}>
           <div className="flex flex-col items-center gap-2 text-muted-foreground">
-            <RefreshCw className="h-5 w-5 animate-spin" />
+            <div className="h-5 w-5 border-2 border-muted-foreground border-t-transparent rounded-full animate-spin" />
             <span className="text-xs">Loading plan view...</span>
           </div>
         </div>
