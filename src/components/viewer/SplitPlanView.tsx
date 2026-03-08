@@ -137,7 +137,17 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   const generateMap = useCallback(() => {
     const plugin = pluginRef.current;
     const viewer = getXeokitViewer();
-    if (!plugin || !viewer?.scene) return;
+    if (!plugin || !viewer?.scene) {
+      console.debug('[SplitPlanView] generateMap: no plugin or viewer');
+      return;
+    }
+
+    // Check if the plugin has any storeys registered
+    const storeyKeys = Object.keys(plugin.storeys || {});
+    if (storeyKeys.length === 0) {
+      console.debug('[SplitPlanView] No storeys registered in plugin yet, will retry');
+      return;
+    }
 
     const storeyId = findCurrentStoreyId();
     if (!storeyId) {
@@ -162,6 +172,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         }
       });
 
+      console.debug(`[SplitPlanView] Generating map for storey ${storeyId}, temporarily showing ${hiddenIds.length} hidden objects`);
+
       const map = plugin.createStoreyMap(storeyId, {
         width,
         format: 'png',
@@ -174,11 +186,13 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       });
 
       if (map?.imageData) {
+        console.debug('[SplitPlanView] Map generated successfully');
         setStoreyMap(map);
         storeyMapRef.current = map;
         setError(null);
         setIsLoading(false);
       } else {
+        console.warn('[SplitPlanView] createStoreyMap returned no imageData');
         setError('Could not generate plan');
       }
     } catch (e) {
