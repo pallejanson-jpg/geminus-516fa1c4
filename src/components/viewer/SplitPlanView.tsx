@@ -4,9 +4,11 @@
  * Uses StoreyViewsPlugin.createStoreyMap() for high-quality orthographic plan images
  * and pickStoreyMap() / storeyMapToWorldPos() for click-to-navigate.
  * Supports pan/zoom and shows a live camera position indicator.
+ *
+ * Dalux-style: 3D camera Y is locked to the selected floor's height range.
  */
 
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { AlertTriangle } from 'lucide-react';
@@ -32,6 +34,9 @@ interface PanZoom {
   scale: number;
 }
 
+/** Unique source tag to prevent event echo loops */
+const SPLIT_PLAN_SOURCE = 'split-plan-view';
+
 const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid, className }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -53,16 +58,27 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   const selectedFloorRef = useRef<{ floorId: string | null; floorFmGuid: string | null }>({ floorId: null, floorFmGuid: null });
   const sdkRef = useRef<any>(null);
   const initAttemptRef = useRef(0);
-  // Track whether we used the fallback snapshot
   const usedFallbackRef = useRef(false);
-  // Cache for generated storey maps
   const mapCacheRef = useRef<Map<string, any>>(new Map());
-  // Precomputed wall entity IDs per storey (for black-wall coloring)
   const wallIdCacheRef = useRef<Map<string, string[]>>(new Map());
-  // Track if initial center has been applied
   const initialCenterApplied = useRef(false);
+  // Guard: last dispatched floor ID to prevent redundant dispatches
+  const lastDispatchedFloorRef = useRef<string | null>(null);
 
   const { floors } = useFloorData(viewerRef, buildingFmGuid);
+
+  // Fallback floor list from plugin when useFloorData is empty
+  const pluginFloors = useMemo(() => {
+    const plugin = pluginRef.current;
+    if (!plugin?.storeys) return [];
+    return Object.entries(plugin.storeys).map(([id, storey]: [string, any]) => ({
+      id,
+      name: storey.storeyId || id,
+      shortName: (storey.storeyId || id).replace(/.*[_-]/, ''),
+    }));
+  }, [storeyPlugin]);
+
+  const effectiveFloors = floors.length > 0 ? floors : pluginFloors;
 
   const normalizeGuidKey = useCallback((value?: string | null) => (value || '').toLowerCase().replace(/-/g, ''), []);
 
@@ -76,7 +92,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     } catch { return null; }
   }, [viewerRef]);
 
-  // Load SDK once — prefer globally shared SDK from NativeXeokitViewer
+  // Load SDK once
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -95,7 +111,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     return () => { mounted = false; };
   }, []);
 
-  // Initialize StoreyViewsPlugin — start immediately + on VIEWER_MODELS_LOADED
+  // Initialize StoreyViewsPlugin
   useEffect(() => {
     let mounted = true;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -155,10 +171,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       }
     };
 
-    // Start immediately
     tryInit();
 
-    // Also listen for VIEWER_MODELS_LOADED to retry
     const modelsHandler = () => {
       initAttemptRef.current = 0;
       tryInit();
@@ -172,7 +186,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     };
   }, [getXeokitViewer]);
 
-  // Find current storey ID based on selected floor (preferred) or fallback
+  // Find current storey ID
   const findCurrentStoreyId = useCallback((): string | null => {
     const plugin = pluginRef.current;
     if (!plugin?.storeys) return null;
@@ -225,24 +239,29 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     return bestId;
   }, [getXeokitViewer, normalizeGuidKey]);
 
-  // Dispatch floor selection event to sync 3D viewer
+  // Dispatch floor selection event — with source tag and dedup guard
   const dispatchFloorSync = useCallback((storeyId: string) => {
+    // Dedup: don't dispatch if we already dispatched for this floor
+    if (lastDispatchedFloorRef.current === storeyId) return;
+    lastDispatchedFloorRef.current = storeyId;
+
     const viewer = getXeokitViewer();
     if (!viewer?.metaScene) return;
 
     const mo = viewer.metaScene.metaObjects?.[storeyId];
     const fmGuid = mo?.originalSystemId || mo?.id || storeyId;
 
-    const detail: FloorSelectionEventDetail = {
+    const detail: FloorSelectionEventDetail & { source?: string } = {
       floorId: storeyId,
       visibleFloorFmGuids: [fmGuid],
       visibleMetaFloorIds: [storeyId],
+      source: SPLIT_PLAN_SOURCE,
     };
 
     window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail }));
   }, [getXeokitViewer]);
 
-  // Generate a fallback snapshot via top-down camera capture
+  // Generate fallback snapshot
   const generateFallbackSnapshot = useCallback(() => {
     const viewer = getXeokitViewer();
     if (!viewer?.scene) return;
@@ -304,7 +323,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     }
   }, [getXeokitViewer]);
 
-  // Generate storey map — with caching and mobile resolution optimization
+  // Generate storey map
   const generateMap = useCallback(() => {
     const plugin = pluginRef.current;
     const viewer = getXeokitViewer();
@@ -319,13 +338,12 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const preferredStoreyId = findCurrentStoreyId();
     if (!preferredStoreyId) return;
 
-    // Dispatch floor selection to keep 3D in sync
+    // Dispatch floor selection to keep 3D in sync (deduped)
     dispatchFloorSync(preferredStoreyId);
 
-    // Update selectedFloorId state for dropdown
     setSelectedFloorId(preferredStoreyId);
 
-    // Check cache first
+    // Check cache
     const cacheKey = preferredStoreyId;
     const cached = mapCacheRef.current.get(cacheKey);
     if (cached) {
@@ -340,12 +358,11 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
     setIsLoading(true);
 
-    // Generate immediately without requestIdleCallback delay
     const container = containerRef.current;
     const maxWidth = isMobile ? 900 : 1600;
     const width = container ? Math.min(container.clientWidth * (isMobile ? 1.5 : 2), maxWidth) : 800;
 
-    // Precompute wall IDs for this storey (cached)
+    // Precompute wall IDs (cached)
     const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifccurtainwall', 'ifcslab', 'ifccolumn', 'ifcbeam', 'ifcrailing', 'ifcstair', 'ifcstairflight']);
     let wallIds = wallIdCacheRef.current.get(preferredStoreyId);
     if (!wallIds) {
@@ -360,7 +377,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       wallIdCacheRef.current.set(preferredStoreyId, wallIds);
     }
 
-    // Apply black walls
+    // Apply black walls for high-contrast plan
     const scene = viewer.scene;
     const originalColors: { id: string; color: number[] | null }[] = [];
     for (const id of wallIds) {
@@ -401,29 +418,32 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     }
   }, [getXeokitViewer, findCurrentStoreyId, generateFallbackSnapshot, isMobile, dispatchFloorSync]);
 
-  // Generate map once when plugin is ready, and on floor changes
+  // Generate map once plugin ready + listen for external floor changes
   useEffect(() => {
     if (!storeyPlugin) return;
 
-    // Single initial generation — immediate
     const t0 = setTimeout(generateMap, 50);
 
-    // Listen for floor changes from other components (e.g. 3D floor switcher)
+    // Listen for floor changes from OTHER components (ignore our own)
     const floorHandler = (event: Event) => {
-      const detail = (event as CustomEvent<FloorSelectionEventDetail>).detail;
+      const detail = (event as CustomEvent<FloorSelectionEventDetail & { source?: string }>).detail;
+      // CRITICAL: Ignore events we dispatched ourselves to break the loop
+      if (detail?.source === SPLIT_PLAN_SOURCE) return;
+
       selectedFloorRef.current = {
         floorId: detail?.floorId ?? null,
         floorFmGuid: detail?.visibleFloorFmGuids?.[0] ?? null,
       };
-      // Reset center for new floor
       initialCenterApplied.current = false;
+      // Reset dedup guard so we can dispatch for the new floor
+      lastDispatchedFloorRef.current = null;
       setTimeout(generateMap, 50);
     };
 
-    // Listen for models loaded (re-generate once)
     const modelsLoadedHandler = () => {
       mapCacheRef.current.clear();
       wallIdCacheRef.current.clear();
+      lastDispatchedFloorRef.current = null;
       setTimeout(generateMap, 200);
     };
 
@@ -437,7 +457,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     };
   }, [storeyPlugin, generateMap]);
 
-  // If no plugin after 15 seconds, try fallback snapshot directly
+  // Fallback snapshot after 15s
   useEffect(() => {
     if (storeyPlugin || storeyMapRef.current) return;
     const t = setTimeout(() => {
@@ -452,7 +472,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   useEffect(() => {
     if (!storeyMap || initialCenterApplied.current) return;
 
-    // Small delay to let image render
     const timer = setTimeout(() => {
       const container = containerRef.current;
       const img = imgRef.current;
@@ -462,8 +481,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const imgW = img.naturalWidth || img.clientWidth;
       const imgH = img.naturalHeight || img.clientHeight;
 
-      // The image is rendered with max-w-full max-h-full object-contain
-      // Calculate its rendered size at scale 0.75
       const scale = 0.75;
       const containerAspect = cRect.width / cRect.height;
       const imgAspect = imgW / imgH;
@@ -489,43 +506,53 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     return () => clearTimeout(timer);
   }, [storeyMap]);
 
-  // Camera position overlay — uses percentage of image
+  // Camera position overlay — use camera.look (target point) not eye
   useEffect(() => {
     const updateCamera = () => {
       const viewer = getXeokitViewer();
       const map = storeyMapRef.current;
       const plugin = pluginRef.current;
-      if (!viewer?.camera?.eye || !map) return;
+      if (!viewer?.camera?.look || !map) return;
 
-      const eye = viewer.camera.eye;
       const look = viewer.camera.look;
+      const eye = viewer.camera.eye;
       const dx = look[0] - eye[0];
       const dz = look[2] - eye[2];
-      const angle = Math.atan2(-dz, -dx);
+      const angle = Math.atan2(dx, -dz); // heading direction camera looks toward
 
       if (usedFallbackRef.current || !plugin) {
         const aabb = viewer.scene?.aabb;
         if (!aabb) return;
-        const normX = (eye[0] - aabb[0]) / (aabb[3] - aabb[0]);
-        const normZ = (eye[2] - aabb[2]) / (aabb[5] - aabb[2]);
+        const xRange = aabb[3] - aabb[0];
+        const zRange = aabb[5] - aabb[2];
+        if (xRange < 0.01 || zRange < 0.01) return;
+        const normX = (look[0] - aabb[0]) / xRange;
+        const normZ = (look[2] - aabb[2]) / zRange;
         setCameraPos({ x: normX * 100, y: normZ * 100, angle });
         return;
       }
 
       const storey = plugin.storeys?.[map.storeyId];
       if (!storey) {
-        // Fallback: use scene AABB
         const aabb = viewer.scene?.aabb;
         if (!aabb) return;
-        const normX = (eye[0] - aabb[0]) / (aabb[3] - aabb[0]);
-        const normZ = (eye[2] - aabb[2]) / (aabb[5] - aabb[2]);
+        const xRange = aabb[3] - aabb[0];
+        const zRange = aabb[5] - aabb[2];
+        if (xRange < 0.01 || zRange < 0.01) return;
+        const normX = (look[0] - aabb[0]) / xRange;
+        const normZ = (look[2] - aabb[2]) / zRange;
         setCameraPos({ x: normX * 100, y: normZ * 100, angle });
         return;
       }
 
+      // Use storey AABB — StoreyViewsPlugin image maps X to (1-normX) and Z to (1-normZ)
       const aabb = plugin._fitStoreyMaps ? storey.storeyAABB : storey.modelAABB;
-      const normX = (eye[0] - aabb[0]) / (aabb[3] - aabb[0]);
-      const normZ = (eye[2] - aabb[2]) / (aabb[5] - aabb[2]);
+      const xRange = aabb[3] - aabb[0];
+      const zRange = aabb[5] - aabb[2];
+      if (xRange < 0.01 || zRange < 0.01) return;
+
+      const normX = (look[0] - aabb[0]) / xRange;
+      const normZ = (look[2] - aabb[2]) / zRange;
 
       setCameraPos({
         x: (1.0 - normX) * 100,
@@ -537,7 +564,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const interval = setInterval(updateCamera, isMobile ? 350 : 150);
     updateCamera();
     return () => clearInterval(interval);
-  }, [getXeokitViewer, storeyMap]);
+  }, [getXeokitViewer, storeyMap, isMobile]);
 
   // Dalux-style: Lock 3D camera Y to selected floor's height range
   useEffect(() => {
@@ -551,15 +578,12 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const map = storeyMapRef.current;
       if (!map?.storeyId) return;
       const storey = plugin.storeys?.[map.storeyId];
-      if (!storey) return;
+      if (!storey?.storeyAABB) return;
 
       const sAABB = storey.storeyAABB;
-      if (!sAABB) return;
-
       const floorMinY = sAABB[1];
       const floorMaxY = sAABB[4];
       const floorRange = floorMaxY - floorMinY;
-      // Allow camera to be within floor range + generous margin above/below
       const margin = Math.max(floorRange * 0.5, 2);
       const minY = floorMinY - margin;
       const maxY = floorMaxY + floorRange * 2 + margin;
@@ -567,15 +591,10 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const eye = viewer.camera.eye;
       const look = viewer.camera.look;
 
-      let needsClamp = false;
       const newLookY = Math.max(minY, Math.min(maxY, look[1]));
       const newEyeY = Math.max(minY, Math.min(maxY + floorRange * 3, eye[1]));
 
       if (Math.abs(newLookY - look[1]) > 0.01 || Math.abs(newEyeY - eye[1]) > 0.01) {
-        needsClamp = true;
-      }
-
-      if (needsClamp) {
         viewer.camera.eye = [eye[0], newEyeY, eye[2]];
         viewer.camera.look = [look[0], newLookY, look[2]];
       }
@@ -654,7 +673,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     setRoomLabels(labels);
   }, [storeyMap, getXeokitViewer]);
 
-  // Click to navigate — preserve camera heading
+  // Click to navigate — use storeyMapToWorldPos for accurate position,
+  // preserve camera heading, clamp Y to storey AABB
   const handleClick = useCallback((e: React.MouseEvent) => {
     if (clickStartRef.current) {
       const dx = Math.abs(e.clientX - clickStartRef.current.x);
@@ -672,60 +692,66 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const imgX = (e.clientX - rect.left) / rect.width * map.width;
     const imgY = (e.clientY - rect.top) / rect.height * map.height;
 
-    // Cancel any ongoing flight
     viewer.cameraFlight?.cancel?.();
 
-    // Get current camera heading to preserve direction
+    // Current camera state
     const currentEye = viewer.camera.eye;
     const currentLook = viewer.camera.look;
+
+    // Heading vector in XZ plane
     const headX = currentLook[0] - currentEye[0];
     const headZ = currentLook[2] - currentEye[2];
     const horizDist = Math.sqrt(headX * headX + headZ * headZ);
-    const headUnit = horizDist > 0.01
-      ? [headX / horizDist, headZ / horizDist]
-      : [1, 0];
-    const yOffset = currentEye[1] - currentLook[1];
-    const safeDist = Math.max(horizDist, 3); // minimum 3m horizontal distance
+    const headUnit = horizDist > 0.01 ? [headX / horizDist, headZ / horizDist] : [1, 0];
 
-    // For fallback, compute world pos from scene AABB
-    if (usedFallbackRef.current || !plugin) {
+    // Y relationship
+    const yOffset = currentEye[1] - currentLook[1];
+
+    // Determine target world position
+    let targetWorldPos: number[] | null = null;
+
+    if (!usedFallbackRef.current && plugin) {
+      try {
+        const worldPos = plugin.storeyMapToWorldPos(map, [imgX, imgY]);
+        if (worldPos) targetWorldPos = [worldPos[0], worldPos[1], worldPos[2]];
+      } catch {}
+    }
+
+    if (!targetWorldPos) {
+      // Fallback: compute from scene AABB
       const aabb = viewer.scene?.aabb;
       if (!aabb) return;
       const normX = (e.clientX - rect.left) / rect.width;
       const normZ = (e.clientY - rect.top) / rect.height;
       const worldX = aabb[0] + normX * (aabb[3] - aabb[0]);
       const worldZ = aabb[2] + normZ * (aabb[5] - aabb[2]);
-      const floorY = aabb[1];
-      const newLook = [worldX, floorY, worldZ];
-      const newEye = [
-        newLook[0] - headUnit[0] * safeDist,
-        newLook[1] + Math.max(yOffset, 3),
-        newLook[2] - headUnit[1] * safeDist,
-      ];
-      viewer.cameraFlight?.flyTo({
-        eye: newEye,
-        look: newLook,
-        up: [0, 1, 0],
-        duration: 0,
-      });
-      return;
+      targetWorldPos = [worldX, aabb[1], worldZ];
     }
 
-    const worldPos = plugin.storeyMapToWorldPos(map, [imgX, imgY]);
-    if (worldPos && viewer.cameraFlight) {
-      const newLook = [worldPos[0], worldPos[1], worldPos[2]];
-      const newEye = [
-        newLook[0] - headUnit[0] * safeDist,
-        newLook[1] + Math.max(yOffset, 3),
-        newLook[2] - headUnit[1] * safeDist,
-      ];
-      viewer.cameraFlight.flyTo({
-        eye: newEye,
-        look: newLook,
-        up: [0, 1, 0],
-        duration: 0,
-      });
+    // Clamp target Y to storey AABB if available
+    const storey = plugin?.storeys?.[map.storeyId];
+    if (storey?.storeyAABB) {
+      const floorY = (storey.storeyAABB[1] + storey.storeyAABB[4]) / 2;
+      targetWorldPos[1] = floorY;
     }
+
+    // Compute new camera: keep heading, clamp distance
+    const viewDist = Math.max(Math.min(horizDist, 30), 5); // clamp between 5m and 30m
+    const safeYOffset = Math.max(Math.min(yOffset, 20), 2); // clamp between 2m and 20m above
+
+    const newLook = targetWorldPos;
+    const newEye = [
+      newLook[0] - headUnit[0] * viewDist,
+      newLook[1] + safeYOffset,
+      newLook[2] - headUnit[1] * viewDist,
+    ];
+
+    viewer.cameraFlight.flyTo({
+      eye: newEye,
+      look: newLook,
+      up: [0, 1, 0],
+      duration: 0,
+    });
   }, [getXeokitViewer]);
 
   // Mouse move for hover
@@ -846,17 +872,17 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
   // Handle floor dropdown change
   const handleFloorChange = useCallback((floorId: string) => {
-    // Find matching floor from useFloorData
-    const floor = floors.find(f => f.id === floorId);
+    const floor = effectiveFloors.find((f: any) => f.id === floorId);
     selectedFloorRef.current = {
       floorId: floorId,
       floorFmGuid: floor?.databaseLevelFmGuids?.[0] ?? null,
     };
     setSelectedFloorId(floorId);
     initialCenterApplied.current = false;
-    mapCacheRef.current.delete(floorId); // force fresh generation if needed
+    lastDispatchedFloorRef.current = null; // allow new dispatch
+    mapCacheRef.current.delete(floorId);
     generateMap();
-  }, [floors, generateMap]);
+  }, [effectiveFloors, generateMap]);
 
   return (
     <div
@@ -872,8 +898,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Mini floor dropdown */}
-      {storeyMap && floors.length > 1 && (
+      {/* Mini floor dropdown — show when we have floors from any source */}
+      {storeyMap && effectiveFloors.length > 0 && (
         <div className="absolute top-2 left-2 z-20" onClick={(e) => e.stopPropagation()}>
           <Select value={selectedFloorId} onValueChange={handleFloorChange}>
             <SelectTrigger
@@ -883,7 +909,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
               <SelectValue placeholder="Plan" />
             </SelectTrigger>
             <SelectContent>
-              {floors.map(f => (
+              {effectiveFloors.map((f: any) => (
                 <SelectItem key={f.id} value={f.id} className="text-[11px]">
                   {f.shortName || f.name}
                 </SelectItem>
@@ -943,9 +969,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
           />
           {/* Room labels overlay */}
           {roomLabels.length > 0 && imgRef.current && (
-            <div
-              className="absolute inset-0 pointer-events-none"
-            >
+            <div className="absolute inset-0 pointer-events-none">
               {roomLabels.map((label) => (
                 <div
                   key={label.id}
@@ -987,7 +1011,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
                   borderLeft: '12px solid transparent',
                   borderRight: '12px solid transparent',
                   borderBottom: '22px solid hsl(var(--primary) / 0.2)',
-                  transform: `translate(-50%, -50%) rotate(${cameraPos.angle - Math.PI / 2}rad)`,
+                  transform: `translate(-50%, -100%) rotate(${cameraPos.angle}rad)`,
                   transformOrigin: 'center bottom',
                 }}
               />
