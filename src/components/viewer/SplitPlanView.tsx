@@ -209,9 +209,14 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const timeout = setTimeout(generateMap, 2000);
     const retry1 = setTimeout(generateMap, 4000);
     const retry2 = setTimeout(generateMap, 7000);
+    const retry3 = setTimeout(generateMap, 10000);
+    const retry4 = setTimeout(generateMap, 15000);
 
     // Also listen for VIEWER_MODELS_LOADED (fired by NativeXeokitViewer)
-    const modelsLoadedHandler = () => setTimeout(generateMap, 1000);
+    const modelsLoadedHandler = () => {
+      setTimeout(generateMap, 500);
+      setTimeout(generateMap, 2000);
+    };
     window.addEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
 
     const floorHandler = () => {
@@ -225,6 +230,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     if (viewer?.scene) {
       modelLoadedSub = viewer.scene.on('modelLoaded', () => {
         setTimeout(generateMap, 500);
+        setTimeout(generateMap, 2000);
       });
     }
 
@@ -233,6 +239,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       clearTimeout(timeout);
       clearTimeout(retry1);
       clearTimeout(retry2);
+      clearTimeout(retry3);
+      clearTimeout(retry4);
       window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, floorHandler);
       window.removeEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
       if (modelLoadedSub !== null && viewer?.scene) {
