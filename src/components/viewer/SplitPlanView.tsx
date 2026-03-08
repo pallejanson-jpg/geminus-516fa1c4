@@ -412,7 +412,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         floorId: detail?.floorId ?? null,
         floorFmGuid: detail?.visibleFloorFmGuids?.[0] ?? null,
       };
-      setPanZoom({ offsetX: 0, offsetY: 0, scale: 1 });
+      setPanZoom({ offsetX: 0, offsetY: 0, scale: 0.75 });
       setTimeout(generateMap, 100);
     };
 
