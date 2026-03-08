@@ -548,7 +548,7 @@ const UnifiedViewerContent: React.FC<{
 
         {/* Right: Controls */}
         <div className="flex items-center gap-1">
-          {!isMobile && buildingFmGuid && (
+          {buildingFmGuid && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
