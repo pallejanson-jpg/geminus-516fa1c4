@@ -8,7 +8,7 @@
 
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { FLOOR_SELECTION_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
+import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { RefreshCw } from 'lucide-react';
 
 interface SplitPlanViewProps {
@@ -37,6 +37,10 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   const clickStartRef = useRef<{ x: number; y: number } | null>(null);
   const storeyMapRef = useRef<any>(null);
   const pluginRef = useRef<any>(null);
+  const selectedFloorRef = useRef<{ floorId: string | null; floorFmGuid: string | null }>({ floorId: null, floorFmGuid: null });
+
+  const normalizeGuidKey = useCallback((value?: string | null) => (value || '').toLowerCase().replace(/-/g, ''), []);
+
 
   const getXeokitViewer = useCallback(() => {
     try {
@@ -89,7 +93,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     return () => { mounted = false; };
   }, [getXeokitViewer]);
 
-  // Find current storey ID based on visible floor
+  // Find current storey ID based on selected floor (preferred) or visible geometry fallback
   const findCurrentStoreyId = useCallback((): string | null => {
     const plugin = pluginRef.current;
     if (!plugin?.storeys) return null;
@@ -97,41 +101,58 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const storeyIds = Object.keys(plugin.storeys);
     if (storeyIds.length === 0) return null;
 
-    // Try to find the storey with the most visible objects
     const viewer = getXeokitViewer();
     if (!viewer?.scene) return storeyIds[0];
 
-    let bestId = storeyIds[0];
-    let bestCount = 0;
+    const metaObjects = viewer.metaScene?.metaObjects || {};
 
-    for (const id of storeyIds) {
-      const storey = plugin.storeys[id];
-      if (!storey) continue;
-      // Count visible objects in this storey's AABB range
-      const sAABB = storey.storeyAABB;
-      let count = 0;
-      const metaScene = viewer.metaScene;
-      if (metaScene?.metaObjects) {
-        for (const moId in metaScene.metaObjects) {
-          const mo = metaScene.metaObjects[moId];
-          if (mo?.type?.toLowerCase() !== 'ifcspace') continue;
-          const obj = viewer.scene.objects?.[mo.id];
-          if (!obj?.visible || !obj?.aabb) continue;
-          // Check if object's Y center is within storey Y range
-          const objYCenter = (obj.aabb[1] + obj.aabb[4]) / 2;
-          if (objYCenter >= sAABB[1] && objYCenter <= sAABB[4]) {
-            count++;
-          }
+    // 1) Use explicit selected floor from floor picker event when possible
+    const selectedFloorId = selectedFloorRef.current.floorId;
+    if (selectedFloorId && plugin.storeys[selectedFloorId]) {
+      return selectedFloorId;
+    }
+
+    const selectedFloorFmGuid = normalizeGuidKey(selectedFloorRef.current.floorFmGuid);
+    if (selectedFloorFmGuid) {
+      for (const storeyId of storeyIds) {
+        const mo = metaObjects[storeyId];
+        if (!mo) continue;
+        const storeyGuid = normalizeGuidKey(mo.originalSystemId || mo.id || '');
+        if (storeyGuid && storeyGuid === selectedFloorFmGuid) {
+          return storeyId;
         }
       }
-      if (count > bestCount) {
-        bestCount = count;
-        bestId = id;
+    }
+
+    // 2) Fallback: choose storey with most renderable descendants (not just IfcSpace)
+    let bestId = storeyIds[0];
+    let bestScore = -1;
+
+    const countDescendantObjects = (root: any): number => {
+      if (!root) return 0;
+      let count = 0;
+      const stack = [...(root.children || [])];
+      while (stack.length > 0) {
+        const node = stack.pop();
+        if (!node) continue;
+        if (viewer.scene.objects?.[node.id]) count++;
+        if (node.children?.length) stack.push(...node.children);
+      }
+      return count;
+    };
+
+    for (const storeyId of storeyIds) {
+      const mo = metaObjects[storeyId];
+      if (!mo) continue;
+      const descendantCount = countDescendantObjects(mo);
+      if (descendantCount > bestScore) {
+        bestScore = descendantCount;
+        bestId = storeyId;
       }
     }
 
     return bestId;
-  }, [getXeokitViewer]);
+  }, [getXeokitViewer, normalizeGuidKey]);
 
   // Generate storey map
   const generateMap = useCallback(() => {
@@ -159,31 +180,51 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const container = containerRef.current;
       const width = container ? Math.min(container.clientWidth * 2, 1600) : 800;
 
-      // Temporarily make all objects visible for storey map rendering
-      // (IfcSpace objects are hidden by default in our viewer but needed for plan rendering)
+      // Temporarily make all objects renderable for storey map rendering.
+      // This avoids blank maps when IfcSpace is hidden, LOD has culled entities,
+      // or 2D clipping section planes are active.
       const scene = viewer.scene;
       const hiddenIds: string[] = [];
+      const culledIds: string[] = [];
+      const sectionPlanes = Object.values(scene.sectionPlanes || {}) as any[];
+      const activeSectionPlanes = sectionPlanes.filter((sp) => sp?.active);
+
+      activeSectionPlanes.forEach((sp) => { sp.active = false; });
+
       const objectIds = scene.objectIds || [];
       objectIds.forEach((id: string) => {
         const entity = scene.objects?.[id];
-        if (entity && !entity.visible) {
+        if (!entity) return;
+        if (!entity.visible) {
           hiddenIds.push(id);
           entity.visible = true;
         }
+        if (entity.culled) {
+          culledIds.push(id);
+          entity.culled = false;
+        }
       });
 
-      console.debug(`[SplitPlanView] Generating map for storey ${storeyId}, temporarily showing ${hiddenIds.length} hidden objects`);
+      console.debug(`[SplitPlanView] Generating map for storey ${storeyId}, restoring hidden=${hiddenIds.length}, culled=${culledIds.length}, disabledPlanes=${activeSectionPlanes.length}`);
 
-      const map = plugin.createStoreyMap(storeyId, {
-        width,
-        format: 'png',
-      });
-
-      // Restore hidden objects
-      hiddenIds.forEach(id => {
-        const entity = scene.objects?.[id];
-        if (entity) entity.visible = false;
-      });
+      let map: any = null;
+      try {
+        map = plugin.createStoreyMap(storeyId, {
+          width,
+          format: 'png',
+        });
+      } finally {
+        // Restore prior state even if createStoreyMap throws
+        hiddenIds.forEach(id => {
+          const entity = scene.objects?.[id];
+          if (entity) entity.visible = false;
+        });
+        culledIds.forEach(id => {
+          const entity = scene.objects?.[id];
+          if (entity) entity.culled = true;
+        });
+        activeSectionPlanes.forEach((sp) => { sp.active = true; });
+      }
 
       if (map?.imageData) {
         console.debug('[SplitPlanView] Map generated successfully');
@@ -219,9 +260,14 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     };
     window.addEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
 
-    const floorHandler = () => {
+    const floorHandler = (event: Event) => {
+      const detail = (event as CustomEvent<FloorSelectionEventDetail>).detail;
+      selectedFloorRef.current = {
+        floorId: detail?.floorId ?? null,
+        floorFmGuid: detail?.visibleFloorFmGuids?.[0] ?? null,
+      };
       setPanZoom({ offsetX: 0, offsetY: 0, scale: 1 });
-      setTimeout(generateMap, 300);
+      setTimeout(generateMap, 150);
     };
 
     // Listen for model loaded events to regenerate
