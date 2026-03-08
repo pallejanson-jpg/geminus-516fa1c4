@@ -14,7 +14,7 @@ import ViewerToolbar from './ViewerToolbar';
 import VisualizationToolbar from './VisualizationToolbar';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { AppContext } from '@/context/AppContext';
-import { VIEW_MODE_REQUESTED_EVENT } from '@/lib/viewer-events';
+import { VIEW_MODE_REQUESTED_EVENT, LOAD_SAVED_VIEW_EVENT, type LoadSavedViewDetail } from '@/lib/viewer-events';
 import { ROOM_LABELS_TOGGLE_EVENT, ROOM_LABELS_CONFIG_EVENT, type RoomLabelsToggleDetail } from '@/hooks/useRoomLabels';
 import useRoomLabels from '@/hooks/useRoomLabels';
 import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDialog';
