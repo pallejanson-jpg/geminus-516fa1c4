@@ -152,7 +152,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     }
 
     return bestId;
-  }, [getXeokitViewer]);
+  }, [getXeokitViewer, normalizeGuidKey]);
 
   // Generate storey map
   const generateMap = useCallback(() => {
