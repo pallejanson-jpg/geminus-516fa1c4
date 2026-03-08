@@ -1,125 +1,165 @@
 
-
-## Plan: System Support + Reconciliation Engine (IMPLEMENTED)
-
-### Database tables created
-1. **`asset_external_ids`** — Maps external IDs (IFC GUID, ACC externalId, Revit UniqueId) to stable `fm_guid` for cross-source reconciliation
-2. **`systems`** — Technical systems (e.g., LB01 Supply Air) with `fm_guid`, `discipline`, `system_type`, `building_fm_guid`, hierarchical `parent_system_id`
-3. **`asset_system`** — Many-to-many relation between assets and systems with optional `role`
-4. **`asset_connections`** — Topology/flow between assets (`from_fm_guid` → `to_fm_guid`) with `connection_type` and `direction`
-
-All tables have RLS: authenticated read, admin write. Indexes on common query patterns.
-
-### Edge function changes
-1. **`ifc-to-xkt/index.ts`** — Extended with system extraction:
-   - Identifies `IfcSystem` / `IfcDistributionSystem` meta objects
-   - Falls back to `SystemName` property grouping
-   - Extracts `IfcRelConnects*` for topology → `asset_connections`
-   - Stores all object IDs in `asset_external_ids`
-   - Persists systems, asset-system links, and connections in batches
-
-2. **`acc-sync/index.ts`** — Extended with system support:
-   - Resolves `System Name`, `System Type`, `System Classification`, `System Abbreviation` property fields
-   - Groups instances by `SystemName` → auto-creates `systems` + `asset_system` rows
-   - Stores ACC `externalId` mappings in `asset_external_ids` for all levels, rooms, instances
-   - Infers discipline from system name (Ventilation, Heating, Cooling, Electrical, Plumbing, FireProtection)
-
-### System activation for existing buildings
-- **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
-- **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
-- **Asset+-byggnader**: Kör `sync-systems` action via `asset-plus-sync` edge function → extraherar system från befintliga attribut (IMPLEMENTERAT)
-
-### Frontend (future phase)
-- System tab on FacilityLandingPage
-- System badge on asset property dialogs
-- Manual system creation dialog
+## Mål (det du beskriver)
+1) **2D-läget (rent 2D)** ska visa en “slice” av valt våningsplan (standard **1.2 m**) så att **väggar/dörrar/fönster/möbler är klickbara**, och inte bara “tomt”.
+2) **Split 2D/3D på mobil**: överdelen (minimap/plan) ska använda **xeokits StoreyViewsPlugin** och **inte bli tom**.
+3) **Verktyg**: **Mätning ska fungera i split** (3D-panelen), men **snitt/section** ska (enligt ditt val “Hybrid”) endast fungera i **full 3D** (inte i split), för maximal stabilitet/prestanda.
+4) **Layout**: Fullskärm/edge-to-edge ska bara gälla **mobil**, desktop ska ha normal header+content utan att klippa.
 
 ---
 
-## Plan: Viewer Color Fix (IMPLEMENTED)
+## 1) Snabb rotorsaks-analys (varför 2D och split-minimap blir tomt idag)
+Utifrån koden + runtime-screenshot:
+- 3D-panelen laddar modellen korrekt, men **SplitPlanView renderar ingen bild** (och visar i praktiken en mörk/tom yta).
+- SplitPlanView bygger på att xeokit-meta innehåller **IfcBuildingStorey** i `viewer.metaScene.metaObjects`. Om:
+  - meta saknas/inte är klar när plugin initieras, eller
+  - StoreyViewsPlugin inte lyckas registrera storeys, eller
+  - `createStoreyMap()` returnerar en bild som blir “osynlig” (transparent/kontrast), eller
+  - bilden inte laddas (img onError) utan att vi visar det,
+  då blir resultatet tomt utan tydlig feedback.
 
-### Changes made:
-1. **Window color** — Changed from blue-gray `[0.392, 0.490, 0.541]` (#647D8A) to neutral warm gray `[0.780, 0.780, 0.760]` (#C7C7C2) in:
-   - `src/lib/architect-colors.ts`
-   - `src/hooks/useArchitectViewMode.ts`
-   - Database `viewer_themes` table (both "Arkitektvy" and "Standard" themes)
-   - `ViewerFilterPanel.tsx` category palette
-
-2. **Space color** — Verified as correct neutral gray `[0.898, 0.894, 0.890]` (#E5E4E3). Changed category palette in ViewerFilterPanel from blue to neutral.
-
-3. **Background** — Already correct gray gradient in NativeViewerShell.
-
-4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
-
-5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
+**Viktig observation:** SplitPlanView saknar “hårda” diagnostik-UI (status + senaste fel + storey count + imageData length) och saknar `img.onError` → vi ser “tomt” men får ingen vägledning.
 
 ---
 
-## Plan: IFC System-Only Import (IMPLEMENTED - Phase 1)
+## 2) Plan: Åtgärda split-minimap (StoreyViewsPlugin) så den aldrig är “tyst tom”
+### 2.1 Lägg till tydlig diagnostik i SplitPlanView (för att låsa felet direkt)
+I `src/components/viewer/SplitPlanView.tsx`:
+- Visa en liten debug-rad i hörnet (endast i dev) med:
+  - `viewerReady` (finns scene/metaScene)
+  - `metaStoreyCount` (antal IfcBuildingStorey i meta)
+  - `pluginStoreyCount`
+  - `lastTriedStoreyId`
+  - `imageDataLength`
+  - `lastError`
+- Lägg till `onError` på `<img>` som sätter `error` om data-url inte renderar.
+- Logga ett kompakt “one-liner” i console när:
+  - plugin initieras
+  - map genereras (storeyId, width/height, imageDataLength)
+  - map misslyckas (exception message)
 
-### What was built
-1. **`ifc-extract-systems` edge function** — New lightweight edge function that:
-   - Downloads IFC from `ifc-uploads` bucket
-   - Parses metadata via `web-ifc` + `xeokit-convert` (same pipeline as `ifc-to-xkt`)
-   - Extracts systems (`IfcSystem`, `IfcDistributionSystem`, `SystemName` property grouping)
-   - Extracts connections (`IfcRelConnects*`)
-   - Reconciles IFC GUIDs with existing assets (3-step: exact match → name match → identity)
-   - Persists to `systems`, `asset_system`, `asset_connections`, `asset_external_ids`
-   - **Skips XKT generation** — much faster (~10-15s vs minutes)
-   - Supports 3 modes: `systems-only` (default), `enrich-guids` (future), `full` (delegates to `ifc-to-xkt`)
+Detta gör att vi kan gå från “tomt” → exakt orsak på första testet.
 
-2. **UI in ApiSettingsModal** — "From IFC" button on the Technical Systems card:
-   - Building selector dropdown
-   - IFC file upload
-   - Mode radio: "Only systems (fast)" / "Systems + FMGUIDs (coming soon)" / "Full conversion"
-   - Progress tracking and result display
+### 2.2 Gör createStoreyMap visuellt robust (kontrast/transparent)
+För att undvika “transparent PNG på mörk bakgrund ser tomt ut”:
+- Sätt SplitPlanView-container till **vit/ljus bakgrund** oavsett tema när vi visar plan (t.ex. `background: #fff`), eller lägg en vit “canvas-matta” bakom `<img>`.
+- Om vi ändå vill följa tema: lägg en toggle senare. Först: robust.
 
-### Still to implement
-- **`enrich-guids` mode** — FMGUID generation + IFC write-back via `web-ifc` property injection
-- **IFC archive** — Store enriched IFC in `ifc-uploads/{buildingFmGuid}/enriched/`
-- **ACC `enrich-guids` action** — Deterministic GUID generation for ACC-sourced models
+### 2.3 Initiera StoreyViewsPlugin från samma SDK-källa som viewern (minska versions/globala skillnader)
+Just nu laddar:
+- NativeXeokitViewer: xeokit SDK via fetch+Blob-import
+- SplitPlanView: import via `Function('return import("/lib/xeokit/xeokit-sdk.es.js")')()`
+
+Plan:
+- Exponera SDK-objektet från NativeXeokitViewer globalt (t.ex. `window.__xeokitSdk`), och låt SplitPlanView använda den om den finns.
+- Fall back till egen import endast om global saknas.
+
+Det minskar risken att StoreyViewsPlugin inte matchar viewer-version.
+
+### 2.4 Fallback om storeys saknas: “plan snapshot”
+Om modellen saknar IfcBuildingStorey-meta (eller plugin inte hittar storeys):
+- Fallback: generera en 2D-bild genom att:
+  - temporärt sätta en top-down ortho-kamera,
+  - rendera en frame,
+  - använda `viewer.scene.canvas.canvas.toDataURL()`
+  - återställa kamera.
+Det är inte lika “riktig storey map”, men gör att användaren aldrig ser “tomt” och vi kan fortfarande klicka för navigation (i fallback begränsat).
 
 ---
 
-## Plan: Remove Separate Technical Systems UI (IMPLEMENTED)
+## 3) Plan: Fixa rent 2D-läge (klipp + klickbarhet på objekt)
+I `src/components/viewer/ViewerToolbar.tsx` + `src/hooks/useSectionPlaneClipping.ts`:
 
-### Changes made
-1. **Removed standalone Technical Systems UI** from `ApiSettingsModal.tsx` Sync tab:
-   - Removed `SyncProgressCard` for Technical Systems
-   - Removed IFC System Import panel (file upload, building selector, mode radio)
-   - Removed state variables: `isSyncingSystems`, `systemSyncResult`, `ifcSystemFile`, `ifcSystemBuildingGuid`, `ifcSystemMode`, `isImportingIfcSystems`, `ifcSystemImportResult`, `ifcSystemBuildings`, `showIfcSystemImport`
-   - Removed `handleSyncSystems` and `handleImportIfcSystems` functions
-   - Added lightweight system count display in the sync status section
+### 3.1 Klipp-strategi (1.2 m standard)
+Behåll standard: `topClipY = floorMinY + 1.2`.
+Men gör bounds robust:
+- Om `calculateFloorBounds(floorId)` ger null eller uppenbart fel:
+  - försök få storey AABB via StoreyViewsPlugin (om tillgänglig), annars
+  - fallback: använd `scene.aabb` + heuristik (t.ex. närmaste Y-kluster).
 
-2. **Auto-trigger system sync** after existing flows:
-   - After Asset+ asset sync completes → calls `sync-systems` automatically
-   - After ACC BIM sync completes → calls `sync-systems` automatically
-   - IFC flow already extracts systems in `ifc-to-xkt` edge function (no change needed)
+### 3.2 Klickbarhet (pickable) i 2D
+I 2D-mode logiken sätter vi idag vissa typer pickable=false (slabs).
+Plan:
+- Säkerställ att **väggar/dörrar/fönster/möbler** alltid förblir `pickable=true` i 2D (om de är synliga).
+- Låt **IfcSpace** vara “svagt” och pickable (för rums-klick), men håll golvplattor/coverings icke-klickbara.
 
-3. **System count** shown inline in sync status when systems exist (no separate card)
+### 3.3 Undvik att 2D-mode råkar göra scenen “tom”
+Säkra ordningen:
+1) Välj floorId (eller default lägsta).
+2) Applicera klipp-plan.
+3) Först efter det: gör typ-styling (opacity/edges).
+4) Avsluta med att “reveal canvas”.
+
+Och lägg en säkerhetsåterställning:
+- Om antal synliga objekt efter 2D-enter blir “nära 0”, auto-rollback:
+  - ta bort klipp
+  - logga diagnos
+  - visa toast i dev.
 
 ---
 
-## Plan: Move & Delete Objects in 3D Viewer (IMPLEMENTED - Phase 1)
+## 4) Plan: Verktyg (mätning + snitt) ska faktiskt göra något
+Just nu togglar `ViewerToolbar` bara state + event, men **installerar inga verktygs-plugins** och kopplar inte pointer-events för att skapa mätningar/snitt.
 
-### Database changes
-- Added columns to `assets`: `modification_status` (text), `moved_offset_x/y/z` (numeric), `original_room_fm_guid` (text), `modification_date` (timestamptz)
-- Partial index on `modification_status WHERE NOT NULL`
+### 4.1 Mätverktyg (ska fungera i split)
+- Installera xeokit **DistanceMeasurementsPlugin** när viewern är redo (NativeXeokitViewer eller NativeViewerShell).
+- När `VIEWER_TOOL_CHANGED_EVENT` = `measure`:
+  - aktivera pluginens input-läge (eller egna canvas handlers som:
+    - pickar world points (pickSurface true när möjligt),
+    - skapar measurement mellan 2 punkter,
+    - visar label/line.
+- Lägg “clear measurements” knapp i toolbar när measure aktiv.
 
-### Viewer changes
-1. **`entityOffsetsEnabled: true`** in `NativeXeokitViewer.tsx` Viewer constructor
-2. **`useObjectMoveMode` hook** — drag-move logic with:
-   - World-space pick-surface delta calculation
-   - AABB-based room detection at new position
-   - Persists offset + `modification_status = 'moved'` + room changes to DB
-   - Applies saved offsets & hides deleted entities on model load
-   - ESC to cancel move
-3. **Context menu** — Added "Flytta objekt", "Ta bort objekt", "Markera" (select fix)
-4. **Filter panel** — New "Ändringar" section with toggles:
-   - "Visa flyttade objekt" → orange colorization (`[1, 0.6, 0.1]`)
-   - "Visa borttagna objekt" → red colorization (`[1, 0.2, 0.2]`), makes hidden deleted objects visible
+### 4.2 Snittverktyg (endast full 3D enligt “Hybrid”)
+- I split-läge (viewMode === split2d3d på mobil):
+  - disable/hidden “Section” i toolbar med tooltip “Tillgängligt i full 3D”.
+  - lägg knapp “Öppna full 3D” (byter mode till 3d) bredvid eller i 3-punktsmenyn.
+- I full 3D:
+  - installera **SectionPlanesPlugin** och koppla interaktion (dra ett plan, rotera/offset, clear).
 
-### Still to implement
-- **Rapport-export** — CSV export of all modified assets from Insights/Asset tab
-- **Asset+ sync reset** — Clear `modification_status` when `source_updated_at` changes in `asset-plus-sync`
-- **ContextMenuSettings panel** — Wire new items visibility to settings toggles
+---
+
+## 5) Plan: Layout (mobil edge-to-edge, desktop normal)
+### 5.1 Mobil
+Behåll `MobileUnifiedViewer` som `fixed inset-0` + `100dvh/100vw` (det uppfyller “hela skärmen” på mobil).
+
+### 5.2 Desktop (ändra så header inte klipps/överlappas)
+I desktop-rendern i `src/pages/UnifiedViewer.tsx`:
+- Byt content wrapper från `absolute inset-0` till en **`flex-1 relative`** under header.
+- Viewer-lager ska fylla bara content-ytan (inte över header).
+Detta eliminerar “klipper lite upp och ner” på desktop och gör desktop-läget stabilt.
+
+---
+
+## 6) Testplan (jag kör själv med browser tools + loggar)
+1) Öppna mobil: `/viewer?building=<en byggnad med floors>&mode=split2d3d`
+2) Verifiera att SplitPlanView visar:
+   - storey count > 0
+   - imageDataLength > 0
+   - img renderar (ingen onError)
+3) Klick i 2D-plan → kameraflytt i 3D-panelen.
+4) Växla till rent `mode=2d`:
+   - klipp 1.2 m
+   - klick på vägg/dörr/fönster ger pick-result (minst highlight/selected).
+5) Measure i split:
+   - skapa mätning mellan två punkter.
+6) Section i split:
+   - ska vara disabled + länk till full 3D.
+7) Section i full 3D:
+   - skapa snitt, clear.
+
+---
+
+## Filer som kommer beröras (implementation)
+- `src/components/viewer/SplitPlanView.tsx` (diagnostik, robust init, bakgrund, img onError, SDK-källa, fallback)
+- `src/components/viewer/NativeXeokitViewer.tsx` (exponera SDK globalt; ev installera plugins)
+- `src/components/viewer/ViewerToolbar.tsx` (verklig tool-aktivering, split-regler för section, 2D robusthet)
+- `src/hooks/useSectionPlaneClipping.ts` (robust bounds, skydd mot “tomt”)
+- `src/pages/UnifiedViewer.tsx` (desktop layout: flex-1 content istället för absolute inset-0)
+
+---
+
+## Förväntat resultat (acceptanskriterier)
+- Split 2D/3D på mobil: överdelen visar planbild (inte tom) inom 10 sek efter load.
+- Rent 2D-läge: synlig “slice” av valt plan, och objekt är klickbara.
+- Mätverktyg fungerar i split. Snittverktyg är avstängt i split men fungerar i full 3D.
+- Desktop: tillbaka till normal layout (header + viewer under), utan klipp uppe/nere.
