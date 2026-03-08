@@ -454,7 +454,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       />
 
       {/* Bottom toolbar */}
-      {isViewerReady && xeokitViewer && (
+      {isViewerReady && xeokitViewer && !hideToolbar && (
         <ViewerToolbar viewer={xeokitViewer} />
       )}
 
