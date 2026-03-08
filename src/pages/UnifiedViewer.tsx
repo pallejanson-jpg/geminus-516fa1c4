@@ -886,7 +886,7 @@ function MobileUnifiedViewer({
   }, [viewMode, viewerReady]);
 
   return (
-    <div ref={containerRef} className="fixed inset-0 bg-black z-40 overflow-hidden flex flex-col" style={{ height: '100dvh', width: '100vw', touchAction: 'none', overscrollBehavior: 'none' }}
+    <div ref={containerRef} className="fixed inset-0 bg-background z-40 overflow-hidden flex flex-col" style={{ height: '100dvh', width: '100vw', touchAction: 'none', overscrollBehavior: 'none' }}
       onTouchMove={isSplit ? handleTouchMove : undefined}
       onTouchEnd={isSplit ? handleTouchEnd : undefined}
     >
@@ -898,7 +898,6 @@ function MobileUnifiedViewer({
             className="relative overflow-hidden"
             style={{
               height: `${splitRatio}%`,
-              paddingTop: 'env(safe-area-inset-top, 0px)',
               touchAction: 'none',
             }}
           >
@@ -912,11 +911,11 @@ function MobileUnifiedViewer({
 
           {/* Draggable divider */}
           <div
-            className="relative z-30 flex items-center justify-center bg-card/90 backdrop-blur-sm border-y border-border/50 touch-none select-none"
-            style={{ height: '20px', cursor: 'row-resize' }}
+            className="relative z-30 flex items-center justify-center border-y border-border/30 touch-none select-none"
+            style={{ height: '8px', cursor: 'row-resize' }}
             onTouchStart={handleTouchStart}
           >
-            <GripHorizontal className="h-3 w-3 text-muted-foreground" />
+            <div className="h-1 w-8 rounded-full bg-muted-foreground/40" />
           </div>
 
           {/* Bottom: 3D Model */}

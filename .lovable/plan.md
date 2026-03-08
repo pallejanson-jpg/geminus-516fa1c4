@@ -1,45 +1,125 @@
 
 
-# Analys: Svarta ytor och layoutproblem i 2D/3D split
+## Plan: System Support + Reconciliation Engine (IMPLEMENTED)
 
-## Problem från bilden
+### Database tables created
+1. **`asset_external_ids`** — Maps external IDs (IFC GUID, ACC externalId, Revit UniqueId) to stable `fm_guid` for cross-source reconciliation
+2. **`systems`** — Technical systems (e.g., LB01 Supply Air) with `fm_guid`, `discipline`, `system_type`, `building_fm_guid`, hierarchical `parent_system_id`
+3. **`asset_system`** — Many-to-many relation between assets and systems with optional `role`
+4. **`asset_connections`** — Topology/flow between assets (`from_fm_guid` → `to_fm_guid`) with `connection_type` and `direction`
 
-1. **Svarta ytor i 2D-planen** — `createStoreyMap()` genererar en planritning där *alla väggar, pelare, balkar, räcken, trappor och bjälklag* temporärt färgas svart (rad 383-388: `entity.colorize = [0, 0, 0]`). Men problemet är att **bakgrunden i snapshot-bilden** också är svart/transparent. xeokits `createStoreyMap` renderar med genomskinlig bakgrund och alla icke-vägg-objekt (golv, dörrar, möbler) visas som de är — men i "Architect mode" har vi redan färgat dessa i ljusa nyanser. Det som syns som stora svarta fält är sannolikt **ifcSlab** (bjälklag/golv) som inkluderas i `wallTypes` och färgas svart — de täcker hela planets yta. Golv/bjälklag bör INTE vara svarta.
+All tables have RLS: authenticated read, admin write. Indexes on common query patterns.
 
-2. **Svarta kanter runt hela vyn** — Mobilens container (`MobileUnifiedViewer`) har `bg-black` på yttre div (rad 889) och `paddingTop: 'env(safe-area-inset-top)'` på 2D-panelen (rad 901). Divider-handtaget har `height: 20px` och `bg-card/90` — detta skapar en synlig svart rand. Dessutom tar safe-area-insets bort utrymme utan att fylla det.
+### Edge function changes
+1. **`ifc-to-xkt/index.ts`** — Extended with system extraction:
+   - Identifies `IfcSystem` / `IfcDistributionSystem` meta objects
+   - Falls back to `SystemName` property grouping
+   - Extracts `IfcRelConnects*` for topology → `asset_connections`
+   - Stores all object IDs in `asset_external_ids`
+   - Persists systems, asset-system links, and connections in batches
 
-3. **2D-planen fyller inte sin container** — Planen visas i `inline-block` med `transform-origin: 0 0` och initial scale 0.75, men centreringslogiken verkar inte köra korrekt, vilket lämnar svart/tomt utrymme runt bilden.
+2. **`acc-sync/index.ts`** — Extended with system support:
+   - Resolves `System Name`, `System Type`, `System Classification`, `System Abbreviation` property fields
+   - Groups instances by `SystemName` → auto-creates `systems` + `asset_system` rows
+   - Stores ACC `externalId` mappings in `asset_external_ids` for all levels, rooms, instances
+   - Infers discipline from system name (Ventilation, Heating, Cooling, Electrical, Plumbing, FireProtection)
 
-## Plan
+### System activation for existing buildings
+- **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
+- **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
+- **Asset+-byggnader**: Kör `sync-systems` action via `asset-plus-sync` edge function → extraherar system från befintliga attribut (IMPLEMENTERAT)
 
-### 1. Fixa svarta planytor — ta bort slab/golv från svartfärgning
-**Fil:** `src/components/viewer/SplitPlanView.tsx` (rad 366)
-- Ta bort `'ifcslab'` från `wallTypes`-setet. Slabs är golvytor som täcker hela planet — att färga dem svart gör hela planen svart.
-- Behåll: `ifcwall`, `ifcwallstandardcase`, `ifccurtainwall`, `ifccolumn`, `ifcbeam` (dessa är tunna linjelement).
-- Eventuellt ta bort `ifcrailing`, `ifcstair`, `ifcstairflight` om de orsakar stora svarta block.
+### Frontend (future phase)
+- System tab on FacilityLandingPage
+- System badge on asset property dialogs
+- Manual system creation dialog
 
-### 2. Ta bort svarta kanter — fullscreen mobile layout
-**Fil:** `src/pages/UnifiedViewer.tsx`
-- Ändra `MobileUnifiedViewer` root-div:
-  - Byt `bg-black` till `bg-background` (eller ta bort helt).
-  - Ta bort `paddingTop: 'env(safe-area-inset-top)'` från 2D-panelen (rad 901) — istället låt planen använda hela höjden och overlay-knappar hantera safe area själva.
-- Divider: Minska höjd från `20px` till `8px`, ta bort bakgrundsfärg eller gör den tunn och transparent.
-- Se till att mode-switcher-overlay använder safe-area men inte tar bort yta från planen.
+---
 
-### 3. Fylla 2D-containern — auto-fit plan
-**Fil:** `src/components/viewer/SplitPlanView.tsx`
-- I centreringseffekten: beräkna `scale` dynamiskt så planen fyller containern (`contain`-logik istället för fast 0.75).
-- Formeln: `scale = Math.min(containerW / imgW, containerH / imgH) * 0.95`
-- Centrera med offset: `offsetX = (containerW - imgW * scale) / 2`, samma för Y.
-- Bakgrundsfärg redan `#ffffff` — korrekt.
+## Plan: Viewer Color Fix (IMPLEMENTED)
 
-### 4. Tunnare divider (mobil)
-**Fil:** `src/pages/UnifiedViewer.tsx`
-- Byt divider-höjd till `8px` (från 20px).
-- Gör griphandtaget subtilare (h-2 w-6, rounded-full, med tunn linje).
-- Behåll touchStart-hitbox på hela elementet.
+### Changes made:
+1. **Window color** — Changed from blue-gray `[0.392, 0.490, 0.541]` (#647D8A) to neutral warm gray `[0.780, 0.780, 0.760]` (#C7C7C2) in:
+   - `src/lib/architect-colors.ts`
+   - `src/hooks/useArchitectViewMode.ts`
+   - Database `viewer_themes` table (both "Arkitektvy" and "Standard" themes)
+   - `ViewerFilterPanel.tsx` category palette
 
-### Filer att ändra
-- `src/components/viewer/SplitPlanView.tsx` — slab-fix, auto-fit centering
-- `src/pages/UnifiedViewer.tsx` — fullscreen layout, tunnare divider
+2. **Space color** — Verified as correct neutral gray `[0.898, 0.894, 0.890]` (#E5E4E3). Changed category palette in ViewerFilterPanel from blue to neutral.
 
+3. **Background** — Already correct gray gradient in NativeViewerShell.
+
+4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
+
+5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
+
+---
+
+## Plan: IFC System-Only Import (IMPLEMENTED - Phase 1)
+
+### What was built
+1. **`ifc-extract-systems` edge function** — New lightweight edge function that:
+   - Downloads IFC from `ifc-uploads` bucket
+   - Parses metadata via `web-ifc` + `xeokit-convert` (same pipeline as `ifc-to-xkt`)
+   - Extracts systems (`IfcSystem`, `IfcDistributionSystem`, `SystemName` property grouping)
+   - Extracts connections (`IfcRelConnects*`)
+   - Reconciles IFC GUIDs with existing assets (3-step: exact match → name match → identity)
+   - Persists to `systems`, `asset_system`, `asset_connections`, `asset_external_ids`
+   - **Skips XKT generation** — much faster (~10-15s vs minutes)
+   - Supports 3 modes: `systems-only` (default), `enrich-guids` (future), `full` (delegates to `ifc-to-xkt`)
+
+2. **UI in ApiSettingsModal** — "From IFC" button on the Technical Systems card:
+   - Building selector dropdown
+   - IFC file upload
+   - Mode radio: "Only systems (fast)" / "Systems + FMGUIDs (coming soon)" / "Full conversion"
+   - Progress tracking and result display
+
+### Still to implement
+- **`enrich-guids` mode** — FMGUID generation + IFC write-back via `web-ifc` property injection
+- **IFC archive** — Store enriched IFC in `ifc-uploads/{buildingFmGuid}/enriched/`
+- **ACC `enrich-guids` action** — Deterministic GUID generation for ACC-sourced models
+
+---
+
+## Plan: Remove Separate Technical Systems UI (IMPLEMENTED)
+
+### Changes made
+1. **Removed standalone Technical Systems UI** from `ApiSettingsModal.tsx` Sync tab:
+   - Removed `SyncProgressCard` for Technical Systems
+   - Removed IFC System Import panel (file upload, building selector, mode radio)
+   - Removed state variables: `isSyncingSystems`, `systemSyncResult`, `ifcSystemFile`, `ifcSystemBuildingGuid`, `ifcSystemMode`, `isImportingIfcSystems`, `ifcSystemImportResult`, `ifcSystemBuildings`, `showIfcSystemImport`
+   - Removed `handleSyncSystems` and `handleImportIfcSystems` functions
+   - Added lightweight system count display in the sync status section
+
+2. **Auto-trigger system sync** after existing flows:
+   - After Asset+ asset sync completes → calls `sync-systems` automatically
+   - After ACC BIM sync completes → calls `sync-systems` automatically
+   - IFC flow already extracts systems in `ifc-to-xkt` edge function (no change needed)
+
+3. **System count** shown inline in sync status when systems exist (no separate card)
+
+---
+
+## Plan: Move & Delete Objects in 3D Viewer (IMPLEMENTED - Phase 1)
+
+### Database changes
+- Added columns to `assets`: `modification_status` (text), `moved_offset_x/y/z` (numeric), `original_room_fm_guid` (text), `modification_date` (timestamptz)
+- Partial index on `modification_status WHERE NOT NULL`
+
+### Viewer changes
+1. **`entityOffsetsEnabled: true`** in `NativeXeokitViewer.tsx` Viewer constructor
+2. **`useObjectMoveMode` hook** — drag-move logic with:
+   - World-space pick-surface delta calculation
+   - AABB-based room detection at new position
+   - Persists offset + `modification_status = 'moved'` + room changes to DB
+   - Applies saved offsets & hides deleted entities on model load
+   - ESC to cancel move
+3. **Context menu** — Added "Flytta objekt", "Ta bort objekt", "Markera" (select fix)
+4. **Filter panel** — New "Ändringar" section with toggles:
+   - "Visa flyttade objekt" → orange colorization (`[1, 0.6, 0.1]`)
+   - "Visa borttagna objekt" → red colorization (`[1, 0.2, 0.2]`), makes hidden deleted objects visible
+
+### Still to implement
+- **Rapport-export** — CSV export of all modified assets from Insights/Asset tab
+- **Asset+ sync reset** — Clear `modification_status` when `source_updated_at` changes in `asset-plus-sync`
+- **ContextMenuSettings panel** — Wire new items visibility to settings toggles
