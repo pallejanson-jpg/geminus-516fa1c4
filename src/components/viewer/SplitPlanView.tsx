@@ -841,16 +841,18 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
   // Handle floor dropdown change
   const handleFloorChange = useCallback((floorId: string) => {
-    const floor = effectiveFloors.find((f: any) => f.id === floorId);
-    const fmGuid = (floor as any)?.databaseLevelFmGuids?.[0] ?? null;
+    const floor = effectiveFloors.find((f) => f.id === floorId);
+    const targetStoreyId = floor?.metaObjectIds.find((id) => pluginRef.current?.storeys?.[id]) || floorId;
+    const fmGuid = floor?.databaseLevelFmGuids?.[0] ?? null;
+
     selectedFloorRef.current = {
-      floorId: floorId,
+      floorId: targetStoreyId,
       floorFmGuid: fmGuid,
     };
-    setSelectedFloorId(floorId);
+    setSelectedFloorId(floor?.id ?? floorId);
     initialCenterApplied.current = false;
     lastDispatchedFloorRef.current = null; // allow new dispatch
-    mapCacheRef.current.delete(floorId);
+    mapCacheRef.current.delete(targetStoreyId);
     generateMap();
   }, [effectiveFloors, generateMap]);
 
