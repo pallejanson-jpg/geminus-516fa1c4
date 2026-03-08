@@ -453,9 +453,11 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         onViewerReady={handleViewerReady}
       />
 
-      {/* Bottom toolbar */}
-      {isViewerReady && xeokitViewer && !hideToolbar && (
-        <ViewerToolbar viewer={xeokitViewer} />
+      {/* Bottom toolbar — always mounted for event handling, hidden visually when hideToolbar */}
+      {isViewerReady && xeokitViewer && (
+        <div style={hideToolbar ? { position: 'absolute', opacity: 0, pointerEvents: 'none', height: 0, overflow: 'hidden' } : undefined}>
+          <ViewerToolbar viewer={xeokitViewer} />
+        </div>
       )}
 
       {/* Mobile header overlay — hidden when parent (UnifiedViewer) provides its own */}
