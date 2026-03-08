@@ -485,7 +485,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       });
     };
 
-    const interval = setInterval(updateCamera, 100);
+    const interval = setInterval(updateCamera, isMobile ? 350 : 150);
     updateCamera();
     return () => clearInterval(interval);
   }, [getXeokitViewer]);
