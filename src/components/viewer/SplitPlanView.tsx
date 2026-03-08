@@ -720,30 +720,46 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         </div>
       )}
 
-      {/* Camera position overlay */}
+      {/* Camera position overlay — positioned inside the transform container */}
       {storeyMap && !imgError && cameraPos && imgRef.current && (
-        <div
-          className="absolute pointer-events-none z-10"
-          style={{
-            left: `calc(${cameraPos.x}% * ${panZoom.scale} + ${panZoom.offsetX}px)`,
-            top: `calc(${cameraPos.y}% * ${panZoom.scale} + ${panZoom.offsetY}px)`,
-          }}
-        >
-          {/* FOV cone */}
-          <div
-            className="absolute -translate-x-1/2 -translate-y-1/2"
-            style={{
-              width: 0, height: 0,
-              borderLeft: '20px solid transparent',
-              borderRight: '20px solid transparent',
-              borderBottom: '35px solid hsl(var(--primary) / 0.15)',
-              transform: `translate(-50%, -50%) rotate(${cameraPos.angle - Math.PI / 2}rad)`,
-              transformOrigin: 'center bottom',
-            }}
-          />
-          {/* Camera dot */}
-          <div className="absolute w-3 h-3 rounded-full bg-primary border-2 border-primary-foreground shadow-lg -translate-x-1/2 -translate-y-1/2" />
-        </div>
+        (() => {
+          // Calculate camera position relative to the image inside the transform container
+          const imgEl = imgRef.current;
+          const containerEl = containerRef.current;
+          if (!imgEl || !containerEl) return null;
+          // The image is inside a flex-centered div that has transform applied.
+          // cameraPos.x/y are percentages of the image dimensions.
+          // We need to position the indicator inside the transformed container.
+          const imgRect = imgEl.getBoundingClientRect();
+          const containerRect = containerEl.getBoundingClientRect();
+          // Screen position of camera on the image
+          const screenX = imgRect.left + (cameraPos.x / 100) * imgRect.width;
+          const screenY = imgRect.top + (cameraPos.y / 100) * imgRect.height;
+          // Convert to container-relative pixels
+          const relX = screenX - containerRect.left;
+          const relY = screenY - containerRect.top;
+          return (
+            <div
+              className="absolute pointer-events-none z-10"
+              style={{ left: `${relX}px`, top: `${relY}px` }}
+            >
+              {/* FOV cone */}
+              <div
+                className="absolute -translate-x-1/2 -translate-y-1/2"
+                style={{
+                  width: 0, height: 0,
+                  borderLeft: '20px solid transparent',
+                  borderRight: '20px solid transparent',
+                  borderBottom: '35px solid hsl(var(--primary) / 0.15)',
+                  transform: `translate(-50%, -50%) rotate(${cameraPos.angle - Math.PI / 2}rad)`,
+                  transformOrigin: 'center bottom',
+                }}
+              />
+              {/* Camera dot */}
+              <div className="absolute w-3 h-3 rounded-full bg-primary border-2 border-primary-foreground shadow-lg -translate-x-1/2 -translate-y-1/2" />
+            </div>
+          );
+        })()
       )}
 
       {/* Hovered entity tooltip removed for cleaner UI */}

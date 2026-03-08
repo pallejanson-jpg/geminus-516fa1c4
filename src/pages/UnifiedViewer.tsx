@@ -809,18 +809,18 @@ function MobileUnifiedViewer({
     isDraggingRef.current = false;
   }, []);
 
-  // Dispatch 2D mode events when switching to 2D on mobile
+  // Dispatch 2D mode events when switching to 2D on mobile — event-driven, not timer-based
   useEffect(() => {
     if (viewMode === '2d' && viewerReady) {
       const dispatch2D = () => {
         window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '2d' } }));
       };
-      // Multiple attempts to ensure toolbar has mounted and is listening
-      const t1 = setTimeout(dispatch2D, 300);
-      const t2 = setTimeout(dispatch2D, 800);
-      const t3 = setTimeout(dispatch2D, 2000);
-      const t4 = setTimeout(dispatch2D, 4000);
-      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
+      // Listen for VIEWER_MODELS_LOADED as the reliable trigger
+      const modelsHandler = () => { setTimeout(dispatch2D, 300); };
+      window.addEventListener('VIEWER_MODELS_LOADED', modelsHandler, { once: true });
+      // Also dispatch once immediately in case models already loaded
+      const t = setTimeout(dispatch2D, 300);
+      return () => { clearTimeout(t); window.removeEventListener('VIEWER_MODELS_LOADED', modelsHandler); };
     } else if (viewMode === '3d' && viewerReady) {
       const dispatch3D = () => {
         window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
@@ -831,7 +831,7 @@ function MobileUnifiedViewer({
   }, [viewMode, viewerReady]);
 
   return (
-    <div ref={containerRef} className="fixed inset-0 bg-black z-40 overflow-hidden flex flex-col" style={{ height: '100dvh', width: '100vw' }}
+    <div ref={containerRef} className="fixed inset-0 bg-black z-40 overflow-hidden flex flex-col" style={{ height: '100dvh', width: '100vw', touchAction: 'none', overscrollBehavior: 'none' }}
       onTouchMove={isSplit ? handleTouchMove : undefined}
       onTouchEnd={isSplit ? handleTouchEnd : undefined}
     >
@@ -844,6 +844,7 @@ function MobileUnifiedViewer({
             style={{
               height: `${splitRatio}%`,
               paddingTop: 'env(safe-area-inset-top, 0px)',
+              touchAction: 'none',
             }}
           >
             {/* Label removed for cleaner mobile UI */}
