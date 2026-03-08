@@ -844,6 +844,7 @@ function MobileUnifiedViewer({
             style={{
               height: `${splitRatio}%`,
               paddingTop: 'env(safe-area-inset-top, 0px)',
+              touchAction: 'none',
             }}
           >
             {/* Label removed for cleaner mobile UI */}
