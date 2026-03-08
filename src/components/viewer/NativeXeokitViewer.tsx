@@ -128,9 +128,10 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         const cc = viewer.cameraControl;
         cc.dollyRate = 10;           // was default ~15-20
         cc.panRate = 0.3;            // was default ~0.5
-        cc.rotationInertia = 0.7;    // add inertia for smoother orbiting
+        cc.rotationInertia = 0.85;   // high inertia for smoother orbiting stop
+        if (cc.dragRotateRate !== undefined) cc.dragRotateRate = 100; // default 360 — critical for mobile touch
         if (cc.touchDollyRate !== undefined) cc.touchDollyRate = 0.15;  // pinch zoom speed
-        if (cc.touchPanRate !== undefined) cc.touchPanRate = 0.3;       // finger pan speed
+        if (cc.touchPanRate !== undefined) cc.touchPanRate = 0.2;       // finger pan speed (lowered from 0.3)
       }
 
       // NavCube — load custom neutral-styled plugin via script tag
