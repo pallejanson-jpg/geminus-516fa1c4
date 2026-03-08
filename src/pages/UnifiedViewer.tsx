@@ -943,7 +943,7 @@ function MobileUnifiedViewer({
 
           {/* Mobile mode switcher overlay — top-right corner */}
           <div
-            className="absolute top-0 right-0 z-40 flex items-center gap-0.5 p-1"
+            className="pointer-events-none absolute top-0 right-0 z-40 flex items-center gap-0.5 p-1"
             style={{
               paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4px)',
               paddingRight: 'max(env(safe-area-inset-right, 0px), 6px)',
@@ -953,11 +953,11 @@ function MobileUnifiedViewer({
               variant="secondary"
               size="icon"
               onClick={onGoBack}
-              className="h-6 w-6 bg-card/95 backdrop-blur-sm shadow-md border"
+              className="pointer-events-auto h-6 w-6 bg-card/95 backdrop-blur-sm shadow-md border"
             >
               <ArrowLeft className="h-3 w-3" />
             </Button>
-            <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md rounded-lg p-0.5 border border-white/10 ml-1">
+            <div className="pointer-events-auto ml-1 flex items-center gap-0.5 rounded-lg border border-border bg-card/90 p-0.5 backdrop-blur-md">
               {([
                 { mode: 'split2d3d' as ViewMode, label: '2D/3D', Icon: LayoutPanelLeft },
                 { mode: '3d' as ViewMode, label: '3D', Icon: Box },
