@@ -424,6 +424,15 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
             const ok = await waitForModel(entity, modelId);
             if (!ok) return;
 
+            // Check if the loaded model has any visible geometry — skip "orphan" models
+            const loadedModel = viewer.scene?.models?.[modelId];
+            const objectCount = loadedModel?.numEntities ?? Object.keys(loadedModel?.objects || {}).length ?? 0;
+            if (objectCount === 0) {
+              console.warn(`[NativeViewer] Skipping empty/orphan model: ${modelId} (0 entities)`);
+              try { loadedModel?.destroy?.(); } catch {}
+              return;
+            }
+
             const ms = Math.round(performance.now() - modelStart);
             console.log(`%c[NativeViewer] ✅ Memory → ${modelId} (${(memData.byteLength / 1024 / 1024).toFixed(1)} MB) ${ms}ms`, 'color:#22c55e;font-weight:bold');
           } else {
@@ -466,6 +475,15 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
               const entity = xktLoader.load({ id: modelId, xkt: arrayBuf, edges: true });
               const ok = await waitForModel(entity, modelId);
               if (!ok) return;
+
+              // Check if the loaded model has any visible geometry — skip "orphan" models
+              const loadedModel2 = viewer.scene?.models?.[modelId];
+              const objCount2 = loadedModel2?.numEntities ?? Object.keys(loadedModel2?.objects || {}).length ?? 0;
+              if (objCount2 === 0) {
+                console.warn(`[NativeViewer] Skipping empty/orphan model: ${modelId} (0 entities)`);
+                try { loadedModel2?.destroy?.(); } catch {}
+                return;
+              }
 
               const totalMs = Math.round(performance.now() - modelStart);
               console.log(`%c[NativeViewer] 💾 Storage → ${modelId} (${(arrayBuf.byteLength / 1024 / 1024).toFixed(1)} MB) fetch: ${fetchMs}ms, total: ${totalMs}ms`, 'color:#3b82f6;font-weight:bold');

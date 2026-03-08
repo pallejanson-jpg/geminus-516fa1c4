@@ -453,6 +453,8 @@ const UnifiedViewerContent: React.FC<{
       onGoBack={handleGoBack}
       viewerInstanceRef={viewerInstanceRef}
       viewerReady={viewerReady}
+      insightsPanelOpen={insightsPanelOpen}
+      setInsightsPanelOpen={setInsightsPanelOpen}
     />;
   }
 
@@ -546,7 +548,7 @@ const UnifiedViewerContent: React.FC<{
 
         {/* Right: Controls */}
         <div className="flex items-center gap-1">
-          {!isMobile && buildingFmGuid && (
+          {buildingFmGuid && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -693,7 +695,7 @@ const UnifiedViewerContent: React.FC<{
       </div>
 
       {/* ─── Insights bottom-sheet panel ─── */}
-      {!isMobile && buildingFmGuid && (
+      {buildingFmGuid && (
         <InsightsDrawerPanel
           buildingFmGuid={buildingFmGuid}
           buildingName={buildingData?.name}
@@ -751,7 +753,7 @@ function MobileUnifiedViewer({
   sdkContainerRef, transform,
   handle3DCameraChange, sync3DPosition, sync3DHeading, sync3DPitch,
   hasIvion, hasFmAccess, floorFmGuid, floorName, entityFmGuid, visualizationParam, insightsMode, forceXray, onGoBack,
-  viewerInstanceRef, viewerReady,
+  viewerInstanceRef, viewerReady, insightsPanelOpen, setInsightsPanelOpen,
 }: {
   buildingData: NonNullable<ReturnType<typeof useBuildingViewerData>['buildingData']>;
   viewMode: ViewMode;
@@ -775,6 +777,8 @@ function MobileUnifiedViewer({
   onGoBack: () => void;
   viewerInstanceRef: React.MutableRefObject<any>;
   viewerReady: boolean;
+  insightsPanelOpen: boolean;
+  setInsightsPanelOpen: (v: boolean) => void;
 }) {
   const isSplit = viewMode === 'split2d3d';
   const activePanel = viewMode === '360' || viewMode === 'vt' ? '360' : '3d';
@@ -1010,9 +1014,26 @@ function MobileUnifiedViewer({
                 </Button>
               )}
             </div>
-            <div className="w-8" /> {/* Spacer for balance */}
+            <Button
+              size="sm"
+              variant="ghost"
+              className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${insightsPanelOpen ? 'bg-white/20 text-white' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
+              onClick={() => setInsightsPanelOpen(!insightsPanelOpen)}
+            >
+              <BarChart2 className="h-3 w-3" />
+            </Button>
           </div>
         </div>
+      )}
+
+      {/* Insights panel (mobile) */}
+      {insightsPanelOpen && (
+        <InsightsDrawerPanel
+          buildingFmGuid={buildingData.fmGuid}
+          buildingName={buildingData.name}
+          open={insightsPanelOpen}
+          onClose={() => setInsightsPanelOpen(false)}
+        />
       )}
     </div>
   );
