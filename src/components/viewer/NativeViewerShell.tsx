@@ -475,7 +475,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       )}
 
       {/* Floor switcher */}
-      {isViewerReady && (
+      {isViewerReady && !hideFloorSwitcher && (
         <FloatingFloorSwitcher
           viewerRef={viewerShimRef}
           buildingFmGuid={buildingFmGuid}
