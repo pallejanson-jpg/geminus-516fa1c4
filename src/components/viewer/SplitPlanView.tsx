@@ -38,9 +38,10 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   const storeyMapRef = useRef<any>(null);
   const pluginRef = useRef<any>(null);
   const selectedFloorRef = useRef<{ floorId: string | null; floorFmGuid: string | null }>({ floorId: null, floorFmGuid: null });
+  const sdkRef = useRef<any>(null);
+  const initAttemptRef = useRef(0);
 
   const normalizeGuidKey = useCallback((value?: string | null) => (value || '').toLowerCase().replace(/-/g, ''), []);
-
 
   const getXeokitViewer = useCallback(() => {
     try {
@@ -54,31 +55,73 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     } catch { return null; }
   }, [viewerRef]);
 
-  // Initialize StoreyViewsPlugin
+  // Load SDK once
   useEffect(() => {
     let mounted = true;
-    let attempts = 0;
-    const maxAttempts = 30;
+    (async () => {
+      try {
+        const sdk = await (Function('return import("/lib/xeokit/xeokit-sdk.es.js")')() as Promise<any>);
+        if (mounted) sdkRef.current = sdk;
+      } catch (e) {
+        console.warn('[SplitPlanView] SDK load failed:', e);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
-    const tryInit = async () => {
+  // Initialize StoreyViewsPlugin — keep retrying until viewer has models with metaObjects
+  useEffect(() => {
+    let mounted = true;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const tryInit = () => {
+      if (!mounted) return;
       const viewer = getXeokitViewer();
-      if (!viewer?.scene) {
-        if (attempts++ < maxAttempts) setTimeout(tryInit, 500);
-        else if (mounted) setError('Viewer not available');
+      const sdk = sdkRef.current;
+
+      if (!viewer?.scene || !sdk?.StoreyViewsPlugin) {
+        if (initAttemptRef.current++ < 60) {
+          retryTimer = setTimeout(tryInit, 500);
+        } else if (mounted) {
+          setError('Viewer not available');
+        }
+        return;
+      }
+
+      // Check that metaScene has IfcBuildingStorey objects — if not, models aren't loaded yet
+      const metaObjects = viewer.metaScene?.metaObjects || {};
+      const hasStoreys = Object.values(metaObjects).some(
+        (mo: any) => mo?.type?.toLowerCase() === 'ifcbuildingstorey'
+      );
+
+      if (!hasStoreys) {
+        if (initAttemptRef.current++ < 60) {
+          retryTimer = setTimeout(tryInit, 500);
+        }
         return;
       }
 
       try {
-        const sdk = await (Function('return import("/lib/xeokit/xeokit-sdk.es.js")')() as Promise<any>);
-        const { StoreyViewsPlugin } = sdk;
-
         // Check if plugin already exists
         let plugin = viewer.plugins?.StoreyViews;
         if (!plugin) {
-          plugin = new StoreyViewsPlugin(viewer, { fitStoreyMaps: true });
+          plugin = new sdk.StoreyViewsPlugin(viewer, { fitStoreyMaps: true });
+        }
+
+        // Verify the plugin actually found storeys
+        const storeyKeys = Object.keys(plugin.storeys || {});
+        if (storeyKeys.length === 0) {
+          // Plugin created but no storeys registered yet — destroy and retry
+          console.debug('[SplitPlanView] Plugin has 0 storeys, retrying...');
+          try { plugin.destroy?.(); } catch {}
+          if (initAttemptRef.current++ < 60) {
+            retryTimer = setTimeout(tryInit, 1000);
+          }
+          return;
         }
 
         if (mounted) {
+          console.log(`[SplitPlanView] StoreyViewsPlugin ready with ${storeyKeys.length} storeys`);
           setStoreyPlugin(plugin);
           pluginRef.current = plugin;
           setIsLoading(false);
@@ -90,10 +133,22 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     };
 
     tryInit();
-    return () => { mounted = false; };
+
+    // Also listen for VIEWER_MODELS_LOADED to retry
+    const modelsHandler = () => {
+      initAttemptRef.current = 0; // reset counter
+      retryTimer = setTimeout(tryInit, 300);
+    };
+    window.addEventListener('VIEWER_MODELS_LOADED', modelsHandler);
+
+    return () => {
+      mounted = false;
+      if (retryTimer) clearTimeout(retryTimer);
+      window.removeEventListener('VIEWER_MODELS_LOADED', modelsHandler);
+    };
   }, [getXeokitViewer]);
 
-  // Find current storey ID based on selected floor (preferred) or visible geometry fallback
+  // Find current storey ID based on selected floor (preferred) or fallback
   const findCurrentStoreyId = useCallback((): string | null => {
     const plugin = pluginRef.current;
     if (!plugin?.storeys) return null;
@@ -106,7 +161,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
     const metaObjects = viewer.metaScene?.metaObjects || {};
 
-    // 1) Use explicit selected floor from floor picker event when possible
+    // 1) Use explicit selected floor from floor picker event
     const selectedFloorId = selectedFloorRef.current.floorId;
     if (selectedFloorId && plugin.storeys[selectedFloorId]) {
       return selectedFloorId;
@@ -124,29 +179,23 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       }
     }
 
-    // 2) Fallback: choose storey with most renderable descendants (not just IfcSpace)
+    // 2) Fallback: choose storey with most descendants
     let bestId = storeyIds[0];
     let bestScore = -1;
 
-    const countDescendantObjects = (root: any): number => {
-      if (!root) return 0;
+    for (const storeyId of storeyIds) {
+      const mo = metaObjects[storeyId];
+      if (!mo) continue;
       let count = 0;
-      const stack = [...(root.children || [])];
+      const stack = [...(mo.children || [])];
       while (stack.length > 0) {
         const node = stack.pop();
         if (!node) continue;
         if (viewer.scene.objects?.[node.id]) count++;
         if (node.children?.length) stack.push(...node.children);
       }
-      return count;
-    };
-
-    for (const storeyId of storeyIds) {
-      const mo = metaObjects[storeyId];
-      if (!mo) continue;
-      const descendantCount = countDescendantObjects(mo);
-      if (descendantCount > bestScore) {
-        bestScore = descendantCount;
+      if (count > bestScore) {
+        bestScore = count;
         bestId = storeyId;
       }
     }
@@ -159,20 +208,16 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const plugin = pluginRef.current;
     const viewer = getXeokitViewer();
     if (!plugin || !viewer?.scene) {
-      console.debug('[SplitPlanView] generateMap: no plugin or viewer');
       return;
     }
 
-    // Check if the plugin has any storeys registered
     const storeyKeys = Object.keys(plugin.storeys || {});
     if (storeyKeys.length === 0) {
-      console.debug('[SplitPlanView] No storeys registered in plugin yet, will retry');
       return;
     }
 
     const storeyId = findCurrentStoreyId();
     if (!storeyId) {
-      console.debug('[SplitPlanView] No storeys found yet, will retry on model load');
       return;
     }
 
@@ -180,65 +225,42 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const container = containerRef.current;
       const width = container ? Math.min(container.clientWidth * 2, 1600) : 800;
 
-      // Temporarily make all objects renderable for storey map rendering.
-      // This avoids blank maps when IfcSpace is hidden, LOD has culled entities,
-      // or 2D clipping section planes are active.
+      // Temporarily make all objects renderable and disable section planes
       const scene = viewer.scene;
       const hiddenIds: string[] = [];
       const culledIds: string[] = [];
       const sectionPlanes = Object.values(scene.sectionPlanes || {}) as any[];
       const activeSectionPlanes = sectionPlanes.filter((sp) => sp?.active);
-
       activeSectionPlanes.forEach((sp) => { sp.active = false; });
 
       const objectIds = scene.objectIds || [];
       objectIds.forEach((id: string) => {
         const entity = scene.objects?.[id];
         if (!entity) return;
-        if (!entity.visible) {
-          hiddenIds.push(id);
-          entity.visible = true;
-        }
-        if (entity.culled) {
-          culledIds.push(id);
-          entity.culled = false;
-        }
+        if (!entity.visible) { hiddenIds.push(id); entity.visible = true; }
+        if (entity.culled) { culledIds.push(id); entity.culled = false; }
       });
-
-      console.debug(`[SplitPlanView] Generating map for storey ${storeyId}, restoring hidden=${hiddenIds.length}, culled=${culledIds.length}, disabledPlanes=${activeSectionPlanes.length}`);
 
       let map: any = null;
       try {
-        map = plugin.createStoreyMap(storeyId, {
-          width,
-          format: 'png',
-        });
+        map = plugin.createStoreyMap(storeyId, { width, format: 'png' });
       } finally {
-        // Restore prior state even if createStoreyMap throws
-        hiddenIds.forEach(id => {
-          const entity = scene.objects?.[id];
-          if (entity) entity.visible = false;
-        });
-        culledIds.forEach(id => {
-          const entity = scene.objects?.[id];
-          if (entity) entity.culled = true;
-        });
+        hiddenIds.forEach(id => { const e = scene.objects?.[id]; if (e) e.visible = false; });
+        culledIds.forEach(id => { const e = scene.objects?.[id]; if (e) e.culled = true; });
         activeSectionPlanes.forEach((sp) => { sp.active = true; });
       }
 
       if (map?.imageData) {
-        console.debug('[SplitPlanView] Map generated successfully');
+        console.debug(`[SplitPlanView] Map generated for storey ${storeyId}`);
         setStoreyMap(map);
         storeyMapRef.current = map;
         setError(null);
         setIsLoading(false);
       } else {
         console.warn('[SplitPlanView] createStoreyMap returned no imageData');
-        setError('Could not generate plan');
       }
     } catch (e) {
-      console.warn('createStoreyMap failed:', e);
-      setError('Plan generation failed');
+      console.warn('[SplitPlanView] createStoreyMap failed:', e);
     }
   }, [getXeokitViewer, findCurrentStoreyId]);
 
@@ -246,17 +268,14 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   useEffect(() => {
     if (!storeyPlugin) return;
 
-    // Wait longer for models to fully load their metaobjects
-    const timeout = setTimeout(generateMap, 2000);
-    const retry1 = setTimeout(generateMap, 4000);
-    const retry2 = setTimeout(generateMap, 7000);
-    const retry3 = setTimeout(generateMap, 10000);
-    const retry4 = setTimeout(generateMap, 15000);
+    // Generate immediately and with retries
+    const t0 = setTimeout(generateMap, 100);
+    const t1 = setTimeout(generateMap, 1000);
+    const t2 = setTimeout(generateMap, 3000);
 
-    // Also listen for VIEWER_MODELS_LOADED (fired by NativeXeokitViewer)
     const modelsLoadedHandler = () => {
-      setTimeout(generateMap, 500);
-      setTimeout(generateMap, 2000);
+      setTimeout(generateMap, 300);
+      setTimeout(generateMap, 1500);
     };
     window.addEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
 
@@ -267,35 +286,27 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         floorFmGuid: detail?.visibleFloorFmGuids?.[0] ?? null,
       };
       setPanZoom({ offsetX: 0, offsetY: 0, scale: 1 });
-      setTimeout(generateMap, 150);
+      setTimeout(generateMap, 100);
     };
 
-    // Listen for model loaded events to regenerate
     const viewer = getXeokitViewer();
     let modelLoadedSub: any = null;
     if (viewer?.scene) {
       modelLoadedSub = viewer.scene.on('modelLoaded', () => {
         setTimeout(generateMap, 500);
-        setTimeout(generateMap, 2000);
       });
     }
 
     window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, floorHandler);
     return () => {
-      clearTimeout(timeout);
-      clearTimeout(retry1);
-      clearTimeout(retry2);
-      clearTimeout(retry3);
-      clearTimeout(retry4);
+      clearTimeout(t0); clearTimeout(t1); clearTimeout(t2);
       window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, floorHandler);
       window.removeEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
-      if (modelLoadedSub !== null && viewer?.scene) {
-        viewer.scene.off(modelLoadedSub);
-      }
+      if (modelLoadedSub !== null && viewer?.scene) viewer.scene.off(modelLoadedSub);
     };
   }, [storeyPlugin, generateMap, getXeokitViewer]);
 
-  // Camera position overlay — update periodically
+  // Camera position overlay
   useEffect(() => {
     const updateCamera = () => {
       const viewer = getXeokitViewer();
@@ -306,21 +317,18 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const storey = plugin.storeys[map.storeyId];
       if (!storey) return;
 
-      // Use the same AABB the plugin uses (fitStoreyMaps → storeyAABB)
       const aabb = plugin._fitStoreyMaps ? storey.storeyAABB : storey.modelAABB;
       const eye = viewer.camera.eye;
       const look = viewer.camera.look;
 
-      // Map world coords to image coords (matching pickStoreyMap's inverse: normX = 1 - imageX/width)
       const normX = (eye[0] - aabb[0]) / (aabb[3] - aabb[0]);
       const normZ = (eye[2] - aabb[2]) / (aabb[5] - aabb[2]);
       const imgX = (1.0 - normX) * map.width;
       const imgY = (1.0 - normZ) * map.height;
 
-      // Direction angle
       const dx = look[0] - eye[0];
       const dz = look[2] - eye[2];
-      const angle = Math.atan2(-dz, -dx); // Invert to match image coordinate space
+      const angle = Math.atan2(-dz, -dx);
 
       setCameraPos({
         x: (imgX / map.width) * 100,
@@ -339,7 +347,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     if (clickStartRef.current) {
       const dx = Math.abs(e.clientX - clickStartRef.current.x);
       const dy = Math.abs(e.clientY - clickStartRef.current.y);
-      if (dx > 5 || dy > 5) return; // was a drag
+      if (dx > 5 || dy > 5) return;
     }
 
     const plugin = pluginRef.current;
@@ -352,7 +360,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const imgX = (e.clientX - rect.left) / rect.width * map.width;
     const imgY = (e.clientY - rect.top) / rect.height * map.height;
 
-    // Use storeyMapToWorldPos for reliable coordinate mapping
     const worldPos = plugin.storeyMapToWorldPos(map, [imgX, imgY]);
     if (worldPos && viewer.cameraFlight) {
       viewer.cameraFlight.flyTo({
@@ -373,7 +380,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       return;
     }
 
-    // Hover pick
     const plugin = pluginRef.current;
     const map = storeyMapRef.current;
     const img = imgRef.current;
@@ -442,10 +448,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       touchStartRef.current = {
         x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
         y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
-        ox: panZoom.offsetX,
-        oy: panZoom.offsetY,
-        dist,
-        scale: panZoom.scale,
+        ox: panZoom.offsetX, oy: panZoom.offsetY,
+        dist, scale: panZoom.scale,
       };
     }
   }, [panZoom]);
@@ -472,7 +476,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const dx = Math.abs(t.clientX - clickStartRef.current.x);
       const dy = Math.abs(t.clientY - clickStartRef.current.y);
       if (dx < 5 && dy < 5) {
-        // Simulate click
         const synth = { clientX: t.clientX, clientY: t.clientY } as React.MouseEvent;
         handleClick(synth);
       }
@@ -543,8 +546,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
           <div
             className="absolute -translate-x-1/2 -translate-y-1/2"
             style={{
-              width: 0,
-              height: 0,
+              width: 0, height: 0,
               borderLeft: '20px solid transparent',
               borderRight: '20px solid transparent',
               borderBottom: '35px solid hsl(var(--primary) / 0.15)',
@@ -566,7 +568,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
       {/* Controls info */}
       <div className="absolute bottom-3 right-3 text-[10px] text-muted-foreground/60 pointer-events-none z-20">
-        {Math.round(panZoom.scale * 100)}% · Drag = pan · Scroll = zoom
+        {Math.round(panZoom.scale * 100)}%
       </div>
 
       {/* Refresh button */}
