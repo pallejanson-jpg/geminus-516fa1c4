@@ -911,11 +911,11 @@ function MobileUnifiedViewer({
 
           {/* Draggable divider */}
           <div
-            className="relative z-30 flex items-center justify-center bg-card/90 backdrop-blur-sm border-y border-border/50 touch-none select-none"
-            style={{ height: '20px', cursor: 'row-resize' }}
+            className="relative z-30 flex items-center justify-center border-y border-border/30 touch-none select-none"
+            style={{ height: '8px', cursor: 'row-resize' }}
             onTouchStart={handleTouchStart}
           >
-            <GripHorizontal className="h-3 w-3 text-muted-foreground" />
+            <div className="h-1 w-8 rounded-full bg-muted-foreground/40" />
           </div>
 
           {/* Bottom: 3D Model */}
