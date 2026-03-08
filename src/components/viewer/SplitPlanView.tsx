@@ -141,7 +141,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
     const storeyId = findCurrentStoreyId();
     if (!storeyId) {
-      // Don't set permanent error — storeys may not be loaded yet
       console.debug('[SplitPlanView] No storeys found yet, will retry on model load');
       return;
     }
@@ -150,9 +149,28 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const container = containerRef.current;
       const width = container ? Math.min(container.clientWidth * 2, 1600) : 800;
 
+      // Temporarily make all objects visible for storey map rendering
+      // (IfcSpace objects are hidden by default in our viewer but needed for plan rendering)
+      const scene = viewer.scene;
+      const hiddenIds: string[] = [];
+      const objectIds = scene.objectIds || [];
+      objectIds.forEach((id: string) => {
+        const entity = scene.objects?.[id];
+        if (entity && !entity.visible) {
+          hiddenIds.push(id);
+          entity.visible = true;
+        }
+      });
+
       const map = plugin.createStoreyMap(storeyId, {
         width,
         format: 'png',
+      });
+
+      // Restore hidden objects
+      hiddenIds.forEach(id => {
+        const entity = scene.objects?.[id];
+        if (entity) entity.visible = false;
       });
 
       if (map?.imageData) {
