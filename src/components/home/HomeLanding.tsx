@@ -344,7 +344,7 @@ function BuildingCard({ building, onClick }: { building: RecentBuilding; onClick
   );
 }
 
-function ViewCard({ view, onClick }: { view: SavedView; onClick: () => void }) {
+const ViewCard = React.forwardRef<HTMLButtonElement, { view: SavedView; onClick: () => void }>(function ViewCard({ view, onClick }, ref) {
   return (
     <button
       type="button"
