@@ -235,7 +235,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
     const detail: FloorSelectionEventDetail = {
       floorId: storeyId,
-      visibleFloorIds: [storeyId],
       visibleFloorFmGuids: [fmGuid],
       visibleMetaFloorIds: [storeyId],
     };
