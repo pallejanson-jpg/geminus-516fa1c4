@@ -705,7 +705,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
     viewer.cameraFlight?.cancel?.();
 
-    // Simple MinimapPanel approach: eye directly above clicked point, keep current height
+    // Use storeyMapToWorldPos (same as working MinimapPanel)
     let worldPos: number[] | null = null;
 
     if (!usedFallbackRef.current && plugin) {
@@ -732,8 +732,20 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     }
 
     if (worldPos && viewer.cameraFlight) {
+      // Compute a sensible eye height: storey center Y + offset for first-person-like view
+      const storey = plugin?.storeys?.[map.storeyId];
+      const sAABB = storey?.storeyAABB;
+      let eyeY = viewer.camera.eye[1];
+      if (sAABB) {
+        const floorY = sAABB[1];
+        const ceilY = sAABB[4];
+        const floorHeight = ceilY - floorY;
+        // Place eye at floor level + 1.6m (eye height), clamped within storey
+        eyeY = floorY + Math.min(1.6, floorHeight * 0.6);
+      }
+
       viewer.cameraFlight.flyTo({
-        eye: [worldPos[0], viewer.camera.eye[1], worldPos[2]],
+        eye: [worldPos[0], eyeY, worldPos[2]],
         look: [worldPos[0], worldPos[1], worldPos[2]],
         up: [0, 1, 0],
         duration: 0.5,
