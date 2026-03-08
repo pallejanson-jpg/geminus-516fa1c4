@@ -32,17 +32,39 @@ async function ensureWasm(): Promise<string> {
   }
 
   // web-ifc in Deno edge runtime ignores wasmPath and resolves to an internal npm path.
-  // Create a symlink so it finds our /tmp files at the expected location.
+  // Try symlink first, then fall back to copying WASM files directly.
   const symlinkParent = "/var/tmp/sb-compile-edge-runtime/node_modules/localhost/web-ifc/0.0.57";
+  let wasmLinked = false;
   try {
     await Deno.mkdir(symlinkParent, { recursive: true });
     const symlinkTarget = `${symlinkParent}/tmp`;
-    try { await Deno.lstat(symlinkTarget); } catch {
+    try { await Deno.lstat(symlinkTarget); wasmLinked = true; } catch {
       await Deno.symlink("/tmp", symlinkTarget);
       console.log(`Created symlink: ${symlinkTarget} -> /tmp`);
+      wasmLinked = true;
     }
   } catch (e) {
-    console.warn(`Could not create symlink (will try direct path): ${e}`);
+    console.warn(`Could not create symlink (will try direct copy): ${e}`);
+  }
+
+  // Fallback: copy WASM files directly to the path web-ifc expects
+  if (!wasmLinked) {
+    const expectedWasmDir = `${symlinkParent}/tmp/web-ifc-wasm`;
+    try {
+      await Deno.mkdir(expectedWasmDir, { recursive: true });
+      for (const file of files) {
+        const src = `${dir}/${file}`;
+        const dest = `${expectedWasmDir}/${file}`;
+        try { await Deno.stat(dest); } catch {
+          const bytes = await Deno.readFile(src);
+          await Deno.writeFile(dest, bytes);
+          console.log(`Copied ${file} to ${dest}`);
+        }
+      }
+      wasmLinked = true;
+    } catch (e2) {
+      console.warn(`Could not copy WASM files to expected path: ${e2}`);
+    }
   }
 
   console.log(`WASM ready at ${dir}/`);
