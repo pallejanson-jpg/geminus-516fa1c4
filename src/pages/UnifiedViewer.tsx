@@ -817,9 +817,12 @@ function MobileUnifiedViewer({
       const dispatch2D = () => {
         window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '2d' } }));
       };
-      const t1 = setTimeout(dispatch2D, 800);
-      const t2 = setTimeout(dispatch2D, 2000);
-      return () => { clearTimeout(t1); clearTimeout(t2); };
+      // Multiple attempts to ensure toolbar has mounted and is listening
+      const t1 = setTimeout(dispatch2D, 300);
+      const t2 = setTimeout(dispatch2D, 800);
+      const t3 = setTimeout(dispatch2D, 2000);
+      const t4 = setTimeout(dispatch2D, 4000);
+      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
     } else if (viewMode === '3d' && viewerReady) {
       const dispatch3D = () => {
         window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
