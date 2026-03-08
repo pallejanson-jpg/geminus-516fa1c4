@@ -271,6 +271,22 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     };
   }, []);
 
+  // Listen for LOAD_SAVED_VIEW_EVENT — queue if viewer not ready, apply immediately otherwise
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<LoadSavedViewDetail>).detail;
+      if (!detail) return;
+      const viewer = (window as any).__nativeXeokitViewer;
+      if (viewer?.camera) {
+        applySavedView(viewer, detail);
+      } else {
+        pendingSavedViewRef.current = detail;
+      }
+    };
+    window.addEventListener(LOAD_SAVED_VIEW_EVENT, handler);
+    return () => window.removeEventListener(LOAD_SAVED_VIEW_EVENT, handler);
+  }, [applySavedView]);
+
   // Context menu via right-click on canvas
   useEffect(() => {
     if (!xeokitViewer?.scene) return;
