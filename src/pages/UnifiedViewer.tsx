@@ -990,7 +990,7 @@ function MobileUnifiedViewer({
         </>
       ) : (
         /* ── Non-split: existing layout ── */
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 h-full w-full">
           {/* 3D/2D viewer — always mounted, hidden when 360 active */}
           <div style={{ display: activePanel === '3d' ? 'flex' : 'none', flexDirection: 'column', height: '100%', position: 'relative' }}>
             {viewMode === '3d' || viewMode === '2d' ? (
