@@ -67,8 +67,26 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
   const { floors } = useFloorData(viewerRef, buildingFmGuid);
 
-  // Use shared floor source of truth (same method as other viewer floor selectors)
-  const effectiveFloors = floors;
+  // Plugin-based floors as immediate fallback (no DB wait)
+  const pluginFloors = React.useMemo(() => {
+    const plugin = pluginRef.current;
+    const viewer = getXeokitViewer();
+    if (!plugin?.storeys) return [];
+    let idx = 0;
+    return Object.entries(plugin.storeys).map(([id, storey]: [string, any]) => {
+      const mo = viewer?.metaScene?.metaObjects?.[id];
+      const rawName = mo?.name || (storey as any).storeyId || id;
+      const isGuid = /^[0-9A-Fa-f-]{30,}$/.test(rawName);
+      idx++;
+      const name = isGuid ? `Plan ${idx}` : rawName;
+      const shortMatch = name.match(/(\d+)/);
+      const shortName = shortMatch ? shortMatch[1] : name.substring(0, 10);
+      return { id, name, shortName, metaObjectIds: [id], databaseLevelFmGuids: [mo?.originalSystemId || id] };
+    });
+  }, [storeyPlugin, getXeokitViewer]);
+
+  // Prefer DB floors when available, fall back to plugin floors
+  const effectiveFloors = floors.length > 0 ? floors : pluginFloors;
 
   const resolveFloorFromStoreyId = useCallback((storeyId: string) => {
     return effectiveFloors.find(
