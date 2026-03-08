@@ -92,7 +92,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     return () => { mounted = false; };
   }, []);
 
-  // Initialize StoreyViewsPlugin — keep retrying until viewer has models with metaObjects
+  // Initialize StoreyViewsPlugin — triggered by VIEWER_MODELS_LOADED event
   useEffect(() => {
     let mounted = true;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -102,24 +102,16 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const viewer = getXeokitViewer();
       const sdk = sdkRef.current;
 
-      // Update diagnostics
       const metaObjects = viewer?.metaScene?.metaObjects || {};
       const metaStoreyCount = Object.values(metaObjects).filter(
         (mo: any) => mo?.type?.toLowerCase() === 'ifcbuildingstorey'
       ).length;
-      setDiag(prev => ({
-        ...prev,
-        viewerReady: !!viewer?.scene,
-        metaStoreyCount,
-      }));
 
       if (!viewer?.scene || !sdk?.StoreyViewsPlugin) {
         if (initAttemptRef.current++ < 90) {
           retryTimer = setTimeout(tryInit, 300);
         } else if (mounted) {
-          const msg = !viewer?.scene ? 'Viewer not available' : 'SDK StoreyViewsPlugin missing';
-          setError(msg);
-          setDiag(prev => ({ ...prev, lastError: msg }));
+          setError(!viewer?.scene ? 'Viewer not available' : 'SDK StoreyViewsPlugin missing');
         }
         return;
       }
@@ -152,14 +144,11 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
           setStoreyPlugin(plugin);
           pluginRef.current = plugin;
           setIsLoading(false);
-          setDiag(prev => ({ ...prev, pluginStoreyCount: storeyKeys.length }));
         }
       } catch (e) {
-        const msg = 'Could not initialize plan view';
         console.warn('StoreyViewsPlugin init failed:', e);
         if (mounted) {
-          setError(msg);
-          setDiag(prev => ({ ...prev, lastError: msg }));
+          setError('Could not initialize plan view');
         }
       }
     };
