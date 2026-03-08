@@ -207,25 +207,26 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   const generateMap = useCallback(() => {
     const plugin = pluginRef.current;
     const viewer = getXeokitViewer();
-    if (!plugin || !viewer?.scene) {
-      return;
-    }
+    if (!plugin || !viewer?.scene) return;
 
     const storeyKeys = Object.keys(plugin.storeys || {});
-    if (storeyKeys.length === 0) {
-      return;
-    }
+    if (storeyKeys.length === 0) return;
 
-    const storeyId = findCurrentStoreyId();
-    if (!storeyId) {
-      return;
-    }
+    setIsLoading(true);
 
-    try {
+    const preferredStoreyId = findCurrentStoreyId();
+    const candidateStoreys = preferredStoreyId
+      ? [preferredStoreyId, ...storeyKeys.filter((id) => id !== preferredStoreyId)]
+      : storeyKeys;
+
+    const tryCreateStoreyMap = (storeyId: string, forceRenderable: boolean) => {
       const container = containerRef.current;
       const width = container ? Math.min(container.clientWidth * 2, 1600) : 800;
 
-      // Temporarily make all objects renderable and disable section planes
+      if (!forceRenderable) {
+        return plugin.createStoreyMap(storeyId, { width, format: 'png' });
+      }
+
       const scene = viewer.scene;
       const hiddenIds: string[] = [];
       const culledIds: string[] = [];
@@ -241,26 +242,37 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         if (entity.culled) { culledIds.push(id); entity.culled = false; }
       });
 
-      let map: any = null;
       try {
-        map = plugin.createStoreyMap(storeyId, { width, format: 'png' });
+        return plugin.createStoreyMap(storeyId, { width, format: 'png' });
       } finally {
         hiddenIds.forEach(id => { const e = scene.objects?.[id]; if (e) e.visible = false; });
         culledIds.forEach(id => { const e = scene.objects?.[id]; if (e) e.culled = true; });
         activeSectionPlanes.forEach((sp) => { sp.active = true; });
       }
+    };
+
+    try {
+      let map: any = null;
+      for (const storeyId of candidateStoreys.slice(0, 6)) {
+        map = tryCreateStoreyMap(storeyId, false);
+        if (map?.imageData) break;
+        map = tryCreateStoreyMap(storeyId, true);
+        if (map?.imageData) break;
+      }
 
       if (map?.imageData) {
-        console.debug(`[SplitPlanView] Map generated for storey ${storeyId}`);
+        console.debug(`[SplitPlanView] Map generated for storey ${map.storeyId || preferredStoreyId}`);
         setStoreyMap(map);
         storeyMapRef.current = map;
         setError(null);
-        setIsLoading(false);
       } else {
-        console.warn('[SplitPlanView] createStoreyMap returned no imageData');
+        setError('Could not generate plan image');
       }
     } catch (e) {
       console.warn('[SplitPlanView] createStoreyMap failed:', e);
+      setError('Map generation failed');
+    } finally {
+      setIsLoading(false);
     }
   }, [getXeokitViewer, findCurrentStoreyId]);
 
