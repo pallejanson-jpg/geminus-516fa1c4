@@ -188,6 +188,15 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             {/* Right section */}
             <div className="flex items-center gap-1 sm:gap-2">
                 <AppButton
+                    onClick={() => setIsApiSettingsOpen(true)}
+                    variant="ghost"
+                    className="h-9 w-9 sm:h-10 sm:w-10 md:hidden"
+                    title="Settings"
+                >
+                    <Settings size={18} />
+                </AppButton>
+
+                <AppButton
                     onClick={toggleRightSidebar}
                     variant="ghost"
                     className="h-9 w-9 sm:h-10 sm:w-10"
