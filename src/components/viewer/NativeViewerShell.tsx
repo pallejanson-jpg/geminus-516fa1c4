@@ -14,7 +14,7 @@ import ViewerToolbar from './ViewerToolbar';
 import VisualizationToolbar from './VisualizationToolbar';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { AppContext } from '@/context/AppContext';
-import { VIEW_MODE_REQUESTED_EVENT } from '@/lib/viewer-events';
+import { VIEW_MODE_REQUESTED_EVENT, LOAD_SAVED_VIEW_EVENT, type LoadSavedViewDetail } from '@/lib/viewer-events';
 import { ROOM_LABELS_TOGGLE_EVENT, ROOM_LABELS_CONFIG_EVENT, type RoomLabelsToggleDetail } from '@/hooks/useRoomLabels';
 import useRoomLabels from '@/hooks/useRoomLabels';
 import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDialog';
@@ -45,6 +45,21 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   // Viewer instance
   const [xeokitViewer, setXeokitViewer] = useState<any>(null);
   const [isViewerReady, setIsViewerReady] = useState(false);
+  const pendingSavedViewRef = useRef<LoadSavedViewDetail | null>(null);
+
+  // Helper: apply a saved view to the xeokit viewer
+  const applySavedView = useCallback((viewer: any, detail: LoadSavedViewDetail) => {
+    if (!viewer?.camera) return;
+    console.log('[NativeViewerShell] Applying saved view:', detail.viewId);
+    viewer.camera.eye = detail.cameraEye;
+    viewer.camera.look = detail.cameraLook;
+    viewer.camera.up = detail.cameraUp;
+    viewer.camera.projection = detail.cameraProjection || 'perspective';
+    // Dispatch view mode if specified
+    if (detail.viewMode) {
+      window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: detail.viewMode } }));
+    }
+  }, []);
 
   // Object move/delete mode hook
   useObjectMoveMode(xeokitViewer, buildingFmGuid);
@@ -238,6 +253,12 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     // Expose globally so UnifiedViewer, SplitPlanView, and sync hooks can find it
     (window as any).__assetPlusViewerInstance = viewerShimRef.current;
     (window as any).__nativeXeokitViewer = viewer;
+
+    // Apply any pending LOAD_SAVED_VIEW that arrived before viewer was ready
+    if (pendingSavedViewRef.current) {
+      applySavedView(viewer, pendingSavedViewRef.current);
+      pendingSavedViewRef.current = null;
+    }
   }, []);
 
   // Clean up global refs on unmount
@@ -249,6 +270,22 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       delete (window as any).__nativeXeokitViewer;
     };
   }, []);
+
+  // Listen for LOAD_SAVED_VIEW_EVENT — queue if viewer not ready, apply immediately otherwise
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<LoadSavedViewDetail>).detail;
+      if (!detail) return;
+      const viewer = (window as any).__nativeXeokitViewer;
+      if (viewer?.camera) {
+        applySavedView(viewer, detail);
+      } else {
+        pendingSavedViewRef.current = detail;
+      }
+    };
+    window.addEventListener(LOAD_SAVED_VIEW_EVENT, handler);
+    return () => window.removeEventListener(LOAD_SAVED_VIEW_EVENT, handler);
+  }, [applySavedView]);
 
   // Context menu via right-click on canvas
   useEffect(() => {

@@ -243,76 +243,11 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }
       }
 
-      // Auto-sync fallback: if no models cached, OR no A-models found, trigger server-side sync from Asset+
+      // Auto-sync DISABLED at start — user approved "no auto-sync" strategy.
+      // If models are missing, show error state; user can trigger manual sync if needed.
       const hasAnyModels = models && models.length > 0;
-      const namedModelsCheck = hasAnyModels ? models.filter((m: ModelCandidate) => {
-        const name = m.model_name;
-        if (!name || /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(name)) return false;
-        return name.toUpperCase().charAt(0) === 'A';
-      }) : [];
-      
-      const needsSync = !hasAnyModels || namedModelsCheck.length === 0;
-      
-      if (!dbError && needsSync) {
-        const reason = !hasAnyModels ? 'no models at all' : 'no A-models found locally';
-        console.log(`[NativeViewer] ${reason} — triggering sync from Asset+...`);
-        if (!mountedRef.current) return;
-        setPhase('syncing');
-
-        try {
-          const { data: syncResult, error: syncError } = await supabase.functions.invoke('asset-plus-sync', {
-            body: { action: 'sync-xkt-building', buildingFmGuid, force: true }
-          });
-          
-          if (syncError) {
-            console.warn('[NativeViewer] Auto-sync failed:', syncError);
-          } else {
-            console.log('[NativeViewer] Auto-sync result:', syncResult);
-          }
-
-          if (!mountedRef.current) return;
-
-          // Re-fetch models after sync
-          const refetch = await supabase
-            .from('xkt_models')
-            .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at')
-            .eq('building_fm_guid', buildingFmGuid)
-            .order('file_size', { ascending: true });
-          
-          // Also re-check storage
-          const { data: storageAfterSync } = await supabase.storage
-            .from('xkt-models')
-            .list(buildingFmGuid, { limit: 1000, sortBy: { column: 'name', order: 'asc' } });
-
-          const remerged = new Map<string, ModelCandidate>();
-          ((refetch.data as any[]) ?? []).forEach((m) => {
-            remerged.set(m.model_id, { ...m, source: 'db' as const });
-          });
-          if (storageAfterSync) {
-            storageAfterSync
-              .filter((f: any) => f.name?.toLowerCase().endsWith('.xkt') && !f.name?.toLowerCase().endsWith('_xkt.xkt'))
-              .forEach((file: any) => {
-                const modelId = file.name.replace(/\.xkt$/i, '');
-                if (!remerged.has(modelId)) {
-                  remerged.set(modelId, {
-                    model_id: modelId,
-                    model_name: modelId,
-                    storage_path: `${buildingFmGuid}/${file.name}`,
-                    file_size: file.metadata?.size ?? null,
-                    storey_fm_guid: null,
-                    synced_at: null,
-                    source: 'storage',
-                  });
-                }
-              });
-          }
-          
-          models = Array.from(remerged.values());
-          dbError = refetch.error;
-          console.log(`[NativeViewer] After sync: ${models.length} models found`);
-        } catch (e) {
-          console.warn('[NativeViewer] Auto-sync error:', e);
-        }
+      if (!hasAnyModels) {
+        console.log('[NativeViewer] No models found locally — auto-sync disabled per config');
       }
 
       if (dbError || !models || models.length === 0) {
@@ -516,10 +451,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       }
       await Promise.allSettled(Array.from(active));
 
-      // 5. Fit camera to scene
+      // 5. Camera: NO auto-fit/flyTo — only saved start view (dispatched via LOAD_SAVED_VIEW_EVENT) applies.
       if (mountedRef.current && viewer.scene) {
-        viewer.cameraFlight.flyTo({ aabb: viewer.scene.aabb, duration: 0.5 });
-
         // Enable SAO after load
         if (viewer.scene.sao) {
           viewer.scene.sao.enabled = true;
