@@ -69,11 +69,16 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       console.log('[NativeViewer] Loading SDK + metadata in parallel...');
 
       const sdkPromise = (async () => {
+        // Reuse cached SDK if already loaded (saves 3-5s on subsequent mounts)
+        if ((window as any).__xeokitSdk) {
+          console.log('[NativeViewer] Reusing cached SDK from window.__xeokitSdk');
+          return (window as any).__xeokitSdk;
+        }
         const sdkResponse = await fetch(XEOKIT_CDN);
         const sdkText = await sdkResponse.text();
         const sdkBlob = new Blob([sdkText], { type: 'application/javascript' });
         const sdkBlobUrl = URL.createObjectURL(sdkBlob);
-      const sdk = await import(/* @vite-ignore */ sdkBlobUrl);
+        const sdk = await import(/* @vite-ignore */ sdkBlobUrl);
         URL.revokeObjectURL(sdkBlobUrl);
         // Expose SDK globally so SplitPlanView can reuse the same module
         (window as any).__xeokitSdk = sdk;
