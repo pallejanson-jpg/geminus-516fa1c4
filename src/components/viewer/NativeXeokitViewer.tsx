@@ -565,7 +565,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         setPhase('error');
       }
     }
-  }, [buildingFmGuid]);
+  }, [buildingFmGuid, isMobile]);
 
   useEffect(() => {
     initialize();
