@@ -873,9 +873,10 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   // Handle floor dropdown change
   const handleFloorChange = useCallback((floorId: string) => {
     const floor = effectiveFloors.find((f: any) => f.id === floorId);
+    const fmGuid = (floor as any)?.databaseLevelFmGuids?.[0] ?? null;
     selectedFloorRef.current = {
       floorId: floorId,
-      floorFmGuid: floor?.databaseLevelFmGuids?.[0] ?? null,
+      floorFmGuid: fmGuid,
     };
     setSelectedFloorId(floorId);
     initialCenterApplied.current = false;
