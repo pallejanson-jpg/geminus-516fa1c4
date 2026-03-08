@@ -70,12 +70,18 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   // Fallback floor list from plugin when useFloorData is empty
   const pluginFloors = useMemo(() => {
     const plugin = pluginRef.current;
+    const viewer = (window as any).__nativeXeokitViewer;
     if (!plugin?.storeys) return [];
-    return Object.entries(plugin.storeys).map(([id, storey]: [string, any]) => ({
-      id,
-      name: storey.storeyId || id,
-      shortName: (storey.storeyId || id).replace(/.*[_-]/, ''),
-    }));
+    let guidCounter = 0;
+    return Object.entries(plugin.storeys).map(([id, storey]: [string, any]) => {
+      const mo = viewer?.metaScene?.metaObjects?.[id];
+      const rawName = mo?.name || storey.storeyId || id;
+      const isGuid = rawName.match(/^[0-9A-Fa-f-]{30,}$/);
+      const name = isGuid ? `Plan ${++guidCounter}` : rawName;
+      const shortMatch = name.match(/(\d+)/);
+      const shortName = shortMatch ? shortMatch[1] : name.substring(0, 10);
+      return { id, name, shortName };
+    });
   }, [storeyPlugin]);
 
   const effectiveFloors = floors.length > 0 ? floors : pluginFloors;
@@ -495,19 +501,19 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     return () => clearTimeout(timer);
   }, [storeyMap]);
 
-  // Camera position overlay — use camera.look (target point) not eye
+  // Camera position overlay — use camera.eye (position) like MinimapPanel
   useEffect(() => {
     const updateCamera = () => {
       const viewer = getXeokitViewer();
       const map = storeyMapRef.current;
       const plugin = pluginRef.current;
-      if (!viewer?.camera?.look || !map) return;
+      if (!viewer?.camera?.eye || !map) return;
 
-      const look = viewer.camera.look;
       const eye = viewer.camera.eye;
+      const look = viewer.camera.look;
       const dx = look[0] - eye[0];
       const dz = look[2] - eye[2];
-      const angle = Math.atan2(dx, -dz); // heading direction camera looks toward
+      const angle = Math.atan2(dx, -dz);
 
       if (usedFallbackRef.current || !plugin) {
         const aabb = viewer.scene?.aabb;
@@ -515,8 +521,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         const xRange = aabb[3] - aabb[0];
         const zRange = aabb[5] - aabb[2];
         if (xRange < 0.01 || zRange < 0.01) return;
-        const normX = (look[0] - aabb[0]) / xRange;
-        const normZ = (look[2] - aabb[2]) / zRange;
+        const normX = (eye[0] - aabb[0]) / xRange;
+        const normZ = (eye[2] - aabb[2]) / zRange;
         setCameraPos({ x: normX * 100, y: normZ * 100, angle });
         return;
       }
@@ -528,20 +534,19 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         const xRange = aabb[3] - aabb[0];
         const zRange = aabb[5] - aabb[2];
         if (xRange < 0.01 || zRange < 0.01) return;
-        const normX = (look[0] - aabb[0]) / xRange;
-        const normZ = (look[2] - aabb[2]) / zRange;
+        const normX = (eye[0] - aabb[0]) / xRange;
+        const normZ = (eye[2] - aabb[2]) / zRange;
         setCameraPos({ x: normX * 100, y: normZ * 100, angle });
         return;
       }
 
-      // Use storey AABB — StoreyViewsPlugin image maps X to (1-normX) and Z to (1-normZ)
       const aabb = plugin._fitStoreyMaps ? storey.storeyAABB : storey.modelAABB;
       const xRange = aabb[3] - aabb[0];
       const zRange = aabb[5] - aabb[2];
       if (xRange < 0.01 || zRange < 0.01) return;
 
-      const normX = (look[0] - aabb[0]) / xRange;
-      const normZ = (look[2] - aabb[2]) / zRange;
+      const normX = (eye[0] - aabb[0]) / xRange;
+      const normZ = (eye[2] - aabb[2]) / zRange;
 
       setCameraPos({
         x: (1.0 - normX) * 100,
@@ -683,64 +688,36 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
     viewer.cameraFlight?.cancel?.();
 
-    // Current camera state
-    const currentEye = viewer.camera.eye;
-    const currentLook = viewer.camera.look;
-
-    // Heading vector in XZ plane
-    const headX = currentLook[0] - currentEye[0];
-    const headZ = currentLook[2] - currentEye[2];
-    const horizDist = Math.sqrt(headX * headX + headZ * headZ);
-    const headUnit = horizDist > 0.01 ? [headX / horizDist, headZ / horizDist] : [1, 0];
-
-    // Y relationship
-    const yOffset = currentEye[1] - currentLook[1];
-
-    // Determine target world position
-    let targetWorldPos: number[] | null = null;
+    // Simple MinimapPanel approach: eye directly above clicked point, keep current height
+    let worldPos: number[] | null = null;
 
     if (!usedFallbackRef.current && plugin) {
       try {
-        const worldPos = plugin.storeyMapToWorldPos(map, [imgX, imgY]);
-        if (worldPos) targetWorldPos = [worldPos[0], worldPos[1], worldPos[2]];
+        const wp = plugin.storeyMapToWorldPos(map, [imgX, imgY]);
+        if (wp) worldPos = [wp[0], wp[1], wp[2]];
       } catch {}
     }
 
-    if (!targetWorldPos) {
-      // Fallback: compute from scene AABB
+    if (!worldPos) {
       const aabb = viewer.scene?.aabb;
       if (!aabb) return;
       const normX = (e.clientX - rect.left) / rect.width;
       const normZ = (e.clientY - rect.top) / rect.height;
-      const worldX = aabb[0] + normX * (aabb[3] - aabb[0]);
-      const worldZ = aabb[2] + normZ * (aabb[5] - aabb[2]);
-      targetWorldPos = [worldX, aabb[1], worldZ];
+      worldPos = [
+        aabb[0] + normX * (aabb[3] - aabb[0]),
+        aabb[1],
+        aabb[2] + normZ * (aabb[5] - aabb[2]),
+      ];
     }
 
-    // Clamp target Y to storey AABB if available
-    const storey = plugin?.storeys?.[map.storeyId];
-    if (storey?.storeyAABB) {
-      const floorY = (storey.storeyAABB[1] + storey.storeyAABB[4]) / 2;
-      targetWorldPos[1] = floorY;
+    if (worldPos && viewer.cameraFlight) {
+      viewer.cameraFlight.flyTo({
+        eye: [worldPos[0], viewer.camera.eye[1], worldPos[2]],
+        look: [worldPos[0], worldPos[1], worldPos[2]],
+        up: [0, 1, 0],
+        duration: 0.5,
+      });
     }
-
-    // Compute new camera: keep heading, clamp distance
-    const viewDist = Math.max(Math.min(horizDist, 30), 5); // clamp between 5m and 30m
-    const safeYOffset = Math.max(Math.min(yOffset, 20), 2); // clamp between 2m and 20m above
-
-    const newLook = targetWorldPos;
-    const newEye = [
-      newLook[0] - headUnit[0] * viewDist,
-      newLook[1] + safeYOffset,
-      newLook[2] - headUnit[1] * viewDist,
-    ];
-
-    viewer.cameraFlight.flyTo({
-      eye: newEye,
-      look: newLook,
-      up: [0, 1, 0],
-      duration: 0,
-    });
   }, [getXeokitViewer]);
 
   // Mouse move for hover
@@ -901,7 +878,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
             <SelectContent>
               {effectiveFloors.map((f: any) => (
                 <SelectItem key={f.id} value={f.id} className="text-[11px]">
-                  {f.shortName || f.name}
+                  {f.name}
                 </SelectItem>
               ))}
             </SelectContent>
