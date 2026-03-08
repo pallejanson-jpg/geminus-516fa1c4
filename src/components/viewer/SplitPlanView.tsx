@@ -144,11 +144,10 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       }
     };
 
-    tryInit();
-
+    // Don't start polling on mount — wait for VIEWER_MODELS_LOADED
     const modelsHandler = () => {
       initAttemptRef.current = 0;
-      retryTimer = setTimeout(tryInit, 300);
+      tryInit();
     };
     window.addEventListener('VIEWER_MODELS_LOADED', modelsHandler);
 

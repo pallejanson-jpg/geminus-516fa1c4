@@ -485,6 +485,25 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         onViewerReady?.(viewer);
         // Dispatch VIEWER_MODELS_LOADED for hooks like useObjectMoveMode
         window.dispatchEvent(new CustomEvent('VIEWER_MODELS_LOADED', { detail: { buildingFmGuid } }));
+
+        // Instant viewFit fallback: if no saved start view arrives within 500ms, fit to scene
+        const fitTimer = setTimeout(() => {
+          if (!mountedRef.current) return;
+          try {
+            const aabb = viewer.scene?.aabb;
+            if (aabb) {
+              viewer.cameraFlight.flyTo({ aabb, duration: 0 });
+              console.log('[NativeViewer] Applied instant viewFit fallback (no saved start view)');
+            }
+          } catch (e) { console.warn('[NativeViewer] viewFit fallback failed:', e); }
+        }, 500);
+
+        // Cancel fit if a saved view arrives
+        const savedViewHandler = () => { clearTimeout(fitTimer); };
+        window.addEventListener(LOAD_SAVED_VIEW_EVENT, savedViewHandler, { once: true });
+        // Cleanup after timeout passes
+        setTimeout(() => window.removeEventListener(LOAD_SAVED_VIEW_EVENT, savedViewHandler), 600);
+
         // Re-apply any pending insights color event that arrived before models loaded
         if (pendingInsightsColorRef.current) {
           const pending = pendingInsightsColorRef.current;
