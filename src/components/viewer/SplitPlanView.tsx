@@ -39,7 +39,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   const [storeyPlugin, setStoreyPlugin] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [panZoom, setPanZoom] = useState<PanZoom>({ offsetX: 0, offsetY: 0, scale: 1 });
+  const [panZoom, setPanZoom] = useState<PanZoom>({ offsetX: 0, offsetY: 0, scale: 0.75 });
   const [cameraPos, setCameraPos] = useState<{ x: number; y: number; angle: number } | null>(null);
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null);
   const [imgError, setImgError] = useState(false);
@@ -318,6 +318,34 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       ? [preferredStoreyId, ...storeyKeys.filter((id) => id !== preferredStoreyId)]
       : storeyKeys;
 
+    // Temporarily colorize walls/slabs black for high-contrast plan output
+    const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifccurtainwall', 'ifcslab', 'ifccolumn', 'ifcbeam', 'ifcrailing', 'ifcstair', 'ifcstairflight']);
+    const metaObjects = viewer?.metaScene?.metaObjects || {};
+    const originalColors: { id: string; color: number[] | null }[] = [];
+
+    const applyBlackWalls = () => {
+      const scene = viewer.scene;
+      for (const [id, mo] of Object.entries(metaObjects) as [string, any][]) {
+        const t = (mo?.type || '').toLowerCase();
+        const entity = scene.objects?.[id];
+        if (!entity) continue;
+        if (wallTypes.has(t)) {
+          originalColors.push({ id, color: entity.colorize ? [...entity.colorize] : null });
+          entity.colorize = [0, 0, 0]; // black
+        }
+      }
+    };
+
+    const restoreColors = () => {
+      const scene = viewer.scene;
+      for (const { id, color } of originalColors) {
+        const entity = scene.objects?.[id];
+        if (!entity) continue;
+        if (color) { entity.colorize = color; } else { entity.colorize = null; }
+      }
+      originalColors.length = 0;
+    };
+
     const tryCreateStoreyMap = (storeyId: string, forceRenderable: boolean) => {
       const container = containerRef.current;
       const width = container ? Math.min(container.clientWidth * 2, 1600) : 800;
@@ -325,7 +353,12 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       setDiag(prev => ({ ...prev, lastTriedStoreyId: storeyId }));
 
       if (!forceRenderable) {
-        return plugin.createStoreyMap(storeyId, { width, format: 'png' });
+        applyBlackWalls();
+        try {
+          return plugin.createStoreyMap(storeyId, { width, format: 'png' });
+        } finally {
+          restoreColors();
+        }
       }
 
       const scene = viewer.scene;
@@ -343,9 +376,11 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         if (entity.culled) { culledIds.push(id); entity.culled = false; }
       });
 
+      applyBlackWalls();
       try {
         return plugin.createStoreyMap(storeyId, { width, format: 'png' });
       } finally {
+        restoreColors();
         hiddenIds.forEach(id => { const e = scene.objects?.[id]; if (e) e.visible = false; });
         culledIds.forEach(id => { const e = scene.objects?.[id]; if (e) e.culled = true; });
         activeSectionPlanes.forEach((sp) => { sp.active = true; });
@@ -412,7 +447,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         floorId: detail?.floorId ?? null,
         floorFmGuid: detail?.visibleFloorFmGuids?.[0] ?? null,
       };
-      setPanZoom({ offsetX: 0, offsetY: 0, scale: 1 });
+      setPanZoom({ offsetX: 0, offsetY: 0, scale: 0.75 });
       setTimeout(generateMap, 100);
     };
 
@@ -656,7 +691,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     touchStartRef.current = null;
   }, [handleClick]);
 
-  const isDev = import.meta.env.DEV;
+  
 
   return (
     <div
@@ -767,10 +802,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         </div>
       )}
 
-      {/* Controls info */}
-      <div className="absolute bottom-3 right-3 text-[10px] text-muted-foreground/60 pointer-events-none z-20">
-        {Math.round(panZoom.scale * 100)}%
-      </div>
 
       {/* Refresh button */}
       <button
@@ -781,16 +812,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         <RefreshCw className="h-3.5 w-3.5" />
       </button>
 
-      {/* Dev diagnostics overlay */}
-      {isDev && (
-        <div className="absolute bottom-3 left-3 text-[8px] font-mono text-black/50 bg-white/70 px-1 py-0.5 rounded pointer-events-none z-20 leading-tight">
-          V:{diag.viewerReady ? '✓' : '✗'} MS:{diag.metaStoreyCount} PS:{diag.pluginStoreyCount}
-          {diag.lastTriedStoreyId && <> S:{diag.lastTriedStoreyId.substring(0, 8)}</>}
-          {diag.imageDataLength > 0 && <> I:{diag.imageDataLength}</>}
-          {diag.lastError && <> E:{diag.lastError}</>}
-          {usedFallbackRef.current && <> FB</>}
-        </div>
-      )}
     </div>
   );
 };
