@@ -481,6 +481,75 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     return () => clearInterval(interval);
   }, [getXeokitViewer]);
 
+  // Compute room labels for 2D overlay
+  useEffect(() => {
+    const map = storeyMapRef.current;
+    const plugin = pluginRef.current;
+    const viewer = getXeokitViewer();
+    if (!map || !viewer?.metaScene || usedFallbackRef.current) {
+      setRoomLabels([]);
+      return;
+    }
+
+    const metaObjects = viewer.metaScene.metaObjects || {};
+    const storey = plugin?.storeys?.[map.storeyId];
+    const aabb = storey
+      ? (plugin._fitStoreyMaps ? storey.storeyAABB : storey.modelAABB)
+      : viewer.scene?.aabb;
+    if (!aabb) {
+      setRoomLabels([]);
+      return;
+    }
+
+    const roomTypes = new Set(['ifcspace', 'ifcroom']);
+    const labels: Array<{ id: string; name: string; number: string; x: number; y: number }> = [];
+
+    // Find the current storey metaObject to filter rooms
+    const storeyMeta = metaObjects[map.storeyId];
+    const storeyChildren = new Set<string>();
+    if (storeyMeta) {
+      const stack = [...(storeyMeta.children || [])];
+      while (stack.length > 0) {
+        const node = stack.pop();
+        if (!node) continue;
+        storeyChildren.add(node.id);
+        if (node.children?.length) stack.push(...node.children);
+      }
+    }
+
+    for (const [id, mo] of Object.entries(metaObjects) as [string, any][]) {
+      const t = (mo?.type || '').toLowerCase();
+      if (!roomTypes.has(t)) continue;
+
+      // If we have storey children, filter to only rooms on this floor
+      if (storeyChildren.size > 0 && !storeyChildren.has(id)) continue;
+
+      const entity = viewer.scene.objects?.[id];
+      if (!entity) continue;
+
+      // Get center of room from entity AABB
+      const entityAabb = entity.aabb;
+      if (!entityAabb) continue;
+
+      const cx = (entityAabb[0] + entityAabb[3]) / 2;
+      const cz = (entityAabb[2] + entityAabb[5]) / 2;
+
+      // Map world coords to normalized image position (inverted like StoreyViewsPlugin)
+      const normX = (cx - aabb[0]) / (aabb[3] - aabb[0]);
+      const normZ = (cz - aabb[2]) / (aabb[5] - aabb[2]);
+      const imgX = (1.0 - normX) * 100;
+      const imgY = (1.0 - normZ) * 100;
+
+      // Extract name and number
+      const name = mo.name || '';
+      const number = mo.LongName || mo.longName || mo.attributes?.LongName || '';
+
+      labels.push({ id, name, number, x: imgX, y: imgY });
+    }
+
+    setRoomLabels(labels);
+  }, [storeyMap, getXeokitViewer]);
+
   // Click to navigate
   const handleClick = useCallback((e: React.MouseEvent) => {
     if (clickStartRef.current) {
