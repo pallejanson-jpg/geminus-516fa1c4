@@ -8,7 +8,7 @@
 
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { FLOOR_SELECTION_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
+import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { RefreshCw } from 'lucide-react';
 
 interface SplitPlanViewProps {
