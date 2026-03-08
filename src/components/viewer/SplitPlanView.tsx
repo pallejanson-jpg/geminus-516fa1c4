@@ -67,24 +67,14 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
   const { floors } = useFloorData(viewerRef, buildingFmGuid);
 
-  // Fallback floor list from plugin when useFloorData is empty
-  const pluginFloors = useMemo(() => {
-    const plugin = pluginRef.current;
-    const viewer = (window as any).__nativeXeokitViewer;
-    if (!plugin?.storeys) return [];
-    let guidCounter = 0;
-    return Object.entries(plugin.storeys).map(([id, storey]: [string, any]) => {
-      const mo = viewer?.metaScene?.metaObjects?.[id];
-      const rawName = mo?.name || storey.storeyId || id;
-      const isGuid = rawName.match(/^[0-9A-Fa-f-]{30,}$/);
-      const name = isGuid ? `Plan ${++guidCounter}` : rawName;
-      const shortMatch = name.match(/(\d+)/);
-      const shortName = shortMatch ? shortMatch[1] : name.substring(0, 10);
-      return { id, name, shortName };
-    });
-  }, [storeyPlugin]);
+  // Use shared floor source of truth (same method as other viewer floor selectors)
+  const effectiveFloors = floors;
 
-  const effectiveFloors = floors.length > 0 ? floors : pluginFloors;
+  const resolveFloorFromStoreyId = useCallback((storeyId: string) => {
+    return effectiveFloors.find(
+      (floor) => floor.id === storeyId || floor.metaObjectIds.includes(storeyId)
+    ) ?? null;
+  }, [effectiveFloors]);
 
   const normalizeGuidKey = useCallback((value?: string | null) => (value || '').toLowerCase().replace(/-/g, ''), []);
 
