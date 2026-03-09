@@ -211,9 +211,9 @@ export function useRoomLabels(
     const labelCount = labelsRef.current.size;
     // Adaptive throttling: more labels = less frequent occlusion checks
     // Auto-disable occlusion above threshold for performance
-    const occlusionThreshold = 150;
+    const occlusionThreshold = 50;
     const effectiveOcclusion = config.occlusionEnabled && labelCount <= occlusionThreshold;
-    const occlusionInterval = labelCount > 80 ? 15 : labelCount > 40 ? 10 : 5;
+    const occlusionInterval = labelCount > 40 ? 15 : labelCount > 20 ? 10 : 5;
 
     occlusionFrameRef.current++;
     const runOcclusion = effectiveOcclusion && occlusionFrameRef.current % occlusionInterval === 0;

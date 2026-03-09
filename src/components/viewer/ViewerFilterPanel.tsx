@@ -592,6 +592,30 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return () => clearInterval(interval);
   }, [isVisible, buildEntityMap]);
 
+  // ── Sync checkedLevels with external floor switcher events ───────────────
+  useEffect(() => {
+    const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
+      const { visibleFloorFmGuids, isAllFloorsVisible } = e.detail;
+      if (isAllFloorsVisible) {
+        setCheckedLevels(new Set());
+      } else if (visibleFloorFmGuids?.length) {
+        // Match incoming guids against our levels using normalizeGuid
+        const incoming = new Set(visibleFloorFmGuids.map(g => normalizeGuid(g)));
+        const matched = new Set<string>();
+        levels.forEach(l => {
+          if (incoming.has(normalizeGuid(l.fmGuid))) {
+            matched.add(l.fmGuid);
+          }
+        });
+        if (matched.size > 0) {
+          setCheckedLevels(matched);
+        }
+      }
+    };
+    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+  }, [levels]);
+
   // ── Fetch annotation categories (non-modeled assets + issues) ────────────
   useEffect(() => {
     if (!isVisible || !buildingFmGuid) return;

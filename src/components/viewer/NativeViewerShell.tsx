@@ -88,14 +88,19 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const viewerShimRef = useRef<any>(null);
 
   // Room labels hook — listens for ROOM_LABELS_TOGGLE_EVENT
-  const { setLabelsEnabled, updateFloorFilter, updateViewMode: updateRoomLabelViewMode } = useRoomLabels(viewerShimRef);
+  const { setLabelsEnabled, updateFloorFilter, updateViewMode: updateRoomLabelViewMode, isEnabled: roomLabelsEnabled } = useRoomLabels(viewerShimRef);
 
   // Track current visible floor guids for room labels
   const currentFloorGuidsRef = React.useRef<string[]>([]);
 
+  // Track toggle state for labels and room labels
+  const labelsVisibleRef = useRef(false);
+  const roomLabelsVisibleRef = useRef(false);
+
   // Wire room labels toggle event — pass current floor filter so labels only show for selected floors
   useEffect(() => {
     const handler = (e: CustomEvent<RoomLabelsToggleDetail>) => {
+      roomLabelsVisibleRef.current = e.detail.enabled;
       setLabelsEnabled(e.detail.enabled, currentFloorGuidsRef.current);
     };
     window.addEventListener(ROOM_LABELS_TOGGLE_EVENT, handler as EventListener);
@@ -313,13 +318,26 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         pickSurface: false,
       });
       if (pickResult?.entity) {
-        // Deselect all first
-        const selected = xeokitViewer.scene.selectedObjectIds || [];
-        if (selected.length > 0) xeokitViewer.scene.setObjectsSelected(selected, false);
-        pickResult.entity.selected = true;
+        const entityId = pickResult.entity.id;
+        const isCtrl = e.ctrlKey || e.metaKey;
+        const alreadySelected = pickResult.entity.selected;
+
+        if (alreadySelected && !isCtrl) {
+          // Toggle off — deselect clicked entity
+          pickResult.entity.selected = false;
+          setPropertiesEntity(null);
+          return;
+        }
+
+        if (!isCtrl) {
+          // Single select — deselect all first
+          const selected = xeokitViewer.scene.selectedObjectIds || [];
+          if (selected.length > 0) xeokitViewer.scene.setObjectsSelected(selected, false);
+        }
+
+        pickResult.entity.selected = !alreadySelected || isCtrl;
 
         // Open properties dialog
-        const entityId = pickResult.entity.id;
         let fmGuid: string | null = null;
         let entityName: string | null = null;
         if (xeokitViewer.metaScene?.metaObjects) {
@@ -639,21 +657,22 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           fmGuid={contextMenu.fmGuid}
           onClose={() => setContextMenu(null)}
           onShowLabels={() => {
-            window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', { detail: { show: true } }));
+            labelsVisibleRef.current = !labelsVisibleRef.current;
+            window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', { detail: { show: labelsVisibleRef.current } }));
           }}
           onCreateIssue={() => {
             setShowVisualizationMenu(true);
           }}
           onViewIssues={() => {
-            // Only open the visualization menu to show issues, don't toggle spaces
             setShowVisualizationMenu(true);
-            // Dispatch a specific event to open the issue list directly
             setTimeout(() => {
               window.dispatchEvent(new CustomEvent('OPEN_ISSUE_LIST'));
             }, 100);
           }}
           onShowRoomLabels={() => {
-            window.dispatchEvent(new CustomEvent(ROOM_LABELS_TOGGLE_EVENT, { detail: { enabled: true } }));
+            const next = !roomLabelsVisibleRef.current;
+            roomLabelsVisibleRef.current = next;
+            window.dispatchEvent(new CustomEvent(ROOM_LABELS_TOGGLE_EVENT, { detail: { enabled: next } }));
           }}
           onShowProperties={handleContextProperties}
           onZoomTo={handleContextZoomTo}
@@ -661,8 +680,16 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           onIsolateEntity={handleContextIsolate}
           onShowAll={handleContextShowAll}
           onSelectEntity={handleContextSelect}
+          onSelectNone={() => {
+            if (!xeokitViewer?.scene) return;
+            const selected = xeokitViewer.scene.selectedObjectIds || [];
+            if (selected.length > 0) xeokitViewer.scene.setObjectsSelected(selected, false);
+            setPropertiesEntity(null);
+          }}
           onMoveObject={handleContextMove}
           onDeleteObject={handleContextDelete}
+          labelsActive={labelsVisibleRef.current}
+          roomLabelsActive={roomLabelsVisibleRef.current}
         />
       )}
 
