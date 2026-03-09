@@ -68,8 +68,10 @@ function detectFormat(data: ArrayBuffer): 'glb' | 'obj' | 'ifc' | 'unknown' {
  */
 export interface IfcHierarchyResult {
   xktData: ArrayBuffer;
+  metaModelJson: any;
   levels: Array<{ id: string; name: string; type: string }>;
   spaces: Array<{ id: string; name: string; type: string; parentId: string }>;
+  systems: Array<{ name: string; type: string; discipline: string; memberIds: string[] }>;
 }
 
 /**
