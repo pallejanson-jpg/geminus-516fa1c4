@@ -68,8 +68,10 @@ function detectFormat(data: ArrayBuffer): 'glb' | 'obj' | 'ifc' | 'unknown' {
  */
 export interface IfcHierarchyResult {
   xktData: ArrayBuffer;
+  metaModelJson: any;
   levels: Array<{ id: string; name: string; type: string }>;
   spaces: Array<{ id: string; name: string; type: string; parentId: string }>;
+  systems: Array<{ name: string; type: string; discipline: string; memberIds: string[] }>;
 }
 
 /**
@@ -123,6 +125,20 @@ export async function convertToXktWithMetadata(
     const mod = await loadXeokitConvert();
     
     let WebIFC: any;
+    
+    // Validate WASM availability before importing web-ifc
+    const wasmDir = '/web-ifc-wasm/';
+    try {
+      const wasmCheck = await fetch(`${wasmDir}web-ifc.wasm`, { method: 'HEAD' });
+      if (!wasmCheck.ok) {
+        throw new Error(`WASM file not found at ${wasmDir}web-ifc.wasm (${wasmCheck.status})`);
+      }
+      logger('WASM files verified at ' + wasmDir);
+    } catch (wasmCheckErr: any) {
+      logger(`WASM validation failed: ${wasmCheckErr.message}`);
+      throw new Error(`web-ifc WASM files not available at ${wasmDir}. Ensure viteStaticCopy is configured correctly.`);
+    }
+    
     try {
       WebIFC = await import('web-ifc');
       logger('web-ifc module loaded successfully');
@@ -132,8 +148,6 @@ export async function convertToXktWithMetadata(
       throw new Error(`web-ifc WASM module failed to load: ${wasmErr.message}`);
     }
 
-    // Use WASM files copied from the matching npm package version (via viteStaticCopy)
-    const wasmDir = '/web-ifc-wasm/';
     logger(`Using web-ifc WASM from ${wasmDir}`);
     
     try {
@@ -180,9 +194,12 @@ export async function convertToXktWithMetadata(
   logger('Finalizing XKTModel...');
   xktModel.finalize();
 
-  // Extract IFC hierarchy from metaObjects
+  // Extract IFC hierarchy and metadata from metaObjects
   const levels: IfcHierarchyResult['levels'] = [];
   const spaces: IfcHierarchyResult['spaces'] = [];
+  const systems: IfcHierarchyResult['systems'] = [];
+  const metaModelObjects: any[] = [];
+  const systemMap = new Map<string, { name: string; type: string; discipline: string; memberIds: string[] }>();
 
   if (xktModel.metaObjects) {
     const metaObjValues = Array.isArray(xktModel.metaObjects)
@@ -190,33 +207,84 @@ export async function convertToXktWithMetadata(
       : Object.values(xktModel.metaObjects);
     for (const metaObj of metaObjValues as any[]) {
       const metaType = metaObj.metaType || metaObj.type || '';
+      const objId = metaObj.metaObjectId || metaObj.id || '';
+      const objName = metaObj.metaObjectName || metaObj.name || metaType;
+      const parentId = metaObj.parentMetaObjectId || metaObj.parentId || '';
+
+      // Build xeokit MetaModel JSON entry
+      metaModelObjects.push({
+        id: objId,
+        type: metaType,
+        name: objName,
+        parent: parentId || undefined,
+      });
+
       if (metaType === 'IfcBuildingStorey') {
-        levels.push({
-          id: metaObj.metaObjectId || metaObj.id || '',
-          name: metaObj.metaObjectName || metaObj.name || metaType,
-          type: metaType,
-        });
+        levels.push({ id: objId, name: objName, type: metaType });
       } else if (metaType === 'IfcSpace') {
-        spaces.push({
-          id: metaObj.metaObjectId || metaObj.id || '',
-          name: metaObj.metaObjectName || metaObj.name || metaType,
-          type: metaType,
-          parentId: metaObj.parentMetaObjectId || metaObj.parentId || '',
-        });
+        spaces.push({ id: objId, name: objName, type: metaType, parentId });
+      } else if (metaType === 'IfcSystem' || metaType === 'IfcDistributionSystem') {
+        systemMap.set(objId, { name: objName, type: metaType, discipline: inferDiscipline(objName), memberIds: [] });
+      }
+
+      // Track system membership via property sets or parent chains
+      if (metaObj.propertySets) {
+        for (const ps of (Array.isArray(metaObj.propertySets) ? metaObj.propertySets : Object.values(metaObj.propertySets)) as any[]) {
+          const sysName = ps?.SystemName || ps?.['System Name'] || ps?.systemName;
+          if (sysName && typeof sysName === 'string') {
+            if (!systemMap.has(sysName)) {
+              systemMap.set(sysName, { name: sysName, type: 'PropertyGrouped', discipline: inferDiscipline(sysName), memberIds: [] });
+            }
+            systemMap.get(sysName)!.memberIds.push(objId);
+          }
+        }
+      }
+    }
+
+    // Resolve system membership from parent relationships
+    for (const metaObj of metaObjValues as any[]) {
+      const parentId = metaObj.parentMetaObjectId || metaObj.parentId || '';
+      if (systemMap.has(parentId)) {
+        const objId = metaObj.metaObjectId || metaObj.id || '';
+        systemMap.get(parentId)!.memberIds.push(objId);
       }
     }
   }
 
+  systems.push(...systemMap.values());
+
   if (levels.length || spaces.length) {
     logger(`Extracted IFC hierarchy: ${levels.length} levels, ${spaces.length} spaces`);
   }
+  if (systems.length > 0) {
+    logger(`Extracted ${systems.length} systems client-side`);
+  }
+
+  // Build xeokit-compatible MetaModel JSON
+  const metaModelJson = {
+    metaObjects: metaModelObjects,
+  };
 
   logger('Writing XKT to ArrayBuffer...');
   const stats: Record<string, any> = { texturesSize: 0 };
   const xktArrayBuffer = writeXKTModelToArrayBuffer(xktModel, null, stats, { zip: false });
 
-  logger(`XKT conversion complete (${(xktArrayBuffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
-  return { xktData: xktArrayBuffer, levels, spaces };
+  logger(`XKT conversion complete (${(xktArrayBuffer.byteLength / 1024 / 1024).toFixed(2)} MB, ${metaModelObjects.length} meta objects)`);
+  return { xktData: xktArrayBuffer, metaModelJson, levels, spaces, systems };
+}
+
+/**
+ * Infer discipline from system name using common patterns.
+ */
+function inferDiscipline(name: string): string {
+  const upper = (name || '').toUpperCase();
+  if (/VENT|LUFT|AIR|AHU|VAV|SUPPLY|EXHAUST|FRÅNLUFT|TILLUFT/.test(upper)) return 'Ventilation';
+  if (/VÄRME|HEAT|RADIATOR|VV|VÄX/.test(upper)) return 'Heating';
+  if (/KYL|COOL|CHILL/.test(upper)) return 'Cooling';
+  if (/EL|ELECTR|KRAFT|BELYSN|LIGHT/.test(upper)) return 'Electrical';
+  if (/VA|VATTEN|PLUMB|AVLOPP|SANIT/.test(upper)) return 'Plumbing';
+  if (/BRAND|FIRE|SPRINK/.test(upper)) return 'FireProtection';
+  return 'Other';
 }
 
 export class AccXktConverter {
