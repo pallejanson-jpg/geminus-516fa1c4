@@ -156,3 +156,89 @@ All tables have RLS: authenticated read, admin write. Indexes on common query pa
 - Adaptive occlusion throttling: interval scales with label count (5 frames for <40, 10 for <80, 15 for 80+)
 - Auto-disables occlusion when label count exceeds 150
 - Viewport culling: labels outside canvas bounds + 50px margin are hidden early (before occlusion pick)
+
+---
+
+## Plan: IFC → Geminus → IMDF Export Pipeline (PLANERAD)
+
+### Översikt
+Fullständigt flöde för att importera IFC, berika data i Geminus, och exportera till IMDF och andra format för konsumtion i externa system (Apple Maps Indoor, wayfinding-appar, IWMS/CAFM).
+
+### Flöde
+
+#### 1. IFC Import (redan implementerat)
+- Användare laddar upp `.ifc` → `ifc-uploads` bucket
+- `ifc-to-xkt`: konverterar till XKT för 3D-visning
+- `ifc-extract-systems`: extraherar metadata, system, GUID-berikning
+- `asset-plus-sync`: synkar till Asset+ API
+- **Resultat i DB:** assets (rum med koordinater & area), building_settings (georeferens), systems/asset_connections
+
+#### 2. Geminus — Berikning & Förvaltning (redan implementerat)
+- Navigering i 3D/2D/360°
+- Tillgångsregistrering (inventarier, brandredskap)
+- Ärendehantering (BCF issues)
+- Sensorkoppling (Senslinc)
+- Dokument & ritningar (FM Access)
+- AI-skanning för automatisk objektdetektering
+- Rumskategorisering (office, restroom, corridor)
+- All data berikas i DB: assets.category, asset_type, attributes, koordinater, annotationer, issues
+
+#### 3. Export — IMDF + Andra Format (NY)
+
+##### IMDF Export (ny edge function: `imdf-export`)
+1. **venue.geojson** — Hämta byggnad från `building_settings` → namn, adress, WGS84-polygon
+2. **level.geojson** — Hämta våningar (`assets WHERE category='Level'`) → ordinal, höjd
+3. **unit.geojson** — Hämta rum (`assets WHERE category='Space'`):
+   - Geometri: `web-ifc` snittar IfcSpace vid golvhöjd → 2D-polygon → WGS84-transform
+   - category: mappa `asset_type` → IMDF-kategori (office, restroom, stairs, elevator)
+   - name, alt_name från `common_name`
+4. **opening.geojson** — Hämta dörrar (`assets WHERE category='Door'`) → position, rumskoppling
+5. **anchor.geojson** — Hämta tillgångar med koordinater → brandredskap, sensorer
+6. **manifest.json** + ZIP-paketering
+
+##### Kritisk transformationslogik (steg 3 — unit.geojson)
+```
+IFC-fil (ifc-uploads bucket)
+  → web-ifc: öppna modell, iterera IfcSpace
+    → hämta geometri (GetFlatMesh)
+      → extrahera vertices, trianglar
+  → Horisontellt snitt vid golvhöjd (storeyAABB[y] + 0.1m)
+    → intersektera alla trianglar med XY-plan
+      → samla linjesegment → sluten polygon
+  → Lokal → WGS84 transform (building_settings.latitude/longitude/rotation)
+  → Output: GeoJSON Polygon per rum
+```
+
+##### Andra exportformat (framtida fas)
+- **BCF-XML**: ärenden → openBIM-kompatibelt
+- **COBie**: tillgångar → Excel/IFC för drift
+- **GeoJSON**: enklare variant utan IMDF-schema
+- **CSV**: tillgångslista för extern import
+
+#### 4. Konsumenter
+- **Apple Maps Indoor** → IMDF för inomhusnavigering
+- **Wayfinding-appar** → IMDF/GeoJSON
+- **IWMS/CAFM-system** → COBie/CSV
+- **BIM-samordning** → BCF-XML tillbaka till Revit/Solibri
+- **Kartplattformar** → GeoJSON till Mapbox/Google Maps
+- **Digital Twin** → Allt ovan + realtidsdata via API
+
+### Komponentstatus
+
+| Komponent | Status |
+|---|---|
+| IFC-uppladdning & lagring | ✅ Finns |
+| web-ifc i edge function | ✅ Finns (ifc-extract-systems) |
+| Georeferens per byggnad | ✅ Finns (building_settings) |
+| Rum med metadata | ✅ Finns (assets-tabellen) |
+| Koordinattransform | ✅ Finns (coordinate-transform.ts) |
+| **2D-polygonextraktion** | ❌ Ny — geometri-slicing |
+| **IMDF-schema-generering** | ❌ Ny — GeoJSON-mappning |
+| **ZIP-paketering** | ❌ Ny — edge function |
+| **Export-UI i Geminus** | ❌ Ny — knapp i inställningar |
+
+### Implementationsfaser
+1. **Fas 1**: Metadata-only IMDF (venue, level, unit utan geometri — använd bounding box som polygon-approximation)
+2. **Fas 2**: Geometri-slicing (web-ifc IfcSpace → 2D-polygoner)
+3. **Fas 3**: Full IMDF med openings, anchors, occupants
+4. **Fas 4**: Övriga exportformat (BCF-XML, COBie, CSV)
