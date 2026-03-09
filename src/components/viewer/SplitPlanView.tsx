@@ -746,31 +746,33 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const currentEye = viewer.camera.eye || [0, 0, 0];
     const currentLook = viewer.camera.look || [0, 0, 0];
 
-    const offsetX = Number.isFinite(currentEye[0]) && Number.isFinite(currentLook[0])
-      ? currentEye[0] - currentLook[0]
-      : 0;
-    const offsetY = Number.isFinite(currentEye[1]) && Number.isFinite(currentLook[1])
-      ? currentEye[1] - currentLook[1]
-      : 1.6;
-    const offsetZ = Number.isFinite(currentEye[2]) && Number.isFinite(currentLook[2])
-      ? currentEye[2] - currentLook[2]
-      : 0;
+    // Preserve the current viewing direction (horizontal only) so
+    // the user keeps looking the same way after clicking on the plan.
+    const dirX = currentLook[0] - currentEye[0];
+    const dirZ = currentLook[2] - currentEye[2];
+    const dirLen = Math.sqrt(dirX * dirX + dirZ * dirZ);
+    // Normalise to a 2 m look-ahead distance; fallback to looking along -Z
+    const lookDist = 2;
+    const ndx = dirLen > 0.001 ? (dirX / dirLen) * lookDist : 0;
+    const ndz = dirLen > 0.001 ? (dirZ / dirLen) * lookDist : -lookDist;
 
-    let nextLookY = Number.isFinite(worldPos[1]) ? worldPos[1] : currentLook[1];
-    let nextEyeY = nextLookY + offsetY;
+    // Calculate floor-appropriate Y heights
+    let eyeY = 1.6; // default person height
+    let lookY = 1.4;
 
     const storey = plugin?.storeys?.[map.storeyId];
     const sAABB = storey?.storeyAABB;
     if (Array.isArray(sAABB) && sAABB.length === 6 && sAABB.every((v) => Number.isFinite(v))) {
       const floorY = sAABB[1];
       const ceilY = sAABB[4];
-      const preferredEyeY = floorY + 1.6;
-      nextEyeY = Math.max(floorY + 0.8, Math.min(ceilY - 0.2, preferredEyeY));
-      nextLookY = Math.max(floorY + 0.2, Math.min(ceilY - 0.5, nextLookY));
+      eyeY = Math.max(floorY + 0.8, Math.min(ceilY - 0.2, floorY + 1.6));
+      lookY = Math.max(floorY + 0.2, Math.min(ceilY - 0.5, floorY + 1.4));
     }
 
-    const nextEye: [number, number, number] = [worldPos[0] + offsetX, nextEyeY, worldPos[2] + offsetZ];
-    const nextLook: [number, number, number] = [worldPos[0], nextLookY, worldPos[2]];
+    // Eye is placed exactly at the clicked world X/Z, at person height
+    const nextEye: [number, number, number] = [worldPos[0], eyeY, worldPos[2]];
+    // Look-at point is 2 m ahead in the current viewing direction
+    const nextLook: [number, number, number] = [worldPos[0] + ndx, lookY, worldPos[2] + ndz];
 
     if (!nextEye.every((v) => Number.isFinite(v)) || !nextLook.every((v) => Number.isFinite(v))) {
       return;
