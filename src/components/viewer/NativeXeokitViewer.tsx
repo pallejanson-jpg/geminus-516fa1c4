@@ -644,12 +644,81 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }
         viewerRef.current = null;
         (window as any).__nativeXeokitViewer = null;
+        (window as any).__xktTileChunks = null;
+        (window as any).__xktTileLoadedIds = null;
       }
       // Clean up any NavCube canvas we added
       const nc = document.getElementById(`native-navcube-${buildingFmGuid.substring(0, 8)}`);
       nc?.remove();
     };
   }, [initialize]);
+
+  // ── Listen for FLOOR_TILE_SWITCH (dynamic tile loading for real per-storey tiles) ──
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail?.tiles || !detail?.floorFmGuid) return;
+
+      const viewer = viewerRef.current;
+      if (!viewer?.scene) return;
+
+      const allChunks: ModelCandidate[] = (window as any).__xktTileChunks || [];
+      const loadedIds: Set<string> = (window as any).__xktTileLoadedIds || new Set();
+      if (allChunks.length === 0) return;
+
+      const tilesToLoad = detail.tiles as Array<{ modelId: string; storagePath?: string }>;
+      const neededIds = new Set(tilesToLoad.map((t: any) => t.modelId));
+
+      // Unload tiles that are no longer needed (not in active+adjacent)
+      for (const loadedId of loadedIds) {
+        if (!neededIds.has(loadedId)) {
+          const model = viewer.scene.models?.[loadedId];
+          if (model) {
+            try { model.destroy(); } catch {}
+            console.log(`[NativeViewer] 🧩 Unloaded tile: ${loadedId}`);
+          }
+          loadedIds.delete(loadedId);
+        }
+      }
+
+      // Load new tiles
+      for (const tile of tilesToLoad) {
+        if (loadedIds.has(tile.modelId)) continue;
+
+        const chunk = allChunks.find((c: any) => c.model_id === tile.modelId);
+        if (!chunk) continue;
+
+        try {
+          const { data: urlData } = await supabase.storage
+            .from('xkt-models')
+            .createSignedUrl(chunk.storage_path, 3600);
+
+          if (urlData?.signedUrl) {
+            const sdk = (window as any).__xeokitSdk;
+            if (!sdk) continue;
+
+            const xktLoader = new sdk.XKTLoaderPlugin(viewer);
+            const entity = xktLoader.load({ id: tile.modelId, src: urlData.signedUrl, edges: true });
+
+            await new Promise<void>((resolve) => {
+              entity?.on?.('loaded', () => resolve());
+              entity?.on?.('error', () => resolve());
+              setTimeout(resolve, 60000);
+            });
+
+            loadedIds.add(tile.modelId);
+            applyArchitectColors(viewer);
+            console.log(`[NativeViewer] 🧩 Loaded tile: ${tile.modelId}`);
+          }
+        } catch (err) {
+          console.warn(`[NativeViewer] Failed to load tile ${tile.modelId}:`, err);
+        }
+      }
+    };
+
+    window.addEventListener('FLOOR_TILE_SWITCH', handler);
+    return () => window.removeEventListener('FLOOR_TILE_SWITCH', handler);
+  }, []);
 
   // ── Listen for Insights color events (chart click → colorize model) ───
   useEffect(() => {
