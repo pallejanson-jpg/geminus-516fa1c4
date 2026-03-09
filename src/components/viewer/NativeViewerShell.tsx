@@ -318,13 +318,26 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         pickSurface: false,
       });
       if (pickResult?.entity) {
-        // Deselect all first
-        const selected = xeokitViewer.scene.selectedObjectIds || [];
-        if (selected.length > 0) xeokitViewer.scene.setObjectsSelected(selected, false);
-        pickResult.entity.selected = true;
+        const entityId = pickResult.entity.id;
+        const isCtrl = e.ctrlKey || e.metaKey;
+        const alreadySelected = pickResult.entity.selected;
+
+        if (alreadySelected && !isCtrl) {
+          // Toggle off — deselect clicked entity
+          pickResult.entity.selected = false;
+          setPropertiesEntity(null);
+          return;
+        }
+
+        if (!isCtrl) {
+          // Single select — deselect all first
+          const selected = xeokitViewer.scene.selectedObjectIds || [];
+          if (selected.length > 0) xeokitViewer.scene.setObjectsSelected(selected, false);
+        }
+
+        pickResult.entity.selected = !alreadySelected || isCtrl;
 
         // Open properties dialog
-        const entityId = pickResult.entity.id;
         let fmGuid: string | null = null;
         let entityName: string | null = null;
         if (xeokitViewer.metaScene?.metaObjects) {
