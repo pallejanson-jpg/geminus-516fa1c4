@@ -24,29 +24,45 @@
 - If found, passes as `metaModelSrc` to `xktLoader.load()` for richer BIM queries
 - Works for all three loading paths: memory, streaming, and buffer
 
+---
+
+## Plan: External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+
 ### Architecture
 
 ```text
-User uploads IFC
+IFC Upload → Supabase Storage → conversion_jobs (pending)
        ↓
-  File size check
+External Worker (polls conversion-worker-api)
+  - Downloads IFC via signed URL
+  - Groups objects by IfcBuildingStorey
+  - Generates per-storey .xkt tiles
+  - Uploads tiles to storage
+  - Reports completion → xkt_models records created
        ↓
-  ≤20MB → Edge Function (server) → fallback to browser on WORKER_LIMIT
-  >20MB → Browser conversion (direct)
-       ↓
-  ┌─────────────────────────┐
-  │ web-ifc + xeokit-convert│
-  │                         │
-  │ 1. Geometry  → .xkt     │
-  │ 2. Metadata  → .json    │
-  │ 3. Systems   → DB       │
-  │ 4. Hierarchy → DB       │
-  └─────────────────────────┘
-       ↓
-  Supabase Storage + DB
-       ↓
-  xktLoader.load({
-    src/xkt: model.xkt,
-    metaModelSrc: metadata.json
-  })
+Viewer detects real tiles (unique storage_paths)
+  - Loads active floor tile (~15MB)
+  - Lazy-loads adjacent floors on FLOOR_TILE_SWITCH event
+  - Unloads distant floors to save memory
+  - Falls back to monolithic loading if no real tiles
 ```
+
+### Files Created/Changed
+
+| File | Action |
+|------|--------|
+| `supabase/functions/conversion-worker-api/index.ts` | Created — worker API (pending/claim/progress/complete/fail/upload-url) |
+| `supabase/config.toml` | Added verify_jwt = false entry |
+| `docs/conversion-worker/worker.mjs` | Created — standalone Node.js worker |
+| `docs/conversion-worker/Dockerfile` | Created — Docker deployment |
+| `docs/conversion-worker/README.md` | Created — deployment guide |
+| `src/components/viewer/NativeXeokitViewer.tsx` | Updated — real tile detection + FLOOR_TILE_SWITCH listener |
+| `src/hooks/useFloorPriorityLoading.ts` | Updated — isRealTiling + getTilesToLoad + FLOOR_TILE_SWITCH dispatch |
+
+### Key Concepts
+
+- **Virtual chunks (Phase 1)**: Same XKT file, visibility filtering by storey metadata
+- **Real tiles (Phase 2)**: Separate per-storey XKT files with unique `storage_path` values
+- Detection: `isRealTiling()` checks if chunks have >1 unique storage paths
+- Dynamic loading: `FLOOR_TILE_SWITCH` custom event triggers load/unload of tiles
+- Worker auth: `WORKER_API_SECRET` shared secret (not JWT)
