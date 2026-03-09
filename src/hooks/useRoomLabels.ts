@@ -231,9 +231,16 @@ export function useRoomLabels(
       const canvasPos = worldToCanvas(label.worldPos, viewer);
       
       if (canvasPos) {
-        // Occlusion test (throttled)
+        // Early viewport culling — skip labels outside visible area
+        if (canvasPos[0] < -margin || canvasPos[0] > canvasW + margin ||
+            canvasPos[1] < -margin || canvasPos[1] > canvasH + margin) {
+          updates.push({ el: label.element, transform: '', visible: false });
+          return;
+        }
+
+        // Occlusion test (throttled, adaptive)
         let occluded = false;
-        if (config.occlusionEnabled) {
+        if (effectiveOcclusion) {
           if (runOcclusion) {
             try {
               const dx = label.worldPos[0] - cameraEye[0];

@@ -91,15 +91,18 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
       )}
 
       <div className="py-1">
-        {items.map(({ icon: Icon, label, action }, idx) => (
-          <button
-            key={`${label}-${idx}`}
-            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-zinc-100 hover:bg-zinc-800 transition-colors"
-            onClick={() => handleClick(action)}
-          >
-            <Icon className="h-4 w-4 text-muted-foreground" />
-            {label}
-          </button>
+        {items.map(({ icon: Icon, label, action, disabled, separator }, idx) => (
+          <React.Fragment key={`${label}-${idx}`}>
+            {separator && <div className="my-1 border-t border-zinc-700" />}
+            <button
+              className={`flex items-center gap-2.5 w-full px-3 py-2 text-sm transition-colors ${disabled ? 'text-zinc-500 cursor-not-allowed' : 'text-zinc-100 hover:bg-zinc-800'}`}
+              onClick={() => !disabled && handleClick(action)}
+              disabled={disabled}
+            >
+              <Icon className={`h-4 w-4 ${disabled ? 'text-zinc-600' : 'text-muted-foreground'}`} />
+              {label}
+            </button>
+          </React.Fragment>
         ))}
       </div>
     </div>

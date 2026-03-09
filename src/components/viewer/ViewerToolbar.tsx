@@ -705,6 +705,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         if (viewer.cameraControl) {
           viewer.cameraControl.navMode = 'planView';
         }
+        // Cache the floor ID for force-reapply
+        if (targetFloorId) {
+          try { sessionStorage.setItem('viewer_last_floor_id', targetFloorId); } catch {}
+        }
       } catch (err) {
         console.warn('[ViewerToolbar] Failed to enter 2D mode cleanly:', err);
         try { remove2DClipping(); } catch {}
@@ -712,6 +716,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
       } finally {
         setTimeout(revealCanvas, 80);
         setTimeout(revealCanvas, 600);
+        mode2dTransitionRef.current = false;
       }
     } else {
       // Restore all entities modified during 2D mode
