@@ -47,7 +47,7 @@ import { Facility } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { AppContext } from '@/context/AppContext';
-import { syncBuildingAssetsIfNeeded, syncAssetToAssetPlus, batchSyncAssetsToAssetPlus, fetchAssetsForBuilding } from '@/services/asset-plus-service';
+import { syncBuildingAssetsIfNeeded, syncAssetToAssetPlus, batchSyncAssetsToAssetPlus, fetchAssetsForBuilding, isAccSourcedBuilding } from '@/services/asset-plus-service';
 import {
   DndContext,
   closestCenter,
