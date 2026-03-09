@@ -80,6 +80,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   fmGuids: fmGuidsProp,
   category,
   onUpdate,
+  entityId,
 }) => {
   const isMobile = useIsMobile();
   
