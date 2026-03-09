@@ -497,7 +497,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
             <SheetTitle className="flex items-center justify-between text-base text-foreground">
               <div className="flex items-center gap-2">
                 <Settings2 className="h-4 w-4" />
-                Visning
+                Display
               </div>
               <div className="flex items-center gap-1">
                 <Button
@@ -505,7 +505,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                   size="icon"
                   className="h-7 w-7"
                   onClick={togglePinned}
-                  title={isPinned ? "Lossa panelen" : "Fäst panelen"}
+                  title={isPinned ? "Unpin panel" : "Pin panel"}
                 >
                   {isPinned ? <Pin className="h-3.5 w-3.5 text-primary" /> : <PinOff className="h-3.5 w-3.5 text-foreground/70" />}
                 </Button>
@@ -514,7 +514,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                   size="icon"
                   className="h-7 w-7"
                   onClick={() => handleOpenChange(false)}
-                  title="Stäng"
+                  title="Close"
                 >
                   <X className="h-3.5 w-3.5" />
                 </Button>
