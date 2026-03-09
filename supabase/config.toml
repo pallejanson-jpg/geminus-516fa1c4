@@ -71,3 +71,6 @@ verify_jwt = false
 
 [functions.imdf-export]
 verify_jwt = false
+
+[functions.conversion-worker-api]
+verify_jwt = false
