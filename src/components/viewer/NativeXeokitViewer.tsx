@@ -380,9 +380,28 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         try {
           const memData = getModelFromMemory(modelId, buildingFmGuid);
 
+          // Check for metadata.json alongside the XKT model
+          const metaStoragePath = model.storage_path.replace(/\.xkt$/i, '_metadata.json');
+          let metaModelSrc: string | undefined;
+          try {
+            const { data: metaUrl } = await supabase.storage
+              .from('xkt-models')
+              .createSignedUrl(metaStoragePath, 3600);
+            if (metaUrl?.signedUrl) {
+              // Verify it exists with a HEAD request
+              const headResp = await fetch(metaUrl.signedUrl, { method: 'HEAD' });
+              if (headResp.ok) {
+                metaModelSrc = metaUrl.signedUrl;
+                console.log(`[NativeViewer] MetaModel JSON found for ${modelId}`);
+              }
+            }
+          } catch { /* no metadata file, continue without */ }
+
           if (memData) {
             console.log(`[NativeViewer] Loading from memory: ${modelId}, size: ${memData.byteLength}`);
-            const entity = xktLoader.load({ id: modelId, xkt: memData, edges: true });
+            const loadOpts: any = { id: modelId, xkt: memData, edges: true };
+            if (metaModelSrc) loadOpts.metaModelSrc = metaModelSrc;
+            const entity = xktLoader.load(loadOpts);
             const ok = await waitForModel(entity, modelId);
             if (!ok) return;
 
