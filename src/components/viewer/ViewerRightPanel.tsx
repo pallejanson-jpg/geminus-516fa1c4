@@ -404,7 +404,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
 
   const handleSubmitIssue = useCallback(async (data: { title: string; description: string; issueType: string; priority: string }) => {
     if (!pendingIssueState || !user || !buildingFmGuid) {
-      toast({ title: "Kan inte skapa ärende", variant: "destructive" }); return;
+      toast({ title: "Cannot create issue", variant: "destructive" }); return;
     }
     setIsSubmittingIssue(true);
     try {
