@@ -1188,6 +1188,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
              <EdgeScrollIndicator viewport={scrollViewportEl} />
            </div>
             </TooltipProvider>
+            </div>
           
           {/* Side-pop panel for BIM Models */}
           <SidePopPanel
