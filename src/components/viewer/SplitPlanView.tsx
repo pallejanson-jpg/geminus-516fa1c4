@@ -492,34 +492,35 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     return () => clearTimeout(t);
   }, [storeyPlugin, generateFallbackSnapshot]);
 
+  // Center image helper — called from effect and onLoad
+  const centerImage = useCallback(() => {
+    if (initialCenterApplied.current) return;
+    const container = containerRef.current;
+    const img = imgRef.current;
+    if (!container || !img) return;
+    const imgW = img.naturalWidth || img.clientWidth;
+    const imgH = img.naturalHeight || img.clientHeight;
+    if (!imgW || !imgH) return;
+
+    const cRect = container.getBoundingClientRect();
+    const scale = Math.min(cRect.width / imgW, cRect.height / imgH) * 0.92;
+    const scaledW = imgW * scale;
+    const scaledH = imgH * scale;
+    const ox = (cRect.width - scaledW) / 2;
+    const oy = (cRect.height - scaledH) / 2;
+
+    const newPz = { offsetX: ox, offsetY: oy, scale };
+    setPanZoom(newPz);
+    panZoomRef.current = newPz;
+    initialCenterApplied.current = true;
+  }, []);
+
   // Center image after storey map loads
   useEffect(() => {
     if (!storeyMap || initialCenterApplied.current) return;
-
-    const timer = setTimeout(() => {
-      const container = containerRef.current;
-      const img = imgRef.current;
-      if (!container || !img) return;
-
-      const cRect = container.getBoundingClientRect();
-      const imgW = img.naturalWidth || img.clientWidth;
-      const imgH = img.naturalHeight || img.clientHeight;
-
-      // Auto-fit: contain the plan image within the container
-      const scale = Math.min(cRect.width / imgW, cRect.height / imgH) * 0.92;
-      const scaledW = imgW * scale;
-      const scaledH = imgH * scale;
-      const ox = (cRect.width - scaledW) / 2;
-      const oy = (cRect.height - scaledH) / 2;
-
-      const newPz = { offsetX: ox, offsetY: oy, scale };
-      setPanZoom(newPz);
-      panZoomRef.current = newPz;
-      initialCenterApplied.current = true;
-    }, 50);
-
+    const timer = setTimeout(centerImage, 50);
     return () => clearTimeout(timer);
-  }, [storeyMap]);
+  }, [storeyMap, centerImage]);
 
   // Camera position overlay — use camera.eye (position) like MinimapPanel
   useEffect(() => {
