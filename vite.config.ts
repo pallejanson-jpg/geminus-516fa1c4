@@ -55,13 +55,21 @@ export default defineConfig(({ mode }) => ({
         { src: 'node_modules/cesium/Build/Cesium/ThirdParty', dest: 'cesiumStatic' },
         { src: 'node_modules/cesium/Build/Cesium/Assets', dest: 'cesiumStatic' },
         { src: 'node_modules/cesium/Build/Cesium/Widgets', dest: 'cesiumStatic' },
+        // Copy web-ifc WASM files matching npm version for browser-side IFC conversion
+        { src: 'node_modules/web-ifc/*.wasm', dest: 'web-ifc-wasm' },
       ],
     }),
   ].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Provide browser-compatible shim for node:util used by @xeokit/xeokit-convert
+      "node:util": path.resolve(__dirname, "./src/lib/node-util-shim.ts"),
     },
+  },
+  optimizeDeps: {
+    // Force Vite to pre-bundle web-ifc so WASM loading works correctly
+    exclude: ['web-ifc'],
   },
   // Ensure WASM files from web-ifc are served correctly
   assetsInclude: ['**/*.wasm'],

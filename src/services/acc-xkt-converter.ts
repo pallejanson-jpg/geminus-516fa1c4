@@ -122,12 +122,15 @@ export async function convertToXktWithMetadata(
     logger('Parsing IFC into XKTModel (browser-side)...');
     const mod = await loadXeokitConvert();
     const WebIFC = await import('web-ifc');
+    // Use WASM files copied from the matching npm package version (via viteStaticCopy)
+    const wasmDir = '/web-ifc-wasm/';
+    logger(`Using web-ifc WASM from ${wasmDir}`);
     await (mod as any).parseIFCIntoXKTModel({
       WebIFC,
       data: glbData,
       xktModel,
       autoNormals: false,
-      wasmPath: '/lib/xeokit/',
+      wasmPath: wasmDir,
       log: logger,
     });
   } else if (format === 'obj') {
