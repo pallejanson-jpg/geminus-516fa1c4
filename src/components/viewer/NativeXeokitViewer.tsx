@@ -32,6 +32,9 @@ interface ModelInfo {
   storage_path: string;
   file_size: number | null;
   storey_fm_guid: string | null;
+  is_chunk?: boolean;
+  chunk_order?: number;
+  parent_model_id?: string | null;
 }
 
 type ModelCandidate = ModelInfo & { synced_at?: string | null; source: 'db' | 'storage' };
