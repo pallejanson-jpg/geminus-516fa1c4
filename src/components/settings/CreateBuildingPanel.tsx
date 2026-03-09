@@ -239,23 +239,35 @@ const CreateBuildingPanel: React.FC = () => {
       startPolling(jobId);
 
       // 5. Invoke edge function (fire-and-forget style — polling handles updates)
-      const { data: convResult, error: fnError } = await supabase.functions.invoke('ifc-to-xkt', {
-        body: {
-          ifcStoragePath,
-          buildingFmGuid: targetBuildingFmGuid,
-          modelName: safeModelName,
-          jobId,
-        },
-      });
+      let convResult: any = null;
+      let fnError: any = null;
+      let isWorkerLimit = false;
 
-      const isWorkerLimit = fnError?.message?.includes('WORKER_LIMIT') || 
-        fnError?.message?.includes('546') ||
-        convResult?.code === 'WORKER_LIMIT';
+      try {
+        const resp = await supabase.functions.invoke('ifc-to-xkt', {
+          body: {
+            ifcStoragePath,
+            buildingFmGuid: targetBuildingFmGuid,
+            modelName: safeModelName,
+            jobId,
+          },
+        });
+        convResult = resp.data;
+        fnError = resp.error;
+      } catch (e: any) {
+        fnError = e;
+      }
+
+      // Detect WORKER_LIMIT from multiple possible locations
+      const errorString = JSON.stringify(fnError ?? '') + JSON.stringify(convResult ?? '');
+      isWorkerLimit = errorString.includes('WORKER_LIMIT') || 
+        errorString.includes('546') ||
+        errorString.includes('not having enough compute resources');
 
       if (fnError && !isWorkerLimit) {
         if (pollingRef.current) clearInterval(pollingRef.current);
         pollingRef.current = null;
-        throw new Error(`Server conversion failed: ${fnError.message}`);
+        throw new Error(`Server conversion failed: ${typeof fnError === 'object' ? JSON.stringify(fnError) : fnError}`);
       }
 
       if (isWorkerLimit) {
