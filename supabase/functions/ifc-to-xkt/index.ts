@@ -393,9 +393,11 @@ Deno.serve(async (req) => {
 
     // Write to /tmp to free the blob from memory
     const ifcTmpPath = `/tmp/input_${Date.now()}.ifc`;
-    const ifcBytes = new Uint8Array(await ifcBlob.arrayBuffer());
+    let ifcBytes: Uint8Array | null = new Uint8Array(await ifcBlob.arrayBuffer());
     const fileSizeMB = ifcBytes.byteLength / 1024 / 1024;
     await Deno.writeFile(ifcTmpPath, ifcBytes);
+    // Release download buffer immediately to free memory before WASM+parse
+    ifcBytes = null;
     await appendLog(`IFC downloaded: ${fileSizeMB.toFixed(1)} MB (saved to disk)`, 20);
 
     // 2. Download WASM and load libraries
@@ -410,20 +412,21 @@ Deno.serve(async (req) => {
     await appendLog("Parsing IFC from disk...", 30);
 
     // Read IFC from disk instead of keeping blob in memory
-    const ifcData = await Deno.readFile(ifcTmpPath);
+    let ifcData: Uint8Array | null = await Deno.readFile(ifcTmpPath);
+    // Remove temp file immediately to free disk
+    try { await Deno.remove(ifcTmpPath); } catch (_) { /* best-effort */ }
 
     await (xeokitConvert as any).parseIFCIntoXKTModel({
       WebIFC,
       data: ifcData,
       xktModel,
-      autoNormals: true,
+      autoNormals: false,
       wasmPath,
       log: (msg: string) => console.log(`  ${msg}`),
     });
 
     // Release IFC data from memory immediately after parsing
-    // @ts-ignore - allow GC
-    try { await Deno.remove(ifcTmpPath); } catch (_) { /* best-effort */ }
+    ifcData = null;
 
     await appendLog("Finalizing XKT model...", 60);
     xktModel.finalize();

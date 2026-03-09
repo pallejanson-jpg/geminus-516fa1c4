@@ -248,11 +248,29 @@ const CreateBuildingPanel: React.FC = () => {
         },
       });
 
-      if (fnError) {
-        // Edge function returned error immediately
+      const isWorkerLimit = fnError?.message?.includes('WORKER_LIMIT') || 
+        fnError?.message?.includes('546') ||
+        convResult?.code === 'WORKER_LIMIT';
+
+      if (fnError && !isWorkerLimit) {
         if (pollingRef.current) clearInterval(pollingRef.current);
         pollingRef.current = null;
         throw new Error(`Server conversion failed: ${fnError.message}`);
+      }
+
+      if (isWorkerLimit) {
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        pollingRef.current = null;
+        addLog('⚠️ Server memory limit exceeded for this file size.');
+        addLog('💡 Try using a smaller/optimized IFC file, or split by discipline.');
+        setConversionProgress(0);
+        setIsConverting(false);
+        toast({
+          variant: 'destructive',
+          title: 'File too large for server conversion',
+          description: 'The IFC file exceeds server memory limits. Try optimizing or splitting the file.',
+        });
+        return;
       }
 
       if (convResult && !convResult.success) {
