@@ -208,20 +208,39 @@ export function useRoomLabels(
     const cameraEye = camera?.eye || [0, 0, 0];
     const cameraLook = camera?.look || [0, 0, 0];
 
-    // Occlusion throttle: only run every 5 frames
+    const labelCount = labelsRef.current.size;
+    // Adaptive throttling: more labels = less frequent occlusion checks
+    // Auto-disable occlusion above threshold for performance
+    const occlusionThreshold = 150;
+    const effectiveOcclusion = config.occlusionEnabled && labelCount <= occlusionThreshold;
+    const occlusionInterval = labelCount > 80 ? 15 : labelCount > 40 ? 10 : 5;
+
     occlusionFrameRef.current++;
-    const runOcclusion = config.occlusionEnabled && occlusionFrameRef.current % 5 === 0;
+    const runOcclusion = effectiveOcclusion && occlusionFrameRef.current % occlusionInterval === 0;
 
     // Phase 1: Compute all positions (read-only)
+    // Viewport culling: get canvas dimensions for early rejection
+    const canvas = viewer.scene?.canvas?.canvas;
+    const canvasW = canvas?.clientWidth || 1920;
+    const canvasH = canvas?.clientHeight || 1080;
+    const margin = 50; // px margin outside viewport
+
     const updates: { el: HTMLDivElement; transform: string; visible: boolean }[] = [];
 
     labelsRef.current.forEach(label => {
       const canvasPos = worldToCanvas(label.worldPos, viewer);
       
       if (canvasPos) {
-        // Occlusion test (throttled)
+        // Early viewport culling — skip labels outside visible area
+        if (canvasPos[0] < -margin || canvasPos[0] > canvasW + margin ||
+            canvasPos[1] < -margin || canvasPos[1] > canvasH + margin) {
+          updates.push({ el: label.element, transform: '', visible: false });
+          return;
+        }
+
+        // Occlusion test (throttled, adaptive)
         let occluded = false;
-        if (config.occlusionEnabled) {
+        if (effectiveOcclusion) {
           if (runOcclusion) {
             try {
               const dx = label.worldPos[0] - cameraEye[0];

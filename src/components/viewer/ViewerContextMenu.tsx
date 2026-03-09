@@ -58,22 +58,21 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
 
   const handleClick = (action: () => void) => { action(); onClose(); };
 
-  // Build items — entity-specific items only show when an entity is picked
-  const items: { icon: any; label: string; action: () => void; entityOnly?: boolean }[] = [];
+  // Build items — entity-specific items always shown but disabled when no entity
+  const hasEntity = !!entityId;
+  const items: { icon: any; label: string; action: () => void; disabled?: boolean; separator?: boolean }[] = [];
 
-  // Entity-specific actions
-  if (entityId) {
-    if (onShowProperties) items.push({ icon: Info, label: 'Egenskaper', action: onShowProperties, entityOnly: true });
-    if (onSelectEntity) items.push({ icon: MousePointer, label: 'Markera', action: onSelectEntity, entityOnly: true });
-    if (onZoomTo) items.push({ icon: ZoomIn, label: 'Zooma till', action: onZoomTo, entityOnly: true });
-    if (onIsolateEntity) items.push({ icon: Scan, label: 'Isolera', action: onIsolateEntity, entityOnly: true });
-    if (onHideEntity) items.push({ icon: EyeOff, label: 'Dölj', action: onHideEntity, entityOnly: true });
-    if (onMoveObject) items.push({ icon: Move, label: 'Flytta objekt', action: onMoveObject, entityOnly: true });
-    if (onDeleteObject) items.push({ icon: Trash2, label: 'Ta bort objekt', action: onDeleteObject, entityOnly: true });
-  }
+  // Entity-specific actions (always visible, disabled when no entity)
+  items.push({ icon: Info, label: 'Egenskaper', action: onShowProperties || (() => {}), disabled: !hasEntity || !onShowProperties });
+  items.push({ icon: MousePointer, label: 'Markera', action: onSelectEntity || (() => {}), disabled: !hasEntity || !onSelectEntity });
+  items.push({ icon: ZoomIn, label: 'Zooma till', action: onZoomTo || (() => {}), disabled: !hasEntity || !onZoomTo });
+  items.push({ icon: Scan, label: 'Isolera', action: onIsolateEntity || (() => {}), disabled: !hasEntity || !onIsolateEntity });
+  items.push({ icon: EyeOff, label: 'Dölj', action: onHideEntity || (() => {}), disabled: !hasEntity || !onHideEntity });
+  items.push({ icon: Move, label: 'Flytta objekt', action: onMoveObject || (() => {}), disabled: !hasEntity || !onMoveObject });
+  items.push({ icon: Trash2, label: 'Ta bort objekt', action: onDeleteObject || (() => {}), disabled: !hasEntity || !onDeleteObject });
 
-  // Always-available actions
-  if (onShowAll) items.push({ icon: Eye, label: 'Visa alla', action: onShowAll });
+  // Separator + always-available actions
+  if (onShowAll) items.push({ icon: Eye, label: 'Visa alla', action: onShowAll, separator: true });
   items.push({ icon: Tags, label: 'Visa etiketter', action: onShowLabels });
   items.push({ icon: Type, label: 'Visa rumsetiketter', action: onShowRoomLabels });
   items.push({ icon: MessageSquarePlus, label: 'Skapa ärende', action: onCreateIssue });
@@ -92,15 +91,18 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
       )}
 
       <div className="py-1">
-        {items.map(({ icon: Icon, label, action }, idx) => (
-          <button
-            key={`${label}-${idx}`}
-            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-zinc-100 hover:bg-zinc-800 transition-colors"
-            onClick={() => handleClick(action)}
-          >
-            <Icon className="h-4 w-4 text-muted-foreground" />
-            {label}
-          </button>
+        {items.map(({ icon: Icon, label, action, disabled, separator }, idx) => (
+          <React.Fragment key={`${label}-${idx}`}>
+            {separator && <div className="my-1 border-t border-zinc-700" />}
+            <button
+              className={`flex items-center gap-2.5 w-full px-3 py-2 text-sm transition-colors ${disabled ? 'text-zinc-500 cursor-not-allowed' : 'text-zinc-100 hover:bg-zinc-800'}`}
+              onClick={() => !disabled && handleClick(action)}
+              disabled={disabled}
+            >
+              <Icon className={`h-4 w-4 ${disabled ? 'text-zinc-600' : 'text-muted-foreground'}`} />
+              {label}
+            </button>
+          </React.Fragment>
         ))}
       </div>
     </div>

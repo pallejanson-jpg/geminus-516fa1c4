@@ -531,10 +531,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
       console.warn('[ViewerToolbar] handleViewModeChange: viewer not ready, skipping');
       return;
     }
-    // Idempotency: skip if already in target mode
-    if (mode === viewModeRef.current) return;
+    // Force reapply: if already in 2D mode and requesting 2D, re-run clipping
+    const isForceReapply = mode === '2d' && viewModeRef.current === '2d';
+    // Idempotency: skip if already in target mode (unless force reapply)
+    if (mode === viewModeRef.current && !isForceReapply) return;
     // Prevent overlapping 2D transitions
-    if (mode === '2d' && mode2dTransitionRef.current) return;
+    if (mode === '2d' && mode2dTransitionRef.current && !isForceReapply) return;
     const scene = viewer.scene;
 
     setViewMode(mode);
@@ -557,6 +559,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         window.dispatchEvent(new CustomEvent(ARCHITECT_BACKGROUND_CHANGED_EVENT, { detail: { presetId: 'white' } }));
 
         let targetFloorId = currentFloorId;
+
+        // Try to resolve floor from last FLOOR_SELECTION_CHANGED event cache
+        if (!targetFloorId) {
+          // Check sessionStorage for last known floor
+          try {
+            const lastFloor = sessionStorage.getItem('viewer_last_floor_id');
+            if (lastFloor) targetFloorId = lastFloor;
+          } catch {}
+        }
 
         if (!targetFloorId) {
           const metaObjects2 = viewer?.metaScene?.metaObjects || {};
@@ -694,6 +705,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         if (viewer.cameraControl) {
           viewer.cameraControl.navMode = 'planView';
         }
+        // Cache the floor ID for force-reapply
+        if (targetFloorId) {
+          try { sessionStorage.setItem('viewer_last_floor_id', targetFloorId); } catch {}
+        }
       } catch (err) {
         console.warn('[ViewerToolbar] Failed to enter 2D mode cleanly:', err);
         try { remove2DClipping(); } catch {}
@@ -701,6 +716,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
       } finally {
         setTimeout(revealCanvas, 80);
         setTimeout(revealCanvas, 600);
+        mode2dTransitionRef.current = false;
       }
     } else {
       // Restore all entities modified during 2D mode

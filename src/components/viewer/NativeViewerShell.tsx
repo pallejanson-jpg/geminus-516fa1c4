@@ -608,23 +608,24 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           onShowRoomLabels={() => {
             window.dispatchEvent(new CustomEvent(ROOM_LABELS_TOGGLE_EVENT, { detail: { enabled: true } }));
           }}
-          onShowProperties={contextMenu.fmGuid ? handleContextProperties : undefined}
-          onZoomTo={contextMenu.entityId ? handleContextZoomTo : undefined}
-          onHideEntity={contextMenu.entityId ? handleContextHide : undefined}
-          onIsolateEntity={contextMenu.entityId ? handleContextIsolate : undefined}
+          onShowProperties={handleContextProperties}
+          onZoomTo={handleContextZoomTo}
+          onHideEntity={handleContextHide}
+          onIsolateEntity={handleContextIsolate}
           onShowAll={handleContextShowAll}
-          onSelectEntity={contextMenu.entityId ? handleContextSelect : undefined}
-          onMoveObject={contextMenu.entityId && contextMenu.fmGuid ? handleContextMove : undefined}
-          onDeleteObject={contextMenu.entityId && contextMenu.fmGuid ? handleContextDelete : undefined}
+          onSelectEntity={handleContextSelect}
+          onMoveObject={handleContextMove}
+          onDeleteObject={handleContextDelete}
         />
       )}
 
       {/* Properties dialog */}
-      {propertiesEntity && propertiesEntity.fmGuid && (
+      {propertiesEntity && (
         <UniversalPropertiesDialog
           isOpen={!!propertiesEntity}
           onClose={() => setPropertiesEntity(null)}
-          fmGuids={propertiesEntity.fmGuid}
+          fmGuids={propertiesEntity.fmGuid || propertiesEntity.entityId}
+          entityId={propertiesEntity.entityId}
         />
       )}
     </div>
