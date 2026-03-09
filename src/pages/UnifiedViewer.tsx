@@ -155,6 +155,21 @@ const UnifiedViewerContent: React.FC<{
           }));
         }, 500);
       }
+    } else if (viewMode === '3d' && floorFmGuid && (prev === '__init__' || prev !== '3d')) {
+      // Also isolate floor in 3D mode when navigating from Portfolio/Navigator
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+          detail: {
+            floorId: null,
+            floorName: floorName || null,
+            bounds: null,
+            visibleMetaFloorIds: [],
+            visibleFloorFmGuids: [floorFmGuid],
+            isAllFloorsVisible: false,
+            isSoloFloor: true,
+          },
+        }));
+      }, 500);
     } else if (viewMode !== '2d' && prev === '2d') {
       window.dispatchEvent(new CustomEvent<ViewMode2DToggledDetail>(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: false } }));
     }

@@ -657,21 +657,22 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           fmGuid={contextMenu.fmGuid}
           onClose={() => setContextMenu(null)}
           onShowLabels={() => {
-            window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', { detail: { show: true } }));
+            labelsVisibleRef.current = !labelsVisibleRef.current;
+            window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', { detail: { show: labelsVisibleRef.current } }));
           }}
           onCreateIssue={() => {
             setShowVisualizationMenu(true);
           }}
           onViewIssues={() => {
-            // Only open the visualization menu to show issues, don't toggle spaces
             setShowVisualizationMenu(true);
-            // Dispatch a specific event to open the issue list directly
             setTimeout(() => {
               window.dispatchEvent(new CustomEvent('OPEN_ISSUE_LIST'));
             }, 100);
           }}
           onShowRoomLabels={() => {
-            window.dispatchEvent(new CustomEvent(ROOM_LABELS_TOGGLE_EVENT, { detail: { enabled: true } }));
+            const next = !roomLabelsVisibleRef.current;
+            roomLabelsVisibleRef.current = next;
+            window.dispatchEvent(new CustomEvent(ROOM_LABELS_TOGGLE_EVENT, { detail: { enabled: next } }));
           }}
           onShowProperties={handleContextProperties}
           onZoomTo={handleContextZoomTo}
@@ -679,8 +680,16 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           onIsolateEntity={handleContextIsolate}
           onShowAll={handleContextShowAll}
           onSelectEntity={handleContextSelect}
+          onSelectNone={() => {
+            if (!xeokitViewer?.scene) return;
+            const selected = xeokitViewer.scene.selectedObjectIds || [];
+            if (selected.length > 0) xeokitViewer.scene.setObjectsSelected(selected, false);
+            setPropertiesEntity(null);
+          }}
           onMoveObject={handleContextMove}
           onDeleteObject={handleContextDelete}
+          labelsActive={labelsVisibleRef.current}
+          roomLabelsActive={roomLabelsVisibleRef.current}
         />
       )}
 
