@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   ArrowLeft, Pencil, Save, ChevronDown, ChevronUp, Loader2, 
   Building2, Layers, DoorOpen, Box, Database, Search, AlertCircle, Cloud,
-  Trash2, Upload, CloudOff, Tag, Check, Sparkles
+  Trash2, Upload, CloudOff, Tag, Check, Sparkles, X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +25,8 @@ interface UniversalPropertiesDialogProps {
   fmGuids: string | string[];  // Support both single GUID and array
   category?: string;
   onUpdate?: () => void;
+  /** BIM entity ID from the viewer (for fallback metadata display) */
+  entityId?: string;
 }
 
 interface PropertyItem {
@@ -78,6 +80,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   fmGuids: fmGuidsProp,
   category,
   onUpdate,
+  entityId,
 }) => {
   const isMobile = useIsMobile();
   
@@ -122,21 +125,72 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   const [bipSuggestions, setBipSuggestions] = useState<BipSuggestion[]>([]);
   const [bipApplied, setBipApplied] = useState<string | null>(null);
 
+  // BIM fallback metadata state
+  const [bimFallbackData, setBimFallbackData] = useState<Record<string, string> | null>(null);
+
   // Fetch data for all selected items
   useEffect(() => {
     if (!isOpen || fmGuids.length === 0) return;
 
     const fetchData = async () => {
       setIsLoading(true);
+      setBimFallbackData(null);
       try {
-        // Fetch all assets matching the fmGuids
+        // Case-insensitive GUID matching: try both original and lowercase
+        const normalizedGuids = [...new Set([
+          ...fmGuids,
+          ...fmGuids.map(g => g.toLowerCase()),
+          ...fmGuids.map(g => g.toUpperCase()),
+        ])];
+
         const { data: assetData, error: assetError } = await supabase
           .from('assets')
           .select('*')
-          .in('fm_guid', fmGuids);
+          .in('fm_guid', normalizedGuids);
 
         if (assetError) throw assetError;
         setAssets(assetData || []);
+
+        // If no assets found, try BIM metadata fallback from the viewer
+        if ((!assetData || assetData.length === 0) && entityId) {
+          const viewer = (window as any).__nativeXeokitViewer;
+          if (viewer?.metaScene?.metaObjects) {
+            const metaObj = viewer.metaScene.metaObjects[entityId];
+            if (metaObj) {
+              const fallback: Record<string, string> = {};
+              fallback['Entity ID'] = entityId;
+              if (metaObj.type) fallback['IFC Type'] = metaObj.type;
+              if (metaObj.name) fallback['Name'] = metaObj.name;
+              if (metaObj.originalSystemId) fallback['FM GUID'] = metaObj.originalSystemId;
+              if (metaObj.attributes?.LongName) fallback['Long Name'] = metaObj.attributes.LongName;
+              if (metaObj.attributes?.ObjectType) fallback['Object Type'] = metaObj.attributes.ObjectType;
+              if (metaObj.attributes?.Description) fallback['Description'] = metaObj.attributes.Description;
+              // Parent storey info
+              let parent = metaObj.parent;
+              while (parent) {
+                if (parent.type?.toLowerCase() === 'ifcbuildingstorey') {
+                  fallback['Floor'] = parent.name || parent.id;
+                  break;
+                }
+                parent = parent.parent;
+              }
+              // Model info
+              if (metaObj.metaModel?.id) fallback['Model'] = metaObj.metaModel.id;
+              // Property sets
+              if (metaObj.propertySets) {
+                metaObj.propertySets.forEach((ps: any) => {
+                  const psName = ps.name || 'Properties';
+                  ps.properties?.forEach((p: any) => {
+                    if (p.value !== undefined && p.value !== null && p.value !== '') {
+                      fallback[`${psName} / ${p.name}`] = String(p.value);
+                    }
+                  });
+                });
+              }
+              setBimFallbackData(fallback);
+            }
+          }
+        }
 
         // If single building, also fetch building_settings
         if (assetData?.length === 1 && (assetData[0]?.category === 'Building' || category === 'Building')) {
@@ -172,7 +226,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     };
 
     fetchData();
-  }, [isOpen, fmGuids, category]);
+  }, [isOpen, fmGuids, category, entityId]);
 
   // Drag handlers (desktop only)
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -897,6 +951,19 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
+          ) : assets.length === 0 && bimFallbackData ? (
+            // BIM metadata fallback display (read-only)
+            <div className="space-y-2">
+              <div className="px-2 py-1.5 bg-muted/50 rounded-md">
+                <span className="text-xs font-medium text-muted-foreground">BIM Metadata (read-only)</span>
+              </div>
+              {Object.entries(bimFallbackData).map(([key, value]) => (
+                <div key={key} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-1.5 px-2 rounded">
+                  <span className="text-xs text-muted-foreground shrink-0">{key}</span>
+                  <span className="text-sm break-all sm:text-right">{value}</span>
+                </div>
+              ))}
+            </div>
           ) : assets.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm">
               <p>No data found</p>
@@ -1161,6 +1228,9 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           </span>
           <Badge variant="outline" className="text-xs shrink-0">{displayCategory}</Badge>
         </div>
+        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onClose}>
+          <X className="h-4 w-4" />
+        </Button>
       </div>
 
       {renderContent()}
