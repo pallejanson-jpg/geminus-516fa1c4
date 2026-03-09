@@ -881,14 +881,14 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const dy = e.touches[0].clientY - ts.y;
       const newOx = ts.ox + dx;
       const newOy = ts.oy + dy;
-      setPanZoom(pz => ({ ...pz, offsetX: newOx, offsetY: newOy }));
+      setPanZoom(pz => { const nv = { ...pz, offsetX: newOx, offsetY: newOy }; panZoomRef.current = nv; return nv; });
     } else if (e.touches.length === 2 && ts.dist) {
       const dx = e.touches[1].clientX - e.touches[0].clientX;
       const dy = e.touches[1].clientY - e.touches[0].clientY;
       const dist = Math.sqrt(dx * dx + dy * dy);
       const scaleFactor = dist / ts.dist;
       const newScale = Math.max(0.3, Math.min(10, (ts.scale || 1) * scaleFactor));
-      setPanZoom(pz => ({ ...pz, scale: newScale }));
+      setPanZoom(pz => { const nv = { ...pz, scale: newScale }; panZoomRef.current = nv; return nv; });
     }
   }, []);
 
