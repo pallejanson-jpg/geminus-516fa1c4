@@ -381,6 +381,13 @@ const CreateBuildingPanel: React.FC = () => {
         }
 
         log('Converter loaded, starting IFC parsing...');
+
+        // Mark job as processing immediately
+        await supabase.from('conversion_jobs').update({
+          status: 'processing', progress: 20,
+          updated_at: new Date().toISOString(),
+        }).eq('id', jobId);
+
         const result = await converterModule.convertToXktWithMetadata(fileBuffer, (msg: string) => {
           log(msg);
         });
