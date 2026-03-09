@@ -170,6 +170,21 @@ const UnifiedViewerContent: React.FC<{
           },
         }));
       }, 500);
+    } else if (viewMode === 'split2d3d' && prev !== 'split2d3d') {
+      // Reset floor isolation in 3D pane — show all objects
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+          detail: {
+            floorId: null,
+            floorName: null,
+            bounds: null,
+            visibleMetaFloorIds: [],
+            visibleFloorFmGuids: [],
+            isAllFloorsVisible: true,
+            isSoloFloor: false,
+          },
+        }));
+      }, 300);
     } else if (viewMode !== '2d' && prev === '2d') {
       window.dispatchEvent(new CustomEvent<ViewMode2DToggledDetail>(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: false } }));
     }
