@@ -261,15 +261,74 @@ const CreateBuildingPanel: React.FC = () => {
       if (isWorkerLimit) {
         if (pollingRef.current) clearInterval(pollingRef.current);
         pollingRef.current = null;
-        addLog('⚠️ Server memory limit exceeded for this file size.');
-        addLog('💡 Try using a smaller/optimized IFC file, or split by discipline.');
-        setConversionProgress(0);
+        addLog('⚠️ Server memory limit exceeded — switching to browser-based conversion...');
+        setConversionProgress(20);
+
+        try {
+          // Read file as ArrayBuffer for client-side conversion
+          const fileBuffer = await ifcFile.arrayBuffer();
+          addLog(`Loaded ${(fileBuffer.byteLength / 1024 / 1024).toFixed(1)} MB into browser memory`);
+
+          const { convertToXktWithMetadata } = await import('@/services/acc-xkt-converter');
+          const result = await convertToXktWithMetadata(fileBuffer, (msg) => {
+            addLog(msg);
+          });
+
+          setConversionProgress(70);
+          addLog(`XKT generated: ${(result.xktData.byteLength / 1024 / 1024).toFixed(2)} MB`);
+          addLog(`Hierarchy: ${result.levels.length} levels, ${result.spaces.length} spaces`);
+
+          // Upload XKT to storage
+          const modelId = `ifc-${Date.now()}`;
+          const storageFileName = `${modelId}.xkt`;
+          const storagePath = `${targetBuildingFmGuid}/${storageFileName}`;
+          addLog('Uploading XKT to storage...');
+
+          const blob = new Blob([result.xktData], { type: 'application/octet-stream' });
+          const { error: uploadErr } = await supabase.storage
+            .from('xkt-models')
+            .upload(storagePath, blob, { contentType: 'application/octet-stream', upsert: true });
+
+          if (uploadErr) throw new Error(`XKT upload failed: ${uploadErr.message}`);
+
+          // Save metadata
+          const safeModelName = ifcFile.name.replace(/\.ifc$/i, '');
+          await supabase.from('xkt_models').upsert({
+            building_fm_guid: targetBuildingFmGuid,
+            model_id: modelId,
+            model_name: safeModelName,
+            file_name: storageFileName,
+            file_size: result.xktData.byteLength,
+            storage_path: storagePath,
+            file_url: null,
+            format: 'xkt',
+            synced_at: new Date().toISOString(),
+            source_updated_at: new Date().toISOString(),
+          } as any, { onConflict: 'building_fm_guid,model_id' });
+
+          // Update conversion job to done
+          if (jobId) {
+            await supabase.from('conversion_jobs').update({
+              status: 'done', progress: 100,
+              result_model_id: modelId,
+              log_messages: conversionLogs,
+              updated_at: new Date().toISOString(),
+            }).eq('id', jobId);
+          }
+
+          setConversionProgress(100);
+          setConversionDone(true);
+          addLog('✅ Done! Browser-based conversion succeeded.');
+          toast({ title: 'IFC converted!', description: `${ifcFile.name} converted in browser and saved.` });
+        } catch (clientErr: any) {
+          addLog(`❌ Browser conversion failed: ${clientErr.message}`);
+          toast({
+            variant: 'destructive',
+            title: 'Conversion failed',
+            description: clientErr.message,
+          });
+        }
         setIsConverting(false);
-        toast({
-          variant: 'destructive',
-          title: 'File too large for server conversion',
-          description: 'The IFC file exceeds server memory limits. Try optimizing or splitting the file.',
-        });
         return;
       }
 
