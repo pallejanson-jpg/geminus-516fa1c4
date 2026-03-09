@@ -412,20 +412,21 @@ Deno.serve(async (req) => {
     await appendLog("Parsing IFC from disk...", 30);
 
     // Read IFC from disk instead of keeping blob in memory
-    const ifcData = await Deno.readFile(ifcTmpPath);
+    let ifcData: Uint8Array | null = await Deno.readFile(ifcTmpPath);
+    // Remove temp file immediately to free disk
+    try { await Deno.remove(ifcTmpPath); } catch (_) { /* best-effort */ }
 
     await (xeokitConvert as any).parseIFCIntoXKTModel({
       WebIFC,
       data: ifcData,
       xktModel,
-      autoNormals: true,
+      autoNormals: false,
       wasmPath,
       log: (msg: string) => console.log(`  ${msg}`),
     });
 
     // Release IFC data from memory immediately after parsing
-    // @ts-ignore - allow GC
-    try { await Deno.remove(ifcTmpPath); } catch (_) { /* best-effort */ }
+    ifcData = null;
 
     await appendLog("Finalizing XKT model...", 60);
     xktModel.finalize();

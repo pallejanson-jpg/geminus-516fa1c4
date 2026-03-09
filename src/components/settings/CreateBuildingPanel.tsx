@@ -248,11 +248,48 @@ const CreateBuildingPanel: React.FC = () => {
         },
       });
 
-      if (fnError) {
-        // Edge function returned error immediately
+      const isWorkerLimit = fnError?.message?.includes('WORKER_LIMIT') || 
+        fnError?.message?.includes('546') ||
+        convResult?.code === 'WORKER_LIMIT';
+
+      if (fnError && !isWorkerLimit) {
         if (pollingRef.current) clearInterval(pollingRef.current);
         pollingRef.current = null;
         throw new Error(`Server conversion failed: ${fnError.message}`);
+      }
+
+      if (isWorkerLimit) {
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        pollingRef.current = null;
+        addLog('⚠️ Server memory limit exceeded — falling back to browser-based conversion...');
+        setConversionProgress(20);
+
+        // Dynamic import of client-side converter
+        const { AccXktConverter } = await import('@/services/acc-xkt-converter');
+        const converter = new AccXktConverter();
+        addLog('Loading browser XKT converter...');
+        
+        const xktResult = await converter.convertAndStore(
+          ifcFile,
+          targetBuildingFmGuid,
+          safeModelName,
+          (progress: number, message: string) => {
+            setConversionProgress(20 + progress * 0.7);
+            addLog(message);
+          }
+        );
+
+        if (!xktResult.success) {
+          throw new Error(xktResult.error || 'Browser conversion failed');
+        }
+
+        setConversionProgress(95);
+        addLog(`✅ Browser conversion complete: ${xktResult.xktSizeMB?.toFixed(1) || '?'} MB`);
+        setConversionProgress(100);
+        setConversionDone(true);
+        addLog('✅ Done! The model is ready to view in the 3D viewer.');
+        setIsConverting(false);
+        return;
       }
 
       if (convResult && !convResult.success) {
