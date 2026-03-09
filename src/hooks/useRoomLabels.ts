@@ -219,6 +219,12 @@ export function useRoomLabels(
     const runOcclusion = effectiveOcclusion && occlusionFrameRef.current % occlusionInterval === 0;
 
     // Phase 1: Compute all positions (read-only)
+    // Viewport culling: get canvas dimensions for early rejection
+    const canvas = viewer.scene?.canvas?.canvas;
+    const canvasW = canvas?.clientWidth || 1920;
+    const canvasH = canvas?.clientHeight || 1080;
+    const margin = 50; // px margin outside viewport
+
     const updates: { el: HTMLDivElement; transform: string; visible: boolean }[] = [];
 
     labelsRef.current.forEach(label => {
