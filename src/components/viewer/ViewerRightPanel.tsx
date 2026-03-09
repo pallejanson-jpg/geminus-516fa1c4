@@ -419,7 +419,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
       if (uploadError) console.error('Screenshot upload failed:', uploadError);
       const { data: urlData } = supabase.storage.from('issue-screenshots').getPublicUrl(`${issueId}.png`);
       const building = allData.find((b: any) => b.fmGuid === buildingFmGuid && b.category === 'Building');
-      const resolvedBuildingName = buildingName || building?.commonName || building?.name || 'Okänd byggnad';
+      const resolvedBuildingName = buildingName || building?.commonName || building?.name || 'Unknown building';
       const { error: insertError } = await supabase.from('bcf_issues').insert({
         id: issueId, title: data.title, description: data.description || null,
         issue_type: data.issueType, priority: data.priority, status: 'open',
@@ -428,7 +428,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
         selected_object_ids: pendingIssueState.selectedObjects, reported_by: user.id,
       });
       if (insertError) throw insertError;
-      toast({ title: "Ärende skapat!", description: `"${data.title}" har skickats` });
+      toast({ title: "Issue created!", description: `"${data.title}" has been submitted` });
       setShowCreateIssueDialog(false);
       setPendingIssueState(null);
     } catch (err) {
