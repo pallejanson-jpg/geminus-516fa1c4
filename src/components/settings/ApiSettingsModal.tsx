@@ -362,6 +362,93 @@ const FmAccessDocSyncPanel: React.FC = () => {
     );
 };
 
+// IMDF Export sub-panel
+const ImdfExportPanel: React.FC<{ allBuildings: any[] }> = ({ allBuildings }) => {
+    const { toast } = useToast();
+    const [selectedBuilding, setSelectedBuilding] = useState('');
+    const [isExporting, setIsExporting] = useState(false);
+    const [exportResult, setExportResult] = useState<string | null>(null);
+
+    const handleExport = async () => {
+        if (!selectedBuilding) return;
+        setIsExporting(true);
+        setExportResult(null);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const res = await fetch(
+                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/imdf-export`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session?.access_token}`,
+                        'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                    },
+                    body: JSON.stringify({ buildingFmGuid: selectedBuilding }),
+                }
+            );
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ error: res.statusText }));
+                throw new Error(err.error || res.statusText);
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `imdf-${selectedBuilding}.zip`;
+            a.click();
+            URL.revokeObjectURL(url);
+            const buildingName = allBuildings.find(b => b.fm_guid === selectedBuilding)?.common_name || selectedBuilding;
+            setExportResult(`Export klar — ${buildingName}`);
+            toast({ title: 'IMDF Export klar', description: `ZIP-fil nedladdad för ${buildingName}` });
+        } catch (err: any) {
+            setExportResult(`Fel: ${err.message}`);
+            toast({ title: 'IMDF Export misslyckades', description: err.message, variant: 'destructive' });
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    return (
+        <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+                Export building data as IMDF (Indoor Mapping Data Format) for indoor mapping systems like Apple Maps Indoor.
+            </p>
+            <div className="space-y-2">
+                <Label className="text-xs">Byggnad</Label>
+                <select
+                    value={selectedBuilding}
+                    onChange={(e) => setSelectedBuilding(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                    <option value="">Välj byggnad...</option>
+                    {allBuildings.map((b) => (
+                        <option key={b.fm_guid} value={b.fm_guid}>
+                            {b.common_name || b.name || b.fm_guid}
+                        </option>
+                    ))}
+                </select>
+            </div>
+            <div className="flex items-center gap-2">
+                <Button
+                    onClick={handleExport}
+                    disabled={!selectedBuilding || isExporting}
+                    size="sm"
+                    className="gap-1"
+                >
+                    {isExporting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Archive className="h-3 w-3" />}
+                    Export IMDF
+                </Button>
+                {exportResult && (
+                    <span className={`text-xs ${exportResult.startsWith('Fel') ? 'text-destructive' : 'text-green-600'}`}>
+                        {exportResult}
+                    </span>
+                )}
+            </div>
+        </div>
+    );
+};
+
 const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) => {
 
     const { toast } = useToast();
