@@ -507,10 +507,10 @@ function parseXktGeometry(xktData: Uint8Array): { positions: Float32Array; indic
     currentOffset += elementSizes[i];
   }
 
-  // Helper to get element as typed array
+  // Helper to get element as a copied Uint8Array (ensures alignment safety)
   const getElement = (idx: number) => {
     if (idx >= numElements) return new Uint8Array(0);
-    return xktData.subarray(elementOffsets[idx], elementOffsets[idx] + elementSizes[idx]);
+    return xktData.slice(elementOffsets[idx], elementOffsets[idx] + elementSizes[idx]);
   };
 
   // For XKT v10, the positions are at element index 14 (quantized Uint16)
