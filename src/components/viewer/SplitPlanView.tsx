@@ -1018,6 +1018,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
             className="max-w-none cursor-crosshair"
             draggable={false}
             onClick={handleClick}
+            onLoad={centerImage}
             onError={() => {
               console.error('[SplitPlanView] img onError — imageData URL failed to render');
               setImgError(true);
