@@ -574,17 +574,23 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     };
 
     // Floor-by-floor energy data (MOCK) — include fmGuid for chart click navigation
+    // Deduplicate floors by base name (strip " - 01", " - 02" suffix from model copies)
     const energyByFloor = useMemo(() => {
-        return buildingStoreys.slice(0, 6).map((storey: any, index: number) => {
+        const seen = new Set<string>();
+        const result: { name: string; fmGuid: string; kwhPerSqm: number; color: string }[] = [];
+        buildingStoreys.forEach((storey: any) => {
+            const baseName = (storey.commonName || storey.name || '').replace(/\s*-\s*\d+$/, '');
+            if (!baseName || seen.has(baseName)) return;
+            seen.add(baseName);
             const hash = hashString(storey.fmGuid || '');
-            const name = storey.commonName || storey.name || `Floor ${index + 1}`;
-            return {
-                name,
+            result.push({
+                name: baseName,
                 fmGuid: storey.fmGuid,
                 kwhPerSqm: 80 + (hash % 60),
-                color: FLOOR_COLORS[index % FLOOR_COLORS.length],
-            };
+                color: FLOOR_COLORS[result.length % FLOOR_COLORS.length],
+            });
         });
+        return result;
     }, [buildingStoreys]);
 
     const renderPieLabel = isMobile 
