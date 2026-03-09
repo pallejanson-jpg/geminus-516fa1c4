@@ -458,7 +458,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
       viewer.cameraControl.followPointer = true;
     } else {
       viewer.cameraControl.navMode = 'orbit';
-      viewer.cameraControl.followPointer = false;
+      viewer.cameraControl.followPointer = true;
     }
     setNavMode(mode);
   }, [viewer]);
