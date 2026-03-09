@@ -1,68 +1,33 @@
 
-## Plan: Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
 
-### Changes Made
+## Plan: Fix ACC Building Asset Sync + Viewer Back Button
 
-#### 1. Browser-Primary Conversion for Large IFC Files
-**File: `src/components/settings/CreateBuildingPanel.tsx`**
-- Files >20MB skip edge function entirely → direct browser conversion
-- Files ≤20MB still try edge function first with WORKER_LIMIT fallback
-- Extracted `runBrowserConversion()` helper for DRY reuse between direct and fallback paths
-- Browser conversion now uploads `metadata.json` alongside `.xkt`
-- Systems extracted client-side are persisted to `systems` + `asset_system` tables
+### Problem 1: ACC buildings trigger unnecessary Asset+ sync
 
-#### 2. Metadata Extraction & Separate JSON
-**File: `src/services/acc-xkt-converter.ts`**
-- `convertToXktWithMetadata()` now returns `metaModelJson` (xeokit MetaModel format) + `systems[]`
-- WASM validation: explicit `HEAD` request to `/web-ifc-wasm/web-ifc.wasm` before importing
-- `inferDiscipline()` function for system classification (Ventilation, Heating, etc.)
-- System extraction from metaObjects: IfcSystem, IfcDistributionSystem, PropertySet grouping
+When opening "Assets" for the ACC-imported Stadshuset Nyköping (FMGUID: `acc-bim-building-...`), `AssetsView` finds zero "Instance" assets locally and calls `syncBuildingAssetsIfNeeded` which invokes the `asset-plus-sync` edge function. This is wrong — ACC buildings already have their own assets with `acc-bim-instance-*` GUIDs. The Asset+ sync won't find anything for an ACC building GUID, wasting time and showing confusing loading states.
 
-#### 3. Viewer MetaModel Loading
-**File: `src/components/viewer/NativeXeokitViewer.tsx`**
-- Before loading each XKT model, checks for `{modelId}_metadata.json` in storage
-- If found, passes as `metaModelSrc` to `xktLoader.load()` for richer BIM queries
-- Works for all three loading paths: memory, streaming, and buffer
+**Root cause:** Neither `AssetsView.tsx` nor `asset-plus-service.ts` check if the building FMGUID is ACC-sourced before triggering Asset+ sync.
 
----
+**Fix:** Add an `isAccBuilding()` helper that checks for `acc-bim-` and `acc-` prefixes. Skip the Asset+ sync trigger for ACC buildings — they already have assets from the BIM sync pipeline.
 
-## Plan: External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+### Problem 2: Back button goes to `/` instead of previous page
 
-### Architecture
+**Fix:** Change `handleGoBack` from `navigate('/')` to `navigate(-1)` with fallback.
 
-```text
-IFC Upload → Supabase Storage → conversion_jobs (pending)
-       ↓
-External Worker (polls conversion-worker-api)
-  - Downloads IFC via signed URL
-  - Groups objects by IfcBuildingStorey
-  - Generates per-storey .xkt tiles
-  - Uploads tiles to storage
-  - Reports completion → xkt_models records created
-       ↓
-Viewer detects real tiles (unique storage_paths)
-  - Loads active floor tile (~15MB)
-  - Lazy-loads adjacent floors on FLOOR_TILE_SWITCH event
-  - Unloads distant floors to save memory
-  - Falls back to monolithic loading if no real tiles
-```
+### Problem 3: Duplicate "Stadshuset Nyköping" 
 
-### Files Created/Changed
+The user has two entries — one from Asset+ (normal FMGUID `7cad5eda...`) and one from ACC BIM sync (`acc-bim-building-...`). The Asset+ one has no storeys/models and can be deleted. This is a data issue, not a code bug — but we should note it.
 
-| File | Action |
-|------|--------|
-| `supabase/functions/conversion-worker-api/index.ts` | Created — worker API (pending/claim/progress/complete/fail/upload-url) |
-| `supabase/config.toml` | Added verify_jwt = false entry |
-| `docs/conversion-worker/worker.mjs` | Created — standalone Node.js worker |
-| `docs/conversion-worker/Dockerfile` | Created — Docker deployment |
-| `docs/conversion-worker/README.md` | Created — deployment guide |
-| `src/components/viewer/NativeXeokitViewer.tsx` | Updated — real tile detection + FLOOR_TILE_SWITCH listener |
-| `src/hooks/useFloorPriorityLoading.ts` | Updated — isRealTiling + getTilesToLoad + FLOOR_TILE_SWITCH dispatch |
+### Files to Change
 
-### Key Concepts
+**`src/services/asset-plus-service.ts`**
+- Add `isAccSourcedBuilding(fmGuid: string)` helper checking for `acc-bim-` or `acc-` prefix
+- In `syncBuildingAssetsIfNeeded` and `ensureBuildingAssets`: return early if the building is ACC-sourced
 
-- **Virtual chunks (Phase 1)**: Same XKT file, visibility filtering by storey metadata
-- **Real tiles (Phase 2)**: Separate per-storey XKT files with unique `storage_path` values
-- Detection: `isRealTiling()` checks if chunks have >1 unique storage paths
-- Dynamic loading: `FLOOR_TILE_SWITCH` custom event triggers load/unload of tiles
-- Worker auth: `WORKER_API_SECRET` shared secret (not JWT)
+**`src/components/portfolio/AssetsView.tsx`**
+- Import the helper and skip the Asset+ sync in `initAssets` for ACC-sourced buildings
+- For ACC buildings, just fetch existing assets from DB without triggering sync
+
+**`src/pages/UnifiedViewer.tsx`**  
+- Line 427: Change `navigate('/')` to `navigate(-1)` with history length fallback
+
