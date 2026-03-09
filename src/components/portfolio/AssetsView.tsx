@@ -249,7 +249,14 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           return;
         }
         
-        // Step 2: No local assets - trigger sync from Asset+
+        // Step 2: ACC-sourced buildings don't need Asset+ sync — their assets come from BIM import
+        if (isAccSourcedBuilding(facility.fmGuid!)) {
+          console.log('AssetsView: ACC-sourced building, skipping Asset+ sync');
+          setIsSyncingAssets(false);
+          return;
+        }
+        
+        // Step 3: No local assets - trigger sync from Asset+
         console.log('AssetsView: No local assets, triggering sync...');
         const result = await syncBuildingAssetsIfNeeded(facility.fmGuid!);
         
