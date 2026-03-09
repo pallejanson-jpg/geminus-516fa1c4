@@ -121,18 +121,35 @@ export async function convertToXktWithMetadata(
   if (format === 'ifc') {
     logger('Parsing IFC into XKTModel (browser-side)...');
     const mod = await loadXeokitConvert();
-    const WebIFC = await import('web-ifc');
+    
+    let WebIFC: any;
+    try {
+      WebIFC = await import('web-ifc');
+      logger('web-ifc module loaded successfully');
+    } catch (wasmErr: any) {
+      logger(`Failed to load web-ifc: ${wasmErr.message}`);
+      console.error('[xkt-convert] web-ifc import failed:', wasmErr);
+      throw new Error(`web-ifc WASM module failed to load: ${wasmErr.message}`);
+    }
+
     // Use WASM files copied from the matching npm package version (via viteStaticCopy)
     const wasmDir = '/web-ifc-wasm/';
     logger(`Using web-ifc WASM from ${wasmDir}`);
-    await (mod as any).parseIFCIntoXKTModel({
-      WebIFC,
-      data: glbData,
-      xktModel,
-      autoNormals: false,
-      wasmPath: wasmDir,
-      log: logger,
-    });
+    
+    try {
+      await (mod as any).parseIFCIntoXKTModel({
+        WebIFC,
+        data: glbData,
+        xktModel,
+        autoNormals: false,
+        wasmPath: wasmDir,
+        log: logger,
+      });
+    } catch (parseErr: any) {
+      logger(`IFC parse error: ${parseErr.message}`);
+      console.error('[xkt-convert] parseIFCIntoXKTModel failed:', parseErr);
+      throw new Error(`IFC parsing failed: ${parseErr.message}`);
+    }
   } else if (format === 'obj') {
     logger('Parsing OBJ into XKTModel...');
     const mod = await import('@xeokit/xeokit-convert');
