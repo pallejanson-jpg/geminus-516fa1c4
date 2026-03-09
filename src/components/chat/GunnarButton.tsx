@@ -85,6 +85,17 @@ export default function GunnarButton() {
     return () => window.removeEventListener(VIEWER_CONTEXT_CHANGED_EVENT, handler as EventListener);
   }, []);
 
+  // Listen for auto-open voice deep link
+  useEffect(() => {
+    const handler = () => {
+      setAutoVoice(true);
+      setIsOpen(true);
+      setIsMinimized(false);
+    };
+    window.addEventListener('GUNNAR_AUTO_OPEN_VOICE', handler);
+    return () => window.removeEventListener('GUNNAR_AUTO_OPEN_VOICE', handler);
+  }, []);
+
   // Clear viewer context when leaving viewer
   useEffect(() => {
     if (activeApp !== 'assetplus_viewer' && activeApp !== 'native_viewer') {
