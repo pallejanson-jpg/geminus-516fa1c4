@@ -424,7 +424,13 @@ const UnifiedViewerContent: React.FC<{
     return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
 
-  const handleGoBack = useCallback(() => navigate('/'), [navigate]);
+  const handleGoBack = useCallback(() => {
+    if (window.history.length > 2) {
+      navigate(-1);
+    } else {
+      navigate('/');
+    }
+  }, [navigate]);
 
   const handleRetrySDK = useCallback(() => {
     retrySDK();
