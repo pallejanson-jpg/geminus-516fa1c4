@@ -433,7 +433,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
       setPendingIssueState(null);
     } catch (err) {
       console.error('Failed to create issue:', err);
-      toast({ title: "Kunde inte skapa ärende", variant: "destructive" });
+      toast({ title: "Could not create issue", variant: "destructive" });
     } finally {
       setIsSubmittingIssue(false);
     }

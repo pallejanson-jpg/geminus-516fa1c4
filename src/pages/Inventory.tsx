@@ -237,11 +237,11 @@ const Inventory: React.FC = () => {
                 <Ivion360View url={ivion360Url} onClose={handleClose360} />
               ) : (
                 <div className="h-full flex items-center justify-center text-muted-foreground">
-                  <div className="text-center max-w-md p-8">
+                <div className="text-center max-w-md p-8">
                     <div className="text-6xl mb-4">🏢</div>
-                    <h3 className="text-lg font-medium mb-2">3D-vy / 360°-vy</h3>
+                    <h3 className="text-lg font-medium mb-2">3D View / 360° View</h3>
                     <p className="text-sm">
-                      Välj en byggnad och klicka på "Välj i 3D" eller "Öppna 360+" i formuläret för att visa vyn här.
+                      Select a building and click "Select 3D position" or "Open 360+" in the form to display the view here.
                     </p>
                   </div>
                 </div>
