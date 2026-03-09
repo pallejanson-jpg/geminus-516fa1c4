@@ -22,6 +22,34 @@ interface SelectedBuilding {
   screenY: number;
 }
 
+/** Hide OSM buildings within a radius of a given lat/lng by applying a Cesium3DTileStyle */
+function hideOsmBuildingsNear(tileset: Cesium.Cesium3DTileset, lat: number, lng: number, radiusMeters = 60) {
+  // Approximate degree delta from meters (rough at Nordic latitudes)
+  const latDelta = radiusMeters / 111320;
+  const lngDelta = radiusMeters / (111320 * Math.cos(lat * Math.PI / 180));
+  const minLat = lat - latDelta;
+  const maxLat = lat + latDelta;
+  const minLng = lng - lngDelta;
+  const maxLng = lng + lngDelta;
+
+  tileset.style = new Cesium.Cesium3DTileStyle({
+    show: {
+      conditions: [
+        [
+          `\${feature['cesium#longitude']} > ${minLng} && \${feature['cesium#longitude']} < ${maxLng} && \${feature['cesium#latitude']} > ${minLat} && \${feature['cesium#latitude']} < ${maxLat}`,
+          'false',
+        ],
+        ['true', 'true'],
+      ],
+    },
+  });
+}
+
+/** Reset OSM tileset style so all buildings are visible again */
+function resetOsmStyle(tileset: Cesium.Cesium3DTileset) {
+  tileset.style = new Cesium.Cesium3DTileStyle({ show: 'true' });
+}
+
 function toCartesian(lat: number, lng: number, height = 0) {
   return Cesium.Cartesian3.fromDegrees(lng, lat, height);
 }
