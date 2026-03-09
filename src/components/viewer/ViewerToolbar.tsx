@@ -132,7 +132,7 @@ ToolButton.displayName = 'ToolButton';
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
-  const [activeTool, setActiveTool] = useState<ViewerTool>('select');
+  const [activeTool, setActiveTool] = useState<ViewerTool>(null);
   const [navMode, setNavMode] = useState<NavMode>('orbit');
   const [viewMode, setViewMode] = useState<ViewMode>('3d');
   const [isXrayActive, setIsXrayActive] = useState(false);
