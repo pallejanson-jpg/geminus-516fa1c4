@@ -455,7 +455,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
               storeModelInMemory(modelId, buildingFmGuid, arrayBuf);
 
-              const entity = xktLoader.load({ id: modelId, xkt: arrayBuf, edges: true });
+              const bufLoadOpts: any = { id: modelId, xkt: arrayBuf, edges: true };
+              if (metaModelSrc) bufLoadOpts.metaModelSrc = metaModelSrc;
+              const entity = xktLoader.load(bufLoadOpts);
               const ok = await waitForModel(entity, modelId);
               if (!ok) return;
 
