@@ -853,20 +853,22 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 1) {
       const t = e.touches[0];
+      const pz = panZoomRef.current;
       clickStartRef.current = { x: t.clientX, y: t.clientY };
-      touchStartRef.current = { x: t.clientX, y: t.clientY, ox: panZoom.offsetX, oy: panZoom.offsetY };
+      touchStartRef.current = { x: t.clientX, y: t.clientY, ox: pz.offsetX, oy: pz.offsetY };
     } else if (e.touches.length === 2) {
       const dx = e.touches[1].clientX - e.touches[0].clientX;
       const dy = e.touches[1].clientY - e.touches[0].clientY;
       const dist = Math.sqrt(dx * dx + dy * dy);
+      const pz = panZoomRef.current;
       touchStartRef.current = {
         x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
         y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
-        ox: panZoom.offsetX, oy: panZoom.offsetY,
-        dist, scale: panZoom.scale,
+        ox: pz.offsetX, oy: pz.offsetY,
+        dist, scale: pz.scale,
       };
     }
-  }, [panZoom]);
+  }, []);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     e.preventDefault();
