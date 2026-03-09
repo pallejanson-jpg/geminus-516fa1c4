@@ -296,7 +296,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   }, [applySavedView]);
 
   // ── Select tool click handler ──────────────────────────────────────────
-  const activeToolRef = useRef<string | null>('select');
+  const activeToolRef = useRef<string | null>(null);
 
   useEffect(() => {
     const handler = (e: CustomEvent<ViewerToolChangedDetail>) => {
@@ -337,17 +337,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
         pickResult.entity.selected = !alreadySelected || isCtrl;
 
-        // Open properties dialog
-        let fmGuid: string | null = null;
-        let entityName: string | null = null;
-        if (xeokitViewer.metaScene?.metaObjects) {
-          const metaObj = xeokitViewer.metaScene.metaObjects[entityId];
-          if (metaObj) {
-            fmGuid = metaObj.originalSystemId || null;
-            entityName = metaObj.name || metaObj.type || null;
-          }
-        }
-        setPropertiesEntity({ entityId, fmGuid, name: entityName });
+        // Do NOT auto-open properties dialog — only via right-click → Properties
       }
     };
 

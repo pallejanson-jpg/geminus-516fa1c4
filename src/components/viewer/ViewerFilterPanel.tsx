@@ -13,7 +13,7 @@ import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hook
 import { ANNOTATION_FILTER_EVENT } from '@/lib/viewer-events';
 import { useFloorData } from '@/hooks/useFloorData';
 import { useModelData } from '@/hooks/useModelData';
-import { recolorArchitectObjects } from '@/lib/architect-colors';
+import { applyArchitectColors, recolorArchitectObjects } from '@/lib/architect-colors';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -742,9 +742,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       if (entity) entity.opacity = 1.0;
     });
 
-    // Re-apply architect color palette as base layer after clean slate
+    // Re-apply full architect color palette as base layer after clean slate
     // This prevents raw XKT colors (red rooms, blue windows) from showing
-    recolorArchitectObjects(viewer);
+    applyArchitectColors(viewer);
 
     // Step 0b: Always hide ALL IfcSpace entities after clean slate (prevent red rooms)
     // They should only become visible when explicitly enabled via "Visa rum" or space filter

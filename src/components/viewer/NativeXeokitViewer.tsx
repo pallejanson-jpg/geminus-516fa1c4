@@ -160,6 +160,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         cc.touchDollyRate = navTuning.touchDollyRate;
         cc.mouseWheelDollyRate = navTuning.mouseWheelDollyRate;
         cc.keyboardDollyRate = navTuning.keyboardDollyRate;
+        cc.followPointer = true;
       }
 
       // NavCube — load custom neutral-styled plugin via script tag
