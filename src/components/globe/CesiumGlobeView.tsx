@@ -231,6 +231,8 @@ const CesiumGlobeView: React.FC = () => {
       viewer.entities.remove(bimEntityRef.current);
       bimEntityRef.current = null;
       setBimLoadedFmGuid(null);
+      // Restore hidden OSM buildings
+      if (osmBuildingsLayerRef.current) resetOsmStyle(osmBuildingsLayerRef.current);
       toast.info('BIM-modell borttagen');
       return;
     }
