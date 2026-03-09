@@ -254,20 +254,38 @@ const CreateBuildingPanel: React.FC = () => {
         });
         convResult = resp.data;
         fnError = resp.error;
+
+        // For FunctionsHttpError, try to read the response body for error details
+        if (fnError && typeof fnError === 'object' && 'context' in fnError) {
+          try {
+            const errResponse = (fnError as any).context;
+            if (errResponse && typeof errResponse.json === 'function') {
+              const errBody = await errResponse.json();
+              console.log('[ifc-convert] Edge function error body:', errBody);
+              if (errBody?.code === 'WORKER_LIMIT' || errBody?.message?.includes('compute resources')) {
+                isWorkerLimit = true;
+              }
+            }
+          } catch (_) { /* response already consumed or not JSON */ }
+        }
       } catch (e: any) {
         fnError = e;
       }
 
-      // Detect WORKER_LIMIT from multiple possible locations
-      const errorString = JSON.stringify(fnError ?? '') + JSON.stringify(convResult ?? '');
-      isWorkerLimit = errorString.includes('WORKER_LIMIT') || 
-        errorString.includes('546') ||
-        errorString.includes('not having enough compute resources');
+      // Also detect WORKER_LIMIT from stringified error/data as fallback
+      if (!isWorkerLimit) {
+        const errorString = JSON.stringify(fnError ?? '') + JSON.stringify(convResult ?? '') + (fnError?.message ?? '');
+        isWorkerLimit = errorString.includes('WORKER_LIMIT') || 
+          errorString.includes('not having enough compute resources') ||
+          errorString.includes('546');
+      }
+
+      console.log('[ifc-convert] fnError:', fnError, 'isWorkerLimit:', isWorkerLimit);
 
       if (fnError && !isWorkerLimit) {
         if (pollingRef.current) clearInterval(pollingRef.current);
         pollingRef.current = null;
-        throw new Error(`Server conversion failed: ${typeof fnError === 'object' ? JSON.stringify(fnError) : fnError}`);
+        throw new Error(`Server conversion failed: ${fnError?.message || JSON.stringify(fnError)}`);
       }
 
       if (isWorkerLimit) {
