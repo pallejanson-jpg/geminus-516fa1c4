@@ -404,7 +404,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
 
   const handleSubmitIssue = useCallback(async (data: { title: string; description: string; issueType: string; priority: string }) => {
     if (!pendingIssueState || !user || !buildingFmGuid) {
-      toast({ title: "Kan inte skapa ärende", variant: "destructive" }); return;
+      toast({ title: "Cannot create issue", variant: "destructive" }); return;
     }
     setIsSubmittingIssue(true);
     try {
@@ -419,7 +419,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
       if (uploadError) console.error('Screenshot upload failed:', uploadError);
       const { data: urlData } = supabase.storage.from('issue-screenshots').getPublicUrl(`${issueId}.png`);
       const building = allData.find((b: any) => b.fmGuid === buildingFmGuid && b.category === 'Building');
-      const resolvedBuildingName = buildingName || building?.commonName || building?.name || 'Okänd byggnad';
+      const resolvedBuildingName = buildingName || building?.commonName || building?.name || 'Unknown building';
       const { error: insertError } = await supabase.from('bcf_issues').insert({
         id: issueId, title: data.title, description: data.description || null,
         issue_type: data.issueType, priority: data.priority, status: 'open',
@@ -428,12 +428,12 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
         selected_object_ids: pendingIssueState.selectedObjects, reported_by: user.id,
       });
       if (insertError) throw insertError;
-      toast({ title: "Ärende skapat!", description: `"${data.title}" har skickats` });
+      toast({ title: "Issue created!", description: `"${data.title}" has been submitted` });
       setShowCreateIssueDialog(false);
       setPendingIssueState(null);
     } catch (err) {
       console.error('Failed to create issue:', err);
-      toast({ title: "Kunde inte skapa ärende", variant: "destructive" });
+      toast({ title: "Could not create issue", variant: "destructive" });
     } finally {
       setIsSubmittingIssue(false);
     }
@@ -497,7 +497,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
             <SheetTitle className="flex items-center justify-between text-base text-foreground">
               <div className="flex items-center gap-2">
                 <Settings2 className="h-4 w-4" />
-                Visning
+                Display
               </div>
               <div className="flex items-center gap-1">
                 <Button
@@ -505,7 +505,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                   size="icon"
                   className="h-7 w-7"
                   onClick={togglePinned}
-                  title={isPinned ? "Lossa panelen" : "Fäst panelen"}
+                  title={isPinned ? "Unpin panel" : "Pin panel"}
                 >
                   {isPinned ? <Pin className="h-3.5 w-3.5 text-primary" /> : <PinOff className="h-3.5 w-3.5 text-foreground/70" />}
                 </Button>
@@ -514,7 +514,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                   size="icon"
                   className="h-7 w-7"
                   onClick={() => handleOpenChange(false)}
-                  title="Stäng"
+                  title="Close"
                 >
                   <X className="h-3.5 w-3.5" />
                 </Button>

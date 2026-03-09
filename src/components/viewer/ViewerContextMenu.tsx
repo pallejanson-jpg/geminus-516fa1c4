@@ -63,20 +63,20 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   const items: { icon: any; label: string; action: () => void; disabled?: boolean; separator?: boolean }[] = [];
 
   // Entity-specific actions (always visible, disabled when no entity)
-  items.push({ icon: Info, label: 'Egenskaper', action: onShowProperties || (() => {}), disabled: !hasEntity || !onShowProperties });
-  items.push({ icon: MousePointer, label: 'Markera', action: onSelectEntity || (() => {}), disabled: !hasEntity || !onSelectEntity });
-  items.push({ icon: ZoomIn, label: 'Zooma till', action: onZoomTo || (() => {}), disabled: !hasEntity || !onZoomTo });
-  items.push({ icon: Scan, label: 'Isolera', action: onIsolateEntity || (() => {}), disabled: !hasEntity || !onIsolateEntity });
-  items.push({ icon: EyeOff, label: 'Dölj', action: onHideEntity || (() => {}), disabled: !hasEntity || !onHideEntity });
-  items.push({ icon: Move, label: 'Flytta objekt', action: onMoveObject || (() => {}), disabled: !hasEntity || !onMoveObject });
-  items.push({ icon: Trash2, label: 'Ta bort objekt', action: onDeleteObject || (() => {}), disabled: !hasEntity || !onDeleteObject });
+  items.push({ icon: Info, label: 'Properties', action: onShowProperties || (() => {}), disabled: !hasEntity || !onShowProperties });
+  items.push({ icon: MousePointer, label: 'Select', action: onSelectEntity || (() => {}), disabled: !hasEntity || !onSelectEntity });
+  items.push({ icon: ZoomIn, label: 'Zoom to', action: onZoomTo || (() => {}), disabled: !hasEntity || !onZoomTo });
+  items.push({ icon: Scan, label: 'Isolate', action: onIsolateEntity || (() => {}), disabled: !hasEntity || !onIsolateEntity });
+  items.push({ icon: EyeOff, label: 'Hide', action: onHideEntity || (() => {}), disabled: !hasEntity || !onHideEntity });
+  items.push({ icon: Move, label: 'Move object', action: onMoveObject || (() => {}), disabled: !hasEntity || !onMoveObject });
+  items.push({ icon: Trash2, label: 'Delete object', action: onDeleteObject || (() => {}), disabled: !hasEntity || !onDeleteObject });
 
   // Separator + always-available actions
-  if (onShowAll) items.push({ icon: Eye, label: 'Visa alla', action: onShowAll, separator: true });
-  items.push({ icon: Tags, label: 'Visa etiketter', action: onShowLabels });
-  items.push({ icon: Type, label: 'Visa rumsetiketter', action: onShowRoomLabels });
-  items.push({ icon: MessageSquarePlus, label: 'Skapa ärende', action: onCreateIssue });
-  items.push({ icon: MessageSquare, label: 'Visa ärenden', action: onViewIssues });
+  if (onShowAll) items.push({ icon: Eye, label: 'Show all', action: onShowAll, separator: true });
+  items.push({ icon: Tags, label: 'Show labels', action: onShowLabels });
+  items.push({ icon: Type, label: 'Show room labels', action: onShowRoomLabels });
+  items.push({ icon: MessageSquarePlus, label: 'Create issue', action: onCreateIssue });
+  items.push({ icon: MessageSquare, label: 'Show issues', action: onViewIssues });
 
   return (
     <div

@@ -733,6 +733,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           <>
             {/* Backdrop — click outside to close */}
             <div className="fixed inset-0 z-[59]" onClick={() => handleSetIsOpen(false)} />
+            <div className="fixed right-0 top-0 h-full w-[288px] sm:w-[320px] z-[60] bg-card border-l border-border flex flex-col">
             <TooltipProvider delayDuration={300}>
               {/* Header */}
               <div className="flex items-center justify-between px-3 py-3 border-b shrink-0">
@@ -1187,6 +1188,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
              <EdgeScrollIndicator viewport={scrollViewportEl} />
            </div>
             </TooltipProvider>
+            </div>
           
           {/* Side-pop panel for BIM Models */}
           <SidePopPanel

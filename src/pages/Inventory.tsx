@@ -161,7 +161,7 @@ const Inventory: React.FC = () => {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <ClipboardList className="h-6 w-6 text-primary" />
-                  <h1 className="text-xl font-semibold text-foreground">Inventering</h1>
+                  <h1 className="text-xl font-semibold text-foreground">Inventory</h1>
                 </div>
                 <Button 
                   variant="outline" 
@@ -170,7 +170,7 @@ const Inventory: React.FC = () => {
                   className="gap-2"
                 >
                   <Scan className="h-4 w-4" />
-                  AI Skanning
+                  AI Scan
                 </Button>
               </div>
               
@@ -178,7 +178,7 @@ const Inventory: React.FC = () => {
               <Collapsible open={showRecentItems} onOpenChange={setShowRecentItems} className="mb-4">
                 <CollapsibleTrigger className="flex items-center justify-between w-full p-3 bg-muted/50 hover:bg-muted rounded-lg transition-colors">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">Senast registrerade</span>
+                    <span className="text-sm font-medium">Recently registered</span>
                     <Badge variant="secondary" className="text-xs">
                       {savedItems.length}
                     </Badge>
@@ -205,7 +205,7 @@ const Inventory: React.FC = () => {
               {/* Registration form */}
               <Card className="p-4 flex-1 overflow-y-auto">
                 <h2 className="text-lg font-semibold mb-4">
-                  {editItem ? 'Redigera tillgång' : 'Registrera ny tillgång'}
+                  {editItem ? 'Edit asset' : 'Register new asset'}
                 </h2>
                 <InventoryForm
                   onSaved={handleSaved}
@@ -237,11 +237,11 @@ const Inventory: React.FC = () => {
                 <Ivion360View url={ivion360Url} onClose={handleClose360} />
               ) : (
                 <div className="h-full flex items-center justify-center text-muted-foreground">
-                  <div className="text-center max-w-md p-8">
+                <div className="text-center max-w-md p-8">
                     <div className="text-6xl mb-4">🏢</div>
-                    <h3 className="text-lg font-medium mb-2">3D-vy / 360°-vy</h3>
+                    <h3 className="text-lg font-medium mb-2">3D View / 360° View</h3>
                     <p className="text-sm">
-                      Välj en byggnad och klicka på "Välj i 3D" eller "Öppna 360+" i formuläret för att visa vyn här.
+                      Select a building and click "Select 3D position" or "Open 360+" in the form to display the view here.
                     </p>
                   </div>
                 </div>
