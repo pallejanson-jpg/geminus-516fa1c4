@@ -3,6 +3,15 @@ import { supabase } from "@/integrations/supabase/client";
 export type AssetPlusFilter = any[];
 
 /**
+ * Check if a building FMGUID originates from the ACC BIM sync pipeline.
+ * ACC-sourced buildings already have assets from the BIM import and should NOT
+ * trigger an Asset+ sync.
+ */
+export function isAccSourcedBuilding(fmGuid: string): boolean {
+  return fmGuid.startsWith('acc-bim-') || fmGuid.startsWith('acc-');
+}
+
+/**
  * Fetch assets from the local synced database for Navigator tree.
  * This reads from the `assets` table which is populated by the asset-plus-sync edge function.
  * 
