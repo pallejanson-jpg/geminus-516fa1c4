@@ -15,6 +15,7 @@ import { AlertCircle, Box } from 'lucide-react';
 import { getModelFromMemory, storeModelInMemory, getMemoryStats } from '@/hooks/useXktPreload';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { applyArchitectColors } from '@/lib/architect-colors';
+import { isRealTiling, getTilesToLoad } from '@/hooks/useFloorPriorityLoading';
 import { INSIGHTS_COLOR_UPDATE_EVENT, INSIGHTS_COLOR_RESET_EVENT, ALARM_ANNOTATIONS_SHOW_EVENT, LOAD_SAVED_VIEW_EVENT, type InsightsColorUpdateDetail, type AlarmAnnotationsShowDetail } from '@/lib/viewer-events';
 
 const XEOKIT_CDN = '/lib/xeokit/xeokit-sdk.es.js';
@@ -32,6 +33,9 @@ interface ModelInfo {
   storage_path: string;
   file_size: number | null;
   storey_fm_guid: string | null;
+  is_chunk?: boolean;
+  chunk_order?: number;
+  parent_model_id?: string | null;
 }
 
 type ModelCandidate = ModelInfo & { synced_at?: string | null; source: 'db' | 'storage' };
@@ -87,7 +91,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       const dbPromise = supabase
         .from('xkt_models')
-        .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at')
+        .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at, is_chunk, chunk_order, parent_model_id')
         .eq('building_fm_guid', buildingFmGuid)
         .order('file_size', { ascending: true });
 
@@ -306,6 +310,42 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         requestIdleCallback(deferStalenessCheck, { timeout: 10000 });
       } else {
         setTimeout(deferStalenessCheck, 5000);
+      }
+
+      // ── Detect real per-storey tiles (Phase 2) ──
+      const chunkModels = models.filter(m => m.is_chunk && m.storey_fm_guid);
+      const nonChunkModels = models.filter(m => !m.is_chunk);
+      const uniqueChunkPaths = new Set(chunkModels.map(m => m.storage_path));
+      const hasRealTiles = chunkModels.length >= 2 && uniqueChunkPaths.size > 1;
+
+      if (hasRealTiles) {
+        console.log(`[NativeViewer] 🧩 Real per-storey tiles detected: ${chunkModels.length} tiles with ${uniqueChunkPaths.size} unique paths`);
+        // Load non-chunk models (structure, facade) normally + first storey tile
+        const sortedChunks = [...chunkModels].sort((a, b) => (a.chunk_order ?? 0) - (b.chunk_order ?? 0));
+        // Pick the middle floor as the initial view (most useful for navigation)
+        const initialIdx = Math.floor(sortedChunks.length / 2);
+        const initialTiles = getTilesToLoad(
+          sortedChunks.map(c => ({
+            modelId: c.model_id,
+            modelName: c.model_name || c.model_id,
+            storeyFmGuid: c.storey_fm_guid!,
+            chunkOrder: c.chunk_order ?? 0,
+            parentModelId: c.parent_model_id || '',
+            storagePath: c.storage_path,
+          })),
+          sortedChunks[initialIdx].storey_fm_guid!
+        );
+        const initialTileIds = new Set(initialTiles.map(t => t.modelId));
+        // Only load non-chunks + initial tiles
+        models = [
+          ...nonChunkModels,
+          ...chunkModels.filter(m => initialTileIds.has(m.model_id)),
+        ];
+        console.log(`[NativeViewer] Loading ${nonChunkModels.length} base models + ${initialTileIds.size} initial tiles (of ${chunkModels.length} total)`);
+
+        // Store full chunk list for dynamic floor switching
+        (window as any).__xktTileChunks = sortedChunks;
+        (window as any).__xktTileLoadedIds = new Set(initialTileIds);
       }
 
       // Load all available models, but prioritize architectural models first in queue.
@@ -604,12 +644,81 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }
         viewerRef.current = null;
         (window as any).__nativeXeokitViewer = null;
+        (window as any).__xktTileChunks = null;
+        (window as any).__xktTileLoadedIds = null;
       }
       // Clean up any NavCube canvas we added
       const nc = document.getElementById(`native-navcube-${buildingFmGuid.substring(0, 8)}`);
       nc?.remove();
     };
   }, [initialize]);
+
+  // ── Listen for FLOOR_TILE_SWITCH (dynamic tile loading for real per-storey tiles) ──
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail?.tiles || !detail?.floorFmGuid) return;
+
+      const viewer = viewerRef.current;
+      if (!viewer?.scene) return;
+
+      const allChunks: ModelCandidate[] = (window as any).__xktTileChunks || [];
+      const loadedIds: Set<string> = (window as any).__xktTileLoadedIds || new Set();
+      if (allChunks.length === 0) return;
+
+      const tilesToLoad = detail.tiles as Array<{ modelId: string; storagePath?: string }>;
+      const neededIds = new Set(tilesToLoad.map((t: any) => t.modelId));
+
+      // Unload tiles that are no longer needed (not in active+adjacent)
+      for (const loadedId of loadedIds) {
+        if (!neededIds.has(loadedId)) {
+          const model = viewer.scene.models?.[loadedId];
+          if (model) {
+            try { model.destroy(); } catch {}
+            console.log(`[NativeViewer] 🧩 Unloaded tile: ${loadedId}`);
+          }
+          loadedIds.delete(loadedId);
+        }
+      }
+
+      // Load new tiles
+      for (const tile of tilesToLoad) {
+        if (loadedIds.has(tile.modelId)) continue;
+
+        const chunk = allChunks.find((c: any) => c.model_id === tile.modelId);
+        if (!chunk) continue;
+
+        try {
+          const { data: urlData } = await supabase.storage
+            .from('xkt-models')
+            .createSignedUrl(chunk.storage_path, 3600);
+
+          if (urlData?.signedUrl) {
+            const sdk = (window as any).__xeokitSdk;
+            if (!sdk) continue;
+
+            const xktLoader = new sdk.XKTLoaderPlugin(viewer);
+            const entity = xktLoader.load({ id: tile.modelId, src: urlData.signedUrl, edges: true });
+
+            await new Promise<void>((resolve) => {
+              entity?.on?.('loaded', () => resolve());
+              entity?.on?.('error', () => resolve());
+              setTimeout(resolve, 60000);
+            });
+
+            loadedIds.add(tile.modelId);
+            applyArchitectColors(viewer);
+            console.log(`[NativeViewer] 🧩 Loaded tile: ${tile.modelId}`);
+          }
+        } catch (err) {
+          console.warn(`[NativeViewer] Failed to load tile ${tile.modelId}:`, err);
+        }
+      }
+    };
+
+    window.addEventListener('FLOOR_TILE_SWITCH', handler);
+    return () => window.removeEventListener('FLOOR_TILE_SWITCH', handler);
+  }, []);
 
   // ── Listen for Insights color events (chart click → colorize model) ───
   useEffect(() => {
