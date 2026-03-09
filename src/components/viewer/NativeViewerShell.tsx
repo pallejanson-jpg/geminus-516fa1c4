@@ -290,6 +290,53 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     return () => window.removeEventListener(LOAD_SAVED_VIEW_EVENT, handler);
   }, [applySavedView]);
 
+  // ── Select tool click handler ──────────────────────────────────────────
+  const activeToolRef = useRef<string | null>('select');
+
+  useEffect(() => {
+    const handler = (e: CustomEvent<ViewerToolChangedDetail>) => {
+      activeToolRef.current = e.detail.tool;
+    };
+    window.addEventListener(VIEWER_TOOL_CHANGED_EVENT, handler as EventListener);
+    return () => window.removeEventListener(VIEWER_TOOL_CHANGED_EVENT, handler as EventListener);
+  }, []);
+
+  useEffect(() => {
+    if (!xeokitViewer?.scene) return;
+    const canvas = xeokitViewer.scene.canvas?.canvas;
+    if (!canvas) return;
+
+    const handleSelectClick = (e: MouseEvent) => {
+      if (activeToolRef.current !== 'select') return;
+      const pickResult = xeokitViewer.scene.pick({
+        canvasPos: [e.offsetX, e.offsetY],
+        pickSurface: false,
+      });
+      if (pickResult?.entity) {
+        // Deselect all first
+        const selected = xeokitViewer.scene.selectedObjectIds || [];
+        if (selected.length > 0) xeokitViewer.scene.setObjectsSelected(selected, false);
+        pickResult.entity.selected = true;
+
+        // Open properties dialog
+        const entityId = pickResult.entity.id;
+        let fmGuid: string | null = null;
+        let entityName: string | null = null;
+        if (xeokitViewer.metaScene?.metaObjects) {
+          const metaObj = xeokitViewer.metaScene.metaObjects[entityId];
+          if (metaObj) {
+            fmGuid = metaObj.originalSystemId || null;
+            entityName = metaObj.name || metaObj.type || null;
+          }
+        }
+        setPropertiesEntity({ entityId, fmGuid, name: entityName });
+      }
+    };
+
+    canvas.addEventListener('click', handleSelectClick);
+    return () => canvas.removeEventListener('click', handleSelectClick);
+  }, [xeokitViewer]);
+
   // Context menu via right-click on canvas
   useEffect(() => {
     if (!xeokitViewer?.scene) return;
