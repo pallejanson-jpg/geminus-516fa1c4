@@ -867,6 +867,36 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
 
                         {/* Space Tab - REAL room data */}
                         <TabsContent value="space" className="mt-0 space-y-6">
+                             {/* Floor filter pills — above pie chart */}
+                             {spaceFloorOptions.length > 1 && (
+                                 <Carousel opts={{ align: 'start', dragFree: true }} className="w-full">
+                                     <CarouselContent className="-ml-1">
+                                         <CarouselItem className="pl-1 basis-auto">
+                                             <Button
+                                                 size="sm"
+                                                 variant={spaceFloorFilter === '' ? 'default' : 'outline'}
+                                                 className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
+                                                 onClick={() => { setSpaceFloorFilter(''); setSelectedRoomType(''); }}
+                                             >
+                                                 All
+                                             </Button>
+                                         </CarouselItem>
+                                         {spaceFloorOptions.map(opt => (
+                                             <CarouselItem key={opt.guid} className="pl-1 basis-auto">
+                                                 <Button
+                                                     size="sm"
+                                                     variant={spaceFloorFilter === opt.name ? 'default' : 'outline'}
+                                                     className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
+                                                     onClick={() => { setSpaceFloorFilter(opt.name); setSelectedRoomType(''); }}
+                                                 >
+                                                     {opt.name}
+                                                 </Button>
+                                             </CarouselItem>
+                                         ))}
+                                     </CarouselContent>
+                                 </Carousel>
+                             )}
+
                             <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
                                 {/* Room Types Distribution - REAL */}
                                 <Card className="border-primary/20 hover:border-primary/50 transition-colors">
@@ -875,11 +905,10 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                             <DoorOpen className="h-4 w-4 text-[hsl(var(--chart-3))]" />
                                             Room Types
                                             <span className="ml-auto cursor-pointer" onClick={() => {
-                                                // Build color map: room fmGuid → pie chart color based on commonName
                                                 const nameColorMap: Record<string, [number, number, number]> = {};
                                                 spaceTypePie.forEach(s => { nameColorMap[s.fullName] = hslStringToRgbFloat(s.color); });
                                                 const roomColorMap: Record<string, [number, number, number]> = {};
-                                                buildingSpaces.forEach((space: any) => {
+                                                floorFilteredSpaces.forEach((space: any) => {
                                                     const name = space.commonName || space.name || 'Unknown';
                                                     const color = nameColorMap[name];
                                                     if (color) roomColorMap[space.fmGuid] = color;
@@ -887,7 +916,10 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                 handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
                                             }}><ViewerLink /></span>
                                         </CardTitle>
-                                        <CardDescription>{stats.roomCount} rooms · {stats.totalArea.toLocaleString()} m² · Click to view in 3D</CardDescription>
+                                        <CardDescription>
+                                            {floorFilteredSpaces.length} rooms{spaceFloorFilter ? ` on ${spaceFloorFilter}` : ''} · {stats.totalArea.toLocaleString()} m²
+                                            {selectedRoomType && <> · filtered: <strong>{selectedRoomType}</strong> <span className="cursor-pointer text-primary hover:underline" onClick={() => setSelectedRoomType('')}>(clear)</span></>}
+                                        </CardDescription>
                                     </CardHeader>
                                     <CardContent>
                                         <div className="h-64">
@@ -896,18 +928,15 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                     <PieChart>
                                                         <Pie data={spaceTypePie} cx="50%" cy="50%" innerRadius={isMobile ? 40 : 50} outerRadius={isMobile ? 65 : 80} paddingAngle={2} dataKey="value" label={renderPieLabel} labelLine={!isMobile}>
                                                             {spaceTypePie.map((entry, index) => (
-                                                                <Cell key={`cell-${index}`} fill={entry.color} style={{ cursor: 'pointer' }} onClick={() => {
-                                                                    // Resolve this room name group to actual room fmGuids
-                                                                    const typeColor = hslStringToRgbFloat(entry.color);
-                                                                    const roomColorMap: Record<string, [number, number, number]> = {};
-                                                                    buildingSpaces.forEach((space: any) => {
-                                                                        const name = space.commonName || space.name || 'Unknown';
-                                                                        if (name === entry.fullName) {
-                                                                            roomColorMap[space.fmGuid] = typeColor;
-                                                                        }
-                                                                    });
-                                                                    handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
-                                                                }} />
+                                                                <Cell
+                                                                    key={`cell-${index}`}
+                                                                    fill={entry.color}
+                                                                    style={{ cursor: 'pointer', opacity: selectedRoomType && selectedRoomType !== entry.fullName ? 0.3 : 1 }}
+                                                                    onClick={() => {
+                                                                        // Toggle room type filter for heatmap
+                                                                        setSelectedRoomType(prev => prev === entry.fullName ? '' : entry.fullName);
+                                                                    }}
+                                                                />
                                                             ))}
                                                         </Pie>
                                                         <Legend formatter={(value: string) => <span style={{ color: 'hsl(var(--foreground))' }}>{value}</span>} />
@@ -919,40 +948,10 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                         </div>
                                     </CardContent>
                                 </Card>
-
                              </div>
 
                              {/* ── Sensor content (merged from Sensors tab) ── */}
                              <div className="space-y-4 mt-6">
-                                 {/* Floor filter pills */}
-                                  {spaceFloorOptions.length > 1 && (
-                                      <Carousel opts={{ align: 'start', dragFree: true }} className="w-full">
-                                          <CarouselContent className="-ml-1">
-                                              <CarouselItem className="pl-1 basis-auto">
-                                                  <Button
-                                                      size="sm"
-                                                      variant={spaceFloorFilter === '' ? 'default' : 'outline'}
-                                                      className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
-                                                      onClick={() => setSpaceFloorFilter('')}
-                                                  >
-                                                      All
-                                                  </Button>
-                                              </CarouselItem>
-                                              {spaceFloorOptions.map(opt => (
-                                                  <CarouselItem key={opt.guid} className="pl-1 basis-auto">
-                                                      <Button
-                                                          size="sm"
-                                                          variant={spaceFloorFilter === opt.name ? 'default' : 'outline'}
-                                                          className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
-                                                          onClick={() => setSpaceFloorFilter(opt.name)}
-                                                      >
-                                                          {opt.name}
-                                                      </Button>
-                                                  </CarouselItem>
-                                              ))}
-                                          </CarouselContent>
-                                      </Carousel>
-                                  )}
 
                                  {/* Metric buttons */}
                                  <div className="flex flex-wrap gap-1.5 items-center justify-between">
