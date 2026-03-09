@@ -645,17 +645,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             .map(([name, value], i) => ({ name, value, color: colors[i % colors.length] }));
     }, [stats.assetCategories]);
 
-    // Prepare space type pie data (REAL - grouped by commonName)
-    const spaceTypePie = useMemo(() => {
-        const colors = [
-            'hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))',
-            'hsl(var(--chart-4))', 'hsl(var(--chart-7))', 'hsl(var(--muted-foreground))',
-        ];
-        return Object.entries(stats.spaceTypes)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 6)
-            .map(([name, value], i) => ({ name: name.length > 18 ? name.substring(0, 18) + '...' : name, fullName: name, value, color: colors[i % colors.length] }));
-    }, [stats.spaceTypes]);
+    // (spaceTypePie is now defined earlier, respecting floor filter)
 
     return (
         <div className="h-full p-2 sm:p-3 md:p-4 lg:p-6 overflow-y-auto">
