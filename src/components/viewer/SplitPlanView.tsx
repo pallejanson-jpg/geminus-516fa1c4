@@ -1060,20 +1060,20 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
                 top: `${cameraPos.y}%`,
               }}
             >
-              {/* FOV cone */}
+            {/* FOV cone */}
               <div
                 className="absolute"
                 style={{
                   width: 0, height: 0,
-                  borderLeft: '12px solid transparent',
-                  borderRight: '12px solid transparent',
-                  borderBottom: '22px solid hsl(var(--primary) / 0.2)',
+                  borderLeft: `${isMobile ? 12 : 16}px solid transparent`,
+                  borderRight: `${isMobile ? 12 : 16}px solid transparent`,
+                  borderBottom: `${isMobile ? 22 : 30}px solid hsl(var(--primary) / 0.2)`,
                   transform: `translate(-50%, -100%) rotate(${cameraPos.angle}rad)`,
                   transformOrigin: 'center bottom',
                 }}
               />
               {/* Camera dot */}
-              <div className="absolute w-2.5 h-2.5 rounded-full bg-primary border-2 border-primary-foreground shadow-lg" style={{ transform: 'translate(-50%, -50%)' }} />
+              <div className={cn("absolute rounded-full bg-primary border-2 border-primary-foreground shadow-lg", isMobile ? "w-2.5 h-2.5" : "w-4 h-4")} style={{ transform: 'translate(-50%, -50%)' }} />
             </div>
           )}
         </div>
