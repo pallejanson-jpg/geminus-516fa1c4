@@ -236,11 +236,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
           if (sceneAABB) applyGlobalFloorPlanClipping(sceneAABB[1]);
         }
       } else {
-      // In 3D mode: do NOT apply ceiling clipping when selecting a floor.
-        // Floor isolation is handled purely via object visibility in FloatingFloorSwitcher.
-        // Clipping (cutting object heights) should only happen in 2D mode.
-        // Use requestAnimationFrame to avoid blocking user interaction
-        requestAnimationFrame(() => { try { remove3DClipping(); } catch {} });
+        // In 3D mode: apply ceiling clipping to cut objects that extend above next floor
+        if (soloId) {
+          requestAnimationFrame(() => { try { applyCeilingClipping(soloId); } catch {} });
+        } else {
+          requestAnimationFrame(() => { try { remove3DClipping(); } catch {} });
+        }
       }
     };
     window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
