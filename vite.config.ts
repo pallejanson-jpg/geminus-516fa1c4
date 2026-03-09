@@ -55,6 +55,8 @@ export default defineConfig(({ mode }) => ({
         { src: 'node_modules/cesium/Build/Cesium/ThirdParty', dest: 'cesiumStatic' },
         { src: 'node_modules/cesium/Build/Cesium/Assets', dest: 'cesiumStatic' },
         { src: 'node_modules/cesium/Build/Cesium/Widgets', dest: 'cesiumStatic' },
+        // Copy web-ifc WASM files matching npm version for browser-side IFC conversion
+        { src: 'node_modules/web-ifc/*.wasm', dest: 'web-ifc-wasm' },
       ],
     }),
   ].filter(Boolean),
