@@ -531,10 +531,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
       console.warn('[ViewerToolbar] handleViewModeChange: viewer not ready, skipping');
       return;
     }
-    // Idempotency: skip if already in target mode
-    if (mode === viewModeRef.current) return;
+    // Force reapply: if already in 2D mode and requesting 2D, re-run clipping
+    const isForceReapply = mode === '2d' && viewModeRef.current === '2d';
+    // Idempotency: skip if already in target mode (unless force reapply)
+    if (mode === viewModeRef.current && !isForceReapply) return;
     // Prevent overlapping 2D transitions
-    if (mode === '2d' && mode2dTransitionRef.current) return;
+    if (mode === '2d' && mode2dTransitionRef.current && !isForceReapply) return;
     const scene = viewer.scene;
 
     setViewMode(mode);
