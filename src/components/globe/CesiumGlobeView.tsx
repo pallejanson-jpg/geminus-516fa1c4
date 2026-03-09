@@ -283,6 +283,11 @@ const CesiumGlobeView: React.FC = () => {
       bimEntityRef.current = entity;
       setBimLoadedFmGuid(fmGuid);
 
+      // Hide overlapping OSM buildings near the BIM placement
+      if (osmBuildingsLayerRef.current) {
+        hideOsmBuildingsNear(osmBuildingsLayerRef.current, facility.lat, facility.lng, 60);
+      }
+
       viewer.camera.flyTo({
         destination: toCartesian(facility.lat, facility.lng, 200),
         orientation: { heading: Cesium.Math.toRadians(45), pitch: Cesium.Math.toRadians(-35), roll: 0 },
