@@ -1,54 +1,244 @@
 
 
-# Plan: Properties Dialog Fix, Close Button & IFC Memory Issue
+## Plan: System Support + Reconciliation Engine (IMPLEMENTED)
 
-## Issue 1: Properties Dialog Format
+### Database tables created
+1. **`asset_external_ids`** — Maps external IDs (IFC GUID, ACC externalId, Revit UniqueId) to stable `fm_guid` for cross-source reconciliation
+2. **`systems`** — Technical systems (e.g., LB01 Supply Air) with `fm_guid`, `discipline`, `system_type`, `building_fm_guid`, hierarchical `parent_system_id`
+3. **`asset_system`** — Many-to-many relation between assets and systems with optional `role`
+4. **`asset_connections`** — Topology/flow between assets (`from_fm_guid` → `to_fm_guid`) with `connection_type` and `direction`
 
-The `NativeViewerShell` already uses `UniversalPropertiesDialog` — the same component used in Portfolio, Rooms, and Assets views. The dialog IS correct. However, there may be a mismatch because the `fmGuid` passed from context menu might be null for BIM objects not in the database, causing the dialog to show "No data found" or BIM fallback instead of the full property view.
+All tables have RLS: authenticated read, admin write. Indexes on common query patterns.
 
-**No code change needed for dialog type** — it's already the correct one. If specific objects aren't showing properties, it's because they lack database records (fmGuid is null).
+### Edge function changes
+1. **`ifc-to-xkt/index.ts`** — Extended with system extraction:
+   - Identifies `IfcSystem` / `IfcDistributionSystem` meta objects
+   - Falls back to `SystemName` property grouping
+   - Extracts `IfcRelConnects*` for topology → `asset_connections`
+   - Stores all object IDs in `asset_external_ids`
+   - Persists systems, asset-system links, and connections in batches
 
-## Issue 2: Close Button Visibility
+2. **`acc-sync/index.ts`** — Extended with system support:
+   - Resolves `System Name`, `System Type`, `System Classification`, `System Abbreviation` property fields
+   - Groups instances by `SystemName` → auto-creates `systems` + `asset_system` rows
+   - Stores ACC `externalId` mappings in `asset_external_ids` for all levels, rooms, instances
+   - Infers discipline from system name (Ventilation, Heating, Cooling, Electrical, Plumbing, FireProtection)
 
-The desktop `UniversalPropertiesDialog` (line 1231) has a small ghost X button (`variant="ghost" size="icon" className="h-7 w-7"`). The user wants a more prominent, clearly visible close button.
+### System activation for existing buildings
+- **ACC-byggnader**: Kör en ny ACC-sync → systemdata extraheras automatiskt
+- **IFC-byggnader**: Ladda upp IFC-filen igen → `ifc-to-xkt` extraherar system
+- **Asset+-byggnader**: Kör `sync-systems` action via `asset-plus-sync` edge function → extraherar system från befintliga attribut (IMPLEMENTERAT)
 
-**Changes in `src/components/common/UniversalPropertiesDialog.tsx`**:
-- Replace the ghost X button with a more prominent styled button (e.g., `variant="outline"` or add a visible border/background)
-- Increase the size slightly and ensure contrast against the header background
-- Also add an explicit X close button to the mobile Sheet header
+### Frontend (future phase)
+- System tab on FacilityLandingPage
+- System badge on asset property dialogs
+- Manual system creation dialog
 
-## Issue 3: IFC Import Memory Limit (WORKER_LIMIT)
+---
 
-The logs show the function successfully downloads a 24.1 MB IFC file, prepares WASM, starts parsing, then hits "Memory limit exceeded". Edge Functions have a ~150MB memory limit. Parsing a 24 MB IFC with web-ifc + xeokit-convert in memory exceeds this.
+## Plan: Viewer Color Fix (IMPLEMENTED)
 
-**Root cause**: The `parseIFCIntoXKTModel` call loads the entire IFC geometry into memory, builds an XKT model, then writes it out — all within one function invocation. For large files this exceeds the edge function memory ceiling.
+### Changes made:
+1. **Window color** — Changed from blue-gray `[0.392, 0.490, 0.541]` (#647D8A) to neutral warm gray `[0.780, 0.780, 0.760]` (#C7C7C2) in:
+   - `src/lib/architect-colors.ts`
+   - `src/hooks/useArchitectViewMode.ts`
+   - Database `viewer_themes` table (both "Arkitektvy" and "Standard" themes)
+   - `ViewerFilterPanel.tsx` category palette
 
-**Mitigation strategy — Chunked/streaming approach**:
+2. **Space color** — Verified as correct neutral gray `[0.898, 0.894, 0.890]` (#E5E4E3). Changed category palette in ViewerFilterPanel from blue to neutral.
 
-This is a fundamental limitation of Edge Functions. Options:
+3. **Background** — Already correct gray gradient in NativeViewerShell.
 
-1. **Reduce memory footprint** (incremental): After reading IFC from disk, null out the `ifcBytes` variable before parsing. Use `{ zip: false }` (already done). Skip `autoNormals` to save some memory.
+4. **A-model priority** — Already implemented in NativeXeokitViewer and useXktPreload.
 
-2. **Split the pipeline** (recommended): Instead of doing everything in one invocation:
-   - **Phase 1** (`ifc-to-xkt`): Only extract metadata (hierarchy, systems) — no geometry conversion. This already works via `ifc-extract-systems`.
-   - **Phase 2**: Use client-side conversion (`acc-xkt-converter.ts` has `convertToXktWithMetadata`) for geometry, which runs in the browser with more memory available.
+5. **XKT per-floor split** — `xkt-split` edge function exists but only creates virtual chunks. Real binary split is Phase 2.
 
-3. **Immediate fix**: Add explicit memory cleanup between stages, reduce the model size threshold for server-side conversion, and gracefully fall back to client-side conversion when the server function fails.
+---
 
-**Changes in `supabase/functions/ifc-to-xkt/index.ts`**:
-- Null out `ifcBytes` immediately after writing to disk (line 396-398): set `ifcBytes` to undefined after `Deno.writeFile`
-- After `parseIFCIntoXKTModel`, explicitly null out the `ifcData` variable
-- These are minor optimizations; for 24MB+ files the real fix is client-side fallback
+## Plan: IFC System-Only Import (IMPLEMENTED - Phase 1)
 
-**Changes in `src/components/settings/CreateBuildingPanel.tsx`**:
-- When server conversion fails with WORKER_LIMIT, automatically fall back to client-side conversion using `AccXktConverter.convertAndStore()`
-- Show a log message: "Server conversion exceeded memory limit, falling back to browser-based conversion..."
+### What was built
+1. **`ifc-extract-systems` edge function** — New lightweight edge function that:
+   - Downloads IFC from `ifc-uploads` bucket
+   - Parses metadata via `web-ifc` + `xeokit-convert` (same pipeline as `ifc-to-xkt`)
+   - Extracts systems (`IfcSystem`, `IfcDistributionSystem`, `SystemName` property grouping)
+   - Extracts connections (`IfcRelConnects*`)
+   - Reconciles IFC GUIDs with existing assets (3-step: exact match → name match → identity)
+   - Persists to `systems`, `asset_system`, `asset_connections`, `asset_external_ids`
+   - **Skips XKT generation** — much faster (~10-15s vs minutes)
+   - Supports 3 modes: `systems-only` (default), `enrich-guids` (future), `full` (delegates to `ifc-to-xkt`)
 
-### Files to modify
+2. **UI in ApiSettingsModal** — "From IFC" button on the Technical Systems card:
+   - Building selector dropdown
+   - IFC file upload
+   - Mode radio: "Only systems (fast)" / "Systems + FMGUIDs (coming soon)" / "Full conversion"
+   - Progress tracking and result display
 
-| File | Changes |
-|------|---------|
-| `src/components/common/UniversalPropertiesDialog.tsx` | Make close button more prominent and visible |
-| `supabase/functions/ifc-to-xkt/index.ts` | Memory cleanup optimizations |
-| `src/components/settings/CreateBuildingPanel.tsx` | Client-side fallback when server hits memory limit |
+### Still to implement
+- **`enrich-guids` mode** — FMGUID generation + IFC write-back via `web-ifc` property injection
+- **IFC archive** — Store enriched IFC in `ifc-uploads/{buildingFmGuid}/enriched/`
+- **ACC `enrich-guids` action** — Deterministic GUID generation for ACC-sourced models
 
+---
+
+## Plan: Remove Separate Technical Systems UI (IMPLEMENTED)
+
+### Changes made
+1. **Removed standalone Technical Systems UI** from `ApiSettingsModal.tsx` Sync tab:
+   - Removed `SyncProgressCard` for Technical Systems
+   - Removed IFC System Import panel (file upload, building selector, mode radio)
+   - Removed state variables: `isSyncingSystems`, `systemSyncResult`, `ifcSystemFile`, `ifcSystemBuildingGuid`, `ifcSystemMode`, `isImportingIfcSystems`, `ifcSystemImportResult`, `ifcSystemBuildings`, `showIfcSystemImport`
+   - Removed `handleSyncSystems` and `handleImportIfcSystems` functions
+   - Added lightweight system count display in the sync status section
+
+2. **Auto-trigger system sync** after existing flows:
+   - After Asset+ asset sync completes → calls `sync-systems` automatically
+   - After ACC BIM sync completes → calls `sync-systems` automatically
+   - IFC flow already extracts systems in `ifc-to-xkt` edge function (no change needed)
+
+3. **System count** shown inline in sync status when systems exist (no separate card)
+
+---
+
+## Plan: Move & Delete Objects in 3D Viewer (IMPLEMENTED - Phase 1)
+
+### Database changes
+- Added columns to `assets`: `modification_status` (text), `moved_offset_x/y/z` (numeric), `original_room_fm_guid` (text), `modification_date` (timestamptz)
+- Partial index on `modification_status WHERE NOT NULL`
+
+### Viewer changes
+1. **`entityOffsetsEnabled: true`** in `NativeXeokitViewer.tsx` Viewer constructor
+2. **`useObjectMoveMode` hook** — drag-move logic with:
+   - World-space pick-surface delta calculation
+   - AABB-based room detection at new position
+   - Persists offset + `modification_status = 'moved'` + room changes to DB
+   - Applies saved offsets & hides deleted entities on model load
+   - ESC to cancel move
+3. **Context menu** — Added "Flytta objekt", "Ta bort objekt", "Markera" (select fix)
+4. **Filter panel** — New "Ändringar" section with toggles:
+   - "Visa flyttade objekt" → orange colorization (`[1, 0.6, 0.1]`)
+   - "Visa borttagna objekt" → red colorization (`[1, 0.2, 0.2]`), makes hidden deleted objects visible
+
+### Still to implement
+- **Rapport-export** — CSV export of all modified assets from Insights/Asset tab
+- **Asset+ sync reset** — Clear `modification_status` when `source_updated_at` changes in `asset-plus-sync`
+- **ContextMenuSettings panel** — Wire new items visibility to settings toggles
+
+---
+
+## Plan: Viewer Stability Fix (5 issues) — IMPLEMENTED
+
+### 1. Empty Properties Dialog + Close Button
+- Added case-insensitive GUID matching (try original, lowercase, uppercase)
+- BIM metadata fallback: when no local asset found, reads metaObject from xeokit viewer (type, name, floor, property sets)
+- Added explicit X close button in desktop header (alongside ArrowLeft)
+- Properties dialog now opens even without fmGuid (uses entityId for BIM fallback)
+
+### 2. Unified Context Menu
+- All entity-specific items always shown, but disabled (grayed out) when no entity is picked
+- Separator between entity and global items
+- NativeViewerShell always passes all handlers (no conditional `undefined`)
+- Result: one consistent menu structure regardless of pick result
+
+### 3. 2D Mode Button Reliability
+- Added "force reapply" logic: re-clicking 2D when already in 2D re-runs clipping
+- Floor ID cached in sessionStorage for recovery when floor context is lost during switch
+- `mode2dTransitionRef` properly cleared in finally block to prevent stuck transitions
+
+### 4. Insights Floor Coloring Accuracy
+- Removed `slice(0,6)` limit on energyByFloor — all floors shown
+- Deduplicated floors by base name (strips " - 01" suffix from model copies)
+- Bar click resolves ALL matching storey GUIDs (across model copies) → only rooms on that floor colored
+- Changed click mode from `room_spaces` to `energy_floor` for strict guid matching
+- NativeXeokitViewer: `energy_floor` mode uses strict GUID matching (no name-based fallback)
+
+### 5. Room Labels Performance
+- Adaptive occlusion throttling: interval scales with label count (5 frames for <40, 10 for <80, 15 for 80+)
+- Auto-disables occlusion when label count exceeds 150
+- Viewport culling: labels outside canvas bounds + 50px margin are hidden early (before occlusion pick)
+
+---
+
+## Plan: IFC → Geminus → IMDF Export Pipeline (PLANERAD)
+
+### Översikt
+Fullständigt flöde för att importera IFC, berika data i Geminus, och exportera till IMDF och andra format för konsumtion i externa system (Apple Maps Indoor, wayfinding-appar, IWMS/CAFM).
+
+### Flöde
+
+#### 1. IFC Import (redan implementerat)
+- Användare laddar upp `.ifc` → `ifc-uploads` bucket
+- `ifc-to-xkt`: konverterar till XKT för 3D-visning
+- `ifc-extract-systems`: extraherar metadata, system, GUID-berikning
+- `asset-plus-sync`: synkar till Asset+ API
+- **Resultat i DB:** assets (rum med koordinater & area), building_settings (georeferens), systems/asset_connections
+
+#### 2. Geminus — Berikning & Förvaltning (redan implementerat)
+- Navigering i 3D/2D/360°
+- Tillgångsregistrering (inventarier, brandredskap)
+- Ärendehantering (BCF issues)
+- Sensorkoppling (Senslinc)
+- Dokument & ritningar (FM Access)
+- AI-skanning för automatisk objektdetektering
+- Rumskategorisering (office, restroom, corridor)
+- All data berikas i DB: assets.category, asset_type, attributes, koordinater, annotationer, issues
+
+#### 3. Export — IMDF + Andra Format (NY)
+
+##### IMDF Export (ny edge function: `imdf-export`)
+1. **venue.geojson** — Hämta byggnad från `building_settings` → namn, adress, WGS84-polygon
+2. **level.geojson** — Hämta våningar (`assets WHERE category='Level'`) → ordinal, höjd
+3. **unit.geojson** — Hämta rum (`assets WHERE category='Space'`):
+   - Geometri: `web-ifc` snittar IfcSpace vid golvhöjd → 2D-polygon → WGS84-transform
+   - category: mappa `asset_type` → IMDF-kategori (office, restroom, stairs, elevator)
+   - name, alt_name från `common_name`
+4. **opening.geojson** — Hämta dörrar (`assets WHERE category='Door'`) → position, rumskoppling
+5. **anchor.geojson** — Hämta tillgångar med koordinater → brandredskap, sensorer
+6. **manifest.json** + ZIP-paketering
+
+##### Kritisk transformationslogik (steg 3 — unit.geojson)
+```
+IFC-fil (ifc-uploads bucket)
+  → web-ifc: öppna modell, iterera IfcSpace
+    → hämta geometri (GetFlatMesh)
+      → extrahera vertices, trianglar
+  → Horisontellt snitt vid golvhöjd (storeyAABB[y] + 0.1m)
+    → intersektera alla trianglar med XY-plan
+      → samla linjesegment → sluten polygon
+  → Lokal → WGS84 transform (building_settings.latitude/longitude/rotation)
+  → Output: GeoJSON Polygon per rum
+```
+
+##### Andra exportformat (framtida fas)
+- **BCF-XML**: ärenden → openBIM-kompatibelt
+- **COBie**: tillgångar → Excel/IFC för drift
+- **GeoJSON**: enklare variant utan IMDF-schema
+- **CSV**: tillgångslista för extern import
+
+#### 4. Konsumenter
+- **Apple Maps Indoor** → IMDF för inomhusnavigering
+- **Wayfinding-appar** → IMDF/GeoJSON
+- **IWMS/CAFM-system** → COBie/CSV
+- **BIM-samordning** → BCF-XML tillbaka till Revit/Solibri
+- **Kartplattformar** → GeoJSON till Mapbox/Google Maps
+- **Digital Twin** → Allt ovan + realtidsdata via API
+
+### Komponentstatus
+
+| Komponent | Status |
+|---|---|
+| IFC-uppladdning & lagring | ✅ Finns |
+| web-ifc i edge function | ✅ Finns (ifc-extract-systems) |
+| Georeferens per byggnad | ✅ Finns (building_settings) |
+| Rum med metadata | ✅ Finns (assets-tabellen) |
+| Koordinattransform | ✅ Finns (coordinate-transform.ts) |
+| **2D-polygonextraktion** | ❌ Ny — geometri-slicing |
+| **IMDF-schema-generering** | ❌ Ny — GeoJSON-mappning |
+| **ZIP-paketering** | ❌ Ny — edge function |
+| **Export-UI i Geminus** | ❌ Ny — knapp i inställningar |
+
+### Implementationsfaser
+1. **Fas 1**: Metadata-only IMDF (venue, level, unit utan geometri — använd bounding box som polygon-approximation)
+2. **Fas 2**: Geometri-slicing (web-ifc IfcSpace → 2D-polygoner)
+3. **Fas 3**: Full IMDF med openings, anchors, occupants
+4. **Fas 4**: Övriga exportformat (BCF-XML, COBie, CSV)
