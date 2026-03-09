@@ -951,6 +951,19 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
+          ) : assets.length === 0 && bimFallbackData ? (
+            // BIM metadata fallback display (read-only)
+            <div className="space-y-2">
+              <div className="px-2 py-1.5 bg-muted/50 rounded-md">
+                <span className="text-xs font-medium text-muted-foreground">BIM Metadata (read-only)</span>
+              </div>
+              {Object.entries(bimFallbackData).map(([key, value]) => (
+                <div key={key} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-1.5 px-2 rounded">
+                  <span className="text-xs text-muted-foreground shrink-0">{key}</span>
+                  <span className="text-sm break-all sm:text-right">{value}</span>
+                </div>
+              ))}
+            </div>
           ) : assets.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm">
               <p>No data found</p>
