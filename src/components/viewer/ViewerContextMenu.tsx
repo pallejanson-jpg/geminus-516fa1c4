@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Type, MessageSquarePlus, MessageSquare, Tags, Scan, EyeOff, Eye, ZoomIn, Info, Move, Trash2, MousePointer } from 'lucide-react';
+import { Type, MessageSquarePlus, MessageSquare, Tags, Scan, EyeOff, Eye, ZoomIn, Info, Move, Trash2, MousePointer, PointerOff, Check } from 'lucide-react';
 
 interface ViewerContextMenuProps {
   position: { x: number; y: number };
@@ -17,8 +17,11 @@ interface ViewerContextMenuProps {
   onIsolateEntity?: () => void;
   onShowAll?: () => void;
   onSelectEntity?: () => void;
+  onSelectNone?: () => void;
   onMoveObject?: () => void;
   onDeleteObject?: () => void;
+  labelsActive?: boolean;
+  roomLabelsActive?: boolean;
 }
 
 const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
@@ -36,8 +39,11 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   onIsolateEntity,
   onShowAll,
   onSelectEntity,
+  onSelectNone,
   onMoveObject,
   onDeleteObject,
+  labelsActive,
+  roomLabelsActive,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -52,7 +58,7 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   }, [onClose]);
 
   const menuWidth = 220;
-  const menuHeight = 340;
+  const menuHeight = 380;
   const x = Math.min(position.x, window.innerWidth - menuWidth - 8);
   const y = Math.min(position.y, window.innerHeight - menuHeight - 8);
 
@@ -60,7 +66,7 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
 
   // Build items — entity-specific items always shown but disabled when no entity
   const hasEntity = !!entityId;
-  const items: { icon: any; label: string; action: () => void; disabled?: boolean; separator?: boolean }[] = [];
+  const items: { icon: any; label: string; action: () => void; disabled?: boolean; separator?: boolean; active?: boolean }[] = [];
 
   // Entity-specific actions (always visible, disabled when no entity)
   items.push({ icon: Info, label: 'Properties', action: onShowProperties || (() => {}), disabled: !hasEntity || !onShowProperties });
@@ -73,8 +79,9 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
 
   // Separator + always-available actions
   if (onShowAll) items.push({ icon: Eye, label: 'Show all', action: onShowAll, separator: true });
-  items.push({ icon: Tags, label: 'Show labels', action: onShowLabels });
-  items.push({ icon: Type, label: 'Show room labels', action: onShowRoomLabels });
+  if (onSelectNone) items.push({ icon: PointerOff, label: 'Select none', action: onSelectNone });
+  items.push({ icon: Tags, label: 'Show labels', action: onShowLabels, active: labelsActive });
+  items.push({ icon: Type, label: 'Show room labels', action: onShowRoomLabels, active: roomLabelsActive });
   items.push({ icon: MessageSquarePlus, label: 'Create issue', action: onCreateIssue });
   items.push({ icon: MessageSquare, label: 'Show issues', action: onViewIssues });
 
@@ -91,7 +98,7 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
       )}
 
       <div className="py-1">
-        {items.map(({ icon: Icon, label, action, disabled, separator }, idx) => (
+        {items.map(({ icon: Icon, label, action, disabled, separator, active }, idx) => (
           <React.Fragment key={`${label}-${idx}`}>
             {separator && <div className="my-1 border-t border-zinc-700" />}
             <button
@@ -100,7 +107,8 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
               disabled={disabled}
             >
               <Icon className={`h-4 w-4 ${disabled ? 'text-zinc-600' : 'text-muted-foreground'}`} />
-              {label}
+              <span className="flex-1 text-left">{label}</span>
+              {active && <Check className="h-3.5 w-3.5 text-emerald-400" />}
             </button>
           </React.Fragment>
         ))}
