@@ -463,13 +463,60 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     setNavMode(mode);
   }, [viewer]);
 
+  // ── Measure & Section plugin refs ──────────────────────────────────────
+  const measurePluginRef = useRef<any>(null);
+  const sectionPluginRef = useRef<any>(null);
+
+  const activateMeasure = useCallback(() => {
+    if (!viewer?.scene) return;
+    const sdk = (window as any).__xeokitSdk;
+    if (!sdk?.DistanceMeasurementsPlugin) { console.warn('[ViewerToolbar] DistanceMeasurementsPlugin not in SDK'); return; }
+    if (!measurePluginRef.current) {
+      measurePluginRef.current = new sdk.DistanceMeasurementsPlugin(viewer, {
+        defaultVisible: true,
+        defaultAxisVisible: true,
+        defaultLabelsVisible: true,
+      });
+    }
+    measurePluginRef.current.control?.activate?.();
+  }, [viewer]);
+
+  const deactivateMeasure = useCallback(() => {
+    measurePluginRef.current?.control?.deactivate?.();
+  }, []);
+
+  const activateSection = useCallback(() => {
+    if (!viewer?.scene) return;
+    const sdk = (window as any).__xeokitSdk;
+    if (!sdk?.SectionPlanesPlugin) { console.warn('[ViewerToolbar] SectionPlanesPlugin not in SDK'); return; }
+    if (!sectionPluginRef.current) {
+      sectionPluginRef.current = new sdk.SectionPlanesPlugin(viewer, {
+        overviewVisible: false,
+      });
+    }
+    sectionPluginRef.current.control?.activate?.();
+  }, [viewer]);
+
+  const deactivateSection = useCallback(() => {
+    sectionPluginRef.current?.control?.deactivate?.();
+  }, []);
+
   const handleToolChange = useCallback((tool: ViewerTool) => {
-    const newTool = tool === activeTool ? 'select' : tool;
+    const newTool = tool === activeTool ? null : tool;
+
+    // Deactivate previous tool plugins
+    if (activeTool === 'measure') deactivateMeasure();
+    if (activeTool === 'slicer') deactivateSection();
+
+    // Activate new tool plugins
+    if (newTool === 'measure') activateMeasure();
+    if (newTool === 'slicer') activateSection();
+
     setActiveTool(newTool);
     window.dispatchEvent(new CustomEvent<ViewerToolChangedDetail>(VIEWER_TOOL_CHANGED_EVENT, {
       detail: { tool: newTool },
     }));
-  }, [activeTool]);
+  }, [activeTool, activateMeasure, deactivateMeasure, activateSection, deactivateSection]);
 
   const handleClearSlices = useCallback(() => {
     if (!viewer?.scene) return;
