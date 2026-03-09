@@ -45,7 +45,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   const [storeyPlugin, setStoreyPlugin] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [panZoom, setPanZoom] = useState<PanZoom>({ offsetX: 0, offsetY: 0, scale: 0.75 });
+  const [panZoom, setPanZoom] = useState<PanZoom>({ offsetX: 0, offsetY: 0, scale: 1 });
+  const panZoomRef = useRef<PanZoom>({ offsetX: 0, offsetY: 0, scale: 1 });
   const [cameraPos, setCameraPos] = useState<{ x: number; y: number; angle: number } | null>(null);
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null);
   const [imgError, setImgError] = useState(false);
@@ -381,8 +382,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     setIsLoading(true);
 
     const container = containerRef.current;
-    const maxWidth = isMobile ? 900 : 1600;
-    const width = container ? Math.min(container.clientWidth * (isMobile ? 1.5 : 2), maxWidth) : 800;
+    const maxWidth = isMobile ? 900 : 4000;
+    const width = container ? Math.min(container.clientWidth * (isMobile ? 1.5 : 3), maxWidth) : 1600;
 
     // Precompute wall IDs once (shared across floors)
     const wallCacheKey = '__global_wall_ids__';
@@ -511,7 +512,9 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const ox = (cRect.width - scaledW) / 2;
       const oy = (cRect.height - scaledH) / 2;
 
-      setPanZoom({ offsetX: ox, offsetY: oy, scale });
+      const newPz = { offsetX: ox, offsetY: oy, scale };
+      setPanZoom(newPz);
+      panZoomRef.current = newPz;
       initialCenterApplied.current = true;
     }, 50);
 
@@ -786,7 +789,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     if (panStartRef.current) {
       const dx = e.clientX - panStartRef.current.x;
       const dy = e.clientY - panStartRef.current.y;
-      setPanZoom(pz => ({ ...pz, offsetX: panStartRef.current!.ox + dx, offsetY: panStartRef.current!.oy + dy }));
+      setPanZoom(pz => { const nv = { ...pz, offsetX: panStartRef.current!.ox + dx, offsetY: panStartRef.current!.oy + dy }; panZoomRef.current = nv; return nv; });
       return;
     }
 
@@ -821,12 +824,14 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     setPanZoom(pz => {
       const newScale = Math.max(0.3, Math.min(10, pz.scale * delta));
       const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) return { ...pz, scale: newScale };
+      if (!rect) { const nv = { ...pz, scale: newScale }; panZoomRef.current = nv; return nv; }
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
       const ox = mx - (mx - pz.offsetX) * (newScale / pz.scale);
       const oy = my - (my - pz.offsetY) * (newScale / pz.scale);
-      return { offsetX: ox, offsetY: oy, scale: newScale };
+      const nv = { offsetX: ox, offsetY: oy, scale: newScale };
+      panZoomRef.current = nv;
+      return nv;
     });
   }, []);
 
@@ -835,9 +840,10 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     if (e.button === 0 || e.button === 1) {
       e.preventDefault();
       clickStartRef.current = { x: e.clientX, y: e.clientY };
-      panStartRef.current = { x: e.clientX, y: e.clientY, ox: panZoom.offsetX, oy: panZoom.offsetY };
+      const pz = panZoomRef.current;
+      panStartRef.current = { x: e.clientX, y: e.clientY, ox: pz.offsetX, oy: pz.offsetY };
     }
-  }, [panZoom]);
+  }, []);
 
   const handleMouseUp = useCallback(() => {
     panStartRef.current = null;
@@ -849,20 +855,22 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 1) {
       const t = e.touches[0];
+      const pz = panZoomRef.current;
       clickStartRef.current = { x: t.clientX, y: t.clientY };
-      touchStartRef.current = { x: t.clientX, y: t.clientY, ox: panZoom.offsetX, oy: panZoom.offsetY };
+      touchStartRef.current = { x: t.clientX, y: t.clientY, ox: pz.offsetX, oy: pz.offsetY };
     } else if (e.touches.length === 2) {
       const dx = e.touches[1].clientX - e.touches[0].clientX;
       const dy = e.touches[1].clientY - e.touches[0].clientY;
       const dist = Math.sqrt(dx * dx + dy * dy);
+      const pz = panZoomRef.current;
       touchStartRef.current = {
         x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
         y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
-        ox: panZoom.offsetX, oy: panZoom.offsetY,
-        dist, scale: panZoom.scale,
+        ox: pz.offsetX, oy: pz.offsetY,
+        dist, scale: pz.scale,
       };
     }
-  }, [panZoom]);
+  }, []);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     e.preventDefault();
@@ -873,14 +881,14 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const dy = e.touches[0].clientY - ts.y;
       const newOx = ts.ox + dx;
       const newOy = ts.oy + dy;
-      setPanZoom(pz => ({ ...pz, offsetX: newOx, offsetY: newOy }));
+      setPanZoom(pz => { const nv = { ...pz, offsetX: newOx, offsetY: newOy }; panZoomRef.current = nv; return nv; });
     } else if (e.touches.length === 2 && ts.dist) {
       const dx = e.touches[1].clientX - e.touches[0].clientX;
       const dy = e.touches[1].clientY - e.touches[0].clientY;
       const dist = Math.sqrt(dx * dx + dy * dy);
       const scaleFactor = dist / ts.dist;
       const newScale = Math.max(0.3, Math.min(10, (ts.scale || 1) * scaleFactor));
-      setPanZoom(pz => ({ ...pz, scale: newScale }));
+      setPanZoom(pz => { const nv = { ...pz, scale: newScale }; panZoomRef.current = nv; return nv; });
     }
   }, []);
 
