@@ -382,8 +382,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     setIsLoading(true);
 
     const container = containerRef.current;
-    const maxWidth = isMobile ? 900 : 1600;
-    const width = container ? Math.min(container.clientWidth * (isMobile ? 1.5 : 2), maxWidth) : 800;
+    const maxWidth = isMobile ? 900 : 4000;
+    const width = container ? Math.min(container.clientWidth * (isMobile ? 1.5 : 3), maxWidth) : 1600;
 
     // Precompute wall IDs once (shared across floors)
     const wallCacheKey = '__global_wall_ids__';
