@@ -19,6 +19,7 @@ const BUTTON_SIZE = 56; // h-14 w-14
 export default function GunnarButton() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [autoVoice, setAutoVoice] = useState(false);
   const [viewerContext, setViewerContext] = useState<ViewerContextChangedDetail | null>(null);
   const { activeApp, selectedFacility, viewer3dFmGuid, navigatorTreeData } = useApp();
   
