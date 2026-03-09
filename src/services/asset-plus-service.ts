@@ -3,6 +3,15 @@ import { supabase } from "@/integrations/supabase/client";
 export type AssetPlusFilter = any[];
 
 /**
+ * Check if a building FMGUID originates from the ACC BIM sync pipeline.
+ * ACC-sourced buildings already have assets from the BIM import and should NOT
+ * trigger an Asset+ sync.
+ */
+export function isAccSourcedBuilding(fmGuid: string): boolean {
+  return fmGuid.startsWith('acc-bim-') || fmGuid.startsWith('acc-');
+}
+
+/**
  * Fetch assets from the local synced database for Navigator tree.
  * This reads from the `assets` table which is populated by the asset-plus-sync edge function.
  * 
@@ -420,6 +429,11 @@ export async function fetchRoomSensorData(buildingFmGuid: string): Promise<any[]
  * Returns true if sync was triggered, false if assets already exist.
  */
 export async function syncBuildingAssetsIfNeeded(buildingFmGuid: string): Promise<{ synced: boolean; count: number }> {
+  // ACC-sourced buildings already have assets from BIM sync — skip Asset+ sync
+  if (isAccSourcedBuilding(buildingFmGuid)) {
+    console.log(`Building ${buildingFmGuid} is ACC-sourced, skipping Asset+ sync`);
+    return { synced: false, count: 0 };
+  }
   // Check local count
   const { count, error: countError } = await supabase
     .from("assets")
@@ -461,6 +475,12 @@ export async function ensureBuildingAssets(
   buildingFmGuid: string,
   options?: { waitForSync?: boolean }
 ): Promise<{ hasAssets: boolean; count: number; syncing: boolean }> {
+  // ACC-sourced buildings already have assets from BIM sync — skip Asset+ sync
+  if (isAccSourcedBuilding(buildingFmGuid)) {
+    console.log(`ensureBuildingAssets: ${buildingFmGuid} is ACC-sourced, skipping Asset+ sync`);
+    return { hasAssets: false, count: 0, syncing: false };
+  }
+
   // 1. Check local count
   const { count, error: countError } = await supabase
     .from("assets")
