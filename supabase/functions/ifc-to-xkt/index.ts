@@ -393,9 +393,11 @@ Deno.serve(async (req) => {
 
     // Write to /tmp to free the blob from memory
     const ifcTmpPath = `/tmp/input_${Date.now()}.ifc`;
-    const ifcBytes = new Uint8Array(await ifcBlob.arrayBuffer());
+    let ifcBytes: Uint8Array | null = new Uint8Array(await ifcBlob.arrayBuffer());
     const fileSizeMB = ifcBytes.byteLength / 1024 / 1024;
     await Deno.writeFile(ifcTmpPath, ifcBytes);
+    // Release download buffer immediately to free memory before WASM+parse
+    ifcBytes = null;
     await appendLog(`IFC downloaded: ${fileSizeMB.toFixed(1)} MB (saved to disk)`, 20);
 
     // 2. Download WASM and load libraries
