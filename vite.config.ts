@@ -63,7 +63,13 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Provide browser-compatible shim for node:util used by @xeokit/xeokit-convert
+      "node:util": path.resolve(__dirname, "./src/lib/node-util-shim.ts"),
     },
+  },
+  optimizeDeps: {
+    // Force Vite to pre-bundle web-ifc so WASM loading works correctly
+    exclude: ['web-ifc'],
   },
   // Ensure WASM files from web-ifc are served correctly
   assetsInclude: ['**/*.wasm'],
