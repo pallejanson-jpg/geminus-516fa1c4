@@ -205,7 +205,7 @@ const Inventory: React.FC = () => {
               {/* Registration form */}
               <Card className="p-4 flex-1 overflow-y-auto">
                 <h2 className="text-lg font-semibold mb-4">
-                  {editItem ? 'Redigera tillgång' : 'Registrera ny tillgång'}
+                  {editItem ? 'Edit asset' : 'Register new asset'}
                 </h2>
                 <InventoryForm
                   onSaved={handleSaved}
