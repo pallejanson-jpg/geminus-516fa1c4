@@ -560,6 +560,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
         let targetFloorId = currentFloorId;
 
+        // Try to resolve floor from last FLOOR_SELECTION_CHANGED event cache
+        if (!targetFloorId) {
+          // Check sessionStorage for last known floor
+          try {
+            const lastFloor = sessionStorage.getItem('viewer_last_floor_id');
+            if (lastFloor) targetFloorId = lastFloor;
+          } catch {}
+        }
+
         if (!targetFloorId) {
           const metaObjects2 = viewer?.metaScene?.metaObjects || {};
           const storeys = Object.values(metaObjects2)
