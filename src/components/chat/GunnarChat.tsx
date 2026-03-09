@@ -39,6 +39,8 @@ interface GunnarChatProps {
   onClose: () => void;
   context?: GunnarContext;
   embedded?: boolean;
+  autoVoice?: boolean;
+  onAutoVoiceConsumed?: () => void;
 }
 
 interface GunnarAction {

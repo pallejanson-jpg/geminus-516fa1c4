@@ -500,7 +500,9 @@ export default function GunnarButton() {
               open={true} 
               onClose={() => setIsOpen(false)} 
               context={buildContext()}
-              embedded 
+              embedded
+              autoVoice={autoVoice}
+              onAutoVoiceConsumed={() => setAutoVoice(false)}
             />
           </div>
 
