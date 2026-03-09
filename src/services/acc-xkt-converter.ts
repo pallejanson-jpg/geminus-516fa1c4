@@ -119,10 +119,17 @@ export async function convertToXktWithMetadata(
   const xktModel = new XKTModel();
 
   if (format === 'ifc') {
-    throw new Error(
-      'IFC conversion is handled server-side via the ifc-to-xkt edge function. ' +
-      'Use the CreateBuildingPanel to upload IFC files.'
-    );
+    logger('Parsing IFC into XKTModel (browser-side)...');
+    const mod = await loadXeokitConvert();
+    const WebIFC = await import('web-ifc');
+    await (mod as any).parseIFCIntoXKTModel({
+      WebIFC,
+      data: glbData,
+      xktModel,
+      autoNormals: false,
+      wasmPath: '/lib/xeokit/',
+      log: logger,
+    });
   } else if (format === 'obj') {
     logger('Parsing OBJ into XKTModel...');
     const mod = await import('@xeokit/xeokit-convert');
