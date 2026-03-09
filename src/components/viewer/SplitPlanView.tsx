@@ -492,34 +492,35 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     return () => clearTimeout(t);
   }, [storeyPlugin, generateFallbackSnapshot]);
 
+  // Center image helper — called from effect and onLoad
+  const centerImage = useCallback(() => {
+    if (initialCenterApplied.current) return;
+    const container = containerRef.current;
+    const img = imgRef.current;
+    if (!container || !img) return;
+    const imgW = img.naturalWidth || img.clientWidth;
+    const imgH = img.naturalHeight || img.clientHeight;
+    if (!imgW || !imgH) return;
+
+    const cRect = container.getBoundingClientRect();
+    const scale = Math.min(cRect.width / imgW, cRect.height / imgH) * 0.92;
+    const scaledW = imgW * scale;
+    const scaledH = imgH * scale;
+    const ox = (cRect.width - scaledW) / 2;
+    const oy = (cRect.height - scaledH) / 2;
+
+    const newPz = { offsetX: ox, offsetY: oy, scale };
+    setPanZoom(newPz);
+    panZoomRef.current = newPz;
+    initialCenterApplied.current = true;
+  }, []);
+
   // Center image after storey map loads
   useEffect(() => {
     if (!storeyMap || initialCenterApplied.current) return;
-
-    const timer = setTimeout(() => {
-      const container = containerRef.current;
-      const img = imgRef.current;
-      if (!container || !img) return;
-
-      const cRect = container.getBoundingClientRect();
-      const imgW = img.naturalWidth || img.clientWidth;
-      const imgH = img.naturalHeight || img.clientHeight;
-
-      // Auto-fit: contain the plan image within the container
-      const scale = Math.min(cRect.width / imgW, cRect.height / imgH) * 0.92;
-      const scaledW = imgW * scale;
-      const scaledH = imgH * scale;
-      const ox = (cRect.width - scaledW) / 2;
-      const oy = (cRect.height - scaledH) / 2;
-
-      const newPz = { offsetX: ox, offsetY: oy, scale };
-      setPanZoom(newPz);
-      panZoomRef.current = newPz;
-      initialCenterApplied.current = true;
-    }, 50);
-
+    const timer = setTimeout(centerImage, 50);
     return () => clearTimeout(timer);
-  }, [storeyMap]);
+  }, [storeyMap, centerImage]);
 
   // Camera position overlay — use camera.eye (position) like MinimapPanel
   useEffect(() => {
@@ -1017,6 +1018,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
             className="max-w-none cursor-crosshair"
             draggable={false}
             onClick={handleClick}
+            onLoad={centerImage}
             onError={() => {
               console.error('[SplitPlanView] img onError — imageData URL failed to render');
               setImgError(true);
@@ -1058,20 +1060,20 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
                 top: `${cameraPos.y}%`,
               }}
             >
-              {/* FOV cone */}
+            {/* FOV cone */}
               <div
                 className="absolute"
                 style={{
                   width: 0, height: 0,
-                  borderLeft: '12px solid transparent',
-                  borderRight: '12px solid transparent',
-                  borderBottom: '22px solid hsl(var(--primary) / 0.2)',
+                  borderLeft: `${isMobile ? 12 : 16}px solid transparent`,
+                  borderRight: `${isMobile ? 12 : 16}px solid transparent`,
+                  borderBottom: `${isMobile ? 22 : 30}px solid hsl(var(--primary) / 0.2)`,
                   transform: `translate(-50%, -100%) rotate(${cameraPos.angle}rad)`,
                   transformOrigin: 'center bottom',
                 }}
               />
               {/* Camera dot */}
-              <div className="absolute w-2.5 h-2.5 rounded-full bg-primary border-2 border-primary-foreground shadow-lg" style={{ transform: 'translate(-50%, -50%)' }} />
+              <div className={cn("absolute rounded-full bg-primary border-2 border-primary-foreground shadow-lg", isMobile ? "w-2.5 h-2.5" : "w-4 h-4")} style={{ transform: 'translate(-50%, -50%)' }} />
             </div>
           )}
         </div>

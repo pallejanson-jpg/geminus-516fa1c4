@@ -132,7 +132,7 @@ ToolButton.displayName = 'ToolButton';
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
-  const [activeTool, setActiveTool] = useState<ViewerTool>('select');
+  const [activeTool, setActiveTool] = useState<ViewerTool>(null);
   const [navMode, setNavMode] = useState<NavMode>('orbit');
   const [viewMode, setViewMode] = useState<ViewMode>('3d');
   const [isXrayActive, setIsXrayActive] = useState(false);
@@ -236,11 +236,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
           if (sceneAABB) applyGlobalFloorPlanClipping(sceneAABB[1]);
         }
       } else {
-      // In 3D mode: do NOT apply ceiling clipping when selecting a floor.
-        // Floor isolation is handled purely via object visibility in FloatingFloorSwitcher.
-        // Clipping (cutting object heights) should only happen in 2D mode.
-        // Use requestAnimationFrame to avoid blocking user interaction
-        requestAnimationFrame(() => { try { remove3DClipping(); } catch {} });
+        // In 3D mode: apply ceiling clipping to cut objects that extend above next floor
+        if (soloId) {
+          requestAnimationFrame(() => { try { applyCeilingClipping(soloId); } catch {} });
+        } else {
+          requestAnimationFrame(() => { try { remove3DClipping(); } catch {} });
+        }
       }
     };
     window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
@@ -457,18 +458,65 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
       viewer.cameraControl.followPointer = true;
     } else {
       viewer.cameraControl.navMode = 'orbit';
-      viewer.cameraControl.followPointer = false;
+      viewer.cameraControl.followPointer = true;
     }
     setNavMode(mode);
   }, [viewer]);
 
+  // ── Measure & Section plugin refs ──────────────────────────────────────
+  const measurePluginRef = useRef<any>(null);
+  const sectionPluginRef = useRef<any>(null);
+
+  const activateMeasure = useCallback(() => {
+    if (!viewer?.scene) return;
+    const sdk = (window as any).__xeokitSdk;
+    if (!sdk?.DistanceMeasurementsPlugin) { console.warn('[ViewerToolbar] DistanceMeasurementsPlugin not in SDK'); return; }
+    if (!measurePluginRef.current) {
+      measurePluginRef.current = new sdk.DistanceMeasurementsPlugin(viewer, {
+        defaultVisible: true,
+        defaultAxisVisible: true,
+        defaultLabelsVisible: true,
+      });
+    }
+    measurePluginRef.current.control?.activate?.();
+  }, [viewer]);
+
+  const deactivateMeasure = useCallback(() => {
+    measurePluginRef.current?.control?.deactivate?.();
+  }, []);
+
+  const activateSection = useCallback(() => {
+    if (!viewer?.scene) return;
+    const sdk = (window as any).__xeokitSdk;
+    if (!sdk?.SectionPlanesPlugin) { console.warn('[ViewerToolbar] SectionPlanesPlugin not in SDK'); return; }
+    if (!sectionPluginRef.current) {
+      sectionPluginRef.current = new sdk.SectionPlanesPlugin(viewer, {
+        overviewVisible: false,
+      });
+    }
+    sectionPluginRef.current.control?.activate?.();
+  }, [viewer]);
+
+  const deactivateSection = useCallback(() => {
+    sectionPluginRef.current?.control?.deactivate?.();
+  }, []);
+
   const handleToolChange = useCallback((tool: ViewerTool) => {
-    const newTool = tool === activeTool ? 'select' : tool;
+    const newTool = tool === activeTool ? null : tool;
+
+    // Deactivate previous tool plugins
+    if (activeTool === 'measure') deactivateMeasure();
+    if (activeTool === 'slicer') deactivateSection();
+
+    // Activate new tool plugins
+    if (newTool === 'measure') activateMeasure();
+    if (newTool === 'slicer') activateSection();
+
     setActiveTool(newTool);
     window.dispatchEvent(new CustomEvent<ViewerToolChangedDetail>(VIEWER_TOOL_CHANGED_EVENT, {
       detail: { tool: newTool },
     }));
-  }, [activeTool]);
+  }, [activeTool, activateMeasure, deactivateMeasure, activateSection, deactivateSection]);
 
   const handleClearSlices = useCallback(() => {
     if (!viewer?.scene) return;
