@@ -292,16 +292,28 @@ const CreateBuildingPanel: React.FC = () => {
         if (pollingRef.current) clearInterval(pollingRef.current);
         pollingRef.current = null;
         addLog('⚠️ Server memory limit exceeded — switching to browser-based conversion...');
+        console.log('[ifc-convert] Starting browser-side fallback conversion');
         setConversionProgress(20);
 
         try {
           // Read file as ArrayBuffer for client-side conversion
-          const fileBuffer = await ifcFile.arrayBuffer();
+          const fileBuffer = await ifcFile!.arrayBuffer();
           addLog(`Loaded ${(fileBuffer.byteLength / 1024 / 1024).toFixed(1)} MB into browser memory`);
+          console.log('[ifc-convert] File loaded, importing converter modules...');
 
-          const { convertToXktWithMetadata } = await import('@/services/acc-xkt-converter');
-          const result = await convertToXktWithMetadata(fileBuffer, (msg) => {
+          let converterModule: any;
+          try {
+            converterModule = await import('@/services/acc-xkt-converter');
+            console.log('[ifc-convert] acc-xkt-converter loaded');
+          } catch (importErr: any) {
+            console.error('[ifc-convert] Failed to import acc-xkt-converter:', importErr);
+            throw new Error(`Failed to load converter: ${importErr.message}`);
+          }
+
+          addLog('Converter loaded, starting IFC parsing...');
+          const result = await converterModule.convertToXktWithMetadata(fileBuffer, (msg: string) => {
             addLog(msg);
+            console.log('[ifc-convert]', msg);
           });
 
           setConversionProgress(70);
