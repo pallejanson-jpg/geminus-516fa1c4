@@ -13,7 +13,7 @@ import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hook
 import { ANNOTATION_FILTER_EVENT } from '@/lib/viewer-events';
 import { useFloorData } from '@/hooks/useFloorData';
 import { useModelData } from '@/hooks/useModelData';
-import { recolorArchitectObjects } from '@/lib/architect-colors';
+import { applyArchitectColors, recolorArchitectObjects } from '@/lib/architect-colors';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
