@@ -25,6 +25,8 @@ interface UniversalPropertiesDialogProps {
   fmGuids: string | string[];  // Support both single GUID and array
   category?: string;
   onUpdate?: () => void;
+  /** BIM entity ID from the viewer (for fallback metadata display) */
+  entityId?: string;
 }
 
 interface PropertyItem {
