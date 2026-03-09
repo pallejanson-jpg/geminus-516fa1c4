@@ -838,9 +838,10 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     if (e.button === 0 || e.button === 1) {
       e.preventDefault();
       clickStartRef.current = { x: e.clientX, y: e.clientY };
-      panStartRef.current = { x: e.clientX, y: e.clientY, ox: panZoom.offsetX, oy: panZoom.offsetY };
+      const pz = panZoomRef.current;
+      panStartRef.current = { x: e.clientX, y: e.clientY, ox: pz.offsetX, oy: pz.offsetY };
     }
-  }, [panZoom]);
+  }, []);
 
   const handleMouseUp = useCallback(() => {
     panStartRef.current = null;
