@@ -69,6 +69,23 @@ const AppLayoutInner: React.FC = () => {
         return () => window.removeEventListener(ILEAN_SETTINGS_CHANGED_EVENT, handleIleanSettingsChange as EventListener);
     }, []);
 
+    // Deep link: ?gunnar=voice → auto-open Gunnar in voice mode
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('gunnar') === 'voice') {
+            // Remove param from URL without reload
+            params.delete('gunnar');
+            const newUrl = params.toString()
+                ? `${window.location.pathname}?${params.toString()}`
+                : window.location.pathname;
+            window.history.replaceState({}, '', newUrl);
+            // Dispatch event after a short delay to let components mount
+            setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('GUNNAR_AUTO_OPEN_VOICE'));
+            }, 500);
+        }
+    }, []);
+
     // Voice command callbacks
     const voiceCallbacks = useCallback(() => ({
         onSearch: (term: string) => {

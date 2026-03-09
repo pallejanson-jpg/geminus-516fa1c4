@@ -19,6 +19,7 @@ const BUTTON_SIZE = 56; // h-14 w-14
 export default function GunnarButton() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [autoVoice, setAutoVoice] = useState(false);
   const [viewerContext, setViewerContext] = useState<ViewerContextChangedDetail | null>(null);
   const { activeApp, selectedFacility, viewer3dFmGuid, navigatorTreeData } = useApp();
   
@@ -82,6 +83,17 @@ export default function GunnarButton() {
     };
     window.addEventListener(VIEWER_CONTEXT_CHANGED_EVENT, handler as EventListener);
     return () => window.removeEventListener(VIEWER_CONTEXT_CHANGED_EVENT, handler as EventListener);
+  }, []);
+
+  // Listen for auto-open voice deep link
+  useEffect(() => {
+    const handler = () => {
+      setAutoVoice(true);
+      setIsOpen(true);
+      setIsMinimized(false);
+    };
+    window.addEventListener('GUNNAR_AUTO_OPEN_VOICE', handler);
+    return () => window.removeEventListener('GUNNAR_AUTO_OPEN_VOICE', handler);
   }, []);
 
   // Clear viewer context when leaving viewer
@@ -488,7 +500,9 @@ export default function GunnarButton() {
               open={true} 
               onClose={() => setIsOpen(false)} 
               context={buildContext()}
-              embedded 
+              embedded
+              autoVoice={autoVoice}
+              onAutoVoiceConsumed={() => setAutoVoice(false)}
             />
           </div>
 
