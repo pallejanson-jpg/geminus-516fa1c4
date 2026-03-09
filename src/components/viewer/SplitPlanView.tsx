@@ -512,7 +512,9 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const ox = (cRect.width - scaledW) / 2;
       const oy = (cRect.height - scaledH) / 2;
 
-      setPanZoom({ offsetX: ox, offsetY: oy, scale });
+      const newPz = { offsetX: ox, offsetY: oy, scale };
+      setPanZoom(newPz);
+      panZoomRef.current = newPz;
       initialCenterApplied.current = true;
     }, 50);
 
