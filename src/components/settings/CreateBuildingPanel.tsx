@@ -194,13 +194,16 @@ const CreateBuildingPanel: React.FC = () => {
     setConversionDone(false);
     setConversionStartTime(Date.now());
 
+    const fileSizeMB = ifcFile.size / 1024 / 1024;
+    const useDirectBrowser = fileSizeMB > 20;
+
     try {
-      addLog(`Reading file: ${ifcFile.name} (${(ifcFile.size / 1024 / 1024).toFixed(1)} MB)`);
-      addLog('📡 Uploading IFC to server for conversion...');
+      addLog(`Reading file: ${ifcFile.name} (${fileSizeMB.toFixed(1)} MB)`);
       setConversionProgress(5);
 
-      // 1. Upload IFC to storage
+      // 1. Upload IFC to storage (always, for archival)
       const ifcStoragePath = `${targetBuildingFmGuid}/${ifcFile.name}`;
+      addLog('📡 Uploading IFC to storage...');
       const { error: ifcUploadError } = await supabase.storage
         .from('ifc-uploads')
         .upload(ifcStoragePath, ifcFile, {
@@ -233,213 +236,244 @@ const CreateBuildingPanel: React.FC = () => {
 
       if (jobError || !jobRow) throw new Error(`Failed to create conversion job: ${jobError?.message}`);
       const jobId = jobRow.id;
-      addLog('Conversion job created. Starting server-side conversion...');
 
-      // 4. Start polling for progress
-      startPolling(jobId);
+      // Route: >20MB → direct browser, ≤20MB → try edge function first
+      if (useDirectBrowser) {
+        addLog(`File is ${fileSizeMB.toFixed(0)} MB — using browser-based conversion (skipping server)`);
+        await runBrowserConversion(ifcFile, targetBuildingFmGuid, jobId, safeModelName, addLog, setConversionProgress);
+      } else {
+        addLog('Conversion job created. Starting server-side conversion...');
 
-      // 5. Invoke edge function (fire-and-forget style — polling handles updates)
-      let convResult: any = null;
-      let fnError: any = null;
-      let isWorkerLimit = false;
+        // Start polling for progress
+        startPolling(jobId);
 
-      try {
-        const resp = await supabase.functions.invoke('ifc-to-xkt', {
-          body: {
-            ifcStoragePath,
-            buildingFmGuid: targetBuildingFmGuid,
-            modelName: safeModelName,
-            jobId,
-          },
-        });
-        convResult = resp.data;
-        fnError = resp.error;
-
-        // For FunctionsHttpError, try to read the response body for error details
-        if (fnError && typeof fnError === 'object' && 'context' in fnError) {
-          try {
-            const errResponse = (fnError as any).context;
-            if (errResponse && typeof errResponse.json === 'function') {
-              const errBody = await errResponse.json();
-              console.log('[ifc-convert] Edge function error body:', errBody);
-              if (errBody?.code === 'WORKER_LIMIT' || errBody?.message?.includes('compute resources')) {
-                isWorkerLimit = true;
-              }
-            }
-          } catch (_) { /* response already consumed or not JSON */ }
-        }
-      } catch (e: any) {
-        fnError = e;
-      }
-
-      // Also detect WORKER_LIMIT from stringified error/data as fallback
-      if (!isWorkerLimit) {
-        const errorString = JSON.stringify(fnError ?? '') + JSON.stringify(convResult ?? '') + (fnError?.message ?? '');
-        isWorkerLimit = errorString.includes('WORKER_LIMIT') || 
-          errorString.includes('not having enough compute resources') ||
-          errorString.includes('546');
-      }
-
-      console.log('[ifc-convert] fnError:', fnError, 'isWorkerLimit:', isWorkerLimit);
-
-      if (fnError && !isWorkerLimit) {
-        if (pollingRef.current) clearInterval(pollingRef.current);
-        pollingRef.current = null;
-        throw new Error(`Server conversion failed: ${fnError?.message || JSON.stringify(fnError)}`);
-      }
-
-      if (isWorkerLimit) {
-        if (pollingRef.current) clearInterval(pollingRef.current);
-        pollingRef.current = null;
-        addLog('⚠️ Server memory limit exceeded — switching to browser-based conversion...');
-        console.log('[ifc-convert] Starting browser-side fallback conversion');
-        setConversionProgress(20);
+        // Invoke edge function
+        let convResult: any = null;
+        let fnError: any = null;
+        let isWorkerLimit = false;
 
         try {
-          // Read file as ArrayBuffer for client-side conversion
-          const fileBuffer = await ifcFile!.arrayBuffer();
-          addLog(`Loaded ${(fileBuffer.byteLength / 1024 / 1024).toFixed(1)} MB into browser memory`);
-          console.log('[ifc-convert] File loaded, importing converter modules...');
+          const resp = await supabase.functions.invoke('ifc-to-xkt', {
+            body: {
+              ifcStoragePath,
+              buildingFmGuid: targetBuildingFmGuid,
+              modelName: safeModelName,
+              jobId,
+            },
+          });
+          convResult = resp.data;
+          fnError = resp.error;
 
-          let converterModule: any;
-          try {
-            converterModule = await import('@/services/acc-xkt-converter');
-            console.log('[ifc-convert] acc-xkt-converter loaded');
-          } catch (importErr: any) {
-            console.error('[ifc-convert] Failed to import acc-xkt-converter:', importErr);
-            throw new Error(`Failed to load converter: ${importErr.message}`);
+          if (fnError && typeof fnError === 'object' && 'context' in fnError) {
+            try {
+              const errResponse = (fnError as any).context;
+              if (errResponse && typeof errResponse.json === 'function') {
+                const errBody = await errResponse.json();
+                console.log('[ifc-convert] Edge function error body:', errBody);
+                if (errBody?.code === 'WORKER_LIMIT' || errBody?.message?.includes('compute resources')) {
+                  isWorkerLimit = true;
+                }
+              }
+            } catch (_) { /* response already consumed */ }
+          }
+        } catch (e: any) {
+          fnError = e;
+        }
+
+        if (!isWorkerLimit) {
+          const errorString = JSON.stringify(fnError ?? '') + JSON.stringify(convResult ?? '') + (fnError?.message ?? '');
+          isWorkerLimit = errorString.includes('WORKER_LIMIT') || 
+            errorString.includes('not having enough compute resources') ||
+            errorString.includes('546');
+        }
+
+        console.log('[ifc-convert] fnError:', fnError, 'isWorkerLimit:', isWorkerLimit);
+
+        if (fnError && !isWorkerLimit) {
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          pollingRef.current = null;
+          throw new Error(`Server conversion failed: ${fnError?.message || JSON.stringify(fnError)}`);
+        }
+
+        if (isWorkerLimit) {
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          pollingRef.current = null;
+          addLog('⚠️ Server memory limit exceeded — switching to browser-based conversion...');
+          setConversionProgress(20);
+          await runBrowserConversion(ifcFile, targetBuildingFmGuid, jobId, safeModelName, addLog, setConversionProgress);
+        } else if (convResult && !convResult.success) {
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          pollingRef.current = null;
+          throw new Error(convResult.error || 'Conversion failed');
+        } else if (convResult?.success) {
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          pollingRef.current = null;
+
+          setConversionProgress(90);
+          addLog(`XKT generated: ${convResult.xktSizeMB} MB`);
+          addLog(`Hierarchy: ${convResult.levels?.length || 0} levels, ${convResult.spaces?.length || 0} spaces`);
+          if (convResult.systemsCount || convResult.connectionsCount) {
+            addLog(`Systems: ${convResult.systemsCount || 0} system, ${convResult.connectionsCount || 0} connections`);
           }
 
-          addLog('Converter loaded, starting IFC parsing...');
-          const result = await converterModule.convertToXktWithMetadata(fileBuffer, (msg: string) => {
-            addLog(msg);
-            console.log('[ifc-convert]', msg);
-          });
+          // Create hierarchy in Asset+ if available
+          const levels = convResult.levels || [];
+          const spaces = convResult.spaces || [];
+          if ((levels.length > 0 || spaces.length > 0) && targetModelFmGuid) {
+            addLog(`Creating ${levels.length} levels and ${spaces.length} spaces in Asset+...`);
+            const levelFmGuids = new Map<string, string>();
+            const hierarchyLevels = levels.map((level: any) => {
+              const fmGuid = crypto.randomUUID();
+              levelFmGuids.set(level.id, fmGuid);
+              return { fmGuid, designation: level.name, commonName: level.name };
+            });
+            const hierarchySpaces = spaces.map((space: any) => {
+              const fmGuid = crypto.randomUUID();
+              return {
+                fmGuid,
+                designation: space.name,
+                commonName: space.name,
+                levelFmGuid: levelFmGuids.get(space.parentId) || undefined,
+              };
+            });
 
-          setConversionProgress(70);
-          addLog(`XKT generated: ${(result.xktData.byteLength / 1024 / 1024).toFixed(2)} MB`);
-          addLog(`Hierarchy: ${result.levels.length} levels, ${result.spaces.length} spaces`);
-
-          // Upload XKT to storage
-          const modelId = `ifc-${Date.now()}`;
-          const storageFileName = `${modelId}.xkt`;
-          const storagePath = `${targetBuildingFmGuid}/${storageFileName}`;
-          addLog('Uploading XKT to storage...');
-
-          const blob = new Blob([result.xktData], { type: 'application/octet-stream' });
-          const { error: uploadErr } = await supabase.storage
-            .from('xkt-models')
-            .upload(storagePath, blob, { contentType: 'application/octet-stream', upsert: true });
-
-          if (uploadErr) throw new Error(`XKT upload failed: ${uploadErr.message}`);
-
-          // Save metadata
-          const safeModelName = ifcFile.name.replace(/\.ifc$/i, '');
-          await supabase.from('xkt_models').upsert({
-            building_fm_guid: targetBuildingFmGuid,
-            model_id: modelId,
-            model_name: safeModelName,
-            file_name: storageFileName,
-            file_size: result.xktData.byteLength,
-            storage_path: storagePath,
-            file_url: null,
-            format: 'xkt',
-            synced_at: new Date().toISOString(),
-            source_updated_at: new Date().toISOString(),
-          } as any, { onConflict: 'building_fm_guid,model_id' });
-
-          // Update conversion job to done
-          if (jobId) {
-            await supabase.from('conversion_jobs').update({
-              status: 'done', progress: 100,
-              result_model_id: modelId,
-              log_messages: conversionLogs,
-              updated_at: new Date().toISOString(),
-            }).eq('id', jobId);
+            const { data: hierarchyData, error: hierarchyError } = await supabase.functions.invoke(
+              'asset-plus-create-hierarchy',
+              { body: { buildingFmGuid: targetBuildingFmGuid, modelFmGuid: targetModelFmGuid, levels: hierarchyLevels, spaces: hierarchySpaces } }
+            );
+            if (hierarchyError) addLog(`⚠️ Hierarchy creation failed: ${hierarchyError.message}`);
+            else if (hierarchyData?.success) addLog(`✅ ${hierarchyData.message}`);
+            else addLog(`⚠️ ${hierarchyData?.error || 'Hierarchy creation failed'}`);
           }
 
           setConversionProgress(100);
           setConversionDone(true);
-          addLog('✅ Done! Browser-based conversion succeeded.');
-          toast({ title: 'IFC converted!', description: `${ifcFile.name} converted in browser and saved.` });
-        } catch (clientErr: any) {
-          addLog(`❌ Browser conversion failed: ${clientErr.message}`);
-          toast({
-            variant: 'destructive',
-            title: 'Conversion failed',
-            description: clientErr.message,
-          });
+          addLog('✅ Done! The model is ready to view in the 3D viewer.');
+          toast({ title: 'IFC uploaded!', description: `${ifcFile.name} converted and saved as a 3D model.` });
+          setIsConverting(false);
         }
-        setIsConverting(false);
-        return;
+        // If convResult is null (timeout but still processing), polling continues
       }
-
-      if (convResult && !convResult.success) {
-        if (pollingRef.current) clearInterval(pollingRef.current);
-        pollingRef.current = null;
-        throw new Error(convResult.error || 'Conversion failed');
-      }
-
-      // Edge function returned success — polling may already have set done
-      if (convResult?.success) {
-        if (pollingRef.current) clearInterval(pollingRef.current);
-        pollingRef.current = null;
-
-        setConversionProgress(90);
-        addLog(`XKT generated: ${convResult.xktSizeMB} MB`);
-        addLog(`Hierarchy: ${convResult.levels?.length || 0} levels, ${convResult.spaces?.length || 0} spaces`);
-        if (convResult.systemsCount || convResult.connectionsCount) {
-          addLog(`Systems: ${convResult.systemsCount || 0} system, ${convResult.connectionsCount || 0} kopplingar extraherade`);
-        }
-
-        // Create hierarchy in Asset+ if available
-        const levels = convResult.levels || [];
-        const spaces = convResult.spaces || [];
-        if ((levels.length > 0 || spaces.length > 0) && targetModelFmGuid) {
-          addLog(`Creating ${levels.length} levels and ${spaces.length} spaces in Asset+...`);
-          const levelFmGuids = new Map<string, string>();
-          const hierarchyLevels = levels.map((level: any) => {
-            const fmGuid = crypto.randomUUID();
-            levelFmGuids.set(level.id, fmGuid);
-            return { fmGuid, designation: level.name, commonName: level.name };
-          });
-          const hierarchySpaces = spaces.map((space: any) => {
-            const fmGuid = crypto.randomUUID();
-            return {
-              fmGuid,
-              designation: space.name,
-              commonName: space.name,
-              levelFmGuid: levelFmGuids.get(space.parentId) || undefined,
-            };
-          });
-
-          const { data: hierarchyData, error: hierarchyError } = await supabase.functions.invoke(
-            'asset-plus-create-hierarchy',
-            { body: { buildingFmGuid: targetBuildingFmGuid, modelFmGuid: targetModelFmGuid, levels: hierarchyLevels, spaces: hierarchySpaces } }
-          );
-          if (hierarchyError) addLog(`⚠️ Hierarchy creation failed: ${hierarchyError.message}`);
-          else if (hierarchyData?.success) addLog(`✅ ${hierarchyData.message}`);
-          else addLog(`⚠️ ${hierarchyData?.error || 'Hierarchy creation failed'}`);
-        }
-
-        setConversionProgress(100);
-        setConversionDone(true);
-        addLog('✅ Done! The model is ready to view in the 3D viewer.');
-
-        toast({
-          title: 'IFC uploaded!',
-          description: `${ifcFile.name} converted and saved as a 3D model.`,
-        });
-        setIsConverting(false);
-      }
-      // If convResult is null (timeout but still processing), polling continues
     } catch (err: any) {
       addLog(`❌ Error: ${err.message}`);
-      toast({
-        variant: 'destructive',
-        title: 'Conversion error',
-        description: err.message,
-      });
+      toast({ variant: 'destructive', title: 'Conversion error', description: err.message });
+      setIsConverting(false);
+    }
+
+    /** Browser-side conversion with metadata extraction and system persistence */
+    async function runBrowserConversion(
+      file: File,
+      buildingGuid: string,
+      jobId: string,
+      modelNameSafe: string,
+      log: (msg: string) => void,
+      setProgress: (p: number) => void,
+    ) {
+      try {
+        const fileBuffer = await file.arrayBuffer();
+        log(`Loaded ${(fileBuffer.byteLength / 1024 / 1024).toFixed(1)} MB into browser memory`);
+
+        let converterModule: any;
+        try {
+          converterModule = await import('@/services/acc-xkt-converter');
+        } catch (importErr: any) {
+          throw new Error(`Failed to load converter: ${importErr.message}`);
+        }
+
+        log('Converter loaded, starting IFC parsing...');
+        const result = await converterModule.convertToXktWithMetadata(fileBuffer, (msg: string) => {
+          log(msg);
+        });
+
+        setProgress(70);
+        log(`XKT generated: ${(result.xktData.byteLength / 1024 / 1024).toFixed(2)} MB`);
+        log(`Hierarchy: ${result.levels.length} levels, ${result.spaces.length} spaces`);
+        if (result.systems?.length > 0) {
+          log(`Systems: ${result.systems.length} extracted client-side`);
+        }
+
+        // Upload XKT to storage
+        const modelId = `ifc-${Date.now()}`;
+        const storageFileName = `${modelId}.xkt`;
+        const storagePath = `${buildingGuid}/${storageFileName}`;
+        log('Uploading XKT to storage...');
+
+        const blob = new Blob([result.xktData], { type: 'application/octet-stream' });
+        const { error: uploadErr } = await supabase.storage
+          .from('xkt-models')
+          .upload(storagePath, blob, { contentType: 'application/octet-stream', upsert: true });
+        if (uploadErr) throw new Error(`XKT upload failed: ${uploadErr.message}`);
+
+        // Upload metadata.json alongside
+        if (result.metaModelJson && result.metaModelJson.metaObjects?.length > 0) {
+          const metaPath = `${buildingGuid}/${modelId}_metadata.json`;
+          const metaBlob = new Blob([JSON.stringify(result.metaModelJson)], { type: 'application/json' });
+          const { error: metaUpErr } = await supabase.storage
+            .from('xkt-models')
+            .upload(metaPath, metaBlob, { contentType: 'application/json', upsert: true });
+          if (metaUpErr) {
+            log(`⚠️ Metadata upload failed: ${metaUpErr.message}`);
+          } else {
+            log(`Metadata JSON uploaded (${result.metaModelJson.metaObjects.length} objects)`);
+          }
+        }
+
+        setProgress(85);
+
+        // Save XKT model record
+        await supabase.from('xkt_models').upsert({
+          building_fm_guid: buildingGuid,
+          model_id: modelId,
+          model_name: modelNameSafe,
+          file_name: storageFileName,
+          file_size: result.xktData.byteLength,
+          storage_path: storagePath,
+          file_url: null,
+          format: 'xkt',
+          synced_at: new Date().toISOString(),
+          source_updated_at: new Date().toISOString(),
+        } as any, { onConflict: 'building_fm_guid,model_id' });
+
+        // Persist extracted systems to DB
+        if (result.systems?.length > 0) {
+          log(`Persisting ${result.systems.length} systems to database...`);
+          for (const sys of result.systems) {
+            const sysFmGuid = crypto.randomUUID();
+            const { data: sysRow } = await supabase.from('systems').upsert({
+              fm_guid: sysFmGuid,
+              name: sys.name,
+              system_type: sys.type,
+              discipline: sys.discipline,
+              building_fm_guid: buildingGuid,
+              source: 'ifc-browser',
+            } as any, { onConflict: 'fm_guid' }).select('id').single();
+
+            if (sysRow?.id && sys.memberIds.length > 0) {
+              const links = sys.memberIds.slice(0, 500).map(mid => ({
+                system_id: sysRow.id,
+                asset_fm_guid: mid,
+              }));
+              await supabase.from('asset_system').upsert(links as any[], { onConflict: 'system_id,asset_fm_guid' });
+            }
+          }
+          log(`✅ ${result.systems.length} systems saved`);
+        }
+
+        // Update conversion job to done
+        await supabase.from('conversion_jobs').update({
+          status: 'done', progress: 100,
+          result_model_id: modelId,
+          updated_at: new Date().toISOString(),
+        }).eq('id', jobId);
+
+        setProgress(100);
+        setConversionDone(true);
+        log('✅ Done! Browser-based conversion succeeded.');
+        toast({ title: 'IFC converted!', description: `${file.name} converted in browser and saved.` });
+      } catch (clientErr: any) {
+        log(`❌ Browser conversion failed: ${clientErr.message}`);
+        toast({ variant: 'destructive', title: 'Conversion failed', description: clientErr.message });
+      }
       setIsConverting(false);
     }
   };
