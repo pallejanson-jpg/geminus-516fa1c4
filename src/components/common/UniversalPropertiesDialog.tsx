@@ -125,21 +125,72 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   const [bipSuggestions, setBipSuggestions] = useState<BipSuggestion[]>([]);
   const [bipApplied, setBipApplied] = useState<string | null>(null);
 
+  // BIM fallback metadata state
+  const [bimFallbackData, setBimFallbackData] = useState<Record<string, string> | null>(null);
+
   // Fetch data for all selected items
   useEffect(() => {
     if (!isOpen || fmGuids.length === 0) return;
 
     const fetchData = async () => {
       setIsLoading(true);
+      setBimFallbackData(null);
       try {
-        // Fetch all assets matching the fmGuids
+        // Case-insensitive GUID matching: try both original and lowercase
+        const normalizedGuids = [...new Set([
+          ...fmGuids,
+          ...fmGuids.map(g => g.toLowerCase()),
+          ...fmGuids.map(g => g.toUpperCase()),
+        ])];
+
         const { data: assetData, error: assetError } = await supabase
           .from('assets')
           .select('*')
-          .in('fm_guid', fmGuids);
+          .in('fm_guid', normalizedGuids);
 
         if (assetError) throw assetError;
         setAssets(assetData || []);
+
+        // If no assets found, try BIM metadata fallback from the viewer
+        if ((!assetData || assetData.length === 0) && entityId) {
+          const viewer = (window as any).__nativeXeokitViewer;
+          if (viewer?.metaScene?.metaObjects) {
+            const metaObj = viewer.metaScene.metaObjects[entityId];
+            if (metaObj) {
+              const fallback: Record<string, string> = {};
+              fallback['Entity ID'] = entityId;
+              if (metaObj.type) fallback['IFC Type'] = metaObj.type;
+              if (metaObj.name) fallback['Name'] = metaObj.name;
+              if (metaObj.originalSystemId) fallback['FM GUID'] = metaObj.originalSystemId;
+              if (metaObj.attributes?.LongName) fallback['Long Name'] = metaObj.attributes.LongName;
+              if (metaObj.attributes?.ObjectType) fallback['Object Type'] = metaObj.attributes.ObjectType;
+              if (metaObj.attributes?.Description) fallback['Description'] = metaObj.attributes.Description;
+              // Parent storey info
+              let parent = metaObj.parent;
+              while (parent) {
+                if (parent.type?.toLowerCase() === 'ifcbuildingstorey') {
+                  fallback['Floor'] = parent.name || parent.id;
+                  break;
+                }
+                parent = parent.parent;
+              }
+              // Model info
+              if (metaObj.metaModel?.id) fallback['Model'] = metaObj.metaModel.id;
+              // Property sets
+              if (metaObj.propertySets) {
+                metaObj.propertySets.forEach((ps: any) => {
+                  const psName = ps.name || 'Properties';
+                  ps.properties?.forEach((p: any) => {
+                    if (p.value !== undefined && p.value !== null && p.value !== '') {
+                      fallback[`${psName} / ${p.name}`] = String(p.value);
+                    }
+                  });
+                });
+              }
+              setBimFallbackData(fallback);
+            }
+          }
+        }
 
         // If single building, also fetch building_settings
         if (assetData?.length === 1 && (assetData[0]?.category === 'Building' || category === 'Building')) {
@@ -175,7 +226,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     };
 
     fetchData();
-  }, [isOpen, fmGuids, category]);
+  }, [isOpen, fmGuids, category, entityId]);
 
   // Drag handlers (desktop only)
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
