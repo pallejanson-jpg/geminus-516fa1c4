@@ -125,6 +125,20 @@ export async function convertToXktWithMetadata(
     const mod = await loadXeokitConvert();
     
     let WebIFC: any;
+    
+    // Validate WASM availability before importing web-ifc
+    const wasmDir = '/web-ifc-wasm/';
+    try {
+      const wasmCheck = await fetch(`${wasmDir}web-ifc.wasm`, { method: 'HEAD' });
+      if (!wasmCheck.ok) {
+        throw new Error(`WASM file not found at ${wasmDir}web-ifc.wasm (${wasmCheck.status})`);
+      }
+      logger('WASM files verified at ' + wasmDir);
+    } catch (wasmCheckErr: any) {
+      logger(`WASM validation failed: ${wasmCheckErr.message}`);
+      throw new Error(`web-ifc WASM files not available at ${wasmDir}. Ensure viteStaticCopy is configured correctly.`);
+    }
+    
     try {
       WebIFC = await import('web-ifc');
       logger('web-ifc module loaded successfully');
@@ -134,8 +148,6 @@ export async function convertToXktWithMetadata(
       throw new Error(`web-ifc WASM module failed to load: ${wasmErr.message}`);
     }
 
-    // Use WASM files copied from the matching npm package version (via viteStaticCopy)
-    const wasmDir = '/web-ifc-wasm/';
     logger(`Using web-ifc WASM from ${wasmDir}`);
     
     try {
