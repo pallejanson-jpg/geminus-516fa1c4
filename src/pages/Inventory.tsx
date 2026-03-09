@@ -161,7 +161,7 @@ const Inventory: React.FC = () => {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <ClipboardList className="h-6 w-6 text-primary" />
-                  <h1 className="text-xl font-semibold text-foreground">Inventering</h1>
+                  <h1 className="text-xl font-semibold text-foreground">Inventory</h1>
                 </div>
                 <Button 
                   variant="outline" 
@@ -170,7 +170,7 @@ const Inventory: React.FC = () => {
                   className="gap-2"
                 >
                   <Scan className="h-4 w-4" />
-                  AI Skanning
+                  AI Scan
                 </Button>
               </div>
               
