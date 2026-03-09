@@ -381,6 +381,13 @@ const CreateBuildingPanel: React.FC = () => {
         }
 
         log('Converter loaded, starting IFC parsing...');
+
+        // Mark job as processing immediately
+        await supabase.from('conversion_jobs').update({
+          status: 'processing', progress: 20,
+          updated_at: new Date().toISOString(),
+        }).eq('id', jobId);
+
         const result = await converterModule.convertToXktWithMetadata(fileBuffer, (msg: string) => {
           log(msg);
         });
@@ -457,6 +464,75 @@ const CreateBuildingPanel: React.FC = () => {
             }
           }
           log(`✅ ${result.systems.length} systems saved`);
+        }
+
+        // Persist extracted hierarchy (levels + spaces) to assets table
+        const levelFmGuids = new Map<string, string>();
+        if (result.levels?.length > 0) {
+          log(`Persisting ${result.levels.length} levels to assets table...`);
+          const levelRows = result.levels.map((level: any) => {
+            const fmGuid = crypto.randomUUID();
+            levelFmGuids.set(level.id || level.name, fmGuid);
+            return {
+              fm_guid: fmGuid,
+              name: level.name,
+              common_name: level.name,
+              category: 'Building Storey',
+              building_fm_guid: buildingGuid,
+              level_fm_guid: fmGuid,
+              is_local: false,
+              created_in_model: false,
+              synced_at: new Date().toISOString(),
+            };
+          });
+          const { error: levelErr } = await supabase.from('assets').upsert(levelRows, { onConflict: 'fm_guid' });
+          if (levelErr) log(`⚠️ Level insert error: ${levelErr.message}`);
+          else log(`✅ ${result.levels.length} levels saved`);
+        }
+
+        if (result.spaces?.length > 0) {
+          log(`Persisting ${result.spaces.length} spaces to assets table...`);
+          const spaceRows = result.spaces.map((space: any) => {
+            const fmGuid = crypto.randomUUID();
+            const parentLevelFmGuid = levelFmGuids.get(space.parentId) || levelFmGuids.get(space.levelName) || null;
+            return {
+              fm_guid: fmGuid,
+              name: space.name,
+              common_name: space.name,
+              category: 'Space',
+              building_fm_guid: buildingGuid,
+              level_fm_guid: parentLevelFmGuid,
+              is_local: false,
+              created_in_model: false,
+              synced_at: new Date().toISOString(),
+            };
+          });
+          const { error: spaceErr } = await supabase.from('assets').upsert(spaceRows, { onConflict: 'fm_guid' });
+          if (spaceErr) log(`⚠️ Space insert error: ${spaceErr.message}`);
+          else log(`✅ ${result.spaces.length} spaces saved`);
+        }
+
+        // Call asset-plus-create-hierarchy if we have hierarchy data and a model GUID
+        if ((result.levels?.length > 0 || result.spaces?.length > 0) && targetModelFmGuid) {
+          log('Creating hierarchy in Asset+...');
+          const hierarchyLevels = result.levels.map((level: any) => ({
+            fmGuid: levelFmGuids.get(level.id || level.name) || crypto.randomUUID(),
+            designation: level.name,
+            commonName: level.name,
+          }));
+          const hierarchySpaces = result.spaces.map((space: any) => ({
+            fmGuid: crypto.randomUUID(),
+            designation: space.name,
+            commonName: space.name,
+            levelFmGuid: levelFmGuids.get(space.parentId) || levelFmGuids.get(space.levelName) || undefined,
+          }));
+          const { data: hData, error: hError } = await supabase.functions.invoke(
+            'asset-plus-create-hierarchy',
+            { body: { buildingFmGuid: buildingGuid, modelFmGuid: targetModelFmGuid, levels: hierarchyLevels, spaces: hierarchySpaces } }
+          );
+          if (hError) log(`⚠️ Asset+ hierarchy failed: ${hError.message}`);
+          else if (hData?.success) log(`✅ ${hData.message}`);
+          else log(`⚠️ ${hData?.error || 'Hierarchy creation failed'}`);
         }
 
         // Update conversion job to done
