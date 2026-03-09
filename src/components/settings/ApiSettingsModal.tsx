@@ -3359,6 +3359,19 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                     </div>
                                 </AccordionContent>
                             </AccordionItem>
+
+                            {/* IMDF Export */}
+                            <AccordionItem value="imdf-export" className="border rounded-lg px-4">
+                                <AccordionTrigger className="py-3">
+                                    <div className="flex items-center gap-2">
+                                        <Archive className="h-4 w-4 text-primary" />
+                                        <span>IMDF Export</span>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    <ImdfExportPanel allBuildings={allBuildings} />
+                                </AccordionContent>
+                            </AccordionItem>
                         </Accordion>
                     </TabsContent>
 
