@@ -102,7 +102,7 @@ function getContextualGreeting(context?: GunnarContext): string {
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gunnar-chat`;
 
-const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function GunnarChat({ open, onClose, context, embedded }, _ref) {
+const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function GunnarChat({ open, onClose, context, embedded, autoVoice, onAutoVoiceConsumed }, _ref) {
   const navigate = useNavigate();
   const { setAiSelectedFmGuids, setActiveApp, setSelectedFacility, setViewer3dFmGuid } = useApp();
   const [messages, setMessages] = useState<Message[]>([]);
