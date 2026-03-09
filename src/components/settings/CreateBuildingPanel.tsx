@@ -261,34 +261,15 @@ const CreateBuildingPanel: React.FC = () => {
       if (isWorkerLimit) {
         if (pollingRef.current) clearInterval(pollingRef.current);
         pollingRef.current = null;
-        addLog('⚠️ Server memory limit exceeded — falling back to browser-based conversion...');
-        setConversionProgress(20);
-
-        // Dynamic import of client-side converter
-        const { AccXktConverter } = await import('@/services/acc-xkt-converter');
-        const converter = new AccXktConverter();
-        addLog('Loading browser XKT converter...');
-        
-        const xktResult = await converter.convertAndStore(
-          ifcFile,
-          targetBuildingFmGuid,
-          safeModelName,
-          (progress: number, message: string) => {
-            setConversionProgress(20 + progress * 0.7);
-            addLog(message);
-          }
-        );
-
-        if (!xktResult.success) {
-          throw new Error(xktResult.error || 'Browser conversion failed');
-        }
-
-        setConversionProgress(95);
-        addLog(`✅ Browser conversion complete: ${xktResult.xktSizeMB?.toFixed(1) || '?'} MB`);
-        setConversionProgress(100);
-        setConversionDone(true);
-        addLog('✅ Done! The model is ready to view in the 3D viewer.');
+        addLog('⚠️ Server memory limit exceeded for this file size.');
+        addLog('💡 Try using a smaller/optimized IFC file, or split by discipline.');
+        setConversionProgress(0);
         setIsConverting(false);
+        toast({
+          variant: 'destructive',
+          title: 'File too large for server conversion',
+          description: 'The IFC file exceeds server memory limits. Try optimizing or splitting the file.',
+        });
         return;
       }
 
