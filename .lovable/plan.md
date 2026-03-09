@@ -123,3 +123,36 @@ All tables have RLS: authenticated read, admin write. Indexes on common query pa
 - **Rapport-export** — CSV export of all modified assets from Insights/Asset tab
 - **Asset+ sync reset** — Clear `modification_status` when `source_updated_at` changes in `asset-plus-sync`
 - **ContextMenuSettings panel** — Wire new items visibility to settings toggles
+
+---
+
+## Plan: Viewer Stability Fix (5 issues) — IMPLEMENTED
+
+### 1. Empty Properties Dialog + Close Button
+- Added case-insensitive GUID matching (try original, lowercase, uppercase)
+- BIM metadata fallback: when no local asset found, reads metaObject from xeokit viewer (type, name, floor, property sets)
+- Added explicit X close button in desktop header (alongside ArrowLeft)
+- Properties dialog now opens even without fmGuid (uses entityId for BIM fallback)
+
+### 2. Unified Context Menu
+- All entity-specific items always shown, but disabled (grayed out) when no entity is picked
+- Separator between entity and global items
+- NativeViewerShell always passes all handlers (no conditional `undefined`)
+- Result: one consistent menu structure regardless of pick result
+
+### 3. 2D Mode Button Reliability
+- Added "force reapply" logic: re-clicking 2D when already in 2D re-runs clipping
+- Floor ID cached in sessionStorage for recovery when floor context is lost during switch
+- `mode2dTransitionRef` properly cleared in finally block to prevent stuck transitions
+
+### 4. Insights Floor Coloring Accuracy
+- Removed `slice(0,6)` limit on energyByFloor — all floors shown
+- Deduplicated floors by base name (strips " - 01" suffix from model copies)
+- Bar click resolves ALL matching storey GUIDs (across model copies) → only rooms on that floor colored
+- Changed click mode from `room_spaces` to `energy_floor` for strict guid matching
+- NativeXeokitViewer: `energy_floor` mode uses strict GUID matching (no name-based fallback)
+
+### 5. Room Labels Performance
+- Adaptive occlusion throttling: interval scales with label count (5 frames for <40, 10 for <80, 15 for 80+)
+- Auto-disables occlusion when label count exceeds 150
+- Viewport culling: labels outside canvas bounds + 50px margin are hidden early (before occlusion pick)
