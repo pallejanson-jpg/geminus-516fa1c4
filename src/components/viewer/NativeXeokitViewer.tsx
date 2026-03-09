@@ -90,7 +90,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       const dbPromise = supabase
         .from('xkt_models')
-        .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at')
+        .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at, is_chunk, chunk_order, parent_model_id')
         .eq('building_fm_guid', buildingFmGuid)
         .order('file_size', { ascending: true });
 

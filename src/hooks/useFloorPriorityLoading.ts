@@ -7,11 +7,12 @@
  * 2. Priority ordering: visible floor → adjacent floors → rest
  * 3. Floor visibility filtering after monolithic model loads
  *
- * Phase 1 (current): Uses "virtual chunks" — same underlying XKT file with
- * storey metadata for visibility filtering. The viewer still loads the full
- * monolithic model but immediately shows only the selected floor.
+ * Phase 1 (virtual chunks): Same underlying XKT file with storey metadata
+ * for visibility filtering. The viewer still loads the full monolithic model
+ * but immediately shows only the selected floor.
  *
- * Phase 2 (future): True per-storey XKT binaries loaded on demand.
+ * Phase 2 (real tiles): Per-storey XKT binaries loaded on demand. Detected
+ * when chunks have unique storage_path values (different files).
  */
 
 import { useCallback, useRef } from 'react';
@@ -22,6 +23,8 @@ interface StoreyChunk {
   storeyFmGuid: string;
   chunkOrder: number;
   parentModelId: string;
+  /** The storage path — if unique per chunk, we have real tiles */
+  storagePath?: string;
 }
 
 interface FloorVisibilityOptions {
@@ -33,6 +36,32 @@ interface FloorVisibilityOptions {
   includeAdjacent?: boolean;
   /** All known storey chunks (ordered) */
   chunks: StoreyChunk[];
+}
+
+/**
+ * Detect if chunks represent real per-storey XKT tiles (Phase 2)
+ * vs virtual chunks pointing to the same monolithic file (Phase 1).
+ */
+export function isRealTiling(chunks: StoreyChunk[]): boolean {
+  if (chunks.length < 2) return false;
+  const paths = new Set(chunks.map(c => c.storagePath).filter(Boolean));
+  return paths.size > 1;
+}
+
+/**
+ * Get the chunks to load for a given active floor (active + adjacent).
+ */
+export function getTilesToLoad(
+  chunks: StoreyChunk[],
+  activeFloorGuid: string,
+): StoreyChunk[] {
+  const idx = chunks.findIndex(c => c.storeyFmGuid === activeFloorGuid);
+  if (idx === -1) return chunks; // load all if not found
+
+  const result: StoreyChunk[] = [chunks[idx]];
+  if (idx > 0) result.push(chunks[idx - 1]);
+  if (idx < chunks.length - 1) result.push(chunks[idx + 1]);
+  return result;
 }
 
 /**
@@ -115,6 +144,7 @@ export function applyFloorPriorityVisibility(options: FloorVisibilityOptions): v
 export function useFloorPriorityLoading() {
   const chunksRef = useRef<StoreyChunk[]>([]);
   const activeFloorRef = useRef<string | null>(null);
+  const loadedTileIdsRef = useRef<Set<string>>(new Set());
 
   const setChunks = useCallback((chunks: StoreyChunk[]) => {
     chunksRef.current = chunks;
@@ -124,6 +154,16 @@ export function useFloorPriorityLoading() {
     activeFloorRef.current = floorFmGuid;
     if (chunksRef.current.length === 0) return;
 
+    // For real tiles, dynamic loading is handled by the viewer
+    if (isRealTiling(chunksRef.current)) {
+      console.log(`[FloorPriority] Real tiling active — floor switch to ${floorFmGuid} handled by viewer`);
+      window.dispatchEvent(new CustomEvent('FLOOR_TILE_SWITCH', { 
+        detail: { floorFmGuid, tiles: getTilesToLoad(chunksRef.current, floorFmGuid) }
+      }));
+      return;
+    }
+
+    // Virtual chunks: use visibility filtering
     applyFloorPriorityVisibility({
       viewer,
       floorFmGuid,
@@ -148,5 +188,8 @@ export function useFloorPriorityLoading() {
     showAllFloors,
     chunksRef,
     activeFloorRef,
+    loadedTileIdsRef,
+    /** Check if real per-storey tiles are available */
+    hasRealTiles: () => isRealTiling(chunksRef.current),
   };
 }
