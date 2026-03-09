@@ -345,15 +345,41 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         return options;
     }, [buildingStoreys]);
 
+    // Spaces filtered by floor
+    const floorFilteredSpaces = useMemo(() => {
+        if (!spaceFloorFilter) return buildingSpaces;
+        const matchingGuids = new Set<string>();
+        buildingStoreys.forEach((s: any) => {
+            const baseName = (s.commonName || '').replace(/\s*-\s*\d+$/, '');
+            if (baseName === spaceFloorFilter) matchingGuids.add(s.fmGuid?.toLowerCase());
+        });
+        return buildingSpaces.filter((s: any) => matchingGuids.has(s.levelFmGuid?.toLowerCase()));
+    }, [buildingSpaces, buildingStoreys, spaceFloorFilter]);
+
+    // Space type pie — respects floor filter
+    const spaceTypePie = useMemo(() => {
+        const colors = [
+            'hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))',
+            'hsl(var(--chart-4))', 'hsl(var(--chart-7))', 'hsl(var(--muted-foreground))',
+        ];
+        const types: Record<string, number> = {};
+        floorFilteredSpaces.forEach((space: any) => {
+            const name = space.commonName || space.name || 'Unknown';
+            types[name] = (types[name] || 0) + 1;
+        });
+        return Object.entries(types)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 6)
+            .map(([name, value], i) => ({ name: name.length > 18 ? name.substring(0, 18) + '...' : name, fullName: name, value, color: colors[i % colors.length] }));
+    }, [floorFilteredSpaces]);
+
     const sensorRooms = useMemo(() => {
-        let filtered = buildingSpaces;
-        if (spaceFloorFilter) {
-            const matchingGuids = new Set<string>();
-            buildingStoreys.forEach((s: any) => {
-                const baseName = (s.commonName || '').replace(/\s*-\s*\d+$/, '');
-                if (baseName === spaceFloorFilter) matchingGuids.add(s.fmGuid?.toLowerCase());
+        let filtered = floorFilteredSpaces;
+        if (selectedRoomType) {
+            filtered = filtered.filter((s: any) => {
+                const name = s.commonName || s.name || 'Unknown';
+                return name === selectedRoomType;
             });
-            filtered = buildingSpaces.filter((s: any) => matchingGuids.has(s.levelFmGuid?.toLowerCase()));
         }
         return filtered.slice(0, 60).map((s: any) => ({
             fmGuid: s.fmGuid,
@@ -361,7 +387,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             name: s.name,
             levelFmGuid: s.levelFmGuid,
         }));
-    }, [buildingSpaces, buildingStoreys, spaceFloorFilter]);
+    }, [floorFilteredSpaces, selectedRoomType]);
 
     // Filtered alarm list for FM grid
     const filteredAlarmList = useMemo(() => {
