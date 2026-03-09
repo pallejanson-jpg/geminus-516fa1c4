@@ -351,6 +351,19 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     else startListening();
   }, [isListening, isLoading, isVoiceSupported, startListening, stopListening]);
 
+  // Auto-start voice mode when opened via deep link (?gunnar=voice)
+  useEffect(() => {
+    if (autoVoice && open && isVoiceSupported && !isListening) {
+      setVoiceOutputEnabled(true);
+      // Small delay to let the UI render first
+      const timer = setTimeout(() => {
+        startListening();
+        onAutoVoiceConsumed?.();
+      }, 600);
+      return () => clearTimeout(timer);
+    }
+  }, [autoVoice, open, isVoiceSupported]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!open || !voiceOutputEnabled || isLoading) return;
     const lastMessage = messages[messages.length - 1];
