@@ -39,6 +39,8 @@ interface GunnarChatProps {
   onClose: () => void;
   context?: GunnarContext;
   embedded?: boolean;
+  autoVoice?: boolean;
+  onAutoVoiceConsumed?: () => void;
 }
 
 interface GunnarAction {
@@ -100,7 +102,7 @@ function getContextualGreeting(context?: GunnarContext): string {
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gunnar-chat`;
 
-const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function GunnarChat({ open, onClose, context, embedded }, _ref) {
+const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function GunnarChat({ open, onClose, context, embedded, autoVoice, onAutoVoiceConsumed }, _ref) {
   const navigate = useNavigate();
   const { setAiSelectedFmGuids, setActiveApp, setSelectedFacility, setViewer3dFmGuid } = useApp();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -348,6 +350,19 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     if (isListening) stopListening();
     else startListening();
   }, [isListening, isLoading, isVoiceSupported, startListening, stopListening]);
+
+  // Auto-start voice mode when opened via deep link (?gunnar=voice)
+  useEffect(() => {
+    if (autoVoice && open && isVoiceSupported && !isListening) {
+      setVoiceOutputEnabled(true);
+      // Small delay to let the UI render first
+      const timer = setTimeout(() => {
+        startListening();
+        onAutoVoiceConsumed?.();
+      }, 600);
+      return () => clearTimeout(timer);
+    }
+  }, [autoVoice, open, isVoiceSupported]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open || !voiceOutputEnabled || isLoading) return;
