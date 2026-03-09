@@ -431,7 +431,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
             if (shouldStreamByUrl) {
               console.log(`[NativeViewer] Streaming large model via src: ${modelId} (${((model.file_size ?? 0) / 1024 / 1024).toFixed(1)} MB)`);
-              const entity = xktLoader.load({ id: modelId, src: urlData.signedUrl, edges: true });
+              const streamOpts: any = { id: modelId, src: urlData.signedUrl, edges: true };
+              if (metaModelSrc) streamOpts.metaModelSrc = metaModelSrc;
+              const entity = xktLoader.load(streamOpts);
               const ok = await waitForModel(entity, modelId);
               if (!ok) return;
             } else {
