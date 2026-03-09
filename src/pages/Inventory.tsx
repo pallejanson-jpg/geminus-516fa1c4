@@ -178,7 +178,7 @@ const Inventory: React.FC = () => {
               <Collapsible open={showRecentItems} onOpenChange={setShowRecentItems} className="mb-4">
                 <CollapsibleTrigger className="flex items-center justify-between w-full p-3 bg-muted/50 hover:bg-muted rounded-lg transition-colors">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">Senast registrerade</span>
+                    <span className="text-sm font-medium">Recently registered</span>
                     <Badge variant="secondary" className="text-xs">
                       {savedItems.length}
                     </Badge>
