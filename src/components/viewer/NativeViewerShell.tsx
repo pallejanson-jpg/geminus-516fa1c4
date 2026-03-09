@@ -296,7 +296,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   }, [applySavedView]);
 
   // ── Select tool click handler ──────────────────────────────────────────
-  const activeToolRef = useRef<string | null>('select');
+  const activeToolRef = useRef<string | null>(null);
 
   useEffect(() => {
     const handler = (e: CustomEvent<ViewerToolChangedDetail>) => {
