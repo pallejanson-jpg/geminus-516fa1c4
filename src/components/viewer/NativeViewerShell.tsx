@@ -88,14 +88,19 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const viewerShimRef = useRef<any>(null);
 
   // Room labels hook — listens for ROOM_LABELS_TOGGLE_EVENT
-  const { setLabelsEnabled, updateFloorFilter, updateViewMode: updateRoomLabelViewMode } = useRoomLabels(viewerShimRef);
+  const { setLabelsEnabled, updateFloorFilter, updateViewMode: updateRoomLabelViewMode, isEnabled: roomLabelsEnabled } = useRoomLabels(viewerShimRef);
 
   // Track current visible floor guids for room labels
   const currentFloorGuidsRef = React.useRef<string[]>([]);
 
+  // Track toggle state for labels and room labels
+  const labelsVisibleRef = useRef(false);
+  const roomLabelsVisibleRef = useRef(false);
+
   // Wire room labels toggle event — pass current floor filter so labels only show for selected floors
   useEffect(() => {
     const handler = (e: CustomEvent<RoomLabelsToggleDetail>) => {
+      roomLabelsVisibleRef.current = e.detail.enabled;
       setLabelsEnabled(e.detail.enabled, currentFloorGuidsRef.current);
     };
     window.addEventListener(ROOM_LABELS_TOGGLE_EVENT, handler as EventListener);
