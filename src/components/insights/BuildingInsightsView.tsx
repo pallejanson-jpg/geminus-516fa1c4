@@ -1004,7 +1004,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                </Button>
                                          </div>
                                           <CardDescription>
-                                             {sensorRooms.length} of {spaceFloorFilter ? `rooms on ${spaceFloorFilter}` : `${buildingSpaces.length} rooms`} · click to select · Ctrl+click for multi-select
+                                             {sensorRooms.length} of {floorFilteredSpaces.length} rooms{spaceFloorFilter ? ` on ${spaceFloorFilter}` : ''}{selectedRoomType ? ` · type: ${selectedRoomType}` : ''} · click to select · Ctrl+click for multi-select
                                          </CardDescription>
                                      </CardHeader>
                                      <CardContent>
