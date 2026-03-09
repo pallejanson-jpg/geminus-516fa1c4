@@ -312,6 +312,42 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         setTimeout(deferStalenessCheck, 5000);
       }
 
+      // ── Detect real per-storey tiles (Phase 2) ──
+      const chunkModels = models.filter(m => m.is_chunk && m.storey_fm_guid);
+      const nonChunkModels = models.filter(m => !m.is_chunk);
+      const uniqueChunkPaths = new Set(chunkModels.map(m => m.storage_path));
+      const hasRealTiles = chunkModels.length >= 2 && uniqueChunkPaths.size > 1;
+
+      if (hasRealTiles) {
+        console.log(`[NativeViewer] 🧩 Real per-storey tiles detected: ${chunkModels.length} tiles with ${uniqueChunkPaths.size} unique paths`);
+        // Load non-chunk models (structure, facade) normally + first storey tile
+        const sortedChunks = [...chunkModels].sort((a, b) => (a.chunk_order ?? 0) - (b.chunk_order ?? 0));
+        // Pick the middle floor as the initial view (most useful for navigation)
+        const initialIdx = Math.floor(sortedChunks.length / 2);
+        const initialTiles = getTilesToLoad(
+          sortedChunks.map(c => ({
+            modelId: c.model_id,
+            modelName: c.model_name || c.model_id,
+            storeyFmGuid: c.storey_fm_guid!,
+            chunkOrder: c.chunk_order ?? 0,
+            parentModelId: c.parent_model_id || '',
+            storagePath: c.storage_path,
+          })),
+          sortedChunks[initialIdx].storey_fm_guid!
+        );
+        const initialTileIds = new Set(initialTiles.map(t => t.modelId));
+        // Only load non-chunks + initial tiles
+        models = [
+          ...nonChunkModels,
+          ...chunkModels.filter(m => initialTileIds.has(m.model_id)),
+        ];
+        console.log(`[NativeViewer] Loading ${nonChunkModels.length} base models + ${initialTileIds.size} initial tiles (of ${chunkModels.length} total)`);
+
+        // Store full chunk list for dynamic floor switching
+        (window as any).__xktTileChunks = sortedChunks;
+        (window as any).__xktTileLoadedIds = new Set(initialTileIds);
+      }
+
       // Load all available models, but prioritize architectural models first in queue.
       const NON_ARCH_PREFIXES = ['BRAND', 'FIRE', 'V-', 'V_', 'VS-', 'VS_', 'EL-', 'EL_', 'MEP', 'SPRINKLER', 'K-', 'K_', 'R-', 'R_', 'S-', 'S_'];
       const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
