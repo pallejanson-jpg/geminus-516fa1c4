@@ -60,10 +60,11 @@ const PortfolioView: React.FC = () => {
   // Convert navigatorTreeData (buildings) to Facility[] format, filtering out empty duplicates
   const facilities: Facility[] = useMemo(() => {
     return navigatorTreeData.filter((building) => {
-      // Filter out buildings with 0 storeys AND 0 spaces (empty duplicates)
+      // Show buildings that have storeys, spaces, OR at least one XKT model (newly imported)
       const hasStoreys = allData.some((a: any) => a.category === 'Building Storey' && a.buildingFmGuid === building.fmGuid);
       const hasSpaces = allData.some((a: any) => a.category === 'Space' && a.buildingFmGuid === building.fmGuid);
-      return hasStoreys || hasSpaces;
+      const hasChildren = building.children && building.children.length > 0;
+      return hasStoreys || hasSpaces || hasChildren;
     }).map((building, index) => {
       // Get spaces for this building from allData
       const buildingSpaces = allData.filter(
