@@ -68,3 +68,6 @@ verify_jwt = false
 
 [functions.fm-access-sync]
 verify_jwt = false
+
+[functions.imdf-export]
+verify_jwt = false
