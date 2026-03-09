@@ -742,17 +742,25 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                         <Bar dataKey="kwhPerSqm" name="kWh/m²" radius={[0, 4, 4, 0]} style={{ cursor: 'pointer' }}>
                                                             {energyByFloor.map((entry, index) => (
                                                                 <Cell key={`cell-${index}`} fill={entry.color} onClick={() => {
-                                                                    // Resolve storey to child rooms for reliable 3D matching
-                                                                    const floorColor = hslStringToRgbFloat(entry.color);
-                                                                    const roomColorMap: Record<string, [number, number, number]> = {};
-                                                                    buildingSpaces.forEach((space: any) => {
-                                                                        if (space.levelFmGuid === entry.fmGuid) {
-                                                                            roomColorMap[space.fmGuid] = floorColor;
-                                                                        }
-                                                                    });
-                                                                    // Fallback: also include storey itself for models that do match
-                                                                    roomColorMap[entry.fmGuid] = floorColor;
-                                                                    handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
+                                                                     // Resolve storey to child rooms STRICTLY for this floor only
+                                                                     const floorColor = hslStringToRgbFloat(entry.color);
+                                                                     const roomColorMap: Record<string, [number, number, number]> = {};
+                                                                     // Find ALL storey fmGuids that share this base name (across model copies)
+                                                                     const baseName = entry.name;
+                                                                     const matchingStoreyGuids = new Set<string>();
+                                                                     buildingStoreys.forEach((s: any) => {
+                                                                         const sBaseName = (s.commonName || s.name || '').replace(/\s*-\s*\d+$/, '');
+                                                                         if (sBaseName === baseName) matchingStoreyGuids.add(s.fmGuid);
+                                                                     });
+                                                                     // Only include rooms that belong to this specific floor
+                                                                     buildingSpaces.forEach((space: any) => {
+                                                                         if (matchingStoreyGuids.has(space.levelFmGuid)) {
+                                                                             roomColorMap[space.fmGuid] = floorColor;
+                                                                         }
+                                                                     });
+                                                                     // Also include storey guids themselves for model matching
+                                                                     matchingStoreyGuids.forEach(g => { roomColorMap[g] = floorColor; });
+                                                                     handleInsightsClick({ mode: 'energy_floor', colorMap: roomColorMap });
                                                                 }} />
                                                             ))}
                                                         </Bar>

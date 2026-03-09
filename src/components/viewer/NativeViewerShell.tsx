@@ -620,11 +620,12 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       )}
 
       {/* Properties dialog */}
-      {propertiesEntity && propertiesEntity.fmGuid && (
+      {propertiesEntity && (
         <UniversalPropertiesDialog
           isOpen={!!propertiesEntity}
           onClose={() => setPropertiesEntity(null)}
-          fmGuids={propertiesEntity.fmGuid}
+          fmGuids={propertiesEntity.fmGuid || propertiesEntity.entityId}
+          entityId={propertiesEntity.entityId}
         />
       )}
     </div>

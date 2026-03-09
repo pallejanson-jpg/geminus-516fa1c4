@@ -669,18 +669,22 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           }
         });
       } else {
-        // Match by fmGuid via originalSystemId or mo.id, with name-based fallback
+        // Match by fmGuid via originalSystemId or mo.id
         const isRoomMode = mode === 'room_spaces' || mode === 'room_type' || mode === 'room_types';
         const isFloorMode = mode.startsWith('energy_floor');
         const nameColorMap = detail.nameColorMap || {};
+        // For floor-specific modes (energy_floor), use STRICT guid-only matching (no name fallback)
+        // to prevent coloring rooms on wrong floors that happen to share names
+        const useStrictGuidMode = isFloorMode;
 
         Object.values(metaObjects).forEach((mo: any) => {
           const sysId = normalizeGuid(mo.originalSystemId || '');
           const moId = normalizeGuid(mo.id || '');
           const moName = (mo.name || '').toLowerCase().trim();
-          // Try fmGuid match first, then name-based fallback
+          // Try fmGuid match first
           let rgb = fmGuidLookup.get(sysId) || fmGuidLookup.get(moId);
-          if (!rgb && moName && nameColorMap[moName]) {
+          // Name-based fallback only when NOT in strict guid mode
+          if (!rgb && !useStrictGuidMode && moName && nameColorMap[moName]) {
             rgb = nameColorMap[moName];
           }
           if (rgb) {

@@ -1228,6 +1228,9 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           </span>
           <Badge variant="outline" className="text-xs shrink-0">{displayCategory}</Badge>
         </div>
+        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onClose}>
+          <X className="h-4 w-4" />
+        </Button>
       </div>
 
       {renderContent()}
