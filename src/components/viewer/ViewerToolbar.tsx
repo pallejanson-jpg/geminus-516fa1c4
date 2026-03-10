@@ -769,8 +769,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         try { remove2DClipping(); } catch {}
         try { remove3DClipping(); } catch {}
       } finally {
-        setTimeout(revealCanvas, 80);
-        setTimeout(revealCanvas, 600);
+        if (!isForceReapply) {
+          setTimeout(revealCanvas, 80);
+          setTimeout(revealCanvas, 600);
+        }
         mode2dTransitionRef.current = false;
       }
     } else {
