@@ -754,12 +754,29 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
           viewer.cameraControl.navMode = 'planView';
           viewer.cameraControl.followPointer = false;
         }
+        // Cancel any ongoing camera flight that could re-apply momentum
+        try { viewer.cameraFlight?.cancel?.(); } catch {}
         // Kill any residual inertia from 3D orbit/pan so the view doesn't spin
         if (viewer.scene?.camera) {
-          viewer.scene.camera.eye = [...viewer.scene.camera.eye];
-          viewer.scene.camera.look = [...viewer.scene.camera.look];
-          viewer.scene.camera.up = [...viewer.scene.camera.up];
+          const cam = viewer.scene.camera;
+          cam.eye = [...cam.eye];
+          cam.look = [...cam.look];
+          cam.up = [...cam.up];
         }
+        // Re-assert planView after a short delay to catch late-arriving touch events on mobile
+        setTimeout(() => {
+          if (viewer.cameraControl && viewModeRef.current === '2d') {
+            viewer.cameraControl.navMode = 'planView';
+            viewer.cameraControl.followPointer = false;
+            // Kill inertia again in case touch events re-applied it
+            if (viewer.scene?.camera) {
+              const cam = viewer.scene.camera;
+              cam.eye = [...cam.eye];
+              cam.look = [...cam.look];
+              cam.up = [...cam.up];
+            }
+          }
+        }, 150);
         // Cache the floor ID for force-reapply
         if (targetFloorId) {
           try { sessionStorage.setItem('viewer_last_floor_id', targetFloorId); } catch {}
