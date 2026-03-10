@@ -757,6 +757,47 @@ const CreateBuildingPanel: React.FC = () => {
         </div>
       )}
 
+      {/* Section 4: Excel Import */}
+      {showIfcUpload && (
+        <div className="space-y-3 border-t pt-4">
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5 text-primary" />
+            <h3 className="font-semibold text-sm">Inventera via Excel</h3>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Ladda ner en mall förfylld med våningar och rum, fyll i objekt offline, och importera tillbaka.
+          </p>
+          <div className="flex items-center gap-2">
+            <ExcelTemplateDownload
+              buildingFmGuid={targetBuildingFmGuid}
+              buildingName={
+                createdBuilding?.buildingName ||
+                existingBuildings.find(b => b.fmGuid === selectedExistingFmGuid)?.commonName ||
+                'Byggnad'
+              }
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setExcelImportOpen(true)}
+              className="gap-1.5"
+            >
+              <Upload className="h-3.5 w-3.5" /> Importera Excel
+            </Button>
+          </div>
+          <ExcelImportDialog
+            open={excelImportOpen}
+            onOpenChange={setExcelImportOpen}
+            buildingFmGuid={targetBuildingFmGuid}
+            buildingName={
+              createdBuilding?.buildingName ||
+              existingBuildings.find(b => b.fmGuid === selectedExistingFmGuid)?.commonName ||
+              'Byggnad'
+            }
+          />
+        </div>
+      )}
+
       {/* Reset button */}
       {(createdBuilding || selectedExistingFmGuid) && (
         <Button variant="outline" size="sm" onClick={handleReset} className="w-full">
