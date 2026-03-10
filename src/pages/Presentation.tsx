@@ -137,8 +137,8 @@ const TitleSlide = () => (
     <div className="absolute inset-0 bg-gradient-to-br from-black/90 via-black/70 to-cyan-950/60" />
     <div className="relative z-10 flex flex-col justify-center h-full text-white px-32 py-20">
       <div className="flex items-center gap-4 mb-6">
-        <div className="px-5 py-2 rounded-full bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 text-[22px] font-medium">
-          Addnode Innovation 2025
+        <div className="px-5 py-2 rounded-full bg-cyan-500/40 border border-cyan-400/50 text-cyan-200 text-[22px] font-medium backdrop-blur-sm">
+          Addnode Innovation 2026
         </div>
       </div>
       <h1 className="text-[130px] font-black leading-none tracking-tight text-white mb-4">
