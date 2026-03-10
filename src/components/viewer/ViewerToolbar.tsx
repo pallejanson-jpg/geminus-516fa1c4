@@ -600,8 +600,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
       };
 
       try {
-        // Hide canvas immediately to avoid 3D flash while we set up 2D
-        if (canvas) canvas.style.opacity = '0';
+        // Hide canvas to avoid 3D flash — skip on force-reapply to prevent flicker
+        if (canvas && !isForceReapply) canvas.style.opacity = '0';
 
         // Set white background FIRST
         window.dispatchEvent(new CustomEvent(ARCHITECT_BACKGROUND_CHANGED_EVENT, { detail: { presetId: 'white' } }));
