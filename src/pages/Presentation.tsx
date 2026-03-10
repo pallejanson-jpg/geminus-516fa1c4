@@ -92,12 +92,23 @@ const NOTES: string[][] = [
   // Slide 7 — Competition
   [
     "The market has real competitors — both in the Nordics and internationally.",
-    "Vyer, Twinfinity (Sweco), and Digital Buildings (Zynka/Newsec) are the Nordic players.",
-    "Autodesk Tandem and dTwin by Nemetschek are the international giants.",
-    "None of them have the full Addnode data ecosystem behind them.",
-    "Geminus has AI Assistants, AI Inventory, and more — and it is Addnode's own IP. That is the moat.",
+    "Vyer has Fastpartner, Alecta, Revelop as customers — strong visualization but zero AI layer.",
+    "Digital Buildings was acquired by Newsec from Zynka — they position as Power BI for Real Estate but lack deep FM and IoT.",
+    "Twinfinity spun out from Sweco in October 2022 — cloud BIM with climate data, but consulting-driven and closed ecosystem.",
+    "Autodesk Tandem has a free tier and Tandem Connect/Insights modules, but US-centric with no Nordic FM integrations.",
+    "None of them have AI Assistants, AI Inventory, or the full Addnode data ecosystem. That is our moat.",
   ],
-  // Slide 8 — Why Addnode Wins
+  // Slide 8 — Competition Deep Dive
+  [
+    "This matrix shows the eight capabilities that define a modern digital twin platform.",
+    "Geminus is the only solution that covers all eight — because it sits on top of Addnode's full stack.",
+    "Vyer has good 3D but stops at visualization. No AI, no FM system, no IoT.",
+    "Digital Buildings is analytics-focused — great dashboards but no BIM viewer, no AI, no IoT depth.",
+    "Twinfinity links BIM with climate data but is consulting-heavy and has no AI capabilities.",
+    "Autodesk Tandem has the global ecosystem but requires full Autodesk lock-in and has no Nordic FM integrations.",
+    "The bottom line: every competitor is a point solution. Geminus is the only connective layer.",
+  ],
+  // Slide 9 — Why Addnode Wins
   [
     "FM software is the fastest-growing segment of the built environment — and Addnode has zero dedicated product today.",
     "Every Geminus user deepens dependency on SWG, Symetri, Bimify, Senslinc simultaneously — churn across the group drops.",
