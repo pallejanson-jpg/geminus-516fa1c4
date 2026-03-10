@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Crosshair, X, Check, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -18,55 +18,62 @@ const Inline3dPositionPicker: React.FC<Inline3dPositionPickerProps> = ({
   onClose,
 }) => {
   const [pendingCoords, setPendingCoords] = useState<{ x: number; y: number; z: number } | null>(null);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const touchStartPos = useRef<{ x: number; y: number } | null>(null);
-
-  const targetFmGuid = roomFmGuid || buildingFmGuid;
 
   const handleViewerReady = useCallback((viewer: any) => {
     const canvas = viewer.scene.canvas.canvas;
 
-    const doPick = (canvasX: number, canvasY: number) => {
-      const hit = viewer.scene.pick({ canvasPos: [canvasX, canvasY], pickSurface: true });
+    // Track drag to distinguish click from orbit
+    let startX = 0, startY = 0, dragged = false;
+    canvas.addEventListener('pointerdown', (e: PointerEvent) => {
+      startX = e.clientX; startY = e.clientY; dragged = false;
+    });
+    canvas.addEventListener('pointermove', (e: PointerEvent) => {
+      if (e.buttons > 0 && !dragged) {
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        if (Math.sqrt(dx * dx + dy * dy) > 6) dragged = true;
+      }
+    });
+
+    // Single-click pick
+    canvas.addEventListener('pointerup', (e: PointerEvent) => {
+      if (dragged) return;
+      const rect = canvas.getBoundingClientRect();
+      const hit = viewer.scene.pick({ canvasPos: [e.clientX - rect.left, e.clientY - rect.top], pickSurface: true });
       if (hit?.worldPos) {
         setPendingCoords({ x: hit.worldPos[0], y: hit.worldPos[1], z: hit.worldPos[2] });
-      }
-    };
-
-    // Touch long-press (500ms)
-    canvas.addEventListener('touchstart', (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      const touch = e.touches[0];
-      const rect = canvas.getBoundingClientRect();
-      touchStartPos.current = { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
-      longPressTimer.current = setTimeout(() => {
-        if (touchStartPos.current) doPick(touchStartPos.current.x, touchStartPos.current.y);
-      }, 500);
-    }, { passive: true });
-
-    canvas.addEventListener('touchmove', (e: TouchEvent) => {
-      if (longPressTimer.current && touchStartPos.current) {
-        const touch = e.touches[0];
-        const rect = canvas.getBoundingClientRect();
-        const dx = touch.clientX - rect.left - touchStartPos.current.x;
-        const dy = touch.clientY - rect.top - touchStartPos.current.y;
-        if (Math.sqrt(dx * dx + dy * dy) > 10) {
-          clearTimeout(longPressTimer.current);
-          longPressTimer.current = null;
+        if (viewer.camera.projection === 'ortho') {
+          toast.info('Position vald i 2D — höjden kanske inte stämmer', {
+            description: 'Byt till 3D för exakt höjd.',
+          });
         }
       }
-    }, { passive: true });
-
-    canvas.addEventListener('touchend', () => {
-      if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
     });
 
-    // Desktop: double-click
-    canvas.addEventListener('dblclick', (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      doPick(e.clientX - rect.left, e.clientY - rect.top);
-    });
-  }, []);
+    // Fly to room if provided
+    if (roomFmGuid) {
+      const tryFlyToRoom = () => {
+        const normalizedRoom = roomFmGuid.toLowerCase().replace(/-/g, '');
+        const objects = viewer.scene.objects;
+        for (const id of Object.keys(objects)) {
+          if (id.toLowerCase().replace(/-/g, '').includes(normalizedRoom)) {
+            const entity = objects[id];
+            if (entity?.aabb) {
+              viewer.cameraFlight.flyTo({ aabb: entity.aabb, duration: 0.8 });
+              return true;
+            }
+          }
+        }
+        return false;
+      };
+      if (!tryFlyToRoom()) {
+        const interval = setInterval(() => {
+          if (tryFlyToRoom()) clearInterval(interval);
+        }, 1000);
+        setTimeout(() => clearInterval(interval), 10000);
+      }
+    }
+  }, [roomFmGuid]);
 
   const handleConfirm = () => {
     if (pendingCoords) {
@@ -92,20 +99,18 @@ const Inline3dPositionPicker: React.FC<Inline3dPositionPickerProps> = ({
 
       <div className="flex-1 min-h-0 relative">
         <NativeXeokitViewer
-          buildingFmGuid={targetFmGuid}
+          buildingFmGuid={buildingFmGuid}
           onClose={onClose}
           onViewerReady={handleViewerReady}
         />
 
-        {/* Instruction — top-left */}
         {!pendingCoords && (
           <div className="absolute top-3 left-3 z-20 bg-primary/90 text-primary-foreground text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5 shadow-md">
             <Crosshair className="h-3.5 w-3.5" />
-            <span>Håll nedtryckt för att markera position</span>
+            <span>Klicka för att markera position</span>
           </div>
         )}
 
-        {/* Confirmation bar */}
         {pendingCoords && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-background/95 backdrop-blur border rounded-lg shadow-lg p-3 flex items-center gap-3">
             <p className="text-sm font-mono">
