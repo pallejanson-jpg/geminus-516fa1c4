@@ -463,7 +463,10 @@ export function useSectionPlaneClipping(
   }, [enabled, getXeokitViewer, calculateFloorBounds, calculateClipHeightFromFloorBoundary, createSectionPlane, destroyPlane, ensureAllEntitiesClippable]);
 
   /**
-   * Apply 2D floor plan clipping (slab slice with top + bottom planes)
+   * Apply 2D floor plan clipping — TOP plane only (no bottom plane).
+   * The bottom plane was clipping away the floor slab and everything below,
+   * resulting in an empty view. In 2D plan mode we only need a ceiling cut
+   * at floorCutHeight (default 0.5m) above the floor level.
    */
   const applyFloorPlanClipping = useCallback((floorId: string, customHeight?: number) => {
     if (!enabled) return;
@@ -482,10 +485,9 @@ export function useSectionPlaneClipping(
     currentFloorMinYRef.current = bounds.minY;
 
     const topClipY = bounds.minY + floorCutHeight;
-    const bottomClipY = bounds.minY - 0.3; // Below floor level to include floor objects
 
     destroyPlane(topPlaneRef);
-    destroyPlane(bottomPlaneRef);
+    destroyPlane(bottomPlaneRef); // ensure no stale bottom plane
 
     topPlaneRef.current = createSectionPlane(
       `2d-top-${floorId}`,
@@ -493,16 +495,12 @@ export function useSectionPlaneClipping(
       [0, 1, 0]
     );
 
-    bottomPlaneRef.current = createSectionPlane(
-      `2d-bottom-${floorId}`,
-      [0, bottomClipY, 0],
-      [0, -1, 0]
-    );
-
-    if (topPlaneRef.current && bottomPlaneRef.current) {
-      console.log(`✅ 2D Slab slice: bottom=${bottomClipY.toFixed(2)}, top=${topClipY.toFixed(2)} for ${bounds.name}`);
+    if (topPlaneRef.current) {
+      console.log(`✅ 2D Top-only clip at Y=${topClipY.toFixed(2)} (floor=${bounds.minY.toFixed(2)} + ${floorCutHeight}m) for ${bounds.name}`);
       currentFloorIdRef.current = floorId;
       currentClipModeRef.current = 'floor';
+    } else {
+      console.warn(`❌ 2D clipping failed for ${bounds.name} — no section plane created`);
     }
   }, [enabled, getXeokitViewer, calculateFloorBounds, createSectionPlane, destroyPlane, ensureAllEntitiesClippable]);
 
