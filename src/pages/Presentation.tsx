@@ -35,6 +35,7 @@ const SLIDE_TITLES = [
   "The Proof — It Already Works",
   "ROI — The Numbers",
   "The Competition — And Why We Win",
+  "Competitive Landscape — Deep Dive",
   "Why Addnode Wins",
   "The Ask",
 ];
