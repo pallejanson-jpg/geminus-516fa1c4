@@ -389,7 +389,7 @@ const UnlocksSlide = () => {
 const ProofSlide = () => (
   <div className="relative w-full h-full overflow-hidden">
     <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/97 via-emerald-950/80 to-slate-900/75" />
+    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/98 via-emerald-950/92 to-slate-900/88" />
     <div className="relative z-10 flex h-full text-white px-32 py-14">
 
       {/* Left: Headline + stats */}
