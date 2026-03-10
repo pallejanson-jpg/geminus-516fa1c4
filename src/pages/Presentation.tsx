@@ -860,6 +860,7 @@ const slides = [
   ProofSlide,
   RoiSlide,
   CompetitionSlide,
+  CompetitionDeepDiveSlide,
   WhyAddnodeSlide,
   AskSlide,
 ];
