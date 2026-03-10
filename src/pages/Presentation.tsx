@@ -633,7 +633,90 @@ const CompetitionSlide = () => {
 };
 
 /* ------------------------------------------------------------------ */
-/*  Slide 8 — Why Addnode Wins (investor language)                     */
+/*  Slide 8 — Competition Deep Dive                                    */
+/* ------------------------------------------------------------------ */
+
+const CompetitionDeepDiveSlide = () => {
+  const capabilities = [
+    "3D BIM Viewer",
+    "AI Assistants",
+    "AI Inventory",
+    "IoT Integration",
+    "FM System Integration",
+    "Multi-vendor Data Hub",
+    "Nordic Market Presence",
+    "SaaS Pricing",
+  ];
+
+  type Level = "full" | "partial" | "none";
+
+  const competitors: { name: string; color: string; scores: Level[] }[] = [
+    { name: "Geminus", color: "text-cyan-300", scores: ["full", "full", "full", "full", "full", "full", "full", "full"] },
+    { name: "Vyer", color: "text-white", scores: ["full", "none", "none", "none", "none", "none", "full", "full"] },
+    { name: "Digital Buildings", color: "text-white", scores: ["none", "none", "none", "partial", "partial", "partial", "full", "full"] },
+    { name: "Twinfinity", color: "text-white", scores: ["full", "none", "none", "partial", "partial", "none", "full", "partial"] },
+    { name: "Autodesk Tandem", color: "text-white", scores: ["full", "none", "none", "full", "partial", "partial", "none", "partial"] },
+  ];
+
+  const icon = (level: Level) => {
+    if (level === "full") return <span className="text-emerald-400 text-[22px]">●</span>;
+    if (level === "partial") return <span className="text-amber-400 text-[22px]">◐</span>;
+    return <span className="text-red-400/60 text-[22px]">○</span>;
+  };
+
+  return (
+    <div className="relative w-full h-full overflow-hidden">
+      <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-950/97 via-indigo-950/80 to-slate-900/80" />
+      <div className="relative z-10 flex flex-col h-full text-white px-28 py-14">
+        <h2 className="text-[64px] font-black text-white mb-2">Competitive Landscape — Deep Dive</h2>
+        <p className="text-[24px] text-white/80 mb-10">Feature-by-feature comparison across key capabilities</p>
+
+        {/* Legend */}
+        <div className="flex items-center gap-8 mb-6">
+          <div className="flex items-center gap-2"><span className="text-emerald-400 text-[18px]">●</span><span className="text-[16px] text-white/70">Full capability</span></div>
+          <div className="flex items-center gap-2"><span className="text-amber-400 text-[18px]">◐</span><span className="text-[16px] text-white/70">Partial / limited</span></div>
+          <div className="flex items-center gap-2"><span className="text-red-400/60 text-[18px]">○</span><span className="text-[16px] text-white/70">Not available</span></div>
+        </div>
+
+        {/* Matrix table */}
+        <div className="flex-1 flex flex-col">
+          {/* Header row */}
+          <div className="flex items-center border-b border-white/20 pb-4 mb-2">
+            <div className="w-[280px] shrink-0 text-[17px] font-bold text-white/50 uppercase tracking-widest">Capability</div>
+            {competitors.map(({ name, color }) => (
+              <div key={name} className={`flex-1 text-center text-[19px] font-bold ${color} ${name === "Geminus" ? "text-[22px]" : ""}`}>
+                {name}
+              </div>
+            ))}
+          </div>
+
+          {/* Data rows */}
+          {capabilities.map((cap, ri) => (
+            <div key={cap} className={`flex items-center py-4 ${ri < capabilities.length - 1 ? "border-b border-white/10" : ""}`}>
+              <div className="w-[280px] shrink-0 text-[20px] text-white/90 font-medium">{cap}</div>
+              {competitors.map(({ name, scores }) => (
+                <div key={name} className={`flex-1 flex justify-center ${name === "Geminus" ? "bg-cyan-500/10 rounded-lg py-1 mx-1" : ""}`}>
+                  {icon(scores[ri])}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* Bottom takeaway */}
+        <div className="mt-6 bg-white rounded-2xl p-5 text-center">
+          <p className="text-[22px] font-black text-black leading-snug">
+            "Geminus is the only platform with full marks across all eight capabilities — because it connects the entire Addnode ecosystem."
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ------------------------------------------------------------------ */
+/*  Slide 9 — Why Addnode Wins (investor language)                     */
 /* ------------------------------------------------------------------ */
 
 const WhyAddnodeSlide = () => (
