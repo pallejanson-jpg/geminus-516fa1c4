@@ -792,7 +792,7 @@ const CreateBuildingPanel: React.FC = () => {
             buildingName={
               createdBuilding?.buildingName ||
               existingBuildings.find(b => b.fmGuid === selectedExistingFmGuid)?.commonName ||
-              'Byggnad'
+              'Building'
             }
           />
         </div>
