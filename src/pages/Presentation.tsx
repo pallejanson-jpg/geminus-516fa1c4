@@ -395,7 +395,7 @@ const ProofSlide = () => (
       {/* Left: Headline + stats */}
       <div className="flex-1 flex flex-col justify-center pr-16">
         <div className="flex items-center gap-4 mb-8">
-          <span className="px-5 py-2 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 text-[20px] font-semibold">
+          <span className="px-5 py-2 rounded-full bg-emerald-500/40 border border-emerald-400/50 text-emerald-200 text-[20px] font-semibold backdrop-blur-sm">
             ✓ Running in production
           </span>
         </div>
