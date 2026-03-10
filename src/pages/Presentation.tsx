@@ -666,27 +666,26 @@ const CompetitionDeepDiveSlide = () => {
   };
 
   return (
-    <div className="relative w-full h-full overflow-hidden">
-      <img src={competitionImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-950/97 via-indigo-950/80 to-slate-900/80" />
-      <div className="relative z-10 flex flex-col h-full text-white px-28 py-14">
-        <h2 className="text-[64px] font-black text-white mb-2">Competitive Landscape — Deep Dive</h2>
-        <p className="text-[24px] text-white/80 mb-10">Feature-by-feature comparison across key capabilities</p>
+    <div className="relative w-full h-full overflow-hidden bg-[#0a0e1a]">
+      <div className="absolute inset-0 bg-gradient-to-b from-[#0d1225] via-[#0a0e1a] to-[#080c16]" />
+      <div className="relative z-10 flex flex-col h-full text-white px-28 py-12">
+        <h2 className="text-[56px] font-black text-white mb-1">Competitive Landscape</h2>
+        <p className="text-[22px] text-white/60 mb-6">Feature-by-feature comparison across key capabilities</p>
 
         {/* Legend */}
-        <div className="flex items-center gap-8 mb-6">
-          <div className="flex items-center gap-2"><span className="text-emerald-400 text-[18px]">●</span><span className="text-[16px] text-white/70">Full capability</span></div>
-          <div className="flex items-center gap-2"><span className="text-amber-400 text-[18px]">◐</span><span className="text-[16px] text-white/70">Partial / limited</span></div>
-          <div className="flex items-center gap-2"><span className="text-red-400/60 text-[18px]">○</span><span className="text-[16px] text-white/70">Not available</span></div>
+        <div className="flex items-center gap-8 mb-5">
+          <div className="flex items-center gap-2"><span className="text-emerald-400 text-[20px]">✔</span><span className="text-[16px] text-white/60">Full capability</span></div>
+          <div className="flex items-center gap-2"><span className="text-amber-400 text-[20px]">◐</span><span className="text-[16px] text-white/60">Partial / limited</span></div>
+          <div className="flex items-center gap-2"><span className="text-red-400 text-[20px]">✘</span><span className="text-[16px] text-white/60">Not available</span></div>
         </div>
 
         {/* Matrix table */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col bg-white/[0.03] rounded-2xl border border-white/10 overflow-hidden">
           {/* Header row */}
-          <div className="flex items-center border-b border-white/20 pb-4 mb-2">
-            <div className="w-[280px] shrink-0 text-[17px] font-bold text-white/50 uppercase tracking-widest">Capability</div>
-            {competitors.map(({ name, color }) => (
-              <div key={name} className={`flex-1 text-center text-[19px] font-bold ${color} ${name === "Geminus" ? "text-[22px]" : ""}`}>
+          <div className="flex items-center bg-white/[0.06] px-6 py-4">
+            <div className="w-[260px] shrink-0 text-[15px] font-bold text-white/40 uppercase tracking-[0.15em]">Capability</div>
+            {competitors.map(({ name }) => (
+              <div key={name} className={`flex-1 text-center text-[18px] font-bold ${name === "Geminus" ? "text-cyan-300 text-[20px]" : "text-white/80"}`}>
                 {name}
               </div>
             ))}
@@ -694,21 +693,30 @@ const CompetitionDeepDiveSlide = () => {
 
           {/* Data rows */}
           {capabilities.map((cap, ri) => (
-            <div key={cap} className={`flex items-center py-4 ${ri < capabilities.length - 1 ? "border-b border-white/10" : ""}`}>
-              <div className="w-[280px] shrink-0 text-[20px] text-white/90 font-medium">{cap}</div>
-              {competitors.map(({ name, scores }) => (
-                <div key={name} className={`flex-1 flex justify-center ${name === "Geminus" ? "bg-cyan-500/10 rounded-lg py-1 mx-1" : ""}`}>
-                  {icon(scores[ri])}
-                </div>
-              ))}
+            <div key={cap} className={`flex items-center px-6 py-[18px] ${ri % 2 === 0 ? "" : "bg-white/[0.02]"} ${ri < capabilities.length - 1 ? "border-b border-white/[0.06]" : ""}`}>
+              <div className="w-[260px] shrink-0 text-[19px] text-white font-medium">{cap}</div>
+              {competitors.map(({ name, scores }) => {
+                const level = scores[ri];
+                return (
+                  <div key={name} className={`flex-1 flex justify-center ${name === "Geminus" ? "bg-cyan-500/[0.08] rounded-lg py-1 mx-2" : ""}`}>
+                    {level === "full" ? (
+                      <span className="text-emerald-400 text-[24px] font-bold">✔</span>
+                    ) : level === "partial" ? (
+                      <span className="text-amber-400 text-[24px]">◐</span>
+                    ) : (
+                      <span className="text-red-400/70 text-[24px]">✘</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>
 
         {/* Bottom takeaway */}
-        <div className="mt-6 bg-white rounded-2xl p-5 text-center">
-          <p className="text-[22px] font-black text-black leading-snug">
-            "Geminus is the only platform with full marks across all eight capabilities — because it connects the entire Addnode ecosystem."
+        <div className="mt-5 bg-gradient-to-r from-cyan-500/20 to-indigo-500/20 rounded-xl border border-cyan-400/30 px-8 py-4 text-center">
+          <p className="text-[20px] font-bold text-white leading-snug">
+            Geminus is the <span className="text-cyan-300">only platform</span> with full marks across all eight capabilities
           </p>
         </div>
       </div>
