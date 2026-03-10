@@ -909,26 +909,7 @@ function MobileUnifiedViewer({
     isDraggingRef.current = false;
   }, []);
 
-  // Dispatch 2D mode events when switching to 2D on mobile — event-driven, not timer-based
-  useEffect(() => {
-    if (viewMode === '2d' && viewerReady) {
-      const dispatch2D = () => {
-        window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '2d' } }));
-      };
-      // Listen for VIEWER_MODELS_LOADED as the reliable trigger
-      const modelsHandler = () => { setTimeout(dispatch2D, 300); };
-      window.addEventListener('VIEWER_MODELS_LOADED', modelsHandler, { once: true });
-      // Also dispatch once immediately in case models already loaded
-      const t = setTimeout(dispatch2D, 300);
-      return () => { clearTimeout(t); window.removeEventListener('VIEWER_MODELS_LOADED', modelsHandler); };
-    } else if (viewMode === '3d' && viewerReady) {
-      const dispatch3D = () => {
-        window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
-      };
-      const t = setTimeout(dispatch3D, 500);
-      return () => clearTimeout(t);
-    }
-  }, [viewMode, viewerReady]);
+  // Removed: duplicate 2D/3D dispatch effect — consolidated in UnifiedViewerContent effect #1
 
   return (
     <div
