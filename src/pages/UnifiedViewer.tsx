@@ -270,8 +270,14 @@ const UnifiedViewerContent: React.FC<{
   const viewerInstanceRef = useRef<any>(null);
   const [viewerReady, setViewerReady] = useState(false);
 
+  const prevBuildingFmGuidRef = useRef<string | null>(null);
   useEffect(() => {
-    setViewerReady(false);
+    const currentFmGuid = buildingData?.fmGuid ?? null;
+    // Only reset viewerReady when building actually changes, not on every buildingData reference update
+    if (currentFmGuid !== prevBuildingFmGuidRef.current) {
+      prevBuildingFmGuidRef.current = currentFmGuid;
+      setViewerReady(false);
+    }
     const checkForViewer = () => {
       const win = window as any;
       const instance = win.__assetPlusViewerInstance;
@@ -282,6 +288,7 @@ const UnifiedViewerContent: React.FC<{
       }
       return false;
     };
+    if (checkForViewer()) return;
     const interval = setInterval(() => {
       if (checkForViewer()) clearInterval(interval);
     }, 500);
