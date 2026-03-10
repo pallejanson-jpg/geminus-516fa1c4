@@ -1,51 +1,68 @@
 
+## Plan: Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
 
-## Plan: Competitive Market Analysis — New Slide + Detailed Deep-Dive Page
+### Changes Made
 
-### Context from Research
+#### 1. Browser-Primary Conversion for Large IFC Files
+**File: `src/components/settings/CreateBuildingPanel.tsx`**
+- Files >20MB skip edge function entirely → direct browser conversion
+- Files ≤20MB still try edge function first with WORKER_LIMIT fallback
+- Extracted `runBrowserConversion()` helper for DRY reuse between direct and fallback paths
+- Browser conversion now uploads `metadata.json` alongside `.xkt`
+- Systems extracted client-side are persisted to `systems` + `asset_system` tables
 
-| Competitor | Strengths | Weaknesses vs Geminus |
-|---|---|---|
-| **Vyer** | Strong Nordic customer base (Fastpartner, Revelop, Alecta, Vacse, Svenska Handelsfastigheter). Good 2D/3D visualization. Focus on operations & drawing archives. | No AI layer (no assistants, no AI inventory). No integrated FM system. Pure visualization — no workflow. No multi-system data hub. |
-| **Digital Buildings (Zynka/Newsec)** | Backed by Newsec (large advisory). "Power BI for Real Estate" — strong analytics. ~50 employees. Good property portfolio dashboards. | Property/portfolio focus, limited deep FM & IoT. No 3D BIM viewer. No AI assistants. Newsec-centric ecosystem. |
-| **Twinfinity (Sweco)** | Spun out as Twinfinity AB (Oct 2022). Cloud-based. Links BIM with operational + climate data. Strong Sweco brand. Major property owners as customers. | Closed Sweco ecosystem. No AI inventory/assistants. Consulting-driven (expensive). Not a product company culture. |
-| **Autodesk Tandem** | Free tier available. Huge Autodesk ecosystem (Revit, ACC). Tandem Connect + Tandem Insights modules. Strong international reach. | US-centric. Requires Autodesk stack. No Nordic FM integrations. No AI assistants. Expensive at scale (enterprise pricing). |
+#### 2. Metadata Extraction & Separate JSON
+**File: `src/services/acc-xkt-converter.ts`**
+- `convertToXktWithMetadata()` now returns `metaModelJson` (xeokit MetaModel format) + `systems[]`
+- WASM validation: explicit `HEAD` request to `/web-ifc-wasm/web-ifc.wasm` before importing
+- `inferDiscipline()` function for system classification (Ventilation, Heating, etc.)
+- System extraction from metaObjects: IfcSystem, IfcDistributionSystem, PropertySet grouping
 
-**Geminus advantages:** AI Assistants (Gunnar/Ilean), AI Inventory (photo scan → auto-register), full Addnode data stack (SWG + Symetri + Bimify + Senslinc), owned IP, vibe-coded in 3 months.
-
----
-
-### Deliverables
-
-#### 1. New Presentation Slide — "Deep Dive: Competitive Landscape"
-
-Insert a new slide after the existing Competition slide (becomes slide 8, pushing others down).
-
-**Layout:** Full comparison matrix at 1920×1080:
-- Top: title "Competitive Landscape — Deep Dive"
-- Center: Feature comparison table with rows for key capabilities and columns for each competitor + Geminus
-- Capabilities: 3D BIM Viewer, AI Assistants, AI Inventory, IoT Integration, FM System Integration, Multi-vendor Data Hub, Nordic Market Presence, Pricing Model
-- Color-coded: green check for Geminus, red/amber/gray for competitors
-- Bottom: key takeaway quote
-
-**File:** `src/pages/Presentation.tsx`
-- Add `CompetitionDeepDiveSlide` component
-- Add to `slides` array after `CompetitionSlide`
-- Add title + speaker notes to `SLIDE_TITLES` and `NOTES` arrays
-
-#### 2. Update Existing Competition Slide
-
-Enrich the competitor descriptions with more specific data from research:
-- Vyer: mention specific customers (Fastpartner, Alecta, Revelop)
-- Digital Buildings: mention "Power BI for Real Estate" positioning, Newsec acquisition
-- Twinfinity: mention Sweco spin-off, cloud BIM + climate data
-- Autodesk Tandem: mention free tier, Tandem Connect/Insights modules
+#### 3. Viewer MetaModel Loading
+**File: `src/components/viewer/NativeXeokitViewer.tsx`**
+- Before loading each XKT model, checks for `{modelId}_metadata.json` in storage
+- If found, passes as `metaModelSrc` to `xktLoader.load()` for richer BIM queries
+- Works for all three loading paths: memory, streaming, and buffer
 
 ---
 
-### Summary of Changes
+## Plan: External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
 
-| File | Change |
-|---|---|
-| `src/pages/Presentation.tsx` | Enrich existing CompetitionSlide data, add new CompetitionDeepDiveSlide, update slide registry + notes |
+### Architecture
 
+```text
+IFC Upload → Supabase Storage → conversion_jobs (pending)
+       ↓
+External Worker (polls conversion-worker-api)
+  - Downloads IFC via signed URL
+  - Groups objects by IfcBuildingStorey
+  - Generates per-storey .xkt tiles
+  - Uploads tiles to storage
+  - Reports completion → xkt_models records created
+       ↓
+Viewer detects real tiles (unique storage_paths)
+  - Loads active floor tile (~15MB)
+  - Lazy-loads adjacent floors on FLOOR_TILE_SWITCH event
+  - Unloads distant floors to save memory
+  - Falls back to monolithic loading if no real tiles
+```
+
+### Files Created/Changed
+
+| File | Action |
+|------|--------|
+| `supabase/functions/conversion-worker-api/index.ts` | Created — worker API (pending/claim/progress/complete/fail/upload-url) |
+| `supabase/config.toml` | Added verify_jwt = false entry |
+| `docs/conversion-worker/worker.mjs` | Created — standalone Node.js worker |
+| `docs/conversion-worker/Dockerfile` | Created — Docker deployment |
+| `docs/conversion-worker/README.md` | Created — deployment guide |
+| `src/components/viewer/NativeXeokitViewer.tsx` | Updated — real tile detection + FLOOR_TILE_SWITCH listener |
+| `src/hooks/useFloorPriorityLoading.ts` | Updated — isRealTiling + getTilesToLoad + FLOOR_TILE_SWITCH dispatch |
+
+### Key Concepts
+
+- **Virtual chunks (Phase 1)**: Same XKT file, visibility filtering by storey metadata
+- **Real tiles (Phase 2)**: Separate per-storey XKT files with unique `storage_path` values
+- Detection: `isRealTiling()` checks if chunks have >1 unique storage paths
+- Dynamic loading: `FLOOR_TILE_SWITCH` custom event triggers load/unload of tiles
+- Worker auth: `WORKER_API_SECRET` shared secret (not JWT)
