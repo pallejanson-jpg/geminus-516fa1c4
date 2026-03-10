@@ -5,24 +5,8 @@ import { verifyAuth, unauthorizedResponse, corsHeaders } from "../_shared/auth.t
 /**
  * Asset+ Create Edge Function
  * 
- * Creates objects in Asset+ using the AddObjectList endpoint with the correct
- * BimObjectWithParents payload format. Supports both single and batch creation.
- * 
- * Correct payload format for Asset+ AddObjectList:
- * {
- *   BimObjectWithParents: [{
- *     BimObject: {
- *       ObjectType: 4,
- *       Designation: "...",
- *       CommonName: "...",
- *       APIKey: "...",
- *       FmGuid: "uuid",
- *       UsedIdentifier: 1,
- *     },
- *     ParentFmGuid: "parent-guid",
- *     UsedIdentifier: 1,
- *   }]
- * }
+ * Creates objects in Asset+ using the AddObjectList endpoint.
+ * Supports both room-parented and orphan (building-parented) objects.
  */
 
 const ObjectType = {
@@ -70,7 +54,8 @@ async function getAccessToken(): Promise<string> {
 
 interface CreateAssetItem {
   fmGuid?: string;
-  parentSpaceFmGuid: string;
+  parentSpaceFmGuid?: string;
+  parentBuildingFmGuid?: string;
   designation: string;
   commonName?: string;
   properties?: Array<{
@@ -87,6 +72,7 @@ interface CreateAssetItem {
 
 interface CreateRequest {
   parentSpaceFmGuid?: string;
+  parentBuildingFmGuid?: string;
   designation?: string;
   commonName?: string;
   fmGuid?: string;
@@ -110,6 +96,19 @@ interface CreateResult {
   asset?: any;
 }
 
+// ============ RESOLVE PARENT ============
+
+/** Determine the parent GUID and building GUID for an item */
+function resolveParent(item: CreateAssetItem): { parentFmGuid: string; isOrphan: boolean } {
+  if (item.parentSpaceFmGuid) {
+    return { parentFmGuid: item.parentSpaceFmGuid, isOrphan: false };
+  }
+  if (item.parentBuildingFmGuid) {
+    return { parentFmGuid: item.parentBuildingFmGuid, isOrphan: true };
+  }
+  throw new Error("Either parentSpaceFmGuid or parentBuildingFmGuid is required");
+}
+
 // ============ CORE CREATE LOGIC ============
 
 async function createSingleObject(
@@ -122,10 +121,9 @@ async function createSingleObject(
   const baseUrl = apiUrl.replace(/\/+$/, "");
   const endpoint = `${baseUrl}/AddObjectList`;
 
-  // Generate FMGUID if not provided
   const fmGuid = item.fmGuid || crypto.randomUUID();
+  const { parentFmGuid, isOrphan } = resolveParent(item);
 
-  // Build correct BimObjectWithParents payload
   const payload = {
     BimObjectWithParents: [{
       BimObject: {
@@ -137,12 +135,12 @@ async function createSingleObject(
         FmGuid: fmGuid,
         UsedIdentifier: 1,
       },
-      ParentFmGuid: item.parentSpaceFmGuid,
+      ParentFmGuid: parentFmGuid,
       UsedIdentifier: 1,
     }],
   };
 
-  console.log(`Creating object ${item.designation} (${fmGuid}) under parent ${item.parentSpaceFmGuid}`);
+  console.log(`Creating object ${item.designation} (${fmGuid}) under parent ${parentFmGuid} (orphan=${isOrphan})`);
 
   try {
     const response = await fetch(endpoint, {
@@ -183,9 +181,9 @@ async function createSingleObject(
       createdAsset = { rawResponse: responseText };
     }
 
-    // Resolve building_fm_guid from parent space hierarchy
-    let buildingFmGuid: string | null = null;
-    if (supabase) {
+    // Resolve building_fm_guid
+    let buildingFmGuid: string | null = isOrphan ? parentFmGuid : null;
+    if (!isOrphan && supabase) {
       try {
         const { data: parentSpace } = await supabase
           .from("assets")
@@ -198,7 +196,7 @@ async function createSingleObject(
       }
     }
 
-    // Store locally with coordinates
+    // Store locally
     if (supabase) {
       try {
         await supabase
@@ -208,7 +206,7 @@ async function createSingleObject(
             name: item.designation,
             common_name: item.commonName || null,
             category: "Instance",
-            in_room_fm_guid: item.parentSpaceFmGuid,
+            in_room_fm_guid: isOrphan ? null : item.parentSpaceFmGuid,
             building_fm_guid: buildingFmGuid,
             coordinate_x: item.coordinates?.x ?? null,
             coordinate_y: item.coordinates?.y ?? null,
@@ -221,7 +219,7 @@ async function createSingleObject(
       }
     }
 
-    // Update properties via UpdateBimObjectsPropertiesData if there are custom properties
+    // Update properties if any
     if (item.properties && item.properties.length > 0) {
       try {
         const propsEndpoint = `${baseUrl}/UpdateBimObjectsPropertiesData`;
@@ -273,11 +271,10 @@ async function createBatchObjects(
 ): Promise<CreateResult[]> {
   const baseUrl = apiUrl.replace(/\/+$/, "");
 
-  // Build BimObjectWithParents payload for batch
   const bimObjectsWithParents = items.map(item => {
     const fmGuid = item.fmGuid || crypto.randomUUID();
-    // Store generated guid back on item for later reference
     (item as any)._resolvedFmGuid = fmGuid;
+    const { parentFmGuid } = resolveParent(item);
 
     return {
       BimObject: {
@@ -289,14 +286,12 @@ async function createBatchObjects(
         FmGuid: fmGuid,
         UsedIdentifier: 1,
       },
-      ParentFmGuid: item.parentSpaceFmGuid,
+      ParentFmGuid: parentFmGuid,
       UsedIdentifier: 1,
     };
   });
 
-  const batchPayload = {
-    BimObjectWithParents: bimObjectsWithParents,
-  };
+  const batchPayload = { BimObjectWithParents: bimObjectsWithParents };
 
   try {
     const endpoint = `${baseUrl}/AddObjectList`;
@@ -323,24 +318,25 @@ async function createBatchObjects(
         createdList = [];
       }
 
-      // Store all locally
       const results: CreateResult[] = [];
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         const created = createdList[i];
         const assetFmGuid = (item as any)._resolvedFmGuid || created?.fmGuid || item.fmGuid;
+        const { isOrphan } = resolveParent(item);
 
         if (assetFmGuid && supabase) {
-          // Resolve building_fm_guid
-          let buildingFmGuid: string | null = null;
-          try {
-            const { data: parentSpace } = await supabase
-              .from("assets")
-              .select("building_fm_guid")
-              .eq("fm_guid", item.parentSpaceFmGuid)
-              .maybeSingle();
-            buildingFmGuid = parentSpace?.building_fm_guid || null;
-          } catch { /* ignore */ }
+          let buildingFmGuid: string | null = isOrphan ? (item.parentBuildingFmGuid || null) : null;
+          if (!isOrphan) {
+            try {
+              const { data: parentSpace } = await supabase
+                .from("assets")
+                .select("building_fm_guid")
+                .eq("fm_guid", item.parentSpaceFmGuid)
+                .maybeSingle();
+              buildingFmGuid = parentSpace?.building_fm_guid || null;
+            } catch { /* ignore */ }
+          }
 
           try {
             await supabase
@@ -350,7 +346,7 @@ async function createBatchObjects(
                 name: item.designation,
                 common_name: item.commonName || null,
                 category: "Instance",
-                in_room_fm_guid: item.parentSpaceFmGuid,
+                in_room_fm_guid: isOrphan ? null : item.parentSpaceFmGuid,
                 building_fm_guid: buildingFmGuid,
                 coordinate_x: item.coordinates?.x ?? null,
                 coordinate_y: item.coordinates?.y ?? null,
@@ -368,7 +364,6 @@ async function createBatchObjects(
       return results;
     }
 
-    // AddObjectList failed - fallback to individual calls
     console.log("AddObjectList batch failed, falling back to individual calls");
   } catch (batchError) {
     console.log("AddObjectList not available, using individual calls:", batchError);
@@ -404,7 +399,8 @@ serve(async (req) => {
       ? body.objects!
       : [{
           fmGuid: body.fmGuid,
-          parentSpaceFmGuid: body.parentSpaceFmGuid || "",
+          parentSpaceFmGuid: body.parentSpaceFmGuid || undefined,
+          parentBuildingFmGuid: body.parentBuildingFmGuid || undefined,
           designation: body.designation || "",
           commonName: body.commonName,
           properties: body.properties,
@@ -413,9 +409,9 @@ serve(async (req) => {
 
     // Validate all items
     for (const item of items) {
-      if (!item.parentSpaceFmGuid) {
+      if (!item.parentSpaceFmGuid && !item.parentBuildingFmGuid) {
         return new Response(
-          JSON.stringify({ success: false, error: "parentSpaceFmGuid is required for all objects" }),
+          JSON.stringify({ success: false, error: "Either parentSpaceFmGuid or parentBuildingFmGuid is required for all objects" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

@@ -1,60 +1,68 @@
 
+## Plan: Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
 
-## Plan: Excel-import med mallnedladdning och orphan-stöd
+### Changes Made
 
-### Sammanfattning
-Bygga en Excel-importfunktion med nedladdningsbar mall per byggnad. Mallen förfylls med kolumnrubriker och hjälpdata (våningsnamn, rumsnamn) så att användaren skriver klartext istället för GUID:er. Systemet slår upp GUID:er automatiskt vid import. Stöd för både objekt med rumsrelation och orphans (enbart byggnadsrelation).
+#### 1. Browser-Primary Conversion for Large IFC Files
+**File: `src/components/settings/CreateBuildingPanel.tsx`**
+- Files >20MB skip edge function entirely → direct browser conversion
+- Files ≤20MB still try edge function first with WORKER_LIMIT fallback
+- Extracted `runBrowserConversion()` helper for DRY reuse between direct and fallback paths
+- Browser conversion now uploads `metadata.json` alongside `.xkt`
+- Systems extracted client-side are persisted to `systems` + `asset_system` tables
 
-### Steg 1 — Orphan-stöd i edge function
-**`supabase/functions/asset-plus-create/index.ts`**
-- Gör `parentSpaceFmGuid` valfritt
-- Lägg till `parentBuildingFmGuid` som alternativ — om inget rum anges, koppla objektet direkt till byggnaden i Asset+
-- Uppdatera validering: kräv antingen `parentSpaceFmGuid` ELLER `parentBuildingFmGuid`
-- Vid lokal lagring: sätt `building_fm_guid` men lämna `in_room_fm_guid` null
+#### 2. Metadata Extraction & Separate JSON
+**File: `src/services/acc-xkt-converter.ts`**
+- `convertToXktWithMetadata()` now returns `metaModelJson` (xeokit MetaModel format) + `systems[]`
+- WASM validation: explicit `HEAD` request to `/web-ifc-wasm/web-ifc.wasm` before importing
+- `inferDiscipline()` function for system classification (Ventilation, Heating, etc.)
+- System extraction from metaObjects: IfcSystem, IfcDistributionSystem, PropertySet grouping
 
-### Steg 2 — Mall-nedladdning (klientbaserad)
-**Ny fil: `src/components/import/ExcelTemplateDownload.tsx`**
-- Knapp "Ladda ner Excel-mall" i CreateBuildingPanel (samma vy som IFC-upload)
-- Användaren väljer byggnad → systemet hämtar alla våningar och rum för den byggnaden från `assets`-tabellen
-- Genererar en `.xlsx`-fil med:
-  - **Kolumner**: Designation (obligatorisk), CommonName, Våning, Rum, Beskrivning, + valfria egenskaper
-  - **Blad 2 "Hjälpdata"**: lista med alla våningsnamn och rumsnamn för byggnaden
-  - **Data-validering (dropdowns)** i kolumnerna Våning och Rum som refererar till Blad 2
-- Använder `xlsx` (SheetJS) biblioteket för generering i webbläsaren
+#### 3. Viewer MetaModel Loading
+**File: `src/components/viewer/NativeXeokitViewer.tsx`**
+- Before loading each XKT model, checks for `{modelId}_metadata.json` in storage
+- If found, passes as `metaModelSrc` to `xktLoader.load()` for richer BIM queries
+- Works for all three loading paths: memory, streaming, and buffer
 
-### Steg 3 — Excel-import
-**Nya filer:**
-- `src/components/import/ExcelImportDialog.tsx` — huvuddialog med steg-för-steg-flöde
-- `src/components/import/ImportPreview.tsx` — tabell med förhandsgranskning och validering
+---
 
-**Flöde:**
-1. Användaren laddar upp ifylld Excel
-2. Parsning med SheetJS → visa rader i tabell
-3. Automatisk namnuppslag: "Plan 4" → matchas mot assets med `category=IfcBuildingStorey` och `common_name ILIKE 'Plan 4'` → hämta `fm_guid`. Samma för rum.
-4. Validering: markera rader som saknar obligatoriska fält eller där namn inte matchar
-5. Användaren godkänner → batch-skapa via `asset-plus-create` edge function
-6. Visa resultat (antal skapade / misslyckade)
+## Plan: External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
 
-### Steg 4 — Integration i befintlig UI
-**`src/components/settings/CreateBuildingPanel.tsx`**
-- Lägg till sektion under IFC-upload: "Inventera via Excel"
-- Två knappar: "Ladda ner mall" + "Importera Excel"
+### Architecture
 
-### Nytt paket
-- `xlsx` (SheetJS) — klientbaserad Excel-generering och parsning
-
-### Tekniskt flöde
 ```text
-Välj byggnad → Ladda ner mall (.xlsx med dropdowns)
-     ↓
-Fyll i offline (designation, commonName, våning, rum)
-     ↓
-Ladda upp → Parse → Namnuppslag (klartext → GUID)
-     ↓
-Validering → Preview-tabell → Godkänn
-     ↓
-Batch-skapa via asset-plus-create (max 100/anrop)
-     ↓
-Resultat: X skapade, Y misslyckade
+IFC Upload → Supabase Storage → conversion_jobs (pending)
+       ↓
+External Worker (polls conversion-worker-api)
+  - Downloads IFC via signed URL
+  - Groups objects by IfcBuildingStorey
+  - Generates per-storey .xkt tiles
+  - Uploads tiles to storage
+  - Reports completion → xkt_models records created
+       ↓
+Viewer detects real tiles (unique storage_paths)
+  - Loads active floor tile (~15MB)
+  - Lazy-loads adjacent floors on FLOOR_TILE_SWITCH event
+  - Unloads distant floors to save memory
+  - Falls back to monolithic loading if no real tiles
 ```
 
+### Files Created/Changed
+
+| File | Action |
+|------|--------|
+| `supabase/functions/conversion-worker-api/index.ts` | Created — worker API (pending/claim/progress/complete/fail/upload-url) |
+| `supabase/config.toml` | Added verify_jwt = false entry |
+| `docs/conversion-worker/worker.mjs` | Created — standalone Node.js worker |
+| `docs/conversion-worker/Dockerfile` | Created — Docker deployment |
+| `docs/conversion-worker/README.md` | Created — deployment guide |
+| `src/components/viewer/NativeXeokitViewer.tsx` | Updated — real tile detection + FLOOR_TILE_SWITCH listener |
+| `src/hooks/useFloorPriorityLoading.ts` | Updated — isRealTiling + getTilesToLoad + FLOOR_TILE_SWITCH dispatch |
+
+### Key Concepts
+
+- **Virtual chunks (Phase 1)**: Same XKT file, visibility filtering by storey metadata
+- **Real tiles (Phase 2)**: Separate per-storey XKT files with unique `storage_path` values
+- Detection: `isRealTiling()` checks if chunks have >1 unique storage paths
+- Dynamic loading: `FLOOR_TILE_SWITCH` custom event triggers load/unload of tiles
+- Worker auth: `WORKER_API_SECRET` shared secret (not JWT)
