@@ -58,6 +58,9 @@ const CreateBuildingPanel: React.FC = () => {
   const [elapsedDisplay, setElapsedDisplay] = useState('');
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Excel import state
+  const [excelImportOpen, setExcelImportOpen] = useState(false);
+
   // Elapsed timer tick
   useEffect(() => {
     if (!conversionStartTime || conversionDone) return;
