@@ -152,7 +152,7 @@ export function useSectionPlaneClipping(
   viewerRef: React.MutableRefObject<any>,
   options: SectionPlaneClippingOptions = {}
 ) {
-  const { enabled = true, offset: initialOffset = 0.05, clipMode = 'ceiling', floorCutHeight: initialFloorCutHeight = 1.2 } = options;
+  const { enabled = true, offset: initialOffset = 0.05, clipMode = 'ceiling', floorCutHeight: initialFloorCutHeight = 0.5 } = options;
   
   const topPlaneRef = useRef<any>(null);
   const bottomPlaneRef = useRef<any>(null);
