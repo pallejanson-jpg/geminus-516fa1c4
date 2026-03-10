@@ -55,6 +55,9 @@ const Inline3dPositionPicker: React.FC<Inline3dPositionPickerProps> = ({
       const tryFlyToRoom = () => {
         const normalizedRoom = roomFmGuid.toLowerCase().replace(/-/g, '');
         const objects = viewer.scene.objects;
+        const metaObjects = viewer.metaScene?.metaObjects || {};
+
+        // Strategy 1: Match entity ID directly
         for (const id of Object.keys(objects)) {
           if (id.toLowerCase().replace(/-/g, '').includes(normalizedRoom)) {
             const entity = objects[id];
@@ -64,6 +67,25 @@ const Inline3dPositionPicker: React.FC<Inline3dPositionPickerProps> = ({
             }
           }
         }
+
+        // Strategy 2: Match via metaObject attributes (originalSystemId, FmGuid)
+        for (const mo of Object.values(metaObjects) as any[]) {
+          const candidates = [
+            mo?.originalSystemId,
+            mo?.attributes?.FmGuid,
+            mo?.attributes?.fmGuid,
+            mo?.attributes?.fmguid,
+          ].filter(Boolean).map((v: string) => v.toLowerCase().replace(/-/g, ''));
+
+          if (candidates.some(c => c === normalizedRoom || c.includes(normalizedRoom))) {
+            const entity = objects[mo.id];
+            if (entity?.aabb) {
+              viewer.cameraFlight.flyTo({ aabb: entity.aabb, duration: 0.8 });
+              return true;
+            }
+          }
+        }
+
         return false;
       };
       if (!tryFlyToRoom()) {
