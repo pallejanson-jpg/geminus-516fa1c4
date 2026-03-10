@@ -1,56 +1,68 @@
 
+## Plan: Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
 
-## Plan: Fix 2D Mode Snap-Back + Self-Rotation
+### Changes Made
 
-### Root Cause Analysis
+#### 1. Browser-Primary Conversion for Large IFC Files
+**File: `src/components/settings/CreateBuildingPanel.tsx`**
+- Files >20MB skip edge function entirely → direct browser conversion
+- Files ≤20MB still try edge function first with WORKER_LIMIT fallback
+- Extracted `runBrowserConversion()` helper for DRY reuse between direct and fallback paths
+- Browser conversion now uploads `metadata.json` alongside `.xkt`
+- Systems extracted client-side are persisted to `systems` + `asset_system` tables
 
-**2D reverts to 3D:** Three competing `useEffect` hooks dispatch `VIEW_MODE_REQUESTED_EVENT`, creating race conditions:
+#### 2. Metadata Extraction & Separate JSON
+**File: `src/services/acc-xkt-converter.ts`**
+- `convertToXktWithMetadata()` now returns `metaModelJson` (xeokit MetaModel format) + `systems[]`
+- WASM validation: explicit `HEAD` request to `/web-ifc-wasm/web-ifc.wasm` before importing
+- `inferDiscipline()` function for system classification (Ventilation, Heating, etc.)
+- System extraction from metaObjects: IfcSystem, IfcDistributionSystem, PropertySet grouping
 
-1. **Effect at line 129** (UnifiedViewerContent): fires immediately on `[viewMode, floorFmGuid]` — dispatches for every change, including when `floorFmGuid` changes
-2. **Effect at line 290** (UnifiedViewerContent): fires on `[viewerReady, viewMode, floorFmGuid]` — dispatches again on `VIEWER_MODELS_LOADED`
-3. **Effect at line 905** (MobileUnifiedViewer): fires on `[viewMode, viewerReady]` — dispatches `'3d'` after 500ms when viewMode='3d'
-
-The problem: Effect #3 schedules a `VIEW_MODE_REQUESTED '3d'` dispatch with a 500ms delay. If `viewerReady` changes (which it does — the effect at line 272 resets `viewerReady` to false on every `buildingData` change, then re-detects it 500ms later), the cleanup/re-fire sequence can dispatch '3d' AFTER the user has already switched to '2d'. Additionally, effect #1 fires on `floorFmGuid` changes, causing force-reapply which hides/reveals the canvas.
-
-**Self-rotation:** The `cameraControl` retains touch inertia from previous 3D interactions. When switching to `planView` nav mode, the residual rotational momentum still applies, causing the view to spin without user input.
-
----
-
-### Fix 1: Consolidate Mode Event Dispatching
-
-**File: `src/pages/UnifiedViewer.tsx`**
-
-- **Remove effect #3** (line 905-923 in MobileUnifiedViewer) entirely — it's redundant with effect #1
-- **Guard effect #1** (line 129): only dispatch `VIEW_MODE_REQUESTED_EVENT` when `viewMode` actually changed (check `prev !== viewMode` before dispatching), not on every `floorFmGuid` change
-- **Stabilize `viewerReady`** (line 272-288): don't call `setViewerReady(false)` if the viewer instance is already detected on the window — only reset when `buildingData.fmGuid` actually changes (use a ref to track previous fmGuid)
-
-### Fix 2: Stop Self-Rotation in 2D/PlanView
-
-**File: `src/components/viewer/ViewerToolbar.tsx`**
-
-In the 2D branch of `handleViewModeChange`, after setting `navMode = 'planView'`, explicitly stop any ongoing inertia:
-```
-viewer.cameraControl.navMode = 'planView';
-// Kill residual inertia
-if (viewer.scene.camera) {
-  viewer.scene.camera.eye = [...viewer.scene.camera.eye];
-}
-```
-
-Also reduce `followPointerEnabled` to false in planView to prevent drift.
-
-### Fix 3: Prevent Force-Reapply Flash
-
-**File: `src/components/viewer/ViewerToolbar.tsx`**
-
-When `isForceReapply` is true, skip the canvas hide/reveal animation (lines 604, 765-766). The clipping/styling can be reapplied without visual disruption.
+#### 3. Viewer MetaModel Loading
+**File: `src/components/viewer/NativeXeokitViewer.tsx`**
+- Before loading each XKT model, checks for `{modelId}_metadata.json` in storage
+- If found, passes as `metaModelSrc` to `xktLoader.load()` for richer BIM queries
+- Works for all three loading paths: memory, streaming, and buffer
 
 ---
 
-### Summary
+## Plan: External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
 
-| File | Change |
-|---|---|
-| `src/pages/UnifiedViewer.tsx` | Remove duplicate effect in MobileUnifiedViewer. Guard effect #1 to only dispatch on actual mode changes. Stabilize viewerReady. |
-| `src/components/viewer/ViewerToolbar.tsx` | Kill camera inertia when entering planView. Skip canvas flash on force-reapply. |
+### Architecture
 
+```text
+IFC Upload → Supabase Storage → conversion_jobs (pending)
+       ↓
+External Worker (polls conversion-worker-api)
+  - Downloads IFC via signed URL
+  - Groups objects by IfcBuildingStorey
+  - Generates per-storey .xkt tiles
+  - Uploads tiles to storage
+  - Reports completion → xkt_models records created
+       ↓
+Viewer detects real tiles (unique storage_paths)
+  - Loads active floor tile (~15MB)
+  - Lazy-loads adjacent floors on FLOOR_TILE_SWITCH event
+  - Unloads distant floors to save memory
+  - Falls back to monolithic loading if no real tiles
+```
+
+### Files Created/Changed
+
+| File | Action |
+|------|--------|
+| `supabase/functions/conversion-worker-api/index.ts` | Created — worker API (pending/claim/progress/complete/fail/upload-url) |
+| `supabase/config.toml` | Added verify_jwt = false entry |
+| `docs/conversion-worker/worker.mjs` | Created — standalone Node.js worker |
+| `docs/conversion-worker/Dockerfile` | Created — Docker deployment |
+| `docs/conversion-worker/README.md` | Created — deployment guide |
+| `src/components/viewer/NativeXeokitViewer.tsx` | Updated — real tile detection + FLOOR_TILE_SWITCH listener |
+| `src/hooks/useFloorPriorityLoading.ts` | Updated — isRealTiling + getTilesToLoad + FLOOR_TILE_SWITCH dispatch |
+
+### Key Concepts
+
+- **Virtual chunks (Phase 1)**: Same XKT file, visibility filtering by storey metadata
+- **Real tiles (Phase 2)**: Separate per-storey XKT files with unique `storage_path` values
+- Detection: `isRealTiling()` checks if chunks have >1 unique storage paths
+- Dynamic loading: `FLOOR_TILE_SWITCH` custom event triggers load/unload of tiles
+- Worker auth: `WORKER_API_SECRET` shared secret (not JWT)

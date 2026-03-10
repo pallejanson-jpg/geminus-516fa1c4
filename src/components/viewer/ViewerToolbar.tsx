@@ -600,8 +600,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
       };
 
       try {
-        // Hide canvas immediately to avoid 3D flash while we set up 2D
-        if (canvas) canvas.style.opacity = '0';
+        // Hide canvas to avoid 3D flash — skip on force-reapply to prevent flicker
+        if (canvas && !isForceReapply) canvas.style.opacity = '0';
 
         // Set white background FIRST
         window.dispatchEvent(new CustomEvent(ARCHITECT_BACKGROUND_CHANGED_EVENT, { detail: { presetId: 'white' } }));
@@ -752,6 +752,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         // Lock navigation: planView mode prevents rotation, only pan + zoom
         if (viewer.cameraControl) {
           viewer.cameraControl.navMode = 'planView';
+          viewer.cameraControl.followPointer = false;
+        }
+        // Kill any residual inertia from 3D orbit/pan so the view doesn't spin
+        if (viewer.scene?.camera) {
+          viewer.scene.camera.eye = [...viewer.scene.camera.eye];
+          viewer.scene.camera.look = [...viewer.scene.camera.look];
+          viewer.scene.camera.up = [...viewer.scene.camera.up];
         }
         // Cache the floor ID for force-reapply
         if (targetFloorId) {
@@ -762,8 +769,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         try { remove2DClipping(); } catch {}
         try { remove3DClipping(); } catch {}
       } finally {
-        setTimeout(revealCanvas, 80);
-        setTimeout(revealCanvas, 600);
+        if (!isForceReapply) {
+          setTimeout(revealCanvas, 80);
+          setTimeout(revealCanvas, 600);
+        }
         mode2dTransitionRef.current = false;
       }
     } else {
