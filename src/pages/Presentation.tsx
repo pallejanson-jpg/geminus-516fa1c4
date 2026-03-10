@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import heroImage from "@/assets/chicago-skyline-hero.jpg";
+import competitionImage from "@/assets/competition-landscape.jpg";
 import screenshotViewer from "@/assets/screenshot-viewer.png";
 import screenshotAiScan from "@/assets/screenshot-ai-scan.png";
 import screenshotMobile from "@/assets/screenshot-mobile.png";
