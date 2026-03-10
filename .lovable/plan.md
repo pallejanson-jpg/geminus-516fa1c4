@@ -1,68 +1,38 @@
 
-## Plan: Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
 
-### Changes Made
+## Problem
 
-#### 1. Browser-Primary Conversion for Large IFC Files
-**File: `src/components/settings/CreateBuildingPanel.tsx`**
-- Files >20MB skip edge function entirely → direct browser conversion
-- Files ≤20MB still try edge function first with WORKER_LIMIT fallback
-- Extracted `runBrowserConversion()` helper for DRY reuse between direct and fallback paths
-- Browser conversion now uploads `metadata.json` alongside `.xkt`
-- Systems extracted client-side are persisted to `systems` + `asset_system` tables
+SheetJS (`xlsx`) community edition stöder **inte** Data Validation (dropdowns) vid skrivning. Egenskapen `ws['!dataValidation']` ignoreras helt — den finns inte i bibliotekets writer. Därför genereras Hjälpdata-fliken korrekt, men inga dropdowns syns i Import-fliken.
 
-#### 2. Metadata Extraction & Separate JSON
-**File: `src/services/acc-xkt-converter.ts`**
-- `convertToXktWithMetadata()` now returns `metaModelJson` (xeokit MetaModel format) + `systems[]`
-- WASM validation: explicit `HEAD` request to `/web-ifc-wasm/web-ifc.wasm` before importing
-- `inferDiscipline()` function for system classification (Ventilation, Heating, etc.)
-- System extraction from metaObjects: IfcSystem, IfcDistributionSystem, PropertySet grouping
+## Lösning
 
-#### 3. Viewer MetaModel Loading
-**File: `src/components/viewer/NativeXeokitViewer.tsx`**
-- Before loading each XKT model, checks for `{modelId}_metadata.json` in storage
-- If found, passes as `metaModelSrc` to `xktLoader.load()` for richer BIM queries
-- Works for all three loading paths: memory, streaming, and buffer
+Byt till att referera Hjälpdata-fliken via **named ranges** i formler som SheetJS *inte heller* stöder — så den enda fungerande lösningen är att använda **`xlsx` Pro** (kommersiell) eller bygga Data Validation manuellt via XML-manipulation av den genererade filen.
 
----
+**Rekommenderad approach:** Skriv en postprocessing-steg som:
 
-## Plan: External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+1. Genererar `.xlsx` med SheetJS som vanligt (data + hjälpdata)
+2. Packar upp filen (`.xlsx` är en ZIP)
+3. Injicerar `<dataValidation>` XML-element direkt i `xl/worksheets/sheet1.xml`
+4. Packar om och laddar ner
 
-### Architecture
+Alternativt kan vi använda ett enklare trick: **referera till Hjälpdata-fliken direkt i validerings-XML** med formel `Hjälpdata!$A$2:$A${n}` för våningar och `Hjälpdata!$B$2:$B${n}` för rum.
 
-```text
-IFC Upload → Supabase Storage → conversion_jobs (pending)
-       ↓
-External Worker (polls conversion-worker-api)
-  - Downloads IFC via signed URL
-  - Groups objects by IfcBuildingStorey
-  - Generates per-storey .xkt tiles
-  - Uploads tiles to storage
-  - Reports completion → xkt_models records created
-       ↓
-Viewer detects real tiles (unique storage_paths)
-  - Loads active floor tile (~15MB)
-  - Lazy-loads adjacent floors on FLOOR_TILE_SWITCH event
-  - Unloads distant floors to save memory
-  - Falls back to monolithic loading if no real tiles
-```
+### Tekniska ändringar
 
-### Files Created/Changed
+**`src/components/import/ExcelTemplateDownload.tsx`:**
 
-| File | Action |
-|------|--------|
-| `supabase/functions/conversion-worker-api/index.ts` | Created — worker API (pending/claim/progress/complete/fail/upload-url) |
-| `supabase/config.toml` | Added verify_jwt = false entry |
-| `docs/conversion-worker/worker.mjs` | Created — standalone Node.js worker |
-| `docs/conversion-worker/Dockerfile` | Created — Docker deployment |
-| `docs/conversion-worker/README.md` | Created — deployment guide |
-| `src/components/viewer/NativeXeokitViewer.tsx` | Updated — real tile detection + FLOOR_TILE_SWITCH listener |
-| `src/hooks/useFloorPriorityLoading.ts` | Updated — isRealTiling + getTilesToLoad + FLOOR_TILE_SWITCH dispatch |
+- Generera workbook som idag med SheetJS
+- Skriv till en `Uint8Array` istället för direkt fil (`XLSX.write(wb, {type:'array'})`)
+- Packa upp med JSZip (lägg till beroende `jszip`)
+- Läs `xl/worksheets/sheet1.xml`
+- Injicera `<dataValidations>` block med två regler:
+  - Kolumn C (Våning): `<dataValidation type="list" sqref="C2:C1000"><formula1>Hjälpdata!$A$2:$A${floorCount+1}</formula1></dataValidation>`
+  - Kolumn D (Rum): `<dataValidation type="list" sqref="D2:D1000"><formula1>Hjälpdata!$B$2:$B${roomCount+1}</formula1></dataValidation>`
+- Packa om ZIP → Blob → ladda ner
 
-### Key Concepts
+### Nytt beroende
+- `jszip` — för att manipulera xlsx-filen (ZIP-format)
 
-- **Virtual chunks (Phase 1)**: Same XKT file, visibility filtering by storey metadata
-- **Real tiles (Phase 2)**: Separate per-storey XKT files with unique `storage_path` values
-- Detection: `isRealTiling()` checks if chunks have >1 unique storage paths
-- Dynamic loading: `FLOOR_TILE_SWITCH` custom event triggers load/unload of tiles
-- Worker auth: `WORKER_API_SECRET` shared secret (not JWT)
+### Resultat
+Användaren får en Excel-fil där kolumn C och D har riktiga dropdowns som refererar till Hjälpdata-fliken.
+
