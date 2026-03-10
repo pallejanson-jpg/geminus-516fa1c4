@@ -559,7 +559,7 @@ const CompetitionSlide = () => {
   return (
     <div className="relative w-full h-full overflow-hidden">
       <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-950/97 via-red-950/75 to-slate-900/80" />
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-950/98 via-red-950/90 to-slate-900/90" />
       <div className="relative z-10 flex h-full text-white px-28 py-12 gap-16">
 
         {/* Left — competitors */}
