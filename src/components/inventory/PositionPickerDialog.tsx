@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Check, RotateCcw, Crosshair } from 'lucide-react';
+import { toast } from 'sonner';
 import NativeXeokitViewer from '@/components/viewer/NativeXeokitViewer';
 
 interface PositionPickerDialogProps {
@@ -21,62 +22,76 @@ const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
 }) => {
   const [pendingCoords, setPendingCoords] = useState<{ x: number; y: number; z: number } | null>(null);
   const viewerRef = useRef<any>(null);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const touchStartPos = useRef<{ x: number; y: number } | null>(null);
-
-  const targetFmGuid = roomFmGuid || buildingFmGuid;
 
   const handleViewerReady = useCallback((viewer: any) => {
     viewerRef.current = viewer;
     const canvas = viewer.scene.canvas.canvas;
 
-    // Long-press pick (500ms) for both touch and mouse
-    const doPick = (canvasX: number, canvasY: number) => {
+    // Single-click pick
+    canvas.addEventListener('pointerup', (e: PointerEvent) => {
+      // Ignore if it was a drag (orbit/pan)
+      if ((e as any).__dragged) return;
+      const rect = canvas.getBoundingClientRect();
+      const canvasX = e.clientX - rect.left;
+      const canvasY = e.clientY - rect.top;
       const hit = viewer.scene.pick({ canvasPos: [canvasX, canvasY], pickSurface: true });
       if (hit?.worldPos) {
-        setPendingCoords({ x: hit.worldPos[0], y: hit.worldPos[1], z: hit.worldPos[2] });
-      }
-    };
+        const coords = { x: hit.worldPos[0], y: hit.worldPos[1], z: hit.worldPos[2] };
+        setPendingCoords(coords);
 
-    // Touch events
-    canvas.addEventListener('touchstart', (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      const touch = e.touches[0];
-      const rect = canvas.getBoundingClientRect();
-      touchStartPos.current = { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
-      longPressTimer.current = setTimeout(() => {
-        if (touchStartPos.current) {
-          doPick(touchStartPos.current.x, touchStartPos.current.y);
+        // Warn if picking in 2D/ortho mode
+        if (viewer.camera.projection === 'ortho') {
+          toast.info('Position vald i 2D — höjden kanske inte stämmer', {
+            description: 'Byt till 3D för exakt höjd.',
+          });
         }
-      }, 500);
-    }, { passive: true });
-
-    canvas.addEventListener('touchmove', (e: TouchEvent) => {
-      if (longPressTimer.current && touchStartPos.current) {
-        const touch = e.touches[0];
-        const rect = canvas.getBoundingClientRect();
-        const dx = touch.clientX - rect.left - touchStartPos.current.x;
-        const dy = touch.clientY - rect.top - touchStartPos.current.y;
-        if (Math.sqrt(dx * dx + dy * dy) > 10) {
-          clearTimeout(longPressTimer.current);
-          longPressTimer.current = null;
-        }
-      }
-    }, { passive: true });
-
-    canvas.addEventListener('touchend', () => {
-      if (longPressTimer.current) {
-        clearTimeout(longPressTimer.current);
-        longPressTimer.current = null;
       }
     });
 
-    // Desktop: double-click to pick
-    canvas.addEventListener('dblclick', (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      doPick(e.clientX - rect.left, e.clientY - rect.top);
+    // Track drag to avoid picking on orbit
+    let startX = 0, startY = 0;
+    canvas.addEventListener('pointerdown', (e: PointerEvent) => {
+      startX = e.clientX; startY = e.clientY;
+      (e as any).__dragged = false;
     });
-  }, []);
+    canvas.addEventListener('pointermove', (e: PointerEvent) => {
+      if (e.buttons > 0) {
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        if (Math.sqrt(dx * dx + dy * dy) > 6) {
+          (e as any).__dragged = true;
+        }
+      }
+    });
+
+    // Fly to room if provided
+    if (roomFmGuid) {
+      // Wait a bit for models to load, then fly to room entity
+      const tryFlyToRoom = () => {
+        const normalizedRoom = roomFmGuid.toLowerCase().replace(/-/g, '');
+        const objects = viewer.scene.objects;
+        for (const id of Object.keys(objects)) {
+          const normalizedId = id.toLowerCase().replace(/-/g, '');
+          if (normalizedId.includes(normalizedRoom)) {
+            const entity = objects[id];
+            if (entity?.aabb) {
+              viewer.cameraFlight.flyTo({ aabb: entity.aabb, duration: 0.8 });
+              return true;
+            }
+          }
+        }
+        return false;
+      };
+
+      // Try immediately, then retry after models load
+      if (!tryFlyToRoom()) {
+        const interval = setInterval(() => {
+          if (tryFlyToRoom()) clearInterval(interval);
+        }, 1000);
+        setTimeout(() => clearInterval(interval), 10000);
+      }
+    }
+  }, [roomFmGuid]);
 
   const handleConfirm = () => {
     if (pendingCoords) {
@@ -86,22 +101,18 @@ const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
     }
   };
 
-  const handleReset = () => {
-    setPendingCoords(null);
-  };
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[95vw] w-[95vw] h-[85vh] p-0 overflow-hidden flex flex-col">
         <DialogHeader className="p-4 pb-2 flex-shrink-0">
           <DialogTitle>Välj position i 3D-modellen</DialogTitle>
           <p className="text-sm text-muted-foreground">
-            Håll nedtryckt (mobil) eller dubbelklicka (dator) för att välja position
+            Klicka i modellen för att välja position
           </p>
         </DialogHeader>
         <div className="flex-1 min-h-0 relative">
           <NativeXeokitViewer
-            buildingFmGuid={targetFmGuid}
+            buildingFmGuid={buildingFmGuid}
             onClose={() => onOpenChange(false)}
             onViewerReady={handleViewerReady}
           />
@@ -109,7 +120,7 @@ const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
           {!pendingCoords && (
             <div className="absolute top-3 left-3 z-20 bg-primary/90 text-primary-foreground text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5 shadow-md">
               <Crosshair className="h-3.5 w-3.5" />
-              <span>Håll nedtryckt för att välja position</span>
+              <span>Klicka för att välja position</span>
             </div>
           )}
 
@@ -118,7 +129,7 @@ const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
               <p className="text-sm font-mono">
                 X: {pendingCoords.x.toFixed(2)}, Y: {pendingCoords.y.toFixed(2)}, Z: {pendingCoords.z.toFixed(2)}
               </p>
-              <Button size="sm" variant="outline" onClick={handleReset} className="gap-1">
+              <Button size="sm" variant="outline" onClick={() => setPendingCoords(null)} className="gap-1">
                 <RotateCcw className="h-3.5 w-3.5" />
                 Välj om
               </Button>
