@@ -8,8 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers, Timer, Cloud
+  Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers, Timer, Cloud, FileSpreadsheet
 } from 'lucide-react';
+import ExcelTemplateDownload from '@/components/import/ExcelTemplateDownload';
+import ExcelImportDialog from '@/components/import/ExcelImportDialog';
 
 interface CreatedBuilding {
   complexFmGuid: string;
@@ -55,6 +57,9 @@ const CreateBuildingPanel: React.FC = () => {
   const [conversionStartTime, setConversionStartTime] = useState<number | null>(null);
   const [elapsedDisplay, setElapsedDisplay] = useState('');
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Excel import state
+  const [excelImportOpen, setExcelImportOpen] = useState(false);
 
   // Elapsed timer tick
   useEffect(() => {
@@ -749,6 +754,47 @@ const CreateBuildingPanel: React.FC = () => {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Section 4: Excel Import */}
+      {showIfcUpload && (
+        <div className="space-y-3 border-t pt-4">
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5 text-primary" />
+            <h3 className="font-semibold text-sm">Inventera via Excel</h3>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Ladda ner en mall förfylld med våningar och rum, fyll i objekt offline, och importera tillbaka.
+          </p>
+          <div className="flex items-center gap-2">
+            <ExcelTemplateDownload
+              buildingFmGuid={targetBuildingFmGuid}
+              buildingName={
+                createdBuilding?.buildingName ||
+                existingBuildings.find(b => b.fmGuid === selectedExistingFmGuid)?.commonName ||
+                'Byggnad'
+              }
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setExcelImportOpen(true)}
+              className="gap-1.5"
+            >
+              <Upload className="h-3.5 w-3.5" /> Importera Excel
+            </Button>
+          </div>
+          <ExcelImportDialog
+            open={excelImportOpen}
+            onOpenChange={setExcelImportOpen}
+            buildingFmGuid={targetBuildingFmGuid}
+            buildingName={
+              createdBuilding?.buildingName ||
+              existingBuildings.find(b => b.fmGuid === selectedExistingFmGuid)?.commonName ||
+              'Byggnad'
+            }
+          />
         </div>
       )}
 

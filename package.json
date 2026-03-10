@@ -76,6 +76,7 @@
     "vaul": "^0.9.9",
     "vite-plugin-static-copy": "^3.2.0",
     "web-ifc": "^0.0.57",
+    "xlsx": "^0.18.5",
     "zod": "^3.25.76"
   },
   "devDependencies": {
