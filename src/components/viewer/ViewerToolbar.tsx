@@ -188,7 +188,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     calculateFloorBounds,
     updateFloorCutHeight,
     update3DCeilingOffset,
-  } = useSectionPlaneClipping(viewerShimRef, { enabled: true, clipMode: 'floor', floorCutHeight: 1.2 });
+  } = useSectionPlaneClipping(viewerShimRef, { enabled: true, clipMode: 'floor', floorCutHeight: 0.5 });
 
   // ── Floor selection events ────────────────────────────────────────────────
   useEffect(() => {

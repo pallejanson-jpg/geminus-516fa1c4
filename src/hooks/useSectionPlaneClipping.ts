@@ -152,7 +152,7 @@ export function useSectionPlaneClipping(
   viewerRef: React.MutableRefObject<any>,
   options: SectionPlaneClippingOptions = {}
 ) {
-  const { enabled = true, offset: initialOffset = 0.05, clipMode = 'ceiling', floorCutHeight: initialFloorCutHeight = 1.2 } = options;
+  const { enabled = true, offset: initialOffset = 0.05, clipMode = 'ceiling', floorCutHeight: initialFloorCutHeight = 0.5 } = options;
   
   const topPlaneRef = useRef<any>(null);
   const bottomPlaneRef = useRef<any>(null);
@@ -412,11 +412,15 @@ export function useSectionPlaneClipping(
     const currentIndex = storeys.findIndex(s => s.id === floorId);
     if (currentIndex === -1) return null;
 
+    const currentFloor = storeys[currentIndex];
     if (currentIndex < storeys.length - 1) {
       const nextFloor = storeys[currentIndex + 1];
-      return { clipHeight: nextFloor.minY, nextFloorMinY: nextFloor.minY };
+      // Use currentFloor.maxY (ceiling slab top) instead of nextFloor.minY
+      // This ensures objects extending to the ceiling are fully visible
+      const clipHeight = Math.min(currentFloor.maxY, nextFloor.minY) + 0.05;
+      return { clipHeight, nextFloorMinY: nextFloor.minY };
     } else {
-      return { clipHeight: storeys[currentIndex].maxY + 0.1, nextFloorMinY: null };
+      return { clipHeight: currentFloor.maxY + 0.1, nextFloorMinY: null };
     }
   }, [getXeokitViewer, calculateFloorBounds]);
 
@@ -459,7 +463,10 @@ export function useSectionPlaneClipping(
   }, [enabled, getXeokitViewer, calculateFloorBounds, calculateClipHeightFromFloorBoundary, createSectionPlane, destroyPlane, ensureAllEntitiesClippable]);
 
   /**
-   * Apply 2D floor plan clipping (slab slice with top + bottom planes)
+   * Apply 2D floor plan clipping — TOP plane only (no bottom plane).
+   * The bottom plane was clipping away the floor slab and everything below,
+   * resulting in an empty view. In 2D plan mode we only need a ceiling cut
+   * at floorCutHeight (default 0.5m) above the floor level.
    */
   const applyFloorPlanClipping = useCallback((floorId: string, customHeight?: number) => {
     if (!enabled) return;
@@ -478,10 +485,9 @@ export function useSectionPlaneClipping(
     currentFloorMinYRef.current = bounds.minY;
 
     const topClipY = bounds.minY + floorCutHeight;
-    const bottomClipY = bounds.minY - 0.3; // Below floor level to include floor objects
 
     destroyPlane(topPlaneRef);
-    destroyPlane(bottomPlaneRef);
+    destroyPlane(bottomPlaneRef); // ensure no stale bottom plane
 
     topPlaneRef.current = createSectionPlane(
       `2d-top-${floorId}`,
@@ -489,16 +495,12 @@ export function useSectionPlaneClipping(
       [0, 1, 0]
     );
 
-    bottomPlaneRef.current = createSectionPlane(
-      `2d-bottom-${floorId}`,
-      [0, bottomClipY, 0],
-      [0, -1, 0]
-    );
-
-    if (topPlaneRef.current && bottomPlaneRef.current) {
-      console.log(`✅ 2D Slab slice: bottom=${bottomClipY.toFixed(2)}, top=${topClipY.toFixed(2)} for ${bounds.name}`);
+    if (topPlaneRef.current) {
+      console.log(`✅ 2D Top-only clip at Y=${topClipY.toFixed(2)} (floor=${bounds.minY.toFixed(2)} + ${floorCutHeight}m) for ${bounds.name}`);
       currentFloorIdRef.current = floorId;
       currentClipModeRef.current = 'floor';
+    } else {
+      console.warn(`❌ 2D clipping failed for ${bounds.name} — no section plane created`);
     }
   }, [enabled, getXeokitViewer, calculateFloorBounds, createSectionPlane, destroyPlane, ensureAllEntitiesClippable]);
 
@@ -511,17 +513,15 @@ export function useSectionPlaneClipping(
     destroyPlane(ceilingPlaneRef);
     
     const topClipY = baseHeight + floorCutHeightRef.current;
-    const bottomClipY = baseHeight - 0.3;
     currentFloorMinYRef.current = baseHeight;
 
     destroyPlane(topPlaneRef);
-    destroyPlane(bottomPlaneRef);
+    destroyPlane(bottomPlaneRef); // no bottom plane in 2D
 
     topPlaneRef.current = createSectionPlane('2d-global-top', [0, topClipY, 0], [0, 1, 0]);
-    bottomPlaneRef.current = createSectionPlane('2d-global-bottom', [0, bottomClipY, 0], [0, -1, 0]);
 
     if (topPlaneRef.current) {
-      console.log(`✅ Global 2D clipping: bottom=${bottomClipY.toFixed(2)}, top=${topClipY.toFixed(2)}`);
+      console.log(`✅ Global 2D clipping: top=${topClipY.toFixed(2)} (no bottom plane)`);
       currentFloorIdRef.current = null;
       currentClipModeRef.current = 'floor';
     }
