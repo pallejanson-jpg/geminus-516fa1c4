@@ -1,48 +1,68 @@
 
+## Plan: Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
 
-## Plan
+### Changes Made
 
-### Del 1: Ändra text — "Import Excel"
+#### 1. Browser-Primary Conversion for Large IFC Files
+**File: `src/components/settings/CreateBuildingPanel.tsx`**
+- Files >20MB skip edge function entirely → direct browser conversion
+- Files ≤20MB still try edge function first with WORKER_LIMIT fallback
+- Extracted `runBrowserConversion()` helper for DRY reuse between direct and fallback paths
+- Browser conversion now uploads `metadata.json` alongside `.xkt`
+- Systems extracted client-side are persisted to `systems` + `asset_system` tables
 
-Enkel textändring i `CreateBuildingPanel.tsx`:
+#### 2. Metadata Extraction & Separate JSON
+**File: `src/services/acc-xkt-converter.ts`**
+- `convertToXktWithMetadata()` now returns `metaModelJson` (xeokit MetaModel format) + `systems[]`
+- WASM validation: explicit `HEAD` request to `/web-ifc-wasm/web-ifc.wasm` before importing
+- `inferDiscipline()` function for system classification (Ventilation, Heating, etc.)
+- System extraction from metaObjects: IfcSystem, IfcDistributionSystem, PropertySet grouping
 
-- **Rad 765**: "Inventera via Excel" → "Import Excel"
-- **Rad 768**: Byt den svenska beskrivningen till engelska: "Download a template pre-filled with floors and rooms, fill in assets offline, and import back."
-- **Rad 785**: "Importera Excel" → "Import Excel" (redan nästan rätt, bara ta bort svenska)
+#### 3. Viewer MetaModel Loading
+**File: `src/components/viewer/NativeXeokitViewer.tsx`**
+- Before loading each XKT model, checks for `{modelId}_metadata.json` in storage
+- If found, passes as `metaModelSrc` to `xktLoader.load()` for richer BIM queries
+- Works for all three loading paths: memory, streaming, and buffer
 
 ---
 
-### Del 2: Samarbetsfunktion — Co-Presence i 3D-viewern
+## Plan: External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
 
-Det du beskriver är en **co-presence**-funktion: flera användare ser varandra i realtid i 3D-viewern, med avatarer som visar var de befinner sig, plus video/röst-kommunikation.
+### Architecture
 
-#### Arkitekturval
+```text
+IFC Upload → Supabase Storage → conversion_jobs (pending)
+       ↓
+External Worker (polls conversion-worker-api)
+  - Downloads IFC via signed URL
+  - Groups objects by IfcBuildingStorey
+  - Generates per-storey .xkt tiles
+  - Uploads tiles to storage
+  - Reports completion → xkt_models records created
+       ↓
+Viewer detects real tiles (unique storage_paths)
+  - Loads active floor tile (~15MB)
+  - Lazy-loads adjacent floors on FLOOR_TILE_SWITCH event
+  - Unloads distant floors to save memory
+  - Falls back to monolithic loading if no real tiles
+```
 
-| Alternativ | Fördel | Nackdel |
-|---|---|---|
-| **Lovable Cloud Realtime** (inbyggt) | Redan tillgängligt, inga extra kostnader, perfekt för position/cursor-synk | Ingen video/röst |
-| **Daily.co** (WebRTC) | Enkel API, bra React SDK, video+röst+skärmdelning | Externt konto krävs |
-| **LiveKit** (WebRTC, open source) | Self-hostable, bra React SDK, låg latens | Kräver server |
-| **Microsoft Teams SDK** | Välkänt, enterprise | Komplex setup, kräver Azure AD |
+### Files Created/Changed
 
-**Rekommendation:** Dela upp i två delar:
+| File | Action |
+|------|--------|
+| `supabase/functions/conversion-worker-api/index.ts` | Created — worker API (pending/claim/progress/complete/fail/upload-url) |
+| `supabase/config.toml` | Added verify_jwt = false entry |
+| `docs/conversion-worker/worker.mjs` | Created — standalone Node.js worker |
+| `docs/conversion-worker/Dockerfile` | Created — Docker deployment |
+| `docs/conversion-worker/README.md` | Created — deployment guide |
+| `src/components/viewer/NativeXeokitViewer.tsx` | Updated — real tile detection + FLOOR_TILE_SWITCH listener |
+| `src/hooks/useFloorPriorityLoading.ts` | Updated — isRealTiling + getTilesToLoad + FLOOR_TILE_SWITCH dispatch |
 
-1. **Co-presence (position + avatarer)** — Bygg med **Lovable Cloud Realtime** (Presence-kanaler). Varje användare broadcastar sin kameraposition + aktiva vy → andra ser en animerad avatar/markör i 3D. Inget externt beroende.
+### Key Concepts
 
-2. **Video/röst** — Integrera **Daily.co** eller **LiveKit** som ett litet videofönster i viewern. Daily har enklast React-integration och gratis tier (10 000 min/månad).
-
-#### Föreslagen implementation (framtida plan)
-
-**Fas 1 — Co-presence utan video:**
-- Ny Realtime-kanal per byggnad: `presence:building:{id}`
-- Varje användare skickar: `{ userId, displayName, avatarUrl, cameraEye, cameraLook, activeFloor }`
-- I viewern: rendera en liten 3D-avatar (sfär/ikon) vid varje annan användares kameraposition
-- Sidopanel: lista aktiva användare med "fly to" knapp
-
-**Fas 2 — Video/röst:**
-- Integrera Daily.co eller LiveKit
-- Litet videofönster (bild-i-bild) per deltagare, förankrat i viewern
-- Mute/unmute, skärmdelning
-
-Det här är ett stort feature — vill du att jag börjar med **Del 1 (textändringen)** nu, och sedan planerar vi co-presence som ett separat projekt?
-
+- **Virtual chunks (Phase 1)**: Same XKT file, visibility filtering by storey metadata
+- **Real tiles (Phase 2)**: Separate per-storey XKT files with unique `storage_path` values
+- Detection: `isRealTiling()` checks if chunks have >1 unique storage paths
+- Dynamic loading: `FLOOR_TILE_SWITCH` custom event triggers load/unload of tiles
+- Worker auth: `WORKER_API_SECRET` shared secret (not JWT)

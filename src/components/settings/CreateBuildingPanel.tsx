@@ -762,10 +762,10 @@ const CreateBuildingPanel: React.FC = () => {
         <div className="space-y-3 border-t pt-4">
           <div className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5 text-primary" />
-            <h3 className="font-semibold text-sm">Inventera via Excel</h3>
+            <h3 className="font-semibold text-sm">Import Excel</h3>
           </div>
           <p className="text-xs text-muted-foreground">
-            Ladda ner en mall förfylld med våningar och rum, fyll i objekt offline, och importera tillbaka.
+            Download a template pre-filled with floors and rooms, fill in assets offline, and import back.
           </p>
           <div className="flex items-center gap-2">
             <ExcelTemplateDownload
@@ -773,7 +773,7 @@ const CreateBuildingPanel: React.FC = () => {
               buildingName={
                 createdBuilding?.buildingName ||
                 existingBuildings.find(b => b.fmGuid === selectedExistingFmGuid)?.commonName ||
-                'Byggnad'
+                 'Building'
               }
             />
             <Button
@@ -782,7 +782,7 @@ const CreateBuildingPanel: React.FC = () => {
               onClick={() => setExcelImportOpen(true)}
               className="gap-1.5"
             >
-              <Upload className="h-3.5 w-3.5" /> Importera Excel
+              <Upload className="h-3.5 w-3.5" /> Import Excel
             </Button>
           </div>
           <ExcelImportDialog
@@ -792,7 +792,7 @@ const CreateBuildingPanel: React.FC = () => {
             buildingName={
               createdBuilding?.buildingName ||
               existingBuildings.find(b => b.fmGuid === selectedExistingFmGuid)?.commonName ||
-              'Byggnad'
+              'Building'
             }
           />
         </div>
