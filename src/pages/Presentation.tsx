@@ -457,7 +457,7 @@ const ProofSlide = () => (
 const RoiSlide = () => (
   <div className="relative w-full h-full overflow-hidden">
     <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/95 via-green-950/80 to-slate-900/70" />
+    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/98 via-green-950/92 to-slate-900/88" />
     <div className="relative z-10 flex flex-col h-full text-white px-32 py-14">
       <div className="mb-10">
         <h2 className="text-[72px] font-black text-white">ROI — The Numbers</h2>
