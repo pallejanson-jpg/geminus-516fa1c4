@@ -414,7 +414,7 @@ const ProofSlide = () => (
             { num: "50+", label: "components built" },
             { num: "6", label: "Addnode API integrations" },
           ].map(({ num, label }) => (
-            <div key={label} className="bg-white/10 rounded-2xl border border-white/20 px-6 py-4">
+            <div key={label} className="bg-black/50 rounded-2xl border border-white/25 px-6 py-4 backdrop-blur-sm">
               <p className="text-[32px] font-black text-emerald-300 leading-none">{num}</p>
               <p className="text-[18px] text-white/80 mt-1">{label}</p>
             </div>
