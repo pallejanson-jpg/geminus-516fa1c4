@@ -168,7 +168,7 @@ const TitleSlide = () => (
 const AecoGapSlide = () => (
   <div className="relative w-full h-full overflow-hidden">
     <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/95 via-red-950/80 to-orange-950/60" />
+    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/98 via-red-950/92 to-orange-950/85" />
     <div className="relative z-10 flex flex-col justify-center h-full text-white px-32 py-16">
       <h2 className="text-[80px] font-black mb-4 text-white">The AECO Industry Has a Gap</h2>
       <p className="text-[28px] text-white/80 mb-14">Addnode is strong in A, E and C — but O is underserved</p>
