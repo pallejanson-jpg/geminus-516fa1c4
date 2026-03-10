@@ -409,7 +409,7 @@ const ProofSlide = () => (
         {/* Stats row */}
         <div className="grid grid-cols-2 gap-6 mb-12">
           {[
-            { num: "3 months", label: "start to production" },
+            { num: "3 months", label: "start to POC" },
             { num: "Non-developer", label: "no code written manually" },
             { num: "50+", label: "components built" },
             { num: "6", label: "Addnode API integrations" },
