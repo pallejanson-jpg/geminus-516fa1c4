@@ -782,7 +782,7 @@ const CreateBuildingPanel: React.FC = () => {
               onClick={() => setExcelImportOpen(true)}
               className="gap-1.5"
             >
-              <Upload className="h-3.5 w-3.5" /> Importera Excel
+              <Upload className="h-3.5 w-3.5" /> Import Excel
             </Button>
           </div>
           <ExcelImportDialog
