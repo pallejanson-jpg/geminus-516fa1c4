@@ -1,53 +1,68 @@
 
+## Plan: Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
 
-## Plan: Position Picker Fixes + Local-Only Save Policy
+### Changes Made
 
-Three changes based on your additions.
+#### 1. Browser-Primary Conversion for Large IFC Files
+**File: `src/components/settings/CreateBuildingPanel.tsx`**
+- Files >20MB skip edge function entirely → direct browser conversion
+- Files ≤20MB still try edge function first with WORKER_LIMIT fallback
+- Extracted `runBrowserConversion()` helper for DRY reuse between direct and fallback paths
+- Browser conversion now uploads `metadata.json` alongside `.xkt`
+- Systems extracted client-side are persisted to `systems` + `asset_system` tables
 
----
+#### 2. Metadata Extraction & Separate JSON
+**File: `src/services/acc-xkt-converter.ts`**
+- `convertToXktWithMetadata()` now returns `metaModelJson` (xeokit MetaModel format) + `systems[]`
+- WASM validation: explicit `HEAD` request to `/web-ifc-wasm/web-ifc.wasm` before importing
+- `inferDiscipline()` function for system classification (Ventilation, Heating, etc.)
+- System extraction from metaObjects: IfcSystem, IfcDistributionSystem, PropertySet grouping
 
-### 1. Local-only save — no Asset+ sync during inventory
-
-**Files:** `QuickRegistrationStep.tsx`, `InventoryForm.tsx`, `ExcelImportDialog.tsx`
-
-Current `QuickRegistrationStep` already saves directly to Supabase `assets` table with `is_local: true` — this is correct. Verify `InventoryForm.tsx` does the same (it does). For `ExcelImportDialog`, it currently calls the `asset-plus-create` edge function — change it to insert directly into the local `assets` table with `is_local: true` instead. No sync to Asset+ or FM Access during creation/editing.
-
----
-
-### 2. Fix PositionPickerDialog — use buildingFmGuid + fly-to room
-
-**Files:** `PositionPickerDialog.tsx`, `Inline3dPositionPicker.tsx`
-
-**Bug fix:** Both files set `targetFmGuid = roomFmGuid || buildingFmGuid` and pass it as `buildingFmGuid` to `NativeXeokitViewer`. XKT models are indexed by building GUID, so this fails when a room is selected.
-
-**Fix:**
-- Always pass `buildingFmGuid` to `NativeXeokitViewer`
-- When viewer is ready AND `roomFmGuid` is provided: look up the room's entity in the viewer scene (by matching entity IDs containing the room GUID), then call `viewer.cameraFlight.flyTo({ aabb: entity.aabb })` to fly to that room
-- This gives the user immediate spatial context of where they're placing
-
----
-
-### 3. Single-click pick instead of long-press/double-click
-
-**Files:** `PositionPickerDialog.tsx`, `Inline3dPositionPicker.tsx`
-
-Current behavior uses long-press (500ms) on mobile and double-click on desktop. The user wants simple single-click pick like in other parts of the system.
-
-**Change:**
-- Replace long-press and double-click handlers with a single `click` event listener on the canvas
-- On click → `viewer.scene.pick({ canvasPos, pickSurface: true })` → set pending coords
-- This matches the pattern used elsewhere and avoids conflicts with the Select tool
-
-**2D height warning:**
-- After picking, if the viewer is in orthographic/2D mode (check `viewer.camera.projection === 'ortho'`), show a toast or inline banner: "Position picked in 2D — height may not be accurate. Switch to 3D for precise height." with an optional action button.
+#### 3. Viewer MetaModel Loading
+**File: `src/components/viewer/NativeXeokitViewer.tsx`**
+- Before loading each XKT model, checks for `{modelId}_metadata.json` in storage
+- If found, passes as `metaModelSrc` to `xktLoader.load()` for richer BIM queries
+- Works for all three loading paths: memory, streaming, and buffer
 
 ---
 
-### Summary of file changes
+## Plan: External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
 
-| File | Change |
-|---|---|
-| `PositionPickerDialog.tsx` | Use `buildingFmGuid` for viewer, fly-to `roomFmGuid`, single-click pick, 2D height warning |
-| `Inline3dPositionPicker.tsx` | Same: use `buildingFmGuid` for viewer, fly-to room, single-click pick |
-| `ExcelImportDialog.tsx` | Save locally to `assets` table instead of calling `asset-plus-create` edge function |
+### Architecture
 
+```text
+IFC Upload → Supabase Storage → conversion_jobs (pending)
+       ↓
+External Worker (polls conversion-worker-api)
+  - Downloads IFC via signed URL
+  - Groups objects by IfcBuildingStorey
+  - Generates per-storey .xkt tiles
+  - Uploads tiles to storage
+  - Reports completion → xkt_models records created
+       ↓
+Viewer detects real tiles (unique storage_paths)
+  - Loads active floor tile (~15MB)
+  - Lazy-loads adjacent floors on FLOOR_TILE_SWITCH event
+  - Unloads distant floors to save memory
+  - Falls back to monolithic loading if no real tiles
+```
+
+### Files Created/Changed
+
+| File | Action |
+|------|--------|
+| `supabase/functions/conversion-worker-api/index.ts` | Created — worker API (pending/claim/progress/complete/fail/upload-url) |
+| `supabase/config.toml` | Added verify_jwt = false entry |
+| `docs/conversion-worker/worker.mjs` | Created — standalone Node.js worker |
+| `docs/conversion-worker/Dockerfile` | Created — Docker deployment |
+| `docs/conversion-worker/README.md` | Created — deployment guide |
+| `src/components/viewer/NativeXeokitViewer.tsx` | Updated — real tile detection + FLOOR_TILE_SWITCH listener |
+| `src/hooks/useFloorPriorityLoading.ts` | Updated — isRealTiling + getTilesToLoad + FLOOR_TILE_SWITCH dispatch |
+
+### Key Concepts
+
+- **Virtual chunks (Phase 1)**: Same XKT file, visibility filtering by storey metadata
+- **Real tiles (Phase 2)**: Separate per-storey XKT files with unique `storage_path` values
+- Detection: `isRealTiling()` checks if chunks have >1 unique storage paths
+- Dynamic loading: `FLOOR_TILE_SWITCH` custom event triggers load/unload of tiles
+- Worker auth: `WORKER_API_SECRET` shared secret (not JWT)
