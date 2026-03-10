@@ -513,17 +513,15 @@ export function useSectionPlaneClipping(
     destroyPlane(ceilingPlaneRef);
     
     const topClipY = baseHeight + floorCutHeightRef.current;
-    const bottomClipY = baseHeight - 0.3;
     currentFloorMinYRef.current = baseHeight;
 
     destroyPlane(topPlaneRef);
-    destroyPlane(bottomPlaneRef);
+    destroyPlane(bottomPlaneRef); // no bottom plane in 2D
 
     topPlaneRef.current = createSectionPlane('2d-global-top', [0, topClipY, 0], [0, 1, 0]);
-    bottomPlaneRef.current = createSectionPlane('2d-global-bottom', [0, bottomClipY, 0], [0, -1, 0]);
 
     if (topPlaneRef.current) {
-      console.log(`✅ Global 2D clipping: bottom=${bottomClipY.toFixed(2)}, top=${topClipY.toFixed(2)}`);
+      console.log(`✅ Global 2D clipping: top=${topClipY.toFixed(2)} (no bottom plane)`);
       currentFloorIdRef.current = null;
       currentClipModeRef.current = 'floor';
     }
