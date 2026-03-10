@@ -298,7 +298,11 @@ const UnifiedViewerContent: React.FC<{
   // ─── Re-dispatch 2D event once viewer is ready, and also on VIEWER_MODELS_LOADED ─
   useEffect(() => {
     if (viewerReady && viewMode === '2d') {
+      let pendingTimeout: ReturnType<typeof setTimeout> | null = null;
+      let cancelled = false;
+
       const dispatch2D = () => {
+        if (cancelled) return; // Don't dispatch if effect was cleaned up
         window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } }));
         window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '2d' } }));
         if (floorFmGuid) {
@@ -317,10 +321,15 @@ const UnifiedViewerContent: React.FC<{
       };
 
       // Only dispatch 2D mode after models are loaded — not on hardcoded timers
-      const modelsLoadedHandler = () => setTimeout(dispatch2D, 300);
+      const modelsLoadedHandler = () => {
+        if (cancelled) return;
+        pendingTimeout = setTimeout(dispatch2D, 300);
+      };
       window.addEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
 
       return () => {
+        cancelled = true;
+        if (pendingTimeout) clearTimeout(pendingTimeout);
         window.removeEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
       };
     }
