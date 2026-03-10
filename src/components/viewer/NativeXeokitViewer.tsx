@@ -413,6 +413,22 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           setTimeout(() => done(false), 90_000);
         });
 
+      // ── Pre-fetch metadata file list in one batch call ──
+      const metadataFileSet = new Set<string>();
+      try {
+        const { data: allFiles } = await supabase.storage
+          .from('xkt-models')
+          .list(buildingFmGuid, { limit: 1000 });
+        if (allFiles) {
+          allFiles.forEach((f: any) => {
+            if (f.name?.endsWith('_metadata.json')) {
+              metadataFileSet.add(`${buildingFmGuid}/${f.name}`);
+            }
+          });
+        }
+        console.log(`[NativeViewer] Batch metadata check: found ${metadataFileSet.size} metadata files`);
+      } catch { /* continue without metadata */ }
+
       const loadModel = async (model: ModelInfo) => {
         const modelStart = performance.now();
         const modelId = model.model_id;
@@ -420,22 +436,20 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         try {
           const memData = getModelFromMemory(modelId, buildingFmGuid);
 
-          // Check for metadata.json alongside the XKT model
+          // Check for metadata.json using pre-fetched list (no per-model network calls)
           const metaStoragePath = model.storage_path.replace(/\.xkt$/i, '_metadata.json');
           let metaModelSrc: string | undefined;
-          try {
-            const { data: metaUrl } = await supabase.storage
-              .from('xkt-models')
-              .createSignedUrl(metaStoragePath, 3600);
-            if (metaUrl?.signedUrl) {
-              // Verify it exists with a HEAD request
-              const headResp = await fetch(metaUrl.signedUrl, { method: 'HEAD' });
-              if (headResp.ok) {
+          if (metadataFileSet.has(metaStoragePath)) {
+            try {
+              const { data: metaUrl } = await supabase.storage
+                .from('xkt-models')
+                .createSignedUrl(metaStoragePath, 3600);
+              if (metaUrl?.signedUrl) {
                 metaModelSrc = metaUrl.signedUrl;
                 console.log(`[NativeViewer] MetaModel JSON found for ${modelId}`);
               }
-            }
-          } catch { /* no metadata file, continue without */ }
+            } catch { /* continue without */ }
+          }
 
           if (memData) {
             console.log(`[NativeViewer] Loading from memory: ${modelId}, size: ${memData.byteLength}`);
