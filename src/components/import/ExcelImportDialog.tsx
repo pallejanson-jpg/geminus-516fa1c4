@@ -276,7 +276,7 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
           {step === 'importing' && (
             <div className="flex flex-col items-center gap-4 py-8">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Skapar objekt i Asset+...</p>
+              <p className="text-sm text-muted-foreground">Skapar objekt...</p>
               <Progress value={importProgress} className="w-64 h-2" />
               <p className="text-xs text-muted-foreground">{importProgress}%</p>
             </div>
