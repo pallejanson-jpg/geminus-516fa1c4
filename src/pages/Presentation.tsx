@@ -546,12 +546,12 @@ const RoiSlide = () => (
 
 const CompetitionSlide = () => {
   const nordic = [
-    { name: "Vyer", desc: "Digital twin viewer for Nordic FM market", gap: "No AI layer, no Addnode data ecosystem" },
-    { name: "Twinfinity", desc: "Sweco's digital twin platform", gap: "Closed vendor ecosystem, no AI inventory" },
-    { name: "Digital Buildings", desc: "Zynka / Newsec property tech", gap: "Property focus, limited FM & IoT depth" },
+    { name: "Vyer", desc: "2D/3D viewer · Fastpartner, Alecta, Revelop", gap: "No AI layer, no FM system, pure visualization — no workflow" },
+    { name: "Digital Buildings", desc: "Newsec/Zynka · 'Power BI for Real Estate'", gap: "No 3D BIM viewer, no AI assistants, Newsec-centric ecosystem" },
+    { name: "Twinfinity", desc: "Sweco spin-off (2022) · Cloud BIM + climate data", gap: "Closed Sweco ecosystem, consulting-driven, no AI inventory" },
   ];
   const international = [
-    { name: "Autodesk Tandem", desc: "Autodesk's digital twin SaaS", gap: "US-centric, no Addnode ecosystem integration" },
+    { name: "Autodesk Tandem", desc: "Free tier · Tandem Connect + Insights modules", gap: "US-centric, requires full Autodesk stack, no Nordic FM integrations" },
     { name: "dTwin", desc: "Nemetschek digital twin platform", gap: "Large vendor lock-in, no native AI assistants" },
   ];
 
