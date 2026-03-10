@@ -8,8 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers, Timer, Cloud
+  Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers, Timer, Cloud, FileSpreadsheet
 } from 'lucide-react';
+import ExcelTemplateDownload from '@/components/import/ExcelTemplateDownload';
+import ExcelImportDialog from '@/components/import/ExcelImportDialog';
 
 interface CreatedBuilding {
   complexFmGuid: string;
