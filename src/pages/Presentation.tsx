@@ -134,7 +134,7 @@ const NOTES: string[][] = [
 const TitleSlide = () => (
   <div className="relative w-full h-full overflow-hidden">
     <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-    <div className="absolute inset-0 bg-gradient-to-br from-black/90 via-black/70 to-cyan-950/60" />
+    <div className="absolute inset-0 bg-gradient-to-br from-black/95 via-black/85 to-cyan-950/80" />
     <div className="relative z-10 flex flex-col justify-center h-full text-white px-32 py-20">
       <div className="flex items-center gap-4 mb-6">
         <div className="px-5 py-2 rounded-full bg-cyan-500/40 border border-cyan-400/50 text-cyan-200 text-[22px] font-medium backdrop-blur-sm">
