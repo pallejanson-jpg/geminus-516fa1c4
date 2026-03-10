@@ -412,11 +412,15 @@ export function useSectionPlaneClipping(
     const currentIndex = storeys.findIndex(s => s.id === floorId);
     if (currentIndex === -1) return null;
 
+    const currentFloor = storeys[currentIndex];
     if (currentIndex < storeys.length - 1) {
       const nextFloor = storeys[currentIndex + 1];
-      return { clipHeight: nextFloor.minY, nextFloorMinY: nextFloor.minY };
+      // Use currentFloor.maxY (ceiling slab top) instead of nextFloor.minY
+      // This ensures objects extending to the ceiling are fully visible
+      const clipHeight = Math.min(currentFloor.maxY, nextFloor.minY) + 0.05;
+      return { clipHeight, nextFloorMinY: nextFloor.minY };
     } else {
-      return { clipHeight: storeys[currentIndex].maxY + 0.1, nextFloorMinY: null };
+      return { clipHeight: currentFloor.maxY + 0.1, nextFloorMinY: null };
     }
   }, [getXeokitViewer, calculateFloorBounds]);
 
