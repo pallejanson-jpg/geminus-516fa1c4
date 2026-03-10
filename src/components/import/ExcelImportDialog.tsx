@@ -154,36 +154,27 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
     let created = 0;
     let failed = 0;
 
-    // Process in batches of 50
+    // Save locally in batches of 50
     const batchSize = 50;
     for (let i = 0; i < validRows.length; i += batchSize) {
       const batch = validRows.slice(i, i + batchSize);
 
-      const objects = batch.map(row => ({
-        designation: row.designation,
-        commonName: row.commonName || row.designation,
-        parentSpaceFmGuid: row.resolvedRoomFmGuid || undefined,
-        parentBuildingFmGuid: row.isOrphan ? buildingFmGuid : undefined,
-        properties: row.description ? [
-          { name: 'Description', value: row.description, dataType: 1 },
-        ] : undefined,
+      const records = batch.map(row => ({
+        fm_guid: crypto.randomUUID(),
+        category: 'Component',
+        name: row.designation,
+        common_name: row.commonName || row.designation,
+        building_fm_guid: buildingFmGuid,
+        in_room_fm_guid: row.resolvedRoomFmGuid || null,
+        is_local: true,
+        created_in_model: false,
+        attributes: row.description ? { syncProperties: { Description: row.description } } : {},
       }));
 
       try {
-        const { data, error } = await supabase.functions.invoke('asset-plus-create', {
-          body: { objects },
-        });
-
+        const { error } = await supabase.from('assets').insert(records);
         if (error) throw error;
-
-        if (data?.summary) {
-          created += data.summary.created || 0;
-          failed += data.summary.failed || 0;
-        } else if (data?.success) {
-          created += batch.length;
-        } else {
-          failed += batch.length;
-        }
+        created += batch.length;
       } catch (err: any) {
         console.error('Batch import failed:', err);
         failed += batch.length;
