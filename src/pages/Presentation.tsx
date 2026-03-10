@@ -225,7 +225,7 @@ const HubSlide = () => {
   return (
     <div className="relative w-full h-full overflow-hidden">
       <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-950/97 via-blue-950/85 to-slate-900/75" />
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-950/98 via-blue-950/92 to-slate-900/88" />
       <div className="relative z-10 flex flex-col justify-center h-full text-white px-24 py-12">
         <h2 className="text-[70px] font-black mb-2 text-white text-center">The Addnode Hub</h2>
         <p className="text-[26px] text-white/80 mb-10 text-center">Addnode already owns every ingredient — Geminus is the missing center</p>
