@@ -731,7 +731,7 @@ const CompetitionDeepDiveSlide = () => {
 const WhyAddnodeSlide = () => (
   <div className="relative w-full h-full overflow-hidden">
     <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/95 via-amber-950/75 to-slate-900/70" />
+    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/98 via-amber-950/90 to-slate-900/88" />
     <div className="relative z-10 flex flex-col justify-center h-full text-white px-32 py-16">
       <TrendingUp className="w-14 h-14 text-amber-400 mb-4" />
       <h2 className="text-[72px] font-black mb-4 text-white">Why Addnode Wins</h2>
