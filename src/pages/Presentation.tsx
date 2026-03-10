@@ -667,7 +667,7 @@ const CompetitionDeepDiveSlide = () => {
 
   return (
     <div className="relative w-full h-full overflow-hidden">
-      <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
+      <img src={competitionImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
       <div className="absolute inset-0 bg-gradient-to-br from-slate-950/97 via-indigo-950/80 to-slate-900/80" />
       <div className="relative z-10 flex flex-col h-full text-white px-28 py-14">
         <h2 className="text-[64px] font-black text-white mb-2">Competitive Landscape — Deep Dive</h2>
