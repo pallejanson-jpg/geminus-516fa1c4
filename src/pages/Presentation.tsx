@@ -134,11 +134,11 @@ const NOTES: string[][] = [
 const TitleSlide = () => (
   <div className="relative w-full h-full overflow-hidden">
     <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-    <div className="absolute inset-0 bg-gradient-to-br from-black/90 via-black/70 to-cyan-950/60" />
+    <div className="absolute inset-0 bg-gradient-to-br from-black/95 via-black/85 to-cyan-950/80" />
     <div className="relative z-10 flex flex-col justify-center h-full text-white px-32 py-20">
       <div className="flex items-center gap-4 mb-6">
-        <div className="px-5 py-2 rounded-full bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 text-[22px] font-medium">
-          Addnode Innovation 2025
+        <div className="px-5 py-2 rounded-full bg-cyan-500/40 border border-cyan-400/50 text-cyan-200 text-[22px] font-medium backdrop-blur-sm">
+          Addnode Innovation 2026
         </div>
       </div>
       <h1 className="text-[130px] font-black leading-none tracking-tight text-white mb-4">
@@ -168,7 +168,7 @@ const TitleSlide = () => (
 const AecoGapSlide = () => (
   <div className="relative w-full h-full overflow-hidden">
     <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/95 via-red-950/80 to-orange-950/60" />
+    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/98 via-red-950/92 to-orange-950/85" />
     <div className="relative z-10 flex flex-col justify-center h-full text-white px-32 py-16">
       <h2 className="text-[80px] font-black mb-4 text-white">The AECO Industry Has a Gap</h2>
       <p className="text-[28px] text-white/80 mb-14">Addnode is strong in A, E and C — but O is underserved</p>
@@ -225,7 +225,7 @@ const HubSlide = () => {
   return (
     <div className="relative w-full h-full overflow-hidden">
       <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-950/97 via-blue-950/85 to-slate-900/75" />
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-950/98 via-blue-950/92 to-slate-900/88" />
       <div className="relative z-10 flex flex-col justify-center h-full text-white px-24 py-12">
         <h2 className="text-[70px] font-black mb-2 text-white text-center">The Addnode Hub</h2>
         <p className="text-[26px] text-white/80 mb-10 text-center">Addnode already owns every ingredient — Geminus is the missing center</p>
@@ -351,7 +351,7 @@ const UnlocksSlide = () => {
   return (
     <div className="relative w-full h-full overflow-hidden">
       <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-950/97 via-cyan-950/80 to-slate-900/75" />
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-950/98 via-cyan-950/92 to-slate-900/88" />
       <div className="relative z-10 flex flex-col h-full text-white px-32 py-14">
         <h2 className="text-[68px] font-black mb-2 text-white">What Geminus Unlocks for Each Company</h2>
         <p className="text-[26px] text-white/80 mb-10">Not what Geminus takes — what each Addnode company <span className="text-cyan-300 font-semibold">gains</span></p>
@@ -389,13 +389,13 @@ const UnlocksSlide = () => {
 const ProofSlide = () => (
   <div className="relative w-full h-full overflow-hidden">
     <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/97 via-emerald-950/80 to-slate-900/75" />
+    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/98 via-emerald-950/92 to-slate-900/88" />
     <div className="relative z-10 flex h-full text-white px-32 py-14">
 
       {/* Left: Headline + stats */}
       <div className="flex-1 flex flex-col justify-center pr-16">
         <div className="flex items-center gap-4 mb-8">
-          <span className="px-5 py-2 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 text-[20px] font-semibold">
+          <span className="px-5 py-2 rounded-full bg-emerald-500/40 border border-emerald-400/50 text-emerald-200 text-[20px] font-semibold backdrop-blur-sm">
             ✓ Running in production
           </span>
         </div>
@@ -409,12 +409,12 @@ const ProofSlide = () => (
         {/* Stats row */}
         <div className="grid grid-cols-2 gap-6 mb-12">
           {[
-            { num: "3 months", label: "start to production" },
+            { num: "3 months", label: "start to POC" },
             { num: "Non-developer", label: "no code written manually" },
             { num: "50+", label: "components built" },
             { num: "6", label: "Addnode API integrations" },
           ].map(({ num, label }) => (
-            <div key={label} className="bg-white/10 rounded-2xl border border-white/20 px-6 py-4">
+            <div key={label} className="bg-black/50 rounded-2xl border border-white/25 px-6 py-4 backdrop-blur-sm">
               <p className="text-[32px] font-black text-emerald-300 leading-none">{num}</p>
               <p className="text-[18px] text-white/80 mt-1">{label}</p>
             </div>
@@ -457,7 +457,7 @@ const ProofSlide = () => (
 const RoiSlide = () => (
   <div className="relative w-full h-full overflow-hidden">
     <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/95 via-green-950/80 to-slate-900/70" />
+    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/98 via-green-950/92 to-slate-900/88" />
     <div className="relative z-10 flex flex-col h-full text-white px-32 py-14">
       <div className="mb-10">
         <h2 className="text-[72px] font-black text-white">ROI — The Numbers</h2>
@@ -559,7 +559,7 @@ const CompetitionSlide = () => {
   return (
     <div className="relative w-full h-full overflow-hidden">
       <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-950/97 via-red-950/75 to-slate-900/80" />
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-950/98 via-red-950/90 to-slate-900/90" />
       <div className="relative z-10 flex h-full text-white px-28 py-12 gap-16">
 
         {/* Left — competitors */}
@@ -731,7 +731,7 @@ const CompetitionDeepDiveSlide = () => {
 const WhyAddnodeSlide = () => (
   <div className="relative w-full h-full overflow-hidden">
     <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/95 via-amber-950/75 to-slate-900/70" />
+    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/98 via-amber-950/90 to-slate-900/88" />
     <div className="relative z-10 flex flex-col justify-center h-full text-white px-32 py-16">
       <TrendingUp className="w-14 h-14 text-amber-400 mb-4" />
       <h2 className="text-[72px] font-black mb-4 text-white">Why Addnode Wins</h2>
