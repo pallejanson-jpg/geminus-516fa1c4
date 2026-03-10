@@ -66,13 +66,14 @@ const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
 
     // Fly to room if provided
     if (roomFmGuid) {
-      // Wait a bit for models to load, then fly to room entity
       const tryFlyToRoom = () => {
         const normalizedRoom = roomFmGuid.toLowerCase().replace(/-/g, '');
         const objects = viewer.scene.objects;
+        const metaObjects = viewer.metaScene?.metaObjects || {};
+
+        // Strategy 1: Match entity ID directly
         for (const id of Object.keys(objects)) {
-          const normalizedId = id.toLowerCase().replace(/-/g, '');
-          if (normalizedId.includes(normalizedRoom)) {
+          if (id.toLowerCase().replace(/-/g, '').includes(normalizedRoom)) {
             const entity = objects[id];
             if (entity?.aabb) {
               viewer.cameraFlight.flyTo({ aabb: entity.aabb, duration: 0.8 });
@@ -80,10 +81,28 @@ const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
             }
           }
         }
+
+        // Strategy 2: Match via metaObject attributes (originalSystemId, FmGuid)
+        for (const mo of Object.values(metaObjects) as any[]) {
+          const candidates = [
+            mo?.originalSystemId,
+            mo?.attributes?.FmGuid,
+            mo?.attributes?.fmGuid,
+            mo?.attributes?.fmguid,
+          ].filter(Boolean).map((v: string) => v.toLowerCase().replace(/-/g, ''));
+
+          if (candidates.some(c => c === normalizedRoom || c.includes(normalizedRoom))) {
+            const entity = objects[mo.id];
+            if (entity?.aabb) {
+              viewer.cameraFlight.flyTo({ aabb: entity.aabb, duration: 0.8 });
+              return true;
+            }
+          }
+        }
+
         return false;
       };
 
-      // Try immediately, then retry after models load
       if (!tryFlyToRoom()) {
         const interval = setInterval(() => {
           if (tryFlyToRoom()) clearInterval(interval);
