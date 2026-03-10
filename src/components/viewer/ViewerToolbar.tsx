@@ -752,6 +752,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         // Lock navigation: planView mode prevents rotation, only pan + zoom
         if (viewer.cameraControl) {
           viewer.cameraControl.navMode = 'planView';
+          viewer.cameraControl.followPointer = false;
+        }
+        // Kill any residual inertia from 3D orbit/pan so the view doesn't spin
+        if (viewer.scene?.camera) {
+          viewer.scene.camera.eye = [...viewer.scene.camera.eye];
+          viewer.scene.camera.look = [...viewer.scene.camera.look];
+          viewer.scene.camera.up = [...viewer.scene.camera.up];
         }
         // Cache the floor ID for force-reapply
         if (targetFloorId) {
