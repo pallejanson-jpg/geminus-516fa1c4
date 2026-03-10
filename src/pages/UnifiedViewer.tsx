@@ -130,7 +130,8 @@ const UnifiedViewerContent: React.FC<{
     const prev = prevViewModeRef.current;
     prevViewModeRef.current = viewMode;
 
-    if (viewMode === '2d' || viewMode === '3d') {
+    // Only dispatch when viewMode actually changed — not on floorFmGuid changes
+    if (prev !== viewMode && (viewMode === '2d' || viewMode === '3d')) {
       window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: viewMode } }));
     }
 
