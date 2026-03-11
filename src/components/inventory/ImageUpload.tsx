@@ -39,7 +39,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) 
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      toast.error('Endast bilder tillåtna');
+      toast.error('Only images allowed');
       return;
     }
 
