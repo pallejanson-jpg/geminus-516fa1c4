@@ -511,7 +511,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
 
                 {/* Symbol selection */}
                 <div className="space-y-1">
-                  <Label className="text-xs">Annotationssymbol</Label>
+                  <Label className="text-xs">Annotation symbol</Label>
                   <Select
                     value={formData.symbol_id}
                     onValueChange={(v) => setFormData({ ...formData, symbol_id: v })}
