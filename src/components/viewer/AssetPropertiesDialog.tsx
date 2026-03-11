@@ -491,7 +491,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
 
                 {/* Asset Type */}
                 <div className="space-y-1">
-                  <Label className="text-xs">Typ av tillgång</Label>
+                  <Label className="text-xs">Asset type</Label>
                   <Select
                     value={formData.asset_type}
                     onValueChange={(v) => setFormData({ ...formData, asset_type: v })}
