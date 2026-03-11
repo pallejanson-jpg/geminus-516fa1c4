@@ -64,7 +64,7 @@ const FmAccessDocuments: React.FC<FmAccessDocumentsProps> = ({ buildingId, build
               </div>
             )}
             {loadedDrawings && drawings.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">Inga ritningar hittade.</p>
+              <p className="text-sm text-muted-foreground text-center py-4">No drawings found.</p>
             )}
             {drawings.map((d, i) => (
               <Card key={d.drawingId || d.objectId || i} className="overflow-hidden">
