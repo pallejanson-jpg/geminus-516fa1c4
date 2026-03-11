@@ -36,9 +36,9 @@ const FmAccessDocuments: React.FC<FmAccessDocumentsProps> = ({ buildingId, build
 
   if (!buildingId) {
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground text-sm p-8">
-        Välj en byggnad för att visa ritningar och dokument.
-      </div>
+       <div className="flex items-center justify-center h-full text-muted-foreground text-sm p-8">
+         Select a building to view drawings and documents.
+       </div>
     );
   }
 
