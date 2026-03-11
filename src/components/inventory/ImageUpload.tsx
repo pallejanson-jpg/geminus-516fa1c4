@@ -161,7 +161,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) 
             ) : (
               <>
                 <Upload className="h-6 w-6" />
-                <span className="text-xs">{isMobile ? 'Ladda upp' : 'Välj bild'}</span>
+                <span className="text-xs">{isMobile ? 'Upload' : 'Choose image'}</span>
               </>
             )}
           </Button>

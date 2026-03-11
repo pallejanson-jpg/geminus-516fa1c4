@@ -37,7 +37,7 @@ const FloorSelector: React.FC<FloorSelectorProps> = ({
       <Label className="text-base">Floor</Label>
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="h-12">
-          <SelectValue placeholder="Välj våning..." />
+          <SelectValue placeholder="Select floor..." />
         </SelectTrigger>
         <SelectContent className="bg-popover z-50">
           {floors.map((f) => (
