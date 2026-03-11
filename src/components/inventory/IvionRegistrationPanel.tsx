@@ -609,7 +609,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="t.ex. Brandsläckare BS-001"
+              placeholder="e.g. Fire Extinguisher BS-001"
               className="h-10"
               maxLength={100}
             />
