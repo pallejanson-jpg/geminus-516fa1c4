@@ -115,10 +115,10 @@ const LocationDetectionStep: React.FC<LocationDetectionStepProps> = ({ onComplet
             }
             className="h-14 text-lg"
           >
-            ✅ Ja, stämmer
-          </Button>
-          <Button onClick={() => onComplete(null)} variant="outline" className="h-14 text-lg">
-            ❌ Nej, välj annan
+             ✅ Yes, correct
+           </Button>
+           <Button onClick={() => onComplete(null)} variant="outline" className="h-14 text-lg">
+             ❌ No, select another
           </Button>
         </div>
 
