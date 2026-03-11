@@ -3175,7 +3175,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             subtitle="3D model files for faster loading"
                                             localCount={syncCheck?.xkt?.localCount || 0}
                                             remoteLabel={syncCheck?.xkt?.buildingCount ? `${syncCheck.xkt.buildingCount} buildings` : undefined}
-                                            inSync={syncCheck?.xkt?.localCount && syncCheck.xkt.localCount > 0 ? true : false}
+                                            inSync={syncCheck?.xkt?.localCount != null && syncCheck?.xkt?.buildingCount != null && syncCheck.xkt.buildingCount > 0 && syncCheck.xkt.localCount >= syncCheck.xkt.buildingCount}
                                             isSyncing={isSyncingXkt}
                                             isCheckingSync={isCheckingSync}
                                             disabled={isSyncingStructure || isSyncingAssets || isSyncingXkt}
