@@ -32,7 +32,7 @@ const getDisplayName = (asset: { name?: string | null; common_name?: string | nu
   if (asset.common_name) return asset.common_name;
   const formattedType = formatAssetType(asset.asset_type || null);
   if (formattedType) return formattedType;
-  return `Okänd (${asset.fm_guid.slice(0, 8)}...)`;
+  return `Unknown (${asset.fm_guid.slice(0, 8)}...)`;
 };
 
 interface UnplacedAssetsPanelProps {
