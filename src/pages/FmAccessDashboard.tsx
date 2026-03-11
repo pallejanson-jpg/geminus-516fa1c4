@@ -55,7 +55,7 @@ const FmAccessDashboard: React.FC = () => {
         body: { action: 'get-drawings', buildingId: buildingFmGuid },
       });
       if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || 'Kunde inte hämta ritningar');
+      if (!data?.success) throw new Error(data?.error || 'Could not fetch drawings');
       setDrawings(Array.isArray(data.data) ? data.data : []);
     } catch (err: any) {
       setErrorDrawings(err.message);
