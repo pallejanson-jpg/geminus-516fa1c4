@@ -718,7 +718,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                       onValueChange={(v) => setFormData({ ...formData, asset_type: v })}
                     >
                       <SelectTrigger className="h-8">
-                        <SelectValue placeholder="Välj typ..." />
+                        <SelectValue placeholder="Select type..." />
                       </SelectTrigger>
                       <SelectContent className="bg-card border shadow-lg z-[100]">
                         {ASSET_TYPES.map((type) => (
