@@ -1,14 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyAuth, unauthorizedResponse, corsHeaders } from "../_shared/auth.ts";
+import { getAssetPlusCredentials } from "../_shared/credentials.ts";
 
 // Get Keycloak access token for 3D Viewer
-async function getAccessToken(): Promise<string> {
-  const keycloakUrl = Deno.env.get("ASSET_PLUS_KEYCLOAK_URL");
-  const clientId = Deno.env.get("ASSET_PLUS_CLIENT_ID");
-  const clientSecret = Deno.env.get("ASSET_PLUS_CLIENT_SECRET");
-  const username = Deno.env.get("ASSET_PLUS_USERNAME");
-  const password = Deno.env.get("ASSET_PLUS_PASSWORD");
+async function getAccessToken(creds: any): Promise<string> {
+  const keycloakUrl = creds.keycloakUrl;
+  const clientId = creds.clientId;
+  const clientSecret = creds.clientSecret;
+  const username = creds.username;
+  const password = creds.password;
 
   if (!keycloakUrl || !clientId) {
     throw new Error("Missing Keycloak configuration");
