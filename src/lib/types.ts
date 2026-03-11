@@ -2,6 +2,36 @@ export type GroupedFacilities = {
     [key: string]: any[];
 };
 
+// ── Geometry manifest types (ACC pipeline) ──
+
+export interface GeometryManifestChunk {
+  storeyGuid: string;
+  storeyName: string;
+  priority: number;
+  url: string;
+  bbox: number[];
+  elementCount: number;
+  format: string;
+}
+
+export interface GeometryManifest {
+  modelId: string;
+  source: { accProjectId: string; accFileUrn: string; apsRegion: string };
+  version: string;
+  format: string;
+  coordinateSystem: { up: string; units: string };
+  materialPolicy: { textures: boolean };
+  chunks: GeometryManifestChunk[];
+  fallback: { url: string } | null;
+}
+
+export interface GeometryIndexEntry {
+  externalId: string;
+  storeyGuid: string;
+  dbId: number;
+  fm_guid: string | null;
+}
+
 export interface Facility {
     fmGuid?: string;
     name?: string;

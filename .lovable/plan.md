@@ -1,61 +1,90 @@
+## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
+
+### Changes Made
+1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
+2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
+3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
+4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
+5. **config.toml** updated with `acc-geometry-extract` function entry
+
+### Pending (Phase 2)
+- Actual GLB chunk creation from SVF geometry (requires conversion worker)
+- OBJ as optional secondary format for small models
+
+---
 
 
-# Analysis: ACC OBJ Pipeline Proposal
+### Ändringar
 
-## Critical Issue — OBJ Stalls on Large Models
+#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
+**Fil:** `supabase/functions/conversion-worker-api/index.ts`
+- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
+- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
+- Upsert till `assets` med `created_in_model: true`
+- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
 
-Your existing code at line 2008 of `acc-sync` has this comment:
+#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
+**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
+- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
+- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
+- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
+- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
+- Diff: soft-delete objekt som finns i DB men inte i ny IFC
+
+#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
+**Fil:** `docs/conversion-worker/worker.mjs`
+- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
+- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
+- Non-fatal: om hierarki-population misslyckas fortsätter workern
+
+#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
+**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
+- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
+- `created_in_model: true` istället för `false`
+- Diff-logik: markerar borttagna objekt efter import
+
+### Datamodell
 
 ```text
-// Use SVF-only (no OBJ which stalls large models at 99%)
-// SVF2 is not supported for all designs (406 error), so we use SVF
+Building Storey:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
+  category:          "Building Storey"
+  created_in_model:  true
+
+Space:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
+  category:          "Space"
+  level_fm_guid:     parent storey fm_guid
+
+Instance:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
+  category:          "Instance"
+  asset_type:        ifcType (e.g. "IfcDoor")
+  level_fm_guid:     resolved storey
+  in_room_fm_guid:   resolved space
 ```
 
-The proposal requests `svf2 + obj` from Model Derivative. This directly contradicts a known production issue you already solved — **OBJ export hangs at 99% for large Revit models**. SVF2 also returns 406 for some designs.
+### Diff-flöde
 
-## Architecture Mismatch
+Vid omimport jämförs importerade fm_guids mot befintliga i DB:
+- **Nytt** → INSERT
+- **Matchat** → UPDATE (namn, typ, rumsplacering)
+- **Borttaget** → `modification_status = 'removed'` (soft-delete)
 
-The spec describes a **Node.js monorepo** (packages/extractor CLI, Express server, pnpm workspaces, Jest). Lovable is React + Supabase — no Node CLI, no Express, no filesystem access. The concept must be adapted:
+---
 
-| Spec component | Lovable equivalent |
-|---|---|
-| `packages/extractor` CLI | Edge function `acc-obj-extract` |
-| `apps/api` Express | Actions in `acc-sync` edge function |
-| `CDN_BASE` filesystem | Supabase Storage (`xkt-models` bucket) |
-| `packages/viewer` React app | Enhance existing `NativeXeokitViewer` |
-| `packages/common` types | Shared TypeScript types in `src/lib/types.ts` |
-| Jest tests | Vitest (already configured) |
+## Previous Plans
 
-## What Actually Works from This Proposal
+### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
+- Browser-primary for >20MB, edge function for ≤20MB
+- MetaModel JSON uploaded alongside XKT
+- Systems extracted and persisted
 
-The **manifest-driven chunk loading** concept is sound and aligns with your existing `useFloorPriorityLoading` hook. The manifest schema and geometry_index schema are well-designed. The priority-based loading (active floor → adjacent → rest) is already implemented for XKT.
+### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+- Standalone Node.js worker polls conversion-worker-api
+- Per-storey .xkt tiles with dynamic floor loading
 
-## Recommended Approach
-
-Instead of fighting the OBJ stall issue, use the geometry you already get:
-
-1. **SVF → extract geometry per storey** (you already parse SVF metadata in `extractBimHierarchy`)
-2. **Convert to GLB per storey** (not monolithic OBJ) using the existing `bim-to-gltf` function pattern
-3. **Store with the manifest schema** from the proposal
-4. **Load via GLTFLoaderPlugin** (better xeokit support than OBJLoaderPlugin)
-
-This gives you the same end result (per-storey chunks, manifest-driven loading, no IFC dependency) without hitting the OBJ stall problem.
-
-## Implementation Plan (if you want to proceed)
-
-### Phase 1: Save the plan document
-Create `docs/plans/acc-obj-pipeline-plan.md` with the full spec for reference.
-
-### Phase 2: Adapt to working formats
-1. **DB migration** — add `format` column to `xkt_models` (`'xkt' | 'glb' | 'obj'`)
-2. **New edge function `acc-geometry-extract`** — downloads SVF derivatives, extracts per-storey geometry, converts to GLB chunks, stores in `xkt-models` bucket with manifest.json
-3. **Manifest + geometry_index** — stored as JSON in storage per the proposed schemas
-4. **Viewer update** — `NativeXeokitViewer` checks for manifest, loads GLB chunks via `GLTFLoaderPlugin` with priority ordering
-
-### Phase 3: OBJ as optional format
-Add OBJ output as a **secondary format** for small models or FM Access consumers, but not as the primary pipeline due to the stall risk.
-
-## My Recommendation
-
-Save the plan document now, then implement using GLB instead of OBJ as the chunk format. The manifest schema, chunking logic, and viewer integration from the proposal are all reusable — only the geometry format changes. Do you want me to save the document and start with this adapted approach?
-
+### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
+- 10 credential override columns on building_settings
+- Shared credential resolver in edge functions
+- Properties page as configuration hub
