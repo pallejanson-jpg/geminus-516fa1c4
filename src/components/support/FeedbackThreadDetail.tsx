@@ -98,7 +98,7 @@ const FeedbackThreadDetail: React.FC<FeedbackThreadDetailProps> = ({
       fetchComments();
     } catch (err) {
       console.error('Failed to post comment:', err);
-      toast({ title: 'Kunde inte skicka kommentar', variant: 'destructive' });
+      toast({ title: 'Could not send comment', variant: 'destructive' });
     } finally {
       setIsSubmitting(false);
     }
@@ -113,7 +113,7 @@ const FeedbackThreadDetail: React.FC<FeedbackThreadDetailProps> = ({
       if (error) throw error;
       setCurrentStatus(newStatus);
       onUpdated();
-      toast({ title: 'Status uppdaterad' });
+      toast({ title: 'Status updated' });
     } catch (err) {
       console.error('Failed to update status:', err);
     }

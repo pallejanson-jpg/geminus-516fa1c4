@@ -100,11 +100,11 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
 
       if (error) throw error;
 
-      toast.success('Alignment sparad');
+      toast.success('Alignment saved');
       onSaved?.();
     } catch (err: any) {
       console.error('Failed to save alignment:', err);
-      toast.error('Kunde inte spara alignment', { description: err.message });
+      toast.error('Could not save alignment', { description: err.message });
     } finally {
       setIsSaving(false);
     }
@@ -126,11 +126,11 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
       if (error) throw error;
 
       onChange({ offsetX: 0, offsetY: 0, offsetZ: 0, rotation: 0 });
-      toast.success('Alignment borttagen');
+      toast.success('Alignment removed');
       onSaved?.();
     } catch (err: any) {
       console.error('Failed to delete alignment:', err);
-      toast.error('Kunde inte ta bort alignment', { description: err.message });
+      toast.error('Could not remove alignment', { description: err.message });
     } finally {
       setIsDeleting(false);
     }
@@ -147,24 +147,24 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
         <div className="flex items-center gap-1">
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Ta bort alignment" disabled={isDeleting}>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Remove alignment" disabled={isDeleting}>
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Ta bort alignment?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Befintlig kalibrering raderas från databasen. Du kan sedan göra en ny punktkalibrering.
-                </AlertDialogDescription>
+                 <AlertDialogTitle>Remove alignment?</AlertDialogTitle>
+                 <AlertDialogDescription>
+                   Existing calibration will be deleted from the database. You can then perform a new point calibration.
+                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Avbryt</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDelete}>Ta bort</AlertDialogAction>
+                 <AlertDialogCancel>Cancel</AlertDialogCancel>
+                 <AlertDialogAction onClick={handleDelete}>Remove</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleReset} title="Återställ">
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleReset} title="Reset">
             <RotateCcw className="h-3.5 w-3.5" />
           </Button>
           <Button
@@ -173,7 +173,7 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
             className="h-7 w-7"
             onClick={handleSave}
             disabled={isSaving}
-            title="Spara"
+            title="Save"
           >
             <Save className="h-3.5 w-3.5" />
           </Button>
@@ -184,7 +184,7 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
       <div className="flex gap-2 bg-muted/50 rounded-md p-2.5">
         <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          Använd punktkalibrering för att matcha 360° och 3D. Klicka samma punkt i båda vyerna.
+          Use point calibration to match 360° and 3D. Click the same point in both views.
         </p>
       </div>
 
@@ -197,7 +197,7 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
           onClick={() => setShowPointPicker(true)}
         >
           <Crosshair className="h-3 w-3" />
-          Punktkalibrering (360° → 3D)
+          Point calibration (360° → 3D)
         </Button>
       )}
 

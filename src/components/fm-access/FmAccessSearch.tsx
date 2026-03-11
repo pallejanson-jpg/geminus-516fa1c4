@@ -35,7 +35,7 @@ const FmAccessSearch: React.FC<FmAccessSearchProps> = ({ onSelect }) => {
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Sök objekt i FM Access..."
+            placeholder="Search objects in FM Access..."
             className="pl-8 h-9 text-sm"
           />
           {loading && <Loader2 size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />}
@@ -43,7 +43,7 @@ const FmAccessSearch: React.FC<FmAccessSearchProps> = ({ onSelect }) => {
       </div>
       <ScrollArea className="flex-1">
         {searched && results.length === 0 && (
-          <p className="text-sm text-muted-foreground text-center p-4">Inga resultat.</p>
+          <p className="text-sm text-muted-foreground text-center p-4">No results.</p>
         )}
         <div className="p-1">
           {results.map((r, i) => (
@@ -52,7 +52,7 @@ const FmAccessSearch: React.FC<FmAccessSearchProps> = ({ onSelect }) => {
               className="w-full text-left px-3 py-2 text-sm hover:bg-accent/50 rounded-md transition-colors"
               onClick={() => onSelect(r)}
             >
-              <div className="font-medium truncate">{r.objectName || r.name || 'Namnlöst'}</div>
+              <div className="font-medium truncate">{r.objectName || r.name || 'Unnamed'}</div>
               {r.className && <div className="text-[11px] text-muted-foreground">{r.className}</div>}
             </button>
           ))}

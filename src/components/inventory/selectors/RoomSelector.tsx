@@ -43,10 +43,10 @@ const RoomSelector: React.FC<RoomSelectorProps> = ({
 
   return (
     <div className="space-y-2">
-      <Label className="text-base">Rum</Label>
+      <Label className="text-base">Room</Label>
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="h-12">
-          <SelectValue placeholder="Välj rum..." />
+          <SelectValue placeholder="Select room..." />
         </SelectTrigger>
         <SelectContent className="bg-popover z-50 max-h-60">
           {rooms.map((r) => (

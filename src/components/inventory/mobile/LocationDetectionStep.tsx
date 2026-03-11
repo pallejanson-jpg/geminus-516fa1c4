@@ -38,37 +38,37 @@ const LocationDetectionStep: React.FC<LocationDetectionStepProps> = ({ onComplet
           <div className="absolute inset-0 rounded-full border-4 border-primary/30 animate-ping" />
         </div>
         <div className="text-center space-y-2">
-          <h2 className="text-xl font-semibold">Letar efter din position...</h2>
-          <p className="text-muted-foreground">Tillåt åtkomst till platstjänster</p>
-        </div>
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  // Error state
-  if (error && error !== 'no_buildings') {
-    const errorMessages: Record<string, { title: string; description: string }> = {
-      permission_denied: {
-        title: 'Platstjänster nekade',
-        description: 'Aktivera platstjänster i din webbläsares inställningar för att använda GPS-detektion.',
-      },
-      position_unavailable: {
-        title: 'Kunde inte hämta position',
-        description: 'Din position kunde inte bestämmas. Välj byggnad manuellt.',
-      },
-      timeout: {
-        title: 'Timeout',
-        description: 'Det tog för lång tid att hämta din position. Försök igen eller välj manuellt.',
-      },
-      geolocation_not_supported: {
-        title: 'GPS stöds inte',
-        description: 'Din enhet stöder inte platstjänster. Välj byggnad manuellt.',
-      },
-      default: {
-        title: 'Något gick fel',
-        description: 'Kunde inte hämta din position. Välj byggnad manuellt.',
-      },
+           <h2 className="text-xl font-semibold">Looking for your location...</h2>
+           <p className="text-muted-foreground">Allow access to location services</p>
+         </div>
+         <Loader2 className="h-6 w-6 animate-spin text-primary" />
+       </div>
+     );
+   }
+ 
+   // Error state
+   if (error && error !== 'no_buildings') {
+     const errorMessages: Record<string, { title: string; description: string }> = {
+       permission_denied: {
+         title: 'Location services denied',
+         description: 'Enable location services in your browser settings to use GPS detection.',
+       },
+       position_unavailable: {
+         title: 'Could not get position',
+         description: 'Your position could not be determined. Select building manually.',
+       },
+       timeout: {
+         title: 'Timeout',
+         description: 'It took too long to get your position. Try again or select manually.',
+       },
+       geolocation_not_supported: {
+         title: 'GPS not supported',
+         description: 'Your device does not support location services. Select building manually.',
+       },
+       default: {
+         title: 'Something went wrong',
+         description: 'Could not get your position. Select building manually.',
+       },
     };
 
     const msg = errorMessages[error] || errorMessages.default;
@@ -85,11 +85,11 @@ const LocationDetectionStep: React.FC<LocationDetectionStepProps> = ({ onComplet
         <div className="flex flex-col gap-3 w-full max-w-xs">
           <Button onClick={requestLocation} variant="outline" className="h-12">
             <Navigation className="h-5 w-5 mr-2" />
-            Försök igen
-          </Button>
-          <Button onClick={() => onComplete(null)} className="h-12">
-            Välj byggnad manuellt
-          </Button>
+             Try again
+           </Button>
+           <Button onClick={() => onComplete(null)} className="h-12">
+             Select building manually
+           </Button>
         </div>
       </div>
     );
@@ -103,7 +103,7 @@ const LocationDetectionStep: React.FC<LocationDetectionStepProps> = ({ onComplet
           <MapPin className="h-12 w-12 text-green-600" />
         </div>
         <div className="text-center space-y-2">
-          <h2 className="text-xl font-semibold">Är du vid {nearbyBuilding.commonName}?</h2>
+          <h2 className="text-xl font-semibold">Are you at {nearbyBuilding.commonName}?</h2>
           <p className="text-muted-foreground">
             Ca {formatDistance(nearbyBuilding.distance)} bort
           </p>
@@ -115,17 +115,17 @@ const LocationDetectionStep: React.FC<LocationDetectionStepProps> = ({ onComplet
             }
             className="h-14 text-lg"
           >
-            ✅ Ja, stämmer
-          </Button>
-          <Button onClick={() => onComplete(null)} variant="outline" className="h-14 text-lg">
-            ❌ Nej, välj annan
+             ✅ Yes, correct
+           </Button>
+           <Button onClick={() => onComplete(null)} variant="outline" className="h-14 text-lg">
+             ❌ No, select another
           </Button>
         </div>
 
         {/* Show other nearby buildings if any */}
         {allBuildings.length > 1 && (
           <Card className="w-full max-w-xs p-4 mt-4">
-            <p className="text-sm text-muted-foreground mb-3">Andra byggnader i närheten:</p>
+            <p className="text-sm text-muted-foreground mb-3">Other nearby buildings:</p>
             <div className="space-y-2">
               {allBuildings.slice(1, 4).map((b) => (
                 <Button
@@ -154,14 +154,14 @@ const LocationDetectionStep: React.FC<LocationDetectionStepProps> = ({ onComplet
         <MapPin className="h-12 w-12 text-muted-foreground" />
       </div>
       <div className="text-center space-y-2">
-        <h2 className="text-xl font-semibold">Ingen byggnad i närheten</h2>
-        <p className="text-muted-foreground max-w-xs">
-          Det finns ingen registrerad byggnad inom 200 meter från dig.
-        </p>
-      </div>
-      <Button onClick={() => onComplete(null)} className="h-14 text-lg w-full max-w-xs">
-        Välj byggnad manuellt
-      </Button>
+         <h2 className="text-xl font-semibold">No building nearby</h2>
+         <p className="text-muted-foreground max-w-xs">
+           There is no registered building within 200 meters of your location.
+         </p>
+       </div>
+       <Button onClick={() => onComplete(null)} className="h-14 text-lg w-full max-w-xs">
+         Select building manually
+       </Button>
     </div>
   );
 };

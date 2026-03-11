@@ -375,14 +375,14 @@ const IssueDetailSheet: React.FC<IssueDetailSheetProps> = ({
                           category: issue.issue_type === 'fault' ? 'fault' : 'question',
                         });
                         if (error) throw error;
-                        toast({ title: "Skickat till Support" });
-                      } catch {
-                        toast({ title: "Kunde inte skicka till Support", variant: "destructive" });
-                      }
+                         toast({ title: "Sent to Support" });
+                       } catch {
+                         toast({ title: "Could not send to Support", variant: "destructive" });
+                       }
                     }}
                   >
                     <LifeBuoy className="h-4 w-4 mr-1" />
-                    Skicka till Support
+                    Send to Support
                   </Button>
                 </div>
               )}

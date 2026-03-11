@@ -118,7 +118,7 @@ const FeedbackCreateForm: React.FC<FeedbackCreateFormProps> = ({ open, onClose, 
       onCreated();
     } catch (err) {
       console.error('Failed to create feedback:', err);
-      toast({ title: 'Kunde inte skicka', variant: 'destructive' });
+      toast({ title: 'Could not send', variant: 'destructive' });
     } finally {
       setIsSubmitting(false);
     }

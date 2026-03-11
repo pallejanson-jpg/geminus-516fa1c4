@@ -32,7 +32,7 @@ const FmAccessIssueOverlay: React.FC<FmAccessIssueOverlayProps> = ({
     priority: string;
   }) => {
     if (!user) {
-      toast.error('Du måste vara inloggad för att skapa ärenden');
+      toast.error('You must be logged in to create issues');
       return;
     }
 
@@ -57,11 +57,11 @@ const FmAccessIssueOverlay: React.FC<FmAccessIssueOverlayProps> = ({
 
       if (error) throw error;
 
-      toast.success('Ärende skapat!');
+      toast.success('Issue created!');
       setShowDialog(false);
     } catch (err: any) {
       console.error('[FmAccessIssueOverlay] Error creating issue:', err);
-      toast.error('Kunde inte skapa ärende: ' + (err.message || 'Okänt fel'));
+      toast.error('Could not create issue: ' + (err.message || 'Unknown error'));
     } finally {
       setIsSubmitting(false);
     }
@@ -82,10 +82,10 @@ const FmAccessIssueOverlay: React.FC<FmAccessIssueOverlayProps> = ({
             : "bottom-4 right-4 h-10 px-3.5 text-xs"
         )}
         style={isMobile ? { bottom: `calc(1rem + env(safe-area-inset-bottom, 0px))` } : undefined}
-        title="Skapa ärende"
+        title="Create issue"
       >
         <MessageSquarePlus className={cn(isMobile ? "h-5 w-5" : "h-4 w-4", "text-primary")} />
-        <span className="font-medium">Skapa ärende</span>
+        <span className="font-medium">Create issue</span>
       </button>
 
       {/* Reuse existing CreateIssueDialog */}

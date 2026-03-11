@@ -36,9 +36,9 @@ const FmAccessDocuments: React.FC<FmAccessDocumentsProps> = ({ buildingId, build
 
   if (!buildingId) {
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground text-sm p-8">
-        Välj en byggnad för att visa ritningar och dokument.
-      </div>
+       <div className="flex items-center justify-center h-full text-muted-foreground text-sm p-8">
+         Select a building to view drawings and documents.
+       </div>
     );
   }
 
@@ -47,10 +47,10 @@ const FmAccessDocuments: React.FC<FmAccessDocumentsProps> = ({ buildingId, build
       <div className="px-3 pt-3">
         <TabsList className="w-full">
           <TabsTrigger value="drawings" className="flex-1 text-xs">
-            <Image size={12} className="mr-1" /> Ritningar ({drawings.length})
+            <Image size={12} className="mr-1" /> Drawings ({drawings.length})
           </TabsTrigger>
           <TabsTrigger value="documents" className="flex-1 text-xs">
-            <FileText size={12} className="mr-1" /> Dokument ({documents.length})
+            <FileText size={12} className="mr-1" /> Documents ({documents.length})
           </TabsTrigger>
         </TabsList>
       </div>
@@ -60,17 +60,17 @@ const FmAccessDocuments: React.FC<FmAccessDocumentsProps> = ({ buildingId, build
           <div className="p-3 space-y-2">
             {!loadedDrawings && (
               <div className="flex items-center justify-center p-4 text-muted-foreground">
-                <Loader2 size={16} className="animate-spin mr-2" /> Laddar ritningar...
+                <Loader2 size={16} className="animate-spin mr-2" /> Loading drawings...
               </div>
             )}
             {loadedDrawings && drawings.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">Inga ritningar hittade.</p>
+              <p className="text-sm text-muted-foreground text-center py-4">No drawings found.</p>
             )}
             {drawings.map((d, i) => (
               <Card key={d.drawingId || d.objectId || i} className="overflow-hidden">
                 <CardContent className="p-3 flex items-center justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{d.objectName || d.name || `Ritning ${i + 1}`}</div>
+                    <div className="text-sm font-medium truncate">{d.objectName || d.name || `Drawing ${i + 1}`}</div>
                     {d.className && <div className="text-[11px] text-muted-foreground">{d.className}</div>}
                   </div>
                   <Button
@@ -93,16 +93,16 @@ const FmAccessDocuments: React.FC<FmAccessDocumentsProps> = ({ buildingId, build
           <div className="p-3 space-y-2">
             {!loadedDocs && (
               <div className="flex items-center justify-center p-4 text-muted-foreground">
-                <Loader2 size={16} className="animate-spin mr-2" /> Laddar dokument...
+                <Loader2 size={16} className="animate-spin mr-2" /> Loading documents...
               </div>
             )}
             {loadedDocs && documents.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">Inga dokument hittade.</p>
+              <p className="text-sm text-muted-foreground text-center py-4">No documents found.</p>
             )}
             {documents.map((d, i) => (
               <Card key={d.documentId || d.objectId || i} className="overflow-hidden">
                 <CardContent className="p-3">
-                  <div className="text-sm font-medium truncate">{d.objectName || d.name || d.fileName || `Dokument ${i + 1}`}</div>
+                  <div className="text-sm font-medium truncate">{d.objectName || d.name || d.fileName || `Document ${i + 1}`}</div>
                   {d.fileName && <div className="text-[11px] text-muted-foreground">{d.fileName}</div>}
                 </CardContent>
               </Card>

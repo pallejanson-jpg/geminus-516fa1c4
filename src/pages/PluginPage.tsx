@@ -71,10 +71,10 @@ export default function PluginPage() {
         <div className="px-4 py-3 border-b border-border shrink-0">
           <div className="flex items-center gap-2 mb-2">
             <Building2 className="h-5 w-5 text-primary" />
-            <h1 className="text-base font-semibold text-foreground">Välj byggnad</h1>
+            <h1 className="text-base font-semibold text-foreground">Select building</h1>
           </div>
           <Input
-            placeholder="Sök byggnad..."
+            placeholder="Search building..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-9 text-sm"
@@ -100,7 +100,7 @@ export default function PluginPage() {
               ))}
               {filtered.length === 0 && !loading && (
                 <p className="text-center text-sm text-muted-foreground py-8">
-                  Inga byggnader hittades
+                  No buildings found
                 </p>
               )}
             </div>
