@@ -222,6 +222,118 @@ Deno.serve(async (req) => {
       });
     }
 
+    // POST /populate-hierarchy — worker sends parsed hierarchy for assets upsert + diff
+    if (req.method === "POST" && action === "populate-hierarchy") {
+      const { building_fm_guid, storeys, spaces, instances } = await req.json();
+      if (!building_fm_guid) throw new Error("building_fm_guid required");
+
+      const now = new Date().toISOString();
+
+      // Helper: deterministic GUID from building + name + type
+      async function deterministicGuid(parts: string[]): Promise<string> {
+        const data = new TextEncoder().encode(parts.join("|"));
+        const hash = await crypto.subtle.digest("SHA-256", data);
+        const hex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
+        return `${hex.slice(0,8)}-${hex.slice(8,12)}-5${hex.slice(13,16)}-${(parseInt(hex.slice(16,18),16) & 0x3f | 0x80).toString(16).padStart(2,"0")}${hex.slice(18,20)}-${hex.slice(20,32)}`;
+      }
+
+      const importedFmGuids = new Set<string>();
+      const storeyIdToFmGuid = new Map<string, string>();
+
+      // 1. Upsert storeys
+      if (storeys?.length > 0) {
+        const storeyRows = [];
+        for (const s of storeys) {
+          const fmGuid = s.globalId || await deterministicGuid([building_fm_guid, s.name || "", "IfcBuildingStorey"]);
+          storeyIdToFmGuid.set(s.id || s.name, fmGuid);
+          importedFmGuids.add(fmGuid);
+          storeyRows.push({
+            fm_guid: fmGuid, name: s.name, common_name: s.name,
+            category: "Building Storey", building_fm_guid, level_fm_guid: fmGuid,
+            is_local: false, created_in_model: true, synced_at: now,
+          });
+        }
+        for (let i = 0; i < storeyRows.length; i += 500) {
+          await supabase.from("assets").upsert(storeyRows.slice(i, i + 500), { onConflict: "fm_guid" });
+        }
+      }
+
+      // 2. Upsert spaces
+      if (spaces?.length > 0) {
+        const spaceRows = [];
+        for (const s of spaces) {
+          const fmGuid = s.globalId || await deterministicGuid([building_fm_guid, s.name || "", "IfcSpace"]);
+          importedFmGuids.add(fmGuid);
+          const parentFmGuid = storeyIdToFmGuid.get(s.parentId) || null;
+          spaceRows.push({
+            fm_guid: fmGuid, name: s.name, common_name: s.name,
+            category: "Space", building_fm_guid, level_fm_guid: parentFmGuid,
+            is_local: false, created_in_model: true, synced_at: now,
+          });
+        }
+        for (let i = 0; i < spaceRows.length; i += 500) {
+          await supabase.from("assets").upsert(spaceRows.slice(i, i + 500), { onConflict: "fm_guid" });
+        }
+      }
+
+      // 3. Upsert instances
+      if (instances?.length > 0) {
+        const instanceRows = [];
+        for (const inst of instances) {
+          const fmGuid = inst.globalId || await deterministicGuid([building_fm_guid, inst.name || "", inst.ifcType || "Instance"]);
+          importedFmGuids.add(fmGuid);
+          const levelFmGuid = storeyIdToFmGuid.get(inst.storeyId) || null;
+          // If parent is a space, resolve in_room_fm_guid
+          let inRoomFmGuid: string | null = null;
+          if (inst.spaceId) {
+            // Space globalId was used or deterministic
+            inRoomFmGuid = inst.spaceGlobalId || null;
+          }
+          instanceRows.push({
+            fm_guid: fmGuid, name: inst.name, common_name: inst.name,
+            category: "Instance", asset_type: inst.ifcType,
+            building_fm_guid, level_fm_guid: levelFmGuid, in_room_fm_guid: inRoomFmGuid,
+            is_local: false, created_in_model: true, synced_at: now,
+          });
+        }
+        for (let i = 0; i < instanceRows.length; i += 500) {
+          await supabase.from("assets").upsert(instanceRows.slice(i, i + 500), { onConflict: "fm_guid" });
+        }
+      }
+
+      // 4. Diff: remove assets that existed in DB but not in new import
+      const { data: existingAssets } = await supabase
+        .from("assets")
+        .select("fm_guid")
+        .eq("building_fm_guid", building_fm_guid)
+        .eq("created_in_model", true)
+        .in("category", ["Building Storey", "Space", "Instance"]);
+
+      if (existingAssets && existingAssets.length > 0) {
+        const removedGuids = existingAssets
+          .map(a => a.fm_guid)
+          .filter(guid => !importedFmGuids.has(guid));
+
+        if (removedGuids.length > 0) {
+          // Soft-delete: mark as removed
+          for (let i = 0; i < removedGuids.length; i += 500) {
+            const chunk = removedGuids.slice(i, i + 500);
+            await supabase
+              .from("assets")
+              .update({ modification_status: "removed", updated_at: now })
+              .in("fm_guid", chunk)
+              .eq("building_fm_guid", building_fm_guid);
+          }
+        }
+      }
+
+      const totalUpserted = (storeys?.length || 0) + (spaces?.length || 0) + (instances?.length || 0);
+      return new Response(
+        JSON.stringify({ ok: true, upserted: totalUpserted, storeys: storeys?.length || 0, spaces: spaces?.length || 0, instances: instances?.length || 0 }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // POST /upload-url — generate signed upload URL for worker to push tiles
     if (req.method === "POST" && action === "upload-url") {
       const { path } = await req.json();
