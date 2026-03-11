@@ -32,7 +32,7 @@ const FmAccessIssueOverlay: React.FC<FmAccessIssueOverlayProps> = ({
     priority: string;
   }) => {
     if (!user) {
-      toast.error('Du måste vara inloggad för att skapa ärenden');
+      toast.error('You must be logged in to create issues');
       return;
     }
 
