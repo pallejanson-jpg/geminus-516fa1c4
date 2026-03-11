@@ -87,7 +87,7 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
         );
       } catch (err) {
         console.error('Failed to load unplaced assets:', err);
-        toast.error('Kunde inte ladda assets');
+        toast.error('Could not load assets');
       } finally {
         setIsLoading(false);
       }
