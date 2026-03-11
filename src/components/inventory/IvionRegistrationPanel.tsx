@@ -671,7 +671,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
 
           {/* Floor */}
           <div className="space-y-1.5">
-            <Label className="text-sm">Våningsplan</Label>
+            <Label className="text-sm">Floor</Label>
             <Select value={levelFmGuid} onValueChange={(v) => { setLevelFmGuid(v); setRoomFmGuid(''); }}>
               <SelectTrigger className="h-10">
                 <SelectValue placeholder="Välj våningsplan..." />
