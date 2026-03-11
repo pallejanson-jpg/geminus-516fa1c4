@@ -558,13 +558,13 @@ export default function Ivion360View({
             <div className="flex flex-col items-center gap-2">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <span className="text-sm text-muted-foreground">
-                {sdkStatus === 'loading' 
-                  ? 'Laddar 360° SDK...'
-                  : isRenewingToken 
-                    ? 'Förnyar anslutning...' 
-                    : isLoadingImages 
-                      ? 'Laddar bildpositioner...'
-                      : 'Laddar 360°-vy...'}
+                 {sdkStatus === 'loading' 
+                   ? 'Loading 360° SDK...'
+                   : isRenewingToken 
+                     ? 'Renewing connection...' 
+                     : isLoadingImages 
+                       ? 'Loading image positions...'
+                       : 'Loading 360° view...'}
               </span>
             </div>
           </div>
