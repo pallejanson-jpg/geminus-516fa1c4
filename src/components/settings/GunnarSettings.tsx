@@ -71,7 +71,7 @@ const GunnarSettings: React.FC = () => {
           <Sparkles className="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h3 className="font-semibold">Gunnar AI</h3>
+          <h3 className="font-semibold">Geminus AI</h3>
           <p className="text-sm text-muted-foreground">AI assistant for facility questions</p>
         </div>
       </div>
