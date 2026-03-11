@@ -357,17 +357,17 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
   // Handle form submission
   const handleSave = async () => {
     if (!name.trim()) {
-      toast.error('Namn är obligatoriskt');
-      return;
-    }
-    if (!category) {
-      toast.error('Välj en kategori');
-      return;
-    }
-    if (!symbolId) {
-      toast.error('Välj en symbol');
-      return;
-    }
+       toast.error('Name is required');
+       return;
+     }
+     if (!category) {
+       toast.error('Select a category');
+       return;
+     }
+     if (!symbolId) {
+       toast.error('Select a symbol');
+       return;
+     }
 
     setIsLoading(true);
     try {
