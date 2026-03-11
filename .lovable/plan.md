@@ -1,100 +1,76 @@
+## Plan: IFC → Assets Pipeline med GUID-generering, tillbakaskrivning och diff-hantering (IMPLEMENTED)
 
+### Ändringar
 
-# Plan: IFC → Assets Pipeline med GUID-generering, tillbakaskrivning och diff-hantering
+#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
+**Fil:** `supabase/functions/conversion-worker-api/index.ts`
+- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
+- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
+- Upsert till `assets` med `created_in_model: true`
+- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
 
-## Problemet
+#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
+**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
+- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
+- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
+- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
+- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
+- Diff: soft-delete objekt som finns i DB men inte i ny IFC
 
-Nuvarande IFC-pipeline (alla tre vägar: edge function, browser, worker) skapar bara `xkt_models` + `asset_external_ids` + `systems`. **Ingen av dem skriver till `assets`-tabellen**, som driver Navigator, Portfolio, filterpaneler och rum-labels. Dessutom saknas:
+#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
+**Fil:** `docs/conversion-worker/worker.mjs`
+- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
+- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
+- Non-fatal: om hierarki-population misslyckas fortsätter workern
 
-1. **GUID-generering** — objekt utan IFC GlobalId får ingen deterministisk fm_guid
-2. **Tillbakaskrivning** — genererade fm_guid skrivs inte tillbaka in i IFC-filen
-3. **Diff/borttagning** — om ett objekt försvinner från en ny IFC-import tas det inte bort från databasen
+#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
+**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
+- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
+- `created_in_model: true` istället för `false`
+- Diff-logik: markerar borttagna objekt efter import
 
-## Lösning i tre delar
-
-### Del 1: Populate `assets` från IFC-metadata
-
-Utöka `ifc-to-xkt` edge function (och `conversion-worker-api /complete`) med en ny funktion `populateAssetsFromIfc()` som körs efter XKT-generering:
-
-- Itererar alla `metaObjects` från parsad IFC
-- För varje `IfcBuildingStorey` → upsert i `assets` med `category: 'Building Storey'`
-- För varje `IfcSpace` → upsert med `category: 'Space'`, `level_fm_guid` = parent storey
-- För varje instansobjekt (IfcDoor, IfcWall, etc.) → upsert med `category: 'Instance'`, korrekt `level_fm_guid` och `in_room_fm_guid`
-- `fm_guid` bestäms av IFC GlobalId om det finns, annars uuid5(buildingFmGuid + objectName + type)
-- Alla markeras `is_local: false`, `created_in_model: true`
-
-### Del 2: GUID-tillbakaskrivning till IFC
-
-Om fm_guid genererades (uuid5) och inte fanns i IFC:en:
-- Använd `web-ifc` API:t (`ifcApi.CreateIfcGuidProperty` / `WriteLine`) för att skriva genererad GUID som IfcPropertySingleValue i ett PropertySet (t.ex. "Geminus_Identifiers")
-- Ladda upp den berikade IFC:en tillbaka till `ifc-uploads` bucket (som `{original}_enriched.ifc`)
-- Detta säkerställer att nästa import matchar samma fm_guid
-
-### Del 3: Diff-hantering (borttagning av borttagna objekt)
-
-Efter populate-steget:
-1. Hämta alla `assets` i databasen för `building_fm_guid` där `created_in_model = true`
-2. Jämför mot listan av fm_guids som just parsades från IFC
-3. Objekt som finns i DB men **inte** i den nya IFC:en → markeras som borttagna:
-   - Sätt `modification_status = 'removed'` (soft-delete först)
-   - Eller radera direkt om `is_local = false`
-4. Objekt som finns i IFC och **matchar** i DB → uppdatera egenskaper (namn, typ, rumsplacering)
-
-### Filer att ändra
-
-| Fil | Ändring |
-|-----|---------|
-| `supabase/functions/ifc-to-xkt/index.ts` | Lägg till `populateAssetsFromIfc()` efter steg 8 (persist systems). Inkludera diff-logik. |
-| `supabase/functions/conversion-worker-api/index.ts` | Ny action `POST /populate-hierarchy` som worker kan anropa efter konvertering |
-| `docs/conversion-worker/worker.mjs` | Efter `/complete`, anropa `/populate-hierarchy` med storey/space/instance-data |
-| `src/components/settings/CreateBuildingPanel.tsx` | Browser-konverteringen: efter `convertToXktWithMetadata`, skriv hierarchy till `assets` via Supabase client |
-| `supabase/functions/ifc-extract-systems/index.ts` | Utöka med samma `populateAssetsFromIfc()` för systems-only-läget |
-
-### Datamodell för insättning
+### Datamodell
 
 ```text
 Building Storey:
-  fm_guid:           IFC GlobalId || uuid5(buildingGuid + name)
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
   category:          "Building Storey"
-  name/common_name:  storey.name
-  building_fm_guid:  buildingFmGuid
-  is_local:          false
   created_in_model:  true
 
 Space:
-  fm_guid:           IFC GlobalId || uuid5(buildingGuid + name)
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
   category:          "Space"
-  name/common_name:  space.name
-  building_fm_guid:  buildingFmGuid
   level_fm_guid:     parent storey fm_guid
-  is_local:          false
-  created_in_model:  true
 
-Instance (IfcDoor, IfcWall, etc.):
-  fm_guid:           IFC GlobalId || uuid5(buildingGuid + name + type)
+Instance:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
   category:          "Instance"
-  name/common_name:  element.name
-  asset_type:        ifcType
-  building_fm_guid:  buildingFmGuid
+  asset_type:        ifcType (e.g. "IfcDoor")
   level_fm_guid:     resolved storey
-  in_room_fm_guid:   resolved space (if parent is IfcSpace)
-  is_local:          false
-  created_in_model:  true
+  in_room_fm_guid:   resolved space
 ```
 
-### Diff-flöde vid omimport
+### Diff-flöde
 
-```text
-IFC Import → parse metaObjects → resolve fm_guids
-                                       │
-                    ┌──────────────────┼──────────────────┐
-                    ▼                  ▼                  ▼
-              Nytt objekt      Matchat objekt      Borttaget objekt
-              INSERT asset     UPDATE egenskaper    DELETE / soft-delete
-                               (namn, rum, typ)     från assets
-```
+Vid omimport jämförs importerade fm_guids mot befintliga i DB:
+- **Nytt** → INSERT
+- **Matchat** → UPDATE (namn, typ, rumsplacering)
+- **Borttaget** → `modification_status = 'removed'` (soft-delete)
 
-### Varför det inte var löst tidigare
+---
 
-`ifc-extract-systems` hade GUID-reconciliering och `asset_external_ids`-skrivning, men **stoppade där** — den skrev aldrig till `assets`-tabellen. `ifc-to-xkt` extraherade levels/spaces som return-data men persisterade dem inte heller. GUID-tillbakaskrivning till IFC diskuterades i minnet (`ifc-metadata-extraction-and-guid-enrichment-v1`) men implementerades bara för property sets, inte som en del av den fullständiga import-pipelinen.
+## Previous Plans
 
+### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
+- Browser-primary for >20MB, edge function for ≤20MB
+- MetaModel JSON uploaded alongside XKT
+- Systems extracted and persisted
+
+### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+- Standalone Node.js worker polls conversion-worker-api
+- Per-storey .xkt tiles with dynamic floor loading
+
+### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
+- 10 credential override columns on building_settings
+- Shared credential resolver in edge functions
+- Properties page as configuration hub

@@ -313,6 +313,154 @@ async function persistSystemsAndConnections(
   }
 }
 
+// ─── Populate assets from IFC metaObjects ───
+
+async function deterministicGuid(parts: string[]): Promise<string> {
+  const data = new TextEncoder().encode(parts.join("|"));
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  const hex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0,8)}-${hex.slice(8,12)}-5${hex.slice(13,16)}-${(parseInt(hex.slice(16,18),16) & 0x3f | 0x80).toString(16).padStart(2,"0")}${hex.slice(18,20)}-${hex.slice(20,32)}`;
+}
+
+const SPATIAL_TYPES = new Set(["IfcBuildingStorey", "IfcSpace"]);
+const SKIP_TYPES = new Set([
+  "IfcProject", "IfcSite", "IfcBuilding", "IfcSystem", "IfcDistributionSystem",
+  "IfcRelAggregates", "IfcRelContainedInSpatialStructure", "IfcRelAssignsToGroup",
+  "IfcRelConnectsElements", "IfcRelConnectsPortToElement", "IfcRelConnectsPorts",
+  "IfcRelFlowControlElements", "IfcRelDefinesByProperties", "IfcRelDefinesByType",
+  "IfcRelAssociatesMaterial", "IfcRelVoidsElement", "IfcRelFillsElement",
+  "IfcRelSpaceBoundary", "IfcRelNests", "IfcRelSequence",
+]);
+
+async function populateAssetsFromMetaObjects(
+  supabase: any,
+  buildingFmGuid: string,
+  metaObjects: any[],
+  appendLog: (msg: string, progress?: number) => Promise<void>
+) {
+  const now = new Date().toISOString();
+  const importedFmGuids = new Set<string>();
+  const storeyIdToFmGuid = new Map<string, string>();
+  const spaceIdToFmGuid = new Map<string, string>();
+
+  // Index parents for storey resolution
+  const parentMap = new Map<string, string>();
+  for (const m of metaObjects) {
+    const id = m.metaObjectId || m.id || "";
+    const parentId = m.parentMetaObjectId || m.parentId || "";
+    if (id && parentId) parentMap.set(id, parentId);
+  }
+
+  // Resolve which storey an object belongs to by walking up the parent chain
+  function resolveStorey(id: string): string | null {
+    let current = id;
+    const visited = new Set<string>();
+    while (current && !visited.has(current)) {
+      visited.add(current);
+      if (storeyIdToFmGuid.has(current)) return current;
+      current = parentMap.get(current) || "";
+    }
+    return null;
+  }
+
+  // Pass 1: Collect storeys
+  const storeyRows: any[] = [];
+  for (const m of metaObjects) {
+    const t = m.metaType || m.type || "";
+    if (t !== "IfcBuildingStorey") continue;
+    const id = m.metaObjectId || m.id || "";
+    const name = m.metaObjectName || m.name || t;
+    const fmGuid = id || await deterministicGuid([buildingFmGuid, name, "IfcBuildingStorey"]);
+    storeyIdToFmGuid.set(id, fmGuid);
+    importedFmGuids.add(fmGuid);
+    storeyRows.push({
+      fm_guid: fmGuid, name, common_name: name,
+      category: "Building Storey", building_fm_guid: buildingFmGuid, level_fm_guid: fmGuid,
+      is_local: false, created_in_model: true, synced_at: now,
+    });
+  }
+
+  // Pass 2: Collect spaces
+  const spaceRows: any[] = [];
+  for (const m of metaObjects) {
+    const t = m.metaType || m.type || "";
+    if (t !== "IfcSpace") continue;
+    const id = m.metaObjectId || m.id || "";
+    const name = m.metaObjectName || m.name || t;
+    const fmGuid = id || await deterministicGuid([buildingFmGuid, name, "IfcSpace"]);
+    spaceIdToFmGuid.set(id, fmGuid);
+    importedFmGuids.add(fmGuid);
+    const parentId = m.parentMetaObjectId || m.parentId || "";
+    const levelFmGuid = storeyIdToFmGuid.get(parentId) || null;
+    spaceRows.push({
+      fm_guid: fmGuid, name, common_name: name,
+      category: "Space", building_fm_guid: buildingFmGuid, level_fm_guid: levelFmGuid,
+      is_local: false, created_in_model: true, synced_at: now,
+    });
+  }
+
+  // Pass 3: Collect instances (non-spatial, non-relationship objects)
+  const instanceRows: any[] = [];
+  for (const m of metaObjects) {
+    const t = m.metaType || m.type || "";
+    if (!t || SPATIAL_TYPES.has(t) || SKIP_TYPES.has(t) || t.startsWith("IfcRel")) continue;
+    const id = m.metaObjectId || m.id || "";
+    const name = m.metaObjectName || m.name || "";
+    if (!id && !name) continue;
+    const fmGuid = id || await deterministicGuid([buildingFmGuid, name, t]);
+    importedFmGuids.add(fmGuid);
+    const storeyMetaId = resolveStorey(id);
+    const levelFmGuid = storeyMetaId ? storeyIdToFmGuid.get(storeyMetaId) || null : null;
+    const parentId = m.parentMetaObjectId || m.parentId || "";
+    const inRoomFmGuid = spaceIdToFmGuid.get(parentId) || null;
+    instanceRows.push({
+      fm_guid: fmGuid, name: name || t, common_name: name || t,
+      category: "Instance", asset_type: t,
+      building_fm_guid: buildingFmGuid, level_fm_guid: levelFmGuid, in_room_fm_guid: inRoomFmGuid,
+      is_local: false, created_in_model: true, synced_at: now,
+    });
+  }
+
+  // Upsert all
+  for (let i = 0; i < storeyRows.length; i += 500) {
+    await supabase.from("assets").upsert(storeyRows.slice(i, i + 500), { onConflict: "fm_guid" });
+  }
+  for (let i = 0; i < spaceRows.length; i += 500) {
+    await supabase.from("assets").upsert(spaceRows.slice(i, i + 500), { onConflict: "fm_guid" });
+  }
+  for (let i = 0; i < instanceRows.length; i += 500) {
+    await supabase.from("assets").upsert(instanceRows.slice(i, i + 500), { onConflict: "fm_guid" });
+  }
+
+  await appendLog(`Assets populated: ${storeyRows.length} storeys, ${spaceRows.length} spaces, ${instanceRows.length} instances`, 92);
+
+  // Diff: soft-delete assets in DB that are no longer in the IFC
+  const { data: existingAssets } = await supabase
+    .from("assets")
+    .select("fm_guid")
+    .eq("building_fm_guid", buildingFmGuid)
+    .eq("created_in_model", true)
+    .in("category", ["Building Storey", "Space", "Instance"]);
+
+  if (existingAssets && existingAssets.length > 0) {
+    const removedGuids = existingAssets
+      .map((a: any) => a.fm_guid)
+      .filter((guid: string) => !importedFmGuids.has(guid));
+
+    if (removedGuids.length > 0) {
+      for (let i = 0; i < removedGuids.length; i += 500) {
+        const chunk = removedGuids.slice(i, i + 500);
+        await supabase
+          .from("assets")
+          .update({ modification_status: "removed", updated_at: now })
+          .in("fm_guid", chunk)
+          .eq("building_fm_guid", buildingFmGuid);
+      }
+      await appendLog(`Marked ${removedGuids.length} removed assets`, 94);
+    }
+  }
+}
+
 // ─── Main handler ───
 
 Deno.serve(async (req) => {
@@ -531,6 +679,10 @@ Deno.serve(async (req) => {
       objectExternalIds,
       appendLog
     );
+
+    // 9. Populate assets table with building hierarchy (storeys, spaces, instances)
+    await appendLog("Populating building hierarchy in assets...", 90);
+    await populateAssetsFromMetaObjects(supabase, buildingFmGuid, metaObjectsList as any[], appendLog);
 
     await updateJob({
       status: "done",

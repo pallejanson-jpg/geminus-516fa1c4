@@ -459,25 +459,75 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           log(`✅ ${result.systems.length} systems saved`);
         }
 
-        // Persist hierarchy to assets
+        // Persist hierarchy to assets using IFC GlobalIds (deterministic)
+        const now = new Date().toISOString();
+        const importedFmGuids = new Set<string>();
         const levelFmGuids = new Map<string, string>();
+
+        // Helper: deterministic GUID from building + name + type
+        async function deterministicGuid(parts: string[]): Promise<string> {
+          const data = new TextEncoder().encode(parts.join('|'));
+          const hash = await crypto.subtle.digest('SHA-256', data);
+          const hex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+          return `${hex.slice(0,8)}-${hex.slice(8,12)}-5${hex.slice(13,16)}-${(parseInt(hex.slice(16,18),16) & 0x3f | 0x80).toString(16).padStart(2,'0')}${hex.slice(18,20)}-${hex.slice(20,32)}`;
+        }
+
         if (result.levels?.length > 0) {
-          const levelRows = result.levels.map((level: any) => {
-            const fmGuid = crypto.randomUUID();
+          const levelRows = [];
+          for (const level of result.levels) {
+            // Use IFC GlobalId if available from metaObjects, otherwise deterministic
+            const fmGuid = level.globalId || await deterministicGuid([buildingGuid, level.name || '', 'IfcBuildingStorey']);
             levelFmGuids.set(level.id || level.name, fmGuid);
-            return { fm_guid: fmGuid, name: level.name, common_name: level.name, category: 'Building Storey', building_fm_guid: buildingGuid, level_fm_guid: fmGuid, is_local: false, created_in_model: false, synced_at: new Date().toISOString() };
-          });
+            importedFmGuids.add(fmGuid);
+            levelRows.push({
+              fm_guid: fmGuid, name: level.name, common_name: level.name,
+              category: 'Building Storey', building_fm_guid: buildingGuid, level_fm_guid: fmGuid,
+              is_local: false, created_in_model: true, synced_at: now,
+            });
+          }
           await supabase.from('assets').upsert(levelRows, { onConflict: 'fm_guid' });
           log(`✅ ${result.levels.length} levels saved`);
         }
         if (result.spaces?.length > 0) {
-          const spaceRows = result.spaces.map((space: any) => {
-            const fmGuid = crypto.randomUUID();
+          const spaceRows = [];
+          for (const space of result.spaces) {
+            const fmGuid = space.globalId || await deterministicGuid([buildingGuid, space.name || '', 'IfcSpace']);
+            importedFmGuids.add(fmGuid);
             const parentLevelFmGuid = levelFmGuids.get(space.parentId) || levelFmGuids.get(space.levelName) || null;
-            return { fm_guid: fmGuid, name: space.name, common_name: space.name, category: 'Space', building_fm_guid: buildingGuid, level_fm_guid: parentLevelFmGuid, is_local: false, created_in_model: false, synced_at: new Date().toISOString() };
-          });
+            spaceRows.push({
+              fm_guid: fmGuid, name: space.name, common_name: space.name,
+              category: 'Space', building_fm_guid: buildingGuid, level_fm_guid: parentLevelFmGuid,
+              is_local: false, created_in_model: true, synced_at: now,
+            });
+          }
           await supabase.from('assets').upsert(spaceRows, { onConflict: 'fm_guid' });
           log(`✅ ${result.spaces.length} spaces saved`);
+        }
+
+        // Diff: soft-delete removed objects
+        if (importedFmGuids.size > 0) {
+          const { data: existingAssets } = await supabase
+            .from('assets')
+            .select('fm_guid')
+            .eq('building_fm_guid', buildingGuid)
+            .eq('created_in_model', true)
+            .in('category', ['Building Storey', 'Space', 'Instance']);
+
+          if (existingAssets && existingAssets.length > 0) {
+            const removedGuids = existingAssets
+              .map((a: any) => a.fm_guid)
+              .filter((guid: string) => !importedFmGuids.has(guid));
+            if (removedGuids.length > 0) {
+              for (let i = 0; i < removedGuids.length; i += 500) {
+                await supabase
+                  .from('assets')
+                  .update({ modification_status: 'removed', updated_at: now })
+                  .in('fm_guid', removedGuids.slice(i, i + 500))
+                  .eq('building_fm_guid', buildingGuid);
+              }
+              log(`🗑️ Marked ${removedGuids.length} removed assets`);
+            }
+          }
         }
 
         if ((result.levels?.length > 0 || result.spaces?.length > 0) && targetModelFmGuid) {
