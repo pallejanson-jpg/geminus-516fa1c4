@@ -161,7 +161,7 @@ export default function CreatePropertyDialog({
       if (existing) {
         const { error } = await supabase
           .from('building_settings')
-          .update(settingsPayload)
+          .update(settingsPayload as any)
           .eq('fm_guid', form.fm_guid.trim());
         if (error) throw error;
       } else {
