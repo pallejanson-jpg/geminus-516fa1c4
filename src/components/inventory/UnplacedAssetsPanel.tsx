@@ -343,8 +343,8 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
           >
             {isCreating ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                Skapar POIs...
+                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                 Creating POIs...
               </>
             ) : (
               <>
