@@ -101,9 +101,9 @@ serve(async (req) => {
     // Action: Test 3D API endpoint with robust discovery
     if (action === "test3DApi") {
       try {
-        const accessToken = await getAccessToken();
-        const apiUrl = Deno.env.get("ASSET_PLUS_API_URL") || "";
-        const apiKey = Deno.env.get("ASSET_PLUS_API_KEY") || "";
+        const accessToken = await getAccessToken(creds);
+        const apiUrl = creds.apiUrl || "";
+        const apiKey = creds.apiKey || "";
         
         const testBuildingGuid = body.buildingFmGuid || "a8fe5835-e293-4ba3-92c6-c7e36f675f23";
         
