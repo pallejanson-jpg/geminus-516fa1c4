@@ -70,7 +70,7 @@ const FmAccessDocuments: React.FC<FmAccessDocumentsProps> = ({ buildingId, build
               <Card key={d.drawingId || d.objectId || i} className="overflow-hidden">
                 <CardContent className="p-3 flex items-center justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{d.objectName || d.name || `Ritning ${i + 1}`}</div>
+                    <div className="text-sm font-medium truncate">{d.objectName || d.name || `Drawing ${i + 1}`}</div>
                     {d.className && <div className="text-[11px] text-muted-foreground">{d.className}</div>}
                   </div>
                   <Button
