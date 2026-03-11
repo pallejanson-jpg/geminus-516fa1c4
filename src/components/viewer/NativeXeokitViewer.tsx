@@ -41,7 +41,7 @@ interface ModelInfo {
 
 type ModelCandidate = ModelInfo & { synced_at?: string | null; source: 'db' | 'storage' };
 
-type LoadPhase = 'init' | 'loading_sdk' | 'creating_viewer' | 'syncing' | 'loading_models' | 'ready' | 'error';
+type LoadPhase = 'init' | 'loading_sdk' | 'creating_viewer' | 'syncing' | 'bootstrapping' | 'loading_models' | 'ready' | 'error';
 
 const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   buildingFmGuid,
