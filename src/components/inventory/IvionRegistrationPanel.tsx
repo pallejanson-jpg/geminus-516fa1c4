@@ -605,7 +605,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
         <div className="p-4 space-y-4">
           {/* Name */}
           <div className="space-y-1.5">
-            <Label className="text-sm">Namn / Beteckning *</Label>
+            <Label className="text-sm">Name / Designation *</Label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
