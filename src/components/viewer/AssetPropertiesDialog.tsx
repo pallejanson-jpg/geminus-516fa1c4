@@ -471,7 +471,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
 
                 {/* Category - Required */}
                 <div className="space-y-1">
-                  <Label className="text-xs">Kategori *</Label>
+                  <Label className="text-xs">Category *</Label>
                   <Select
                     value={formData.category}
                     onValueChange={(v) => setFormData({ ...formData, category: v })}
