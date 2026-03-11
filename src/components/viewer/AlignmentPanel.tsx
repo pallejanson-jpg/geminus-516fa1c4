@@ -197,7 +197,7 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
           onClick={() => setShowPointPicker(true)}
         >
           <Crosshair className="h-3 w-3" />
-          Punktkalibrering (360° → 3D)
+          Point calibration (360° → 3D)
         </Button>
       )}
 

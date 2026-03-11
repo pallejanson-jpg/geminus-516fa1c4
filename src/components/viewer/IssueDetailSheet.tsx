@@ -382,7 +382,7 @@ const IssueDetailSheet: React.FC<IssueDetailSheetProps> = ({
                     }}
                   >
                     <LifeBuoy className="h-4 w-4 mr-1" />
-                    Skicka till Support
+                    Send to Support
                   </Button>
                 </div>
               )}

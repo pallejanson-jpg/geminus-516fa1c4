@@ -72,7 +72,7 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
         onValueChange={setQuery}
       />
       <CommandList className="max-h-[400px]">
-        <CommandEmpty>Inga resultat hittades</CommandEmpty>
+        <CommandEmpty>No results found</CommandEmpty>
         {Array.from(grouped.entries()).map(([category, items]) => {
           const Icon = categoryIcons[category] || Box;
           return (

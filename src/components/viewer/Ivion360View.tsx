@@ -574,13 +574,13 @@ export default function Ivion360View({
         {syncEnabled && !isLoadingImages && imageCache.length === 0 && hasImageLoadError && (
           <div className="absolute top-12 left-2 right-2 z-20 bg-amber-100 dark:bg-amber-900/40 
                           text-amber-800 dark:text-amber-200 text-xs px-3 py-2 rounded shadow flex items-center justify-between gap-2">
-            <span>⚠️ Kunde inte hämta bildpositioner för synk.</span>
-            <button 
-              onClick={retryLoadImages}
-              className="underline hover:no-underline whitespace-nowrap"
-            >
-              Försök igen
-            </button>
+             <span>⚠️ Could not fetch image positions for sync.</span>
+             <button 
+               onClick={retryLoadImages}
+               className="underline hover:no-underline whitespace-nowrap"
+             >
+               Try again
+             </button>
           </div>
         )}
 

@@ -26,7 +26,7 @@ export function SearchResultsList({
   if (isLoading) {
     return (
       <div className="p-4 text-center text-sm text-muted-foreground">
-        Söker...
+        Searching...
       </div>
     );
   }

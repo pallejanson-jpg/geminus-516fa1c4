@@ -85,7 +85,7 @@ const FmAccessIssueOverlay: React.FC<FmAccessIssueOverlayProps> = ({
         title="Create issue"
       >
         <MessageSquarePlus className={cn(isMobile ? "h-5 w-5" : "h-4 w-4", "text-primary")} />
-        <span className="font-medium">Skapa ärende</span>
+        <span className="font-medium">Create issue</span>
       </button>
 
       {/* Reuse existing CreateIssueDialog */}

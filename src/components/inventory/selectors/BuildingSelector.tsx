@@ -30,7 +30,7 @@ const BuildingSelector: React.FC<BuildingSelectorProps> = ({ value, onChange }) 
       <Label className="text-base">Building *</Label>
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="h-12">
-          <SelectValue placeholder="Välj byggnad..." />
+          <SelectValue placeholder="Select building..." />
         </SelectTrigger>
         <SelectContent className="bg-popover z-50">
           {displayBuildings.map((b) => (
