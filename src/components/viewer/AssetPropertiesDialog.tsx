@@ -255,7 +255,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
   const handleCreate = async () => {
     // Validation
     if (!formData.name.trim()) {
-      toast.error('Benämning är obligatoriskt');
+      toast.error('Name is required');
       return;
     }
     if (!formData.category) {
