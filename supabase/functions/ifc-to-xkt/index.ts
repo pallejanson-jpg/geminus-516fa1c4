@@ -532,6 +532,10 @@ Deno.serve(async (req) => {
       appendLog
     );
 
+    // 9. Populate assets table with building hierarchy (storeys, spaces, instances)
+    await appendLog("Populating building hierarchy in assets...", 90);
+    await populateAssetsFromMetaObjects(supabase, buildingFmGuid, metaObjectsList as any[], appendLog);
+
     await updateJob({
       status: "done",
       progress: 100,
