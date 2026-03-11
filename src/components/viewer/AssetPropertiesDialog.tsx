@@ -796,8 +796,8 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                 <Separator />
                 
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {assets[0].is_local && <Badge variant="secondary">Lokal</Badge>}
-                  {assets[0].annotation_placed && <Badge variant="secondary">Placerad</Badge>}
+                   {assets[0].is_local && <Badge variant="secondary">Local</Badge>}
+                   {assets[0].annotation_placed && <Badge variant="secondary">Placed</Badge>}
                 </div>
               </div>
             )}
