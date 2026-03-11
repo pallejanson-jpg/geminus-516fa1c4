@@ -236,7 +236,7 @@ export default function SensorsTab() {
               onValueChange={val => setSelectedBuildingGuid(val)}
             >
               <SelectTrigger className="h-7 text-xs w-44">
-                <SelectValue placeholder="Välj byggnad" />
+                <SelectValue placeholder="Select building" />
               </SelectTrigger>
               <SelectContent>
                 {buildings.map((b: any) => (
