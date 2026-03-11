@@ -399,7 +399,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
         <div className="flex items-center gap-2">
           <GripVertical className="h-4 w-4 text-muted-foreground" />
           <span className="font-medium text-sm">
-            {createMode ? 'Skapa ny tillgång' : 'Egenskaper'}
+            {createMode ? 'Create new asset' : 'Properties'}
             {isMultiSelect && !createMode && <Badge variant="secondary" className="ml-1">{assets.length}</Badge>}
           </span>
         </div>
