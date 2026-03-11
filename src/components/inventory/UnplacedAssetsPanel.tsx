@@ -278,7 +278,7 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
           ) : filteredAssets.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
               <MapPin className="h-8 w-8 mb-2" />
-              <p className="text-sm">Inga assets utan Ivion-position</p>
+              <p className="text-sm">No assets without Ivion position</p>
             </div>
           ) : (
             <>
