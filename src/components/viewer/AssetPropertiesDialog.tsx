@@ -593,7 +593,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                       )}
                       {metaObj.parent && (
                         <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">Förälder</Label>
+                          <Label className="text-xs text-muted-foreground">Parent</Label>
                           <p className="text-sm">{metaObj.parent.name || metaObj.parent.type || '-'}</p>
                         </div>
                       )}
