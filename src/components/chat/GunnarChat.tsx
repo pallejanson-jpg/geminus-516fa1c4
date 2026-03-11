@@ -771,6 +771,26 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
               disabled={isLoading}
               className="flex-1 h-9 text-sm"
             />
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 shrink-0"
+              onClick={() => {
+                if (voiceOutputEnabled) {
+                  window.speechSynthesis.cancel();
+                  setVoiceOutputEnabled(false);
+                } else {
+                  setVoiceOutputEnabled(true);
+                }
+              }}
+              title={voiceOutputEnabled ? 'Disable voice output' : 'Enable voice output'}
+            >
+              {voiceOutputEnabled ? (
+                <Volume2 className={cn("h-4 w-4", isSpeaking && "animate-pulse text-primary")} />
+              ) : (
+                <VolumeX className="h-4 w-4 text-muted-foreground" />
+              )}
+            </Button>
             {isVoiceSupported && (
               <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" onClick={toggleListening} disabled={isLoading}>
                 {isListening ? <MicOff className="h-4 w-4 text-destructive" /> : <Mic className="h-4 w-4" />}
