@@ -126,7 +126,7 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
       if (error) throw error;
 
       onChange({ offsetX: 0, offsetY: 0, offsetZ: 0, rotation: 0 });
-      toast.success('Alignment borttagen');
+      toast.success('Alignment removed');
       onSaved?.();
     } catch (err: any) {
       console.error('Failed to delete alignment:', err);
