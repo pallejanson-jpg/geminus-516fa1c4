@@ -1,68 +1,48 @@
 
-## Plan: Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
 
-### Changes Made
+# Plan: Add "Geminus ESG" Slide as Final Slide
 
-#### 1. Browser-Primary Conversion for Large IFC Files
-**File: `src/components/settings/CreateBuildingPanel.tsx`**
-- Files >20MB skip edge function entirely → direct browser conversion
-- Files ≤20MB still try edge function first with WORKER_LIMIT fallback
-- Extracted `runBrowserConversion()` helper for DRY reuse between direct and fallback paths
-- Browser conversion now uploads `metadata.json` alongside `.xkt`
-- Systems extracted client-side are persisted to `systems` + `asset_system` tables
+## What
 
-#### 2. Metadata Extraction & Separate JSON
-**File: `src/services/acc-xkt-converter.ts`**
-- `convertToXktWithMetadata()` now returns `metaModelJson` (xeokit MetaModel format) + `systems[]`
-- WASM validation: explicit `HEAD` request to `/web-ifc-wasm/web-ifc.wasm` before importing
-- `inferDiscipline()` function for system classification (Ventilation, Heating, etc.)
-- System extraction from metaObjects: IfcSystem, IfcDistributionSystem, PropertySet grouping
+Add a new slide **"Geminus ESG — The Next Revenue Layer"** as the **last slide** (slide 11) in the presentation, after "The Ask". This positions the ESG module as a forward-looking bonus/vision slide.
 
-#### 3. Viewer MetaModel Loading
-**File: `src/components/viewer/NativeXeokitViewer.tsx`**
-- Before loading each XKT model, checks for `{modelId}_metadata.json` in storage
-- If found, passes as `metaModelSrc` to `xktLoader.load()` for richer BIM queries
-- Works for all three loading paths: memory, streaming, and buffer
+The module name is **Geminus ESG**.
 
----
+## Slide Content
 
-## Plan: External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+**Title**: "Geminus ESG — Sustainability Built In"
 
-### Architecture
+**Layout**: Two-column with a bottom summary bar. Dark gradient background (no image), matching the competition deep-dive slide style.
 
-```text
-IFC Upload → Supabase Storage → conversion_jobs (pending)
-       ↓
-External Worker (polls conversion-worker-api)
-  - Downloads IFC via signed URL
-  - Groups objects by IfcBuildingStorey
-  - Generates per-storey .xkt tiles
-  - Uploads tiles to storage
-  - Reports completion → xkt_models records created
-       ↓
-Viewer detects real tiles (unique storage_paths)
-  - Loads active floor tile (~15MB)
-  - Lazy-loads adjacent floors on FLOOR_TILE_SWITCH event
-  - Unloads distant floors to save memory
-  - Falls back to monolithic loading if no real tiles
-```
+**Left column — "Already in Platform (80%)"**:
+- Building data (BIM, areas, floors) — Asset+
+- FM & maintenance history — Faciliate
+- Energy & indoor climate — Senslinc IoT
+- Building hierarchy & rooms — Digital Twin
 
-### Files Created/Changed
+**Right column — "Geminus ESG Adds (20%)"**:
+- ESG Data Model — 80+ sustainability data points
+- Carbon/LCA — OneClickLCA integration (sister company)
+- EU Taxonomy engine — automated compliance checks
+- Report Library — CSRD, Building Logbook, PDF/Excel
 
-| File | Action |
+**Bottom bar**: Three value statements:
+- "CSRD & EU Taxonomy compliance" 
+- "50–70% lower reporting cost"
+- "New SaaS revenue stream"
+
+**Speaker notes**: Cover the data source breakdown (what comes from where), the customer pain points (fragmented data, manual Excel reporting, audit risk, ESG affecting financing), and the strategic positioning from FM vendor to ESG-native digital twin platform.
+
+## Files Modified
+
+| File | Change |
 |------|--------|
-| `supabase/functions/conversion-worker-api/index.ts` | Created — worker API (pending/claim/progress/complete/fail/upload-url) |
-| `supabase/config.toml` | Added verify_jwt = false entry |
-| `docs/conversion-worker/worker.mjs` | Created — standalone Node.js worker |
-| `docs/conversion-worker/Dockerfile` | Created — Docker deployment |
-| `docs/conversion-worker/README.md` | Created — deployment guide |
-| `src/components/viewer/NativeXeokitViewer.tsx` | Updated — real tile detection + FLOOR_TILE_SWITCH listener |
-| `src/hooks/useFloorPriorityLoading.ts` | Updated — isRealTiling + getTilesToLoad + FLOOR_TILE_SWITCH dispatch |
+| `src/pages/Presentation.tsx` | Add `EsgSlide` component, append to `slides` array, add title to `SLIDE_TITLES`, add notes to `NOTES` |
 
-### Key Concepts
+## Design
 
-- **Virtual chunks (Phase 1)**: Same XKT file, visibility filtering by storey metadata
-- **Real tiles (Phase 2)**: Separate per-storey XKT files with unique `storage_path` values
-- Detection: `isRealTiling()` checks if chunks have >1 unique storage paths
-- Dynamic loading: `FLOOR_TILE_SWITCH` custom event triggers load/unload of tiles
-- Worker auth: `WORKER_API_SECRET` shared secret (not JWT)
+- Background: solid dark gradient (`bg-gradient-to-br from-[#0a0e1a] to-[#1a1040]`) — same as competition deep-dive slide
+- High-contrast text with `bg-black/50 backdrop-blur-sm` cards
+- Icons from lucide-react: `Leaf`, `Zap`, `BarChart3`, `Shield`
+- Bottom summary uses cyan/indigo gradient border (matching existing slide patterns)
+
