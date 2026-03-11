@@ -74,3 +74,6 @@ verify_jwt = false
 
 [functions.conversion-worker-api]
 verify_jwt = false
+
+[functions.acc-geometry-extract]
+verify_jwt = false
