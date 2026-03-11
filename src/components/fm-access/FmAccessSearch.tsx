@@ -43,7 +43,7 @@ const FmAccessSearch: React.FC<FmAccessSearchProps> = ({ onSelect }) => {
       </div>
       <ScrollArea className="flex-1">
         {searched && results.length === 0 && (
-          <p className="text-sm text-muted-foreground text-center p-4">Inga resultat.</p>
+          <p className="text-sm text-muted-foreground text-center p-4">No results.</p>
         )}
         <div className="p-1">
           {results.map((r, i) => (
