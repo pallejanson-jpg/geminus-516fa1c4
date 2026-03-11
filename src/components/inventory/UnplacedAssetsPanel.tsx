@@ -128,7 +128,7 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
   // Create POIs in Ivion for selected assets
   const handleCreatePois = async () => {
     if (!ivionSiteId) {
-      toast.error('Ingen Ivion-site konfigurerad');
+      toast.error('No Ivion site configured');
       return;
     }
 
