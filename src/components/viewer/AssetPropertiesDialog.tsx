@@ -426,7 +426,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
               <div className="space-y-4">
                 {/* Position picker */}
                 <div className="space-y-2">
-                  <Label className="text-xs font-medium">Position i 3D *</Label>
+                  <Label className="text-xs font-medium">Position in 3D *</Label>
                   <div className="flex gap-2">
                     <Button
                       type="button"
