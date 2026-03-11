@@ -420,9 +420,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     // Clear selection
     const selected = scene?.selectedObjectIds || [];
     if (selected.length > 0) scene.setObjectsSelected(selected, false);
-    // Clear section planes
+    // Clear user-created section planes (NOT floor clipping planes)
     const planes = Object.values(scene.sectionPlanes || {});
     planes.forEach((sp: any) => { try { sp.destroy(); } catch {} });
+    // Clear measurements
+    if (measurePluginRef.current) {
+      measurePluginRef.current.clear?.();
+    }
     // Reset visibility — use batch API which is faster
     const allIds = scene.objectIds || [];
     if (allIds.length > 0) {
@@ -449,6 +453,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     // Remove any 3D clipping
     try { remove3DClipping(); } catch {}
     try { remove2DClipping(); } catch {}
+    // Re-apply modifications (deleted/moved objects) so they stay deleted
+    requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent('REAPPLY_MODIFICATIONS'));
+    });
   }, [viewer, remove3DClipping, remove2DClipping]);
 
   const handleNavModeChange = useCallback((mode: NavMode) => {
@@ -485,6 +493,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     measurePluginRef.current?.control?.deactivate?.();
   }, []);
 
+  const clearMeasurements = useCallback(() => {
+    if (measurePluginRef.current) {
+      measurePluginRef.current.clear?.();
+      console.log('[ViewerToolbar] Measurements cleared');
+    }
+  }, []);
+
   const activateSection = useCallback(() => {
     if (!viewer?.scene) return;
     const sdk = (window as any).__xeokitSdk;
@@ -494,11 +509,47 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         overviewVisible: false,
       });
     }
-    sectionPluginRef.current.control?.activate?.();
+    // Try .control.activate() first, fall back to plugin-level activation
+    if (sectionPluginRef.current.control?.activate) {
+      sectionPluginRef.current.control.activate();
+    } else {
+      // Some SDK versions require creating section planes via click
+      console.log('[ViewerToolbar] SectionPlanesPlugin.control not available, using manual plane creation');
+      // Set up a click handler on the canvas to create section planes
+      const canvas = viewer.scene?.canvas?.canvas;
+      if (canvas) {
+        const clickHandler = (e: MouseEvent) => {
+          const pickResult = viewer.scene.pick({
+            canvasPos: [e.offsetX, e.offsetY],
+            pickSurface: true,
+          });
+          if (pickResult?.worldPos && pickResult?.worldNormal) {
+            sectionPluginRef.current?.createSectionPlane?.({
+              pos: pickResult.worldPos,
+              dir: pickResult.worldNormal,
+            });
+          }
+        };
+        canvas.addEventListener('click', clickHandler);
+        // Store cleanup
+        (sectionPluginRef.current as any).__manualClickHandler = clickHandler;
+        (sectionPluginRef.current as any).__canvas = canvas;
+      }
+    }
   }, [viewer]);
 
   const deactivateSection = useCallback(() => {
-    sectionPluginRef.current?.control?.deactivate?.();
+    if (sectionPluginRef.current?.control?.deactivate) {
+      sectionPluginRef.current.control.deactivate();
+    }
+    // Clean up manual click handler if used
+    const handler = (sectionPluginRef.current as any)?.__manualClickHandler;
+    const canvas = (sectionPluginRef.current as any)?.__canvas;
+    if (handler && canvas) {
+      canvas.removeEventListener('click', handler);
+      delete (sectionPluginRef.current as any).__manualClickHandler;
+      delete (sectionPluginRef.current as any).__canvas;
+    }
   }, []);
 
   const handleToolChange = useCallback((tool: ViewerTool) => {
@@ -891,7 +942,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
                 <ToolButton icon={tool.icon} label={tool.label} onClick={() => handleToolChange('select')} active={activeTool === 'select'} disabled={!isReady} />
               )}
               {tool.id === 'measure' && (
-                <ToolButton icon={tool.icon} label={tool.label} onClick={() => handleToolChange('measure')} active={activeTool === 'measure'} disabled={!isReady} />
+                <>
+                  <ToolButton icon={tool.icon} label={tool.label} onClick={() => handleToolChange('measure')} active={activeTool === 'measure'} disabled={!isReady} />
+                  {activeTool === 'measure' && (
+                    <ToolButton icon={<RotateCcw className="h-3 w-3 sm:h-3.5 sm:w-3.5" />} label="Clear measurements" onClick={clearMeasurements} disabled={!isReady} />
+                  )}
+                </>
               )}
               {tool.id === 'section' && viewMode !== '2d' && (
                 <>

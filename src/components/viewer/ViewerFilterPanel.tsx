@@ -189,10 +189,11 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     });
   }, [sharedFloors, buildingData]);
 
-  // Sources: ONLY from levels that exist in current viewer (prevents phantom models)
+  // Sources: from Asset+ storeys OR fallback to scene models
   const sources: BimSource[] = useMemo(() => {
     const grouped = new Map<string, { name: string; storeyCount: number }>();
 
+    // Strategy 1: Asset+ storey parentBimObjectId
     levels.forEach(level => {
       if (!level.sourceGuid) return;
       const current = grouped.get(level.sourceGuid);
@@ -203,6 +204,18 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
     });
 
+    // Strategy 2: If no Asset+ sources, use scene models with friendly names from sharedModels
+    if (grouped.size === 0 && sharedModels.length > 0) {
+      sharedModels.forEach(model => {
+        // Use model name, avoid showing GUIDs
+        const name = model.name && !/^[0-9a-f]{8}-/i.test(model.name) ? model.name : model.shortName;
+        grouped.set(model.id, {
+          name: name || `Model ${model.id.substring(0, 8)}`,
+          storeyCount: 0,
+        });
+      });
+    }
+
     const result = Array.from(grouped.entries()).map(([guid, val]) => ({
       guid,
       name: val.name,
@@ -210,7 +223,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }));
 
     return result.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-  }, [levels, apSources]);
+  }, [levels, apSources, sharedModels]);
 
   const spaces: SpaceItem[] = useMemo(() => {
     const allSpaces = buildingData
@@ -258,6 +271,21 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     });
     setLevelColors(colors);
   }, [levels]);
+
+  // Auto-assign palette colors to spaces BY NAME (same name = same color)
+  useEffect(() => {
+    const nameToColor = new Map<string, string>();
+    const colors = new Map<string, string>();
+    let colorIdx = 0;
+    spaces.forEach(space => {
+      if (!nameToColor.has(space.name)) {
+        nameToColor.set(space.name, LEVEL_PALETTE[colorIdx % LEVEL_PALETTE.length]);
+        colorIdx++;
+      }
+      colors.set(space.fmGuid, nameToColor.get(space.name)!);
+    });
+    setSpaceColors(colors);
+  }, [spaces]);
 
   // (Category colors useEffect moved below categories declaration)
 
@@ -775,7 +803,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         });
       }
 
-      // Space colors
+      // Space colors — make spaces visible and colored
       if (autoColorSpaces) {
         spaces.forEach(space => {
           const color = spaceColors.get(space.fmGuid) || LEVEL_PALETTE[spaces.indexOf(space) % LEVEL_PALETTE.length];
@@ -783,7 +811,12 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           const spaceEntityIds = eMap.get(space.fmGuid);
           spaceEntityIds?.forEach(id => {
             const entity = scene.objects?.[id];
-            if (entity) entity.colorize = rgb;
+            if (entity) {
+              entity.colorize = rgb;
+              entity.visible = true;
+              entity.pickable = true;
+              entity.opacity = 0.7;
+            }
           });
         });
       }
@@ -1235,9 +1268,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     window.dispatchEvent(new CustomEvent(ANNOTATION_FILTER_EVENT, { detail: { visibleCategories: [] } }));
   }, []);
 
-  // ── Fetch modified assets when modifications section opens ───────────
+  // ── Fetch modified assets when modifications section opens or after deletion ───
+  const fetchModifiedRef = useRef<() => void>(() => {});
   useEffect(() => {
-    if (!modificationsOpen || !buildingFmGuid) return;
+    if (!buildingFmGuid) return;
     const fetchModified = async () => {
       const { data } = await supabase
         .from('assets')
@@ -1246,8 +1280,19 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         .not('modification_status', 'is', null);
       setModifiedAssets(data || []);
     };
-    fetchModified();
+    fetchModifiedRef.current = fetchModified;
+    if (modificationsOpen) fetchModified();
   }, [modificationsOpen, buildingFmGuid]);
+
+  // Listen for OBJECT_DELETE events to refresh modification count
+  useEffect(() => {
+    const handler = () => {
+      // Re-fetch after a short delay to let the DB update
+      setTimeout(() => fetchModifiedRef.current(), 500);
+    };
+    window.addEventListener('OBJECT_DELETE', handler);
+    return () => window.removeEventListener('OBJECT_DELETE', handler);
+  }, []);
 
   // ── Apply modification visualization ────────────────────────────────
   useEffect(() => {
