@@ -612,10 +612,10 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                   );
                 }
                 return (
-                  <div className="text-center py-8 text-muted-foreground text-sm">
-                    <p>Ingen asset hittad i databasen</p>
-                    <p className="text-xs mt-1">Objektet kanske inte är synkat ännu</p>
-                  </div>
+                   <div className="text-center py-8 text-muted-foreground text-sm">
+                     <p>No asset found in database</p>
+                     <p className="text-xs mt-1">The object may not be synced yet</p>
+                   </div>
                 );
               })()
             ) : isMultiSelect ? (
