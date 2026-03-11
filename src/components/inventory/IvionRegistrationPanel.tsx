@@ -299,16 +299,16 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
   // Fetch POI data from Ivion
   const handleFetchPoi = async () => {
     if (!ivionSiteId) {
-      toast.error('Ingen Ivion-site konfigurerad');
-      return;
-    }
+       toast.error('No Ivion site configured');
+       return;
+     }
 
-    const poiId = parsePoiId(poiInput);
-    if (!poiId) {
-      toast.error('Ogiltigt POI-ID', {
-        description: 'Ange ett giltigt POI-ID (nummer) eller Ivion-URL med poi-parameter',
-      });
-      return;
+     const poiId = parsePoiId(poiInput);
+     if (!poiId) {
+       toast.error('Invalid POI ID', {
+         description: 'Enter a valid POI ID (number) or Ivion URL with poi parameter',
+       });
+       return;
     }
 
     setIsFetchingPoi(true);
