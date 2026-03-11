@@ -420,9 +420,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     // Clear selection
     const selected = scene?.selectedObjectIds || [];
     if (selected.length > 0) scene.setObjectsSelected(selected, false);
-    // Clear section planes
+    // Clear user-created section planes (NOT floor clipping planes)
     const planes = Object.values(scene.sectionPlanes || {});
     planes.forEach((sp: any) => { try { sp.destroy(); } catch {} });
+    // Clear measurements
+    if (measurePluginRef.current) {
+      measurePluginRef.current.clear?.();
+    }
     // Reset visibility — use batch API which is faster
     const allIds = scene.objectIds || [];
     if (allIds.length > 0) {
@@ -449,6 +453,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     // Remove any 3D clipping
     try { remove3DClipping(); } catch {}
     try { remove2DClipping(); } catch {}
+    // Re-apply modifications (deleted/moved objects) so they stay deleted
+    requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent('REAPPLY_MODIFICATIONS'));
+    });
   }, [viewer, remove3DClipping, remove2DClipping]);
 
   const handleNavModeChange = useCallback((mode: NavMode) => {
