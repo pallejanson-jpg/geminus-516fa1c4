@@ -579,7 +579,9 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const { action = 'full-sync', buildingFmGuid } = body;
-    
+
+    // Resolve per-building credentials (falls back to env vars)
+    _creds = await getAssetPlusCredentials(supabase, buildingFmGuid);
     // Only admins can run full sync operations
     const adminOnlyActions = ['full-sync', 'sync-structure', 'sync-assets-chunked', 'sync-assets-resumable', 'sync-xkt', 'sync-xkt-resumable'];
     if (adminOnlyActions.includes(action) && !auth.isAdmin) {
