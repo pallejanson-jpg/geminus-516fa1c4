@@ -1,108 +1,76 @@
-## Plan: Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
+## Plan: IFC → Assets Pipeline med GUID-generering, tillbakaskrivning och diff-hantering (IMPLEMENTED)
 
-### Changes Made
+### Ändringar
 
-#### 1. Browser-Primary Conversion for Large IFC Files
-**File: `src/components/settings/CreateBuildingPanel.tsx`**
-- Files >20MB skip edge function entirely → direct browser conversion
-- Files ≤20MB still try edge function first with WORKER_LIMIT fallback
-- Extracted `runBrowserConversion()` helper for DRY reuse between direct and fallback paths
-- Browser conversion now uploads `metadata.json` alongside `.xkt`
-- Systems extracted client-side are persisted to `systems` + `asset_system` tables
+#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
+**Fil:** `supabase/functions/conversion-worker-api/index.ts`
+- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
+- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
+- Upsert till `assets` med `created_in_model: true`
+- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
 
-#### 2. Metadata Extraction & Separate JSON
-**File: `src/services/acc-xkt-converter.ts`**
-- `convertToXktWithMetadata()` now returns `metaModelJson` (xeokit MetaModel format) + `systems[]`
-- WASM validation: explicit `HEAD` request to `/web-ifc-wasm/web-ifc.wasm` before importing
-- `inferDiscipline()` function for system classification (Ventilation, Heating, etc.)
-- System extraction from metaObjects: IfcSystem, IfcDistributionSystem, PropertySet grouping
+#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
+**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
+- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
+- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
+- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
+- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
+- Diff: soft-delete objekt som finns i DB men inte i ny IFC
 
-#### 3. Viewer MetaModel Loading
-**File: `src/components/viewer/NativeXeokitViewer.tsx`**
-- Before loading each XKT model, checks for `{modelId}_metadata.json` in storage
-- If found, passes as `metaModelSrc` to `xktLoader.load()` for richer BIM queries
-- Works for all three loading paths: memory, streaming, and buffer
+#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
+**Fil:** `docs/conversion-worker/worker.mjs`
+- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
+- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
+- Non-fatal: om hierarki-population misslyckas fortsätter workern
 
----
+#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
+**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
+- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
+- `created_in_model: true` istället för `false`
+- Diff-logik: markerar borttagna objekt efter import
 
-## Plan: External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
-
-### Architecture
+### Datamodell
 
 ```text
-IFC Upload → Supabase Storage → conversion_jobs (pending)
-       ↓
-External Worker (polls conversion-worker-api)
-  - Downloads IFC via signed URL
-  - Groups objects by IfcBuildingStorey
-  - Generates per-storey .xkt tiles
-  - Uploads tiles to storage
-  - Reports completion → xkt_models records created
-       ↓
-Viewer detects real tiles (unique storage_paths)
-  - Loads active floor tile (~15MB)
-  - Lazy-loads adjacent floors on FLOOR_TILE_SWITCH event
-  - Unloads distant floors to save memory
-  - Falls back to monolithic loading if no real tiles
+Building Storey:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
+  category:          "Building Storey"
+  created_in_model:  true
+
+Space:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
+  category:          "Space"
+  level_fm_guid:     parent storey fm_guid
+
+Instance:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
+  category:          "Instance"
+  asset_type:        ifcType (e.g. "IfcDoor")
+  level_fm_guid:     resolved storey
+  in_room_fm_guid:   resolved space
 ```
 
-### Files Created/Changed
+### Diff-flöde
 
-| File | Action |
-|------|--------|
-| `supabase/functions/conversion-worker-api/index.ts` | Created — worker API (pending/claim/progress/complete/fail/upload-url) |
-| `supabase/config.toml` | Added verify_jwt = false entry |
-| `docs/conversion-worker/worker.mjs` | Created — standalone Node.js worker |
-| `docs/conversion-worker/Dockerfile` | Created — Docker deployment |
-| `docs/conversion-worker/README.md` | Created — deployment guide |
-| `src/components/viewer/NativeXeokitViewer.tsx` | Updated — real tile detection + FLOOR_TILE_SWITCH listener |
-| `src/hooks/useFloorPriorityLoading.ts` | Updated — isRealTiling + getTilesToLoad + FLOOR_TILE_SWITCH dispatch |
-
-### Key Concepts
-
-- **Virtual chunks (Phase 1)**: Same XKT file, visibility filtering by storey metadata
-- **Real tiles (Phase 2)**: Separate per-storey XKT files with unique `storage_path` values
-- Detection: `isRealTiling()` checks if chunks have >1 unique storage paths
-- Dynamic loading: `FLOOR_TILE_SWITCH` custom event triggers load/unload of tiles
-- Worker auth: `WORKER_API_SECRET` shared secret (not JWT)
+Vid omimport jämförs importerade fm_guids mot befintliga i DB:
+- **Nytt** → INSERT
+- **Matchat** → UPDATE (namn, typ, rumsplacering)
+- **Borttaget** → `modification_status = 'removed'` (soft-delete)
 
 ---
 
-## Plan: Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
+## Previous Plans
 
-### Changes Made
+### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
+- Browser-primary for >20MB, edge function for ≤20MB
+- MetaModel JSON uploaded alongside XKT
+- Systems extracted and persisted
 
-#### 1. Database Migration
-Added 10 nullable credential override columns to `building_settings`:
-- `assetplus_api_url`, `assetplus_api_key`, `assetplus_keycloak_url`, `assetplus_client_id`, `assetplus_client_secret`, `assetplus_username`, `assetplus_password`
-- `senslinc_api_url`, `senslinc_email`, `senslinc_password`
+### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+- Standalone Node.js worker polls conversion-worker-api
+- Per-storey .xkt tiles with dynamic floor loading
 
-When NULL → global env vars are used (backwards compatible).
-
-#### 2. Shared Credential Resolver
-**File: `supabase/functions/_shared/credentials.ts`**
-- `getAssetPlusCredentials(supabase, buildingFmGuid?)` — checks building_settings, falls back to env vars
-- `getSenslincCredentials(supabase, buildingFmGuid?)` — same pattern for Senslinc
-
-#### 3. Properties Page (Configuration Hub)
-**File: `src/pages/Properties.tsx`** — Rewritten from static mockup to functional page
-- Fetches real buildings from `building_settings` + `assets`
-- Shows FM GUID, name, coordinates, custom credential badges
-- Search, refresh, create/edit
-
-**File: `src/components/properties/CreatePropertyDialog.tsx`** — New
-- Sheet dialog with Building Identity (FM GUID, name, lat/lng)
-- Accordion sections for Asset+ and Senslinc credential overrides
-- "Test Connection" buttons for each
-
-#### 4. Edge Function Updates
-- `asset-plus-sync/index.ts` — Uses `_creds` module-level variable resolved from `getAssetPlusCredentials()` at request start
-- `asset-plus-query/index.ts` — Passes resolved `creds` to `getAccessToken(creds)` and uses for API config
-- `senslinc-query/index.ts` — Uses `getSenslincCredentials()` with `buildingFmGuid` from request body
-
-### Flow
-1. Admin opens Properties → sees all buildings with credential status
-2. Clicks "Lägg till fastighet" → enters FM GUID + optional custom credentials
-3. Saves → `building_settings` row created/updated
-4. Sync/query for that building → edge function resolves override credentials automatically
-5. All other buildings continue using global credentials unchanged
+### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
+- 10 credential override columns on building_settings
+- Shared credential resolver in edge functions
+- Properties page as configuration hub
