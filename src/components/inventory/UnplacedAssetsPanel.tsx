@@ -333,7 +333,7 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
         {!ivionSiteId ? (
           <div className="flex items-center gap-2 text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg">
             <AlertCircle className="h-4 w-4 flex-shrink-0" />
-            <span className="text-xs">Ivion API-autentisering krävs för att skapa POIs</span>
+            <span className="text-xs">Ivion API authentication required to create POIs</span>
           </div>
         ) : (
           <Button
