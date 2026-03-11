@@ -70,10 +70,10 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) 
         .getPublicUrl(filePath);
 
       onChange(urlData.publicUrl);
-      toast.success('Bild uppladdad!');
+      toast.success('Image uploaded!');
     } catch (error: any) {
       console.error('Upload error:', error);
-      toast.error('Kunde inte ladda upp bild', {
+      toast.error('Could not upload image', {
         description: error.message,
       });
     } finally {
