@@ -459,7 +459,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
 
                 {/* Name/Designation - Required */}
                 <div className="space-y-1">
-                  <Label className="text-xs">Benämning / Nummer *</Label>
+                  <Label className="text-xs">Name / Number *</Label>
                   <Input
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
