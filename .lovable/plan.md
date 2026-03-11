@@ -1,68 +1,97 @@
 
-## Plan: Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
 
-### Changes Made
+# Plan: Properties Page as Building Configuration Hub
 
-#### 1. Browser-Primary Conversion for Large IFC Files
-**File: `src/components/settings/CreateBuildingPanel.tsx`**
-- Files >20MB skip edge function entirely → direct browser conversion
-- Files ≤20MB still try edge function first with WORKER_LIMIT fallback
-- Extracted `runBrowserConversion()` helper for DRY reuse between direct and fallback paths
-- Browser conversion now uploads `metadata.json` alongside `.xkt`
-- Systems extracted client-side are persisted to `systems` + `asset_system` tables
+## Current State
 
-#### 2. Metadata Extraction & Separate JSON
-**File: `src/services/acc-xkt-converter.ts`**
-- `convertToXktWithMetadata()` now returns `metaModelJson` (xeokit MetaModel format) + `systems[]`
-- WASM validation: explicit `HEAD` request to `/web-ifc-wasm/web-ifc.wasm` before importing
-- `inferDiscipline()` function for system classification (Ventilation, Heating, etc.)
-- System extraction from metaObjects: IfcSystem, IfcDistributionSystem, PropertySet grouping
+The `Properties.tsx` page is currently a static mockup with hardcoded data. It needs to become a functional page that:
+1. Lists real buildings from the database (`building_settings` + `assets` where category = 'Building')
+2. Allows creating new building entries with FM GUID and custom API credentials
+3. Allows configuring per-building Asset+ and Senslinc credential overrides
 
-#### 3. Viewer MetaModel Loading
-**File: `src/components/viewer/NativeXeokitViewer.tsx`**
-- Before loading each XKT model, checks for `{modelId}_metadata.json` in storage
-- If found, passes as `metaModelSrc` to `xktLoader.load()` for richer BIM queries
-- Works for all three loading paths: memory, streaming, and buffer
+## What Changes
 
----
+### 1. Database Migration
 
-## Plan: External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+Add 10 credential override columns to `building_settings`:
 
-### Architecture
-
-```text
-IFC Upload → Supabase Storage → conversion_jobs (pending)
-       ↓
-External Worker (polls conversion-worker-api)
-  - Downloads IFC via signed URL
-  - Groups objects by IfcBuildingStorey
-  - Generates per-storey .xkt tiles
-  - Uploads tiles to storage
-  - Reports completion → xkt_models records created
-       ↓
-Viewer detects real tiles (unique storage_paths)
-  - Loads active floor tile (~15MB)
-  - Lazy-loads adjacent floors on FLOOR_TILE_SWITCH event
-  - Unloads distant floors to save memory
-  - Falls back to monolithic loading if no real tiles
+```
+assetplus_api_url, assetplus_api_key, assetplus_keycloak_url,
+assetplus_client_id, assetplus_client_secret, assetplus_username, assetplus_password,
+senslinc_api_url, senslinc_email, senslinc_password
 ```
 
-### Files Created/Changed
+All nullable — NULL means "use global credentials".
 
-| File | Action |
-|------|--------|
-| `supabase/functions/conversion-worker-api/index.ts` | Created — worker API (pending/claim/progress/complete/fail/upload-url) |
-| `supabase/config.toml` | Added verify_jwt = false entry |
-| `docs/conversion-worker/worker.mjs` | Created — standalone Node.js worker |
-| `docs/conversion-worker/Dockerfile` | Created — Docker deployment |
-| `docs/conversion-worker/README.md` | Created — deployment guide |
-| `src/components/viewer/NativeXeokitViewer.tsx` | Updated — real tile detection + FLOOR_TILE_SWITCH listener |
-| `src/hooks/useFloorPriorityLoading.ts` | Updated — isRealTiling + getTilesToLoad + FLOOR_TILE_SWITCH dispatch |
+### 2. Rewrite `Properties.tsx` to be functional
 
-### Key Concepts
+- Fetch buildings from `building_settings` joined with `assets` (category = 'Building')
+- Each card shows: name, FM GUID, address, area, sync status indicator, whether custom credentials are configured
+- "Lägg till fastighet" button opens a dialog/sheet
 
-- **Virtual chunks (Phase 1)**: Same XKT file, visibility filtering by storey metadata
-- **Real tiles (Phase 2)**: Separate per-storey XKT files with unique `storage_path` values
-- Detection: `isRealTiling()` checks if chunks have >1 unique storage paths
-- Dynamic loading: `FLOOR_TILE_SWITCH` custom event triggers load/unload of tiles
-- Worker auth: `WORKER_API_SECRET` shared secret (not JWT)
+### 3. Create Property Dialog (`CreatePropertyDialog.tsx`)
+
+A sheet/dialog with two sections:
+
+**Section 1 — Building Identity**
+- FM GUID (text input — the key that links to Asset+)
+- Name
+- Address
+- Coordinates (lat/lng)
+
+On save: upserts into `building_settings` with the given `fm_guid`.
+
+**Section 2 — Custom API Credentials (Accordion, collapsed by default)**
+
+Two sub-sections:
+
+**Asset+ Override:**
+- API URL, API Key, Keycloak URL, Client ID, Client Secret, Username, Password
+
+**Senslinc Override:**
+- API URL, Email, Password
+
+A "Test Connection" button for each that calls the existing edge functions with the override credentials.
+
+### 4. Property Detail / Edit
+
+Clicking a property card (or "Redigera" in dropdown) opens the same dialog pre-filled, allowing credential editing.
+
+### 5. Shared Credential Resolver (`supabase/functions/_shared/credentials.ts`)
+
+```typescript
+export async function getCredentials(supabase, buildingFmGuid, system: 'assetplus' | 'senslinc') {
+  // 1. Check building_settings for overrides
+  // 2. Fall back to Deno.env.get() globals
+}
+```
+
+### 6. Update Edge Functions
+
+Modify these to use the credential resolver when `buildingFmGuid` is provided:
+- `asset-plus-sync/index.ts`
+- `asset-plus-query/index.ts`
+- `senslinc-query/index.ts`
+
+The change is small — replace direct `Deno.env.get()` calls with `getCredentials()` at the top of the handler.
+
+## Files
+
+| Action | File |
+|--------|------|
+| Migration | Add 10 columns to `building_settings` |
+| Rewrite | `src/pages/Properties.tsx` — functional with real data |
+| Create | `src/components/properties/CreatePropertyDialog.tsx` |
+| Create | `supabase/functions/_shared/credentials.ts` |
+| Modify | `supabase/functions/asset-plus-sync/index.ts` — use resolver |
+| Modify | `supabase/functions/asset-plus-query/index.ts` — use resolver |
+| Modify | `supabase/functions/senslinc-query/index.ts` — use resolver |
+
+## Flow
+
+1. Admin opens Properties page → sees all buildings
+2. Clicks "Lägg till fastighet" → enters FM GUID + name + optional credentials
+3. Saves → `building_settings` row created
+4. Triggers sync for that building → edge function detects override credentials → uses them
+5. Building data appears in the platform alongside existing buildings
+
