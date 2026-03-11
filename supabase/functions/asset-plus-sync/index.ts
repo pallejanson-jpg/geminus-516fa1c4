@@ -353,8 +353,8 @@ async function getRemoteCountByTypes(
   accessToken: string,
   objectTypes: number[]
 ): Promise<number> {
-  const apiUrl = Deno.env.get("ASSET_PLUS_API_URL");
-  const apiKey = Deno.env.get("ASSET_PLUS_API_KEY");
+  const apiUrl = _creds.apiUrl || Deno.env.get("ASSET_PLUS_API_URL");
+  const apiKey = _creds.apiKey || Deno.env.get("ASSET_PLUS_API_KEY");
 
   if (!apiUrl || !apiKey) return -1;
 
