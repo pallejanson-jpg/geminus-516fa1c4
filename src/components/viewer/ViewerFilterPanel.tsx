@@ -272,6 +272,21 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     setLevelColors(colors);
   }, [levels]);
 
+  // Auto-assign palette colors to spaces BY NAME (same name = same color)
+  useEffect(() => {
+    const nameToColor = new Map<string, string>();
+    const colors = new Map<string, string>();
+    let colorIdx = 0;
+    spaces.forEach(space => {
+      if (!nameToColor.has(space.name)) {
+        nameToColor.set(space.name, LEVEL_PALETTE[colorIdx % LEVEL_PALETTE.length]);
+        colorIdx++;
+      }
+      colors.set(space.fmGuid, nameToColor.get(space.name)!);
+    });
+    setSpaceColors(colors);
+  }, [spaces]);
+
   // (Category colors useEffect moved below categories declaration)
 
   // ── XEOKit accessor ─────────────────────────────────────────────────────
