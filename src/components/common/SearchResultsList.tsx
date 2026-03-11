@@ -21,7 +21,7 @@ export function SearchResultsList({
   results, 
   onSelect, 
   isLoading = false,
-  emptyMessage = 'Inga resultat hittades'
+  emptyMessage = 'No results found'
 }: SearchResultsListProps) {
   if (isLoading) {
     return (
