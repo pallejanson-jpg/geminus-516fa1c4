@@ -8,10 +8,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers, Timer, Cloud, FileSpreadsheet
+  Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers, Timer, Cloud, FileSpreadsheet, KeyRound, Pencil, RefreshCw
 } from 'lucide-react';
 import ExcelTemplateDownload from '@/components/import/ExcelTemplateDownload';
 import ExcelImportDialog from '@/components/import/ExcelImportDialog';
+import CreatePropertyDialog from '@/components/properties/CreatePropertyDialog';
+
+interface ConfiguredBuilding {
+  fmGuid: string;
+  name: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  isFavorite: boolean;
+  hasCustomAssetPlus: boolean;
+  hasCustomSenslinc: boolean;
+}
 
 interface CreatedBuilding {
   complexFmGuid: string;
