@@ -236,8 +236,8 @@ async function fetchAssetPlusObjects(
   take = 200,
   options: FetchOptions = {}
 ): Promise<{ data: any[]; hasMore: boolean; lastFmGuid?: string }> {
-  const apiUrl = Deno.env.get("ASSET_PLUS_API_URL");
-  const apiKey = Deno.env.get("ASSET_PLUS_API_KEY");
+  const apiUrl = _creds.apiUrl || Deno.env.get("ASSET_PLUS_API_URL");
+  const apiKey = _creds.apiKey || Deno.env.get("ASSET_PLUS_API_KEY");
 
   if (!apiUrl || !apiKey) {
     throw new Error("Missing Asset+ API configuration");
