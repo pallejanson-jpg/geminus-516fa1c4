@@ -73,7 +73,7 @@ const FmAccessDashboard: React.FC = () => {
         body: { action: 'get-documents', buildingId: buildingFmGuid },
       });
       if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || 'Kunde inte hämta dokument');
+      if (!data?.success) throw new Error(data?.error || 'Could not fetch documents');
       setDocuments(Array.isArray(data.data) ? data.data : []);
     } catch (err: any) {
       setErrorDocs(err.message);
