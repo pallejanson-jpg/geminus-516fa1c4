@@ -692,7 +692,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
               <Label className="text-sm">Room</Label>
               <Select value={roomFmGuid} onValueChange={setRoomFmGuid}>
                 <SelectTrigger className="h-10">
-                  <SelectValue placeholder="Välj rum..." />
+                  <SelectValue placeholder="Select room..." />
                 </SelectTrigger>
                 <SelectContent className="z-[70] max-h-[200px]">
                   {rooms.map((r) => (
