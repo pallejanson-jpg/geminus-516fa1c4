@@ -640,7 +640,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
             <Label className="text-sm">Symbol *</Label>
             <Select value={symbolId} onValueChange={setSymbolId}>
               <SelectTrigger className="h-10">
-                <SelectValue placeholder="Välj symbol..." />
+                <SelectValue placeholder="Select symbol..." />
               </SelectTrigger>
               <SelectContent className="z-[70] max-h-[200px]">
                 {Object.entries(groupedSymbols).map(([cat, syms]) => (
