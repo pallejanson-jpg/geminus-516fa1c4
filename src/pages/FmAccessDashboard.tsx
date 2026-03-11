@@ -151,7 +151,7 @@ const FmAccessDashboard: React.FC = () => {
               <p className="text-xs text-muted-foreground">{errorDrawings}</p>
             </div>
           ) : drawings.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-4">Inga ritningar hittades</p>
+            <p className="text-xs text-muted-foreground text-center py-4">No drawings found</p>
           ) : (
             <div className="space-y-1">
               {drawings.map((d) => (
