@@ -578,7 +578,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                         BIM metadata (not synced to database)
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Namn</Label>
+                         <Label className="text-xs text-muted-foreground">Name</Label>
                         <p className="text-sm">{metaObj.name || '-'}</p>
                       </div>
                       <div className="space-y-1">
