@@ -35,7 +35,7 @@ const FmAccessSearch: React.FC<FmAccessSearchProps> = ({ onSelect }) => {
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Sök objekt i FM Access..."
+            placeholder="Search objects in FM Access..."
             className="pl-8 h-9 text-sm"
           />
           {loading && <Loader2 size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />}
