@@ -807,12 +807,12 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
           <div className="p-3 border-t flex justify-end gap-2">
             {createMode ? (
               <>
-                <Button variant="outline" size="sm" onClick={onClose} disabled={isSaving}>
-                  Avbryt
-                </Button>
-                <Button size="sm" onClick={handleSave} disabled={isSaving || !hasCoordinates}>
-                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
-                  Skapa
+                 <Button variant="outline" size="sm" onClick={onClose} disabled={isSaving}>
+                   Cancel
+                 </Button>
+                 <Button size="sm" onClick={handleSave} disabled={isSaving || !hasCoordinates}>
+                   {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
+                   Create
                 </Button>
               </>
             ) : assets.length > 0 && (
