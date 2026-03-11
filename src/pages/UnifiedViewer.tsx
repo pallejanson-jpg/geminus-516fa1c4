@@ -12,8 +12,9 @@
  * so that xeokit keeps loaded XKT models in memory.
  */
 
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo, useContext } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { AppContext } from '@/context/AppContext';
 import {
   ArrowLeft, Layers, Move3D, Maximize2, Minimize2, Eye,
   RefreshCw, View, Box, Combine, SplitSquareHorizontal,
