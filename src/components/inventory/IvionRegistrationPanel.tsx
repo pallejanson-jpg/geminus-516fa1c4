@@ -439,7 +439,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
         }
       }
 
-      toast.success('Tillgång sparad!');
+      toast.success('Asset saved!');
       
       // Check if we should close after saving
       if (closeAfterSave && onSavedAndClose) {
