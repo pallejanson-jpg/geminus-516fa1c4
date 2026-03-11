@@ -480,13 +480,13 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
   const getConnectionStatusDisplay = () => {
     switch (connectionStatus) {
       case 'connected':
-        return { icon: Wifi, text: 'Ansluten', className: 'text-green-600 bg-green-100/80 dark:bg-green-900/30' };
-      case 'error':
-        return { icon: WifiOff, text: 'Anslutningsfel', className: 'text-red-600 bg-red-100/80 dark:bg-red-900/30' };
-      case 'expired':
-        return { icon: AlertCircle, text: 'Token utgått', className: 'text-amber-600 bg-amber-100/80 dark:bg-amber-900/30' };
-      default:
-        return { icon: Loader2, text: 'Ansluter...', className: 'text-muted-foreground bg-muted' };
+         return { icon: Wifi, text: 'Connected', className: 'text-green-600 bg-green-100/80 dark:bg-green-900/30' };
+       case 'error':
+         return { icon: WifiOff, text: 'Connection error', className: 'text-red-600 bg-red-100/80 dark:bg-red-900/30' };
+       case 'expired':
+         return { icon: AlertCircle, text: 'Token expired', className: 'text-amber-600 bg-amber-100/80 dark:bg-amber-900/30' };
+       default:
+         return { icon: Loader2, text: 'Connecting...', className: 'text-muted-foreground bg-muted' };
     }
   };
 
