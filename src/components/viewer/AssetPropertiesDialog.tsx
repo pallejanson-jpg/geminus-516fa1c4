@@ -365,7 +365,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
 
       setIsEditing(false);
     } catch (error: any) {
-      toast.error('Fel vid sparning: ' + error.message);
+      toast.error('Error saving: ' + error.message);
     } finally {
       setIsSaving(false);
     }
