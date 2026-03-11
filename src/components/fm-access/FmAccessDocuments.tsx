@@ -93,7 +93,7 @@ const FmAccessDocuments: React.FC<FmAccessDocumentsProps> = ({ buildingId, build
           <div className="p-3 space-y-2">
             {!loadedDocs && (
               <div className="flex items-center justify-center p-4 text-muted-foreground">
-                <Loader2 size={16} className="animate-spin mr-2" /> Laddar dokument...
+                <Loader2 size={16} className="animate-spin mr-2" /> Loading documents...
               </div>
             )}
             {loadedDocs && documents.length === 0 && (
