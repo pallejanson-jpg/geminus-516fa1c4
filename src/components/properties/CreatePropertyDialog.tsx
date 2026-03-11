@@ -167,7 +167,7 @@ export default function CreatePropertyDialog({
       } else {
         const { error } = await supabase
           .from('building_settings')
-          .insert(settingsPayload);
+          .insert(settingsPayload as any);
         if (error) throw error;
       }
 
