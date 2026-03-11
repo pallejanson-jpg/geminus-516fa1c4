@@ -45,7 +45,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) 
 
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      toast.error('Bilden får max vara 5 MB');
+      toast.error('Image must be 5 MB or less');
       return;
     }
 
