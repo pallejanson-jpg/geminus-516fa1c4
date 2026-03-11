@@ -151,9 +151,9 @@ async function fetchApsBubble(urnBase64: string, token: string, mdBase: string):
   return res.json();
 }
 
-// ── Extract level mapping from APS metadata tree (lightweight) ──
-// Uses the tree endpoint first (small), then paginated properties only when needed
+// ── Extract level mapping from APS metadata (paginated properties) ──
 async function fetchSvfProperties(urnBase64: string, token: string, mdBase: string): Promise<any> {
+  // Step 1: Get viewable GUID
   const res = await fetch(`${mdBase}/${urnBase64}/metadata`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -170,136 +170,59 @@ async function fetchSvfProperties(urnBase64: string, token: string, mdBase: stri
 
   const view3d = viewables.find((v: any) => v.role === "3d") || viewables[0];
   const viewGuid = view3d.guid;
-  console.log(`[acc-geometry-extract] Using viewable guid=${viewGuid}, name=${view3d.name}, role=${view3d.role}`);
+  console.log(`[acc-geometry-extract] Using viewable guid=${viewGuid}, name=${view3d.name}`);
 
-  // Step 1: Fetch the object tree (much lighter than full properties)
-  let treeData: any = null;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const treeRes = await fetch(`${mdBase}/${urnBase64}/metadata/${viewGuid}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (treeRes.status === 202) {
-      console.log(`[acc-geometry-extract] Tree not ready (202), retrying in ${10 + attempt * 5}s`);
-      await new Promise(r => setTimeout(r, (10 + attempt * 5) * 1000));
-      continue;
-    }
-    if (treeRes.ok) {
-      treeData = await treeRes.json();
+  // Step 2: Fetch properties in small pages to avoid OOM
+  const PAGE_SIZE = 200;
+  const collection: any[] = [];
+  let offset = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const propsUrl = `${mdBase}/${urnBase64}/metadata/${viewGuid}/properties?forceget=true&limit=${PAGE_SIZE}&offset=${offset}`;
+    let propsRes: Response | null = null;
+    
+    for (let retry = 0; retry < 3; retry++) {
+      propsRes = await fetch(propsUrl, { headers: { Authorization: `Bearer ${token}` } });
+      if (propsRes.status === 202) {
+        console.log(`[acc-geometry-extract] Properties page offset=${offset} not ready (202), waiting 10s...`);
+        await new Promise(r => setTimeout(r, 10000));
+        continue;
+      }
       break;
     }
-    console.warn(`[acc-geometry-extract] Tree fetch failed: ${treeRes.status}`);
-    await treeRes.text(); // consume body
-    return null;
-  }
 
-  if (!treeData) {
-    console.warn("[acc-geometry-extract] Tree not available after retries");
-    return null;
-  }
-
-  // Extract level structure from tree — find IfcBuildingStorey or Level nodes
-  const levelMap = new Map<number, string>(); // dbId → levelName
-  const allDbIds: Array<{ dbId: number; externalId?: string }> = [];
-
-  function walkTree(node: any, currentLevel: string | null) {
-    const dbId = node.objectid;
-    const name = node.name || "";
-    const type = node.type || "";
-
-    // Detect level nodes by type or naming pattern
-    const isLevel = type.includes("IfcBuildingStorey") ||
-      type.includes("Level") ||
-      name.match(/^(Level|Plan|Våning|Etage|Niveau)\s/i) ||
-      (type === "Revit Level" || type === "Levels");
-
-    const effectiveLevel = isLevel ? name : currentLevel;
-
-    if (dbId !== undefined) {
-      allDbIds.push({ dbId });
-      if (effectiveLevel) {
-        levelMap.set(dbId, effectiveLevel);
+    if (!propsRes || !propsRes.ok) {
+      if (propsRes) {
+        const errBody = await propsRes.text();
+        console.warn(`[acc-geometry-extract] Properties page failed: ${propsRes.status} — ${errBody.substring(0, 200)}`);
       }
+      // If we got some data, use it; otherwise fail
+      if (collection.length > 0) break;
+      return null;
     }
 
-    if (node.objects) {
-      for (const child of node.objects) {
-        walkTree(child, effectiveLevel);
-      }
+    const pageData = await propsRes.json();
+    const pageCollection = pageData?.data?.collection || [];
+    collection.push(...pageCollection);
+    console.log(`[acc-geometry-extract] Properties page offset=${offset}: ${pageCollection.length} items (total: ${collection.length})`);
+
+    if (pageCollection.length < PAGE_SIZE) {
+      hasMore = false;
+    } else {
+      offset += PAGE_SIZE;
+    }
+
+    // Cap at 5000 objects to stay within edge function memory
+    if (collection.length >= 5000) {
+      console.warn(`[acc-geometry-extract] Capping at ${collection.length} objects`);
+      hasMore = false;
     }
   }
 
-  const rootObjects = treeData?.data?.objects || [];
-  for (const root of rootObjects) {
-    walkTree(root, null);
-  }
-
-  console.log(`[acc-geometry-extract] Tree walk: ${allDbIds.length} objects, ${levelMap.size} with level assignment`);
-
-  // Step 2: Fetch properties in pages to get externalId mapping (paginated to avoid OOM)
-  const PAGE_SIZE = 500;
-  const collection: any[] = [];
-
-  // Only fetch properties if we found objects
-  if (allDbIds.length > 0) {
-    let offset = 0;
-    let hasMore = true;
-
-    while (hasMore) {
-      const propsUrl = `${mdBase}/${urnBase64}/metadata/${viewGuid}/properties?forceget=true&limit=${PAGE_SIZE}&offset=${offset}`;
-      let propsRes: Response | null = null;
-      
-      for (let retry = 0; retry < 3; retry++) {
-        propsRes = await fetch(propsUrl, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (propsRes.status === 202) {
-          console.log(`[acc-geometry-extract] Properties page offset=${offset} not ready, waiting...`);
-          await new Promise(r => setTimeout(r, 10000));
-          continue;
-        }
-        break;
-      }
-
-      if (!propsRes || !propsRes.ok) {
-        if (propsRes) {
-          const errBody = await propsRes.text();
-          console.warn(`[acc-geometry-extract] Properties page fetch failed: ${propsRes.status} — ${errBody.substring(0, 200)}`);
-        }
-        break;
-      }
-
-      const pageData = await propsRes.json();
-      const pageCollection = pageData?.data?.collection || [];
-      collection.push(...pageCollection);
-      console.log(`[acc-geometry-extract] Properties page offset=${offset}: ${pageCollection.length} objects (total: ${collection.length})`);
-
-      if (pageCollection.length < PAGE_SIZE) {
-        hasMore = false;
-      } else {
-        offset += PAGE_SIZE;
-      }
-
-      // Safety: don't exceed ~10k objects to stay within memory
-      if (collection.length > 10000) {
-        console.warn(`[acc-geometry-extract] Capping properties at ${collection.length} objects to avoid OOM`);
-        hasMore = false;
-      }
-    }
-  }
-
-  // Merge tree-based levels with property-based levels
-  // The collection has externalId which we need, and properties which may have more level info
-  const mergedCollection = collection.map((el: any) => {
-    const treeLevel = levelMap.get(el.objectid);
-    return {
-      ...el,
-      _treeLevel: treeLevel,
-    };
-  });
-
-  console.log(`[acc-geometry-extract] Properties response: ${mergedCollection.length} objects in collection`);
-  if (mergedCollection.length > 0) {
-    const sample = mergedCollection[0];
+  // Log sample for debugging
+  if (collection.length > 0) {
+    const sample = collection[0];
     console.log(`[acc-geometry-extract] Sample: objectid=${sample.objectid}, name=${sample.name}, externalId=${sample.externalId}`);
     const propGroups = Object.keys(sample.properties || {});
     console.log(`[acc-geometry-extract] Property groups: ${propGroups.join(", ")}`);
@@ -307,9 +230,11 @@ async function fetchSvfProperties(urnBase64: string, token: string, mdBase: stri
       const groupKeys = Object.keys(sample.properties?.[group] || {});
       console.log(`[acc-geometry-extract]   ${group}: ${groupKeys.join(", ")}`);
     }
+  } else {
+    console.warn("[acc-geometry-extract] Properties returned 0 objects in collection");
   }
 
-  return { properties: { data: { collection: mergedCollection } }, viewGuid, levelMap };
+  return { properties: { data: { collection } }, viewGuid };
 }
 
 // ── Level key detection (multilingual) ──
