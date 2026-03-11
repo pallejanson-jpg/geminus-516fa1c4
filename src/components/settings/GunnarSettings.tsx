@@ -150,7 +150,7 @@ const GunnarSettings: React.FC = () => {
 
       <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
         <p className="font-medium text-foreground mb-1">Tip</p>
-        <p>You can drag the Gunnar button to any position on the screen. The position is saved automatically.</p>
+        <p>You can drag the Geminus AI button to any position on the screen. The position is saved automatically.</p>
       </div>
     </div>
   );

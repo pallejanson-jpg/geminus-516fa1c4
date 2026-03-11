@@ -3530,7 +3530,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                 <AccordionTrigger className="py-3">
                                     <div className="flex items-center gap-2">
                                         <Sparkles className="h-4 w-4" />
-                                        <span>Gunnar AI</span>
+                                        <span>Geminus AI</span>
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent>
