@@ -1,61 +1,76 @@
+## Plan: IFC → Assets Pipeline med GUID-generering, tillbakaskrivning och diff-hantering (IMPLEMENTED)
 
-Mål: få viewer för t.ex. Labradorgatan 16 att självläka när lokal XKT saknas, istället för att fastna i fel-läget.
+### Ändringar
 
-1) Bekräftad problembild (från loggar + data)
-- `xkt_models` har 0 rader för `cc27795e...` och `xkt-models` storage har 0 filer för byggnaden.
-- XKT-sync-kortet visar “i synk” missvisande: i koden sätts `inSync` till `true` så fort total `localCount > 0` globalt, inte per byggnad.
-- Direkt test av backend-funktionen `sync-xkt-building` gav:
-  - `success: true`
-  - `hint: "cache-on-load"`
-  - meddelande att servern inte kan hämta 3D-API i den miljön.
-- `NativeXeokitViewer` har explicit avstängd auto-sync (`auto-sync disabled`) och failar direkt vid 0 lokala modeller.
-- “Kunde inte ladda 3D-modellen” är fortfarande kvar i UI (ska vara engelska).
+#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
+**Fil:** `supabase/functions/conversion-worker-api/index.ts`
+- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
+- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
+- Upsert till `assets` med `created_in_model: true`
+- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
 
-Do I know what the issue is?
-Ja: kombination av (a) missvisande sync-status, (b) native-viewer som bara läser lokal cache, och (c) server-sync som i vissa fall inte kan hämta 3D-modeller — därför ingen fallback som faktiskt laddar första gången.
+#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
+**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
+- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
+- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
+- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
+- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
+- Diff: soft-delete objekt som finns i DB men inte i ny IFC
 
-2) Implementationsplan
-A. Fixa statusindikatorn i Settings
-- Fil: `src/components/settings/ApiSettingsModal.tsx`
-- Ändra XKT-kortets `inSync` till byggnadsmedveten status (inte global `localCount > 0`).
-- Visa tydligt “X buildings with cached XKT / total buildings” och markera “Partial” när vissa byggnader saknar modeller.
+#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
+**Fil:** `docs/conversion-worker/worker.mjs`
+- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
+- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
+- Non-fatal: om hierarki-population misslyckas fortsätter workern
 
-B. Återinför verklig “first-open bootstrap” i viewer
-- Fil: `src/components/viewer/NativeXeokitViewer.tsx`
-- När inga lokala modeller hittas:
-  1) Försök backend-sync (`action: sync-xkt-building`).
-  2) Om resultat blir `hint: cache-on-load` eller `synced=0`, kör klient-bootstrap:
-     - hämta token + config via `asset-plus-query` (`getToken`, `getConfig`)
-     - upptäck fungerande GetModels-endpoint robust (flera URL-varianter)
-     - hämta modell-lista, ladda XKT binärt i browsern
-     - spara med `xktCacheService.saveModelFromViewer(...)`
-     - lägg i memory-cache och fortsätt ladda viewer utan fel-overlay.
-- Lägg progress-overlay: “Preparing 3D models for first load…”
-- Endast faila till error-state om både lokal cache + bootstrap misslyckas.
+#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
+**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
+- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
+- `created_in_model: true` istället för `false`
+- Diff-logik: markerar borttagna objekt efter import
 
-C. Robustare tolkning av GetModels-svar
-- Filer:
-  - `supabase/functions/asset-plus-sync/index.ts`
-  - `supabase/functions/asset-plus-query/index.ts` (test/debug-del)
-- Acceptera fler response-shapes än ren array (`models/items/data`) och logga kort diagnostik (status + format) för enklare felsökning.
+### Datamodell
 
-D. Språk-konsistens
-- Fil: `src/components/viewer/NativeXeokitViewer.tsx`
-- Byt kvarvarande svenska felrubriken till engelska:
-  - “Failed to load 3D model”.
+```text
+Building Storey:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
+  category:          "Building Storey"
+  created_in_model:  true
 
-3) Teknisk detalj (designval)
-- Behåll nuvarande cache-persistens mellan 2D/3D/split (den fungerar redan).
-- Ingen IFC-uppladdning krävs i detta flöde; IFC ska vara alternativ, inte beroende.
-- Bootstrap körs endast när byggnad saknar lokal XKT (inte vid normal last).
+Space:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
+  category:          "Space"
+  level_fm_guid:     parent storey fm_guid
 
-4) Verifiering efter implementation
-- Byggnad utan lokal XKT (Labradorgatan 16):
-  - öppna `/viewer?...mode=3d`
-  - se bootstrap-progress istället för direkt error
-  - verifiera att modeller laddas och att rader/filer skapas i cache.
-- Ladda om viewer:
-  - verifiera att den nu går direkt via lokal cache.
-- Växla 2D ↔ 3D ↔ split ↔ tillbaka till landningssida ↔ in i viewer:
-  - verifiera att XKT inte hämtas om i onödan.
-- Kontrollera att Settings visar korrekt (inte falsk “i synk”).
+Instance:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
+  category:          "Instance"
+  asset_type:        ifcType (e.g. "IfcDoor")
+  level_fm_guid:     resolved storey
+  in_room_fm_guid:   resolved space
+```
+
+### Diff-flöde
+
+Vid omimport jämförs importerade fm_guids mot befintliga i DB:
+- **Nytt** → INSERT
+- **Matchat** → UPDATE (namn, typ, rumsplacering)
+- **Borttaget** → `modification_status = 'removed'` (soft-delete)
+
+---
+
+## Previous Plans
+
+### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
+- Browser-primary for >20MB, edge function for ≤20MB
+- MetaModel JSON uploaded alongside XKT
+- Systems extracted and persisted
+
+### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+- Standalone Node.js worker polls conversion-worker-api
+- Per-storey .xkt tiles with dynamic floor loading
+
+### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
+- 10 credential override columns on building_settings
+- Shared credential resolver in edge functions
+- Properties page as configuration hub

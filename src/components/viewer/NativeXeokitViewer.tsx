@@ -11,7 +11,8 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeGuid } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
-import { AlertCircle, Box } from 'lucide-react';
+import { AlertCircle, Box, Loader2 } from 'lucide-react';
+import { xktCacheService } from '@/services/xkt-cache-service';
 import { getModelFromMemory, storeModelInMemory, getMemoryStats } from '@/hooks/useXktPreload';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { applyArchitectColors } from '@/lib/architect-colors';
@@ -40,7 +41,7 @@ interface ModelInfo {
 
 type ModelCandidate = ModelInfo & { synced_at?: string | null; source: 'db' | 'storage' };
 
-type LoadPhase = 'init' | 'loading_sdk' | 'creating_viewer' | 'syncing' | 'loading_models' | 'ready' | 'error';
+type LoadPhase = 'init' | 'loading_sdk' | 'creating_viewer' | 'syncing' | 'bootstrapping' | 'loading_models' | 'ready' | 'error';
 
 const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   buildingFmGuid,
@@ -272,18 +273,168 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }
       }
 
-      // Auto-sync DISABLED at start — user approved "no auto-sync" strategy.
-      // If models are missing, show error state; user can trigger manual sync if needed.
-      const hasAnyModels = models && models.length > 0;
-      if (!hasAnyModels) {
-        console.log('[NativeViewer] No models found locally — auto-sync disabled per config');
-      }
-
+      // ── BOOTSTRAP: If no local models, attempt server-sync then client-side fetch ──
       if (dbError || !models || models.length === 0) {
-        console.warn('[NativeViewer] No models found for building', buildingFmGuid, 'dbError:', dbError);
-        setErrorMsg(`No 3D models found for this building. Sync XKT models via Settings → Buildings, or upload an IFC file.`);
-        setPhase('error');
-        return;
+        console.log('[NativeViewer] No local models found — attempting bootstrap...');
+        setPhase('syncing');
+
+        // Step 1: Try server-side sync
+        let bootstrapSuccess = false;
+        try {
+          const { data: syncResult } = await supabase.functions.invoke('asset-plus-sync', {
+            body: { action: 'sync-xkt-building', buildingFmGuid }
+          });
+
+          if (syncResult?.synced > 0) {
+            console.log(`[NativeViewer] Server sync succeeded: ${syncResult.synced} models`);
+            // Re-fetch models from DB
+            const { data: freshModels } = await supabase
+              .from('xkt_models')
+              .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at, is_chunk, chunk_order, parent_model_id')
+              .eq('building_fm_guid', buildingFmGuid)
+              .order('file_size', { ascending: true });
+            if (freshModels && freshModels.length > 0) {
+              models = freshModels.map((m: any) => ({ ...m, source: 'db' as const }));
+              bootstrapSuccess = true;
+            }
+          } else {
+            console.log('[NativeViewer] Server sync returned 0 models, trying client-side bootstrap...');
+          }
+        } catch (e) {
+          console.warn('[NativeViewer] Server sync failed:', e);
+        }
+
+        // Step 2: Client-side bootstrap — fetch XKT directly from Asset+ API via browser
+        if (!bootstrapSuccess) {
+          try {
+            // Get auth token and API config
+            const [tokenRes, configRes] = await Promise.all([
+              supabase.functions.invoke('asset-plus-query', { body: { action: 'getToken', buildingFmGuid } }),
+              supabase.functions.invoke('asset-plus-query', { body: { action: 'getConfig', buildingFmGuid } }),
+            ]);
+
+            const accessToken = tokenRes.data?.accessToken;
+            const apiUrl = configRes.data?.apiUrl;
+            const apiKey = configRes.data?.apiKey;
+
+            if (accessToken && apiUrl && apiKey) {
+              // Discover 3D endpoint from browser (not blocked like edge functions)
+              const baseUrl = apiUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
+              const assetDbUrl = apiUrl.replace(/\/+$/, '');
+              const candidatePaths = [
+                `${baseUrl}/api/threed/GetModels`,
+                `${baseUrl}/threed/GetModels`,
+                `${assetDbUrl}/api/threed/GetModels`,
+                `${assetDbUrl}/threed/GetModels`,
+                `${assetDbUrl}/GetModels`,
+                `${baseUrl}/api/v1/threed/GetModels`,
+              ];
+
+              let discoveredModels: any[] | null = null;
+              for (const basePath of candidatePaths) {
+                try {
+                  const url = `${basePath}?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
+                  console.log(`[NativeViewer] Bootstrap: trying ${basePath}`);
+                  const res = await fetch(url, {
+                    headers: { "Authorization": `Bearer ${accessToken}` }
+                  });
+                  if (res.ok) {
+                    const data = await res.json();
+                    // Accept multiple response shapes
+                    const modelArray = Array.isArray(data) ? data
+                      : Array.isArray(data?.models) ? data.models
+                      : Array.isArray(data?.items) ? data.items
+                      : Array.isArray(data?.data) ? data.data
+                      : null;
+                    if (modelArray && modelArray.length > 0) {
+                      console.log(`[NativeViewer] Bootstrap: found ${modelArray.length} models at ${basePath}`);
+                      discoveredModels = modelArray;
+                      break;
+                    }
+                  }
+                } catch (e) {
+                  console.debug(`[NativeViewer] Bootstrap endpoint failed: ${basePath}`, e);
+                }
+              }
+
+              if (discoveredModels && discoveredModels.length > 0) {
+                console.log(`[NativeViewer] Bootstrap: downloading ${discoveredModels.length} XKT models...`);
+                let bootstrapLoaded = 0;
+                const bootstrappedModels: ModelCandidate[] = [];
+
+                for (const model of discoveredModels) {
+                  const xktUrl = model.xktFileUrl || model.xkt_file_url || model.fileUrl || model.url;
+                  if (!xktUrl) continue;
+
+                  const modelId = model.id || model.modelId || xktUrl.split('/').pop()?.replace('.xkt', '') || `model_${Date.now()}`;
+                  let fullXktUrl = xktUrl;
+                  if (xktUrl.startsWith('/')) {
+                    fullXktUrl = baseUrl + xktUrl;
+                  }
+
+                  try {
+                    console.log(`[NativeViewer] Bootstrap: fetching ${modelId}...`);
+                    const xktRes = await fetch(fullXktUrl, {
+                      headers: { "Authorization": `Bearer ${accessToken}` }
+                    });
+
+                    if (!xktRes.ok) continue;
+                    const xktData = await xktRes.arrayBuffer();
+                    if (xktData.byteLength < 1024) continue;
+
+                    // Check it's actually binary XKT, not HTML error page
+                    const firstByte = String.fromCharCode(new Uint8Array(xktData)[0]);
+                    if (firstByte === '<' || firstByte === '{') continue;
+
+                    // Store in memory cache for immediate use
+                    storeModelInMemory(modelId, buildingFmGuid, xktData);
+
+                    // Save to backend in background (non-blocking)
+                    const modelName = model.name || model.modelName || modelId;
+                    xktCacheService.saveModelFromViewer(modelId, xktData, buildingFmGuid, modelName)
+                      .then(ok => { if (ok) console.log(`[NativeViewer] Bootstrap: cached ${modelId} to backend`); });
+
+                    const fileName = `${modelId}.xkt`;
+                    bootstrappedModels.push({
+                      model_id: modelId,
+                      model_name: modelName,
+                      storage_path: `${buildingFmGuid}/${fileName}`,
+                      file_size: xktData.byteLength,
+                      storey_fm_guid: null,
+                      source: 'db',
+                    });
+
+                    bootstrapLoaded++;
+                    console.log(`[NativeViewer] Bootstrap: loaded ${modelId} (${(xktData.byteLength / 1024 / 1024).toFixed(1)} MB)`);
+                  } catch (e) {
+                    console.warn(`[NativeViewer] Bootstrap: failed to fetch ${modelId}:`, e);
+                  }
+                }
+
+                if (bootstrappedModels.length > 0) {
+                  models = bootstrappedModels;
+                  bootstrapSuccess = true;
+                  console.log(`[NativeViewer] Bootstrap: successfully loaded ${bootstrapLoaded} models`);
+                }
+              }
+            } else {
+              console.warn('[NativeViewer] Bootstrap: missing Asset+ credentials');
+            }
+          } catch (e) {
+            console.warn('[NativeViewer] Client-side bootstrap failed:', e);
+          }
+        }
+
+        if (!bootstrapSuccess) {
+          console.warn('[NativeViewer] Bootstrap failed — no models available');
+          setErrorMsg('No 3D models found for this building. Sync XKT models via Settings → Buildings, or upload an IFC file.');
+          setPhase('error');
+          return;
+        }
+
+        // Continue with bootstrapped models
+        if (!mountedRef.current) return;
+        setPhase('loading_models');
       }
 
       // Staleness check: deferred to avoid competing with model loading
@@ -968,6 +1119,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       {phase !== 'ready' && phase !== 'error' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm z-10">
           <Spinner className="h-8 w-8" />
+          {(phase === 'syncing' || phase === 'bootstrapping') && (
+            <p className="text-xs text-muted-foreground mt-3">Preparing 3D models for first load…</p>
+          )}
         </div>
       )}
 
@@ -975,7 +1129,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       {phase === 'error' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/90 z-10 p-6 text-center">
           <AlertCircle className="h-8 w-8 text-destructive mb-3" />
-          <p className="text-sm text-destructive font-medium mb-2">Kunde inte ladda 3D-modellen</p>
+          <p className="text-sm text-destructive font-medium mb-2">Failed to load 3D model</p>
           <p className="text-xs text-muted-foreground max-w-md">{errorMsg}</p>
         </div>
       )}
