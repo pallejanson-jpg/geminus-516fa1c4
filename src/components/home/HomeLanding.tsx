@@ -24,7 +24,7 @@ const ASSISTANTS: Array<{
   icon: React.ComponentType<{ className?: string }>;
   available: boolean;
 }> = [
-  { id: "gunnar", title: "Gunnar", subtitle: "Data Assistant", description: "Ask about buildings, rooms and assets", icon: Database, available: true },
+  { id: "gunnar", title: "Geminus AI", subtitle: "Data Assistant", description: "Ask about buildings, rooms and assets", icon: Database, available: true },
   { id: "ilean", title: "Ilean", subtitle: "Document Assistant", description: "Search documents and drawings", icon: FileQuestion, available: true },
   { id: "doris", title: "Doris", subtitle: "FM Access Assistant", description: "Integration with FM Access", icon: Sparkles, available: false },
 ];

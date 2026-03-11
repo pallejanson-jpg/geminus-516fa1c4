@@ -845,7 +845,7 @@ async function execCreateWorkOrder(supabase: any, args: any) {
     space_fm_guid: args.space_fm_guid || null,
     space_name: args.space_name || null,
     status: "open",
-    reported_by: "Gunnar AI",
+    reported_by: "Geminus AI",
   }).select().single();
 
   if (error) throw error;

@@ -95,7 +95,7 @@ export default function KnowledgeBaseSettings() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Add URLs to help pages for apps and integrations. Gunnar will use these to answer platform usage questions.
+        Add URLs to help pages for apps and integrations. Geminus AI will use these to answer platform usage questions.
       </p>
 
       {/* Add form */}

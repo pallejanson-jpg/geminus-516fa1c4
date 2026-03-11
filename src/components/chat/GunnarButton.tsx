@@ -464,7 +464,7 @@ export default function GunnarButton() {
               {!isMobile && <GripHorizontal className="h-4 w-4 text-muted-foreground" />}
               <div className="flex items-center gap-1.5">
                 <Sparkles className="h-4 w-4 text-primary" />
-                <span className="font-medium text-sm">Gunnar AI</span>
+                <span className="font-medium text-sm">Geminus AI</span>
               </div>
             </div>
             <div className="flex items-center gap-1">

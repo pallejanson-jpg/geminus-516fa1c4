@@ -252,7 +252,7 @@ export default function GeminusPluginMenu({
           <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/50 shrink-0">
             <span className="text-sm font-medium flex items-center gap-2">
               <Bot className="h-4 w-4 text-primary" />
-              Gunnar
+              Geminus AI
             </span>
             <Button variant="ghost" size="icon" className="h-9 w-9 min-h-[44px] min-w-[44px]" onClick={handleClose}>
               <X className="h-4 w-4" />
