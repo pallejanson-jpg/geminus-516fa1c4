@@ -316,7 +316,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
         // Continue anyway - local save succeeded
       }
 
-      toast.success('Tillgång skapad!', {
+      toast.success('Asset created!', {
         description: formData.name,
       });
 
