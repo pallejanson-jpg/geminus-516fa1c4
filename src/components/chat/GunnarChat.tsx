@@ -95,9 +95,9 @@ function getContextualGreeting(context?: GunnarContext): string {
      return `Hi! You're in the Navigator. I can help you find rooms, assets, or building components. What are you looking for?`;
    }
    if (context?.activeApp === 'portfolio') {
-     return `Hi! I'm Gunnar, your facility assistant. I can tell you about all buildings in the portfolio — ask about rooms, areas, floors, drawings, or specific assets!`;
+    return `Hi! I'm Geminus AI, your facility assistant. I can tell you about all buildings in the portfolio — ask about rooms, areas, floors, drawings, or specific assets!`;
    }
-   return `Hi! I'm Gunnar, your AI assistant for facility data. Ask me about:\n\n• Buildings, floors, rooms, and areas\n• Equipment and assets\n• Drawings from FM Access\n• Fault reports and issues\n• 3D model navigation\n• IoT sensor data\n• Platform help\n\nWhat would you like to know?`;
+   return `Hi! I'm Geminus AI, your AI assistant for facility data. Ask me about:\n\n• Buildings, floors, rooms, and areas\n• Equipment and assets\n• Drawings from FM Access\n• Fault reports and issues\n• 3D model navigation\n• IoT sensor data\n• Platform help\n\nWhat would you like to know?`;
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gunnar-chat`;

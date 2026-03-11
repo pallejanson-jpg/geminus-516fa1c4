@@ -71,7 +71,7 @@ const GunnarSettings: React.FC = () => {
           <Sparkles className="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h3 className="font-semibold">Gunnar AI</h3>
+          <h3 className="font-semibold">Geminus AI</h3>
           <p className="text-sm text-muted-foreground">AI assistant for facility questions</p>
         </div>
       </div>
@@ -86,7 +86,7 @@ const GunnarSettings: React.FC = () => {
               <div className="text-left">
                 <h4 className="font-medium text-sm">Visibility</h4>
                 <p className="text-xs text-muted-foreground">
-                  {settings.visible ? 'Gunnar button is visible' : 'Gunnar button is hidden'}
+                  {settings.visible ? 'Geminus AI button is visible' : 'Geminus AI button is hidden'}
                 </p>
               </div>
             </div>
@@ -95,7 +95,7 @@ const GunnarSettings: React.FC = () => {
             <div className="flex items-center justify-between py-2">
               <div className="space-y-0.5">
                 <Label htmlFor="gunnar-visible" className="text-sm font-medium">
-                  Show Gunnar button
+                  Show Geminus AI button
                 </Label>
                 <p className="text-xs text-muted-foreground">
                   Shows the floating AI assistant button in the application
@@ -150,7 +150,7 @@ const GunnarSettings: React.FC = () => {
 
       <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
         <p className="font-medium text-foreground mb-1">Tip</p>
-        <p>You can drag the Gunnar button to any position on the screen. The position is saved automatically.</p>
+        <p>You can drag the Geminus AI button to any position on the screen. The position is saved automatically.</p>
       </div>
     </div>
   );

@@ -403,7 +403,7 @@ export default function GunnarButton() {
             </div>
           </TooltipTrigger>
           <TooltipContent side="left" className="font-medium">
-            Fråga Gunnar (dra för att flytta)
+            Fråga Geminus AI (dra för att flytta)
           </TooltipContent>
         </Tooltip>
       </div>
@@ -420,7 +420,7 @@ export default function GunnarButton() {
             "flex items-center gap-2 hover:bg-card transition-colors"
           )}>
             <Sparkles className="h-5 w-5 text-primary" />
-            <span className="text-sm font-medium max-w-32 truncate">Gunnar</span>
+            <span className="text-sm font-medium max-w-32 truncate">Geminus AI</span>
             <Maximize2 className="h-4 w-4 text-muted-foreground" />
           </div>
         </div>
@@ -464,7 +464,7 @@ export default function GunnarButton() {
               {!isMobile && <GripHorizontal className="h-4 w-4 text-muted-foreground" />}
               <div className="flex items-center gap-1.5">
                 <Sparkles className="h-4 w-4 text-primary" />
-                <span className="font-medium text-sm">Gunnar AI</span>
+                <span className="font-medium text-sm">Geminus AI</span>
               </div>
             </div>
             <div className="flex items-center gap-1">

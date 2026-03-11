@@ -617,7 +617,7 @@ const CompetitionSlide = () => {
             <p className="text-[20px] font-bold text-cyan-300 uppercase tracking-widest mb-6">Geminus has everything they have — and more</p>
             <div className="space-y-5">
               {[
-                { label: "AI Assistants (Gunnar)", sub: "Natural language FM queries — none of them have this" },
+                { label: "AI Assistants (Geminus AI)", sub: "Natural language FM queries — none of them have this" },
                 { label: "AI Inventory", sub: "360° photo scanning → auto-registration in Asset+" },
                 { label: "Full Addnode data stack", sub: "SWG + Symetri + Bimify + Senslinc + In Use" },
                 { label: "Addnode's own IP", sub: "Not a licensed platform — built and owned by Addnode" },
