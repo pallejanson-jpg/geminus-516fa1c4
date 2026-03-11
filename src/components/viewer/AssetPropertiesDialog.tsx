@@ -626,7 +626,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                 </div>
                 <Separator />
                 <div className="space-y-2">
-                  <Label className="text-xs">Gemensam symbol</Label>
+                  <Label className="text-xs">Shared symbol</Label>
                   {isEditing ? (
                     <Select
                       value={formData.symbol_id}
