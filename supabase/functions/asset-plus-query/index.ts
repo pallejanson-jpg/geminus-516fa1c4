@@ -62,12 +62,15 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body = await req.json();
-    const { action, filter } = body;
+    const { action, filter, buildingFmGuid } = body;
+
+    // Resolve per-building credentials
+    const creds = await getAssetPlusCredentials(supabase, buildingFmGuid);
 
     // Action: Get access token for 3D Viewer
     if (action === "getToken") {
       try {
-        const accessToken = await getAccessToken();
+        const accessToken = await getAccessToken(creds);
         return new Response(
           JSON.stringify({ accessToken }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
