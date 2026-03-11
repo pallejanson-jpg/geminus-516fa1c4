@@ -1,108 +1,100 @@
-## Plan: Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
 
-### Changes Made
 
-#### 1. Browser-Primary Conversion for Large IFC Files
-**File: `src/components/settings/CreateBuildingPanel.tsx`**
-- Files >20MB skip edge function entirely → direct browser conversion
-- Files ≤20MB still try edge function first with WORKER_LIMIT fallback
-- Extracted `runBrowserConversion()` helper for DRY reuse between direct and fallback paths
-- Browser conversion now uploads `metadata.json` alongside `.xkt`
-- Systems extracted client-side are persisted to `systems` + `asset_system` tables
+# Plan: IFC → Assets Pipeline med GUID-generering, tillbakaskrivning och diff-hantering
 
-#### 2. Metadata Extraction & Separate JSON
-**File: `src/services/acc-xkt-converter.ts`**
-- `convertToXktWithMetadata()` now returns `metaModelJson` (xeokit MetaModel format) + `systems[]`
-- WASM validation: explicit `HEAD` request to `/web-ifc-wasm/web-ifc.wasm` before importing
-- `inferDiscipline()` function for system classification (Ventilation, Heating, etc.)
-- System extraction from metaObjects: IfcSystem, IfcDistributionSystem, PropertySet grouping
+## Problemet
 
-#### 3. Viewer MetaModel Loading
-**File: `src/components/viewer/NativeXeokitViewer.tsx`**
-- Before loading each XKT model, checks for `{modelId}_metadata.json` in storage
-- If found, passes as `metaModelSrc` to `xktLoader.load()` for richer BIM queries
-- Works for all three loading paths: memory, streaming, and buffer
+Nuvarande IFC-pipeline (alla tre vägar: edge function, browser, worker) skapar bara `xkt_models` + `asset_external_ids` + `systems`. **Ingen av dem skriver till `assets`-tabellen**, som driver Navigator, Portfolio, filterpaneler och rum-labels. Dessutom saknas:
 
----
+1. **GUID-generering** — objekt utan IFC GlobalId får ingen deterministisk fm_guid
+2. **Tillbakaskrivning** — genererade fm_guid skrivs inte tillbaka in i IFC-filen
+3. **Diff/borttagning** — om ett objekt försvinner från en ny IFC-import tas det inte bort från databasen
 
-## Plan: External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+## Lösning i tre delar
 
-### Architecture
+### Del 1: Populate `assets` från IFC-metadata
+
+Utöka `ifc-to-xkt` edge function (och `conversion-worker-api /complete`) med en ny funktion `populateAssetsFromIfc()` som körs efter XKT-generering:
+
+- Itererar alla `metaObjects` från parsad IFC
+- För varje `IfcBuildingStorey` → upsert i `assets` med `category: 'Building Storey'`
+- För varje `IfcSpace` → upsert med `category: 'Space'`, `level_fm_guid` = parent storey
+- För varje instansobjekt (IfcDoor, IfcWall, etc.) → upsert med `category: 'Instance'`, korrekt `level_fm_guid` och `in_room_fm_guid`
+- `fm_guid` bestäms av IFC GlobalId om det finns, annars uuid5(buildingFmGuid + objectName + type)
+- Alla markeras `is_local: false`, `created_in_model: true`
+
+### Del 2: GUID-tillbakaskrivning till IFC
+
+Om fm_guid genererades (uuid5) och inte fanns i IFC:en:
+- Använd `web-ifc` API:t (`ifcApi.CreateIfcGuidProperty` / `WriteLine`) för att skriva genererad GUID som IfcPropertySingleValue i ett PropertySet (t.ex. "Geminus_Identifiers")
+- Ladda upp den berikade IFC:en tillbaka till `ifc-uploads` bucket (som `{original}_enriched.ifc`)
+- Detta säkerställer att nästa import matchar samma fm_guid
+
+### Del 3: Diff-hantering (borttagning av borttagna objekt)
+
+Efter populate-steget:
+1. Hämta alla `assets` i databasen för `building_fm_guid` där `created_in_model = true`
+2. Jämför mot listan av fm_guids som just parsades från IFC
+3. Objekt som finns i DB men **inte** i den nya IFC:en → markeras som borttagna:
+   - Sätt `modification_status = 'removed'` (soft-delete först)
+   - Eller radera direkt om `is_local = false`
+4. Objekt som finns i IFC och **matchar** i DB → uppdatera egenskaper (namn, typ, rumsplacering)
+
+### Filer att ändra
+
+| Fil | Ändring |
+|-----|---------|
+| `supabase/functions/ifc-to-xkt/index.ts` | Lägg till `populateAssetsFromIfc()` efter steg 8 (persist systems). Inkludera diff-logik. |
+| `supabase/functions/conversion-worker-api/index.ts` | Ny action `POST /populate-hierarchy` som worker kan anropa efter konvertering |
+| `docs/conversion-worker/worker.mjs` | Efter `/complete`, anropa `/populate-hierarchy` med storey/space/instance-data |
+| `src/components/settings/CreateBuildingPanel.tsx` | Browser-konverteringen: efter `convertToXktWithMetadata`, skriv hierarchy till `assets` via Supabase client |
+| `supabase/functions/ifc-extract-systems/index.ts` | Utöka med samma `populateAssetsFromIfc()` för systems-only-läget |
+
+### Datamodell för insättning
 
 ```text
-IFC Upload → Supabase Storage → conversion_jobs (pending)
-       ↓
-External Worker (polls conversion-worker-api)
-  - Downloads IFC via signed URL
-  - Groups objects by IfcBuildingStorey
-  - Generates per-storey .xkt tiles
-  - Uploads tiles to storage
-  - Reports completion → xkt_models records created
-       ↓
-Viewer detects real tiles (unique storage_paths)
-  - Loads active floor tile (~15MB)
-  - Lazy-loads adjacent floors on FLOOR_TILE_SWITCH event
-  - Unloads distant floors to save memory
-  - Falls back to monolithic loading if no real tiles
+Building Storey:
+  fm_guid:           IFC GlobalId || uuid5(buildingGuid + name)
+  category:          "Building Storey"
+  name/common_name:  storey.name
+  building_fm_guid:  buildingFmGuid
+  is_local:          false
+  created_in_model:  true
+
+Space:
+  fm_guid:           IFC GlobalId || uuid5(buildingGuid + name)
+  category:          "Space"
+  name/common_name:  space.name
+  building_fm_guid:  buildingFmGuid
+  level_fm_guid:     parent storey fm_guid
+  is_local:          false
+  created_in_model:  true
+
+Instance (IfcDoor, IfcWall, etc.):
+  fm_guid:           IFC GlobalId || uuid5(buildingGuid + name + type)
+  category:          "Instance"
+  name/common_name:  element.name
+  asset_type:        ifcType
+  building_fm_guid:  buildingFmGuid
+  level_fm_guid:     resolved storey
+  in_room_fm_guid:   resolved space (if parent is IfcSpace)
+  is_local:          false
+  created_in_model:  true
 ```
 
-### Files Created/Changed
+### Diff-flöde vid omimport
 
-| File | Action |
-|------|--------|
-| `supabase/functions/conversion-worker-api/index.ts` | Created — worker API (pending/claim/progress/complete/fail/upload-url) |
-| `supabase/config.toml` | Added verify_jwt = false entry |
-| `docs/conversion-worker/worker.mjs` | Created — standalone Node.js worker |
-| `docs/conversion-worker/Dockerfile` | Created — Docker deployment |
-| `docs/conversion-worker/README.md` | Created — deployment guide |
-| `src/components/viewer/NativeXeokitViewer.tsx` | Updated — real tile detection + FLOOR_TILE_SWITCH listener |
-| `src/hooks/useFloorPriorityLoading.ts` | Updated — isRealTiling + getTilesToLoad + FLOOR_TILE_SWITCH dispatch |
+```text
+IFC Import → parse metaObjects → resolve fm_guids
+                                       │
+                    ┌──────────────────┼──────────────────┐
+                    ▼                  ▼                  ▼
+              Nytt objekt      Matchat objekt      Borttaget objekt
+              INSERT asset     UPDATE egenskaper    DELETE / soft-delete
+                               (namn, rum, typ)     från assets
+```
 
-### Key Concepts
+### Varför det inte var löst tidigare
 
-- **Virtual chunks (Phase 1)**: Same XKT file, visibility filtering by storey metadata
-- **Real tiles (Phase 2)**: Separate per-storey XKT files with unique `storage_path` values
-- Detection: `isRealTiling()` checks if chunks have >1 unique storage paths
-- Dynamic loading: `FLOOR_TILE_SWITCH` custom event triggers load/unload of tiles
-- Worker auth: `WORKER_API_SECRET` shared secret (not JWT)
+`ifc-extract-systems` hade GUID-reconciliering och `asset_external_ids`-skrivning, men **stoppade där** — den skrev aldrig till `assets`-tabellen. `ifc-to-xkt` extraherade levels/spaces som return-data men persisterade dem inte heller. GUID-tillbakaskrivning till IFC diskuterades i minnet (`ifc-metadata-extraction-and-guid-enrichment-v1`) men implementerades bara för property sets, inte som en del av den fullständiga import-pipelinen.
 
----
-
-## Plan: Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
-
-### Changes Made
-
-#### 1. Database Migration
-Added 10 nullable credential override columns to `building_settings`:
-- `assetplus_api_url`, `assetplus_api_key`, `assetplus_keycloak_url`, `assetplus_client_id`, `assetplus_client_secret`, `assetplus_username`, `assetplus_password`
-- `senslinc_api_url`, `senslinc_email`, `senslinc_password`
-
-When NULL → global env vars are used (backwards compatible).
-
-#### 2. Shared Credential Resolver
-**File: `supabase/functions/_shared/credentials.ts`**
-- `getAssetPlusCredentials(supabase, buildingFmGuid?)` — checks building_settings, falls back to env vars
-- `getSenslincCredentials(supabase, buildingFmGuid?)` — same pattern for Senslinc
-
-#### 3. Properties Page (Configuration Hub)
-**File: `src/pages/Properties.tsx`** — Rewritten from static mockup to functional page
-- Fetches real buildings from `building_settings` + `assets`
-- Shows FM GUID, name, coordinates, custom credential badges
-- Search, refresh, create/edit
-
-**File: `src/components/properties/CreatePropertyDialog.tsx`** — New
-- Sheet dialog with Building Identity (FM GUID, name, lat/lng)
-- Accordion sections for Asset+ and Senslinc credential overrides
-- "Test Connection" buttons for each
-
-#### 4. Edge Function Updates
-- `asset-plus-sync/index.ts` — Uses `_creds` module-level variable resolved from `getAssetPlusCredentials()` at request start
-- `asset-plus-query/index.ts` — Passes resolved `creds` to `getAccessToken(creds)` and uses for API config
-- `senslinc-query/index.ts` — Uses `getSenslincCredentials()` with `buildingFmGuid` from request body
-
-### Flow
-1. Admin opens Properties → sees all buildings with credential status
-2. Clicks "Lägg till fastighet" → enters FM GUID + optional custom credentials
-3. Saves → `building_settings` row created/updated
-4. Sync/query for that building → edge function resolves override credentials automatically
-5. All other buildings continue using global credentials unchanged
