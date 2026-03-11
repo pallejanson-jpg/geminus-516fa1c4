@@ -173,7 +173,7 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
             className="h-7 w-7"
             onClick={handleSave}
             disabled={isSaving}
-            title="Spara"
+            title="Save"
           >
             <Save className="h-3.5 w-3.5" />
           </Button>
