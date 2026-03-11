@@ -2162,6 +2162,27 @@ serve(async (req: Request) => {
 
         await supabase.from("acc_model_translations").update(updateData).eq("version_urn", versionUrn);
 
+        // When translation succeeds, trigger geometry extraction pipeline (non-blocking)
+        if (overallStatus === "success" && body.buildingFmGuid) {
+          console.log(`[check-translation] Translation success — triggering acc-geometry-extract for ${body.buildingFmGuid}`);
+          // Fire-and-forget: invoke the geometry extract function
+          fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/acc-geometry-extract`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+            },
+            body: JSON.stringify({
+              action: "extract",
+              buildingFmGuid: body.buildingFmGuid,
+              versionUrn,
+              modelKey: body.modelKey || body.buildingFmGuid,
+              accProjectId: body.accProjectId || "",
+            }),
+          }).then(r => console.log(`[check-translation] Geometry extract triggered: ${r.status}`))
+            .catch(e => console.warn(`[check-translation] Geometry extract trigger failed:`, e));
+        }
+
         return new Response(
           JSON.stringify({
             success: true,
@@ -2170,6 +2191,7 @@ serve(async (req: Request) => {
             derivativeCount: derivatives.length,
             derivatives: derivatives.slice(0, 20),
             hasSvf2: manifest.derivatives?.some((d: any) => d.outputType === "svf2") || false,
+            geometryExtractTriggered: overallStatus === "success" && !!body.buildingFmGuid,
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
