@@ -125,7 +125,7 @@ const LocationDetectionStep: React.FC<LocationDetectionStepProps> = ({ onComplet
         {/* Show other nearby buildings if any */}
         {allBuildings.length > 1 && (
           <Card className="w-full max-w-xs p-4 mt-4">
-            <p className="text-sm text-muted-foreground mb-3">Andra byggnader i närheten:</p>
+            <p className="text-sm text-muted-foreground mb-3">Other nearby buildings:</p>
             <div className="space-y-2">
               {allBuildings.slice(1, 4).map((b) => (
                 <Button
