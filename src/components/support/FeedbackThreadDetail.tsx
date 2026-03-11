@@ -98,7 +98,7 @@ const FeedbackThreadDetail: React.FC<FeedbackThreadDetailProps> = ({
       fetchComments();
     } catch (err) {
       console.error('Failed to post comment:', err);
-      toast({ title: 'Kunde inte skicka kommentar', variant: 'destructive' });
+      toast({ title: 'Could not send comment', variant: 'destructive' });
     } finally {
       setIsSubmitting(false);
     }
