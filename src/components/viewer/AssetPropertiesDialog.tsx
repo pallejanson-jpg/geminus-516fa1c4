@@ -706,7 +706,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Kategori</Label>
+                  <Label className="text-xs text-muted-foreground">Category</Label>
                   <Badge variant="outline">{assets[0].category}</Badge>
                 </div>
 
