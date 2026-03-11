@@ -151,11 +151,25 @@ export default function CreatePropertyDialog({
         senslinc_password: form.senslinc_password || null,
       };
 
-      const { error } = await supabase
+      // Check if row exists
+      const { data: existing } = await supabase
         .from('building_settings')
-        .upsert(settingsPayload, { onConflict: 'fm_guid' });
+        .select('id')
+        .eq('fm_guid', form.fm_guid.trim())
+        .maybeSingle();
 
-      if (error) throw error;
+      if (existing) {
+        const { error } = await supabase
+          .from('building_settings')
+          .update(settingsPayload)
+          .eq('fm_guid', form.fm_guid.trim());
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('building_settings')
+          .insert(settingsPayload);
+        if (error) throw error;
+      }
 
       // Also upsert a Building asset row if name is provided
       if (form.name.trim()) {
