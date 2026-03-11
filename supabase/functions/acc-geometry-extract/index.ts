@@ -1,3 +1,4 @@
+// ACC Geometry Extract v2 — lightweight, no SVF property parsing
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
