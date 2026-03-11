@@ -138,6 +138,57 @@ function groupByStorey(ifcApi, modelId) {
   return storeys;
 }
 
+async function extractHierarchy(ifcPath, buildingGuid) {
+  const ifcApi = new WebIFC.IfcAPI();
+  await ifcApi.Init();
+  const ifcData = fs.readFileSync(ifcPath);
+  const modelId = ifcApi.OpenModel(ifcData);
+
+  const IFCBUILDINGSTOREY = 3124254112;
+  const IFCSPACE = 3856911033;
+
+  const storeys = [];
+  const spaces = [];
+  const instances = [];
+
+  // Helper to get all elements of a type
+  function getByType(typeId) {
+    try {
+      const ids = ifcApi.GetLineIDsWithType(modelId, typeId);
+      const count = ids.size ? ids.size() : ids.length || 0;
+      const result = [];
+      for (let i = 0; i < count; i++) {
+        const id = ids.size ? ids.get(i) : ids[i];
+        try {
+          result.push(ifcApi.GetLine(modelId, id));
+        } catch {}
+      }
+      return result;
+    } catch {
+      return [];
+    }
+  }
+
+  // Storeys
+  for (const s of getByType(IFCBUILDINGSTOREY)) {
+    const name = s?.Name?.value || s?.LongName?.value || `storey_${storeys.length}`;
+    const globalId = s?.GlobalId?.value || null;
+    storeys.push({ id: String(s?.expressID || ""), name, globalId });
+  }
+
+  // Spaces
+  for (const s of getByType(IFCSPACE)) {
+    const name = s?.Name?.value || s?.LongName?.value || `space_${spaces.length}`;
+    const globalId = s?.GlobalId?.value || null;
+    // Find parent storey via IfcRelContainedInSpatialStructure or IfcRelAggregates
+    spaces.push({ id: String(s?.expressID || ""), name, globalId, parentId: "" });
+  }
+
+  ifcApi.CloseModel(modelId);
+  console.log(`Hierarchy: ${storeys.length} storeys, ${spaces.length} spaces`);
+  return { storeys, spaces, instances };
+}
+
 async function processJob(job) {
   const jobId = job.id;
   const buildingGuid = job.building_fm_guid;
@@ -190,27 +241,21 @@ async function processJob(job) {
       await reportProgress(jobId, progress, `Converting storey ${i + 1}/${storeys.length}: ${storey.name}`);
 
       try {
-        // convert2xkt with IFC source
-        const xktArrayBuffer = [];
-        const metaModel = { metaObjects: [] };
-
         await convert2xkt({
           source: ifcPath,
           outputXKTModel: null,
           output: xktPath,
-          includeTypes: storey.guid ? undefined : undefined, // Future: filter by storey
+          includeTypes: storey.guid ? undefined : undefined,
           log: (msg) => console.log(`  [xkt] ${msg}`),
         });
 
         const xktSize = fs.existsSync(xktPath) ? fs.statSync(xktPath).size : 0;
 
         if (xktSize > 0) {
-          // Upload XKT tile
           const storagePath = `${buildingGuid}/${safeName}.xkt`;
           const uploadData = await api("upload-url", "POST", { path: storagePath });
           await uploadFile(uploadData.signedUrl, xktPath, uploadData.token);
 
-          // Upload metadata if exists
           if (fs.existsSync(metaPath)) {
             const metaStoragePath = `${buildingGuid}/${safeName}_metadata.json`;
             const metaUpload = await api("upload-url", "POST", { path: metaStoragePath });
@@ -235,9 +280,8 @@ async function processJob(job) {
       }
     }
 
-    // 4. Report completion
+    // 4. Fallback: full model if no tiles
     if (tiles.length === 0) {
-      // Fallback: convert full model as single tile
       await reportProgress(jobId, 90, "No storey tiles — converting full model...");
       const fullXktPath = path.join(tmpDir, "full_model.xkt");
 
@@ -264,13 +308,30 @@ async function processJob(job) {
       }
     }
 
+    // 5. Report completion
     await api("complete", "POST", { job_id: jobId, tiles });
     console.log(`✅ Job ${jobId} complete: ${tiles.length} tiles`);
+
+    // 6. Extract and populate building hierarchy (storeys, spaces, instances → assets table)
+    try {
+      await reportProgress(jobId, 95, "Populating building hierarchy...");
+      const hierarchy = await extractHierarchy(ifcPath, buildingGuid);
+      if (hierarchy.storeys.length > 0 || hierarchy.spaces.length > 0) {
+        const result = await api("populate-hierarchy", "POST", {
+          building_fm_guid: buildingGuid,
+          storeys: hierarchy.storeys,
+          spaces: hierarchy.spaces,
+          instances: hierarchy.instances,
+        });
+        console.log(`  Hierarchy populated: ${JSON.stringify(result)}`);
+      }
+    } catch (hierErr) {
+      console.warn("Hierarchy population failed (non-fatal):", hierErr.message);
+    }
   } catch (e) {
     console.error(`❌ Job ${jobId} failed:`, e);
     await api("fail", "POST", { job_id: jobId, error_message: e.message }).catch(() => {});
   } finally {
-    // Cleanup temp files
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     } catch {}
