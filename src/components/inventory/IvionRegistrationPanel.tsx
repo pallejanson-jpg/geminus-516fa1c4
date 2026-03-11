@@ -533,7 +533,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
           >
             <RefreshCw className="h-4 w-4" />
             Load new POI
-            <Badge variant="secondary" className="ml-1 bg-amber-100 text-amber-700">Ny!</Badge>
+            <Badge variant="secondary" className="ml-1 bg-amber-100 text-amber-700">New!</Badge>
           </Button>
         </div>
       )}
