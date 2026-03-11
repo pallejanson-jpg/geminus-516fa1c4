@@ -1,4 +1,18 @@
-## Plan: IFC → Assets Pipeline med GUID-generering, tillbakaskrivning och diff-hantering (IMPLEMENTED)
+## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
+
+### Changes Made
+1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
+2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
+3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
+4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
+5. **config.toml** updated with `acc-geometry-extract` function entry
+
+### Pending (Phase 2)
+- Actual GLB chunk creation from SVF geometry (requires conversion worker)
+- OBJ as optional secondary format for small models
+
+---
+
 
 ### Ändringar
 
