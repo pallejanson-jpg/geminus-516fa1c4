@@ -582,7 +582,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                         <p className="text-sm">{metaObj.name || '-'}</p>
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Typ (IFC)</Label>
+                        <Label className="text-xs text-muted-foreground">Type (IFC)</Label>
                         <p className="text-sm">{metaObj.type || '-'}</p>
                       </div>
                       {metaObj.originalSystemId && (
