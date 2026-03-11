@@ -82,7 +82,7 @@ const FmAccessIssueOverlay: React.FC<FmAccessIssueOverlayProps> = ({
             : "bottom-4 right-4 h-10 px-3.5 text-xs"
         )}
         style={isMobile ? { bottom: `calc(1rem + env(safe-area-inset-bottom, 0px))` } : undefined}
-        title="Skapa ärende"
+        title="Create issue"
       >
         <MessageSquarePlus className={cn(isMobile ? "h-5 w-5" : "h-4 w-4", "text-primary")} />
         <span className="font-medium">Skapa ärende</span>
