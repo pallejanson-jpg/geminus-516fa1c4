@@ -783,7 +783,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                   <>
                     <Separator />
                     <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Koordinater</Label>
+                      <Label className="text-xs text-muted-foreground">Coordinates</Label>
                       <p className="text-xs font-mono">
                         X: {assets[0].coordinate_x?.toFixed(2)}, 
                         Y: {assets[0].coordinate_y?.toFixed(2)}, 
