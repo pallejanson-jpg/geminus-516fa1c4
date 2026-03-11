@@ -133,7 +133,7 @@ const FmAccessDashboard: React.FC = () => {
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm flex items-center gap-2">
               <Image className="h-4 w-4 text-primary" />
-              Ritningar
+              Drawings
             </CardTitle>
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={fetchDrawings}>
               <RefreshCw className="h-3.5 w-3.5" />
