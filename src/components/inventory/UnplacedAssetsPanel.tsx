@@ -327,7 +327,7 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
       {/* Footer with action buttons */}
       <div className="p-4 border-t bg-card/50">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-sm text-muted-foreground">{selectedAssets.size} valda</span>
+          <span className="text-sm text-muted-foreground">{selectedAssets.size} selected</span>
         </div>
 
         {!ivionSiteId ? (
