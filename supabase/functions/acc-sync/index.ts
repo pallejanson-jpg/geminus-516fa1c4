@@ -2178,7 +2178,7 @@ serve(async (req: Request) => {
               versionUrn,
               modelKey: body.modelKey || body.buildingFmGuid,
               accProjectId: body.accProjectId || "",
-              userId: userId || null,
+              userId: auth.userId || null,
             }),
           }).then(r => console.log(`[check-translation] Geometry extract triggered: ${r.status}`))
             .catch(e => console.warn(`[check-translation] Geometry extract trigger failed:`, e));
