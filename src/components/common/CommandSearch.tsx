@@ -67,7 +67,7 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
       <CommandInput 
-        placeholder="Sök byggnader, våningar, rum..."
+        placeholder="Search buildings, floors, rooms..."
         value={query}
         onValueChange={setQuery}
       />
