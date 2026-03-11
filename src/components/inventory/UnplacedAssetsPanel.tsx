@@ -192,9 +192,9 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
     }
 
     if (failCount > 0) {
-      toast.error(`${failCount} misslyckades`, {
-        description: 'Kontrollera Ivion-anslutningen',
-      });
+       toast.error(`${failCount} failed`, {
+         description: 'Check Ivion connection',
+       });
     }
   };
 
