@@ -491,12 +491,16 @@ export function useRoomLabels(
 
     console.log(`✅ Created ${createdCount} room labels (${filteredCount} filtered by floor)`);
 
-    // Set up camera change listener with rAF throttling
+    // Set up camera change listener with double-rAF throttling for performance
     const scene2 = viewer.scene;
     if (scene2 && !cameraListenerRef.current) {
       let rafId = 0;
+      let frameSkip = 0;
       const throttledUpdate = () => {
         if (rafId) return;
+        frameSkip++;
+        // Only update every 2nd frame to reduce CPU load
+        if (frameSkip % 2 !== 0) return;
         rafId = requestAnimationFrame(() => {
           rafId = 0;
           updateLabelPositions();
