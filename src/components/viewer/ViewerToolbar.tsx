@@ -934,7 +934,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
                 <ToolButton icon={tool.icon} label={tool.label} onClick={() => handleToolChange('select')} active={activeTool === 'select'} disabled={!isReady} />
               )}
               {tool.id === 'measure' && (
-                <ToolButton icon={tool.icon} label={tool.label} onClick={() => handleToolChange('measure')} active={activeTool === 'measure'} disabled={!isReady} />
+                <>
+                  <ToolButton icon={tool.icon} label={tool.label} onClick={() => handleToolChange('measure')} active={activeTool === 'measure'} disabled={!isReady} />
+                  {activeTool === 'measure' && (
+                    <ToolButton icon={<RotateCcw className="h-3 w-3 sm:h-3.5 sm:w-3.5" />} label="Clear measurements" onClick={clearMeasurements} disabled={!isReady} />
+                  )}
+                </>
               )}
               {tool.id === 'section' && viewMode !== '2d' && (
                 <>
