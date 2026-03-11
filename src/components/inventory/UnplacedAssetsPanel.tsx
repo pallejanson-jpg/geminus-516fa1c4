@@ -289,7 +289,7 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
                 </span>
                 <div className="flex gap-2">
                   <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={selectAll}>
-                    Välj alla
+                    Select all
                   </Button>
                   <span className="text-muted-foreground">|</span>
                   <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={deselectAll}>
