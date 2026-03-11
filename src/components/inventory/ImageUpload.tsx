@@ -96,7 +96,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) 
 
   return (
     <div className="space-y-2">
-      <Label className="text-base">Bild (valfritt)</Label>
+      <Label className="text-base">Image (optional)</Label>
       
       {value ? (
         <div className="relative rounded-lg overflow-hidden border border-border">
