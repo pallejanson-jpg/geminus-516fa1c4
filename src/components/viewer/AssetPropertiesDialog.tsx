@@ -263,7 +263,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
       return;
     }
     if (!initialCoordinates && formData.coordinate_x === 0 && formData.coordinate_y === 0) {
-      toast.error('Välj position i 3D-vyn först');
+      toast.error('Select a position in the 3D view first');
       return;
     }
 
