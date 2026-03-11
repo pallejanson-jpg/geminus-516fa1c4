@@ -575,7 +575,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                   return (
                     <div className="space-y-3">
                       <div className="text-xs text-muted-foreground bg-muted/50 rounded p-2">
-                        BIM-metadata (ej synkat till databasen)
+                        BIM metadata (not synced to database)
                       </div>
                       <div className="space-y-1">
                         <Label className="text-xs text-muted-foreground">Namn</Label>
