@@ -542,7 +542,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
       <div className="p-4 border-b bg-muted/30">
         <div className="flex items-center justify-between mb-1.5">
           <Label className="text-xs text-muted-foreground">
-            Hämta position från POI
+            Fetch position from POI
           </Label>
           <Button
             variant="ghost"
