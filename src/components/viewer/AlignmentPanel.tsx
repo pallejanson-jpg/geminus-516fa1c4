@@ -153,10 +153,10 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Ta bort alignment?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Befintlig kalibrering raderas från databasen. Du kan sedan göra en ny punktkalibrering.
-                </AlertDialogDescription>
+                 <AlertDialogTitle>Remove alignment?</AlertDialogTitle>
+                 <AlertDialogDescription>
+                   Existing calibration will be deleted from the database. You can then perform a new point calibration.
+                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Avbryt</AlertDialogCancel>
