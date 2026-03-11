@@ -16,11 +16,11 @@ let _creds = {
 
 // Get Keycloak access token
 async function getAccessToken(): Promise<string> {
-  const keycloakUrl = Deno.env.get("ASSET_PLUS_KEYCLOAK_URL");
-  const clientId = Deno.env.get("ASSET_PLUS_CLIENT_ID");
-  const clientSecret = Deno.env.get("ASSET_PLUS_CLIENT_SECRET");
-  const username = Deno.env.get("ASSET_PLUS_USERNAME");
-  const password = Deno.env.get("ASSET_PLUS_PASSWORD");
+  const keycloakUrl = _creds.keycloakUrl || Deno.env.get("ASSET_PLUS_KEYCLOAK_URL");
+  const clientId = _creds.clientId || Deno.env.get("ASSET_PLUS_CLIENT_ID");
+  const clientSecret = _creds.clientSecret || Deno.env.get("ASSET_PLUS_CLIENT_SECRET");
+  const username = _creds.username || Deno.env.get("ASSET_PLUS_USERNAME");
+  const password = _creds.password || Deno.env.get("ASSET_PLUS_PASSWORD");
 
   if (!keycloakUrl || !clientId) {
     throw new Error("Missing Keycloak configuration");
