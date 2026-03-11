@@ -273,7 +273,7 @@ export default function SensorsTab() {
             variant="ghost"
             className="h-7 w-7"
             onClick={() => setRefreshKey(k => k + 1)}
-            title="Uppdatera"
+            title="Refresh"
           >
             <RefreshCw className="h-3.5 w-3.5" />
           </Button>

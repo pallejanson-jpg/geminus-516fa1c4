@@ -100,7 +100,7 @@ export default function PluginPage() {
               ))}
               {filtered.length === 0 && !loading && (
                 <p className="text-center text-sm text-muted-foreground py-8">
-                  Inga byggnader hittades
+                  No buildings found
                 </p>
               )}
             </div>

@@ -783,7 +783,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
               // Debounce search by using startTransition
               React.startTransition(() => setSearchQuery(val));
             }}
-            placeholder="Sök assets..."
+            placeholder="Search assets..."
             className="pl-7 sm:pl-9 h-8 sm:h-9 text-xs sm:text-sm"
           />
         </div>

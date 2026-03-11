@@ -52,7 +52,7 @@ const FmAccessSearch: React.FC<FmAccessSearchProps> = ({ onSelect }) => {
               className="w-full text-left px-3 py-2 text-sm hover:bg-accent/50 rounded-md transition-colors"
               onClick={() => onSelect(r)}
             >
-              <div className="font-medium truncate">{r.objectName || r.name || 'Namnlöst'}</div>
+              <div className="font-medium truncate">{r.objectName || r.name || 'Unnamed'}</div>
               {r.className && <div className="text-[11px] text-muted-foreground">{r.className}</div>}
             </button>
           ))}

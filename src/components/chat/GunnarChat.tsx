@@ -75,29 +75,29 @@ function stripFollowups(content: string): string {
 }
 
 function getContextualGreeting(context?: GunnarContext): string {
-  if (context?.activeApp === 'support') {
-    return `Hej! Du är i supportsektionen. Fråga mig om hur plattformen fungerar, vilka funktioner som finns, eller hur du löser ett specifikt problem!`;
-  }
-  if (context?.activeApp === 'fma_plus' || context?.activeApp === 'fma_native') {
-    const bName = context?.currentBuilding?.name;
-    if (bName) {
-      return `Hej! Du arbetar i FM Access för **${bName}**. Fråga mig om rum, utrustning, dokument, ritningar eller arbetsordrar!`;
-    }
-    return `Hej! Du arbetar i FM Access. Välj en byggnad så kan jag svara på frågor om rum, dokument och utrustning.`;
-  }
-  if (context?.currentBuilding?.name) {
-    return `Hej! Jag ser att du tittar på **${context.currentBuilding.name}**. Fråga mig om våningar, rum, ytor, tillgångar, ritningar, felanmälningar eller ärenden!`;
-  }
-  if (context?.activeApp === 'assetplus_viewer' || context?.activeApp === 'native_viewer') {
-    return `Hej! Du är i 3D-viewern. Jag kan hjälpa dig navigera, utforska våningar, visa modeller eller hitta specifika objekt. Prova att fråga "Hur många rum finns det?" eller "Visa våning 2 i 3D".`;
-  }
-  if (context?.activeApp === 'navigator') {
-    return `Hej! Du är i Navigatorn. Jag kan hjälpa dig hitta rum, tillgångar eller byggnadskomponenter. Vad letar du efter?`;
-  }
-  if (context?.activeApp === 'portfolio') {
-    return `Hej! Jag är Gunnar, din fastighetsassistent. Jag kan berätta om alla byggnader i portföljen — fråga om rum, ytor, våningar, ritningar eller specifika tillgångar!`;
-  }
-  return `Hej! Jag är Gunnar, din AI-assistent för fastighetsdata. Fråga mig om:\n\n• Byggnader, våningar, rum och ytor\n• Utrustning och tillgångar\n• Ritningar från FM Access\n• Felanmälningar och ärenden\n• 3D-modellnavigering\n• IoT-sensordata\n• Hjälp med plattformen\n\nVad vill du veta?`;
+   if (context?.activeApp === 'support') {
+     return `Hi! You're in the support section. Ask me about how the platform works, available features, or how to solve a specific problem!`;
+   }
+   if (context?.activeApp === 'fma_plus' || context?.activeApp === 'fma_native') {
+     const bName = context?.currentBuilding?.name;
+     if (bName) {
+       return `Hi! You're working in FM Access for **${bName}**. Ask me about rooms, equipment, documents, drawings, or work orders!`;
+     }
+     return `Hi! You're working in FM Access. Select a building and I can answer questions about rooms, documents, and equipment.`;
+   }
+   if (context?.currentBuilding?.name) {
+     return `Hi! I see you're looking at **${context.currentBuilding.name}**. Ask me about floors, rooms, areas, assets, drawings, fault reports, or issues!`;
+   }
+   if (context?.activeApp === 'assetplus_viewer' || context?.activeApp === 'native_viewer') {
+     return `Hi! You're in the 3D viewer. I can help you navigate, explore floors, show models, or find specific objects. Try asking "How many rooms are there?" or "Show floor 2 in 3D".`;
+   }
+   if (context?.activeApp === 'navigator') {
+     return `Hi! You're in the Navigator. I can help you find rooms, assets, or building components. What are you looking for?`;
+   }
+   if (context?.activeApp === 'portfolio') {
+     return `Hi! I'm Gunnar, your facility assistant. I can tell you about all buildings in the portfolio — ask about rooms, areas, floors, drawings, or specific assets!`;
+   }
+   return `Hi! I'm Gunnar, your AI assistant for facility data. Ask me about:\n\n• Buildings, floors, rooms, and areas\n• Equipment and assets\n• Drawings from FM Access\n• Fault reports and issues\n• 3D model navigation\n• IoT sensor data\n• Platform help\n\nWhat would you like to know?`;
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gunnar-chat`;
