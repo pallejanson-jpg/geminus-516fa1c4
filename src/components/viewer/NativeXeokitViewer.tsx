@@ -648,6 +648,29 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         console.debug('[NativeViewer] Manifest check skipped:', e);
       }
 
+      // If manifest GLB chunks loaded successfully, skip XKT model loading
+      if (manifestLoaded) {
+        console.log('[NativeViewer] Manifest GLB chunks loaded — skipping XKT model queue');
+        // Apply architect colors and finalize
+        if (viewer.scene) {
+          const { colorized, hiddenSpaces } = applyArchitectColors(viewer);
+          console.log(`[NativeViewer] Colorized ${colorized} objects, hidden ${hiddenSpaces} IfcSpace objects`);
+        }
+        const totalTime = Math.round(performance.now() - t0);
+        console.log(`%c[NativeViewer] 🎉 Manifest-driven GLB loading complete in ${totalTime}ms`, 'color:#22c55e;font-weight:bold;font-size:14px');
+        if (mountedRef.current) {
+          setPhase('ready');
+          (window as any).__nativeXeokitViewer = viewer;
+          onViewerReady?.(viewer);
+          window.dispatchEvent(new CustomEvent('VIEWER_MODELS_LOADED', { detail: { buildingFmGuid } }));
+          try {
+            const aabb = viewer.scene?.aabb;
+            if (aabb) viewer.cameraFlight.flyTo({ aabb, duration: 0 });
+          } catch {}
+        }
+        return;
+      }
+
       const loadModel = async (model: ModelInfo) => {
         const modelStart = performance.now();
         const modelId = model.model_id;
