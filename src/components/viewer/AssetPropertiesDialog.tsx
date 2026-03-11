@@ -517,7 +517,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                     onValueChange={(v) => setFormData({ ...formData, symbol_id: v })}
                   >
                     <SelectTrigger className="h-9">
-                      <SelectValue placeholder="Välj symbol..." />
+                       <SelectValue placeholder="Select symbol..." />
                     </SelectTrigger>
                     <SelectContent className="bg-card border shadow-lg z-[100]">
                       <SelectItem value="">Ingen symbol</SelectItem>
