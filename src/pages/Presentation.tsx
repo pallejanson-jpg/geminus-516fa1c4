@@ -883,6 +883,7 @@ const slides = [
   CompetitionDeepDiveSlide,
   WhyAddnodeSlide,
   AskSlide,
+  EsgSlide,
 ];
 
 /* ------------------------------------------------------------------ */
