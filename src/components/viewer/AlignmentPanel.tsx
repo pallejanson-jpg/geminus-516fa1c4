@@ -184,7 +184,7 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
       <div className="flex gap-2 bg-muted/50 rounded-md p-2.5">
         <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          Använd punktkalibrering för att matcha 360° och 3D. Klicka samma punkt i båda vyerna.
+          Use point calibration to match 360° and 3D. Click the same point in both views.
         </p>
       </div>
 
