@@ -123,8 +123,8 @@ const FmAccessDashboard: React.FC = () => {
         onClick={() => navigate(`/split-viewer?building=${buildingFmGuid}&mode=2d`)}
         className="gap-2"
       >
-        <Square className="h-4 w-4" />
-        Öppna 2D-ritning i viewer
+         <Square className="h-4 w-4" />
+         Open 2D drawing in viewer
       </Button>
 
       {/* Drawings section */}
