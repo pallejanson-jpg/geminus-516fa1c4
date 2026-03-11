@@ -485,6 +485,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     measurePluginRef.current?.control?.deactivate?.();
   }, []);
 
+  const clearMeasurements = useCallback(() => {
+    if (measurePluginRef.current) {
+      measurePluginRef.current.clear?.();
+      console.log('[ViewerToolbar] Measurements cleared');
+    }
+  }, []);
+
   const activateSection = useCallback(() => {
     if (!viewer?.scene) return;
     const sdk = (window as any).__xeokitSdk;
@@ -494,11 +501,47 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         overviewVisible: false,
       });
     }
-    sectionPluginRef.current.control?.activate?.();
+    // Try .control.activate() first, fall back to plugin-level activation
+    if (sectionPluginRef.current.control?.activate) {
+      sectionPluginRef.current.control.activate();
+    } else {
+      // Some SDK versions require creating section planes via click
+      console.log('[ViewerToolbar] SectionPlanesPlugin.control not available, using manual plane creation');
+      // Set up a click handler on the canvas to create section planes
+      const canvas = viewer.scene?.canvas?.canvas;
+      if (canvas) {
+        const clickHandler = (e: MouseEvent) => {
+          const pickResult = viewer.scene.pick({
+            canvasPos: [e.offsetX, e.offsetY],
+            pickSurface: true,
+          });
+          if (pickResult?.worldPos && pickResult?.worldNormal) {
+            sectionPluginRef.current?.createSectionPlane?.({
+              pos: pickResult.worldPos,
+              dir: pickResult.worldNormal,
+            });
+          }
+        };
+        canvas.addEventListener('click', clickHandler);
+        // Store cleanup
+        (sectionPluginRef.current as any).__manualClickHandler = clickHandler;
+        (sectionPluginRef.current as any).__canvas = canvas;
+      }
+    }
   }, [viewer]);
 
   const deactivateSection = useCallback(() => {
-    sectionPluginRef.current?.control?.deactivate?.();
+    if (sectionPluginRef.current?.control?.deactivate) {
+      sectionPluginRef.current.control.deactivate();
+    }
+    // Clean up manual click handler if used
+    const handler = (sectionPluginRef.current as any)?.__manualClickHandler;
+    const canvas = (sectionPluginRef.current as any)?.__canvas;
+    if (handler && canvas) {
+      canvas.removeEventListener('click', handler);
+      delete (sectionPluginRef.current as any).__manualClickHandler;
+      delete (sectionPluginRef.current as any).__canvas;
+    }
   }, []);
 
   const handleToolChange = useCallback((tool: ViewerTool) => {
