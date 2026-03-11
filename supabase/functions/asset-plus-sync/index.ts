@@ -111,9 +111,14 @@ async function discover3dModelsEndpoint(
           headers: { "Authorization": `Bearer ${accessToken}` }
         });
         if (res.ok) {
-          const models = await res.json();
-          if (Array.isArray(models)) {
-            return { url: cached.value, fromCache: true, models };
+          const data = await res.json();
+          const modelArray = Array.isArray(data) ? data
+            : Array.isArray(data?.models) ? data.models
+            : Array.isArray(data?.items) ? data.items
+            : Array.isArray(data?.data) ? data.data
+            : null;
+          if (modelArray) {
+            return { url: cached.value, fromCache: true, models: modelArray };
           }
         }
       } catch (e) {
