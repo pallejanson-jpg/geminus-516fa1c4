@@ -509,7 +509,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
       >
         <div className="flex items-center gap-2">
           <GripVertical className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium">Registrera tillgång</span>
+          <span className="font-medium">Register asset</span>
         </div>
         <div className="flex items-center gap-2">
           {/* Mini connection status */}
