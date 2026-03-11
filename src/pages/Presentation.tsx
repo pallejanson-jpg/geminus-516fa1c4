@@ -120,13 +120,21 @@ const NOTES: string[][] = [
     "Geminus turns five separate Addnode companies into one coherent value proposition.",
     "The O in AECO is a blue ocean — and Addnode already has all the assets to win it.",
   ],
-  // Slide 9 — The Ask
+  // Slide 10 — The Ask
   [
     "One hundred thousand dollars to productize what is already working.",
     "Security hardening, GDPR compliance, deep SWG Concept Evolution API integration.",
     "Bimify and Senslinc live connectors with certified support agreements.",
     "Six months. A product. A competitive moat across the Design Management business area.",
     "The code is running. The integrations exist. I'm ready. Are you?",
+  ],
+  // Slide 11 — Geminus ESG
+  [
+    "ESG is the next revenue layer — and 80% of the data infrastructure is already built inside Geminus.",
+    "Building geometry, areas, floors come from Asset+. FM and maintenance history from Faciliate. Energy and indoor climate from Senslinc IoT.",
+    "What we add: an ESG Data Model with 80+ sustainability data points, OneClickLCA integration for carbon/LCA (Addnode sister company), and an automated EU Taxonomy engine.",
+    "The customer pain is real: fragmented data across 5–10 Excel files, manual reporting costing 200+ hours/year, audit risk, and ESG scores now affecting financing terms.",
+    "Geminus ESG turns us from an FM vendor into an ESG-native digital twin platform — a new SaaS module, new revenue stream, and a competitive moat no point solution can match.",
   ],
 ];
 
