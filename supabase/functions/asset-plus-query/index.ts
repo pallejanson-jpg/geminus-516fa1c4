@@ -1,14 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyAuth, unauthorizedResponse, corsHeaders } from "../_shared/auth.ts";
+import { getAssetPlusCredentials } from "../_shared/credentials.ts";
 
 // Get Keycloak access token for 3D Viewer
-async function getAccessToken(): Promise<string> {
-  const keycloakUrl = Deno.env.get("ASSET_PLUS_KEYCLOAK_URL");
-  const clientId = Deno.env.get("ASSET_PLUS_CLIENT_ID");
-  const clientSecret = Deno.env.get("ASSET_PLUS_CLIENT_SECRET");
-  const username = Deno.env.get("ASSET_PLUS_USERNAME");
-  const password = Deno.env.get("ASSET_PLUS_PASSWORD");
+async function getAccessToken(creds: any): Promise<string> {
+  const keycloakUrl = creds.keycloakUrl;
+  const clientId = creds.clientId;
+  const clientSecret = creds.clientSecret;
+  const username = creds.username;
+  const password = creds.password;
 
   if (!keycloakUrl || !clientId) {
     throw new Error("Missing Keycloak configuration");
@@ -61,12 +62,15 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body = await req.json();
-    const { action, filter } = body;
+    const { action, filter, buildingFmGuid } = body;
+
+    // Resolve per-building credentials
+    const creds = await getAssetPlusCredentials(supabase, buildingFmGuid);
 
     // Action: Get access token for 3D Viewer
     if (action === "getToken") {
       try {
-        const accessToken = await getAccessToken();
+        const accessToken = await getAccessToken(creds);
         return new Response(
           JSON.stringify({ accessToken }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -82,8 +86,8 @@ serve(async (req) => {
 
     // Action: Get API configuration for 3D Viewer
     if (action === "getConfig") {
-      const apiUrl = Deno.env.get("ASSET_PLUS_API_URL") || "";
-      const apiKey = Deno.env.get("ASSET_PLUS_API_KEY") || "";
+      const apiUrl = creds.apiUrl || "";
+      const apiKey = creds.apiKey || "";
       
       return new Response(
         JSON.stringify({ 
@@ -97,9 +101,9 @@ serve(async (req) => {
     // Action: Test 3D API endpoint with robust discovery
     if (action === "test3DApi") {
       try {
-        const accessToken = await getAccessToken();
-        const apiUrl = Deno.env.get("ASSET_PLUS_API_URL") || "";
-        const apiKey = Deno.env.get("ASSET_PLUS_API_KEY") || "";
+        const accessToken = await getAccessToken(creds);
+        const apiUrl = creds.apiUrl || "";
+        const apiKey = creds.apiKey || "";
         
         const testBuildingGuid = body.buildingFmGuid || "a8fe5835-e293-4ba3-92c6-c7e36f675f23";
         

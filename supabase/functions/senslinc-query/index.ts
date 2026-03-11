@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getSenslincCredentials } from "../_shared/credentials.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -262,18 +264,24 @@ serve(async (req) => {
     });
 
   try {
-    const { action, fmGuid, siteCode, indiceId, workspaceKey, query, days, contextLevel, question, conversationHistory } = await req.json() as SenslincRequest;
+    const { action, fmGuid, siteCode, indiceId, workspaceKey, query, days, contextLevel, question, conversationHistory, buildingFmGuid } = await req.json() as SenslincRequest & { buildingFmGuid?: string };
 
-    const apiUrl = Deno.env.get('SENSLINC_API_URL');
-    const email = Deno.env.get('SENSLINC_EMAIL');
-    const password = Deno.env.get('SENSLINC_PASSWORD');
+    // Resolve per-building credentials
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const sbClient = createClient(supabaseUrl, supabaseKey);
+    const slCreds = await getSenslincCredentials(sbClient, buildingFmGuid || fmGuid);
+
+    const apiUrl = slCreds.apiUrl;
+    const email = slCreds.email;
+    const password = slCreds.password;
 
     if (!apiUrl || !email || !password) {
       return new Response(
         JSON.stringify({
           success: false,
           error: 'Senslinc credentials not configured',
-          message: 'Please configure SENSLINC_API_URL, SENSLINC_EMAIL, and SENSLINC_PASSWORD in Lovable Cloud secrets.'
+          message: 'Please configure Senslinc credentials in Lovable Cloud or in building settings.'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

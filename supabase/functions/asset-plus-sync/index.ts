@@ -1,14 +1,26 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyAuth, unauthorizedResponse, forbiddenResponse, corsHeaders } from "../_shared/auth.ts";
+import { getAssetPlusCredentials } from "../_shared/credentials.ts";
+
+// Module-level credential overrides (set per-request from building_settings)
+let _creds = {
+  apiUrl: '',
+  apiKey: '',
+  keycloakUrl: '',
+  clientId: '',
+  clientSecret: '',
+  username: '',
+  password: '',
+};
 
 // Get Keycloak access token
 async function getAccessToken(): Promise<string> {
-  const keycloakUrl = Deno.env.get("ASSET_PLUS_KEYCLOAK_URL");
-  const clientId = Deno.env.get("ASSET_PLUS_CLIENT_ID");
-  const clientSecret = Deno.env.get("ASSET_PLUS_CLIENT_SECRET");
-  const username = Deno.env.get("ASSET_PLUS_USERNAME");
-  const password = Deno.env.get("ASSET_PLUS_PASSWORD");
+  const keycloakUrl = _creds.keycloakUrl || Deno.env.get("ASSET_PLUS_KEYCLOAK_URL");
+  const clientId = _creds.clientId || Deno.env.get("ASSET_PLUS_CLIENT_ID");
+  const clientSecret = _creds.clientSecret || Deno.env.get("ASSET_PLUS_CLIENT_SECRET");
+  const username = _creds.username || Deno.env.get("ASSET_PLUS_USERNAME");
+  const password = _creds.password || Deno.env.get("ASSET_PLUS_PASSWORD");
 
   if (!keycloakUrl || !clientId) {
     throw new Error("Missing Keycloak configuration");
@@ -224,8 +236,8 @@ async function fetchAssetPlusObjects(
   take = 200,
   options: FetchOptions = {}
 ): Promise<{ data: any[]; hasMore: boolean; lastFmGuid?: string }> {
-  const apiUrl = Deno.env.get("ASSET_PLUS_API_URL");
-  const apiKey = Deno.env.get("ASSET_PLUS_API_KEY");
+  const apiUrl = _creds.apiUrl || Deno.env.get("ASSET_PLUS_API_URL");
+  const apiKey = _creds.apiKey || Deno.env.get("ASSET_PLUS_API_KEY");
 
   if (!apiUrl || !apiKey) {
     throw new Error("Missing Asset+ API configuration");
@@ -341,8 +353,8 @@ async function getRemoteCountByTypes(
   accessToken: string,
   objectTypes: number[]
 ): Promise<number> {
-  const apiUrl = Deno.env.get("ASSET_PLUS_API_URL");
-  const apiKey = Deno.env.get("ASSET_PLUS_API_KEY");
+  const apiUrl = _creds.apiUrl || Deno.env.get("ASSET_PLUS_API_URL");
+  const apiKey = _creds.apiKey || Deno.env.get("ASSET_PLUS_API_KEY");
 
   if (!apiUrl || !apiKey) return -1;
 
@@ -567,7 +579,9 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const { action = 'full-sync', buildingFmGuid } = body;
-    
+
+    // Resolve per-building credentials (falls back to env vars)
+    _creds = await getAssetPlusCredentials(supabase, buildingFmGuid);
     // Only admins can run full sync operations
     const adminOnlyActions = ['full-sync', 'sync-structure', 'sync-assets-chunked', 'sync-assets-resumable', 'sync-xkt', 'sync-xkt-resumable'];
     if (adminOnlyActions.includes(action) && !auth.isAdmin) {
@@ -1057,8 +1071,8 @@ serve(async (req) => {
       const startTime = Date.now();
       
       const accessToken = await getAccessToken();
-      const apiUrl = Deno.env.get("ASSET_PLUS_API_URL") || "";
-      const apiKey = Deno.env.get("ASSET_PLUS_API_KEY") || "";
+      const apiUrl = _creds.apiUrl || Deno.env.get("ASSET_PLUS_API_URL") || "";
+      const apiKey = _creds.apiKey || Deno.env.get("ASSET_PLUS_API_KEY") || "";
       
       console.log('Starting sync-xkt-resumable');
 
@@ -1336,8 +1350,8 @@ serve(async (req) => {
       }
 
       const accessToken = await getAccessToken();
-      const apiUrl = Deno.env.get("ASSET_PLUS_API_URL") || "";
-      const apiKey = Deno.env.get("ASSET_PLUS_API_KEY") || "";
+      const apiUrl = _creds.apiUrl || Deno.env.get("ASSET_PLUS_API_URL") || "";
+      const apiKey = _creds.apiKey || Deno.env.get("ASSET_PLUS_API_KEY") || "";
       
       console.log(`Starting sync-xkt-building for: ${buildingFmGuid}`);
 
@@ -1633,8 +1647,8 @@ serve(async (req) => {
       console.log(`Found ${localAssets.length} local assets to push`);
       
       const accessToken = await getAccessToken();
-      const apiUrl = Deno.env.get("ASSET_PLUS_API_URL") || "";
-      const apiKey = Deno.env.get("ASSET_PLUS_API_KEY") || "";
+      const apiUrl = _creds.apiUrl || Deno.env.get("ASSET_PLUS_API_URL") || "";
+      const apiKey = _creds.apiKey || Deno.env.get("ASSET_PLUS_API_KEY") || "";
       const baseUrl = apiUrl.replace(/\/+$/, "");
       
       let pushed = 0;
