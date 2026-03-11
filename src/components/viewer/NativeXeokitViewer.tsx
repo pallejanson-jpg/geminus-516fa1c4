@@ -591,7 +591,63 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         console.log(`[NativeViewer] Batch metadata check: found ${metadataFileSet.size} metadata files`);
       } catch { /* continue without metadata */ }
 
-      const loadModel = async (model: ModelInfo) => {
+      // ── Check for geometry manifest (GLB per-storey chunks from ACC pipeline) ──
+      try {
+        const hasManifestFile = metadataFileSet.size > 0 || false; // Check alongside metadata batch
+        const { data: manifestFiles2 } = await supabase.storage
+          .from('xkt-models')
+          .list(buildingFmGuid, { limit: 100 });
+
+        const hasManifest = manifestFiles2?.some((f: any) => f.name === '_geometry_manifest.json');
+
+        if (hasManifest && gltfLoader) {
+          console.log('[NativeViewer] 📋 Geometry manifest found — loading GLB chunks');
+          const { data: manifestUrl } = await supabase.storage
+            .from('xkt-models')
+            .createSignedUrl(`${buildingFmGuid}/_geometry_manifest.json`, 3600);
+
+          if (manifestUrl?.signedUrl) {
+            const manifestRes = await fetch(manifestUrl.signedUrl);
+            if (manifestRes.ok) {
+              const manifest: GeometryManifest = await manifestRes.json();
+              console.log(`[NativeViewer] Manifest: ${manifest.chunks.length} storey chunks, format=${manifest.format}`);
+
+              const sortedChunks = [...manifest.chunks].sort((a, b) => a.priority - b.priority);
+              setLoadProgress({ loaded: 0, total: sortedChunks.length });
+
+              let chunkLoaded = 0;
+              for (const chunk of sortedChunks) {
+                if (!mountedRef.current) break;
+                try {
+                  const { data: chunkUrl } = await supabase.storage
+                    .from('xkt-models')
+                    .createSignedUrl(chunk.url, 3600);
+
+                  if (chunkUrl?.signedUrl) {
+                    const chunkId = `${manifest.modelId}_${chunk.storeyGuid.substring(0, 8)}`;
+                    const entity = gltfLoader.load({ id: chunkId, src: chunkUrl.signedUrl, edges: true });
+                    await waitForModel(entity, chunkId);
+                    chunkLoaded++;
+                    setLoadProgress({ loaded: chunkLoaded, total: sortedChunks.length });
+                    console.log(`[NativeViewer] GLB chunk loaded: ${chunk.storeyName} (${chunk.elementCount} elements)`);
+                  }
+                } catch (e) {
+                  console.warn(`[NativeViewer] GLB chunk failed: ${chunk.storeyName}`, e);
+                }
+              }
+
+              if (chunkLoaded > 0) {
+                manifestLoaded = true;
+                console.log(`%c[NativeViewer] ✅ ${chunkLoaded}/${sortedChunks.length} GLB chunks loaded from manifest`, 'color:#22c55e;font-weight:bold');
+                (window as any).__geometryManifest = manifest;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.debug('[NativeViewer] Manifest check skipped:', e);
+      }
+
         const modelStart = performance.now();
         const modelId = model.model_id;
 
