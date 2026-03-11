@@ -259,7 +259,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
       return;
     }
     if (!formData.category) {
-      toast.error('Kategori är obligatoriskt');
+      toast.error('Category is required');
       return;
     }
     if (!initialCoordinates && formData.coordinate_x === 0 && formData.coordinate_y === 0) {
