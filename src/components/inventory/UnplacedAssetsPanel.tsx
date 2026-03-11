@@ -248,7 +248,7 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
       >
         <div className="flex items-center gap-2">
           <GripVertical className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium">Skapa POI från Geminus</span>
+          <span className="font-medium">Create POI from Geminus</span>
         </div>
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
           <X className="h-4 w-4" />
