@@ -680,7 +680,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                 <Separator />
 
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Namn</Label>
+                  <Label className="text-xs text-muted-foreground">Name</Label>
                   {isEditing ? (
                     <Input
                       value={formData.name}
