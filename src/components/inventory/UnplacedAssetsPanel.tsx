@@ -133,7 +133,7 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
     }
 
     if (selectedAssets.size === 0) {
-      toast.error('Välj minst en tillgång');
+      toast.error('Select at least one asset');
       return;
     }
 
