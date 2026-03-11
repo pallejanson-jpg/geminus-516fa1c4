@@ -22,6 +22,8 @@ import {
   ArrowRight,
   X,
   Timer,
+  Leaf,
+  Shield,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
