@@ -59,34 +59,33 @@ async function getThreeLeggedToken(userId: string, supabase: any): Promise<strin
   const isExpired = new Date(tokenRow.expires_at) < new Date();
   if (!isExpired) return tokenRow.access_token;
 
-  // Try to refresh
-  try {
-    const clientId = Deno.env.get("APS_CLIENT_ID")!;
-    const clientSecret = Deno.env.get("APS_CLIENT_SECRET")!;
+  // Refresh expired token
+  const clientId = Deno.env.get("APS_CLIENT_ID");
+  const clientSecret = Deno.env.get("APS_CLIENT_SECRET");
+  if (!clientId || !clientSecret) return null;
 
+  try {
     const res = await fetch("https://developer.api.autodesk.com/authentication/v2/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         grant_type: "refresh_token",
-        refresh_token: tokenRow.refresh_token,
         client_id: clientId,
         client_secret: clientSecret,
+        refresh_token: tokenRow.refresh_token,
       }),
     });
 
     if (!res.ok) {
-      console.error(`[acc-geometry-extract] 3-legged token refresh failed: ${res.status}`);
+      console.warn(`[acc-geometry-extract] Token refresh failed: ${res.status}`);
       return null;
     }
 
     const data = await res.json();
-    const expiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
-
     await supabase.from("acc_oauth_tokens").update({
       access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      expires_at: expiresAt,
+      refresh_token: data.refresh_token || tokenRow.refresh_token,
+      expires_at: new Date(Date.now() + data.expires_in * 1000).toISOString(),
       updated_at: new Date().toISOString(),
     }).eq("user_id", userId);
 
@@ -139,7 +138,7 @@ function getRegionEndpoint(urnBase64: string): { mdBase: string; region: string 
     if (decoded.includes("wipemea")) {
       return { mdBase: "https://developer.api.autodesk.com/modelderivative/v2/regions/eu/designdata", region: "EU" };
     }
-  } catch {}
+  } catch { /* ignore */ }
   return { mdBase: "https://developer.api.autodesk.com/modelderivative/v2/designdata", region: "US" };
 }
 
@@ -153,6 +152,7 @@ async function fetchApsBubble(urnBase64: string, token: string, mdBase: string):
 }
 
 // ── Extract SVF property database to get Level + externalId mapping ──
+// Handles APS async 202 responses with polling
 async function fetchSvfProperties(urnBase64: string, token: string, mdBase: string): Promise<any> {
   const res = await fetch(`${mdBase}/${urnBase64}/metadata`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -163,21 +163,60 @@ async function fetchSvfProperties(urnBase64: string, token: string, mdBase: stri
   }
   const meta = await res.json();
   const viewables = meta?.data?.metadata || [];
-  if (viewables.length === 0) return null;
-
-  const view3d = viewables.find((v: any) => v.role === "3d") || viewables[0];
-  const viewGuid = view3d.guid;
-
-  // Fetch properties for this viewable
-  const propsRes = await fetch(`${mdBase}/${urnBase64}/metadata/${viewGuid}/properties?forceget=true`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!propsRes.ok) {
-    console.warn(`[acc-geometry-extract] properties fetch failed: ${propsRes.status}`);
+  if (viewables.length === 0) {
+    console.warn("[acc-geometry-extract] No viewables in metadata response");
     return null;
   }
 
-  const propsData = await propsRes.json();
+  const view3d = viewables.find((v: any) => v.role === "3d") || viewables[0];
+  const viewGuid = view3d.guid;
+  console.log(`[acc-geometry-extract] Using viewable guid=${viewGuid}, name=${view3d.name}, role=${view3d.role}`);
+
+  // Fetch properties — may return 202 (processing) for large models
+  let propsData: any = null;
+  const maxAttempts = 8;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const propsRes = await fetch(`${mdBase}/${urnBase64}/metadata/${viewGuid}/properties?forceget=true`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (propsRes.status === 202) {
+      console.log(`[acc-geometry-extract] Properties not ready (202), retrying in ${10 + attempt * 5}s (attempt ${attempt + 1}/${maxAttempts})`);
+      await new Promise(r => setTimeout(r, (10 + attempt * 5) * 1000));
+      continue;
+    }
+
+    if (!propsRes.ok) {
+      console.warn(`[acc-geometry-extract] properties fetch failed: ${propsRes.status}`);
+      const errBody = await propsRes.text();
+      console.warn(`[acc-geometry-extract] properties error body: ${errBody.substring(0, 500)}`);
+      return null;
+    }
+
+    propsData = await propsRes.json();
+    break;
+  }
+
+  if (!propsData) {
+    console.warn("[acc-geometry-extract] Properties not ready after max attempts");
+    return null;
+  }
+
+  // Log the response structure for debugging
+  const collection = propsData?.data?.collection || [];
+  console.log(`[acc-geometry-extract] Properties response: ${collection.length} objects in collection`);
+  if (collection.length > 0) {
+    const sample = collection[0];
+    console.log(`[acc-geometry-extract] Sample object keys: objectid=${sample.objectid}, name=${sample.name}, externalId=${sample.externalId}`);
+    const propGroups = Object.keys(sample.properties || {});
+    console.log(`[acc-geometry-extract] Sample property groups: ${propGroups.join(", ")}`);
+    // Log first few property groups with their keys
+    for (const group of propGroups.slice(0, 3)) {
+      const groupKeys = Object.keys(sample.properties[group] || {});
+      console.log(`[acc-geometry-extract]   ${group}: ${groupKeys.join(", ")}`);
+    }
+  }
+
   return { properties: propsData, viewGuid };
 }
 
@@ -186,14 +225,17 @@ const LEVEL_KEYS = [
   "Level", "level", "Plan", "plan", "Våning", "våning",
   "Base Level", "Base Constraint", "Reference Level",
   "Etage", "etage", "Niveau", "niveau",
+  "Schedule Level", "Building Story", "Building Storey",
 ];
 
 function findLevelFromProperties(props: Record<string, any>): string | null {
+  // Direct top-level check
   for (const key of LEVEL_KEYS) {
     if (props[key]) return String(props[key]);
   }
-  for (const group of Object.values(props)) {
-    if (typeof group === "object" && group !== null) {
+  // Nested group check (APS returns properties grouped by category like "Constraints", "Identity Data")
+  for (const [groupName, group] of Object.entries(props)) {
+    if (typeof group === "object" && group !== null && !Array.isArray(group)) {
       for (const key of LEVEL_KEYS) {
         if ((group as any)[key]) return String((group as any)[key]);
       }
@@ -214,6 +256,9 @@ function buildLevelGroups(propertiesResult: any): {
 
   const elements = propertiesResult?.properties?.data?.collection || [];
   
+  let levelHits = 0;
+  let levelMisses = 0;
+
   for (const element of elements) {
     const dbId = element.objectid;
     const externalId = element.externalId || `dbId_${dbId}`;
@@ -222,8 +267,12 @@ function buildLevelGroups(propertiesResult: any): {
     dbIdToExternalId.set(dbId, externalId);
 
     const levelName = findLevelFromProperties(props);
-    if (!levelName) continue;
+    if (!levelName) {
+      levelMisses++;
+      continue;
+    }
 
+    levelHits++;
     dbIdToLevel.set(dbId, levelName);
     const levelKey = levelName.toLowerCase().replace(/[^a-z0-9]/g, "_");
 
@@ -233,6 +282,17 @@ function buildLevelGroups(propertiesResult: any): {
     const group = levelGroups.get(levelKey)!;
     group.dbIds.push(dbId);
     group.externalIds.push(externalId);
+  }
+
+  console.log(`[acc-geometry-extract] Level assignment: ${levelHits} hits, ${levelMisses} misses out of ${elements.length} total`);
+  
+  // Log first missed element for debugging
+  if (levelMisses > 0 && elements.length > 0) {
+    const missedEl = elements.find((e: any) => !findLevelFromProperties(e.properties || {}));
+    if (missedEl) {
+      const groups = Object.keys(missedEl.properties || {});
+      console.log(`[acc-geometry-extract] Sample missed element: name=${missedEl.name}, groups=[${groups.join(",")}]`);
+    }
   }
 
   return { levelGroups, dbIdToExternalId, dbIdToLevel };
@@ -285,7 +345,7 @@ async function pollForObjDerivative(
   urnBase64: string, token: string, mdBase: string,
   maxAttempts = 15,
 ): Promise<{ objUrn: string; mtlUrn: string | null } | null> {
-  const delays = [10000, 15000, 20000, 25000, 30000]; // exponential-ish backoff
+  const delays = [10000, 15000, 20000, 25000, 30000];
   
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const delay = delays[Math.min(attempt, delays.length - 1)];
@@ -294,38 +354,19 @@ async function pollForObjDerivative(
 
     const bubble = await fetchApsBubble(urnBase64, token, mdBase);
     
-    // Collect all derivatives
-    const allDerivs: any[] = [];
-    function collectDerivs(node: any) {
-      if (node.urn) allDerivs.push(node);
-      if (node.children) node.children.forEach(collectDerivs);
-      if (node.derivatives) node.derivatives.forEach(collectDerivs);
-    }
-    collectDerivs(bubble);
-
-    // Check for OBJ derivative
-    const objDeriv = allDerivs.find(d =>
-      (d.role === "obj" || d.outputType === "obj") ||
-      (d.urn && (d.urn.endsWith(".obj") || d.mime === "application/octet-stream") && d.role === "graphics")
-    );
-
-    // Also look for any OBJ output type in derivatives list
     const objOutput = bubble.derivatives?.find((d: any) => d.outputType === "obj");
     if (objOutput) {
       if (objOutput.status === "success") {
-        // Find the actual OBJ file within the derivative children
         const objFiles: any[] = [];
         function findObjFiles(node: any) {
-          if (node.urn && (node.role === "obj" || node.urn.endsWith(".obj") || node.mime === "application/octet-stream")) {
-            objFiles.push(node);
-          }
+          if (node.urn) objFiles.push(node);
           if (node.children) node.children.forEach(findObjFiles);
         }
         findObjFiles(objOutput);
         
         if (objFiles.length > 0) {
-          const mtlFile = objFiles.find(f => f.urn?.endsWith(".mtl"));
-          const objFile = objFiles.find(f => !f.urn?.endsWith(".mtl")) || objFiles[0];
+          const mtlFile = objFiles.find((f: any) => f.urn?.endsWith(".mtl"));
+          const objFile = objFiles.find((f: any) => !f.urn?.endsWith(".mtl")) || objFiles[0];
           console.log(`[acc-geometry-extract] OBJ derivative ready: ${objFile.urn?.substring(0, 60)}`);
           return { objUrn: objFile.urn, mtlUrn: mtlFile?.urn || null };
         }
@@ -333,12 +374,6 @@ async function pollForObjDerivative(
         console.error("[acc-geometry-extract] OBJ translation failed:", objOutput.messages);
         return null;
       }
-      // Still in progress, continue polling
-    }
-
-    if (objDeriv) {
-      console.log(`[acc-geometry-extract] Found OBJ derivative: ${objDeriv.urn?.substring(0, 60)}`);
-      return { objUrn: objDeriv.urn, mtlUrn: null };
     }
   }
 
@@ -351,13 +386,15 @@ async function downloadDerivative(urnBase64: string, derivUrn: string, token: st
   const encodedDerivUrn = encodeURIComponent(derivUrn);
   const url = `${mdBase}/${urnBase64}/manifest/${encodedDerivUrn}`;
   
-  console.log(`[acc-geometry-extract] Downloading derivative: ${derivUrn.substring(0, 60)}...`);
+  console.log(`[acc-geometry-extract] Downloading derivative: ${derivUrn.substring(0, 80)}...`);
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
   if (!res.ok) {
     console.error(`[acc-geometry-extract] Derivative download failed: ${res.status}`);
+    const errText = await res.text();
+    console.error(`[acc-geometry-extract] Download error: ${errText.substring(0, 300)}`);
     return null;
   }
 
@@ -379,7 +416,6 @@ function objToGlb(objText: string): ArrayBuffer {
       vertices.push(parseFloat(parts[1]) || 0, parseFloat(parts[2]) || 0, parseFloat(parts[3]) || 0);
     } else if (trimmed.startsWith("f ")) {
       const parts = trimmed.split(/\s+/).slice(1);
-      // Convert face to triangles (fan triangulation)
       const faceIndices = parts.map(p => parseInt(p.split("/")[0]) - 1);
       for (let i = 1; i < faceIndices.length - 1; i++) {
         indices.push(faceIndices[0], faceIndices[i], faceIndices[i + 1]);
@@ -389,7 +425,6 @@ function objToGlb(objText: string): ArrayBuffer {
 
   if (vertices.length === 0) {
     console.warn("[acc-geometry-extract] OBJ had 0 vertices, creating empty GLB placeholder");
-    // Create a tiny placeholder
     return buildGlb(new Float32Array([0,0,0, 1,0,0, 0,1,0]), new Uint32Array([0,1,2]));
   }
 
@@ -462,6 +497,35 @@ function buildGlb(vertices: Float32Array, indices: Uint32Array, materialColor?: 
   return glb;
 }
 
+// ── Find and download SVF geometry as a raw binary (the SVF itself contains geometry) ──
+async function downloadSvfGeometry(
+  urnBase64: string,
+  token: string,
+  mdBase: string,
+  bubble: any,
+): Promise<ArrayBuffer | null> {
+  // Find the SVF derivative
+  const allDerivs: any[] = [];
+  function collectAll(node: any) {
+    if (node.urn) allDerivs.push(node);
+    if (node.children) node.children.forEach(collectAll);
+    if (node.derivatives) node.derivatives.forEach(collectAll);
+  }
+  collectAll(bubble);
+
+  // Look for F2D or graphics role derivatives that might be downloadable
+  const graphicsDeriv = allDerivs.find(d =>
+    d.role === "graphics" && d.mime && d.mime !== "application/autodesk-svf" && d.mime !== "application/autodesk-svf2"
+  );
+  
+  if (graphicsDeriv) {
+    console.log(`[acc-geometry-extract] Found downloadable graphics derivative: mime=${graphicsDeriv.mime}`);
+    return await downloadDerivative(urnBase64, graphicsDeriv.urn, token, mdBase);
+  }
+
+  return null;
+}
+
 // ── Download and store real geometry from APS ──
 async function downloadRealGeometry(
   urnBase64: string,
@@ -473,7 +537,6 @@ async function downloadRealGeometry(
   supabase: any,
 ): Promise<{ fallbackPath: string | null; glbBytes: number }> {
 
-  // Step 1: Check bubble for existing downloadable derivatives (glTF/GLB/OBJ)
   const bubble = await fetchApsBubble(urnBase64, token, mdBase);
   const allDerivs: any[] = [];
   function collectDerivs(node: any) {
@@ -483,68 +546,87 @@ async function downloadRealGeometry(
   }
   collectDerivs(bubble);
   console.log(`[acc-geometry-extract] Found ${allDerivs.length} derivatives in bubble`);
+  // Log all derivative types for debugging
+  const derivSummary = allDerivs.map(d => `${d.role || "?"}/${d.mime || d.outputType || "?"}`).slice(0, 15);
+  console.log(`[acc-geometry-extract] Derivative types: ${derivSummary.join(", ")}`);
 
-  // Look for existing glTF/GLB
+  let geometryData: ArrayBuffer | null = null;
+
+  // Priority 1: Existing glTF/GLB derivative
   const gltfDeriv = allDerivs.find(d =>
     d.mime === 'model/gltf-binary' || d.mime === 'model/gltf+json' || d.name?.endsWith('.glb') || d.name?.endsWith('.gltf')
   );
-
-  // Look for existing OBJ
-  const objOutput = bubble.derivatives?.find((d: any) => d.outputType === "obj" && d.status === "success");
-
-  let geometryData: ArrayBuffer | null = null;
-  let isGlb = false;
-
-  // Priority 1: Existing glTF/GLB derivative
   if (gltfDeriv) {
     console.log("[acc-geometry-extract] Found existing glTF derivative, downloading...");
     geometryData = await downloadDerivative(urnBase64, gltfDeriv.urn, token, mdBase);
-    isGlb = true;
   }
 
-  // Priority 2: Existing OBJ derivative
-  if (!geometryData && objOutput) {
-    const objFiles: any[] = [];
-    function findObjFiles(node: any) {
-      if (node.urn) objFiles.push(node);
-      if (node.children) node.children.forEach(findObjFiles);
-    }
-    findObjFiles(objOutput);
-    const objFile = objFiles.find(f => !f.urn?.endsWith(".mtl"));
-    if (objFile) {
-      console.log("[acc-geometry-extract] Found existing OBJ derivative, downloading...");
-      const objData = await downloadDerivative(urnBase64, objFile.urn, token, mdBase);
-      if (objData && objData.byteLength > 100) {
-        const objText = new TextDecoder().decode(objData);
-        geometryData = objToGlb(objText);
-        isGlb = true;
+  // Priority 2: Existing completed OBJ derivative
+  if (!geometryData) {
+    const objOutput = bubble.derivatives?.find((d: any) => d.outputType === "obj" && d.status === "success");
+    if (objOutput) {
+      const objFiles: any[] = [];
+      function findObjFiles(node: any) {
+        if (node.urn) objFiles.push(node);
+        if (node.children) node.children.forEach(findObjFiles);
+      }
+      findObjFiles(objOutput);
+      const objFile = objFiles.find((f: any) => !f.urn?.endsWith(".mtl"));
+      if (objFile) {
+        console.log("[acc-geometry-extract] Found existing OBJ derivative, downloading...");
+        const objData = await downloadDerivative(urnBase64, objFile.urn, token, mdBase);
+        if (objData && objData.byteLength > 100) {
+          const objText = new TextDecoder().decode(objData);
+          geometryData = objToGlb(objText);
+        }
       }
     }
   }
 
-  // Priority 3: Request new OBJ translation
+  // Priority 3: Request new OBJ translation (try 3-legged first, fallback to 2-legged)
   if (!geometryData) {
     console.log("[acc-geometry-extract] No existing geometry — requesting OBJ translation...");
-    const requested = await requestObjTranslation(urnBase64, token, mdBase);
     
-    if (requested) {
-      // Poll for the OBJ derivative
+    let requested = await requestObjTranslation(urnBase64, token, mdBase);
+    
+    // If 3-legged fails with 403, retry with 2-legged token which has data:write scope
+    if (!requested && is3Legged) {
+      console.log("[acc-geometry-extract] 3-legged OBJ request failed, retrying with 2-legged token...");
+      try {
+        const twoLegToken = await getApsToken();
+        requested = await requestObjTranslation(urnBase64, twoLegToken, mdBase);
+        
+        if (requested) {
+          // Use 2-legged token for polling too
+          const objResult = await pollForObjDerivative(urnBase64, twoLegToken, mdBase);
+          if (objResult) {
+            const objData = await downloadDerivative(urnBase64, objResult.objUrn, twoLegToken, mdBase);
+            if (objData && objData.byteLength > 100) {
+              const firstBytes = new Uint8Array(objData.slice(0, 4));
+              if (firstBytes[0] === 0x67 && firstBytes[1] === 0x6C && firstBytes[2] === 0x54 && firstBytes[3] === 0x46) {
+                geometryData = objData;
+              } else {
+                const objText = new TextDecoder().decode(objData);
+                geometryData = objToGlb(objText);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[acc-geometry-extract] 2-legged fallback failed:", err);
+      }
+    } else if (requested) {
+      // Poll with the same token
       const objResult = await pollForObjDerivative(urnBase64, token, mdBase);
-      
       if (objResult) {
         const objData = await downloadDerivative(urnBase64, objResult.objUrn, token, mdBase);
         if (objData && objData.byteLength > 100) {
-          // Check if it's already binary GLB
           const firstBytes = new Uint8Array(objData.slice(0, 4));
           if (firstBytes[0] === 0x67 && firstBytes[1] === 0x6C && firstBytes[2] === 0x54 && firstBytes[3] === 0x46) {
-            // Already GLB (glTF magic)
             geometryData = objData;
-            isGlb = true;
           } else {
-            // OBJ text → convert to GLB
             const objText = new TextDecoder().decode(objData);
             geometryData = objToGlb(objText);
-            isGlb = true;
           }
         }
       }
@@ -570,19 +652,6 @@ async function downloadRealGeometry(
   }
 
   console.log(`[acc-geometry-extract] Monolithic GLB stored: ${fallbackStoragePath} (${(geometryData.byteLength / 1024 / 1024).toFixed(1)} MB)`);
-
-  // Register in xkt_models
-  await supabase.from("xkt_models").upsert({
-    model_id: `${modelKey}_full_glb`,
-    model_name: `${modelKey} (GLB)`,
-    building_fm_guid: buildingFmGuid,
-    storage_path: fallbackStoragePath,
-    file_name: `${modelKey}_full.glb`,
-    format: "glb",
-    file_size: geometryData.byteLength,
-    is_chunk: false,
-  }, { onConflict: "model_id" });
-
   return { fallbackPath: fallbackStoragePath, glbBytes: geometryData.byteLength };
 }
 
@@ -619,7 +688,6 @@ async function enrichWithFmGuids(
     }
   }
 
-  console.log(`[acc-geometry-extract] Enriched ${enriched}/${geometryIndex.mapping.length} entries with fm_guid`);
   return enriched;
 }
 
@@ -728,12 +796,12 @@ Deno.serve(async (req) => {
       const propertiesResult = await fetchSvfProperties(urnBase64, token, mdBase);
       
       if (!propertiesResult) {
-        return new Response(JSON.stringify({ error: "Could not fetch SVF properties" }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        console.warn("[acc-geometry-extract] Properties unavailable — continuing without level data");
       }
 
-      const { levelGroups, dbIdToExternalId } = buildLevelGroups(propertiesResult);
+      const { levelGroups, dbIdToExternalId } = propertiesResult
+        ? buildLevelGroups(propertiesResult)
+        : { levelGroups: new Map(), dbIdToExternalId: new Map(), dbIdToLevel: new Map() };
       console.log(`[acc-geometry-extract] Found ${levelGroups.size} levels, ${dbIdToExternalId.size} elements`);
 
       // Step 4: Download real geometry from APS (OBJ/glTF → GLB)
@@ -752,7 +820,7 @@ Deno.serve(async (req) => {
           storeyGuid,
           storeyName: group.name,
           priority: priority++,
-          url: "", // No per-storey chunks — viewer uses fallback + visibility switching
+          url: "",
           bbox: [],
           elementCount: group.dbIds.length,
           format: "glb",
