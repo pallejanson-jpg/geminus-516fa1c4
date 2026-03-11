@@ -211,7 +211,7 @@ export function useRoomLabels(
     const labelCount = labelsRef.current.size;
     // Adaptive throttling: more labels = less frequent occlusion checks
     // Auto-disable occlusion above threshold for performance
-    const occlusionThreshold = 50;
+    const occlusionThreshold = 30;
     const effectiveOcclusion = config.occlusionEnabled && labelCount <= occlusionThreshold;
     const occlusionInterval = labelCount > 40 ? 15 : labelCount > 20 ? 10 : 5;
 
@@ -491,12 +491,16 @@ export function useRoomLabels(
 
     console.log(`✅ Created ${createdCount} room labels (${filteredCount} filtered by floor)`);
 
-    // Set up camera change listener with rAF throttling
+    // Set up camera change listener with double-rAF throttling for performance
     const scene2 = viewer.scene;
     if (scene2 && !cameraListenerRef.current) {
       let rafId = 0;
+      let frameSkip = 0;
       const throttledUpdate = () => {
         if (rafId) return;
+        frameSkip++;
+        // Only update every 2nd frame to reduce CPU load
+        if (frameSkip % 2 !== 0) return;
         rafId = requestAnimationFrame(() => {
           rafId = 0;
           updateLabelPositions();
