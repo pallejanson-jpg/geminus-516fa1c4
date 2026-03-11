@@ -293,7 +293,7 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
                   </Button>
                   <span className="text-muted-foreground">|</span>
                   <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={deselectAll}>
-                    Avmarkera
+                    Deselect
                   </Button>
                 </div>
               </div>
