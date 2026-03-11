@@ -420,7 +420,7 @@ export default function GunnarButton() {
             "flex items-center gap-2 hover:bg-card transition-colors"
           )}>
             <Sparkles className="h-5 w-5 text-primary" />
-            <span className="text-sm font-medium max-w-32 truncate">Gunnar</span>
+            <span className="text-sm font-medium max-w-32 truncate">Geminus AI</span>
             <Maximize2 className="h-4 w-4 text-muted-foreground" />
           </div>
         </div>
