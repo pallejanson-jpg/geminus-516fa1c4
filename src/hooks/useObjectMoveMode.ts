@@ -77,7 +77,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
     }
   }, [viewer, buildingFmGuid]);
 
-  // Apply on VIEWER_MODELS_LOADED event instead of hardcoded delay
+  // Apply on VIEWER_MODELS_LOADED event and REAPPLY_MODIFICATIONS event
   useEffect(() => {
     if (!viewer?.scene) return;
 
@@ -88,14 +88,22 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
       }
     };
 
+    const reapplyHandler = () => {
+      applyModifications();
+    };
+
     window.addEventListener(VIEWER_MODELS_LOADED_EVENT, handler);
+    window.addEventListener('REAPPLY_MODIFICATIONS', reapplyHandler);
 
     // Fallback: also apply if models are already loaded (viewer is ready)
     if (viewer.scene.numObjects > 0) {
       applyModifications();
     }
 
-    return () => window.removeEventListener(VIEWER_MODELS_LOADED_EVENT, handler);
+    return () => {
+      window.removeEventListener(VIEWER_MODELS_LOADED_EVENT, handler);
+      window.removeEventListener('REAPPLY_MODIFICATIONS', reapplyHandler);
+    };
   }, [viewer, applyModifications, buildingFmGuid]);
 
   // ── Undo helpers ─────────────────────────────────────────────────────

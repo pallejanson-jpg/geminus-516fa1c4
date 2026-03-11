@@ -803,7 +803,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         });
       }
 
-      // Space colors
+      // Space colors — make spaces visible and colored
       if (autoColorSpaces) {
         spaces.forEach(space => {
           const color = spaceColors.get(space.fmGuid) || LEVEL_PALETTE[spaces.indexOf(space) % LEVEL_PALETTE.length];
@@ -811,7 +811,12 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           const spaceEntityIds = eMap.get(space.fmGuid);
           spaceEntityIds?.forEach(id => {
             const entity = scene.objects?.[id];
-            if (entity) entity.colorize = rgb;
+            if (entity) {
+              entity.colorize = rgb;
+              entity.visible = true;
+              entity.pickable = true;
+              entity.opacity = 0.7;
+            }
           });
         });
       }
