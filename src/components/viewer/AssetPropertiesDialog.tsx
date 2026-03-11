@@ -463,7 +463,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                   <Input
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="t.ex. BS-001, Stol-A1"
+                    placeholder="e.g. BS-001, Chair-A1"
                     className="h-9"
                     required
                   />
