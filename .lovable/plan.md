@@ -1,53 +1,108 @@
+## Plan: Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
 
+### Changes Made
 
-# Plan: Integrate Property Credentials into Create Building Panel
+#### 1. Browser-Primary Conversion for Large IFC Files
+**File: `src/components/settings/CreateBuildingPanel.tsx`**
+- Files >20MB skip edge function entirely → direct browser conversion
+- Files ≤20MB still try edge function first with WORKER_LIMIT fallback
+- Extracted `runBrowserConversion()` helper for DRY reuse between direct and fallback paths
+- Browser conversion now uploads `metadata.json` alongside `.xkt`
+- Systems extracted client-side are persisted to `systems` + `asset_system` tables
 
-## Problem
+#### 2. Metadata Extraction & Separate JSON
+**File: `src/services/acc-xkt-converter.ts`**
+- `convertToXktWithMetadata()` now returns `metaModelJson` (xeokit MetaModel format) + `systems[]`
+- WASM validation: explicit `HEAD` request to `/web-ifc-wasm/web-ifc.wasm` before importing
+- `inferDiscipline()` function for system classification (Ventilation, Heating, etc.)
+- System extraction from metaObjects: IfcSystem, IfcDistributionSystem, PropertySet grouping
 
-The per-building credential configuration currently lives on a separate "Fastigheter" page (`/properties`). The user wants this functionality integrated into the existing **Buildings tab** inside the Settings modal, alongside `CreateBuildingPanel`.
+#### 3. Viewer MetaModel Loading
+**File: `src/components/viewer/NativeXeokitViewer.tsx`**
+- Before loading each XKT model, checks for `{modelId}_metadata.json` in storage
+- If found, passes as `metaModelSrc` to `xktLoader.load()` for richer BIM queries
+- Works for all three loading paths: memory, streaming, and buffer
 
-## Solution
+---
 
-Move the property listing and credential override UI into the existing **"building" tab** in `ApiSettingsModal`, so everything building-related lives in one place.
+## Plan: External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
 
-### Changes
-
-| Action | File | What |
-|--------|------|------|
-| Modify | `src/components/settings/CreateBuildingPanel.tsx` | Add a "Configured Buildings" list at the top showing existing buildings from `building_settings`. Each row has an "Edit" button that opens `CreatePropertyDialog` for credential overrides. |
-| Modify | `src/components/settings/ApiSettingsModal.tsx` | No change needed — `CreateBuildingPanel` already renders in the "building" tab |
-| Keep | `src/components/properties/CreatePropertyDialog.tsx` | Reuse as-is — it's already a standalone Sheet component |
-| Modify | `src/pages/Properties.tsx` | Redirect or simplify to point users to Settings → Buildings |
-| Modify | `src/components/layout/AppSidebar.tsx` | Remove or update the "Properties" nav item (or keep it as a redirect) |
-
-### How it works
-
-1. User opens **Settings → Buildings** tab
-2. At the top: list of existing buildings (fetched from `building_settings` + `assets`) with name, FM GUID, and badge indicators for custom credentials
-3. Click a building → opens `CreatePropertyDialog` sheet for editing identity + API credentials
-4. Below the list: existing "Create New Building" form (unchanged)
-5. After creating a building, user can immediately click it in the list to configure credentials
-
-### UI Layout in the Buildings Tab
+### Architecture
 
 ```text
-┌─────────────────────────────────────┐
-│  Configured Buildings               │
-│  ┌─────────────────────────────────┐│
-│  │ Building A  │ FM-123  │ [Edit] ││
-│  │ Building B  │ FM-456  │ [Edit] ││
-│  └─────────────────────────────────┘│
-│                                     │
-│  ── Create New Building ──          │
-│  [existing CreateBuildingPanel UI]  │
-└─────────────────────────────────────┘
+IFC Upload → Supabase Storage → conversion_jobs (pending)
+       ↓
+External Worker (polls conversion-worker-api)
+  - Downloads IFC via signed URL
+  - Groups objects by IfcBuildingStorey
+  - Generates per-storey .xkt tiles
+  - Uploads tiles to storage
+  - Reports completion → xkt_models records created
+       ↓
+Viewer detects real tiles (unique storage_paths)
+  - Loads active floor tile (~15MB)
+  - Lazy-loads adjacent floors on FLOOR_TILE_SWITCH event
+  - Unloads distant floors to save memory
+  - Falls back to monolithic loading if no real tiles
 ```
 
-### Files Modified
+### Files Created/Changed
 
-| File | Change |
+| File | Action |
 |------|--------|
-| `src/components/settings/CreateBuildingPanel.tsx` | Add building list with edit buttons, import and open `CreatePropertyDialog` |
-| `src/components/layout/AppSidebar.tsx` | Remove "Properties" from sidebar nav |
-| `src/pages/Properties.tsx` | Simplify or remove (optional — can keep as redirect) |
+| `supabase/functions/conversion-worker-api/index.ts` | Created — worker API (pending/claim/progress/complete/fail/upload-url) |
+| `supabase/config.toml` | Added verify_jwt = false entry |
+| `docs/conversion-worker/worker.mjs` | Created — standalone Node.js worker |
+| `docs/conversion-worker/Dockerfile` | Created — Docker deployment |
+| `docs/conversion-worker/README.md` | Created — deployment guide |
+| `src/components/viewer/NativeXeokitViewer.tsx` | Updated — real tile detection + FLOOR_TILE_SWITCH listener |
+| `src/hooks/useFloorPriorityLoading.ts` | Updated — isRealTiling + getTilesToLoad + FLOOR_TILE_SWITCH dispatch |
 
+### Key Concepts
+
+- **Virtual chunks (Phase 1)**: Same XKT file, visibility filtering by storey metadata
+- **Real tiles (Phase 2)**: Separate per-storey XKT files with unique `storage_path` values
+- Detection: `isRealTiling()` checks if chunks have >1 unique storage paths
+- Dynamic loading: `FLOOR_TILE_SWITCH` custom event triggers load/unload of tiles
+- Worker auth: `WORKER_API_SECRET` shared secret (not JWT)
+
+---
+
+## Plan: Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
+
+### Changes Made
+
+#### 1. Database Migration
+Added 10 nullable credential override columns to `building_settings`:
+- `assetplus_api_url`, `assetplus_api_key`, `assetplus_keycloak_url`, `assetplus_client_id`, `assetplus_client_secret`, `assetplus_username`, `assetplus_password`
+- `senslinc_api_url`, `senslinc_email`, `senslinc_password`
+
+When NULL → global env vars are used (backwards compatible).
+
+#### 2. Shared Credential Resolver
+**File: `supabase/functions/_shared/credentials.ts`**
+- `getAssetPlusCredentials(supabase, buildingFmGuid?)` — checks building_settings, falls back to env vars
+- `getSenslincCredentials(supabase, buildingFmGuid?)` — same pattern for Senslinc
+
+#### 3. Properties Page (Configuration Hub)
+**File: `src/pages/Properties.tsx`** — Rewritten from static mockup to functional page
+- Fetches real buildings from `building_settings` + `assets`
+- Shows FM GUID, name, coordinates, custom credential badges
+- Search, refresh, create/edit
+
+**File: `src/components/properties/CreatePropertyDialog.tsx`** — New
+- Sheet dialog with Building Identity (FM GUID, name, lat/lng)
+- Accordion sections for Asset+ and Senslinc credential overrides
+- "Test Connection" buttons for each
+
+#### 4. Edge Function Updates
+- `asset-plus-sync/index.ts` — Uses `_creds` module-level variable resolved from `getAssetPlusCredentials()` at request start
+- `asset-plus-query/index.ts` — Passes resolved `creds` to `getAccessToken(creds)` and uses for API config
+- `senslinc-query/index.ts` — Uses `getSenslincCredentials()` with `buildingFmGuid` from request body
+
+### Flow
+1. Admin opens Properties → sees all buildings with credential status
+2. Clicks "Lägg till fastighet" → enters FM GUID + optional custom credentials
+3. Saves → `building_settings` row created/updated
+4. Sync/query for that building → edge function resolves override credentials automatically
+5. All other buildings continue using global credentials unchanged

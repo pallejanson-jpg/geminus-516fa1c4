@@ -31,7 +31,6 @@ import {
 
 const mainNavItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Properties", url: "/properties", icon: Building2 },
   { title: "3D Viewer", url: "/viewer", icon: Box },
   { title: "FM Access", url: "/fm-access", icon: Square },
   { title: "Documents", url: "/documents", icon: FileText },

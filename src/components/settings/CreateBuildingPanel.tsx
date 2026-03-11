@@ -8,10 +8,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers, Timer, Cloud, FileSpreadsheet
+  Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers, Timer, Cloud, FileSpreadsheet, KeyRound, Pencil, RefreshCw
 } from 'lucide-react';
 import ExcelTemplateDownload from '@/components/import/ExcelTemplateDownload';
 import ExcelImportDialog from '@/components/import/ExcelImportDialog';
+import CreatePropertyDialog from '@/components/properties/CreatePropertyDialog';
+
+interface ConfiguredBuilding {
+  fmGuid: string;
+  name: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  isFavorite: boolean;
+  hasCustomAssetPlus: boolean;
+  hasCustomSenslinc: boolean;
+}
 
 interface CreatedBuilding {
   complexFmGuid: string;
@@ -579,8 +590,116 @@ const CreateBuildingPanel: React.FC = () => {
 
   const showIfcUpload = createdBuilding || selectedExistingFmGuid;
 
+  // Configured buildings state
+  const [configuredBuildings, setConfiguredBuildings] = useState<ConfiguredBuilding[]>([]);
+  const [loadingConfigured, setLoadingConfigured] = useState(true);
+  const [propertyDialogOpen, setPropertyDialogOpen] = useState(false);
+  const [editFmGuid, setEditFmGuid] = useState<string | null>(null);
+
+  const fetchConfiguredBuildings = useCallback(async () => {
+    setLoadingConfigured(true);
+    try {
+      const { data: settings } = await supabase
+        .from('building_settings')
+        .select('fm_guid, latitude, longitude, is_favorite, assetplus_api_url, senslinc_api_url');
+
+      const fmGuids = (settings || []).map((s: any) => s.fm_guid);
+      let nameMap: Record<string, string> = {};
+      if (fmGuids.length > 0) {
+        const { data: buildings } = await supabase
+          .from('assets')
+          .select('fm_guid, name')
+          .eq('category', 'Building')
+          .in('fm_guid', fmGuids);
+        (buildings || []).forEach((b: any) => { nameMap[b.fm_guid] = b.name; });
+      }
+
+      setConfiguredBuildings((settings || []).map((s: any) => ({
+        fmGuid: s.fm_guid,
+        name: nameMap[s.fm_guid] || null,
+        latitude: s.latitude,
+        longitude: s.longitude,
+        isFavorite: s.is_favorite,
+        hasCustomAssetPlus: !!s.assetplus_api_url,
+        hasCustomSenslinc: !!s.senslinc_api_url,
+      })));
+    } catch (err) {
+      console.error('Failed to fetch configured buildings:', err);
+    } finally {
+      setLoadingConfigured(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchConfiguredBuildings();
+    const handler = () => fetchConfiguredBuildings();
+    window.addEventListener('building-settings-changed', handler);
+    return () => window.removeEventListener('building-settings-changed', handler);
+  }, [fetchConfiguredBuildings]);
+
   return (
     <div className="space-y-6 py-2">
+      {/* Configured Buildings List */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-primary" />
+            <h3 className="font-semibold text-sm">Configured Buildings</h3>
+          </div>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={fetchConfiguredBuildings}>
+            <RefreshCw className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+
+        {loadingConfigured ? (
+          <div className="text-xs text-muted-foreground py-2">Loading...</div>
+        ) : configuredBuildings.length === 0 ? (
+          <p className="text-xs text-muted-foreground py-2">No buildings configured yet.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {configuredBuildings.map((b) => (
+              <div
+                key={b.fmGuid}
+                className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs group hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium truncate">{b.name || b.fmGuid.slice(0, 12) + '…'}</p>
+                  <p className="text-muted-foreground font-mono text-[10px] truncate">{b.fmGuid}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {b.hasCustomAssetPlus && (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                      <KeyRound className="h-2.5 w-2.5 mr-0.5" />Asset+
+                    </Badge>
+                  )}
+                  {b.hasCustomSenslinc && (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                      <KeyRound className="h-2.5 w-2.5 mr-0.5" />Senslinc
+                    </Badge>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => { setEditFmGuid(b.fmGuid); setPropertyDialogOpen(true); }}
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="border-t" />
+
+      <CreatePropertyDialog
+        open={propertyDialogOpen}
+        onOpenChange={setPropertyDialogOpen}
+        editFmGuid={editFmGuid}
+        onSaved={fetchConfiguredBuildings}
+      />
       {/* Section 1: Upload IFC to existing building */}
       {!createdBuilding && (
         <div className="space-y-3">
