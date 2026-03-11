@@ -520,7 +520,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                        <SelectValue placeholder="Select symbol..." />
                     </SelectTrigger>
                     <SelectContent className="bg-card border shadow-lg z-[100]">
-                      <SelectItem value="">Ingen symbol</SelectItem>
+                       <SelectItem value="">No symbol</SelectItem>
                       {symbols.map((s) => (
                         <SelectItem key={s.id} value={s.id}>
                           <div className="flex items-center gap-2">
