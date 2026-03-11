@@ -24,7 +24,7 @@ const ASSISTANTS: Array<{
   icon: React.ComponentType<{ className?: string }>;
   available: boolean;
 }> = [
-  { id: "gunnar", title: "Gunnar", subtitle: "Data Assistant", description: "Ask about buildings, rooms and assets", icon: Database, available: true },
+  { id: "gunnar", title: "Geminus AI", subtitle: "Data Assistant", description: "Ask about buildings, rooms and assets", icon: Database, available: true },
   { id: "ilean", title: "Ilean", subtitle: "Document Assistant", description: "Search documents and drawings", icon: FileQuestion, available: true },
   { id: "doris", title: "Doris", subtitle: "FM Access Assistant", description: "Integration with FM Access", icon: Sparkles, available: false },
 ];
@@ -163,7 +163,7 @@ export default function HomeLanding() {
   };
 
   return (
-    <div className="relative min-h-full text-foreground">
+    <div className="relative min-h-screen text-foreground">
       {/* Full-page background */}
       <ParticleBackground />
       <div className="pointer-events-none absolute inset-0 bg-background/70" aria-hidden="true" />

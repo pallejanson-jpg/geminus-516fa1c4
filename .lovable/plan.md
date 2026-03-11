@@ -1,68 +1,90 @@
+## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
 
+### Changes Made
+1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
+2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
+3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
+4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
+5. **config.toml** updated with `acc-geometry-extract` function entry
 
-# Plan: Three Items
-
-## 1. ParticleBackground not visible
-
-The `ParticleBackground` canvas uses `absolute inset-0` positioning, but the parent `div` at line 166 uses `relative min-h-full` — which means the parent has no explicit height until content renders. The canvas likely renders with 0 height initially. 
-
-**Fix:** Add `min-h-screen` to the parent wrapper so the absolute-positioned canvas has a height to fill. Also ensure the canvas has `z-0` so it sits behind the overlay and content.
-
-**File:** `src/components/home/HomeLanding.tsx` — line 166, change to `min-h-screen`.
-
----
-
-## 2. Rename "Gunnar" → "Geminus AI"
-
-This is a broad rename across the codebase. All user-visible labels change; internal variable names and the database table (`gunnar_conversations`) stay as-is to avoid breaking changes.
-
-**Files with user-facing "Gunnar" text to update:**
-
-| File | What changes |
-|------|-------------|
-| `src/components/home/HomeLanding.tsx` | Assistant title "Gunnar" → "Geminus AI" |
-| `src/components/chat/GunnarButton.tsx` | Tooltip "Fråga Gunnar", panel header "Gunnar AI", minimized bubble "Gunnar" |
-| `src/components/chat/GunnarChat.tsx` | Greeting text, system prompt references |
-| `src/components/viewer/GeminusPluginMenu.tsx` | Menu label "Fråga Gunnar" → "Fråga Geminus AI", panel header |
-| `src/components/settings/GunnarSettings.tsx` | Label "Show Gunnar button" → "Show Geminus AI button" |
-| `src/components/settings/KnowledgeBaseSettings.tsx` | Description text |
-| `src/components/settings/ApiSettingsModal.tsx` | Accordion label |
-| `src/components/layout/AppLayout.tsx` | Comment only |
-| `src/pages/Presentation.tsx` | Label "AI Assistants (Gunnar)" |
-| `supabase/functions/gunnar-chat/index.ts` | System prompt persona name |
-
-File names (`GunnarChat.tsx`, `GunnarButton.tsx`, `GunnarSettings.tsx`) and the edge function folder (`gunnar-chat`) keep their current names to minimize refactoring risk. The database table `gunnar_conversations` stays unchanged.
+### Pending (Phase 2)
+- Actual GLB chunk creation from SVF geometry (requires conversion worker)
+- OBJ as optional secondary format for small models
 
 ---
 
-## 3. RealEstateCore — what does it actually mean?
 
-This is a research/explanation question, not an implementation task:
+### Ändringar
 
-Adopting RealEstateCore (REC) goes beyond just renaming properties. Here is what it involves:
+#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
+**Fil:** `supabase/functions/conversion-worker-api/index.ts`
+- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
+- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
+- Upsert till `assets` med `created_in_model: true`
+- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
 
-**A. Property/type mapping (the naming part)**
-- Asset categories and types get mapped to REC classes (e.g. "Rum" → `rec:Room`, "Brandslackare" → `rec:FireExtinguisher`). This is the most visible change — a mapping layer translates Geminus internal names to REC URIs.
+#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
+**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
+- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
+- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
+- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
+- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
+- Diff: soft-delete objekt som finns i DB men inte i ny IFC
 
-**B. Ontology structure**
-- REC uses a class hierarchy (Building → BuildingComponent → Space → Room). Geminus already has a similar tree but the relationships need formal `@type` annotations in exports.
+#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
+**Fil:** `docs/conversion-worker/worker.mjs`
+- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
+- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
+- Non-fatal: om hierarki-population misslyckas fortsätter workern
 
-**C. Data export format**
-- REC mandates **JSON-LD** (linked data) format for interoperability. A new export function would produce standard JSON-LD documents with `@context` pointing to the REC ontology.
+#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
+**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
+- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
+- `created_in_model: true` istället för `false`
+- Diff-logik: markerar borttagna objekt efter import
 
-**D. IoT/Point modeling**
-- Senslinc sensor data would be typed using REC's `Point` hierarchy (e.g. `rec:TemperatureSensor`, `rec:CO2Sensor`). This enables ProptechOS and other platforms to understand the sensor data.
+### Datamodell
 
-**E. Relationship semantics**
-- REC defines relationships like `isPartOf`, `hasSpace`, `servedBy`. Currently Geminus uses parent-child in the tree; REC compliance means these relationships get formal predicates.
+```text
+Building Storey:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
+  category:          "Building Storey"
+  created_in_model:  true
 
-**What does NOT change:** The database schema, the UI workflows, or how users interact with Geminus day-to-day. REC compliance is primarily about how data is **classified, exported, and described** to external systems.
+Space:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
+  category:          "Space"
+  level_fm_guid:     parent storey fm_guid
+
+Instance:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
+  category:          "Instance"
+  asset_type:        ifcType (e.g. "IfcDoor")
+  level_fm_guid:     resolved storey
+  in_room_fm_guid:   resolved space
+```
+
+### Diff-flöde
+
+Vid omimport jämförs importerade fm_guids mot befintliga i DB:
+- **Nytt** → INSERT
+- **Matchat** → UPDATE (namn, typ, rumsplacering)
+- **Borttaget** → `modification_status = 'removed'` (soft-delete)
 
 ---
 
-## Summary of code changes
+## Previous Plans
 
-1. **Fix ParticleBackground visibility** — 1 line in `HomeLanding.tsx`
-2. **Rename Gunnar → Geminus AI** — ~10 files, user-facing strings only
-3. **REC question** — no code changes, answered above
+### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
+- Browser-primary for >20MB, edge function for ≤20MB
+- MetaModel JSON uploaded alongside XKT
+- Systems extracted and persisted
 
+### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+- Standalone Node.js worker polls conversion-worker-api
+- Per-storey .xkt tiles with dynamic floor loading
+
+### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
+- 10 credential override columns on building_settings
+- Shared credential resolver in edge functions
+- Properties page as configuration hub

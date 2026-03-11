@@ -3264,7 +3264,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 Synka dokument &amp; ritningar
                                             </h4>
                                             <p className="text-xs text-muted-foreground mb-3">
-                                                Synkar ritningar, dokument och DoU-instruktioner från FM Access till lokal databas för snabb sökning via Gunnar.
+                                                Synkar ritningar, dokument och DoU-instruktioner från FM Access till lokal databas för snabb sökning via Geminus AI.
                                             </p>
                                             <FmAccessDocSyncPanel />
                                         </div>
@@ -3530,7 +3530,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                 <AccordionTrigger className="py-3">
                                     <div className="flex items-center gap-2">
                                         <Sparkles className="h-4 w-4" />
-                                        <span>Gunnar AI</span>
+                                        <span>Geminus AI</span>
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent>
