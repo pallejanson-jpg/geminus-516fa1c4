@@ -1,65 +1,105 @@
-import { Building2, MapPin, MoreVertical, Plus, Search } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { useState, useEffect, useCallback } from 'react';
+import { Building2, MapPin, MoreVertical, Plus, Search, KeyRound, RefreshCw } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from '@/components/ui/dropdown-menu';
+import { supabase } from '@/integrations/supabase/client';
+import { Skeleton } from '@/components/ui/skeleton';
+import CreatePropertyDialog from '@/components/properties/CreatePropertyDialog';
 
-const properties = [
-  {
-    id: 1,
-    name: "Kontorshus Centrum",
-    address: "Storgatan 15, Stockholm",
-    type: "Kontor",
-    area: "4 500 m²",
-    status: "active",
-  },
-  {
-    id: 2,
-    name: "Lagerlokaler Syd",
-    address: "Industrivägen 42, Malmö",
-    type: "Lager",
-    area: "12 000 m²",
-    status: "active",
-  },
-  {
-    id: 3,
-    name: "Kv. Björken",
-    address: "Björkgatan 8-12, Göteborg",
-    type: "Bostäder",
-    area: "8 200 m²",
-    status: "maintenance",
-  },
-  {
-    id: 4,
-    name: "Handelsfastigheten",
-    address: "Köpcentrum 1, Uppsala",
-    type: "Handel",
-    area: "15 800 m²",
-    status: "active",
-  },
-  {
-    id: 5,
-    name: "Teknikparken",
-    address: "Innovationsvägen 5, Lund",
-    type: "Kontor",
-    area: "6 300 m²",
-    status: "pending",
-  },
-];
-
-const statusConfig = {
-  active: { label: "Aktiv", variant: "default" as const },
-  maintenance: { label: "Underhåll", variant: "secondary" as const },
-  pending: { label: "Väntande", variant: "outline" as const },
-};
+interface PropertyRow {
+  fmGuid: string;
+  name: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  isFavorite: boolean;
+  hasCustomAssetPlus: boolean;
+  hasCustomSenslinc: boolean;
+}
 
 export default function Properties() {
+  const [properties, setProperties] = useState<PropertyRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editFmGuid, setEditFmGuid] = useState<string | null>(null);
+
+  const fetchProperties = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Fetch building_settings with credential override indicators
+      const { data: settings, error } = await supabase
+        .from('building_settings')
+        .select('fm_guid, latitude, longitude, is_favorite, assetplus_api_url, senslinc_api_url');
+
+      if (error) throw error;
+
+      // Fetch building names from assets
+      const fmGuids = (settings || []).map((s: any) => s.fm_guid);
+      let nameMap: Record<string, string> = {};
+      if (fmGuids.length > 0) {
+        const { data: buildings } = await supabase
+          .from('assets')
+          .select('fm_guid, name')
+          .eq('category', 'Building')
+          .in('fm_guid', fmGuids);
+
+        (buildings || []).forEach((b: any) => {
+          nameMap[b.fm_guid] = b.name;
+        });
+      }
+
+      const rows: PropertyRow[] = (settings || []).map((s: any) => ({
+        fmGuid: s.fm_guid,
+        name: nameMap[s.fm_guid] || null,
+        latitude: s.latitude,
+        longitude: s.longitude,
+        isFavorite: s.is_favorite,
+        hasCustomAssetPlus: !!(s as any).assetplus_api_url,
+        hasCustomSenslinc: !!(s as any).senslinc_api_url,
+      }));
+
+      setProperties(rows);
+    } catch (err) {
+      console.error('Failed to fetch properties:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProperties();
+    const handler = () => fetchProperties();
+    window.addEventListener('building-settings-changed', handler);
+    return () => window.removeEventListener('building-settings-changed', handler);
+  }, [fetchProperties]);
+
+  const filtered = properties.filter((p) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      p.fmGuid.toLowerCase().includes(q) ||
+      (p.name && p.name.toLowerCase().includes(q))
+    );
+  });
+
+  function openEdit(fmGuid: string) {
+    setEditFmGuid(fmGuid);
+    setDialogOpen(true);
+  }
+
+  function openCreate() {
+    setEditFmGuid(null);
+    setDialogOpen(true);
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -67,16 +107,21 @@ export default function Properties() {
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Fastigheter</h1>
           <p className="text-muted-foreground">
-            Hantera din fastighetsportfölj
+            Hantera din fastighetsportfölj och API-anslutningar
           </p>
         </div>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Lägg till fastighet
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="icon" onClick={fetchProperties} title="Uppdatera">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            Lägg till fastighet
+          </Button>
+        </div>
       </div>
 
-      {/* Search and Filters */}
+      {/* Search */}
       <div className="flex gap-4">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -84,65 +129,101 @@ export default function Properties() {
             type="search"
             placeholder="Sök fastigheter..."
             className="pl-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
         </div>
       </div>
 
       {/* Properties Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {properties.map((property) => (
-          <Card key={property.id} className="group hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-start justify-between pb-2">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                  <Building2 className="h-5 w-5 text-primary" />
+      {loading ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-40 rounded-xl" />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          {properties.length === 0
+            ? 'Inga fastigheter konfigurerade. Klicka "Lägg till fastighet" för att börja.'
+            : 'Inga resultat matchar din sökning.'}
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((property) => (
+            <Card
+              key={property.fmGuid}
+              className="group hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => openEdit(property.fmGuid)}
+            >
+              <CardHeader className="flex flex-row items-start justify-between pb-2">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                    <Building2 className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="min-w-0">
+                    <CardTitle className="text-base truncate">
+                      {property.name || property.fmGuid.slice(0, 12) + '…'}
+                    </CardTitle>
+                    <CardDescription className="text-xs font-mono truncate">
+                      {property.fmGuid}
+                    </CardDescription>
+                  </div>
                 </div>
-                <div>
-                  <CardTitle className="text-base">{property.name}</CardTitle>
-                  <CardDescription className="flex items-center gap-1 text-xs">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => openEdit(property.fmGuid)}>
+                      Redigera
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </CardHeader>
+              <CardContent>
+                {property.latitude && property.longitude && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1 mb-2">
                     <MapPin className="h-3 w-3" />
-                    {property.address}
-                  </CardDescription>
+                    {property.latitude.toFixed(4)}, {property.longitude.toFixed(4)}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-1.5">
+                  {property.isFavorite && (
+                    <Badge variant="default" className="text-[10px]">Favorit</Badge>
+                  )}
+                  {property.hasCustomAssetPlus && (
+                    <Badge variant="secondary" className="text-[10px]">
+                      <KeyRound className="h-2.5 w-2.5 mr-1" />
+                      Asset+
+                    </Badge>
+                  )}
+                  {property.hasCustomSenslinc && (
+                    <Badge variant="secondary" className="text-[10px]">
+                      <KeyRound className="h-2.5 w-2.5 mr-1" />
+                      Senslinc
+                    </Badge>
+                  )}
                 </div>
-              </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem>Visa detaljer</DropdownMenuItem>
-                  <DropdownMenuItem>Redigera</DropdownMenuItem>
-                  <DropdownMenuItem>3D-vy</DropdownMenuItem>
-                  <DropdownMenuItem>Dokument</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Typ</p>
-                  <p className="text-sm font-medium">{property.type}</p>
-                </div>
-                <div className="space-y-1 text-right">
-                  <p className="text-xs text-muted-foreground">Yta</p>
-                  <p className="text-sm font-medium">{property.area}</p>
-                </div>
-              </div>
-              <div className="mt-4">
-                <Badge variant={statusConfig[property.status as keyof typeof statusConfig].variant}>
-                  {statusConfig[property.status as keyof typeof statusConfig].label}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <CreatePropertyDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        editFmGuid={editFmGuid}
+        onSaved={fetchProperties}
+      />
     </div>
   );
 }
