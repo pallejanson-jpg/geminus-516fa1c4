@@ -209,7 +209,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
           });
         }
       } catch (error: any) {
-        toast.error('Kunde inte hämta data: ' + error.message);
+        toast.error('Failed to fetch data: ' + error.message);
       } finally {
         setIsLoading(false);
       }
