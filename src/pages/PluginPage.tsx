@@ -74,7 +74,7 @@ export default function PluginPage() {
             <h1 className="text-base font-semibold text-foreground">Select building</h1>
           </div>
           <Input
-            placeholder="Sök byggnad..."
+            placeholder="Search building..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-9 text-sm"
