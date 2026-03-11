@@ -94,7 +94,7 @@ const FmAccessDashboard: React.FC = () => {
           <AlertCircle className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
           <p className="text-sm text-muted-foreground">No building selected. Go to a building and open FM Access from there.</p>
           <Button variant="outline" className="mt-4" onClick={() => navigate('/')}>
-            Till Dashboard
+            To Dashboard
           </Button>
         </div>
       </div>
