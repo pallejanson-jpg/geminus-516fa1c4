@@ -61,7 +61,7 @@ const FmAccessIssueOverlay: React.FC<FmAccessIssueOverlayProps> = ({
       setShowDialog(false);
     } catch (err: any) {
       console.error('[FmAccessIssueOverlay] Error creating issue:', err);
-      toast.error('Kunde inte skapa ärende: ' + (err.message || 'Okänt fel'));
+      toast.error('Could not create issue: ' + (err.message || 'Unknown error'));
     } finally {
       setIsSubmitting(false);
     }
