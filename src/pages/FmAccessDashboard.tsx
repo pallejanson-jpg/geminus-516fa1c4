@@ -112,7 +112,7 @@ const FmAccessDashboard: React.FC = () => {
           <Square className="h-5 w-5 text-primary" />
           <div>
             <h1 className="text-lg font-semibold text-foreground">FM Access</h1>
-            <p className="text-xs text-muted-foreground">Ritningar och dokument</p>
+            <p className="text-xs text-muted-foreground">Drawings and documents</p>
           </div>
         </div>
       </div>
