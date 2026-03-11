@@ -167,7 +167,7 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
     setIsCreating(false);
 
     if (successCount > 0) {
-      toast.success(`${successCount} POI(s) skapade i Ivion`);
+      toast.success(`${successCount} POI(s) created in Ivion`);
       onAssetsCreated();
       
       // Reload assets list
