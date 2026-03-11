@@ -599,7 +599,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                       )}
                       {propertySets.length > 0 && propertySets.map((ps: any, idx: number) => (
                         <div key={idx} className="space-y-1">
-                          <Label className="text-xs text-muted-foreground font-medium">{ps.name || `Egenskaper ${idx + 1}`}</Label>
+                          <Label className="text-xs text-muted-foreground font-medium">{ps.name || `Properties ${idx + 1}`}</Label>
                           {(ps.properties || []).map((prop: any, pidx: number) => (
                             <div key={pidx} className="flex justify-between text-xs">
                               <span className="text-muted-foreground">{prop.name}</span>
