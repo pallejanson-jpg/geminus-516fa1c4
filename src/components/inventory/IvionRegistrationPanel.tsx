@@ -462,7 +462,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
       // Keep level and room for convenience
     } catch (err: any) {
       console.error('Save error:', err);
-      toast.error('Kunde inte spara', { description: err.message });
+      toast.error('Could not save', { description: err.message });
     } finally {
       setIsLoading(false);
       setCloseAfterSave(false);
