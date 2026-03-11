@@ -1,6 +1,18 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyAuth, unauthorizedResponse, forbiddenResponse, corsHeaders } from "../_shared/auth.ts";
+import { getAssetPlusCredentials } from "../_shared/credentials.ts";
+
+// Module-level credential overrides (set per-request from building_settings)
+let _creds = {
+  apiUrl: '',
+  apiKey: '',
+  keycloakUrl: '',
+  clientId: '',
+  clientSecret: '',
+  username: '',
+  password: '',
+};
 
 // Get Keycloak access token
 async function getAccessToken(): Promise<string> {
