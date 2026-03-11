@@ -595,7 +595,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
         {!fetchedCoords && connectionStatus === 'expired' && (
           <div className="flex items-center gap-2 text-xs text-amber-600 mt-2">
             <AlertCircle className="h-3.5 w-3.5" />
-            <span>Token utgått - manuell hämtning kan misslyckas</span>
+            <span>Token expired - manual fetch may fail</span>
           </div>
         )}
       </div>
