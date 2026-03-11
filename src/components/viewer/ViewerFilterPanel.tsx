@@ -189,10 +189,11 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     });
   }, [sharedFloors, buildingData]);
 
-  // Sources: ONLY from levels that exist in current viewer (prevents phantom models)
+  // Sources: from Asset+ storeys OR fallback to scene models
   const sources: BimSource[] = useMemo(() => {
     const grouped = new Map<string, { name: string; storeyCount: number }>();
 
+    // Strategy 1: Asset+ storey parentBimObjectId
     levels.forEach(level => {
       if (!level.sourceGuid) return;
       const current = grouped.get(level.sourceGuid);
@@ -203,6 +204,18 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
     });
 
+    // Strategy 2: If no Asset+ sources, use scene models with friendly names from sharedModels
+    if (grouped.size === 0 && sharedModels.length > 0) {
+      sharedModels.forEach(model => {
+        // Use model name, avoid showing GUIDs
+        const name = model.name && !/^[0-9a-f]{8}-/i.test(model.name) ? model.name : model.shortName;
+        grouped.set(model.id, {
+          name: name || `Model ${model.id.substring(0, 8)}`,
+          storeyCount: 0,
+        });
+      });
+    }
+
     const result = Array.from(grouped.entries()).map(([guid, val]) => ({
       guid,
       name: val.name,
@@ -210,7 +223,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }));
 
     return result.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-  }, [levels, apSources]);
+  }, [levels, apSources, sharedModels]);
 
   const spaces: SpaceItem[] = useMemo(() => {
     const allSpaces = buildingData
