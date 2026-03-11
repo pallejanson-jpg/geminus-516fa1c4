@@ -556,7 +556,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
             ) : (
               <RefreshCw className="h-3 w-3" />
             )}
-            Hämta senaste
+            Fetch latest
           </Button>
         </div>
         <div className="flex gap-2">
