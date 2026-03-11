@@ -323,7 +323,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
       onUpdate?.();
       onClose();
     } catch (error: any) {
-      toast.error('Fel vid skapande: ' + error.message);
+      toast.error('Error creating asset: ' + error.message);
     } finally {
       setIsSaving(false);
     }
