@@ -436,7 +436,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                       disabled={isSaving}
                     >
                       <MapPin className="h-4 w-4" />
-                      {isPickingCoordinates ? 'Klicka i 3D...' : hasCoordinates ? 'Ändra' : 'Välj position'}
+                      {isPickingCoordinates ? 'Click in 3D...' : hasCoordinates ? 'Change' : 'Pick position'}
                     </Button>
                     {hasCoordinates && (
                       <div className="flex items-center gap-1 px-2 bg-muted rounded text-xs">
