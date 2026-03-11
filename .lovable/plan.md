@@ -1,79 +1,90 @@
+## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
+
+### Changes Made
+1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
+2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
+3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
+4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
+5. **config.toml** updated with `acc-geometry-extract` function entry
+
+### Pending (Phase 2)
+- Actual GLB chunk creation from SVF geometry (requires conversion worker)
+- OBJ as optional secondary format for small models
+
+---
 
 
-# Plan: ACC GLB Geometry Pipeline — Real Geometry Extraction
+### Ändringar
 
-## Problem
+#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
+**Fil:** `supabase/functions/conversion-worker-api/index.ts`
+- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
+- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
+- Upsert till `assets` med `created_in_model: true`
+- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
 
-The current `acc-geometry-extract` function creates **placeholder cube GLBs** instead of real geometry. The logs show:
-- SVF binary can't be parsed in Deno (no `forge-convert-utils`)
-- IFC translation request returns 403 (missing `data:write` scope)
-- `download-derivative` only finds SVF derivatives, no downloadable single-file geometry
+#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
+**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
+- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
+- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
+- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
+- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
+- Diff: soft-delete objekt som finns i DB men inte i ny IFC
 
-## Solution: Two-Phase Approach
+#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
+**Fil:** `docs/conversion-worker/worker.mjs`
+- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
+- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
+- Non-fatal: om hierarki-population misslyckas fortsätter workern
 
-### Phase 1: Request glTF translation from APS
+#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
+**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
+- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
+- `created_in_model: true` istället för `false`
+- Diff-logik: markerar borttagna objekt efter import
 
-Update `acc-sync`'s `translate-model` action to request **both SVF and glTF** output formats from APS Model Derivative. This gives us a downloadable GLB derivative.
+### Datamodell
 
-**File:** `supabase/functions/acc-sync/index.ts`
-- In the `translate-model` action, add `{"type":"svf","views":["3d"]}` AND `{"type":"svf","views":["3d"],"advanced":{"conversionMethod":"v3","buildingStoreys":"show"}}` — the SVF translation already works, and we keep it for metadata
-- Add a **separate** translation request for glTF/GLB format: `{"type":"ifc"}` or keep current flow but fix token scopes
-
-Actually, the simpler fix: update `acc-geometry-extract` to use the **3-legged token** (from `acc_oauth_tokens` table) instead of 2-legged, which has more privileges including `data:write`.
-
-### Phase 2: Fix `acc-geometry-extract` to download real geometry
-
-**File:** `supabase/functions/acc-geometry-extract/index.ts`
-
-Changes:
-1. **Add 3-legged token support** — Query `acc_oauth_tokens` for user tokens (same pattern as `acc-sync`), fall back to 2-legged
-2. **Request glTF translation** if no GLB derivative exists — POST to Model Derivative API with `{"type":"obj","advanced":{"exportFileStructure":"single"}}` using proper token
-3. **Poll and download** the resulting geometry file (GLB/OBJ)
-4. **Store monolithic GLB** as the fallback in storage
-5. **Create manifest with real storey metadata** — the Level grouping from SVF properties is already working, keep manifest pointing to monolithic GLB with storey metadata for visibility-based floor switching
-6. **Remove placeholder cube creation** — replace with real geometry download
-
-### Phase 3: Viewer uses manifest for visibility-based floor switching
-
-**File:** `src/components/viewer/NativeXeokitViewer.tsx`
-
-The viewer already handles manifest loading. Update:
-1. When manifest has a `fallback` URL but no real per-storey chunks, load the monolithic GLB
-2. Use the geometry index to map objects to storeys for visibility switching
-3. Integrate with `useFloorPriorityLoading` for show/hide by storey
-
-## Technical Details
-
-### Token resolution in `acc-geometry-extract`
 ```text
-1. Check acc_oauth_tokens for user's 3-legged token
-2. If expired, refresh using client_id/client_secret
-3. Fall back to 2-legged if no user token available
+Building Storey:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
+  category:          "Building Storey"
+  created_in_model:  true
+
+Space:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
+  category:          "Space"
+  level_fm_guid:     parent storey fm_guid
+
+Instance:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
+  category:          "Instance"
+  asset_type:        ifcType (e.g. "IfcDoor")
+  level_fm_guid:     resolved storey
+  in_room_fm_guid:   resolved space
 ```
 
-### Geometry download strategy
-```text
-1. Check bubble for existing glTF/GLB/OBJ derivatives
-2. If found → download directly
-3. If not → request new OBJ translation (single file)
-4. Poll with exponential backoff (10s → 20s → 30s, max 10 attempts)
-5. Download when ready
-6. If OBJ → convert to GLB using existing buildGlb()
-7. Store in xkt-models bucket
-```
+### Diff-flöde
 
-### Manifest structure (unchanged schema, real data)
-```text
-- chunks[]: storey metadata with element counts + bbox (from SVF properties)
-- fallback.url: path to monolithic GLB in storage
-- Viewer loads fallback GLB, uses chunk metadata for floor visibility
-```
+Vid omimport jämförs importerade fm_guids mot befintliga i DB:
+- **Nytt** → INSERT
+- **Matchat** → UPDATE (namn, typ, rumsplacering)
+- **Borttaget** → `modification_status = 'removed'` (soft-delete)
 
-## Files Changed
+---
 
-| File | Change |
-|---|---|
-| `supabase/functions/acc-geometry-extract/index.ts` | Add 3-legged token, real geometry download, remove placeholder cubes |
-| `supabase/functions/acc-sync/index.ts` | Pass `userId` to geometry extract trigger so it can use 3-legged token |
-| `src/components/viewer/NativeXeokitViewer.tsx` | Handle monolithic fallback GLB + storey visibility from manifest |
-| `supabase/functions
+## Previous Plans
+
+### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
+- Browser-primary for >20MB, edge function for ≤20MB
+- MetaModel JSON uploaded alongside XKT
+- Systems extracted and persisted
+
+### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+- Standalone Node.js worker polls conversion-worker-api
+- Per-storey .xkt tiles with dynamic floor loading
+
+### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
+- 10 credential override columns on building_settings
+- Shared credential resolver in edge functions
+- Properties page as configuration hub

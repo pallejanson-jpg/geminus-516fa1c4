@@ -591,9 +591,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         console.log(`[NativeViewer] Batch metadata check: found ${metadataFileSet.size} metadata files`);
       } catch { /* continue without metadata */ }
 
-      // ── Check for geometry manifest (GLB per-storey chunks from ACC pipeline) ──
+      // ── Check for geometry manifest (GLB from ACC pipeline) ──
       try {
-        const hasManifestFile = metadataFileSet.size > 0 || false; // Check alongside metadata batch
         const { data: manifestFiles2 } = await supabase.storage
           .from('xkt-models')
           .list(buildingFmGuid, { limit: 100 });
@@ -601,7 +600,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         const hasManifest = manifestFiles2?.some((f: any) => f.name === '_geometry_manifest.json');
 
         if (hasManifest && gltfLoader) {
-          console.log('[NativeViewer] 📋 Geometry manifest found — loading GLB chunks');
+          console.log('[NativeViewer] 📋 Geometry manifest found — loading GLB');
           const { data: manifestUrl } = await supabase.storage
             .from('xkt-models')
             .createSignedUrl(`${buildingFmGuid}/_geometry_manifest.json`, 3600);
@@ -610,35 +609,63 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
             const manifestRes = await fetch(manifestUrl.signedUrl);
             if (manifestRes.ok) {
               const manifest: GeometryManifest = await manifestRes.json();
-              console.log(`[NativeViewer] Manifest: ${manifest.chunks.length} storey chunks, format=${manifest.format}`);
+              console.log(`[NativeViewer] Manifest: ${manifest.chunks.length} storey entries, format=${manifest.format}, fallback=${!!manifest.fallback}`);
 
-              const sortedChunks = [...manifest.chunks].sort((a, b) => a.priority - b.priority);
-              setLoadProgress({ loaded: 0, total: sortedChunks.length });
+              // Check if we have real per-storey chunk URLs or just metadata
+              const hasRealChunkUrls = manifest.chunks.some(c => c.url && c.url.length > 0);
 
-              let chunkLoaded = 0;
-              for (const chunk of sortedChunks) {
-                if (!mountedRef.current) break;
-                try {
-                  const { data: chunkUrl } = await supabase.storage
-                    .from('xkt-models')
-                    .createSignedUrl(chunk.url, 3600);
+              if (hasRealChunkUrls) {
+                // Load per-storey GLB chunks
+                const sortedChunks = [...manifest.chunks].filter(c => c.url).sort((a, b) => a.priority - b.priority);
+                setLoadProgress({ loaded: 0, total: sortedChunks.length });
 
-                  if (chunkUrl?.signedUrl) {
-                    const chunkId = `${manifest.modelId}_${chunk.storeyGuid.substring(0, 8)}`;
-                    const entity = gltfLoader.load({ id: chunkId, src: chunkUrl.signedUrl, edges: true });
-                    await waitForModel(entity, chunkId);
-                    chunkLoaded++;
-                    setLoadProgress({ loaded: chunkLoaded, total: sortedChunks.length });
-                    console.log(`[NativeViewer] GLB chunk loaded: ${chunk.storeyName} (${chunk.elementCount} elements)`);
+                let chunkLoaded = 0;
+                for (const chunk of sortedChunks) {
+                  if (!mountedRef.current) break;
+                  try {
+                    const { data: chunkUrl } = await supabase.storage
+                      .from('xkt-models')
+                      .createSignedUrl(chunk.url, 3600);
+
+                    if (chunkUrl?.signedUrl) {
+                      const chunkId = `${manifest.modelId}_${chunk.storeyGuid.substring(0, 8)}`;
+                      const entity = gltfLoader.load({ id: chunkId, src: chunkUrl.signedUrl, edges: true });
+                      await waitForModel(entity, chunkId);
+                      chunkLoaded++;
+                      setLoadProgress({ loaded: chunkLoaded, total: sortedChunks.length });
+                      console.log(`[NativeViewer] GLB chunk loaded: ${chunk.storeyName} (${chunk.elementCount} elements)`);
+                    }
+                  } catch (e) {
+                    console.warn(`[NativeViewer] GLB chunk failed: ${chunk.storeyName}`, e);
                   }
-                } catch (e) {
-                  console.warn(`[NativeViewer] GLB chunk failed: ${chunk.storeyName}`, e);
+                }
+
+                if (chunkLoaded > 0) {
+                  manifestLoaded = true;
+                  console.log(`%c[NativeViewer] ✅ ${chunkLoaded}/${sortedChunks.length} GLB chunks loaded`, 'color:#22c55e;font-weight:bold');
+                }
+              } else if (manifest.fallback?.url) {
+                // Load monolithic fallback GLB + use manifest metadata for storey visibility
+                console.log(`[NativeViewer] Loading monolithic fallback GLB: ${manifest.fallback.url}`);
+                setLoadProgress({ loaded: 0, total: 1 });
+
+                const { data: fallbackUrl } = await supabase.storage
+                  .from('xkt-models')
+                  .createSignedUrl(manifest.fallback.url, 3600);
+
+                if (fallbackUrl?.signedUrl) {
+                  const fallbackId = `${manifest.modelId}_full_glb`;
+                  const entity = gltfLoader.load({ id: fallbackId, src: fallbackUrl.signedUrl, edges: true });
+                  const ok = await waitForModel(entity, fallbackId);
+                  if (ok) {
+                    manifestLoaded = true;
+                    setLoadProgress({ loaded: 1, total: 1 });
+                    console.log(`%c[NativeViewer] ✅ Monolithic fallback GLB loaded`, 'color:#22c55e;font-weight:bold');
+                  }
                 }
               }
 
-              if (chunkLoaded > 0) {
-                manifestLoaded = true;
-                console.log(`%c[NativeViewer] ✅ ${chunkLoaded}/${sortedChunks.length} GLB chunks loaded from manifest`, 'color:#22c55e;font-weight:bold');
+              if (manifestLoaded) {
                 (window as any).__geometryManifest = manifest;
               }
             }
