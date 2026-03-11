@@ -163,7 +163,7 @@ export default function HomeLanding() {
   };
 
   return (
-    <div className="relative min-h-full text-foreground">
+    <div className="relative min-h-screen text-foreground">
       {/* Full-page background */}
       <ParticleBackground />
       <div className="pointer-events-none absolute inset-0 bg-background/70" aria-hidden="true" />
