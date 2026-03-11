@@ -148,8 +148,14 @@ async function discover3dModelsEndpoint(
       
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data)) {
-          console.log(`✅ Found working 3D endpoint: ${basePath}`);
+        // Accept multiple response shapes: direct array, or {models/items/data} wrapper
+        const modelArray = Array.isArray(data) ? data
+          : Array.isArray(data?.models) ? data.models
+          : Array.isArray(data?.items) ? data.items
+          : Array.isArray(data?.data) ? data.data
+          : null;
+        if (modelArray) {
+          console.log(`✅ Found working 3D endpoint: ${basePath} (shape: ${Array.isArray(data) ? 'array' : Object.keys(data).join(',')})`);
           
           // Cache the working base path
           await supabase
@@ -160,7 +166,7 @@ async function discover3dModelsEndpoint(
               updated_at: new Date().toISOString()
             }, { onConflict: 'key' });
           
-          return { url: basePath, fromCache: false, models: data };
+          return { url: basePath, fromCache: false, models: modelArray };
         }
       }
     } catch (e) {
