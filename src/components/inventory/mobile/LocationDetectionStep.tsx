@@ -85,11 +85,11 @@ const LocationDetectionStep: React.FC<LocationDetectionStepProps> = ({ onComplet
         <div className="flex flex-col gap-3 w-full max-w-xs">
           <Button onClick={requestLocation} variant="outline" className="h-12">
             <Navigation className="h-5 w-5 mr-2" />
-            Försök igen
-          </Button>
-          <Button onClick={() => onComplete(null)} className="h-12">
-            Välj byggnad manuellt
-          </Button>
+             Try again
+           </Button>
+           <Button onClick={() => onComplete(null)} className="h-12">
+             Select building manually
+           </Button>
         </div>
       </div>
     );
