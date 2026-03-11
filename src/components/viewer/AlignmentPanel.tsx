@@ -164,7 +164,7 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleReset} title="Återställ">
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleReset} title="Reset">
             <RotateCcw className="h-3.5 w-3.5" />
           </Button>
           <Button
