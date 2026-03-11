@@ -538,15 +538,15 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                 </div>
 
                 {/* Info about mandatory fields */}
-                <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
-                  <p className="font-medium">Obligatoriska fält för Asset+:</p>
-                  <ul className="list-disc list-inside mt-1">
-                    <li>FM GUID (genereras automatiskt)</li>
-                    <li>Benämning</li>
-                    <li>Kategori</li>
-                    <li>Position (koordinater)</li>
-                  </ul>
-                </div>
+                 <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                   <p className="font-medium">Required fields for Asset+:</p>
+                   <ul className="list-disc list-inside mt-1">
+                     <li>FM GUID (auto-generated)</li>
+                     <li>Name</li>
+                     <li>Category</li>
+                     <li>Position (coordinates)</li>
+                   </ul>
+                 </div>
               </div>
             ) : assets.length === 0 ? (
               /* Fallback: show BIM metadata from xeokit metaScene */
