@@ -154,14 +154,14 @@ const LocationDetectionStep: React.FC<LocationDetectionStepProps> = ({ onComplet
         <MapPin className="h-12 w-12 text-muted-foreground" />
       </div>
       <div className="text-center space-y-2">
-        <h2 className="text-xl font-semibold">Ingen byggnad i närheten</h2>
-        <p className="text-muted-foreground max-w-xs">
-          Det finns ingen registrerad byggnad inom 200 meter från dig.
-        </p>
-      </div>
-      <Button onClick={() => onComplete(null)} className="h-14 text-lg w-full max-w-xs">
-        Välj byggnad manuellt
-      </Button>
+         <h2 className="text-xl font-semibold">No building nearby</h2>
+         <p className="text-muted-foreground max-w-xs">
+           There is no registered building within 200 meters of your location.
+         </p>
+       </div>
+       <Button onClick={() => onComplete(null)} className="h-14 text-lg w-full max-w-xs">
+         Select building manually
+       </Button>
     </div>
   );
 };
