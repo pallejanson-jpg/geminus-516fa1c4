@@ -39,7 +39,7 @@ const MENU_ITEMS = [
   { id: 'workorder' as const, label: 'Arbetsorder', icon: Wrench },
   { id: 'support' as const, label: 'Supportärende', icon: LifeBuoy },
   { id: 'insights' as const, label: 'Insikter', icon: BarChart2 },
-  { id: 'gunnar' as const, label: 'Fråga Gunnar', icon: Bot },
+  { id: 'gunnar' as const, label: 'Fråga Geminus AI', icon: Bot },
   { id: 'ilean' as const, label: 'Fråga Ilean', icon: FileText },
 ];
 
