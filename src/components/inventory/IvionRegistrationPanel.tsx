@@ -138,9 +138,9 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
       // Don't auto-fetch since we already have POI data
       setAutoFetchAttempted(true);
 
-      toast.success('Ny POI upptäckt!', {
-        description: `Position: (${initialPoi.location.x.toFixed(2)}, ${initialPoi.location.y.toFixed(2)}, ${initialPoi.location.z.toFixed(2)})`,
-      });
+       toast.success('New POI detected!', {
+         description: `Position: (${initialPoi.location.x.toFixed(2)}, ${initialPoi.location.y.toFixed(2)}, ${initialPoi.location.z.toFixed(2)})`,
+       });
     }
   }, [initialPoi]);
 
