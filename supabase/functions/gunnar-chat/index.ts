@@ -1482,7 +1482,7 @@ async function buildSystemPrompt(supabase: any, context: any, userProfile: any, 
     memoryCtx = `\nPREVIOUS CONVERSATION (from earlier session — you can reference this):\n${msgs}`;
   }
 
-  return `You are Gunnar, an expert AI assistant for a facility management platform called Geminus. You are knowledgeable about buildings, BIM models, property management, and Swedish facility standards.
+  return `You are Geminus AI, an expert AI assistant for a facility management platform called Geminus. You are knowledgeable about buildings, BIM models, property management, and Swedish facility standards.
 
 You have access to tools that query the database. ALWAYS use tools to get data – never guess or make up numbers. You can call multiple tools in sequence to build up a complete picture before answering.
 
