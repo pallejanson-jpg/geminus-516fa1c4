@@ -104,7 +104,7 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
       onSaved?.();
     } catch (err: any) {
       console.error('Failed to save alignment:', err);
-      toast.error('Kunde inte spara alignment', { description: err.message });
+      toast.error('Could not save alignment', { description: err.message });
     } finally {
       setIsSaving(false);
     }
