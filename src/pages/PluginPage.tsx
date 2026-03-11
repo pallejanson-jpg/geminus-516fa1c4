@@ -71,7 +71,7 @@ export default function PluginPage() {
         <div className="px-4 py-3 border-b border-border shrink-0">
           <div className="flex items-center gap-2 mb-2">
             <Building2 className="h-5 w-5 text-primary" />
-            <h1 className="text-base font-semibold text-foreground">Välj byggnad</h1>
+            <h1 className="text-base font-semibold text-foreground">Select building</h1>
           </div>
           <Input
             placeholder="Sök byggnad..."
