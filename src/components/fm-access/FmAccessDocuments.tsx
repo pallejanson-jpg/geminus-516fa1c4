@@ -97,7 +97,7 @@ const FmAccessDocuments: React.FC<FmAccessDocumentsProps> = ({ buildingId, build
               </div>
             )}
             {loadedDocs && documents.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">Inga dokument hittade.</p>
+              <p className="text-sm text-muted-foreground text-center py-4">No documents found.</p>
             )}
             {documents.map((d, i) => (
               <Card key={d.documentId || d.objectId || i} className="overflow-hidden">
