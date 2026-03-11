@@ -179,9 +179,9 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
           if (title) setName(title);
         }
 
-        toast.success('Senaste POI hämtad!', {
-          description: `Position: (${data.location.x.toFixed(2)}, ${data.location.y.toFixed(2)}, ${data.location.z.toFixed(2)})`,
-        });
+         toast.success('Latest POI fetched!', {
+           description: `Position: (${data.location.x.toFixed(2)}, ${data.location.y.toFixed(2)}, ${data.location.z.toFixed(2)})`,
+         });
       } else if (data?.error) {
         // Show error but don't block the form
         console.warn('POI fetch warning:', data.error);
