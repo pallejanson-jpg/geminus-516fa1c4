@@ -663,7 +663,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                           <span>{selectedSymbol.name}</span>
                         </>
                       ) : (
-                        <span className="text-muted-foreground">Ingen symbol</span>
+                         <span className="text-muted-foreground">No symbol</span>
                       )}
                     </div>
                   )}
