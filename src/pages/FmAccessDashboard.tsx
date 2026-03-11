@@ -55,7 +55,7 @@ const FmAccessDashboard: React.FC = () => {
         body: { action: 'get-drawings', buildingId: buildingFmGuid },
       });
       if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || 'Kunde inte hämta ritningar');
+      if (!data?.success) throw new Error(data?.error || 'Could not fetch drawings');
       setDrawings(Array.isArray(data.data) ? data.data : []);
     } catch (err: any) {
       setErrorDrawings(err.message);
@@ -73,7 +73,7 @@ const FmAccessDashboard: React.FC = () => {
         body: { action: 'get-documents', buildingId: buildingFmGuid },
       });
       if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || 'Kunde inte hämta dokument');
+      if (!data?.success) throw new Error(data?.error || 'Could not fetch documents');
       setDocuments(Array.isArray(data.data) ? data.data : []);
     } catch (err: any) {
       setErrorDocs(err.message);
@@ -92,9 +92,9 @@ const FmAccessDashboard: React.FC = () => {
       <div className="flex items-center justify-center h-full p-8">
         <div className="text-center">
           <AlertCircle className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">Ingen byggnad vald. Gå till en byggnad och öppna FM Access därifrån.</p>
+          <p className="text-sm text-muted-foreground">No building selected. Go to a building and open FM Access from there.</p>
           <Button variant="outline" className="mt-4" onClick={() => navigate('/')}>
-            Till Dashboard
+            To Dashboard
           </Button>
         </div>
       </div>
@@ -112,7 +112,7 @@ const FmAccessDashboard: React.FC = () => {
           <Square className="h-5 w-5 text-primary" />
           <div>
             <h1 className="text-lg font-semibold text-foreground">FM Access</h1>
-            <p className="text-xs text-muted-foreground">Ritningar och dokument</p>
+            <p className="text-xs text-muted-foreground">Drawings and documents</p>
           </div>
         </div>
       </div>
@@ -123,8 +123,8 @@ const FmAccessDashboard: React.FC = () => {
         onClick={() => navigate(`/split-viewer?building=${buildingFmGuid}&mode=2d`)}
         className="gap-2"
       >
-        <Square className="h-4 w-4" />
-        Öppna 2D-ritning i viewer
+         <Square className="h-4 w-4" />
+         Open 2D drawing in viewer
       </Button>
 
       {/* Drawings section */}
@@ -133,7 +133,7 @@ const FmAccessDashboard: React.FC = () => {
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm flex items-center gap-2">
               <Image className="h-4 w-4 text-primary" />
-              Ritningar
+              Drawings
             </CardTitle>
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={fetchDrawings}>
               <RefreshCw className="h-3.5 w-3.5" />
@@ -151,7 +151,7 @@ const FmAccessDashboard: React.FC = () => {
               <p className="text-xs text-muted-foreground">{errorDrawings}</p>
             </div>
           ) : drawings.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-4">Inga ritningar hittades</p>
+            <p className="text-xs text-muted-foreground text-center py-4">No drawings found</p>
           ) : (
             <div className="space-y-1">
               {drawings.map((d) => (
@@ -177,7 +177,7 @@ const FmAccessDashboard: React.FC = () => {
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm flex items-center gap-2">
               <FileText className="h-4 w-4 text-primary" />
-              Dokument
+              Documents
             </CardTitle>
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={fetchDocuments}>
               <RefreshCw className="h-3.5 w-3.5" />
@@ -195,7 +195,7 @@ const FmAccessDashboard: React.FC = () => {
               <p className="text-xs text-muted-foreground">{errorDocs}</p>
             </div>
           ) : documents.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-4">Inga dokument hittades</p>
+            <p className="text-xs text-muted-foreground text-center py-4">No documents found</p>
           ) : (
             <div className="space-y-1">
               {documents.map((d) => (

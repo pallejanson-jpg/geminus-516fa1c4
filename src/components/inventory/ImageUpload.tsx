@@ -39,13 +39,13 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) 
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      toast.error('Endast bilder tillåtna');
+      toast.error('Only images allowed');
       return;
     }
 
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      toast.error('Bilden får max vara 5 MB');
+      toast.error('Image must be 5 MB or less');
       return;
     }
 
@@ -70,10 +70,10 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) 
         .getPublicUrl(filePath);
 
       onChange(urlData.publicUrl);
-      toast.success('Bild uppladdad!');
+      toast.success('Image uploaded!');
     } catch (error: any) {
       console.error('Upload error:', error);
-      toast.error('Kunde inte ladda upp bild', {
+      toast.error('Could not upload image', {
         description: error.message,
       });
     } finally {
@@ -96,7 +96,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) 
 
   return (
     <div className="space-y-2">
-      <Label className="text-base">Bild (valfritt)</Label>
+      <Label className="text-base">Image (optional)</Label>
       
       {value ? (
         <div className="relative rounded-lg overflow-hidden border border-border">
@@ -137,7 +137,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) 
               ) : (
                 <>
                   <Camera className="h-6 w-6" />
-                  <span className="text-xs">Ta foto</span>
+                  <span className="text-xs">Take photo</span>
                 </>
               )}
             </Button>
@@ -161,7 +161,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) 
             ) : (
               <>
                 <Upload className="h-6 w-6" />
-                <span className="text-xs">{isMobile ? 'Ladda upp' : 'Välj bild'}</span>
+                <span className="text-xs">{isMobile ? 'Upload' : 'Choose image'}</span>
               </>
             )}
           </Button>

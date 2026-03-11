@@ -236,7 +236,7 @@ export default function SensorsTab() {
               onValueChange={val => setSelectedBuildingGuid(val)}
             >
               <SelectTrigger className="h-7 text-xs w-44">
-                <SelectValue placeholder="Välj byggnad" />
+                <SelectValue placeholder="Select building" />
               </SelectTrigger>
               <SelectContent>
                 {buildings.map((b: any) => (
@@ -273,7 +273,7 @@ export default function SensorsTab() {
             variant="ghost"
             className="h-7 w-7"
             onClick={() => setRefreshKey(k => k + 1)}
-            title="Uppdatera"
+            title="Refresh"
           >
             <RefreshCw className="h-3.5 w-3.5" />
           </Button>

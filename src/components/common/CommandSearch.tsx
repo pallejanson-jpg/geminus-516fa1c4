@@ -67,12 +67,12 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
       <CommandInput 
-        placeholder="Sök byggnader, våningar, rum..."
+        placeholder="Search buildings, floors, rooms..."
         value={query}
         onValueChange={setQuery}
       />
       <CommandList className="max-h-[400px]">
-        <CommandEmpty>Inga resultat hittades</CommandEmpty>
+        <CommandEmpty>No results found</CommandEmpty>
         {Array.from(grouped.entries()).map(([category, items]) => {
           const Icon = categoryIcons[category] || Box;
           return (

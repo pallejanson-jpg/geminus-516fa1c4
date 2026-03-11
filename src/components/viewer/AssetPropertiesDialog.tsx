@@ -17,22 +17,22 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-// Asset type options for dropdown (Swedish)
+// Asset type options for dropdown
 const ASSET_TYPES = [
-  { value: 'fire_extinguisher', label: 'Brandsläckare' },
-  { value: 'chair', label: 'Stol' },
-  { value: 'table', label: 'Bord' },
-  { value: 'hvac', label: 'Luftbehandlingsaggregat' },
+  { value: 'fire_extinguisher', label: 'Fire Extinguisher' },
+  { value: 'chair', label: 'Chair' },
+  { value: 'table', label: 'Table' },
+  { value: 'hvac', label: 'HVAC Unit' },
   { value: 'sprinkler', label: 'Sprinkler' },
   { value: 'sensor', label: 'Sensor' },
-  { value: 'lamp', label: 'Lampa' },
-  { value: 'cabinet', label: 'Skåp' },
-  { value: 'other', label: 'Övrigt' },
+  { value: 'lamp', label: 'Lamp' },
+  { value: 'cabinet', label: 'Cabinet' },
+  { value: 'other', label: 'Other' },
 ];
 
 // IFC Object categories (mandatory for Asset+)
 const OBJECT_CATEGORIES = [
-  { value: 'Instance', label: 'Instance (Inventarie)' },
+  { value: 'Instance', label: 'Instance (Inventory)' },
   { value: 'IfcFurniture', label: 'Furniture' },
   { value: 'IfcBuildingElementProxy', label: 'Building Element' },
   { value: 'IfcFlowTerminal', label: 'Flow Terminal' },
@@ -209,7 +209,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
           });
         }
       } catch (error: any) {
-        toast.error('Kunde inte hämta data: ' + error.message);
+        toast.error('Failed to fetch data: ' + error.message);
       } finally {
         setIsLoading(false);
       }
@@ -255,15 +255,15 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
   const handleCreate = async () => {
     // Validation
     if (!formData.name.trim()) {
-      toast.error('Benämning är obligatoriskt');
+      toast.error('Name is required');
       return;
     }
     if (!formData.category) {
-      toast.error('Kategori är obligatoriskt');
+      toast.error('Category is required');
       return;
     }
     if (!initialCoordinates && formData.coordinate_x === 0 && formData.coordinate_y === 0) {
-      toast.error('Välj position i 3D-vyn först');
+      toast.error('Select a position in the 3D view first');
       return;
     }
 
@@ -316,14 +316,14 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
         // Continue anyway - local save succeeded
       }
 
-      toast.success('Tillgång skapad!', {
+      toast.success('Asset created!', {
         description: formData.name,
       });
 
       onUpdate?.();
       onClose();
     } catch (error: any) {
-      toast.error('Fel vid skapande: ' + error.message);
+      toast.error('Error creating asset: ' + error.message);
     } finally {
       setIsSaving(false);
     }
@@ -358,14 +358,14 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
         if (error) throw error;
 
         toast.success(isMultiSelect 
-          ? `Uppdaterade ${assets.length} assets` 
-          : 'Egenskaper sparade');
+          ? `Updated ${assets.length} assets` 
+          : 'Properties saved');
         onUpdate?.();
       }
 
       setIsEditing(false);
     } catch (error: any) {
-      toast.error('Fel vid sparning: ' + error.message);
+      toast.error('Error saving: ' + error.message);
     } finally {
       setIsSaving(false);
     }
@@ -399,7 +399,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
         <div className="flex items-center gap-2">
           <GripVertical className="h-4 w-4 text-muted-foreground" />
           <span className="font-medium text-sm">
-            {createMode ? 'Skapa ny tillgång' : 'Egenskaper'}
+            {createMode ? 'Create new asset' : 'Properties'}
             {isMultiSelect && !createMode && <Badge variant="secondary" className="ml-1">{assets.length}</Badge>}
           </span>
         </div>
@@ -426,7 +426,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
               <div className="space-y-4">
                 {/* Position picker */}
                 <div className="space-y-2">
-                  <Label className="text-xs font-medium">Position i 3D *</Label>
+                  <Label className="text-xs font-medium">Position in 3D *</Label>
                   <div className="flex gap-2">
                     <Button
                       type="button"
@@ -436,7 +436,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                       disabled={isSaving}
                     >
                       <MapPin className="h-4 w-4" />
-                      {isPickingCoordinates ? 'Klicka i 3D...' : hasCoordinates ? 'Ändra' : 'Välj position'}
+                      {isPickingCoordinates ? 'Click in 3D...' : hasCoordinates ? 'Change' : 'Pick position'}
                     </Button>
                     {hasCoordinates && (
                       <div className="flex items-center gap-1 px-2 bg-muted rounded text-xs">
@@ -459,11 +459,11 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
 
                 {/* Name/Designation - Required */}
                 <div className="space-y-1">
-                  <Label className="text-xs">Benämning / Nummer *</Label>
+                  <Label className="text-xs">Name / Number *</Label>
                   <Input
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="t.ex. BS-001, Stol-A1"
+                    placeholder="e.g. BS-001, Chair-A1"
                     className="h-9"
                     required
                   />
@@ -471,7 +471,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
 
                 {/* Category - Required */}
                 <div className="space-y-1">
-                  <Label className="text-xs">Kategori *</Label>
+                  <Label className="text-xs">Category *</Label>
                   <Select
                     value={formData.category}
                     onValueChange={(v) => setFormData({ ...formData, category: v })}
@@ -491,13 +491,13 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
 
                 {/* Asset Type */}
                 <div className="space-y-1">
-                  <Label className="text-xs">Typ av tillgång</Label>
+                  <Label className="text-xs">Asset type</Label>
                   <Select
                     value={formData.asset_type}
                     onValueChange={(v) => setFormData({ ...formData, asset_type: v })}
                   >
                     <SelectTrigger className="h-9">
-                      <SelectValue placeholder="Välj typ..." />
+                       <SelectValue placeholder="Select type..." />
                     </SelectTrigger>
                     <SelectContent className="bg-card border shadow-lg z-[100]">
                       {ASSET_TYPES.map((type) => (
@@ -511,16 +511,16 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
 
                 {/* Symbol selection */}
                 <div className="space-y-1">
-                  <Label className="text-xs">Annotationssymbol</Label>
+                  <Label className="text-xs">Annotation symbol</Label>
                   <Select
                     value={formData.symbol_id}
                     onValueChange={(v) => setFormData({ ...formData, symbol_id: v })}
                   >
                     <SelectTrigger className="h-9">
-                      <SelectValue placeholder="Välj symbol..." />
+                       <SelectValue placeholder="Select symbol..." />
                     </SelectTrigger>
                     <SelectContent className="bg-card border shadow-lg z-[100]">
-                      <SelectItem value="">Ingen symbol</SelectItem>
+                       <SelectItem value="">No symbol</SelectItem>
                       {symbols.map((s) => (
                         <SelectItem key={s.id} value={s.id}>
                           <div className="flex items-center gap-2">
@@ -538,15 +538,15 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                 </div>
 
                 {/* Info about mandatory fields */}
-                <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
-                  <p className="font-medium">Obligatoriska fält för Asset+:</p>
-                  <ul className="list-disc list-inside mt-1">
-                    <li>FM GUID (genereras automatiskt)</li>
-                    <li>Benämning</li>
-                    <li>Kategori</li>
-                    <li>Position (koordinater)</li>
-                  </ul>
-                </div>
+                 <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                   <p className="font-medium">Required fields for Asset+:</p>
+                   <ul className="list-disc list-inside mt-1">
+                     <li>FM GUID (auto-generated)</li>
+                     <li>Name</li>
+                     <li>Category</li>
+                     <li>Position (coordinates)</li>
+                   </ul>
+                 </div>
               </div>
             ) : assets.length === 0 ? (
               /* Fallback: show BIM metadata from xeokit metaScene */
@@ -575,14 +575,14 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                   return (
                     <div className="space-y-3">
                       <div className="text-xs text-muted-foreground bg-muted/50 rounded p-2">
-                        BIM-metadata (ej synkat till databasen)
+                        BIM metadata (not synced to database)
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Namn</Label>
+                         <Label className="text-xs text-muted-foreground">Name</Label>
                         <p className="text-sm">{metaObj.name || '-'}</p>
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Typ (IFC)</Label>
+                        <Label className="text-xs text-muted-foreground">Type (IFC)</Label>
                         <p className="text-sm">{metaObj.type || '-'}</p>
                       </div>
                       {metaObj.originalSystemId && (
@@ -593,13 +593,13 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                       )}
                       {metaObj.parent && (
                         <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">Förälder</Label>
+                          <Label className="text-xs text-muted-foreground">Parent</Label>
                           <p className="text-sm">{metaObj.parent.name || metaObj.parent.type || '-'}</p>
                         </div>
                       )}
                       {propertySets.length > 0 && propertySets.map((ps: any, idx: number) => (
                         <div key={idx} className="space-y-1">
-                          <Label className="text-xs text-muted-foreground font-medium">{ps.name || `Egenskaper ${idx + 1}`}</Label>
+                          <Label className="text-xs text-muted-foreground font-medium">{ps.name || `Properties ${idx + 1}`}</Label>
                           {(ps.properties || []).map((prop: any, pidx: number) => (
                             <div key={pidx} className="flex justify-between text-xs">
                               <span className="text-muted-foreground">{prop.name}</span>
@@ -612,31 +612,31 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                   );
                 }
                 return (
-                  <div className="text-center py-8 text-muted-foreground text-sm">
-                    <p>Ingen asset hittad i databasen</p>
-                    <p className="text-xs mt-1">Objektet kanske inte är synkat ännu</p>
-                  </div>
+                   <div className="text-center py-8 text-muted-foreground text-sm">
+                     <p>No asset found in database</p>
+                     <p className="text-xs mt-1">The object may not be synced yet</p>
+                   </div>
                 );
               })()
             ) : isMultiSelect ? (
               /* Multi-select view */
               <div className="space-y-4">
                 <div className="text-sm text-muted-foreground">
-                  {assets.length} objekt markerade
+                  {assets.length} objects selected
                 </div>
                 <Separator />
                 <div className="space-y-2">
-                  <Label className="text-xs">Gemensam symbol</Label>
+                  <Label className="text-xs">Shared symbol</Label>
                   {isEditing ? (
                     <Select
                       value={formData.symbol_id}
                       onValueChange={(v) => setFormData({ ...formData, symbol_id: v })}
                     >
                       <SelectTrigger className="h-9">
-                        <SelectValue placeholder="Välj symbol..." />
+                         <SelectValue placeholder="Select symbol..." />
                       </SelectTrigger>
                       <SelectContent className="bg-card border shadow-lg z-[100]">
-                        <SelectItem value="">Ingen symbol</SelectItem>
+                         <SelectItem value="">No symbol</SelectItem>
                         {symbols.map((s) => (
                           <SelectItem key={s.id} value={s.id}>
                             <div className="flex items-center gap-2">
@@ -663,7 +663,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                           <span>{selectedSymbol.name}</span>
                         </>
                       ) : (
-                        <span className="text-muted-foreground">Ingen symbol</span>
+                         <span className="text-muted-foreground">No symbol</span>
                       )}
                     </div>
                   )}
@@ -680,7 +680,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                 <Separator />
 
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Namn</Label>
+                  <Label className="text-xs text-muted-foreground">Name</Label>
                   {isEditing ? (
                     <Input
                       value={formData.name}
@@ -706,7 +706,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Kategori</Label>
+                  <Label className="text-xs text-muted-foreground">Category</Label>
                   <Badge variant="outline">{assets[0].category}</Badge>
                 </div>
 
@@ -718,7 +718,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                       onValueChange={(v) => setFormData({ ...formData, asset_type: v })}
                     >
                       <SelectTrigger className="h-8">
-                        <SelectValue placeholder="Välj typ..." />
+                        <SelectValue placeholder="Select type..." />
                       </SelectTrigger>
                       <SelectContent className="bg-card border shadow-lg z-[100]">
                         {ASSET_TYPES.map((type) => (
@@ -736,17 +736,17 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                 <Separator />
 
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Annotationssymbol</Label>
+                  <Label className="text-xs text-muted-foreground">Annotation symbol</Label>
                   {isEditing ? (
                     <Select
                       value={formData.symbol_id}
                       onValueChange={(v) => setFormData({ ...formData, symbol_id: v })}
                     >
                       <SelectTrigger className="h-9">
-                        <SelectValue placeholder="Välj symbol..." />
+                        <SelectValue placeholder="Select symbol..." />
                       </SelectTrigger>
                       <SelectContent className="bg-card border shadow-lg z-[100]">
-                        <SelectItem value="">Ingen symbol</SelectItem>
+                        <SelectItem value="">No symbol</SelectItem>
                         {symbols.map((s) => (
                           <SelectItem key={s.id} value={s.id}>
                             <div className="flex items-center gap-2">
@@ -773,7 +773,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                           <span>{selectedSymbol.name}</span>
                         </>
                       ) : (
-                        <span className="text-muted-foreground">Ingen symbol</span>
+                        <span className="text-muted-foreground">No symbol</span>
                       )}
                     </div>
                   )}
@@ -783,7 +783,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                   <>
                     <Separator />
                     <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Koordinater</Label>
+                      <Label className="text-xs text-muted-foreground">Coordinates</Label>
                       <p className="text-xs font-mono">
                         X: {assets[0].coordinate_x?.toFixed(2)}, 
                         Y: {assets[0].coordinate_y?.toFixed(2)}, 
@@ -796,8 +796,8 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                 <Separator />
                 
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {assets[0].is_local && <Badge variant="secondary">Lokal</Badge>}
-                  {assets[0].annotation_placed && <Badge variant="secondary">Placerad</Badge>}
+                   {assets[0].is_local && <Badge variant="secondary">Local</Badge>}
+                   {assets[0].annotation_placed && <Badge variant="secondary">Placed</Badge>}
                 </div>
               </div>
             )}
@@ -807,29 +807,29 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
           <div className="p-3 border-t flex justify-end gap-2">
             {createMode ? (
               <>
-                <Button variant="outline" size="sm" onClick={onClose} disabled={isSaving}>
-                  Avbryt
-                </Button>
-                <Button size="sm" onClick={handleSave} disabled={isSaving || !hasCoordinates}>
-                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
-                  Skapa
+                 <Button variant="outline" size="sm" onClick={onClose} disabled={isSaving}>
+                   Cancel
+                 </Button>
+                 <Button size="sm" onClick={handleSave} disabled={isSaving || !hasCoordinates}>
+                   {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
+                   Create
                 </Button>
               </>
             ) : assets.length > 0 && (
               isEditing ? (
                 <>
-                  <Button variant="outline" size="sm" onClick={() => setIsEditing(false)} disabled={isSaving}>
-                    Avbryt
-                  </Button>
-                  <Button size="sm" onClick={handleSave} disabled={isSaving}>
-                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
-                    Spara
-                  </Button>
+                   <Button variant="outline" size="sm" onClick={() => setIsEditing(false)} disabled={isSaving}>
+                     Cancel
+                   </Button>
+                   <Button size="sm" onClick={handleSave} disabled={isSaving}>
+                     {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+                     Save
+                   </Button>
                 </>
               ) : (
-                <Button variant="outline" size="sm" onClick={handleStartEdit}>
-                  <Pencil className="h-4 w-4 mr-1" />
-                  Redigera
+                 <Button variant="outline" size="sm" onClick={handleStartEdit}>
+                   <Pencil className="h-4 w-4 mr-1" />
+                   Edit
                 </Button>
               )
             )}

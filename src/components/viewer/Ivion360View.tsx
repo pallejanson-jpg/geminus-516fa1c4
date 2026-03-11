@@ -558,13 +558,13 @@ export default function Ivion360View({
             <div className="flex flex-col items-center gap-2">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <span className="text-sm text-muted-foreground">
-                {sdkStatus === 'loading' 
-                  ? 'Laddar 360° SDK...'
-                  : isRenewingToken 
-                    ? 'Förnyar anslutning...' 
-                    : isLoadingImages 
-                      ? 'Laddar bildpositioner...'
-                      : 'Laddar 360°-vy...'}
+                 {sdkStatus === 'loading' 
+                   ? 'Loading 360° SDK...'
+                   : isRenewingToken 
+                     ? 'Renewing connection...' 
+                     : isLoadingImages 
+                       ? 'Loading image positions...'
+                       : 'Loading 360° view...'}
               </span>
             </div>
           </div>
@@ -574,13 +574,13 @@ export default function Ivion360View({
         {syncEnabled && !isLoadingImages && imageCache.length === 0 && hasImageLoadError && (
           <div className="absolute top-12 left-2 right-2 z-20 bg-amber-100 dark:bg-amber-900/40 
                           text-amber-800 dark:text-amber-200 text-xs px-3 py-2 rounded shadow flex items-center justify-between gap-2">
-            <span>⚠️ Kunde inte hämta bildpositioner för synk.</span>
-            <button 
-              onClick={retryLoadImages}
-              className="underline hover:no-underline whitespace-nowrap"
-            >
-              Försök igen
-            </button>
+             <span>⚠️ Could not fetch image positions for sync.</span>
+             <button 
+               onClick={retryLoadImages}
+               className="underline hover:no-underline whitespace-nowrap"
+             >
+               Try again
+             </button>
           </div>
         )}
 

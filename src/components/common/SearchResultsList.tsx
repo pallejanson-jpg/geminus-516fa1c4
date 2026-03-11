@@ -21,12 +21,12 @@ export function SearchResultsList({
   results, 
   onSelect, 
   isLoading = false,
-  emptyMessage = 'Inga resultat hittades'
+  emptyMessage = 'No results found'
 }: SearchResultsListProps) {
   if (isLoading) {
     return (
       <div className="p-4 text-center text-sm text-muted-foreground">
-        Söker...
+        Searching...
       </div>
     );
   }

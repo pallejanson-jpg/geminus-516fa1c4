@@ -138,9 +138,9 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
       // Don't auto-fetch since we already have POI data
       setAutoFetchAttempted(true);
 
-      toast.success('Ny POI upptäckt!', {
-        description: `Position: (${initialPoi.location.x.toFixed(2)}, ${initialPoi.location.y.toFixed(2)}, ${initialPoi.location.z.toFixed(2)})`,
-      });
+       toast.success('New POI detected!', {
+         description: `Position: (${initialPoi.location.x.toFixed(2)}, ${initialPoi.location.y.toFixed(2)}, ${initialPoi.location.z.toFixed(2)})`,
+       });
     }
   }, [initialPoi]);
 
@@ -179,9 +179,9 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
           if (title) setName(title);
         }
 
-        toast.success('Senaste POI hämtad!', {
-          description: `Position: (${data.location.x.toFixed(2)}, ${data.location.y.toFixed(2)}, ${data.location.z.toFixed(2)})`,
-        });
+         toast.success('Latest POI fetched!', {
+           description: `Position: (${data.location.x.toFixed(2)}, ${data.location.y.toFixed(2)}, ${data.location.z.toFixed(2)})`,
+         });
       } else if (data?.error) {
         // Show error but don't block the form
         console.warn('POI fetch warning:', data.error);
@@ -299,16 +299,16 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
   // Fetch POI data from Ivion
   const handleFetchPoi = async () => {
     if (!ivionSiteId) {
-      toast.error('Ingen Ivion-site konfigurerad');
-      return;
-    }
+       toast.error('No Ivion site configured');
+       return;
+     }
 
-    const poiId = parsePoiId(poiInput);
-    if (!poiId) {
-      toast.error('Ogiltigt POI-ID', {
-        description: 'Ange ett giltigt POI-ID (nummer) eller Ivion-URL med poi-parameter',
-      });
-      return;
+     const poiId = parsePoiId(poiInput);
+     if (!poiId) {
+       toast.error('Invalid POI ID', {
+         description: 'Enter a valid POI ID (number) or Ivion URL with poi parameter',
+       });
+       return;
     }
 
     setIsFetchingPoi(true);
@@ -338,17 +338,17 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
           if (title) setName(title);
         }
 
-        toast.success('POI-data hämtad!', {
-          description: `Position: (${data.location.x.toFixed(2)}, ${data.location.y.toFixed(2)}, ${data.location.z.toFixed(2)})`,
-        });
-      } else {
-        toast.error('POI hittades inte');
-      }
-    } catch (err: any) {
-      console.error('POI fetch error:', err);
-      toast.error('Kunde inte hämta POI', {
-        description: err.message || 'Kontrollera att POI-ID är korrekt',
-      });
+         toast.success('POI data fetched!', {
+           description: `Position: (${data.location.x.toFixed(2)}, ${data.location.y.toFixed(2)}, ${data.location.z.toFixed(2)})`,
+         });
+       } else {
+         toast.error('POI not found');
+       }
+     } catch (err: any) {
+       console.error('POI fetch error:', err);
+       toast.error('Could not fetch POI', {
+         description: err.message || 'Check that the POI ID is correct',
+       });
     } finally {
       setIsFetchingPoi(false);
     }
@@ -357,17 +357,17 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
   // Handle form submission
   const handleSave = async () => {
     if (!name.trim()) {
-      toast.error('Namn är obligatoriskt');
-      return;
-    }
-    if (!category) {
-      toast.error('Välj en kategori');
-      return;
-    }
-    if (!symbolId) {
-      toast.error('Välj en symbol');
-      return;
-    }
+       toast.error('Name is required');
+       return;
+     }
+     if (!category) {
+       toast.error('Select a category');
+       return;
+     }
+     if (!symbolId) {
+       toast.error('Select a symbol');
+       return;
+     }
 
     setIsLoading(true);
     try {
@@ -439,7 +439,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
         }
       }
 
-      toast.success('Tillgång sparad!');
+      toast.success('Asset saved!');
       
       // Check if we should close after saving
       if (closeAfterSave && onSavedAndClose) {
@@ -462,7 +462,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
       // Keep level and room for convenience
     } catch (err: any) {
       console.error('Save error:', err);
-      toast.error('Kunde inte spara', { description: err.message });
+      toast.error('Could not save', { description: err.message });
     } finally {
       setIsLoading(false);
       setCloseAfterSave(false);
@@ -480,13 +480,13 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
   const getConnectionStatusDisplay = () => {
     switch (connectionStatus) {
       case 'connected':
-        return { icon: Wifi, text: 'Ansluten', className: 'text-green-600 bg-green-100/80 dark:bg-green-900/30' };
-      case 'error':
-        return { icon: WifiOff, text: 'Anslutningsfel', className: 'text-red-600 bg-red-100/80 dark:bg-red-900/30' };
-      case 'expired':
-        return { icon: AlertCircle, text: 'Token utgått', className: 'text-amber-600 bg-amber-100/80 dark:bg-amber-900/30' };
-      default:
-        return { icon: Loader2, text: 'Ansluter...', className: 'text-muted-foreground bg-muted' };
+         return { icon: Wifi, text: 'Connected', className: 'text-green-600 bg-green-100/80 dark:bg-green-900/30' };
+       case 'error':
+         return { icon: WifiOff, text: 'Connection error', className: 'text-red-600 bg-red-100/80 dark:bg-red-900/30' };
+       case 'expired':
+         return { icon: AlertCircle, text: 'Token expired', className: 'text-amber-600 bg-amber-100/80 dark:bg-amber-900/30' };
+       default:
+         return { icon: Loader2, text: 'Connecting...', className: 'text-muted-foreground bg-muted' };
     }
   };
 
@@ -509,7 +509,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
       >
         <div className="flex items-center gap-2">
           <GripVertical className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium">Registrera tillgång</span>
+          <span className="font-medium">Register asset</span>
         </div>
         <div className="flex items-center gap-2">
           {/* Mini connection status */}
@@ -532,8 +532,8 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
             className="w-full gap-2 border-amber-500 text-amber-600 hover:bg-amber-100 dark:hover:bg-amber-900"
           >
             <RefreshCw className="h-4 w-4" />
-            Ladda ny POI
-            <Badge variant="secondary" className="ml-1 bg-amber-100 text-amber-700">Ny!</Badge>
+            Load new POI
+            <Badge variant="secondary" className="ml-1 bg-amber-100 text-amber-700">New!</Badge>
           </Button>
         </div>
       )}
@@ -542,7 +542,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
       <div className="p-4 border-b bg-muted/30">
         <div className="flex items-center justify-between mb-1.5">
           <Label className="text-xs text-muted-foreground">
-            Hämta position från POI
+            Fetch position from POI
           </Label>
           <Button
             variant="ghost"
@@ -556,7 +556,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
             ) : (
               <RefreshCw className="h-3 w-3" />
             )}
-            Hämta senaste
+            Fetch latest
           </Button>
         </div>
         <div className="flex gap-2">
@@ -595,7 +595,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
         {!fetchedCoords && connectionStatus === 'expired' && (
           <div className="flex items-center gap-2 text-xs text-amber-600 mt-2">
             <AlertCircle className="h-3.5 w-3.5" />
-            <span>Token utgått - manuell hämtning kan misslyckas</span>
+            <span>Token expired - manual fetch may fail</span>
           </div>
         )}
       </div>
@@ -605,11 +605,11 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
         <div className="p-4 space-y-4">
           {/* Name */}
           <div className="space-y-1.5">
-            <Label className="text-sm">Namn / Beteckning *</Label>
+            <Label className="text-sm">Name / Designation *</Label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="t.ex. Brandsläckare BS-001"
+              placeholder="e.g. Fire Extinguisher BS-001"
               className="h-10"
               maxLength={100}
             />
@@ -617,10 +617,10 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
 
           {/* Category */}
           <div className="space-y-1.5">
-            <Label className="text-sm">Kategori *</Label>
+            <Label className="text-sm">Category *</Label>
             <Select value={category} onValueChange={setCategory}>
               <SelectTrigger className="h-10">
-                <SelectValue placeholder="Välj kategori..." />
+                <SelectValue placeholder="Select category..." />
               </SelectTrigger>
               <SelectContent className="z-[70]">
                 {INVENTORY_CATEGORIES.map((cat) => (
@@ -640,7 +640,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
             <Label className="text-sm">Symbol *</Label>
             <Select value={symbolId} onValueChange={setSymbolId}>
               <SelectTrigger className="h-10">
-                <SelectValue placeholder="Välj symbol..." />
+                <SelectValue placeholder="Select symbol..." />
               </SelectTrigger>
               <SelectContent className="z-[70] max-h-[200px]">
                 {Object.entries(groupedSymbols).map(([cat, syms]) => (
@@ -671,10 +671,10 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
 
           {/* Floor */}
           <div className="space-y-1.5">
-            <Label className="text-sm">Våningsplan</Label>
+            <Label className="text-sm">Floor</Label>
             <Select value={levelFmGuid} onValueChange={(v) => { setLevelFmGuid(v); setRoomFmGuid(''); }}>
               <SelectTrigger className="h-10">
-                <SelectValue placeholder="Välj våningsplan..." />
+                <SelectValue placeholder="Select floor..." />
               </SelectTrigger>
               <SelectContent className="z-[70]">
                 {floors.map((f) => (
@@ -689,10 +689,10 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
           {/* Room */}
           {levelFmGuid && rooms.length > 0 && (
             <div className="space-y-1.5">
-              <Label className="text-sm">Rum</Label>
+              <Label className="text-sm">Room</Label>
               <Select value={roomFmGuid} onValueChange={setRoomFmGuid}>
                 <SelectTrigger className="h-10">
-                  <SelectValue placeholder="Välj rum..." />
+                  <SelectValue placeholder="Select room..." />
                 </SelectTrigger>
                 <SelectContent className="z-[70] max-h-[200px]">
                   {rooms.map((r) => (
@@ -707,11 +707,11 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
 
           {/* Description */}
           <div className="space-y-1.5">
-            <Label className="text-sm">Beskrivning</Label>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Valfri beskrivning..."
+             <Label className="text-sm">Description</Label>
+             <Textarea
+               value={description}
+               onChange={(e) => setDescription(e.target.value)}
+               placeholder="Optional description..."
               rows={2}
               className="resize-none"
             />
@@ -733,7 +733,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
           {isLoading && !closeAfterSave ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            'Spara & fortsätt'
+            'Save & continue'
           )}
         </Button>
         <Button
@@ -747,7 +747,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
           {isLoading && closeAfterSave ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            'Spara & avsluta'
+            'Save & close'
           )}
         </Button>
       </div>
