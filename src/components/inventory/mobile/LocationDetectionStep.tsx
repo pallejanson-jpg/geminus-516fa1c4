@@ -103,7 +103,7 @@ const LocationDetectionStep: React.FC<LocationDetectionStepProps> = ({ onComplet
           <MapPin className="h-12 w-12 text-green-600" />
         </div>
         <div className="text-center space-y-2">
-          <h2 className="text-xl font-semibold">Är du vid {nearbyBuilding.commonName}?</h2>
+          <h2 className="text-xl font-semibold">Are you at {nearbyBuilding.commonName}?</h2>
           <p className="text-muted-foreground">
             Ca {formatDistance(nearbyBuilding.distance)} bort
           </p>
