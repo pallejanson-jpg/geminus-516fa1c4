@@ -285,7 +285,7 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
               {/* Select all / deselect all */}
               <div className="flex justify-between items-center px-2 py-1 mb-2">
                 <span className="text-xs text-muted-foreground">
-                  {filteredAssets.length} tillgångar utan position
+                  {filteredAssets.length} assets without position
                 </span>
                 <div className="flex gap-2">
                   <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={selectAll}>
