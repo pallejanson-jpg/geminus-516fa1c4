@@ -1293,9 +1293,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     window.addEventListener('OBJECT_DELETE', handler);
     return () => window.removeEventListener('OBJECT_DELETE', handler);
   }, []);
-    };
-    fetchModified();
-  }, [modificationsOpen, buildingFmGuid]);
 
   // ── Apply modification visualization ────────────────────────────────
   useEffect(() => {
