@@ -17,17 +17,17 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-// Asset type options for dropdown (Swedish)
+// Asset type options for dropdown
 const ASSET_TYPES = [
-  { value: 'fire_extinguisher', label: 'Brandsläckare' },
-  { value: 'chair', label: 'Stol' },
-  { value: 'table', label: 'Bord' },
-  { value: 'hvac', label: 'Luftbehandlingsaggregat' },
+  { value: 'fire_extinguisher', label: 'Fire Extinguisher' },
+  { value: 'chair', label: 'Chair' },
+  { value: 'table', label: 'Table' },
+  { value: 'hvac', label: 'HVAC Unit' },
   { value: 'sprinkler', label: 'Sprinkler' },
   { value: 'sensor', label: 'Sensor' },
-  { value: 'lamp', label: 'Lampa' },
-  { value: 'cabinet', label: 'Skåp' },
-  { value: 'other', label: 'Övrigt' },
+  { value: 'lamp', label: 'Lamp' },
+  { value: 'cabinet', label: 'Cabinet' },
+  { value: 'other', label: 'Other' },
 ];
 
 // IFC Object categories (mandatory for Asset+)
