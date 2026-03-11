@@ -338,17 +338,17 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
           if (title) setName(title);
         }
 
-        toast.success('POI-data hämtad!', {
-          description: `Position: (${data.location.x.toFixed(2)}, ${data.location.y.toFixed(2)}, ${data.location.z.toFixed(2)})`,
-        });
-      } else {
-        toast.error('POI hittades inte');
-      }
-    } catch (err: any) {
-      console.error('POI fetch error:', err);
-      toast.error('Kunde inte hämta POI', {
-        description: err.message || 'Kontrollera att POI-ID är korrekt',
-      });
+         toast.success('POI data fetched!', {
+           description: `Position: (${data.location.x.toFixed(2)}, ${data.location.y.toFixed(2)}, ${data.location.z.toFixed(2)})`,
+         });
+       } else {
+         toast.error('POI not found');
+       }
+     } catch (err: any) {
+       console.error('POI fetch error:', err);
+       toast.error('Could not fetch POI', {
+         description: err.message || 'Check that the POI ID is correct',
+       });
     } finally {
       setIsFetchingPoi(false);
     }
