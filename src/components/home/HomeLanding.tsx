@@ -165,7 +165,7 @@ export default function HomeLanding() {
   return (
     <div className="relative min-h-full text-foreground">
       {/* Full-page background */}
-      <div className="pointer-events-none absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${chicagoHero})` }} aria-hidden="true" />
+      <ParticleBackground />
       <div className="pointer-events-none absolute inset-0 bg-background/70" aria-hidden="true" />
 
       {/* Main layout */}
