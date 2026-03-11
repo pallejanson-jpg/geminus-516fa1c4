@@ -130,7 +130,7 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
       onSaved?.();
     } catch (err: any) {
       console.error('Failed to delete alignment:', err);
-      toast.error('Kunde inte ta bort alignment', { description: err.message });
+      toast.error('Could not remove alignment', { description: err.message });
     } finally {
       setIsDeleting(false);
     }
