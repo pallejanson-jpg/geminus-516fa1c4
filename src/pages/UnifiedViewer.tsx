@@ -442,11 +442,8 @@ const UnifiedViewerContent: React.FC<{
   }, []);
 
   const handleGoBack = useCallback(() => {
-    if (window.history.length > 2) {
-      navigate(-1);
-    } else {
-      navigate('/');
-    }
+    // Always navigate to portfolio/home — navigate(-1) is unreliable in embedded previews
+    navigate('/');
   }, [navigate]);
 
   const handleRetrySDK = useCallback(() => {
