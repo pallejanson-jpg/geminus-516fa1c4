@@ -1348,8 +1348,8 @@ serve(async (req) => {
       }
 
       const accessToken = await getAccessToken();
-      const apiUrl = Deno.env.get("ASSET_PLUS_API_URL") || "";
-      const apiKey = Deno.env.get("ASSET_PLUS_API_KEY") || "";
+      const apiUrl = _creds.apiUrl || Deno.env.get("ASSET_PLUS_API_URL") || "";
+      const apiKey = _creds.apiKey || Deno.env.get("ASSET_PLUS_API_KEY") || "";
       
       console.log(`Starting sync-xkt-building for: ${buildingFmGuid}`);
 
