@@ -349,7 +349,7 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
             ) : (
               <>
                 <MapPin className="h-4 w-4 mr-2" />
-                Skapa {selectedAssets.size} POI(s) i Ivion
+                Create {selectedAssets.size} POI(s) in Ivion
               </>
             )}
           </Button>
