@@ -358,8 +358,8 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
         if (error) throw error;
 
         toast.success(isMultiSelect 
-          ? `Uppdaterade ${assets.length} assets` 
-          : 'Egenskaper sparade');
+          ? `Updated ${assets.length} assets` 
+          : 'Properties saved');
         onUpdate?.();
       }
 
