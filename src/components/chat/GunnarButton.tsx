@@ -403,7 +403,7 @@ export default function GunnarButton() {
             </div>
           </TooltipTrigger>
           <TooltipContent side="left" className="font-medium">
-            Fråga Gunnar (dra för att flytta)
+            Fråga Geminus AI (dra för att flytta)
           </TooltipContent>
         </Tooltip>
       </div>
