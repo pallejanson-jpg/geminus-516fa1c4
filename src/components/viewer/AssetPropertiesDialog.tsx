@@ -622,7 +622,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
               /* Multi-select view */
               <div className="space-y-4">
                 <div className="text-sm text-muted-foreground">
-                  {assets.length} objekt markerade
+                  {assets.length} objects selected
                 </div>
                 <Separator />
                 <div className="space-y-2">
