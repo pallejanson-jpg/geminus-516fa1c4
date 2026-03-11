@@ -736,7 +736,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                 <Separator />
 
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Annotationssymbol</Label>
+                  <Label className="text-xs text-muted-foreground">Annotation symbol</Label>
                   {isEditing ? (
                     <Select
                       value={formData.symbol_id}
