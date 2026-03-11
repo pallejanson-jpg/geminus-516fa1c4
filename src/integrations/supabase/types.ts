@@ -693,6 +693,13 @@ export type Database = {
       }
       building_settings: {
         Row: {
+          assetplus_api_key: string | null
+          assetplus_api_url: string | null
+          assetplus_client_id: string | null
+          assetplus_client_secret: string | null
+          assetplus_keycloak_url: string | null
+          assetplus_password: string | null
+          assetplus_username: string | null
           created_at: string
           fm_access_building_guid: string | null
           fm_guid: string
@@ -712,10 +719,20 @@ export type Database = {
           latitude: number | null
           longitude: number | null
           rotation: number | null
+          senslinc_api_url: string | null
+          senslinc_email: string | null
+          senslinc_password: string | null
           start_view_id: string | null
           updated_at: string
         }
         Insert: {
+          assetplus_api_key?: string | null
+          assetplus_api_url?: string | null
+          assetplus_client_id?: string | null
+          assetplus_client_secret?: string | null
+          assetplus_keycloak_url?: string | null
+          assetplus_password?: string | null
+          assetplus_username?: string | null
           created_at?: string
           fm_access_building_guid?: string | null
           fm_guid: string
@@ -735,10 +752,20 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           rotation?: number | null
+          senslinc_api_url?: string | null
+          senslinc_email?: string | null
+          senslinc_password?: string | null
           start_view_id?: string | null
           updated_at?: string
         }
         Update: {
+          assetplus_api_key?: string | null
+          assetplus_api_url?: string | null
+          assetplus_client_id?: string | null
+          assetplus_client_secret?: string | null
+          assetplus_keycloak_url?: string | null
+          assetplus_password?: string | null
+          assetplus_username?: string | null
           created_at?: string
           fm_access_building_guid?: string | null
           fm_guid?: string
@@ -758,6 +785,9 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           rotation?: number | null
+          senslinc_api_url?: string | null
+          senslinc_email?: string | null
+          senslinc_password?: string | null
           start_view_id?: string | null
           updated_at?: string
         }
