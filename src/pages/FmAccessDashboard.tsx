@@ -92,7 +92,7 @@ const FmAccessDashboard: React.FC = () => {
       <div className="flex items-center justify-center h-full p-8">
         <div className="text-center">
           <AlertCircle className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">Ingen byggnad vald. Gå till en byggnad och öppna FM Access därifrån.</p>
+          <p className="text-sm text-muted-foreground">No building selected. Go to a building and open FM Access from there.</p>
           <Button variant="outline" className="mt-4" onClick={() => navigate('/')}>
             Till Dashboard
           </Button>
