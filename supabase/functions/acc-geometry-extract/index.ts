@@ -358,7 +358,8 @@ function buildLevelGroups(propertiesResult: any): {
 
     dbIdToExternalId.set(dbId, externalId);
 
-    const levelName = findLevelFromProperties(props);
+    // Try property-based level first, then tree-based level as fallback
+    const levelName = findLevelFromProperties(props) || element._treeLevel || null;
     if (!levelName) {
       levelMisses++;
       continue;
