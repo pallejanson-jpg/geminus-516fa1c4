@@ -86,7 +86,7 @@ const GunnarSettings: React.FC = () => {
               <div className="text-left">
                 <h4 className="font-medium text-sm">Visibility</h4>
                 <p className="text-xs text-muted-foreground">
-                  {settings.visible ? 'Gunnar button is visible' : 'Gunnar button is hidden'}
+                  {settings.visible ? 'Geminus AI button is visible' : 'Geminus AI button is hidden'}
                 </p>
               </div>
             </div>
