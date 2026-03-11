@@ -620,7 +620,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
             <Label className="text-sm">Category *</Label>
             <Select value={category} onValueChange={setCategory}>
               <SelectTrigger className="h-10">
-                <SelectValue placeholder="Välj kategori..." />
+                <SelectValue placeholder="Select category..." />
               </SelectTrigger>
               <SelectContent className="z-[70]">
                 {INVENTORY_CATEGORIES.map((cat) => (
