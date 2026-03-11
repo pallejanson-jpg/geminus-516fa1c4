@@ -3264,7 +3264,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 Synka dokument &amp; ritningar
                                             </h4>
                                             <p className="text-xs text-muted-foreground mb-3">
-                                                Synkar ritningar, dokument och DoU-instruktioner från FM Access till lokal databas för snabb sökning via Gunnar.
+                                                Synkar ritningar, dokument och DoU-instruktioner från FM Access till lokal databas för snabb sökning via Geminus AI.
                                             </p>
                                             <FmAccessDocSyncPanel />
                                         </div>
