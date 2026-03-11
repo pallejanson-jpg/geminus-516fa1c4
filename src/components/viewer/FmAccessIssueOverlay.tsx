@@ -57,7 +57,7 @@ const FmAccessIssueOverlay: React.FC<FmAccessIssueOverlayProps> = ({
 
       if (error) throw error;
 
-      toast.success('Ärende skapat!');
+      toast.success('Issue created!');
       setShowDialog(false);
     } catch (err: any) {
       console.error('[FmAccessIssueOverlay] Error creating issue:', err);
