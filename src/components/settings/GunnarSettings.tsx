@@ -95,7 +95,7 @@ const GunnarSettings: React.FC = () => {
             <div className="flex items-center justify-between py-2">
               <div className="space-y-0.5">
                 <Label htmlFor="gunnar-visible" className="text-sm font-medium">
-                  Show Gunnar button
+                  Show Geminus AI button
                 </Label>
                 <p className="text-xs text-muted-foreground">
                   Shows the floating AI assistant button in the application
