@@ -1,53 +1,76 @@
+## Plan: IFC → Assets Pipeline med GUID-generering, tillbakaskrivning och diff-hantering (IMPLEMENTED)
 
+### Ändringar
 
-# Analysis: Labradorgatan 16 Viewer Issues
+#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
+**Fil:** `supabase/functions/conversion-worker-api/index.ts`
+- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
+- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
+- Upsert till `assets` med `created_in_model: true`
+- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
 
-## Issue 1: "No XKT models found"
+#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
+**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
+- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
+- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
+- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
+- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
+- Diff: soft-delete objekt som finns i DB men inte i ny IFC
 
-**Root cause:** Building `cc27795e` (Labradorgatan 16) has hierarchy data in the `assets` table (1 Building, 7 Storeys, 100+ Instances from Asset+ sync), but **zero rows in `xkt_models`** and **zero files in the `xkt-models` storage bucket**. The 3D geometry was never synced or uploaded.
+#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
+**Fil:** `docs/conversion-worker/worker.mjs`
+- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
+- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
+- Non-fatal: om hierarki-population misslyckas fortsätter workern
 
-This building was synced from Asset+ for metadata only — no XKT conversion has been performed. The viewer correctly reports "No XKT models found" because there genuinely are none.
+#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
+**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
+- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
+- `created_in_model: true` istället för `false`
+- Diff-logik: markerar borttagna objekt efter import
 
-**Fix options:**
-- Sync XKT models from Asset+ (run `asset-plus-sync` with `sync-xkt-building` action for this building)
-- Or upload an IFC file for this building via Settings → Buildings
+### Datamodell
 
-This is a data issue, not a code bug.
+```text
+Building Storey:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
+  category:          "Building Storey"
+  created_in_model:  true
 
-## Issue 2: Back button not working
+Space:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
+  category:          "Space"
+  level_fm_guid:     parent storey fm_guid
 
-**Root cause:** The `handleGoBack` function calls `navigate('/')`, which should work. However, looking at the session replay, the user clicks the back arrow and the viewer reloads instead of navigating away. This suggests the click is hitting the wrong element or the viewer's `h-screen w-screen` container is intercepting/reloading.
-
-Looking at the code more carefully: the back button at line 584-591 in `UnifiedViewer.tsx` calls `handleGoBack` which does `navigate('/')`. The route `/*` renders `AppLayout` (protected). This should work correctly.
-
-The most likely cause is that the error state rendering at line 510-520 shows a "Back" button, but clicking the ArrowLeft in the header toolbar (while in error state) might cause a re-render loop. The session replay shows the viewer mounting 3 times in rapid succession (3 separate "Loading viewer..." → error cycles), suggesting `NativeViewerShell` is being remounted.
-
-Let me check if the `viewer3dFmGuid` context is causing repeated navigation/remounting.
-
-**Proposed fix for back button:** The `handleGoBack` navigates to `/` but does not clear `viewer3dFmGuid` from context, which could cause the main layout to immediately redirect back to `/viewer`. The `NativeViewerPage` (rendered in `MainContent` for the "3d" active app) has redirect logic that sends to `/viewer?building=...` when `viewer3dFmGuid` is set. If the user navigates to `/` but `viewer3dFmGuid` is still set and `activeApp` is still '3d', it could loop.
-
-**Fix:** `handleGoBack` should also clear `viewer3dFmGuid` from context before navigating.
-
-## Changes
-
-### 1. Fix back button in UnifiedViewer
-
-In `src/pages/UnifiedViewer.tsx`, update `handleGoBack` to clear the viewer context:
-
-```typescript
-const handleGoBack = useCallback(() => {
-  setViewer3dFmGuid(null);
-  navigate('/');
-}, [navigate, setViewer3dFmGuid]);
+Instance:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
+  category:          "Instance"
+  asset_type:        ifcType (e.g. "IfcDoor")
+  level_fm_guid:     resolved storey
+  in_room_fm_guid:   resolved space
 ```
 
-This requires adding `setViewer3dFmGuid` from `AppContext`.
+### Diff-flöde
 
-### 2. No code fix needed for the missing models
+Vid omimport jämförs importerade fm_guids mot befintliga i DB:
+- **Nytt** → INSERT
+- **Matchat** → UPDATE (namn, typ, rumsplacering)
+- **Borttaget** → `modification_status = 'removed'` (soft-delete)
 
-Labradorgatan 16 genuinely has no XKT models. The user needs to either:
-- Trigger an Asset+ XKT sync for that building
-- Upload an IFC file
+---
 
-I will add a more helpful error message that suggests these actions instead of the generic "Ensure models have been synced."
+## Previous Plans
 
+### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
+- Browser-primary for >20MB, edge function for ≤20MB
+- MetaModel JSON uploaded alongside XKT
+- Systems extracted and persisted
+
+### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+- Standalone Node.js worker polls conversion-worker-api
+- Per-storey .xkt tiles with dynamic floor loading
+
+### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
+- 10 credential override columns on building_settings
+- Shared credential resolver in edge functions
+- Properties page as configuration hub

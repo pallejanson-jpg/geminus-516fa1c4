@@ -12,8 +12,9 @@
  * so that xeokit keeps loaded XKT models in memory.
  */
 
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo, useContext } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { AppContext } from '@/context/AppContext';
 import {
   ArrowLeft, Layers, Move3D, Maximize2, Minimize2, Eye,
   RefreshCw, View, Box, Combine, SplitSquareHorizontal,
@@ -441,10 +442,14 @@ const UnifiedViewerContent: React.FC<{
     return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
 
+  const { setViewer3dFmGuid } = useContext(AppContext);
+
   const handleGoBack = useCallback(() => {
+    // Clear viewer context to prevent redirect loops from NativeViewerPage
+    setViewer3dFmGuid(null);
     // Always navigate to portfolio/home — navigate(-1) is unreliable in embedded previews
     navigate('/');
-  }, [navigate]);
+  }, [navigate, setViewer3dFmGuid]);
 
   const handleRetrySDK = useCallback(() => {
     retrySDK();

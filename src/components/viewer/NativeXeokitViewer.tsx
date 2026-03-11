@@ -281,7 +281,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       if (dbError || !models || models.length === 0) {
         console.warn('[NativeViewer] No models found for building', buildingFmGuid, 'dbError:', dbError);
-        setErrorMsg(`No XKT models found for building ${buildingFmGuid.substring(0, 8)}. Ensure models have been synced.`);
+        setErrorMsg(`Inga 3D-modeller hittades för denna byggnad. Synka XKT-modeller via Inställningar → Byggnader, eller ladda upp en IFC-fil.`);
         setPhase('error');
         return;
       }
@@ -381,7 +381,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       if (loadList.length === 0) {
         console.warn('[NativeViewer] No models found at all for building', buildingFmGuid);
-        setErrorMsg('No XKT models found for this building.');
+        setErrorMsg('Inga 3D-modeller hittades för denna byggnad. Synka XKT-modeller via Inställningar → Byggnader, eller ladda upp en IFC-fil.');
         setPhase('error');
         return;
       }
