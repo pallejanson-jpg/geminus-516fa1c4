@@ -648,6 +648,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         console.debug('[NativeViewer] Manifest check skipped:', e);
       }
 
+      const loadModel = async (model: ModelInfo) => {
         const modelStart = performance.now();
         const modelId = model.model_id;
 
