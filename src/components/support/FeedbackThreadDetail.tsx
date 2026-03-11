@@ -113,7 +113,7 @@ const FeedbackThreadDetail: React.FC<FeedbackThreadDetailProps> = ({
       if (error) throw error;
       setCurrentStatus(newStatus);
       onUpdated();
-      toast({ title: 'Status uppdaterad' });
+      toast({ title: 'Status updated' });
     } catch (err) {
       console.error('Failed to update status:', err);
     }

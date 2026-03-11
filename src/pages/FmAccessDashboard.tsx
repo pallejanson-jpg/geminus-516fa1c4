@@ -195,7 +195,7 @@ const FmAccessDashboard: React.FC = () => {
               <p className="text-xs text-muted-foreground">{errorDocs}</p>
             </div>
           ) : documents.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-4">Inga dokument hittades</p>
+            <p className="text-xs text-muted-foreground text-center py-4">No documents found</p>
           ) : (
             <div className="space-y-1">
               {documents.map((d) => (

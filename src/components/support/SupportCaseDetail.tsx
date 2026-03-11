@@ -139,9 +139,9 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
         setNewComment('');
         await fetchLocalComments(supportCase.id);
       }
-      toast({ title: 'Kommentar skickad' });
-    } catch {
-      toast({ title: 'Kunde inte skicka kommentar', variant: 'destructive' });
+       toast({ title: 'Comment sent' });
+     } catch {
+       toast({ title: 'Could not send comment', variant: 'destructive' });
     } finally {
       setSubmitting(false);
     }

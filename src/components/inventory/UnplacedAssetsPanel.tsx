@@ -355,8 +355,8 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
           </Button>
         )}
 
-        <p className="text-xs text-muted-foreground mt-3 text-center">
-          POIs skapas med FMGUID i "Custom attributes" för att koppla till Geminus
+         <p className="text-xs text-muted-foreground mt-3 text-center">
+           POIs are created with FMGUID in "Custom attributes" to link to Geminus
         </p>
       </div>
     </div>

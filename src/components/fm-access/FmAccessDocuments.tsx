@@ -102,7 +102,7 @@ const FmAccessDocuments: React.FC<FmAccessDocumentsProps> = ({ buildingId, build
             {documents.map((d, i) => (
               <Card key={d.documentId || d.objectId || i} className="overflow-hidden">
                 <CardContent className="p-3">
-                  <div className="text-sm font-medium truncate">{d.objectName || d.name || d.fileName || `Dokument ${i + 1}`}</div>
+                  <div className="text-sm font-medium truncate">{d.objectName || d.name || d.fileName || `Document ${i + 1}`}</div>
                   {d.fileName && <div className="text-[11px] text-muted-foreground">{d.fileName}</div>}
                 </CardContent>
               </Card>
