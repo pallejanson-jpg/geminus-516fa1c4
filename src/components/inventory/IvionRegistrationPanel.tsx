@@ -707,11 +707,11 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
 
           {/* Description */}
           <div className="space-y-1.5">
-            <Label className="text-sm">Beskrivning</Label>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Valfri beskrivning..."
+             <Label className="text-sm">Description</Label>
+             <Textarea
+               value={description}
+               onChange={(e) => setDescription(e.target.value)}
+               placeholder="Optional description..."
               rows={2}
               className="resize-none"
             />
