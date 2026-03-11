@@ -22,6 +22,8 @@ import {
   ArrowRight,
   X,
   Timer,
+  Leaf,
+  Shield,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -39,6 +41,7 @@ const SLIDE_TITLES = [
   "Competitive Landscape — Deep Dive",
   "Why Addnode Wins",
   "The Ask",
+  "Geminus ESG — Sustainability Built In",
 ];
 
 const NOTES: string[][] = [
@@ -117,13 +120,21 @@ const NOTES: string[][] = [
     "Geminus turns five separate Addnode companies into one coherent value proposition.",
     "The O in AECO is a blue ocean — and Addnode already has all the assets to win it.",
   ],
-  // Slide 9 — The Ask
+  // Slide 10 — The Ask
   [
     "One hundred thousand dollars to productize what is already working.",
     "Security hardening, GDPR compliance, deep SWG Concept Evolution API integration.",
     "Bimify and Senslinc live connectors with certified support agreements.",
     "Six months. A product. A competitive moat across the Design Management business area.",
     "The code is running. The integrations exist. I'm ready. Are you?",
+  ],
+  // Slide 11 — Geminus ESG
+  [
+    "ESG is the next revenue layer — and 80% of the data infrastructure is already built inside Geminus.",
+    "Building geometry, areas, floors come from Asset+. FM and maintenance history from Faciliate. Energy and indoor climate from Senslinc IoT.",
+    "What we add: an ESG Data Model with 80+ sustainability data points, OneClickLCA integration for carbon/LCA (Addnode sister company), and an automated EU Taxonomy engine.",
+    "The customer pain is real: fragmented data across 5–10 Excel files, manual reporting costing 200+ hours/year, audit risk, and ESG scores now affecting financing terms.",
+    "Geminus ESG turns us from an FM vendor into an ESG-native digital twin platform — a new SaaS module, new revenue stream, and a competitive moat no point solution can match.",
   ],
 ];
 
@@ -858,6 +869,86 @@ const AskSlide = () => (
 );
 
 /* ------------------------------------------------------------------ */
+/*  Slide 11 — Geminus ESG                                             */
+/* ------------------------------------------------------------------ */
+
+const EsgSlide = () => (
+  <div className="relative w-full h-full overflow-hidden bg-gradient-to-br from-[#0a0e1a] to-[#1a1040]">
+    <div className="relative z-10 flex flex-col h-full text-white px-28 py-16">
+      <div className="flex items-center gap-4 mb-2">
+        <div className="px-5 py-2 rounded-full bg-emerald-500/25 border border-emerald-400/50 text-emerald-300 text-[20px] font-medium backdrop-blur-sm">
+          <Leaf className="w-5 h-5 inline mr-2 -mt-0.5" />
+          New Module
+        </div>
+      </div>
+      <h2 className="text-[72px] font-black mb-2 text-white leading-tight">Geminus ESG</h2>
+      <p className="text-[26px] text-white/70 mb-10">Sustainability Built In — The Next Revenue Layer</p>
+
+      <div className="grid grid-cols-2 gap-10 flex-1">
+        <div className="bg-black/50 backdrop-blur-sm rounded-3xl border border-white/15 p-10">
+          <h3 className="text-[28px] font-bold text-emerald-300 mb-6 flex items-center gap-3">
+            <CheckCircle2 className="w-7 h-7" />
+            Already in Platform <span className="text-white/50 font-normal">(80%)</span>
+          </h3>
+          <div className="space-y-5">
+            {[
+              { icon: Building2, label: "Building data", sub: "BIM, areas, floors", source: "Asset+", color: "text-blue-400" },
+              { icon: Zap, label: "FM & maintenance", sub: "Work orders, history", source: "Faciliate", color: "text-emerald-400" },
+              { icon: BarChart3, label: "Energy & indoor climate", sub: "kWh, temp, CO₂", source: "Senslinc IoT", color: "text-orange-400" },
+              { icon: Target, label: "Building hierarchy", sub: "Floors, rooms, zones", source: "Digital Twin", color: "text-cyan-400" },
+            ].map(({ icon: Icon, label, sub, source, color }) => (
+              <div key={label} className="flex items-start gap-4">
+                <Icon className={`w-6 h-6 mt-1 shrink-0 ${color}`} />
+                <div>
+                  <p className="text-[22px] font-semibold text-white">{label}</p>
+                  <p className="text-[17px] text-white/60">{sub} — <span className="text-white/80 font-medium">{source}</span></p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-black/50 backdrop-blur-sm rounded-3xl border border-emerald-400/30 p-10">
+          <h3 className="text-[28px] font-bold text-white mb-6 flex items-center gap-3">
+            <Leaf className="w-7 h-7 text-emerald-400" />
+            Geminus ESG Adds <span className="text-emerald-300 font-normal">(20%)</span>
+          </h3>
+          <div className="space-y-5">
+            {[
+              { icon: BarChart3, label: "ESG Data Model", sub: "80+ sustainability data points", color: "text-emerald-400" },
+              { icon: Zap, label: "Carbon / LCA", sub: "OneClickLCA integration (sister company)", color: "text-yellow-400" },
+              { icon: Shield, label: "EU Taxonomy Engine", sub: "Automated compliance checks", color: "text-indigo-400" },
+              { icon: Target, label: "Report Library", sub: "CSRD, Building Logbook, PDF/Excel", color: "text-cyan-400" },
+            ].map(({ icon: Icon, label, sub, color }) => (
+              <div key={label} className="flex items-start gap-4">
+                <Icon className={`w-6 h-6 mt-1 shrink-0 ${color}`} />
+                <div>
+                  <p className="text-[22px] font-semibold text-white">{label}</p>
+                  <p className="text-[17px] text-white/60">{sub}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8 grid grid-cols-3 gap-6">
+        {[
+          { text: "CSRD & EU Taxonomy compliance", icon: Shield },
+          { text: "50–70% lower reporting cost", icon: TrendingUp },
+          { text: "New SaaS revenue stream", icon: DollarSign },
+        ].map(({ text, icon: Icon }) => (
+          <div key={text} className="flex items-center gap-4 bg-gradient-to-r from-emerald-500/15 to-cyan-500/15 border border-emerald-400/30 rounded-2xl px-6 py-4">
+            <Icon className="w-6 h-6 text-emerald-400 shrink-0" />
+            <p className="text-[20px] font-semibold text-white">{text}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+/* ------------------------------------------------------------------ */
 /*  Slide registry                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -872,6 +963,7 @@ const slides = [
   CompetitionDeepDiveSlide,
   WhyAddnodeSlide,
   AskSlide,
+  EsgSlide,
 ];
 
 /* ------------------------------------------------------------------ */
