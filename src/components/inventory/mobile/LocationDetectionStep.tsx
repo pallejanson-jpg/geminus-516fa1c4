@@ -38,37 +38,37 @@ const LocationDetectionStep: React.FC<LocationDetectionStepProps> = ({ onComplet
           <div className="absolute inset-0 rounded-full border-4 border-primary/30 animate-ping" />
         </div>
         <div className="text-center space-y-2">
-          <h2 className="text-xl font-semibold">Letar efter din position...</h2>
-          <p className="text-muted-foreground">Tillåt åtkomst till platstjänster</p>
-        </div>
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  // Error state
-  if (error && error !== 'no_buildings') {
-    const errorMessages: Record<string, { title: string; description: string }> = {
-      permission_denied: {
-        title: 'Platstjänster nekade',
-        description: 'Aktivera platstjänster i din webbläsares inställningar för att använda GPS-detektion.',
-      },
-      position_unavailable: {
-        title: 'Kunde inte hämta position',
-        description: 'Din position kunde inte bestämmas. Välj byggnad manuellt.',
-      },
-      timeout: {
-        title: 'Timeout',
-        description: 'Det tog för lång tid att hämta din position. Försök igen eller välj manuellt.',
-      },
-      geolocation_not_supported: {
-        title: 'GPS stöds inte',
-        description: 'Din enhet stöder inte platstjänster. Välj byggnad manuellt.',
-      },
-      default: {
-        title: 'Något gick fel',
-        description: 'Kunde inte hämta din position. Välj byggnad manuellt.',
-      },
+           <h2 className="text-xl font-semibold">Looking for your location...</h2>
+           <p className="text-muted-foreground">Allow access to location services</p>
+         </div>
+         <Loader2 className="h-6 w-6 animate-spin text-primary" />
+       </div>
+     );
+   }
+ 
+   // Error state
+   if (error && error !== 'no_buildings') {
+     const errorMessages: Record<string, { title: string; description: string }> = {
+       permission_denied: {
+         title: 'Location services denied',
+         description: 'Enable location services in your browser settings to use GPS detection.',
+       },
+       position_unavailable: {
+         title: 'Could not get position',
+         description: 'Your position could not be determined. Select building manually.',
+       },
+       timeout: {
+         title: 'Timeout',
+         description: 'It took too long to get your position. Try again or select manually.',
+       },
+       geolocation_not_supported: {
+         title: 'GPS not supported',
+         description: 'Your device does not support location services. Select building manually.',
+       },
+       default: {
+         title: 'Something went wrong',
+         description: 'Could not get your position. Select building manually.',
+       },
     };
 
     const msg = errorMessages[error] || errorMessages.default;
