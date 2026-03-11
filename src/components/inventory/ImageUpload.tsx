@@ -137,7 +137,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) 
               ) : (
                 <>
                   <Camera className="h-6 w-6" />
-                  <span className="text-xs">Ta foto</span>
+                  <span className="text-xs">Take photo</span>
                 </>
               )}
             </Button>
