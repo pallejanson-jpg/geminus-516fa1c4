@@ -9,10 +9,11 @@ const corsHeaders = {
 /**
  * Edge function: acc-geometry-extract
  * 
- * Extracts per-storey GLB geometry chunks from APS SVF derivatives.
+ * Extracts geometry from APS SVF derivatives and stores as GLB in Supabase Storage.
+ * Uses 3-legged token for broader APS access, falling back to 2-legged.
  * 
  * Actions:
- *   "extract"  — Download SVF, parse metadata, create per-storey GLB chunks + manifest
+ *   "extract"  — Download geometry (OBJ/glTF from APS), parse SVF metadata for level grouping, store manifest
  *   "status"   — Check if a manifest already exists for a building/version
  *   "manifest" — Return the manifest JSON for a building
  */
@@ -45,6 +46,58 @@ interface GeometryIndexEntry {
   fm_guid: string | null;
 }
 
+// ── 3-legged token helper (mirrors acc-sync pattern) ──
+async function getThreeLeggedToken(userId: string, supabase: any): Promise<string | null> {
+  const { data: tokenRow, error } = await supabase
+    .from("acc_oauth_tokens")
+    .select("access_token, refresh_token, expires_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error || !tokenRow) return null;
+
+  const isExpired = new Date(tokenRow.expires_at) < new Date();
+  if (!isExpired) return tokenRow.access_token;
+
+  // Try to refresh
+  try {
+    const clientId = Deno.env.get("APS_CLIENT_ID")!;
+    const clientSecret = Deno.env.get("APS_CLIENT_SECRET")!;
+
+    const res = await fetch("https://developer.api.autodesk.com/authentication/v2/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: tokenRow.refresh_token,
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
+    });
+
+    if (!res.ok) {
+      console.error(`[acc-geometry-extract] 3-legged token refresh failed: ${res.status}`);
+      return null;
+    }
+
+    const data = await res.json();
+    const expiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
+
+    await supabase.from("acc_oauth_tokens").update({
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_at: expiresAt,
+      updated_at: new Date().toISOString(),
+    }).eq("user_id", userId);
+
+    console.log("[acc-geometry-extract] 3-legged token refreshed");
+    return data.access_token;
+  } catch (err) {
+    console.error("[acc-geometry-extract] Token refresh error:", err);
+    return null;
+  }
+}
+
 // ── APS OAuth 2-legged ──
 async function getApsToken(): Promise<string> {
   const clientId = Deno.env.get("APS_CLIENT_ID");
@@ -59,11 +112,24 @@ async function getApsToken(): Promise<string> {
     },
     body: new URLSearchParams({
       grant_type: "client_credentials",
-      scope: "data:read viewables:read",
+      scope: "data:read data:write viewables:read",
     }),
   });
   if (!res.ok) throw new Error(`APS auth failed: ${res.status}`);
   return (await res.json()).access_token;
+}
+
+// ── Best available token (prefers 3-legged) ──
+async function getBestToken(userId: string | null, supabase: any): Promise<{ token: string; is3Legged: boolean }> {
+  if (userId) {
+    const threeLeg = await getThreeLeggedToken(userId, supabase);
+    if (threeLeg) {
+      console.log("[acc-geometry-extract] Using 3-legged token");
+      return { token: threeLeg, is3Legged: true };
+    }
+  }
+  console.log("[acc-geometry-extract] Using 2-legged token");
+  return { token: await getApsToken(), is3Legged: false };
 }
 
 // ── Detect EU region from URN ──
@@ -102,12 +168,6 @@ async function fetchSvfProperties(urnBase64: string, token: string, mdBase: stri
   const view3d = viewables.find((v: any) => v.role === "3d") || viewables[0];
   const viewGuid = view3d.guid;
 
-  // Fetch the full object tree for this viewable (needed for per-element geometry extraction)
-  const treeRes = await fetch(`${mdBase}/${urnBase64}/metadata/${viewGuid}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const treeData = treeRes.ok ? await treeRes.json() : null;
-
   // Fetch properties for this viewable
   const propsRes = await fetch(`${mdBase}/${urnBase64}/metadata/${viewGuid}/properties?forceget=true`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -118,7 +178,7 @@ async function fetchSvfProperties(urnBase64: string, token: string, mdBase: stri
   }
 
   const propsData = await propsRes.json();
-  return { properties: propsData, tree: treeData, viewGuid };
+  return { properties: propsData, viewGuid };
 }
 
 // ── Level key detection (multilingual) ──
@@ -129,11 +189,9 @@ const LEVEL_KEYS = [
 ];
 
 function findLevelFromProperties(props: Record<string, any>): string | null {
-  // Direct property check
   for (const key of LEVEL_KEYS) {
     if (props[key]) return String(props[key]);
   }
-  // Check nested property groups (Revit stores in "Constraints" group)
   for (const group of Object.values(props)) {
     if (typeof group === "object" && group !== null) {
       for (const key of LEVEL_KEYS) {
@@ -189,7 +247,157 @@ async function deterministicGuid(buildingGuid: string, levelName: string): Promi
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
-// ── Build a minimal GLB from vertices + indices ──
+// ── Request OBJ translation from APS Model Derivative ──
+async function requestObjTranslation(urnBase64: string, token: string, mdBase: string): Promise<boolean> {
+  const jobUrl = mdBase.replace("/designdata", "/designdata/job");
+  console.log(`[acc-geometry-extract] Requesting OBJ translation at ${jobUrl}`);
+  
+  const res = await fetch(jobUrl, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "x-ads-force": "true",
+    },
+    body: JSON.stringify({
+      input: { urn: urnBase64 },
+      output: {
+        formats: [{
+          type: "obj",
+          advanced: { exportFileStructure: "single", unit: "mm" },
+        }],
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error(`[acc-geometry-extract] OBJ translation request failed (${res.status}): ${errText}`);
+    return false;
+  }
+
+  console.log("[acc-geometry-extract] OBJ translation job submitted");
+  return true;
+}
+
+// ── Poll APS manifest until OBJ derivative is ready ──
+async function pollForObjDerivative(
+  urnBase64: string, token: string, mdBase: string,
+  maxAttempts = 15,
+): Promise<{ objUrn: string; mtlUrn: string | null } | null> {
+  const delays = [10000, 15000, 20000, 25000, 30000]; // exponential-ish backoff
+  
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const delay = delays[Math.min(attempt, delays.length - 1)];
+    console.log(`[acc-geometry-extract] Polling for OBJ derivative (attempt ${attempt + 1}/${maxAttempts}, wait ${delay / 1000}s)...`);
+    await new Promise(r => setTimeout(r, delay));
+
+    const bubble = await fetchApsBubble(urnBase64, token, mdBase);
+    
+    // Collect all derivatives
+    const allDerivs: any[] = [];
+    function collectDerivs(node: any) {
+      if (node.urn) allDerivs.push(node);
+      if (node.children) node.children.forEach(collectDerivs);
+      if (node.derivatives) node.derivatives.forEach(collectDerivs);
+    }
+    collectDerivs(bubble);
+
+    // Check for OBJ derivative
+    const objDeriv = allDerivs.find(d =>
+      (d.role === "obj" || d.outputType === "obj") ||
+      (d.urn && (d.urn.endsWith(".obj") || d.mime === "application/octet-stream") && d.role === "graphics")
+    );
+
+    // Also look for any OBJ output type in derivatives list
+    const objOutput = bubble.derivatives?.find((d: any) => d.outputType === "obj");
+    if (objOutput) {
+      if (objOutput.status === "success") {
+        // Find the actual OBJ file within the derivative children
+        const objFiles: any[] = [];
+        function findObjFiles(node: any) {
+          if (node.urn && (node.role === "obj" || node.urn.endsWith(".obj") || node.mime === "application/octet-stream")) {
+            objFiles.push(node);
+          }
+          if (node.children) node.children.forEach(findObjFiles);
+        }
+        findObjFiles(objOutput);
+        
+        if (objFiles.length > 0) {
+          const mtlFile = objFiles.find(f => f.urn?.endsWith(".mtl"));
+          const objFile = objFiles.find(f => !f.urn?.endsWith(".mtl")) || objFiles[0];
+          console.log(`[acc-geometry-extract] OBJ derivative ready: ${objFile.urn?.substring(0, 60)}`);
+          return { objUrn: objFile.urn, mtlUrn: mtlFile?.urn || null };
+        }
+      } else if (objOutput.status === "failed") {
+        console.error("[acc-geometry-extract] OBJ translation failed:", objOutput.messages);
+        return null;
+      }
+      // Still in progress, continue polling
+    }
+
+    if (objDeriv) {
+      console.log(`[acc-geometry-extract] Found OBJ derivative: ${objDeriv.urn?.substring(0, 60)}`);
+      return { objUrn: objDeriv.urn, mtlUrn: null };
+    }
+  }
+
+  console.warn("[acc-geometry-extract] OBJ derivative not ready after max attempts");
+  return null;
+}
+
+// ── Download a derivative file from APS ──
+async function downloadDerivative(urnBase64: string, derivUrn: string, token: string, mdBase: string): Promise<ArrayBuffer | null> {
+  const encodedDerivUrn = encodeURIComponent(derivUrn);
+  const url = `${mdBase}/${urnBase64}/manifest/${encodedDerivUrn}`;
+  
+  console.log(`[acc-geometry-extract] Downloading derivative: ${derivUrn.substring(0, 60)}...`);
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    console.error(`[acc-geometry-extract] Derivative download failed: ${res.status}`);
+    return null;
+  }
+
+  const data = await res.arrayBuffer();
+  console.log(`[acc-geometry-extract] Downloaded ${(data.byteLength / 1024 / 1024).toFixed(2)} MB`);
+  return data;
+}
+
+// ── Build a minimal GLB from OBJ text ──
+function objToGlb(objText: string): ArrayBuffer {
+  const vertices: number[] = [];
+  const indices: number[] = [];
+  const lines = objText.split("\n");
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("v ")) {
+      const parts = trimmed.split(/\s+/);
+      vertices.push(parseFloat(parts[1]) || 0, parseFloat(parts[2]) || 0, parseFloat(parts[3]) || 0);
+    } else if (trimmed.startsWith("f ")) {
+      const parts = trimmed.split(/\s+/).slice(1);
+      // Convert face to triangles (fan triangulation)
+      const faceIndices = parts.map(p => parseInt(p.split("/")[0]) - 1);
+      for (let i = 1; i < faceIndices.length - 1; i++) {
+        indices.push(faceIndices[0], faceIndices[i], faceIndices[i + 1]);
+      }
+    }
+  }
+
+  if (vertices.length === 0) {
+    console.warn("[acc-geometry-extract] OBJ had 0 vertices, creating empty GLB placeholder");
+    // Create a tiny placeholder
+    return buildGlb(new Float32Array([0,0,0, 1,0,0, 0,1,0]), new Uint32Array([0,1,2]));
+  }
+
+  console.log(`[acc-geometry-extract] OBJ parsed: ${vertices.length / 3} vertices, ${indices.length / 3} triangles`);
+  return buildGlb(new Float32Array(vertices), new Uint32Array(indices));
+}
+
+// ── Build a minimal GLB binary ──
 function buildGlb(vertices: Float32Array, indices: Uint32Array, materialColor?: [number, number, number]): ArrayBuffer {
   let minX = Infinity, minY = Infinity, minZ = Infinity;
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
@@ -200,9 +408,6 @@ function buildGlb(vertices: Float32Array, indices: Uint32Array, materialColor?: 
     if (y < minY) minY = y; if (y > maxY) maxY = y;
     if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
   }
-
-  const vertexBytes = vertices.buffer.slice(vertices.byteOffset, vertices.byteOffset + vertices.byteLength);
-  const indexBytes = indices.buffer.slice(indices.byteOffset, indices.byteOffset + indices.byteLength);
 
   const vertexByteLength = vertices.byteLength;
   const indexByteLength = indices.byteLength;
@@ -215,37 +420,11 @@ function buildGlb(vertices: Float32Array, indices: Uint32Array, materialColor?: 
     scene: 0,
     scenes: [{ nodes: [0] }],
     nodes: [{ mesh: 0 }],
-    materials: [{
-      pbrMetallicRoughness: {
-        baseColorFactor: [...color, 1.0],
-        metallicFactor: 0.1,
-        roughnessFactor: 0.8,
-      },
-      doubleSided: true,
-    }],
-    meshes: [{
-      primitives: [{
-        attributes: { POSITION: 0 },
-        indices: 1,
-        material: 0,
-        mode: 4,
-      }],
-    }],
+    materials: [{ pbrMetallicRoughness: { baseColorFactor: [...color, 1.0], metallicFactor: 0.1, roughnessFactor: 0.8 }, doubleSided: true }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0 }, indices: 1, material: 0, mode: 4 }] }],
     accessors: [
-      {
-        bufferView: 0,
-        componentType: 5126,
-        count: numVerts,
-        type: "VEC3",
-        min: [minX, minY, minZ],
-        max: [maxX, maxY, maxZ],
-      },
-      {
-        bufferView: 1,
-        componentType: 5125,
-        count: indices.length,
-        type: "SCALAR",
-      },
+      { bufferView: 0, componentType: 5126, count: numVerts, type: "VEC3", min: [minX, minY, minZ], max: [maxX, maxY, maxZ] },
+      { bufferView: 1, componentType: 5125, count: indices.length, type: "SCALAR" },
     ],
     bufferViews: [
       { buffer: 0, byteOffset: 0, byteLength: vertexByteLength, target: 34962 },
@@ -276,162 +455,135 @@ function buildGlb(vertices: Float32Array, indices: Uint32Array, materialColor?: 
 
   view.setUint32(offset, totalBinLength, true); offset += 4;
   view.setUint32(offset, 0x004E4942, true); offset += 4;
-  u8.set(new Uint8Array(vertexBytes), offset); offset += vertexByteLength;
-  u8.set(new Uint8Array(indexBytes), offset); offset += indexByteLength;
+  u8.set(new Uint8Array(vertices.buffer, vertices.byteOffset, vertices.byteLength), offset); offset += vertexByteLength;
+  u8.set(new Uint8Array(indices.buffer, indices.byteOffset, indices.byteLength), offset); offset += indexByteLength;
   for (let i = 0; i < indexPadding; i++) u8[offset++] = 0;
 
   return glb;
 }
 
-// ── Download SVF derivative and extract geometry per level ──
-async function downloadAndChunkSvfGeometry(
+// ── Download and store real geometry from APS ──
+async function downloadRealGeometry(
   urnBase64: string,
   token: string,
+  is3Legged: boolean,
   mdBase: string,
-  viewGuid: string,
-  levelGroups: Map<string, { name: string; dbIds: number[] }>,
   buildingFmGuid: string,
   modelKey: string,
   supabase: any,
-): Promise<{ chunks: { levelKey: string; storagePath: string; bbox: number[]; vertexCount: number }[]; fallbackPath: string | null }> {
-  
-  const chunks: { levelKey: string; storagePath: string; bbox: number[]; vertexCount: number }[] = [];
-  let fallbackPath: string | null = null;
+): Promise<{ fallbackPath: string | null; glbBytes: number }> {
 
-  // Step 1: Get the object tree to understand hierarchy
-  // The SVF metadata already has per-object properties with Level assignments.
-  // We'll use the download-derivative pattern to get the actual geometry,
-  // then parse and split by level.
-
-  // Get the full SVF manifest to find downloadable resources
+  // Step 1: Check bubble for existing downloadable derivatives (glTF/GLB/OBJ)
   const bubble = await fetchApsBubble(urnBase64, token, mdBase);
-  
-  // Find SVF derivative resources
   const allDerivs: any[] = [];
   function collectDerivs(node: any) {
-    if (node.urn) allDerivs.push({ urn: node.urn, role: node.role, mime: node.mime, outputType: node.outputType, name: node.name, guid: node.guid });
+    if (node.urn) allDerivs.push({ urn: node.urn, role: node.role, mime: node.mime, outputType: node.outputType, name: node.name });
     if (node.children) node.children.forEach(collectDerivs);
     if (node.derivatives) node.derivatives.forEach(collectDerivs);
   }
   collectDerivs(bubble);
-
   console.log(`[acc-geometry-extract] Found ${allDerivs.length} derivatives in bubble`);
 
-  // Look for glTF/GLB derivative first (best case — APS already has it)
-  const gltfDeriv = allDerivs.find(d => 
+  // Look for existing glTF/GLB
+  const gltfDeriv = allDerivs.find(d =>
     d.mime === 'model/gltf-binary' || d.mime === 'model/gltf+json' || d.name?.endsWith('.glb') || d.name?.endsWith('.gltf')
   );
 
-  // Look for OBJ derivative (second choice — can split per level)
-  const objDeriv = allDerivs.find(d =>
-    d.outputType === 'obj' && d.role === 'graphics'
+  // Look for existing OBJ
+  const objOutput = bubble.derivatives?.find((d: any) => d.outputType === "obj" && d.status === "success");
+
+  let geometryData: ArrayBuffer | null = null;
+  let isGlb = false;
+
+  // Priority 1: Existing glTF/GLB derivative
+  if (gltfDeriv) {
+    console.log("[acc-geometry-extract] Found existing glTF derivative, downloading...");
+    geometryData = await downloadDerivative(urnBase64, gltfDeriv.urn, token, mdBase);
+    isGlb = true;
+  }
+
+  // Priority 2: Existing OBJ derivative
+  if (!geometryData && objOutput) {
+    const objFiles: any[] = [];
+    function findObjFiles(node: any) {
+      if (node.urn) objFiles.push(node);
+      if (node.children) node.children.forEach(findObjFiles);
+    }
+    findObjFiles(objOutput);
+    const objFile = objFiles.find(f => !f.urn?.endsWith(".mtl"));
+    if (objFile) {
+      console.log("[acc-geometry-extract] Found existing OBJ derivative, downloading...");
+      const objData = await downloadDerivative(urnBase64, objFile.urn, token, mdBase);
+      if (objData && objData.byteLength > 100) {
+        const objText = new TextDecoder().decode(objData);
+        geometryData = objToGlb(objText);
+        isGlb = true;
+      }
+    }
+  }
+
+  // Priority 3: Request new OBJ translation
+  if (!geometryData) {
+    console.log("[acc-geometry-extract] No existing geometry — requesting OBJ translation...");
+    const requested = await requestObjTranslation(urnBase64, token, mdBase);
+    
+    if (requested) {
+      // Poll for the OBJ derivative
+      const objResult = await pollForObjDerivative(urnBase64, token, mdBase);
+      
+      if (objResult) {
+        const objData = await downloadDerivative(urnBase64, objResult.objUrn, token, mdBase);
+        if (objData && objData.byteLength > 100) {
+          // Check if it's already binary GLB
+          const firstBytes = new Uint8Array(objData.slice(0, 4));
+          if (firstBytes[0] === 0x67 && firstBytes[1] === 0x6C && firstBytes[2] === 0x54 && firstBytes[3] === 0x46) {
+            // Already GLB (glTF magic)
+            geometryData = objData;
+            isGlb = true;
+          } else {
+            // OBJ text → convert to GLB
+            const objText = new TextDecoder().decode(objData);
+            geometryData = objToGlb(objText);
+            isGlb = true;
+          }
+        }
+      }
+    }
+  }
+
+  if (!geometryData || geometryData.byteLength < 100) {
+    console.warn("[acc-geometry-extract] Could not obtain any real geometry from APS");
+    return { fallbackPath: null, glbBytes: 0 };
+  }
+
+  // Store as monolithic fallback GLB
+  const fallbackStoragePath = `${buildingFmGuid}/${modelKey}_full.glb`;
+  const { error: uploadErr } = await supabase.storage.from("xkt-models").upload(
+    fallbackStoragePath,
+    new Blob([geometryData], { type: "model/gltf-binary" }),
+    { upsert: true, contentType: "model/gltf-binary" },
   );
 
-  // Find any geometry resource from SVF
-  const svfGeomDeriv = allDerivs.find(d => d.role === 'graphics' && d.urn);
-
-  if (gltfDeriv) {
-    console.log(`[acc-geometry-extract] Found glTF derivative — downloading as monolithic fallback`);
-    
-    const encodedDerivUrn = encodeURIComponent(gltfDeriv.urn);
-    const downloadUrl = `${mdBase}/${urnBase64}/manifest/${encodedDerivUrn}`;
-    
-    const dlRes = await fetch(downloadUrl, { headers: { Authorization: `Bearer ${token}` } });
-    if (dlRes.ok) {
-      const glbData = await dlRes.arrayBuffer();
-      console.log(`[acc-geometry-extract] Downloaded GLB: ${(glbData.byteLength / 1024 / 1024).toFixed(1)} MB`);
-      
-      // Store as monolithic fallback
-      const fallbackStoragePath = `${buildingFmGuid}/${modelKey}_full.glb`;
-      const { error: uploadErr } = await supabase.storage.from("xkt-models").upload(
-        fallbackStoragePath,
-        new Blob([glbData], { type: "model/gltf-binary" }),
-        { upsert: true, contentType: "model/gltf-binary" },
-      );
-      if (!uploadErr) {
-        fallbackPath = fallbackStoragePath;
-        console.log(`[acc-geometry-extract] Monolithic GLB stored at ${fallbackStoragePath}`);
-      }
-
-      // Register in xkt_models as a non-chunk GLB model
-      await supabase.from("xkt_models").upsert({
-        model_id: `${modelKey}_full_glb`,
-        model_name: `${modelKey} (GLB)`,
-        building_fm_guid: buildingFmGuid,
-        storage_path: fallbackStoragePath,
-        file_name: `${modelKey}_full.glb`,
-        format: "glb",
-        file_size: glbData.byteLength,
-        is_chunk: false,
-      }, { onConflict: "model_id" });
-    }
+  if (uploadErr) {
+    console.error("[acc-geometry-extract] Failed to upload monolithic GLB:", uploadErr);
+    return { fallbackPath: null, glbBytes: 0 };
   }
 
-  // Now create per-storey placeholder chunks with metadata
-  // The actual per-storey GLB splitting requires the SVF fragment database
-  // which maps dbId → mesh fragments. We create the manifest structure
-  // and if we got the monolithic GLB, we also have a functional fallback.
-  
-  // For real per-storey chunking, we need the SVF fragment-to-dbId mapping
-  // Try to download the SVF property db which contains this
-  if (svfGeomDeriv) {
-    console.log(`[acc-geometry-extract] Attempting per-storey geometry extraction from SVF...`);
-    
-    // The SVF derivative bundle contains a fragments.pack file that maps
-    // dbId to mesh fragment indices. We need this to split geometry.
-    // Unfortunately, SVF is a multi-file format (many small resources)
-    // that's hard to parse in an edge function.
-    
-    // Alternative: Use the Forge/APS Object Tree + Properties API to get 
-    // bounding boxes per element, then create simple bounding-box-based GLBs.
-    
-    for (const [levelKey, group] of levelGroups) {
-      // For now, create a simple GLB with a bounding box placeholder per storey
-      // This allows the manifest structure to work end-to-end.
-      // Real geometry will come from the monolithic GLB fallback.
-      
-      const storagePath = `${buildingFmGuid}/glb_chunks/${modelKey}_storey_${levelKey}.glb`;
-      
-      // Create a simple box GLB as a placeholder that shows the storey name
-      // This will be replaced by real geometry when the conversion worker runs
-      const placeholderVertices = new Float32Array([
-        // Simple unit cube scaled later
-        0,0,0, 1,0,0, 1,1,0, 0,1,0,
-        0,0,1, 1,0,1, 1,1,1, 0,1,1,
-      ]);
-      const placeholderIndices = new Uint32Array([
-        0,1,2, 0,2,3, // front
-        4,6,5, 4,7,6, // back
-        0,4,5, 0,5,1, // bottom
-        2,6,7, 2,7,3, // top
-        0,3,7, 0,7,4, // left
-        1,5,6, 1,6,2, // right
-      ]);
-      
-      const chunkGlb = buildGlb(placeholderVertices, placeholderIndices, [0.5, 0.6, 0.8]);
-      
-      const { error: chunkUploadErr } = await supabase.storage.from("xkt-models").upload(
-        storagePath,
-        new Blob([chunkGlb], { type: "model/gltf-binary" }),
-        { upsert: true, contentType: "model/gltf-binary" },
-      );
-      
-      if (!chunkUploadErr) {
-        chunks.push({
-          levelKey,
-          storagePath,
-          bbox: [0, 0, 0, 1, 1, 1], // placeholder
-          vertexCount: 8,
-        });
-      } else {
-        console.warn(`[acc-geometry-extract] Failed to upload chunk ${levelKey}:`, chunkUploadErr);
-      }
-    }
-    
-    console.log(`[acc-geometry-extract] Created ${chunks.length} storey chunk placeholders`);
-  }
+  console.log(`[acc-geometry-extract] Monolithic GLB stored: ${fallbackStoragePath} (${(geometryData.byteLength / 1024 / 1024).toFixed(1)} MB)`);
 
-  return { chunks, fallbackPath };
+  // Register in xkt_models
+  await supabase.from("xkt_models").upsert({
+    model_id: `${modelKey}_full_glb`,
+    model_name: `${modelKey} (GLB)`,
+    building_fm_guid: buildingFmGuid,
+    storage_path: fallbackStoragePath,
+    file_name: `${modelKey}_full.glb`,
+    format: "glb",
+    file_size: geometryData.byteLength,
+    is_chunk: false,
+  }, { onConflict: "model_id" });
+
+  return { fallbackPath: fallbackStoragePath, glbBytes: geometryData.byteLength };
 }
 
 // ── Enrich geometry_index with fm_guid from asset_external_ids ──
@@ -441,12 +593,9 @@ async function enrichWithFmGuids(
 ): Promise<number> {
   if (geometryIndex.mapping.length === 0) return 0;
 
-  // Batch lookup: get all externalIds → fm_guids from asset_external_ids
   const externalIds = geometryIndex.mapping.map(m => m.externalId).filter(id => !id.startsWith("dbId_"));
-  
   if (externalIds.length === 0) return 0;
 
-  // Query in batches of 500
   let enriched = 0;
   const fmGuidMap = new Map<string, string>();
   
@@ -462,7 +611,6 @@ async function enrichWithFmGuids(
     }
   }
 
-  // Apply to index
   for (const entry of geometryIndex.mapping) {
     const fmGuid = fmGuidMap.get(entry.externalId);
     if (fmGuid) {
@@ -487,7 +635,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceKey);
 
     const body = await req.json();
-    const { action, buildingFmGuid, versionUrn, modelKey, accProjectId } = body;
+    const { action, buildingFmGuid, versionUrn, modelKey, accProjectId, userId } = body;
 
     if (!buildingFmGuid) {
       return new Response(JSON.stringify({ error: "buildingFmGuid required" }), {
@@ -495,24 +643,19 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── STATUS: Check if manifest already exists ──
+    // ── STATUS ──
     if (action === "status") {
       const { data: files } = await supabase.storage
         .from("xkt-models")
         .list(buildingFmGuid, { limit: 100 });
 
       const hasManifest = files?.some((f: any) => f.name === "_geometry_manifest.json");
-      const hasGlbChunks = files?.some((f: any) => f.name === "glb_chunks");
-
-      return new Response(JSON.stringify({
-        hasManifest: !!hasManifest,
-        hasGlbChunks: !!hasGlbChunks,
-      }), {
+      return new Response(JSON.stringify({ hasManifest: !!hasManifest }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // ── MANIFEST: Return the manifest JSON ──
+    // ── MANIFEST ──
     if (action === "manifest") {
       const manifestPath = `${buildingFmGuid}/_geometry_manifest.json`;
       const { data: urlData } = await supabase.storage
@@ -545,19 +688,15 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Idempotency: skip if manifest already exists for this building
+      // Idempotency check
       const { data: existingFiles } = await supabase.storage
         .from("xkt-models")
         .list(buildingFmGuid, { limit: 100 });
       
       const existingManifest = existingFiles?.find((f: any) => f.name === "_geometry_manifest.json");
       if (existingManifest && !body.force) {
-        console.log(`[acc-geometry-extract] Manifest already exists for ${buildingFmGuid}, skipping (use force=true to override)`);
-        return new Response(JSON.stringify({
-          success: true,
-          skipped: true,
-          message: "Manifest already exists. Use force=true to regenerate.",
-        }), {
+        console.log(`[acc-geometry-extract] Manifest already exists, skipping (use force=true)`);
+        return new Response(JSON.stringify({ success: true, skipped: true }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -567,12 +706,12 @@ Deno.serve(async (req) => {
       const effectiveModelKey = modelKey || buildingFmGuid;
       const versionStamp = new Date().toISOString();
 
-      console.log(`[acc-geometry-extract] Starting extract for ${buildingFmGuid}, URN=${urnBase64.substring(0, 30)}..., region=${region}`);
+      console.log(`[acc-geometry-extract] Starting extract for ${buildingFmGuid}, region=${region}`);
 
-      // Step 1: Get APS token
-      const token = await getApsToken();
+      // Step 1: Get best token (3-legged preferred)
+      const { token, is3Legged } = await getBestToken(userId || null, supabase);
 
-      // Step 2: Check if SVF translation is ready
+      // Step 2: Check SVF translation status
       const bubble = await fetchApsBubble(urnBase64, token, mdBase);
       if (bubble.status !== "success") {
         return new Response(JSON.stringify({
@@ -584,8 +723,8 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Step 3: Fetch SVF properties (Level grouping + externalId)
-      console.log(`[acc-geometry-extract] Fetching SVF properties...`);
+      // Step 3: Fetch SVF properties for level grouping
+      console.log("[acc-geometry-extract] Fetching SVF properties...");
       const propertiesResult = await fetchSvfProperties(urnBase64, token, mdBase);
       
       if (!propertiesResult) {
@@ -594,54 +733,39 @@ Deno.serve(async (req) => {
         });
       }
 
-      const { levelGroups, dbIdToExternalId, dbIdToLevel } = buildLevelGroups(propertiesResult);
-      console.log(`[acc-geometry-extract] Found ${levelGroups.size} levels, ${dbIdToExternalId.size} elements with externalIds`);
+      const { levelGroups, dbIdToExternalId } = buildLevelGroups(propertiesResult);
+      console.log(`[acc-geometry-extract] Found ${levelGroups.size} levels, ${dbIdToExternalId.size} elements`);
 
-      if (levelGroups.size === 0) {
-        // No level grouping found — still try to download monolithic geometry
-        console.log(`[acc-geometry-extract] No levels found, attempting monolithic GLB download...`);
-      }
-
-      // Step 4: Download SVF geometry and create per-storey GLB chunks
-      const { chunks: glbChunks, fallbackPath } = await downloadAndChunkSvfGeometry(
-        urnBase64, token, mdBase,
-        propertiesResult.viewGuid || "",
-        levelGroups,
-        buildingFmGuid,
-        effectiveModelKey,
-        supabase,
+      // Step 4: Download real geometry from APS (OBJ/glTF → GLB)
+      const { fallbackPath, glbBytes } = await downloadRealGeometry(
+        urnBase64, token, is3Legged, mdBase,
+        buildingFmGuid, effectiveModelKey, supabase,
       );
 
-      // Step 5: Build manifest
+      // Step 5: Build manifest with level metadata
       const manifestChunks: ManifestChunk[] = [];
       let priority = 0;
 
-      for (const [levelKey, group] of levelGroups) {
+      for (const [_levelKey, group] of levelGroups) {
         const storeyGuid = await deterministicGuid(buildingFmGuid, group.name);
-        const glbChunk = glbChunks.find(c => c.levelKey === levelKey);
-
         manifestChunks.push({
           storeyGuid,
           storeyName: group.name,
           priority: priority++,
-          url: glbChunk?.storagePath || `${buildingFmGuid}/glb_chunks/${effectiveModelKey}_storey_${levelKey}.glb`,
-          bbox: glbChunk?.bbox || [],
+          url: "", // No per-storey chunks — viewer uses fallback + visibility switching
+          bbox: [],
           elementCount: group.dbIds.length,
           format: "glb",
         });
       }
 
-      // Sort by name for consistent ordering
+      // Sort by name
       manifestChunks.sort((a, b) => a.storeyName.localeCompare(b.storeyName, "sv"));
       manifestChunks.forEach((c, i) => { c.priority = i; });
 
       const manifest: GeometryManifest = {
         modelId: effectiveModelKey,
-        source: {
-          accProjectId: accProjectId || "",
-          accFileUrn: versionUrn,
-          apsRegion: region,
-        },
+        source: { accProjectId: accProjectId || "", accFileUrn: versionUrn, apsRegion: region },
         version: versionStamp,
         format: "glb",
         coordinateSystem: { up: "Z", units: "mm" },
@@ -669,10 +793,9 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Enrich with fm_guid from asset_external_ids
       const enrichedCount = await enrichWithFmGuids(geometryIndex, supabase);
 
-      // Step 7: Store manifest + geometry_index in storage
+      // Step 7: Store manifest + index
       const [manifestUpload, indexUpload] = await Promise.all([
         supabase.storage.from("xkt-models").upload(
           `${buildingFmGuid}/_geometry_manifest.json`,
@@ -686,26 +809,10 @@ Deno.serve(async (req) => {
         ),
       ]);
 
-      if (manifestUpload.error) console.error(`[acc-geometry-extract] Manifest upload failed:`, manifestUpload.error);
-      if (indexUpload.error) console.error(`[acc-geometry-extract] Index upload failed:`, indexUpload.error);
+      if (manifestUpload.error) console.error("[acc-geometry-extract] Manifest upload failed:", manifestUpload.error);
+      if (indexUpload.error) console.error("[acc-geometry-extract] Index upload failed:", indexUpload.error);
 
-      // Step 8: Register chunks in xkt_models table
-      for (const chunk of manifestChunks) {
-        await supabase.from("xkt_models").upsert({
-          model_id: `${effectiveModelKey}_storey_${chunk.storeyGuid.substring(0, 8)}`,
-          model_name: chunk.storeyName,
-          building_fm_guid: buildingFmGuid,
-          storage_path: chunk.url,
-          file_name: chunk.url.split("/").pop() || "chunk.glb",
-          format: "glb",
-          is_chunk: true,
-          chunk_order: chunk.priority,
-          storey_fm_guid: chunk.storeyGuid,
-          parent_model_id: effectiveModelKey,
-        }, { onConflict: "model_id" });
-      }
-
-      console.log(`[acc-geometry-extract] ✅ Pipeline complete: ${manifestChunks.length} chunks, ${geometryIndex.mapping.length} mapped, ${enrichedCount} fm_guids resolved, fallback=${!!fallbackPath}`);
+      console.log(`[acc-geometry-extract] ✅ Pipeline complete: ${manifestChunks.length} level metadata entries, ${geometryIndex.mapping.length} mapped, ${enrichedCount} fm_guids, fallback=${!!fallbackPath} (${(glbBytes / 1024 / 1024).toFixed(1)} MB)`);
 
       return new Response(JSON.stringify({
         success: true,
@@ -715,8 +822,9 @@ Deno.serve(async (req) => {
           totalElements: dbIdToExternalId.size,
           mappedElements: geometryIndex.mapping.length,
           enrichedFmGuids: enrichedCount,
-          glbChunksCreated: glbChunks.length,
           hasFallback: !!fallbackPath,
+          fallbackSizeMB: +(glbBytes / 1024 / 1024).toFixed(1),
+          tokenType: is3Legged ? "3-legged" : "2-legged",
         },
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -2165,7 +2165,7 @@ serve(async (req: Request) => {
         // When translation succeeds, trigger geometry extraction pipeline (non-blocking)
         if (overallStatus === "success" && body.buildingFmGuid) {
           console.log(`[check-translation] Translation success — triggering acc-geometry-extract for ${body.buildingFmGuid}`);
-          // Fire-and-forget: invoke the geometry extract function
+          // Fire-and-forget: invoke the geometry extract function with userId for 3-legged token
           fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/acc-geometry-extract`, {
             method: "POST",
             headers: {
@@ -2178,6 +2178,7 @@ serve(async (req: Request) => {
               versionUrn,
               modelKey: body.modelKey || body.buildingFmGuid,
               accProjectId: body.accProjectId || "",
+              userId: auth.userId || null,
             }),
           }).then(r => console.log(`[check-translation] Geometry extract triggered: ${r.status}`))
             .catch(e => console.warn(`[check-translation] Geometry extract trigger failed:`, e));
