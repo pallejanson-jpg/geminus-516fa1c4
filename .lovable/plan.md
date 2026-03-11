@@ -1,42 +1,90 @@
+## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
+
+### Changes Made
+1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
+2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
+3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
+4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
+5. **config.toml** updated with `acc-geometry-extract` function entry
+
+### Pending (Phase 2)
+- Actual GLB chunk creation from SVF geometry (requires conversion worker)
+- OBJ as optional secondary format for small models
+
+---
 
 
-# Plan: Animated Video Background on Home Landing
+### Ändringar
 
-## Summary
+#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
+**Fil:** `supabase/functions/conversion-worker-api/index.ts`
+- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
+- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
+- Upsert till `assets` med `created_in_model: true`
+- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
 
-Replace the static `chicago-skyline-hero.jpg` background on the home landing page with a looping video background showing a data-sphere animation similar to the reference image (Emergent Labs style — glowing numbers/particles forming a sphere on a dark background).
+#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
+**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
+- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
+- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
+- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
+- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
+- Diff: soft-delete objekt som finns i DB men inte i ny IFC
 
-## Approach
+#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
+**Fil:** `docs/conversion-worker/worker.mjs`
+- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
+- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
+- Non-fatal: om hierarki-population misslyckas fortsätter workern
 
-Since we cannot generate video inside Lovable, we have two realistic options:
+#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
+**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
+- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
+- `created_in_model: true` istället för `false`
+- Diff-logik: markerar borttagna objekt efter import
 
-1. **Use a free stock video** — Find a similar dark, abstract data/particle sphere video from a royalty-free source (e.g. Pexels, Pixabay) and host it in `public/`
-2. **Use a CSS/canvas animation** — Create a purely code-driven particle sphere effect using Canvas API or CSS, avoiding the need for a video file entirely
+### Datamodell
 
-**Recommended: Option 2 (Canvas animation)** — No external video dependency, smaller bundle, and we can customize colors/style to match the Geminus brand (cyan/teal tones like the reference image).
+```text
+Building Storey:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
+  category:          "Building Storey"
+  created_in_model:  true
 
-## Changes
+Space:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
+  category:          "Space"
+  level_fm_guid:     parent storey fm_guid
 
-### 1. New file: `src/components/home/ParticleBackground.tsx`
+Instance:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
+  category:          "Instance"
+  asset_type:        ifcType (e.g. "IfcDoor")
+  level_fm_guid:     resolved storey
+  in_room_fm_guid:   resolved space
+```
 
-A React component that renders a `<canvas>` element with an animated 3D particle sphere:
-- ~200-300 floating number/dot particles arranged in a sphere
-- Cyan/teal color palette matching the reference
-- Slow rotation animation
-- Dark background (works with the existing `bg-background/70` overlay)
-- Uses `requestAnimationFrame` for smooth 60fps animation
-- Responsive — fills container, handles resize
-- Lightweight — no dependencies, pure Canvas 2D API
+### Diff-flöde
 
-### 2. Edit: `src/components/home/HomeLanding.tsx`
+Vid omimport jämförs importerade fm_guids mot befintliga i DB:
+- **Nytt** → INSERT
+- **Matchat** → UPDATE (namn, typ, rumsplacering)
+- **Borttaget** → `modification_status = 'removed'` (soft-delete)
 
-- Replace the static `backgroundImage` div (line 168) with the `<ParticleBackground />` component
-- Remove the `chicagoHero` import (line 7) since it's no longer needed
-- Keep the existing semi-transparent overlay (`bg-background/70`) for text readability
+---
 
-## Technical Notes
+## Previous Plans
 
-- The canvas animation will be paused when the component unmounts (cleanup in `useEffect`)
-- On mobile, reduce particle count for performance
-- The `chicago-skyline-hero.jpg` asset can remain in the repo (used elsewhere or as fallback)
+### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
+- Browser-primary for >20MB, edge function for ≤20MB
+- MetaModel JSON uploaded alongside XKT
+- Systems extracted and persisted
 
+### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+- Standalone Node.js worker polls conversion-worker-api
+- Per-storey .xkt tiles with dynamic floor loading
+
+### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
+- 10 credential override columns on building_settings
+- Shared credential resolver in edge functions
+- Properties page as configuration hub
