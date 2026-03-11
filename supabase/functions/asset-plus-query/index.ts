@@ -86,8 +86,8 @@ serve(async (req) => {
 
     // Action: Get API configuration for 3D Viewer
     if (action === "getConfig") {
-      const apiUrl = Deno.env.get("ASSET_PLUS_API_URL") || "";
-      const apiKey = Deno.env.get("ASSET_PLUS_API_KEY") || "";
+      const apiUrl = creds.apiUrl || "";
+      const apiKey = creds.apiKey || "";
       
       return new Response(
         JSON.stringify({ 
