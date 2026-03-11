@@ -47,7 +47,7 @@ const FmAccessDocuments: React.FC<FmAccessDocumentsProps> = ({ buildingId, build
       <div className="px-3 pt-3">
         <TabsList className="w-full">
           <TabsTrigger value="drawings" className="flex-1 text-xs">
-            <Image size={12} className="mr-1" /> Ritningar ({drawings.length})
+            <Image size={12} className="mr-1" /> Drawings ({drawings.length})
           </TabsTrigger>
           <TabsTrigger value="documents" className="flex-1 text-xs">
             <FileText size={12} className="mr-1" /> Dokument ({documents.length})
