@@ -32,7 +32,7 @@ const ASSET_TYPES = [
 
 // IFC Object categories (mandatory for Asset+)
 const OBJECT_CATEGORIES = [
-  { value: 'Instance', label: 'Instance (Inventarie)' },
+  { value: 'Instance', label: 'Instance (Inventory)' },
   { value: 'IfcFurniture', label: 'Furniture' },
   { value: 'IfcBuildingElementProxy', label: 'Building Element' },
   { value: 'IfcFlowTerminal', label: 'Flow Terminal' },
