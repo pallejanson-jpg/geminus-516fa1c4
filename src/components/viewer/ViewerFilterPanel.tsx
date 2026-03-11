@@ -1268,9 +1268,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     window.dispatchEvent(new CustomEvent(ANNOTATION_FILTER_EVENT, { detail: { visibleCategories: [] } }));
   }, []);
 
-  // ── Fetch modified assets when modifications section opens ───────────
+  // ── Fetch modified assets when modifications section opens or after deletion ───
+  const fetchModifiedRef = useRef<() => void>(() => {});
   useEffect(() => {
-    if (!modificationsOpen || !buildingFmGuid) return;
+    if (!buildingFmGuid) return;
     const fetchModified = async () => {
       const { data } = await supabase
         .from('assets')
@@ -1278,6 +1279,20 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         .eq('building_fm_guid', buildingFmGuid)
         .not('modification_status', 'is', null);
       setModifiedAssets(data || []);
+    };
+    fetchModifiedRef.current = fetchModified;
+    if (modificationsOpen) fetchModified();
+  }, [modificationsOpen, buildingFmGuid]);
+
+  // Listen for OBJECT_DELETE events to refresh modification count
+  useEffect(() => {
+    const handler = () => {
+      // Re-fetch after a short delay to let the DB update
+      setTimeout(() => fetchModifiedRef.current(), 500);
+    };
+    window.addEventListener('OBJECT_DELETE', handler);
+    return () => window.removeEventListener('OBJECT_DELETE', handler);
+  }, []);
     };
     fetchModified();
   }, [modificationsOpen, buildingFmGuid]);
