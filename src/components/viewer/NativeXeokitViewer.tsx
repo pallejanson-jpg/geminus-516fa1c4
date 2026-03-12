@@ -205,6 +205,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           scaleCanvasResolutionFactor: 0.6,
           hideEdges: true,
           hideSAO: true,
+          delayBeforeRestore: true,
+          delayBeforeRestoreSeconds: isMobile ? 0.5 : 0.3,
         });
       }
 
