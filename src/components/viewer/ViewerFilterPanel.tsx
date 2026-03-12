@@ -748,11 +748,14 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return map;
   }, []);
 
-  // ── Apply filter + coloring ─────────────────────────────────────────────
+  // ── Apply filter + coloring (debounced) ──────────────────────────────────
 
   const rafRef = useRef<number>(0);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const applyFilterVisibility = useCallback(() => {
+    clearTimeout(debounceRef.current);
     cancelAnimationFrame(rafRef.current);
+    debounceRef.current = setTimeout(() => {
     rafRef.current = requestAnimationFrame(() => {
     const viewer = getXeokitViewer();
     if (!viewer?.scene) return;
