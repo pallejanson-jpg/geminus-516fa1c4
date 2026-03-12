@@ -34,6 +34,7 @@ interface LevelItem {
 interface SpaceItem {
   fmGuid: string;
   name: string;
+  designation: string;
   levelFmGuid: string;
 }
 
