@@ -604,13 +604,6 @@ const UnifiedViewerContent: React.FC<{
             <Layers className="h-4 w-4 text-primary" />
             <div>
               <h1 className="text-sm font-semibold text-white">{buildingData.name}</h1>
-              <p className="text-[10px] text-white/60">
-                {viewMode === 'vt' ? 'Virtual Twin' :
-                 viewMode === 'split' ? 'Split 3D/360°' :
-                 viewMode === 'split2d3d' ? 'Split 2D/3D' :
-                 viewMode === '360' ? '360° Panorama' :
-                 viewMode === '2d' ? '2D Plan View' : '3D Viewer'}
-              </p>
             </div>
           </div>
         </div>
