@@ -38,6 +38,8 @@ const FmAccessDashboard = lazy(() => import("@/pages/FmAccessDashboard"));
 const IssueResolution = lazy(() => import("@/pages/IssueResolution"));
 // Standalone plugin page for external system integration
 const PluginPage = lazy(() => import("@/pages/PluginPage"));
+// Homepage V2 test page
+const HomeLandingV2 = lazy(() => import("@/pages/HomeLandingV2"));
 
 const queryClient = new QueryClient();
 
