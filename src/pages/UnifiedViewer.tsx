@@ -81,6 +81,7 @@ const UnifiedViewerContent: React.FC<{
   const [viewMode, setViewMode] = useState<ViewMode>(effectiveInitialMode);
   const userChangedModeRef = useRef(false);
   const viewModeRef = useRef<ViewMode>(effectiveInitialMode);
+  const lastFloorEventRef = useRef<number>(0);
 
   // Keep viewModeRef always in sync
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
