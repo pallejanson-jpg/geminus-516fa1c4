@@ -166,8 +166,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         const storeyKeys = Object.keys(plugin.storeys || {});
         if (storeyKeys.length === 0) {
           try { plugin.destroy?.(); } catch {}
-          if (initAttemptRef.current++ < 10) {
-            retryTimer = setTimeout(tryInit, 100);
+          if (initAttemptRef.current++ < 30) {
+            retryTimer = setTimeout(tryInit, 200);
           }
           return;
         }

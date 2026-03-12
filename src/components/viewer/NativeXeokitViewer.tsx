@@ -861,13 +861,19 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
         // Always perform instant viewFit after models load (duration: 0, no animation)
         // If a saved start view exists, NativeViewerShell will apply it on top of this.
-        try {
-          const aabb = viewer.scene?.aabb;
-          if (aabb) {
-            viewer.cameraFlight.flyTo({ aabb, duration: 0 });
-            console.log('[NativeViewer] Applied instant viewFit (duration: 0)');
-          }
-        } catch (e) { console.warn('[NativeViewer] viewFit failed:', e); }
+        // Skip viewFit in split2d3d mode — floor isolation handles camera positioning
+        const isSplit2d3d = new URLSearchParams(window.location.search).get('mode') === 'split2d3d';
+        if (!isSplit2d3d) {
+          try {
+            const aabb = viewer.scene?.aabb;
+            if (aabb) {
+              viewer.cameraFlight.flyTo({ aabb, duration: 0 });
+              console.log('[NativeViewer] Applied instant viewFit (duration: 0)');
+            }
+          } catch (e) { console.warn('[NativeViewer] viewFit failed:', e); }
+        } else {
+          console.log('[NativeViewer] Skipped viewFit — split2d3d mode active');
+        }
 
         // Re-apply any pending insights color event that arrived before models loaded
         if (pendingInsightsColorRef.current) {

@@ -953,11 +953,17 @@ function MobileUnifiedViewer({
             }}
           >
             {/* Label removed for cleaner mobile UI */}
-            <SplitPlanView
-              viewerRef={viewerInstanceRef}
-              buildingFmGuid={buildingData.fmGuid}
-              className="h-full"
-            />
+            {viewerReady ? (
+              <SplitPlanView
+                viewerRef={viewerInstanceRef}
+                buildingFmGuid={buildingData.fmGuid}
+                className="h-full"
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center bg-muted/30">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            )}
           </div>
 
           {/* Draggable divider with grip handle */}
