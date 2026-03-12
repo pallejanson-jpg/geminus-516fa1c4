@@ -154,12 +154,13 @@ export function useViewerTheme() {
 
     console.log('Applying viewer theme:', theme.name);
 
-    // Apply subtle edge settings for cleaner look
+    // Apply edge settings from theme
     const edgeMaterial = scene.edgeMaterial;
     if (edgeMaterial && theme.edge_settings?.enabled) {
-      edgeMaterial.edgeColor = [0.85, 0.84, 0.82];
-      edgeMaterial.edgeAlpha = 0.15;
-      edgeMaterial.edgeWidth = 1;
+      const edgeColor = theme.edge_settings.edgeColor ? hexToRgb(theme.edge_settings.edgeColor) : [0.85, 0.84, 0.82];
+      edgeMaterial.edgeColor = edgeColor;
+      edgeMaterial.edgeAlpha = theme.edge_settings.edgeAlpha ?? 0.15;
+      edgeMaterial.edgeWidth = theme.edge_settings.edgeWidth ?? 1;
     }
 
     // Iterate through all objects and apply colors
