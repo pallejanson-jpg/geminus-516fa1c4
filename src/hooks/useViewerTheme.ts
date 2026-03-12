@@ -103,12 +103,49 @@ export function useViewerTheme() {
 
     const state = stateRef.current;
     const colorMappings = theme.color_mappings || {};
+    const isNativeColour = theme.name === 'Model Native Colour' || Object.keys(colorMappings).length === 0;
     
-    // If "Standard" theme (empty mappings), just restore and return
-    if (Object.keys(colorMappings).length === 0) {
-      resetTheme(viewerRef);
-      setActiveTheme(theme);
+    // Store original colors if not already stored
+    if (state.originalColors.size === 0) {
+      const objects = scene.objects;
+      for (const objectId in objects) {
+        const entity = objects[objectId];
+        if (entity) {
+          state.originalColors.set(objectId, {
+            color: entity.colorize ? [...entity.colorize] : [1, 1, 1],
+            opacity: entity.opacity ?? 1,
+            edges: entity.edges ?? true,
+          });
+        }
+      }
+      const edgeMaterial = scene.edgeMaterial;
+      if (edgeMaterial) {
+        state.originalEdgeColor = [...edgeMaterial.edgeColor];
+        state.originalEdgeAlpha = edgeMaterial.edgeAlpha;
+      }
+      const container = document.getElementById('AssetPlusViewer');
+      if (container) {
+        state.originalBackground = container.style.background || '';
+      }
+    }
+
+    // "Model Native Colour" — restore original model colors (no architect palette)
+    if (isNativeColour) {
+      console.log('Applying Model Native Colour: restoring original model colors');
+      for (const [objectId, original] of state.originalColors) {
+        const entity = scene.objects[objectId];
+        if (entity) {
+          entity.colorize = original.color;
+          entity.opacity = original.opacity;
+          entity.edges = original.edges;
+        }
+      }
+      // Disable edges for cleaner native look
+      if (scene.edgeMaterial) {
+        scene.edgeMaterial.edgeAlpha = 0;
+      }
       state.activeThemeId = theme.id;
+      setActiveTheme(theme);
       window.dispatchEvent(new CustomEvent(VIEWER_THEME_CHANGED_EVENT, {
         detail: { themeId: theme.id, themeName: theme.name }
       }));
