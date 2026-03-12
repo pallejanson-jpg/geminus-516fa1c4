@@ -24,7 +24,7 @@ interface FloatingFloorSwitcherProps {
 export const FLOOR_PILLS_TOGGLE_EVENT = 'FLOOR_PILLS_TOGGLE';
 
 const MAX_VISIBLE_PILLS_DESKTOP = 12;
-const MAX_VISIBLE_PILLS_MOBILE = 4;
+const MAX_VISIBLE_PILLS_MOBILE = 3;
 
 const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
   viewerRef,
