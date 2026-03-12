@@ -40,6 +40,8 @@ const IssueResolution = lazy(() => import("@/pages/IssueResolution"));
 const PluginPage = lazy(() => import("@/pages/PluginPage"));
 // Homepage V2 test page
 const HomeLandingV2 = lazy(() => import("@/pages/HomeLandingV2"));
+// API Documentation page
+const ApiDocs = lazy(() => import("@/pages/ApiDocs"));
 
 const queryClient = new QueryClient();
 
@@ -243,6 +245,18 @@ const App = () => {
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                 <ProtectedRoute>
                   <HomeLandingV2 />
+                </ProtectedRoute>
+              </Suspense>
+            } 
+          />
+          
+          {/* API Documentation page */}
+          <Route 
+            path="/api-docs" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <ProtectedRoute>
+                  <ApiDocs />
                 </ProtectedRoute>
               </Suspense>
             } 
