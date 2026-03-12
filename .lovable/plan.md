@@ -1,117 +1,56 @@
-## Plan: Mobile Viewer Startup Hardening (IMPLEMENTED ✅)
-
-### Changes Made
-1. **Mobile touch tuning** (`NativeXeokitViewer.tsx`): dragRotationRate 30→70, touchPanRate 0.06→0.14, touchDollyRate 0.04→0.09, rotationInertia 0.93→0.88, panInertia 0.88→0.82
-2. **FastNav delay** (`NativeXeokitViewer.tsx`): Added `delayBeforeRestore: true` (0.5s mobile, 0.3s desktop)
-3. **Suppress viewFit in split2d3d** (`NativeXeokitViewer.tsx`): Skips instant viewFit when `?mode=split2d3d` — floor isolation handles camera
-4. **Defer SplitPlanView mount** (`UnifiedViewer.tsx`): Mobile SplitPlanView only renders after `viewerReady=true`, shows spinner until then
-5. **Increased SplitPlanView retry** (`SplitPlanView.tsx`): 10×100ms → 30×200ms (6s total window), immediate retry on VIEWER_MODELS_LOADED
-6. **Debounced floor events** (`UnifiedViewer.tsx`): 500ms guard on FLOOR_SELECTION_CHANGED dispatches to prevent competing events
-
-### Architecture Principle
-Mobile and desktop share the same `UnifiedViewerContent` initialization logic. The ONLY difference is layout:
-- Mobile: vertical stack (2D top, 3D bottom) with touch-optimized divider (8px)
-- Desktop: horizontal ResizablePanelGroup with drag handle (4px)
-
-Future changes to viewer startup MUST apply to both paths. Do NOT create separate mobile/desktop init logic.
-
----
-
-## Plan: SplitPlanView Navigation + Alignment UX (IMPLEMENTED ✅)
-
-### Changes Made
-1. **SplitPlanView click navigation** (`SplitPlanView.tsx`): Replaced first-person instant jump with MinimapPanel-style fly-to — keeps current eye height, looks down at clicked point, animates 0.5s.
-2. **AlignmentPointPicker precision** (`AlignmentPointPicker.tsx`): Now estimates surface point via ray-cast from tripod position + viewing direction × adjustable distance slider (0.5–10m). Shows captured coordinates and distance in both steps for verification.
-
----
-
-## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
-
-### Changes Made
-1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
-2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
-3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
-4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
-5. **config.toml** updated with `acc-geometry-extract` function entry
-
-### Pending (Phase 2)
-- Actual GLB chunk creation from SVF geometry (requires conversion worker)
-- OBJ as optional secondary format for small models
-
----
 
 
-### Ändringar
+# Plan: Samla API-dokumentation i Geminus och gör den sökbar för AI
 
-#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
-**Fil:** `supabase/functions/conversion-worker-api/index.ts`
-- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
-- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
-- Upsert till `assets` med `created_in_model: true`
-- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
+## Nuläge
+- API-dokumentation finns som hårdkodad `API_CATEGORIES`-array i `RightSidebar.tsx` — bara Asset+ och FM Access endpoints
+- Faciliate och Senslinc saknas helt i UI:t
+- Dokumentationen i `docs/api/` (Asset+, FM Access, Senslinc, Faciliate, Congeria, Ivion) är inte indexerad för Geminus AI
+- Geminus AI har `search_help_docs`-verktyget men det söker bara i `document_chunks` som fylls via Knowledge Base Sources
 
-#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
-**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
-- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
-- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
-- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
-- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
-- Diff: soft-delete objekt som finns i DB men inte i ny IFC
+## Mål
+1. Komplett API-dokumentationsvy i användarmenyn med alla integrationer
+2. Geminus AI kan svara på frågor om alla API:er
 
-#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
-**Fil:** `docs/conversion-worker/worker.mjs`
-- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
-- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
-- Non-fatal: om hierarki-population misslyckas fortsätter workern
+## Ändringar
 
-#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
-**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
-- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
-- `created_in_model: true` istället för `false`
-- Diff-logik: markerar borttagna objekt efter import
+### A. Utöka API_CATEGORIES i RightSidebar.tsx
+Lägg till endpoints för **Faciliate**, **Senslinc** och **Ivion** baserat på befintlig dokumentation i `docs/api/`:
 
-### Datamodell
+- **Faciliate**: REST v2 API — arbetsordrar, hyreskontrakt, byggnader
+- **Senslinc**: Sensorer, mätdata, larm
+- **Ivion**: Platser, POI:er, panoramabilder
 
-```text
-Building Storey:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
-  category:          "Building Storey"
-  created_in_model:  true
+### B. Skapa en dedikerad API Documentation-sida
+Ny fil: `src/pages/ApiDocs.tsx` — en komplett referenssida med:
+- Sökbar lista av alla integrationer
+- Expanderbara sektioner per system (Asset+, FM Access, Faciliate, Senslinc, Ivion)
+- Autentiseringsflöden, endpoints, parametrar
+- Länk från user-dropdown i `AppHeader.tsx`
 
-Space:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
-  category:          "Space"
-  level_fm_guid:     parent storey fm_guid
+### C. Indexera API-dokumentationen för Geminus AI
+Lägg till API-dokumentationen som förindexerade `document_chunks` via en migration eller edge function-action:
+- Chunka innehållet från `docs/api/*/overview.md` + `openapi.yaml`
+- Spara med `source_type = 'api_docs'` i `document_chunks`
+- Alternativt: lägg till varje `docs/api/*/overview.md` som en Knowledge Base Source som kan indexeras via befintligt UI
 
-Instance:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
-  category:          "Instance"
-  asset_type:        ifcType (e.g. "IfcDoor")
-  level_fm_guid:     resolved storey
-  in_room_fm_guid:   resolved space
-```
+### D. Uppdatera Geminus AI system prompt
+I `gunnar-chat/index.ts`, lägg till instruktion att använda `search_help_docs` även för API-frågor, och att API-dokumentation finns indexerad.
 
-### Diff-flöde
+## Filer som ändras
 
-Vid omimport jämförs importerade fm_guids mot befintliga i DB:
-- **Nytt** → INSERT
-- **Matchat** → UPDATE (namn, typ, rumsplacering)
-- **Borttaget** → `modification_status = 'removed'` (soft-delete)
+| Fil | Ändring |
+|---|---|
+| `src/components/layout/RightSidebar.tsx` | Utöka `API_CATEGORIES` med Faciliate, Senslinc, Ivion |
+| `src/pages/ApiDocs.tsx` | **NY** — dedikerad API-dokumentationssida |
+| `src/App.tsx` | Lägg till route `/api-docs` |
+| `src/components/layout/AppHeader.tsx` | Lägg till "API Documentation" i user-dropdown |
+| `supabase/functions/gunnar-chat/index.ts` | Uppdatera system prompt för API-frågors hantering |
+| `supabase/functions/index-documents/index.ts` | Lägg till action `index-api-docs` som chunkar docs/api-filerna |
 
----
+## Implementationsordning
+1. Utöka API_CATEGORIES med alla integrationer
+2. Skapa ApiDocs-sidan och koppla i router + header
+3. Indexera API-dokumentation i document_chunks
+4. Uppdatera Geminus AI prompt
 
-## Previous Plans
-
-### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
-- Browser-primary for >20MB, edge function for ≤20MB
-- MetaModel JSON uploaded alongside XKT
-- Systems extracted and persisted
-
-### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
-- Standalone Node.js worker polls conversion-worker-api
-- Per-storey .xkt tiles with dynamic floor loading
-
-### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
-- 10 credential override columns on building_settings
-- Shared credential resolver in edge functions
-- Properties page as configuration hub
