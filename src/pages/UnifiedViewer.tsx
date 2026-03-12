@@ -554,7 +554,7 @@ const UnifiedViewerContent: React.FC<{
 
   // ─── Mobile: Simplified tab layout ─────────────────────────────────
   if (isMobile) {
-    return <MobileUnifiedViewer
+    return <MobileViewerPage
       buildingData={buildingData}
       viewMode={viewMode}
       setViewMode={setViewMode}
