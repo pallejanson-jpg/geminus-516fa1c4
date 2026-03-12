@@ -1526,7 +1526,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             {filteredSpaces.slice(0, 200).map(space => (
               <FilterRow
                 key={space.fmGuid}
-                label={space.name}
+                label={space.designation ? `${space.name} (${space.designation})` : space.name}
                 checked={checkedSpaces.has(space.fmGuid)}
                 onCheckedChange={(checked) => handleSpaceToggle(space.fmGuid, checked)}
                 onClick={() => handleSpaceClick(space.fmGuid)}
