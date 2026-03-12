@@ -223,13 +223,23 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const allSpaces = buildingData
       .filter((a: any) => a.category === 'Space' || a.category === 'IfcSpace');
 
-    // When levels are available from viewer, filter by visible levels
-    // When no levels (viewer not ready), show ALL spaces for this building
+    // Build a set of ALL database level fm guids (not just the primary one)
+    // This fixes room count dropping to 0 when a floor is selected
     let visibleLevelGuids: Set<string> | null = null;
     if (levels.length > 0) {
-      visibleLevelGuids = checkedLevels.size > 0
-        ? new Set(Array.from(checkedLevels).map(g => normalizeGuid(g)))
-        : new Set(levels.map(l => normalizeGuid(l.fmGuid)));
+      const allLevelGuids = new Set<string>();
+      const relevantLevels = checkedLevels.size > 0
+        ? sharedFloors.filter(f => checkedLevels.has(f.databaseLevelFmGuids[0] || f.id))
+        : sharedFloors;
+      relevantLevels.forEach(floor => {
+        floor.databaseLevelFmGuids.forEach(g => allLevelGuids.add(normalizeGuid(g)));
+      });
+      // Also add the level fmGuids from the levels array for fallback
+      const relevantLevelItems = checkedLevels.size > 0
+        ? levels.filter(l => checkedLevels.has(l.fmGuid))
+        : levels;
+      relevantLevelItems.forEach(l => allLevelGuids.add(normalizeGuid(l.fmGuid)));
+      visibleLevelGuids = allLevelGuids;
     }
 
     const filteredByLevel = allSpaces.filter((a: any) => {
@@ -239,7 +249,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     });
 
     // Fallback: if viewer-level mapping is not ready/correct yet, still show spaces
-    // so the user can filter by room instead of getting an empty list.
     const spacesSource = (
       filteredByLevel.length === 0 &&
       allSpaces.length > 0 &&
@@ -248,14 +257,20 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     ) ? allSpaces : filteredByLevel;
 
     return spacesSource
-      .map((a: any) => ({
-        fmGuid: a.fmGuid || a.fm_guid,
-        name: (a.commonName || a.common_name || a.name || 'Unnamed').replace(/^null$/, 'Unnamed'),
-        levelFmGuid: a.levelFmGuid || a.level_fm_guid,
-      }))
+      .map((a: any) => {
+        const name = (a.commonName || a.common_name || a.name || 'Unnamed').replace(/^null$/, 'Unnamed');
+        // Extract designation/number from attributes or name field
+        const designation = a.attributes?.designation || a.attributes?.Designation || a.attributes?.number || '';
+        return {
+          fmGuid: a.fmGuid || a.fm_guid,
+          name,
+          designation: typeof designation === 'string' ? designation : '',
+          levelFmGuid: a.levelFmGuid || a.level_fm_guid,
+        };
+      })
       .filter((s: SpaceItem) => s.name && s.name !== 'Unnamed')
       .sort((a: SpaceItem, b: SpaceItem) => a.name.localeCompare(b.name, 'sv', { numeric: true }));
-  }, [buildingData, checkedLevels, levels]);
+  }, [buildingData, checkedLevels, levels, sharedFloors]);
 
   // Auto-assign palette colors to levels
   useEffect(() => {
