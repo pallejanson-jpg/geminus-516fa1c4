@@ -1,3 +1,36 @@
+## Plan: Mobile Viewer Startup Hardening (IMPLEMENTED ✅)
+
+### Changes Made
+1. **Mobile touch tuning** (`NativeXeokitViewer.tsx`): dragRotationRate 30→70, touchPanRate 0.06→0.14, touchDollyRate 0.04→0.09, rotationInertia 0.93→0.88, panInertia 0.88→0.82
+2. **FastNav delay** (`NativeXeokitViewer.tsx`): Added `delayBeforeRestore: true` (0.5s mobile, 0.3s desktop)
+3. **Suppress viewFit in split2d3d** (`NativeXeokitViewer.tsx`): Skips instant viewFit when `?mode=split2d3d` — floor isolation handles camera
+4. **Defer SplitPlanView mount** (`UnifiedViewer.tsx`): Mobile SplitPlanView only renders after `viewerReady=true`, shows spinner until then
+5. **Increased SplitPlanView retry** (`SplitPlanView.tsx`): 10×100ms → 30×200ms (6s total window), immediate retry on VIEWER_MODELS_LOADED
+6. **Debounced floor events** (`UnifiedViewer.tsx`): 500ms guard on FLOOR_SELECTION_CHANGED dispatches to prevent competing events
+
+### Architecture Principle
+Mobile and desktop share the same `UnifiedViewerContent` initialization logic. The ONLY difference is layout:
+- Mobile: vertical stack (2D top, 3D bottom) with touch-optimized divider (8px)
+- Desktop: horizontal ResizablePanelGroup with drag handle (4px)
+
+Future changes to viewer startup MUST apply to both paths. Do NOT create separate mobile/desktop init logic.
+
+---
+
+## Plan: SplitPlanView Navigation + Alignment UX (PENDING — start separately)
+
+### Issue 1: SplitPlanView click navigation doesn't match MinimapPanel
+- **Root cause**: SplitPlanView does instant jump (duration:0) to first-person at 1.6m height. MinimapPanel uses 0.8s animated fly-to keeping current eye height.
+- **Fix**: Match MinimapPanel strategy — keep current eye height, look at clicked point, animate 0.5s.
+- **File**: `src/components/viewer/SplitPlanView.tsx` (lines 745-787)
+
+### Issue 2: 3D/360° alignment precision
+- **Root cause**: AlignmentPointPicker captures panorama tripod position, not the clicked surface point. Creates systematic offset.
+- **Fix**: Use ray-cast or improved UX guidance. Add visual feedback markers in both views.
+- **File**: `src/components/viewer/AlignmentPointPicker.tsx` (lines 69-93)
+
+---
+
 ## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
 
 ### Changes Made
