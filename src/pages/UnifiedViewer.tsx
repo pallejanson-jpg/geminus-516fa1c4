@@ -47,6 +47,7 @@ import { FLOOR_SELECTION_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
 
 import { useIsMobile } from '@/hooks/use-mobile';
 import { toast } from 'sonner';
+import MobileViewerPage from '@/components/viewer/mobile/MobileViewerPage';
 
 export type ViewMode = '2d' | '3d' | 'split' | 'split2d3d' | 'vt' | '360';
 
@@ -553,7 +554,7 @@ const UnifiedViewerContent: React.FC<{
 
   // ─── Mobile: Simplified tab layout ─────────────────────────────────
   if (isMobile) {
-    return <MobileUnifiedViewer
+    return <MobileViewerPage
       buildingData={buildingData}
       viewMode={viewMode}
       setViewMode={setViewMode}
