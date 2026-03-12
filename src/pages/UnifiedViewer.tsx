@@ -86,6 +86,26 @@ const UnifiedViewerContent: React.FC<{
   // Keep viewModeRef always in sync
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
 
+  // When entering split2d3d mode, ensure all floors are visible in 3D
+  useEffect(() => {
+    if (viewMode !== 'split2d3d') return;
+    // Short delay to let the viewer mount
+    const timer = setTimeout(() => {
+      window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+        detail: {
+          floorId: null,
+          floorName: null,
+          bounds: null,
+          visibleMetaFloorIds: [],
+          visibleFloorFmGuids: [],
+          isAllFloorsVisible: true,
+          isSoloFloor: false,
+        },
+      }));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [viewMode]);
+
   // ─── FM Access availability ────────────────────────────────────────
   const [hasFmAccess, setHasFmAccess] = useState(!!floorFmGuid);
   useEffect(() => {
@@ -604,13 +624,6 @@ const UnifiedViewerContent: React.FC<{
             <Layers className="h-4 w-4 text-primary" />
             <div>
               <h1 className="text-sm font-semibold text-white">{buildingData.name}</h1>
-              <p className="text-[10px] text-white/60">
-                {viewMode === 'vt' ? 'Virtual Twin' :
-                 viewMode === 'split' ? 'Split 3D/360°' :
-                 viewMode === 'split2d3d' ? 'Split 2D/3D' :
-                 viewMode === '360' ? '360° Panorama' :
-                 viewMode === '2d' ? '2D Plan View' : '3D Viewer'}
-              </p>
             </div>
           </div>
         </div>
@@ -618,8 +631,8 @@ const UnifiedViewerContent: React.FC<{
         {/* Center: Mode switcher */}
         <div className="flex gap-1 bg-black/40 backdrop-blur-md rounded-lg p-1 border border-white/10">
           <ModeButton mode="2d" current={viewMode} disabled={false} onClick={setViewMode} icon={<Square className="h-3.5 w-3.5" />} label="2D" />
-          <ModeButton mode="3d" current={viewMode} disabled={false} onClick={setViewMode} icon={<Box className="h-3.5 w-3.5" />} label="3D" />
           <ModeButton mode="split2d3d" current={viewMode} disabled={false} onClick={setViewMode} icon={<LayoutPanelLeft className="h-3.5 w-3.5" />} label="2D/3D" />
+          <ModeButton mode="3d" current={viewMode} disabled={false} onClick={setViewMode} icon={<Box className="h-3.5 w-3.5" />} label="3D" />
           <ModeButton mode="split" current={viewMode} disabled={!hasIvion} onClick={setViewMode} icon={<SplitSquareHorizontal className="h-3.5 w-3.5" />} label="3D/360" />
           <ModeButton mode="vt" current={viewMode} disabled={!hasIvion || sdkStatus === 'failed'} onClick={setViewMode} icon={<Combine className="h-3.5 w-3.5" />} label="VT" />
           <ModeButton mode="360" current={viewMode} disabled={!hasIvion || sdkStatus === 'failed'} onClick={setViewMode} icon={<View className="h-3.5 w-3.5" />} label="360°" />
@@ -841,7 +854,7 @@ function ModeButton({ mode, current, disabled, onClick, icon, label }: {
           onClick={() => onClick(mode)}
           className={`gap-1.5 px-3 h-8 rounded-md transition-all text-xs ${
             isActive
-              ? 'bg-white/20 text-white shadow-inner'
+              ? 'bg-primary text-primary-foreground shadow-inner'
               : 'text-white/60 hover:text-white hover:bg-white/10'
           } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
         >
@@ -1025,9 +1038,9 @@ function MobileUnifiedViewer({
             </Button>
             <div className="pointer-events-auto ml-1 flex items-center gap-0.5 rounded-lg border border-border bg-card/90 p-0.5 backdrop-blur-md">
               {([
+                { mode: '2d' as ViewMode, label: '2D', Icon: Square },
                 { mode: 'split2d3d' as ViewMode, label: '2D/3D', Icon: LayoutPanelLeft },
                 { mode: '3d' as ViewMode, label: '3D', Icon: Box },
-                { mode: '2d' as ViewMode, label: '2D', Icon: Square },
               ] as const).map(({ mode, label, Icon }) => (
                 <Button
                   key={mode}
@@ -1123,8 +1136,8 @@ function MobileUnifiedViewer({
             </Button>
             <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md rounded-lg p-0.5 border border-white/10 pointer-events-auto">
               {([
-                { mode: 'split2d3d' as ViewMode, label: '2D/3D', Icon: LayoutPanelLeft },
                 { mode: '2d' as ViewMode, label: '2D', Icon: Square },
+                { mode: 'split2d3d' as ViewMode, label: '2D/3D', Icon: LayoutPanelLeft },
                 { mode: '3d' as ViewMode, label: '3D', Icon: Box },
               ] as const).map(({ mode, label, Icon }) => (
                 <Button

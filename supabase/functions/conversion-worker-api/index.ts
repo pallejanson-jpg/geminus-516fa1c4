@@ -351,25 +351,35 @@ Deno.serve(async (req) => {
       );
     }
 
-    // POST /batch-enqueue — enqueue conversion jobs for all buildings with IFC files
+    // POST /batch-enqueue — enqueue conversion jobs for all buildings with XKT/IFC from any source
     if (req.method === "POST" && action === "batch-enqueue") {
       const { created_by } = await req.json();
 
-      // List all top-level folders in ifc-uploads bucket
-      const { data: folders, error: listErr } = await supabase.storage
+      // Strategy: find ALL buildings that have any model data, from any source
+      // 1. IFC uploads
+      const { data: folders } = await supabase.storage
         .from("ifc-uploads")
         .list("", { limit: 1000 });
+      const ifcBuildingGuids = new Set(
+        (folders || []).filter((f: any) => f.id && !f.name.includes(".")).map((f: any) => f.name)
+      );
 
-      if (listErr) throw listErr;
+      // 2. XKT models from any source (Asset+, ACC, manual)
+      const { data: xktBuildings } = await supabase
+        .from("xkt_models")
+        .select("building_fm_guid")
+        .limit(1000);
+      const xktBuildingGuids = new Set(
+        (xktBuildings || []).map((x: any) => x.building_fm_guid).filter(Boolean)
+      );
 
-      const buildingGuids = (folders || [])
-        .filter((f: any) => f.id && !f.name.includes("."))
-        .map((f: any) => f.name);
+      // Merge all building GUIDs
+      const allGuids = new Set([...ifcBuildingGuids, ...xktBuildingGuids]);
 
       let enqueued = 0;
       const skipped: string[] = [];
 
-      for (const guid of buildingGuids) {
+      for (const guid of allGuids) {
         // Check if there's already a pending/processing job
         const { data: existingJob } = await supabase
           .from("conversion_jobs")
@@ -384,22 +394,44 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Find IFC file in this building's folder
-        const { data: files } = await supabase.storage
-          .from("ifc-uploads")
-          .list(guid, { limit: 10 });
+        // Try to find IFC file first
+        let storagePath: string | null = null;
+        let modelName = guid;
 
-        const ifcFile = (files || []).find((f: any) => f.name.toLowerCase().endsWith(".ifc"));
-        if (!ifcFile) {
+        if (ifcBuildingGuids.has(guid)) {
+          const { data: files } = await supabase.storage
+            .from("ifc-uploads")
+            .list(guid, { limit: 10 });
+          const ifcFile = (files || []).find((f: any) => f.name.toLowerCase().endsWith(".ifc"));
+          if (ifcFile) {
+            storagePath = `${guid}/${ifcFile.name}`;
+            modelName = ifcFile.name.replace(/\.ifc$/i, "");
+          }
+        }
+
+        // If no IFC file, use the first XKT model's storage path as reference
+        if (!storagePath) {
+          const { data: xktModel } = await supabase
+            .from("xkt_models")
+            .select("storage_path, model_name")
+            .eq("building_fm_guid", guid)
+            .limit(1)
+            .maybeSingle();
+          if (xktModel) {
+            storagePath = xktModel.storage_path;
+            modelName = xktModel.model_name || guid;
+          }
+        }
+
+        if (!storagePath) {
           skipped.push(guid);
           continue;
         }
 
-        const storagePath = `${guid}/${ifcFile.name}`;
         await supabase.from("conversion_jobs").insert({
           building_fm_guid: guid,
           ifc_storage_path: storagePath,
-          model_name: ifcFile.name.replace(/\.ifc$/i, ""),
+          model_name: modelName,
           status: "pending",
           created_by: created_by || null,
         });
@@ -407,7 +439,7 @@ Deno.serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ ok: true, enqueued, skipped: skipped.length, total_buildings: buildingGuids.length }),
+        JSON.stringify({ ok: true, enqueued, skipped: skipped.length, total_buildings: allGuids.size }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

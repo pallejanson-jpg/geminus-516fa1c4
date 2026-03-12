@@ -103,20 +103,8 @@ export function useViewerTheme() {
 
     const state = stateRef.current;
     const colorMappings = theme.color_mappings || {};
+    const isNativeColour = theme.name === 'Model Native Colour' || Object.keys(colorMappings).length === 0;
     
-    // If "Standard" theme (empty mappings), just restore and return
-    if (Object.keys(colorMappings).length === 0) {
-      resetTheme(viewerRef);
-      setActiveTheme(theme);
-      state.activeThemeId = theme.id;
-      window.dispatchEvent(new CustomEvent(VIEWER_THEME_CHANGED_EVENT, {
-        detail: { themeId: theme.id, themeName: theme.name }
-      }));
-      return true;
-    }
-
-    console.log('Applying viewer theme:', theme.name);
-
     // Store original colors if not already stored
     if (state.originalColors.size === 0) {
       const objects = scene.objects;
@@ -130,27 +118,49 @@ export function useViewerTheme() {
           });
         }
       }
-      
-      // Store original edge material
       const edgeMaterial = scene.edgeMaterial;
       if (edgeMaterial) {
         state.originalEdgeColor = [...edgeMaterial.edgeColor];
         state.originalEdgeAlpha = edgeMaterial.edgeAlpha;
       }
-      
-      // Store original background
       const container = document.getElementById('AssetPlusViewer');
       if (container) {
         state.originalBackground = container.style.background || '';
       }
     }
 
-    // Apply subtle edge settings for cleaner look
+    // "Model Native Colour" — restore original model colors (no architect palette)
+    if (isNativeColour) {
+      console.log('Applying Model Native Colour: restoring original model colors');
+      for (const [objectId, original] of state.originalColors) {
+        const entity = scene.objects[objectId];
+        if (entity) {
+          entity.colorize = original.color;
+          entity.opacity = original.opacity;
+          entity.edges = original.edges;
+        }
+      }
+      // Disable edges for cleaner native look
+      if (scene.edgeMaterial) {
+        scene.edgeMaterial.edgeAlpha = 0;
+      }
+      state.activeThemeId = theme.id;
+      setActiveTheme(theme);
+      window.dispatchEvent(new CustomEvent(VIEWER_THEME_CHANGED_EVENT, {
+        detail: { themeId: theme.id, themeName: theme.name }
+      }));
+      return true;
+    }
+
+    console.log('Applying viewer theme:', theme.name);
+
+    // Apply edge settings from theme
     const edgeMaterial = scene.edgeMaterial;
     if (edgeMaterial && theme.edge_settings?.enabled) {
-      edgeMaterial.edgeColor = [0.85, 0.84, 0.82];
-      edgeMaterial.edgeAlpha = 0.15;
-      edgeMaterial.edgeWidth = 1;
+      const edgeColor = theme.edge_settings.edgeColor ? hexToRgb(theme.edge_settings.edgeColor) : [0.85, 0.84, 0.82];
+      edgeMaterial.edgeColor = edgeColor;
+      edgeMaterial.edgeAlpha = theme.edge_settings.edgeAlpha ?? 0.15;
+      edgeMaterial.edgeWidth = theme.edge_settings.edgeWidth ?? 1;
     }
 
     // Iterate through all objects and apply colors
