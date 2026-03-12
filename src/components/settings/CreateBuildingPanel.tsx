@@ -571,11 +571,11 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       });
       if (error) throw error;
       toast({
-        title: 'Asset+ synk klar',
-        description: data?.message || `Synkade ${data?.totalSynced || 0} objekt.`,
+        title: 'Asset+ sync complete',
+        description: data?.message || `Synced ${data?.totalSynced || 0} objects.`,
       });
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Asset+ sync misslyckades', description: err.message });
+      toast({ variant: 'destructive', title: 'Asset+ sync failed', description: err.message });
     } finally {
       setIsSyncingAssetPlus(false);
     }
