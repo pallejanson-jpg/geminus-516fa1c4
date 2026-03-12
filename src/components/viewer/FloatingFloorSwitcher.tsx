@@ -207,7 +207,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                 onDoubleClick={handlePillDoubleClick}
                 className={cn(
                   isMobile
-                    ? 'h-7 px-2 text-[10px] font-medium rounded-full'
+                    ? 'h-6 px-1.5 text-[9px] font-medium rounded-full'
                     : compact ? 'h-5 px-1 text-[7px] font-medium rounded' : 'h-6 px-1.5 min-w-[60px] text-[9px] sm:h-7 sm:px-2 sm:min-w-[60px] sm:text-xs font-medium rounded-md text-center justify-center',
                   'transition-all duration-150 w-auto shadow-sm',
                   state === 'active' && 'bg-primary text-primary-foreground shadow-md hover:bg-primary/90',
