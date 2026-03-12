@@ -1,117 +1,83 @@
-## Plan: Mobile Viewer Startup Hardening (IMPLEMENTED ✅)
-
-### Changes Made
-1. **Mobile touch tuning** (`NativeXeokitViewer.tsx`): dragRotationRate 30→70, touchPanRate 0.06→0.14, touchDollyRate 0.04→0.09, rotationInertia 0.93→0.88, panInertia 0.88→0.82
-2. **FastNav delay** (`NativeXeokitViewer.tsx`): Added `delayBeforeRestore: true` (0.5s mobile, 0.3s desktop)
-3. **Suppress viewFit in split2d3d** (`NativeXeokitViewer.tsx`): Skips instant viewFit when `?mode=split2d3d` — floor isolation handles camera
-4. **Defer SplitPlanView mount** (`UnifiedViewer.tsx`): Mobile SplitPlanView only renders after `viewerReady=true`, shows spinner until then
-5. **Increased SplitPlanView retry** (`SplitPlanView.tsx`): 10×100ms → 30×200ms (6s total window), immediate retry on VIEWER_MODELS_LOADED
-6. **Debounced floor events** (`UnifiedViewer.tsx`): 500ms guard on FLOOR_SELECTION_CHANGED dispatches to prevent competing events
-
-### Architecture Principle
-Mobile and desktop share the same `UnifiedViewerContent` initialization logic. The ONLY difference is layout:
-- Mobile: vertical stack (2D top, 3D bottom) with touch-optimized divider (8px)
-- Desktop: horizontal ResizablePanelGroup with drag handle (4px)
-
-Future changes to viewer startup MUST apply to both paths. Do NOT create separate mobile/desktop init logic.
-
----
-
-## Plan: SplitPlanView Navigation + Alignment UX (IMPLEMENTED ✅)
-
-### Changes Made
-1. **SplitPlanView click navigation** (`SplitPlanView.tsx`): Replaced first-person instant jump with MinimapPanel-style fly-to — keeps current eye height, looks down at clicked point, animates 0.5s.
-2. **AlignmentPointPicker precision** (`AlignmentPointPicker.tsx`): Now estimates surface point via ray-cast from tripod position + viewing direction × adjustable distance slider (0.5–10m). Shows captured coordinates and distance in both steps for verification.
-
----
-
-## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
-
-### Changes Made
-1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
-2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
-3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
-4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
-5. **config.toml** updated with `acc-geometry-extract` function entry
-
-### Pending (Phase 2)
-- Actual GLB chunk creation from SVF geometry (requires conversion worker)
-- OBJ as optional secondary format for small models
-
----
 
 
-### Ändringar
+# Plan: Fix 6 Viewer Issues
 
-#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
-**Fil:** `supabase/functions/conversion-worker-api/index.ts`
-- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
-- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
-- Upsert till `assets` med `created_in_model: true`
-- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
+## 1. Properties Dialog Shows Only BIM Metadata
 
-#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
-**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
-- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
-- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
-- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
-- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
-- Diff: soft-delete objekt som finns i DB men inte i ny IFC
+**Root cause:** In `NativeViewerShell.tsx` line 691, the dialog receives `fmGuid = metaObj.originalSystemId` which is the raw xeokit entity ID. This often doesn't match the `fm_guid` in the `assets` table (different casing, format, or the entity simply wasn't synced). When the DB query returns 0 results, `UniversalPropertiesDialog` falls back to basic BIM metadata.
 
-#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
-**Fil:** `docs/conversion-worker/worker.mjs`
-- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
-- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
-- Non-fatal: om hierarki-population misslyckas fortsätter workern
+**Fix:** In `UniversalPropertiesDialog.tsx`, expand the lookup strategy:
+- Also search by `entityId` as a potential `fm_guid` match
+- Try case-insensitive match on the `name` field as additional fallback
+- Query `asset_external_ids` table for the entity ID to find the correct `fm_guid`
+- If the entity has property sets in xeokit metaScene, display those alongside the BIM fallback (currently only basic fields are shown)
 
-#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
-**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
-- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
-- `created_in_model: true` istället för `false`
-- Diff-logik: markerar borttagna objekt efter import
+**Files:** `src/components/common/UniversalPropertiesDialog.tsx` (lines 138-200)
 
-### Datamodell
+## 2. Section Tool Auto-Sections Instead of Manual Handle
 
-```text
-Building Storey:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
-  category:          "Building Storey"
-  created_in_model:  true
+**Root cause:** In `ViewerToolbar.tsx` lines 503-538, the section tool uses `SectionPlanesPlugin` with a fallback to a simple click-to-create-plane approach. There's no drag handle / gizmo for repositioning the section plane after creation. The `SectionPlanesPlugin` has a `.control` property that should provide interactive gizmos but `overviewVisible: false` may be suppressing it.
 
-Space:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
-  category:          "Space"
-  level_fm_guid:     parent storey fm_guid
+**Fix:** 
+- Set `overviewVisible: true` on the SectionPlanesPlugin to enable the interactive control widget
+- After creating a section plane, call `sectionPluginRef.current.showControl(sectionPlane.id)` to display drag handles
+- Add a "flip" button next to "Clear sections" to flip the active plane direction
 
-Instance:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
-  category:          "Instance"
-  asset_type:        ifcType (e.g. "IfcDoor")
-  level_fm_guid:     resolved storey
-  in_room_fm_guid:   resolved space
+**File:** `src/components/viewer/ViewerToolbar.tsx` (lines 503-553)
+
+## 3. FastNav Setting Not Respected
+
+**Root cause:** `NativeXeokitViewer.tsx` line 202 always installs `FastNavPlugin` regardless of the user setting stored in `localStorage` via `getFastNavEnabled()` (defined in `VoiceSettings.tsx`). The setting switch works but is never read during viewer init.
+
+**Fix:** Import `getFastNavEnabled` and gate FastNav installation:
+```
+if (sdk.FastNavPlugin && getFastNavEnabled()) {
+  new sdk.FastNavPlugin(viewer, { ... });
+}
 ```
 
-### Diff-flöde
+**File:** `src/components/viewer/NativeXeokitViewer.tsx` (lines 200-211)
 
-Vid omimport jämförs importerade fm_guids mot befintliga i DB:
-- **Nytt** → INSERT
-- **Matchat** → UPDATE (namn, typ, rumsplacering)
-- **Borttaget** → `modification_status = 'removed'` (soft-delete)
+## 4. bim-to-gltf Runtime Error
+
+**Root cause:** The edge function uses `web-ifc` WASM which requires filesystem access that may not work in the Deno edge function environment (same issue seen in `ifc-to-xkt`). The error shows `RUNTIME_ERROR` with `lineno: 0` suggesting a WASM initialization crash. No logs are recorded, confirming the function crashes before any logging.
+
+**Fix:** Add the same WASM download-and-redirect pattern used in `ifc-to-xkt/index.ts` (the `ensureWasm()` function). The `bim-to-gltf` function needs to download `web-ifc.wasm` to `/tmp` and redirect `Deno.readFileSync` before using `web-ifc`.
+
+**File:** `supabase/functions/bim-to-gltf/index.ts` (add `ensureWasm()` from `ifc-to-xkt`)
+
+## 5. Building A1 Issues: Double Spinner, No Structure in Navigator, Not in Portfolio
+
+**Root cause (double spinner):** Both `NativeXeokitViewer` (line 1245) and `NativeViewerShell` may show overlapping loading states. The shell doesn't gate its own loading indicator against the viewer's phase.
+
+**Root cause (no structure):** The IFC import via browser conversion creates `xkt_models` entries but may not have run the `populateAssetsFromMetaObjects` step that creates storeys/spaces/instances in the `assets` table. Without assets, Portfolio and Navigator show nothing.
+
+**Fix:**
+- **Double spinner:** In `NativeViewerShell.tsx`, don't show an additional loading state — rely on the viewer's own overlay
+- **Missing structure:** After browser IFC conversion, ensure the client triggers the `ifc-extract-systems` edge function with `mode: 'enrich-guids'` to populate the assets table hierarchy. Add a post-conversion call in `CreateBuildingPanel.tsx`'s `runBrowserConversion`.
+- **Swedish labels:** Translate `CreateBuildingPanel.tsx` labels to English per the language standardization memory
+
+**Files:** `src/components/viewer/NativeXeokitViewer.tsx`, `src/components/settings/CreateBuildingPanel.tsx`
+
+## 6. Batch XKT Worker for All Buildings
+
+**Current state:** The XKT worker polls for `conversion_jobs` with status `pending`. It processes one job at a time. There's no UI to queue all buildings at once.
+
+**Fix:** Add a "Re-process all buildings" button in Settings → Buildings that:
+1. Queries all buildings with IFC files in `ifc-uploads` storage
+2. Creates a `conversion_jobs` entry for each building
+3. The existing worker picks them up automatically via polling
+
+**File:** `src/components/settings/CreateBuildingPanel.tsx` (add batch action), `supabase/functions/conversion-worker-api/index.ts` (add `POST /batch-enqueue` action)
 
 ---
 
-## Previous Plans
+## Implementation Order
+1. FastNav setting fix (smallest, immediate UX win)
+2. Properties dialog lookup improvement
+3. Section tool gizmo handles
+4. Double spinner fix + English labels
+5. bim-to-gltf WASM fix
+6. Post-conversion asset population for Building A1
+7. Batch XKT worker enqueue
 
-### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
-- Browser-primary for >20MB, edge function for ≤20MB
-- MetaModel JSON uploaded alongside XKT
-- Systems extracted and persisted
-
-### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
-- Standalone Node.js worker polls conversion-worker-api
-- Per-storey .xkt tiles with dynamic floor loading
-
-### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
-- 10 credential override columns on building_settings
-- Shared credential resolver in edge functions
-- Properties page as configuration hub
