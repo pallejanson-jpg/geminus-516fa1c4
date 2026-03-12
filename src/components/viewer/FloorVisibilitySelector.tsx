@@ -213,7 +213,6 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
           setVisibleFloorIds(allIds);
           applyFloorVisibility(allIds);
           setClippingEnabled(false);
-          updateClipping(Array.from(allIds));
         } else if (visibleMetaFloorIds && visibleMetaFloorIds.length > 0) {
           const matchingIds = new Set(
             floorsRef.current
