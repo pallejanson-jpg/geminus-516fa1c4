@@ -68,12 +68,30 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       localStorage.setItem(storageKey, JSON.stringify(Array.from(visibleFloorIds)));
     }, [visibleFloorIds, buildingFmGuid, isInitialized]);
 
-    // Section plane clipping
-    const { updateClipping, isClippingActive, calculateFloorBounds } = useSectionPlaneClipping(viewerRef, {
-      enabled: enableClipping && clippingEnabled,
-      offset: 0.1,
-      clipMode: 'ceiling',
-    });
+    // Lightweight floor bounds calculator (clipping is handled by ViewerToolbar)
+    const calculateFloorBounds = useCallback((floorId: string) => {
+      const viewer = getXeokitViewer();
+      if (!viewer?.metaScene?.metaObjects) return null;
+      const metaObj = viewer.metaScene.metaObjects[floorId];
+      if (!metaObj) return null;
+      const getAllChildIds = (mo: any): string[] => {
+        const ids = [mo.id];
+        (mo.children || []).forEach((c: any) => ids.push(...getAllChildIds(c)));
+        return ids;
+      };
+      const childIds = getAllChildIds(metaObj);
+      let minY = Infinity, maxY = -Infinity;
+      childIds.forEach(id => {
+        const entity = viewer.scene.objects[id];
+        if (entity?.aabb) {
+          if (entity.aabb[1] < minY) minY = entity.aabb[1];
+          if (entity.aabb[4] > maxY) maxY = entity.aabb[4];
+        }
+      });
+      if (minY === Infinity) return null;
+      return { id: floorId, name: metaObj.name || 'Floor', minY, maxY, metaObjectIds: childIds };
+    }, [getXeokitViewer]);
+    const isClippingActive = false; // Clipping state managed by ViewerToolbar
 
     const getXeokitViewer = useCallback(() => {
       try { return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer; }
