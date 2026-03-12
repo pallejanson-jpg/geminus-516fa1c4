@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { 
     Search, Home, LayoutGrid, Globe, Network, User as UserIcon, 
-    Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Settings, LogOut, Shield, Sparkles, AppWindow
+    Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Settings, LogOut, Shield, Sparkles, AppWindow, Code
 } from 'lucide-react';
 import ApiSettingsModal from '@/components/settings/ApiSettingsModal';
 import ProfileModal from '@/components/settings/ProfileModal';
@@ -236,6 +236,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                         <DropdownMenuItem onClick={() => navigate('/onboarding')}>
                             <Sparkles className="mr-2 h-4 w-4" />
                             Start introduction
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => navigate('/api-docs')}>
+                            <Code className="mr-2 h-4 w-4" />
+                            API Documentation
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
