@@ -13,6 +13,7 @@ import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hook
 import { ANNOTATION_FILTER_EVENT } from '@/lib/viewer-events';
 import { useFloorData } from '@/hooks/useFloorData';
 import { useModelData } from '@/hooks/useModelData';
+import { getDescendantIds } from '@/hooks/useFloorVisibility';
 import { applyArchitectColors, recolorArchitectObjects } from '@/lib/architect-colors';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -84,19 +85,7 @@ const isGuid = (str: string): boolean =>
 
 // normalizeGuid imported from '@/lib/utils'
 
-const getDescendantIds = (viewer: any, rootId: string): string[] => {
-  const metaObj = viewer?.metaScene?.metaObjects?.[rootId];
-  if (!metaObj) return [rootId];
-  const ids: string[] = [rootId];
-  const collect = (obj: any) => {
-    obj.children?.forEach((child: any) => {
-      ids.push(child.id);
-      collect(child);
-    });
-  };
-  collect(metaObj);
-  return ids;
-};
+// getDescendantIds imported from useFloorVisibility
 
 const HIGHLIGHT_COLOR: [number, number, number] = [0.25, 0.55, 0.95];
 
