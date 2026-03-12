@@ -14,13 +14,33 @@ import {
   Eye,
   Crosshair,
   Home,
+  Gauge,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { applyArchitectColors } from '@/lib/architect-colors';
+import { ARCHITECT_BACKGROUND_CHANGED_EVENT } from '@/hooks/useArchitectViewMode';
+import {
+  useSectionPlaneClipping,
+  FLOOR_SELECTION_CHANGED_EVENT,
+  VIEW_MODE_CHANGED_EVENT,
+  CLIP_HEIGHT_CHANGED_EVENT,
+  type FloorSelectionEventDetail,
+  type ClipHeightEventDetail,
+} from '@/hooks/useSectionPlaneClipping';
+import {
+  VIEW_MODE_REQUESTED_EVENT,
+  VIEWER_TOOL_CHANGED_EVENT,
+  VIEW_MODE_2D_TOGGLED_EVENT,
+  type ViewModeRequestedDetail,
+  type ViewerToolChangedDetail,
+  type ViewMode2DToggledDetail,
+} from '@/lib/viewer-events';
 import { applyArchitectColors } from '@/lib/architect-colors';
 import { ARCHITECT_BACKGROUND_CHANGED_EVENT } from '@/hooks/useArchitectViewMode';
 import {
