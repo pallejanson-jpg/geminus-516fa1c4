@@ -86,6 +86,26 @@ const UnifiedViewerContent: React.FC<{
   // Keep viewModeRef always in sync
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
 
+  // When entering split2d3d mode, ensure all floors are visible in 3D
+  useEffect(() => {
+    if (viewMode !== 'split2d3d') return;
+    // Short delay to let the viewer mount
+    const timer = setTimeout(() => {
+      window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+        detail: {
+          floorId: null,
+          floorName: null,
+          bounds: null,
+          visibleMetaFloorIds: [],
+          visibleFloorFmGuids: [],
+          isAllFloorsVisible: true,
+          isSoloFloor: false,
+        },
+      }));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [viewMode]);
+
   // ─── FM Access availability ────────────────────────────────────────
   const [hasFmAccess, setHasFmAccess] = useState(!!floorFmGuid);
   useEffect(() => {
