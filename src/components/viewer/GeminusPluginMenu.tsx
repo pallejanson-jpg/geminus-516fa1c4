@@ -33,7 +33,7 @@ interface GeminusPluginMenuProps {
   contextMetadata?: Record<string, any>;
 }
 
-type ActivePanel = null | 'issue' | 'workorder' | 'support' | 'insights' | 'gunnar' | 'ilean';
+type ActivePanel = null | 'issue' | 'workorder' | 'support' | 'insights' | 'gunnar' | 'ilean' | 'inventory';
 
 const MENU_ITEMS = [
   { id: 'issue' as const, label: 'Skapa ärende', icon: MessageSquarePlus },
