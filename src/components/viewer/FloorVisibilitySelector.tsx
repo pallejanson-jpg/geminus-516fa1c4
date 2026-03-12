@@ -303,11 +303,10 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         const newSet = new Set(prev);
         checked ? newSet.add(floorId) : newSet.delete(floorId);
         applyFloorVisibility(newSet);
-        updateClipping(Array.from(newSet));
         emitFloorEvent(newSet);
         return newSet;
       });
-    }, [applyFloorVisibility, updateClipping, emitFloorEvent]);
+    }, [applyFloorVisibility, emitFloorEvent]);
 
     const handleShowOnlyFloor = useCallback((floorId: string) => {
       const newSet = new Set([floorId]);
