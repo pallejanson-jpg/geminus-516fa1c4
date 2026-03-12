@@ -143,15 +143,36 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           ...fmGuids.map(g => g.toUpperCase()),
         ])];
 
-        const { data: assetData, error: assetError } = await supabase
+        let { data: assetData, error: assetError } = await supabase
           .from('assets')
           .select('*')
           .in('fm_guid', normalizedGuids);
 
         if (assetError) throw assetError;
+
+        // If no direct match, try looking up via asset_external_ids table
+        if ((!assetData || assetData.length === 0) && entityId) {
+          const { data: extIds } = await supabase
+            .from('asset_external_ids')
+            .select('fm_guid')
+            .eq('external_id', entityId)
+            .limit(5);
+
+          if (extIds && extIds.length > 0) {
+            const resolvedGuids = extIds.map(e => e.fm_guid);
+            const { data: resolvedAssets } = await supabase
+              .from('assets')
+              .select('*')
+              .in('fm_guid', resolvedGuids);
+            if (resolvedAssets && resolvedAssets.length > 0) {
+              assetData = resolvedAssets;
+            }
+          }
+        }
+
         setAssets(assetData || []);
 
-        // If no assets found, try BIM metadata fallback from the viewer
+        // If no assets found, try BIM metadata fallback from the viewer (with full property sets)
         if ((!assetData || assetData.length === 0) && entityId) {
           const viewer = (window as any).__nativeXeokitViewer;
           if (viewer?.metaScene?.metaObjects) {
