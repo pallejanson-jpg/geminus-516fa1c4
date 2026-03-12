@@ -230,7 +230,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       };
       window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
       return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
-    }, [applyFloorVisibility, updateClipping]);
+    }, [applyFloorVisibility]);
 
     // Apply initial visibility
     useEffect(() => {
