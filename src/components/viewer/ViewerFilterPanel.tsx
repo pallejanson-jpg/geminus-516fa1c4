@@ -196,11 +196,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
     // Strategy 2: If no Asset+ sources, use scene models with friendly names from sharedModels
     if (grouped.size === 0 && sharedModels.length > 0) {
-      sharedModels.forEach(model => {
-        // Use model name, avoid showing GUIDs
-        const name = model.name && !/^[0-9a-f]{8}-/i.test(model.name) ? model.name : model.shortName;
+      sharedModels.forEach((model, index) => {
+        // Use model name, avoid showing GUIDs — check both full UUID and partial GUID patterns
+        const rawName = model.name || '';
+        const looksLikeGuid = /^[0-9a-f]{8}[-]?[0-9a-f]{4}/i.test(rawName) || /^[0-9a-f-]{20,}$/i.test(rawName);
+        const friendlyName = (!rawName || looksLikeGuid)
+          ? (model.shortName || `Modell ${index + 1}`)
+          : rawName;
         grouped.set(model.id, {
-          name: name || `Model ${model.id.substring(0, 8)}`,
+          name: friendlyName,
           storeyCount: 0,
         });
       });
