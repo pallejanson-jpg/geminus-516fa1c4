@@ -81,6 +81,7 @@ const UnifiedViewerContent: React.FC<{
   const [viewMode, setViewMode] = useState<ViewMode>(effectiveInitialMode);
   const userChangedModeRef = useRef(false);
   const viewModeRef = useRef<ViewMode>(effectiveInitialMode);
+  const lastFloorEventRef = useRef<number>(0);
 
   // Keep viewModeRef always in sync
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
@@ -173,20 +174,24 @@ const UnifiedViewerContent: React.FC<{
         }));
       }, 500);
     } else if (viewMode === 'split2d3d' && prev !== 'split2d3d') {
-      // Reset floor isolation in 3D pane — show all objects
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
-          detail: {
-            floorId: null,
-            floorName: null,
-            bounds: null,
-            visibleMetaFloorIds: [],
-            visibleFloorFmGuids: [],
-            isAllFloorsVisible: true,
-            isSoloFloor: false,
-          },
-        }));
-      }, 300);
+      // Reset floor isolation in 3D pane — show all objects (debounced 500ms)
+      const now = Date.now();
+      if (now - (lastFloorEventRef.current || 0) > 500) {
+        lastFloorEventRef.current = now;
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+            detail: {
+              floorId: null,
+              floorName: null,
+              bounds: null,
+              visibleMetaFloorIds: [],
+              visibleFloorFmGuids: [],
+              isAllFloorsVisible: true,
+              isSoloFloor: false,
+            },
+          }));
+        }, 300);
+      }
     } else if (viewMode !== '2d' && prev === '2d') {
       window.dispatchEvent(new CustomEvent<ViewMode2DToggledDetail>(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: false } }));
     }
@@ -949,11 +954,17 @@ function MobileUnifiedViewer({
             }}
           >
             {/* Label removed for cleaner mobile UI */}
-            <SplitPlanView
-              viewerRef={viewerInstanceRef}
-              buildingFmGuid={buildingData.fmGuid}
-              className="h-full"
-            />
+            {viewerReady ? (
+              <SplitPlanView
+                viewerRef={viewerInstanceRef}
+                buildingFmGuid={buildingData.fmGuid}
+                className="h-full"
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center bg-muted/30">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            )}
           </div>
 
           {/* Draggable divider with grip handle */}
