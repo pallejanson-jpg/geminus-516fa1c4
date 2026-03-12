@@ -293,6 +293,16 @@ export default function GeminusPluginMenu({
           </div>
         </div>
       )}
+
+      {/* Inventory */}
+      {buildingFmGuid && (
+        <InventoryPanel
+          buildingFmGuid={buildingFmGuid}
+          buildingName={buildingName}
+          open={activePanel === 'inventory'}
+          onClose={handleClose}
+        />
+      )}
     </>
   );
 }
