@@ -744,36 +744,12 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
 
     if (!worldPos || !viewer.cameraFlight) return;
 
-    const currentEye = viewer.camera.eye || [0, 0, 0];
-    const currentLook = viewer.camera.look || [0, 0, 0];
+    // Match MinimapPanel strategy: keep current eye height, look down
+    // at the clicked point, animate smoothly.
+    const currentEyeY = viewer.camera.eye?.[1] ?? 10;
 
-    // Preserve the current viewing direction (horizontal only) so
-    // the user keeps looking the same way after clicking on the plan.
-    const dirX = currentLook[0] - currentEye[0];
-    const dirZ = currentLook[2] - currentEye[2];
-    const dirLen = Math.sqrt(dirX * dirX + dirZ * dirZ);
-    // Normalise to a 2 m look-ahead distance; fallback to looking along -Z
-    const lookDist = 2;
-    const ndx = dirLen > 0.001 ? (dirX / dirLen) * lookDist : 0;
-    const ndz = dirLen > 0.001 ? (dirZ / dirLen) * lookDist : -lookDist;
-
-    // Calculate floor-appropriate Y heights
-    let eyeY = 1.6; // default person height
-    let lookY = 1.4;
-
-    const storey = plugin?.storeys?.[map.storeyId];
-    const sAABB = storey?.storeyAABB;
-    if (Array.isArray(sAABB) && sAABB.length === 6 && sAABB.every((v) => Number.isFinite(v))) {
-      const floorY = sAABB[1];
-      const ceilY = sAABB[4];
-      eyeY = Math.max(floorY + 0.8, Math.min(ceilY - 0.2, floorY + 1.6));
-      lookY = Math.max(floorY + 0.2, Math.min(ceilY - 0.5, floorY + 1.4));
-    }
-
-    // Eye is placed exactly at the clicked world X/Z, at person height
-    const nextEye: [number, number, number] = [worldPos[0], eyeY, worldPos[2]];
-    // Look-at point is 2 m ahead in the current viewing direction
-    const nextLook: [number, number, number] = [worldPos[0] + ndx, lookY, worldPos[2] + ndz];
+    const nextEye: [number, number, number] = [worldPos[0], currentEyeY, worldPos[2]];
+    const nextLook: [number, number, number] = [worldPos[0], worldPos[1], worldPos[2]];
 
     if (!nextEye.every((v) => Number.isFinite(v)) || !nextLook.every((v) => Number.isFinite(v))) {
       return;
@@ -783,7 +759,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       eye: nextEye,
       look: nextLook,
       up: [0, 1, 0],
-      duration: 0,
+      duration: 0.5,
     });
   }, [getXeokitViewer]);
 
