@@ -86,6 +86,13 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
           .filter(f => visibleMetaFloorIds.some(metaId => f.id === metaId || f.metaObjectIds.includes(metaId)))
           .map(f => f.id);
         if (matching.length > 0) setVisibleFloorIds(new Set(matching));
+      } else if (e.detail.visibleFloorFmGuids?.length > 0) {
+        const matching = floors
+          .filter(f => f.databaseLevelFmGuids.some(g =>
+            e.detail.visibleFloorFmGuids!.some((vg: string) => vg.toLowerCase() === g.toLowerCase())
+          ))
+          .map(f => f.id);
+        if (matching.length > 0) setVisibleFloorIds(new Set(matching));
       } else if (e.detail.floorId === null) {
         setVisibleFloorIds(new Set(floors.map(f => f.id)));
       } else if (e.detail.floorId) {
