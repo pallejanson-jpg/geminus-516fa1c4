@@ -5,6 +5,7 @@
 
 import React, { useCallback, useState, useContext, useMemo, useEffect } from "react";
 import { Database, FileQuestion, Sparkles, Building2, Eye, Activity, TrendingUp } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";

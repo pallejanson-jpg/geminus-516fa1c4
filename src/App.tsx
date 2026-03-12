@@ -236,6 +236,18 @@ const App = () => {
             } 
           />
           
+          {/* Homepage V2 test page — two-column desktop layout */}
+          <Route 
+            path="/home-v2" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <ProtectedRoute>
+                  <HomeLandingV2 />
+                </ProtectedRoute>
+              </Suspense>
+            } 
+          />
+          
           {/* Protected app routes */}
           <Route 
             path="/*" 
