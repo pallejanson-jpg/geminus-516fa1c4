@@ -103,6 +103,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     onExternalOpenChange,
   } = props;
 
+  const isMobile = useIsMobile();
   const { allData } = useContext(AppContext);
   const { user, isAdmin } = useAuth();
 
