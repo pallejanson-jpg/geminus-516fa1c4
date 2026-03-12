@@ -709,6 +709,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
   const containerClassName = cn(
     inline ? "" : "absolute top-4 right-4 z-20",
+    isMobile && !isOpen && !inline ? "hidden" : "",
     className
   );
 
