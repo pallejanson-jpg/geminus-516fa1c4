@@ -1499,6 +1499,7 @@ CRITICAL UX RULES:
 5. Always include address or other identifying info alongside building names when available — NEVER GUIDs.
 6. For follow-up suggestions, format as clickable buttons when possible.
 7. When the user asks about help, how to use the platform, or support questions, use the search_help_docs tool.
+8. When the user asks about API documentation, integration endpoints, authentication flows, or how to connect to Asset+, FM Access, Faciliate, Senslinc, or Ivion, use the search_help_docs tool. API documentation for ALL integrations is indexed in the knowledge base.
 
 ${userCtx}
 ${ctx}
