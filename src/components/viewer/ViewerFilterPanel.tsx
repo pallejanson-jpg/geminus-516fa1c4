@@ -34,6 +34,7 @@ interface LevelItem {
 interface SpaceItem {
   fmGuid: string;
   name: string;
+  designation: string;
   levelFmGuid: string;
 }
 
@@ -195,11 +196,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
     // Strategy 2: If no Asset+ sources, use scene models with friendly names from sharedModels
     if (grouped.size === 0 && sharedModels.length > 0) {
-      sharedModels.forEach(model => {
-        // Use model name, avoid showing GUIDs
-        const name = model.name && !/^[0-9a-f]{8}-/i.test(model.name) ? model.name : model.shortName;
+      sharedModels.forEach((model, index) => {
+        // Use model name, avoid showing GUIDs — check both full UUID and partial GUID patterns
+        const rawName = model.name || '';
+        const looksLikeGuid = /^[0-9a-f]{8}[-]?[0-9a-f]{4}/i.test(rawName) || /^[0-9a-f-]{20,}$/i.test(rawName);
+        const friendlyName = (!rawName || looksLikeGuid)
+          ? (model.shortName || `Modell ${index + 1}`)
+          : rawName;
         grouped.set(model.id, {
-          name: name || `Model ${model.id.substring(0, 8)}`,
+          name: friendlyName,
           storeyCount: 0,
         });
       });
@@ -218,13 +223,23 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const allSpaces = buildingData
       .filter((a: any) => a.category === 'Space' || a.category === 'IfcSpace');
 
-    // When levels are available from viewer, filter by visible levels
-    // When no levels (viewer not ready), show ALL spaces for this building
+    // Build a set of ALL database level fm guids (not just the primary one)
+    // This fixes room count dropping to 0 when a floor is selected
     let visibleLevelGuids: Set<string> | null = null;
     if (levels.length > 0) {
-      visibleLevelGuids = checkedLevels.size > 0
-        ? new Set(Array.from(checkedLevels).map(g => normalizeGuid(g)))
-        : new Set(levels.map(l => normalizeGuid(l.fmGuid)));
+      const allLevelGuids = new Set<string>();
+      const relevantLevels = checkedLevels.size > 0
+        ? sharedFloors.filter(f => checkedLevels.has(f.databaseLevelFmGuids[0] || f.id))
+        : sharedFloors;
+      relevantLevels.forEach(floor => {
+        floor.databaseLevelFmGuids.forEach(g => allLevelGuids.add(normalizeGuid(g)));
+      });
+      // Also add the level fmGuids from the levels array for fallback
+      const relevantLevelItems = checkedLevels.size > 0
+        ? levels.filter(l => checkedLevels.has(l.fmGuid))
+        : levels;
+      relevantLevelItems.forEach(l => allLevelGuids.add(normalizeGuid(l.fmGuid)));
+      visibleLevelGuids = allLevelGuids;
     }
 
     const filteredByLevel = allSpaces.filter((a: any) => {
@@ -234,7 +249,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     });
 
     // Fallback: if viewer-level mapping is not ready/correct yet, still show spaces
-    // so the user can filter by room instead of getting an empty list.
     const spacesSource = (
       filteredByLevel.length === 0 &&
       allSpaces.length > 0 &&
@@ -243,14 +257,20 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     ) ? allSpaces : filteredByLevel;
 
     return spacesSource
-      .map((a: any) => ({
-        fmGuid: a.fmGuid || a.fm_guid,
-        name: (a.commonName || a.common_name || a.name || 'Unnamed').replace(/^null$/, 'Unnamed'),
-        levelFmGuid: a.levelFmGuid || a.level_fm_guid,
-      }))
+      .map((a: any) => {
+        const name = (a.commonName || a.common_name || a.name || 'Unnamed').replace(/^null$/, 'Unnamed');
+        // Extract designation/number from attributes or name field
+        const designation = a.attributes?.designation || a.attributes?.Designation || a.attributes?.number || '';
+        return {
+          fmGuid: a.fmGuid || a.fm_guid,
+          name,
+          designation: typeof designation === 'string' ? designation : '',
+          levelFmGuid: a.levelFmGuid || a.level_fm_guid,
+        };
+      })
       .filter((s: SpaceItem) => s.name && s.name !== 'Unnamed')
       .sort((a: SpaceItem, b: SpaceItem) => a.name.localeCompare(b.name, 'sv', { numeric: true }));
-  }, [buildingData, checkedLevels, levels]);
+  }, [buildingData, checkedLevels, levels, sharedFloors]);
 
   // Auto-assign palette colors to levels
   useEffect(() => {
@@ -728,11 +748,14 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return map;
   }, []);
 
-  // ── Apply filter + coloring ─────────────────────────────────────────────
+  // ── Apply filter + coloring (debounced) ──────────────────────────────────
 
   const rafRef = useRef<number>(0);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const applyFilterVisibility = useCallback(() => {
+    clearTimeout(debounceRef.current);
     cancelAnimationFrame(rafRef.current);
+    debounceRef.current = setTimeout(() => {
     rafRef.current = requestAnimationFrame(() => {
     const viewer = getXeokitViewer();
     if (!viewer?.scene) return;
@@ -1162,11 +1185,13 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         visibleMetaFloorIds: [], visibleFloorFmGuids: visibleFmGuids,
         isAllFloorsVisible: !hasAnyFilter,
         isSoloFloor: visibleFmGuids.length === 1,
+        fromFilterPanel: true,
       } as FloorSelectionEventDetail,
     }));
 
     console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', scene.objectIds.length);
     }); // end requestAnimationFrame
+    }, 150); // debounce 150ms
   }, [getXeokitViewer, checkedSources, checkedLevels, checkedSpaces, checkedCategories,
     levels, spaces, categoryToIfcTypes, levelColors, spaceColors, categoryColors, autoColorEnabled, autoColorSpaces, autoColorCategories, xrayMode]);
 
@@ -1506,7 +1531,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             {filteredSpaces.slice(0, 200).map(space => (
               <FilterRow
                 key={space.fmGuid}
-                label={space.name}
+                label={space.designation ? `${space.name} (${space.designation})` : space.name}
                 checked={checkedSpaces.has(space.fmGuid)}
                 onCheckedChange={(checked) => handleSpaceToggle(space.fmGuid, checked)}
                 onClick={() => handleSpaceClick(space.fmGuid)}

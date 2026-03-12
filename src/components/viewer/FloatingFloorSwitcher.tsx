@@ -77,6 +77,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
   useEffect(() => {
     const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
       const { visibleMetaFloorIds, isAllFloorsVisible } = e.detail;
+      const fromFilterPanel = !!(e.detail as any).fromFilterPanel;
       isReceivingExternalEvent.current = true;
 
       if (isAllFloorsVisible) {
@@ -98,6 +99,13 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
       } else if (e.detail.floorId) {
         const match = floors.find(f => f.id === e.detail.floorId || f.metaObjectIds.includes(e.detail.floorId!));
         if (match) setVisibleFloorIds(new Set([match.id]));
+      }
+
+      // If event came from filter panel, don't re-apply floor visibility
+      // (filter panel already handles its own visibility logic)
+      if (fromFilterPanel) {
+        setTimeout(() => { isReceivingExternalEvent.current = false; }, 100);
+        return;
       }
 
       setTimeout(() => { isReceivingExternalEvent.current = false; }, 100);

@@ -1,7 +1,7 @@
 import React, { useState, useContext, useCallback, useEffect, useRef } from 'react';
 import {
   Menu, X, MessageSquarePlus, LifeBuoy, BarChart2, Bot, FileText, Wrench,
-  Send, Loader2,
+  Send, Loader2, Package,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
@@ -24,6 +24,7 @@ import InsightsDrawerPanel from './InsightsDrawerPanel';
 import GunnarChat, { GunnarContext } from '@/components/chat/GunnarChat';
 import CreateSupportCase from '@/components/support/CreateSupportCase';
 import IleanEmbeddedChat from './IleanEmbeddedChat';
+import InventoryPanel from './InventoryPanel';
 
 interface GeminusPluginMenuProps {
   buildingFmGuid?: string;
@@ -32,12 +33,13 @@ interface GeminusPluginMenuProps {
   contextMetadata?: Record<string, any>;
 }
 
-type ActivePanel = null | 'issue' | 'workorder' | 'support' | 'insights' | 'gunnar' | 'ilean';
+type ActivePanel = null | 'issue' | 'workorder' | 'support' | 'insights' | 'gunnar' | 'ilean' | 'inventory';
 
 const MENU_ITEMS = [
   { id: 'issue' as const, label: 'Skapa ärende', icon: MessageSquarePlus },
   { id: 'workorder' as const, label: 'Arbetsorder', icon: Wrench },
   { id: 'support' as const, label: 'Supportärende', icon: LifeBuoy },
+  { id: 'inventory' as const, label: 'Inventory', icon: Package },
   { id: 'insights' as const, label: 'Insikter', icon: BarChart2 },
   { id: 'gunnar' as const, label: 'Fråga Geminus AI', icon: Bot },
   { id: 'ilean' as const, label: 'Fråga Ilean', icon: FileText },
@@ -290,6 +292,16 @@ export default function GeminusPluginMenu({
             />
           </div>
         </div>
+      )}
+
+      {/* Inventory */}
+      {buildingFmGuid && (
+        <InventoryPanel
+          buildingFmGuid={buildingFmGuid}
+          buildingName={buildingName}
+          open={activePanel === 'inventory'}
+          onClose={handleClose}
+        />
       )}
     </>
   );
