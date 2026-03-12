@@ -6,6 +6,50 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+/** Download WASM files and redirect so web-ifc can find them in Deno edge */
+async function ensureWasm(): Promise<string> {
+  const dir = "/tmp/web-ifc-wasm";
+  try { await Deno.mkdir(dir, { recursive: true }); } catch (_) { /* exists */ }
+
+  const files = ["web-ifc.wasm", "web-ifc-node.wasm"];
+  const baseUrl = "https://unpkg.com/web-ifc@0.0.57";
+
+  for (const file of files) {
+    const dest = `${dir}/${file}`;
+    try {
+      await Deno.stat(dest);
+    } catch {
+      console.log(`[bim-to-gltf] Downloading ${file}...`);
+      const resp = await fetch(`${baseUrl}/${file}`);
+      if (resp.ok) {
+        const bytes = new Uint8Array(await resp.arrayBuffer());
+        await Deno.writeFile(dest, bytes);
+        console.log(`[bim-to-gltf] Saved ${file} (${(bytes.length / 1024 / 1024).toFixed(1)} MB)`);
+      } else {
+        console.warn(`[bim-to-gltf] Could not download ${file}: ${resp.status}`);
+      }
+    }
+  }
+
+  // Redirect Deno.readFileSync from internal npm path to /tmp
+  const expectedPrefix = "/var/tmp/sb-compile-edge-runtime/node_modules/localhost/web-ifc/0.0.57/tmp/web-ifc-wasm/";
+  const originalReadFileSync = Deno.readFileSync;
+  // @ts-ignore - monkey-patching for WASM resolution
+  Deno.readFileSync = (path: string | URL) => {
+    const p = typeof path === "string" ? path : path.toString();
+    if (p.startsWith(expectedPrefix)) {
+      const fileName = p.substring(expectedPrefix.length);
+      const redirected = `${dir}/${fileName}`;
+      console.log(`[bim-to-gltf] WASM redirect: ${p} -> ${redirected}`);
+      return originalReadFileSync(redirected);
+    }
+    return originalReadFileSync(path);
+  };
+
+  console.log(`[bim-to-gltf] WASM ready at ${dir}/`);
+  return dir + "/";
+}
+
 /**
  * Edge function: bim-to-gltf
  * Converts IFC files to GLB format for Cesium globe display.
@@ -124,6 +168,9 @@ Deno.serve(async (req) => {
         const ifcBuffer = await ifcBlob.arrayBuffer();
         const sizeMB = ifcBuffer.byteLength / (1024 * 1024);
         console.log(`[bim-to-gltf] IFC size: ${sizeMB.toFixed(1)} MB`);
+
+        // Ensure WASM is available before importing web-ifc
+        await ensureWasm();
 
         // 2. Parse IFC with web-ifc
         const WebIFC = await import("npm:web-ifc@0.0.57");
@@ -326,7 +373,6 @@ Deno.serve(async (req) => {
  * Indices: Uint32Array
  */
 function buildGlb(vertices: Float32Array, indices: Uint32Array): ArrayBuffer {
-  // Compute bounding box for accessor min/max
   let minX = Infinity, minY = Infinity, minZ = Infinity;
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
   const numVerts = vertices.length / 3;
@@ -349,7 +395,6 @@ function buildGlb(vertices: Float32Array, indices: Uint32Array): ArrayBuffer {
   const vertexByteLength = vertices.byteLength;
   const indexByteLength = indices.byteLength;
 
-  // Pad index buffer to 4-byte alignment
   const indexPadding = (4 - (indexByteLength % 4)) % 4;
   const totalBinLength = vertexByteLength + indexByteLength + indexPadding;
 
@@ -357,70 +402,37 @@ function buildGlb(vertices: Float32Array, indices: Uint32Array): ArrayBuffer {
     asset: { version: "2.0", generator: "geminus-bim-to-gltf" },
     scene: 0,
     scenes: [{ nodes: [0] }],
-    nodes: [
-      {
-        mesh: 0,
-        // IFC uses Y-up typically, Cesium uses Z-up. Apply rotation if needed.
-        // Most IFC files are already in a usable orientation for Cesium.
-      },
-    ],
-    meshes: [
-      {
-        primitives: [
-          {
-            attributes: { POSITION: 0 },
-            indices: 1,
-            mode: 4, // TRIANGLES
-          },
-        ],
-      },
-    ],
+    nodes: [{ mesh: 0 }],
+    meshes: [{
+      primitives: [{
+        attributes: { POSITION: 0 },
+        indices: 1,
+        mode: 4,
+      }],
+    }],
     accessors: [
       {
-        bufferView: 0,
-        componentType: 5126, // FLOAT
-        count: numVerts,
-        type: "VEC3",
-        min: [minX, minY, minZ],
-        max: [maxX, maxY, maxZ],
+        bufferView: 0, componentType: 5126, count: numVerts, type: "VEC3",
+        min: [minX, minY, minZ], max: [maxX, maxY, maxZ],
       },
       {
-        bufferView: 1,
-        componentType: 5125, // UNSIGNED_INT
-        count: indices.length,
-        type: "SCALAR",
+        bufferView: 1, componentType: 5125, count: indices.length, type: "SCALAR",
       },
     ],
     bufferViews: [
-      {
-        buffer: 0,
-        byteOffset: 0,
-        byteLength: vertexByteLength,
-        target: 34962, // ARRAY_BUFFER
-      },
-      {
-        buffer: 0,
-        byteOffset: vertexByteLength,
-        byteLength: indexByteLength,
-        target: 34963, // ELEMENT_ARRAY_BUFFER
-      },
+      { buffer: 0, byteOffset: 0, byteLength: vertexByteLength, target: 34962 },
+      { buffer: 0, byteOffset: vertexByteLength, byteLength: indexByteLength, target: 34963 },
     ],
-    buffers: [
-      {
-        byteLength: totalBinLength,
-      },
-    ],
+    buffers: [{ byteLength: totalBinLength }],
   };
 
   const jsonString = JSON.stringify(gltfJson);
   const jsonEncoder = new TextEncoder();
   const jsonBytes = jsonEncoder.encode(jsonString);
 
-  // Pad JSON to 4-byte alignment
   const jsonPadding = (4 - (jsonBytes.length % 4)) % 4;
   const jsonChunkLength = jsonBytes.length + jsonPadding;
 
-  // GLB structure: header(12) + jsonChunkHeader(8) + jsonData + binChunkHeader(8) + binData
   const totalLength = 12 + 8 + jsonChunkLength + 8 + totalBinLength;
 
   const glb = new ArrayBuffer(totalLength);
@@ -428,37 +440,25 @@ function buildGlb(vertices: Float32Array, indices: Uint32Array): ArrayBuffer {
   const u8 = new Uint8Array(glb);
 
   let offset = 0;
+  view.setUint32(offset, 0x46546C67, true); offset += 4;
+  view.setUint32(offset, 2, true); offset += 4;
+  view.setUint32(offset, totalLength, true); offset += 4;
 
-  // GLB Header
-  view.setUint32(offset, 0x46546C67, true); offset += 4; // magic: "glTF"
-  view.setUint32(offset, 2, true); offset += 4;           // version: 2
-  view.setUint32(offset, totalLength, true); offset += 4;  // total length
-
-  // JSON chunk header
   view.setUint32(offset, jsonChunkLength, true); offset += 4;
-  view.setUint32(offset, 0x4E4F534A, true); offset += 4; // "JSON"
+  view.setUint32(offset, 0x4E4F534A, true); offset += 4;
 
-  // JSON data
   u8.set(jsonBytes, offset);
   offset += jsonBytes.length;
-  // Pad with spaces (0x20)
-  for (let i = 0; i < jsonPadding; i++) {
-    u8[offset++] = 0x20;
-  }
+  for (let i = 0; i < jsonPadding; i++) { u8[offset++] = 0x20; }
 
-  // BIN chunk header
   view.setUint32(offset, totalBinLength, true); offset += 4;
-  view.setUint32(offset, 0x004E4942, true); offset += 4; // "BIN\0"
+  view.setUint32(offset, 0x004E4942, true); offset += 4;
 
-  // BIN data: vertices then indices
   u8.set(new Uint8Array(vertexBytes), offset);
   offset += vertexByteLength;
   u8.set(new Uint8Array(indexBytes), offset);
   offset += indexByteLength;
-  // Pad with zeros
-  for (let i = 0; i < indexPadding; i++) {
-    u8[offset++] = 0;
-  }
+  for (let i = 0; i < indexPadding; i++) { u8[offset++] = 0; }
 
   return glb;
 }
@@ -484,14 +484,12 @@ function buildGlb(vertices: Float32Array, indices: Uint32Array): ArrayBuffer {
 function parseXktGeometry(xktData: Uint8Array): { positions: Float32Array; indices: Uint32Array; vertexCount: number } {
   const dataView = new DataView(xktData.buffer, xktData.byteOffset, xktData.byteLength);
 
-  // Read header
-  const magic = dataView.getUint32(0, true); // "XKT\0" or version indicator
+  const magic = dataView.getUint32(0, true);
   const version = dataView.getUint32(4, true);
   const numElements = dataView.getUint32(8, true);
 
   console.log(`[parseXkt] version=${version}, numElements=${numElements}`);
 
-  // Read element sizes directory
   const elementSizes: number[] = [];
   let offset = 12;
   for (let i = 0; i < numElements; i++) {
@@ -499,7 +497,6 @@ function parseXktGeometry(xktData: Uint8Array): { positions: Float32Array; indic
     offset += 4;
   }
 
-  // Calculate element offsets
   const elementOffsets: number[] = [];
   let currentOffset = offset;
   for (let i = 0; i < numElements; i++) {
@@ -507,38 +504,22 @@ function parseXktGeometry(xktData: Uint8Array): { positions: Float32Array; indic
     currentOffset += elementSizes[i];
   }
 
-  // Helper to get element as a copied Uint8Array (ensures alignment safety)
   const getElement = (idx: number) => {
     if (idx >= numElements) return new Uint8Array(0);
     return xktData.slice(elementOffsets[idx], elementOffsets[idx] + elementSizes[idx]);
   };
 
-  // For XKT v10, the positions are at element index 14 (quantized Uint16)
-  // and indices at element index 16 (Uint32)
-  // positionsDecodeMatrix at element 24
-  // But the exact indices depend on the XKT version.
-  // We'll use a simpler approach: find the largest float-like and uint-like arrays.
-
-  // Try to extract quantized positions (Uint16) and indices (Uint32)
-  // In v9/v10: positions=14, normals=15, indices=16, edgeIndices=17
-  // decode matrices=24 (or 22 in some versions)
-
   let quantizedPositions: Uint16Array;
   let rawIndices: Uint32Array;
 
   if (version >= 9 && numElements > 16) {
-    // v9/v10 layout
     const posBytes = getElement(14);
     quantizedPositions = new Uint16Array(posBytes.buffer, posBytes.byteOffset, posBytes.byteLength / 2);
-
     const idxBytes = getElement(16);
     rawIndices = new Uint32Array(idxBytes.buffer, idxBytes.byteOffset, idxBytes.byteLength / 4);
   } else {
-    // Fallback: try to find positions/indices in earlier format (v6-v8)
-    // positions=6, normals=7, indices=8
     const posBytes = getElement(6);
     quantizedPositions = new Uint16Array(posBytes.buffer, posBytes.byteOffset, posBytes.byteLength / 2);
-
     const idxBytes = getElement(8);
     rawIndices = new Uint32Array(idxBytes.buffer, idxBytes.byteOffset, idxBytes.byteLength / 4);
   }
@@ -550,7 +531,6 @@ function parseXktGeometry(xktData: Uint8Array): { positions: Float32Array; indic
 
   const vertexCount = quantizedPositions.length / 3;
 
-  // Try to get decode matrix (element 24 in v10, or 22 in v9)
   let decodeMatrixElement: Uint8Array | null = null;
   if (version >= 10 && numElements > 24 && elementSizes[24] >= 64) {
     decodeMatrixElement = getElement(24);
@@ -558,30 +538,22 @@ function parseXktGeometry(xktData: Uint8Array): { positions: Float32Array; indic
     decodeMatrixElement = getElement(22);
   }
 
-  // Dequantize positions
   const positions = new Float32Array(vertexCount * 3);
 
   if (decodeMatrixElement && decodeMatrixElement.byteLength >= 64) {
-    // Use first decode matrix (global) — 4x4 float32 matrix
     const matrix = new Float32Array(decodeMatrixElement.buffer, decodeMatrixElement.byteOffset, 16);
-    
     for (let i = 0; i < vertexCount; i++) {
       const qx = quantizedPositions[i * 3];
       const qy = quantizedPositions[i * 3 + 1];
       const qz = quantizedPositions[i * 3 + 2];
-
-      // Normalize to 0..1
       const nx = qx / 65535;
       const ny = qy / 65535;
       const nz = qz / 65535;
-
-      // Apply decode matrix (column-major 4x4)
       positions[i * 3]     = matrix[0] * nx + matrix[4] * ny + matrix[8]  * nz + matrix[12];
       positions[i * 3 + 1] = matrix[1] * nx + matrix[5] * ny + matrix[9]  * nz + matrix[13];
       positions[i * 3 + 2] = matrix[2] * nx + matrix[6] * ny + matrix[10] * nz + matrix[14];
     }
   } else {
-    // No decode matrix — just normalize to a unit-ish range
     console.log(`[parseXkt] No decode matrix, using raw dequantization`);
     for (let i = 0; i < vertexCount; i++) {
       positions[i * 3]     = quantizedPositions[i * 3] / 65535 * 100 - 50;
@@ -591,6 +563,5 @@ function parseXktGeometry(xktData: Uint8Array): { positions: Float32Array; indic
   }
 
   console.log(`[parseXkt] Dequantized ${vertexCount} vertices, ${rawIndices.length} indices`);
-
   return { positions, indices: rawIndices, vertexCount };
 }
