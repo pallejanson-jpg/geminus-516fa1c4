@@ -49,12 +49,14 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
   if (metaScene?.metaObjects) {
     for (const [id, metaObj] of Object.entries(metaScene.metaObjects as Record<string, any>)) {
       const ifcType = (metaObj.type || '').toLowerCase();
+      const objName = (metaObj.name || '').toLowerCase();
       const entity = scene.objects?.[id];
       if (!entity) continue;
       processedIds.add(id);
 
       const isSpace = ifcType.includes('ifcspace') || ifcType === 'ifc_space' || ifcType === 'space';
-      if (isSpace) {
+      const isAreaBlanket = objName === 'area' || objName === 'areas';
+      if (isSpace || isAreaBlanket) {
         entity.colorize = SPACE_COLOR;
         entity.opacity = 0.3;
         entity.visible = false;

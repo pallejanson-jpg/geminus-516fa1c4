@@ -139,6 +139,15 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       // Slow down navigation for smoother control (extra aggressive on mobile one-finger)
       if (viewer.cameraControl) {
         const cc = viewer.cameraControl;
+
+        // Read user speed multiplier from localStorage
+        let speedMultiplier = 1;
+        try {
+          const stored = localStorage.getItem('viewer-nav-speed');
+          if (stored) speedMultiplier = parseInt(stored) / 100;
+        } catch {}
+        speedMultiplier = Math.max(0.25, Math.min(3, speedMultiplier));
+
         const navTuning = isMobile
           ? {
               dragRotationRate: 70,
@@ -150,13 +159,13 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
               keyboardDollyRate: 4,
             }
           : {
-              dragRotationRate: 120,
+              dragRotationRate: 120 * speedMultiplier,
               rotationInertia: 0.85,
-              touchPanRate: 0.3,
+              touchPanRate: 0.3 * speedMultiplier,
               panInertia: 0.7,
-              touchDollyRate: 0.15,
-              mouseWheelDollyRate: 50,
-              keyboardDollyRate: 5,
+              touchDollyRate: 0.15 * speedMultiplier,
+              mouseWheelDollyRate: 50 * speedMultiplier,
+              keyboardDollyRate: 5 * speedMultiplier,
             };
 
         cc.dragRotationRate = navTuning.dragRotationRate;
@@ -167,6 +176,31 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         cc.mouseWheelDollyRate = navTuning.mouseWheelDollyRate;
         cc.keyboardDollyRate = navTuning.keyboardDollyRate;
         cc.followPointer = true;
+
+        // Double-click flyTo stability guard
+        // Prevent being thrown to wrong position when pickSurface fails
+        cc.on('doublePickedSurface', (pickResult: any) => {
+          if (!pickResult?.worldPos) return;
+          const [px, py, pz] = pickResult.worldPos;
+          if (isNaN(px) || isNaN(py) || isNaN(pz)) return;
+          // Sanity check: reject picks >50m vertically from current eye
+          const eyeY = viewer.camera?.eye?.[1] ?? 0;
+          if (Math.abs(py - eyeY) > 50) {
+            console.warn('[NativeViewer] Rejected double-click flyTo: target too far vertically', { py, eyeY });
+            return;
+          }
+          viewer.cameraFlight.flyTo({
+            eye: [px - 5, py + 5, pz - 5],
+            look: pickResult.worldPos,
+            up: [0, 1, 0],
+            duration: 0.5,
+          });
+        });
+
+        // When doublePickedNothing fires, do NOT fly — this prevents the "thrown to scene center" issue
+        cc.on('doublePickedNothing', () => {
+          // Intentionally no-op — prevents default flyTo on empty space double-click
+        });
       }
 
       // NavCube — load custom neutral-styled plugin via script tag

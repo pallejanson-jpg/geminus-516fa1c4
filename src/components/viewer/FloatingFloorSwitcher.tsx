@@ -178,9 +178,27 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
       }, { timeout: 100 });
     }
 
+    // Re-hide IfcSpace and "Area" objects after floor visibility changes
+    const metaObjects = viewer.metaScene?.metaObjects || {};
+    const showSet = new Set(idsToShow);
+    Object.entries(metaObjects).forEach(([id, metaObj]: [string, any]) => {
+      if (!showSet.has(id)) return;
+      const ifcType = (metaObj.type || '').toLowerCase();
+      const objName = (metaObj.name || '').toLowerCase();
+      const isSpace = ifcType.includes('ifcspace') || ifcType === 'ifc_space' || ifcType === 'space';
+      const isAreaBlanket = objName === 'area' || objName === 'areas';
+      if (isSpace || isAreaBlanket) {
+        const entity = scene.objects?.[id];
+        if (entity) {
+          entity.visible = false;
+          entity.pickable = false;
+        }
+      }
+    });
+
     if (isSoloMode) {
-      const metaObjects = viewer.metaScene?.metaObjects || {};
-      Object.values(metaObjects).forEach((metaObj: any) => {
+      const metaObjects2 = viewer.metaScene?.metaObjects || {};
+      Object.values(metaObjects2).forEach((metaObj: any) => {
         if (metaObj.type?.toLowerCase() === 'ifccovering') {
           const entity = scene.objects?.[metaObj.id];
           if (entity) entity.visible = false;

@@ -14,11 +14,13 @@ import {
   Eye,
   Crosshair,
   Home,
+  Gauge,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { applyArchitectColors } from '@/lib/architect-colors';
@@ -464,9 +466,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     if (mode === 'firstPerson') {
       viewer.cameraControl.navMode = 'firstPerson';
       viewer.cameraControl.followPointer = true;
+      viewer.cameraControl.constrainVertical = true;
     } else {
       viewer.cameraControl.navMode = 'orbit';
       viewer.cameraControl.followPointer = true;
+      viewer.cameraControl.constrainVertical = false;
     }
     setNavMode(mode);
   }, [viewer]);
@@ -1000,7 +1004,36 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
               <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent side="top" className="w-56 p-2" align="end">
+          <PopoverContent side="top" className="w-64 p-2" align="end">
+            <p className="text-xs font-medium mb-2 text-muted-foreground">Navigation Speed</p>
+            <div className="flex items-center gap-2 mb-3 px-1">
+              <Gauge className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <Slider
+                min={25}
+                max={300}
+                step={25}
+                value={[(() => {
+                  try { return parseInt(localStorage.getItem('viewer-nav-speed') || '100'); } catch { return 100; }
+                })()]}
+                onValueChange={([val]) => {
+                  localStorage.setItem('viewer-nav-speed', String(val));
+                  if (viewer?.cameraControl) {
+                    const m = val / 100;
+                    const cc = viewer.cameraControl;
+                    cc.dragRotationRate = 120 * m;
+                    cc.mouseWheelDollyRate = 50 * m;
+                    cc.keyboardDollyRate = 5 * m;
+                    cc.touchPanRate = 0.3 * m;
+                    cc.touchDollyRate = 0.15 * m;
+                  }
+                }}
+                className="flex-1"
+              />
+              <span className="text-[10px] text-muted-foreground w-8 text-right">
+                {(() => { try { return localStorage.getItem('viewer-nav-speed') || '100'; } catch { return '100'; } })()}%
+              </span>
+            </div>
+            <Separator className="my-2" />
             <p className="text-xs font-medium mb-2 text-muted-foreground">Toolbar tools (max 10)</p>
             <div className="space-y-1.5">
               {ALL_TOOLS.map(tool => (
