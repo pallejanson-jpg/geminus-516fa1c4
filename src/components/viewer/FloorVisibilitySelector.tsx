@@ -68,6 +68,11 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       localStorage.setItem(storageKey, JSON.stringify(Array.from(visibleFloorIds)));
     }, [visibleFloorIds, buildingFmGuid, isInitialized]);
 
+    const getXeokitViewer = useCallback(() => {
+      try { return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer; }
+      catch { return null; }
+    }, [viewerRef]);
+
     // Lightweight floor bounds calculator (clipping is handled by ViewerToolbar)
     const calculateFloorBounds = useCallback((floorId: string) => {
       const viewer = getXeokitViewer();
@@ -92,11 +97,6 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       return { id: floorId, name: metaObj.name || 'Floor', minY, maxY, metaObjectIds: childIds };
     }, [getXeokitViewer]);
     const isClippingActive = false; // Clipping state managed by ViewerToolbar
-
-    const getXeokitViewer = useCallback(() => {
-      try { return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer; }
-      catch { return null; }
-    }, [viewerRef]);
 
     // ── Initialize selection when floors arrive ───────────────────────────
     useEffect(() => {
