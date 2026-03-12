@@ -320,9 +320,8 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       const allIds = new Set(floors.map(f => f.id));
       setVisibleFloorIds(allIds);
       applyFloorVisibility(allIds);
-      updateClipping(Array.from(allIds));
       emitFloorEvent(allIds);
-    }, [applyFloorVisibility, floors, updateClipping, emitFloorEvent]);
+    }, [applyFloorVisibility, floors, emitFloorEvent]);
 
     const allVisible = useMemo(() => floors.length > 0 && visibleFloorIds.size === floors.length, [floors, visibleFloorIds]);
     const visibleCount = visibleFloorIds.size;
