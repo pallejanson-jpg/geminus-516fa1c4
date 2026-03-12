@@ -834,7 +834,7 @@ function ModeButton({ mode, current, disabled, onClick, icon, label }: {
           onClick={() => onClick(mode)}
           className={`gap-1.5 px-3 h-8 rounded-md transition-all text-xs ${
             isActive
-              ? 'bg-white/20 text-white shadow-inner'
+              ? 'bg-primary text-primary-foreground shadow-inner'
               : 'text-white/60 hover:text-white hover:bg-white/10'
           } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
         >
