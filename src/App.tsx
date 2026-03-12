@@ -38,6 +38,8 @@ const FmAccessDashboard = lazy(() => import("@/pages/FmAccessDashboard"));
 const IssueResolution = lazy(() => import("@/pages/IssueResolution"));
 // Standalone plugin page for external system integration
 const PluginPage = lazy(() => import("@/pages/PluginPage"));
+// Homepage V2 test page
+const HomeLandingV2 = lazy(() => import("@/pages/HomeLandingV2"));
 
 const queryClient = new QueryClient();
 
@@ -230,6 +232,18 @@ const App = () => {
             element={
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                 <PluginPage />
+              </Suspense>
+            } 
+          />
+          
+          {/* Homepage V2 test page — two-column desktop layout */}
+          <Route 
+            path="/home-v2" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <ProtectedRoute>
+                  <HomeLandingV2 />
+                </ProtectedRoute>
               </Suspense>
             } 
           />
