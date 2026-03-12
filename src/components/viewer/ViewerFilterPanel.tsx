@@ -1182,6 +1182,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         visibleMetaFloorIds: [], visibleFloorFmGuids: visibleFmGuids,
         isAllFloorsVisible: !hasAnyFilter,
         isSoloFloor: visibleFmGuids.length === 1,
+        fromFilterPanel: true,
       } as FloorSelectionEventDetail,
     }));
 
