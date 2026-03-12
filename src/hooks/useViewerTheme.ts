@@ -154,34 +154,6 @@ export function useViewerTheme() {
 
     console.log('Applying viewer theme:', theme.name);
 
-    // Store original colors if not already stored
-    if (state.originalColors.size === 0) {
-      const objects = scene.objects;
-      for (const objectId in objects) {
-        const entity = objects[objectId];
-        if (entity) {
-          state.originalColors.set(objectId, {
-            color: entity.colorize ? [...entity.colorize] : [1, 1, 1],
-            opacity: entity.opacity ?? 1,
-            edges: entity.edges ?? true,
-          });
-        }
-      }
-      
-      // Store original edge material
-      const edgeMaterial = scene.edgeMaterial;
-      if (edgeMaterial) {
-        state.originalEdgeColor = [...edgeMaterial.edgeColor];
-        state.originalEdgeAlpha = edgeMaterial.edgeAlpha;
-      }
-      
-      // Store original background
-      const container = document.getElementById('AssetPlusViewer');
-      if (container) {
-        state.originalBackground = container.style.background || '';
-      }
-    }
-
     // Apply subtle edge settings for cleaner look
     const edgeMaterial = scene.edgeMaterial;
     if (edgeMaterial && theme.edge_settings?.enabled) {
