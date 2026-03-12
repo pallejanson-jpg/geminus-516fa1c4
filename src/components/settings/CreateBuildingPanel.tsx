@@ -598,18 +598,18 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <Building2 className="h-5 w-5 text-primary" />
-          <h3 className="font-semibold text-sm">Välj byggnad</h3>
+          <h3 className="font-semibold text-sm">Select Building</h3>
           <Button variant="ghost" size="icon" className="h-7 w-7 ml-auto" onClick={fetchBuildings}>
             <RefreshCw className="h-3.5 w-3.5" />
           </Button>
         </div>
 
         {loadingBuildings ? (
-          <div className="text-xs text-muted-foreground py-2">Laddar byggnader...</div>
+          <div className="text-xs text-muted-foreground py-2">Loading buildings...</div>
         ) : (
           <Select value={selectedBuildingFmGuid} onValueChange={(v) => { setSelectedBuildingFmGuid(v); setShowCreateForm(false); handleResetIfc(); }}>
             <SelectTrigger className="h-10 text-sm">
-              <SelectValue placeholder="Välj en byggnad..." />
+              <SelectValue placeholder="Select a building..." />
             </SelectTrigger>
             <SelectContent>
               {existingBuildings.map(b => (
@@ -628,7 +628,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         {!selectedBuildingFmGuid && !showCreateForm && (
           <Button variant="outline" size="sm" onClick={() => setShowCreateForm(true)} className="w-full gap-1.5 text-xs">
             <Building2 className="h-3.5 w-3.5" />
-            Skapa ny byggnad i Asset+
+            Create new building in Asset+
           </Button>
         )}
       </div>
@@ -636,46 +636,46 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       {/* ══════ Create New Building (expandable) ══════ */}
       {showCreateForm && !selectedBuildingFmGuid && (
         <div className="space-y-3 border rounded-lg p-4 bg-muted/20">
-          <h4 className="font-medium text-sm">Skapa ny fastighet & byggnad</h4>
+          <h4 className="font-medium text-sm">Create new property & building</h4>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Fastighetsbeteckning *</Label>
-              <Input placeholder="t.ex. FASTIGHET-01" value={complexDesignation} onChange={e => setComplexDesignation(e.target.value)} className="h-9 text-sm" />
+              <Label className="text-xs">Property designation *</Label>
+              <Input placeholder="e.g. PROPERTY-01" value={complexDesignation} onChange={e => setComplexDesignation(e.target.value)} className="h-9 text-sm" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Fastighetsnamn *</Label>
-              <Input placeholder="t.ex. Storgatan 5" value={complexName} onChange={e => setComplexName(e.target.value)} className="h-9 text-sm" />
+              <Label className="text-xs">Property name *</Label>
+              <Input placeholder="e.g. Main Street 5" value={complexName} onChange={e => setComplexName(e.target.value)} className="h-9 text-sm" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Byggnadsbeteckning *</Label>
-              <Input placeholder="t.ex. HUS-A" value={buildingDesignation} onChange={e => setBuildingDesignation(e.target.value)} className="h-9 text-sm" />
+              <Label className="text-xs">Building designation *</Label>
+              <Input placeholder="e.g. BLDG-A" value={buildingDesignation} onChange={e => setBuildingDesignation(e.target.value)} className="h-9 text-sm" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Byggnadsnamn *</Label>
-              <Input placeholder="t.ex. Huvudbyggnad" value={buildingName} onChange={e => setBuildingName(e.target.value)} className="h-9 text-sm" />
+              <Label className="text-xs">Building name *</Label>
+              <Input placeholder="e.g. Main Building" value={buildingName} onChange={e => setBuildingName(e.target.value)} className="h-9 text-sm" />
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs flex items-center gap-1"><Layers className="h-3 w-3" /> Modellnamn</Label>
-            <Input placeholder="t.ex. A-modell" value={modelName} onChange={e => setModelName(e.target.value)} className="h-9 text-sm" />
+            <Label className="text-xs flex items-center gap-1"><Layers className="h-3 w-3" /> Model name</Label>
+            <Input placeholder="e.g. A-model" value={modelName} onChange={e => setModelName(e.target.value)} className="h-9 text-sm" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs flex items-center gap-1"><MapPin className="h-3 w-3" /> Latitud</Label>
+              <Label className="text-xs flex items-center gap-1"><MapPin className="h-3 w-3" /> Latitude</Label>
               <Input type="number" step="any" placeholder="59.3293" value={latitude} onChange={e => setLatitude(e.target.value)} className="h-9 text-sm" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs flex items-center gap-1"><MapPin className="h-3 w-3" /> Longitud</Label>
+              <Label className="text-xs flex items-center gap-1"><MapPin className="h-3 w-3" /> Longitude</Label>
               <Input type="number" step="any" placeholder="18.0686" value={longitude} onChange={e => setLongitude(e.target.value)} className="h-9 text-sm" />
             </div>
           </div>
           <div className="flex gap-2">
             <Button onClick={handleCreate} disabled={isCreating || !complexDesignation || !complexName || !buildingDesignation || !buildingName} className="flex-1 gap-2">
-              {isCreating ? <><Loader2 className="h-4 w-4 animate-spin" />Skapar...</> : <><Building2 className="h-4 w-4" />Skapa i Asset+</>}
+              {isCreating ? <><Loader2 className="h-4 w-4 animate-spin" />Creating...</> : <><Building2 className="h-4 w-4" />Create in Asset+</>}
             </Button>
-            <Button variant="outline" onClick={() => setShowCreateForm(false)}>Avbryt</Button>
+            <Button variant="outline" onClick={() => setShowCreateForm(false)}>Cancel</Button>
           </div>
         </div>
       )}
@@ -695,7 +695,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
               <AccordionTrigger className="px-3 py-2.5 hover:no-underline hover:bg-muted/50 text-sm">
                 <div className="flex items-center gap-2">
                   <KeyRound className="h-4 w-4 text-muted-foreground" />
-                  <span>Redigera credentials</span>
+                  <span>Edit Credentials</span>
                   {(selectedBuilding?.hasCustomAssetPlus || selectedBuilding?.hasCustomSenslinc) && (
                     <Badge variant="secondary" className="text-[9px] px-1.5 py-0 ml-1">Custom</Badge>
                   )}
@@ -703,7 +703,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
               </AccordionTrigger>
               <AccordionContent className="px-3 pb-3 pt-1">
                 <p className="text-xs text-muted-foreground mb-2">
-                  Lägg till egna API-credentials för denna byggnad (Asset+, Senslinc).
+                  Add custom API credentials for this building (Asset+, Senslinc).
                 </p>
                 <Button
                   variant="outline"
@@ -712,7 +712,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                   onClick={() => { setEditFmGuid(selectedBuildingFmGuid); setPropertyDialogOpen(true); }}
                 >
                   <Pencil className="h-3.5 w-3.5" />
-                  Redigera
+                  Edit
                 </Button>
               </AccordionContent>
             </AccordionItem>
@@ -752,7 +752,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                     </div>
                     {isConverting && !conversionDone && (
                       <p className="text-[10px] text-muted-foreground animate-pulse flex items-center gap-1">
-                        <Cloud className="h-3 w-3" /> Converting — kan ta några minuter…
+                        <Cloud className="h-3 w-3" /> Converting — this may take a few minutes…
                       </p>
                     )}
                     <div className="rounded-md border bg-background p-2 max-h-32 overflow-y-auto">
@@ -763,14 +763,14 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                     {conversionDone && (
                       <div className="flex items-center gap-1.5 text-xs text-green-600">
                         <CheckCircle2 className="h-3.5 w-3.5" />
-                        Modellen är klar — visas automatiskt i 3D-viewern.
+                        Model is ready — it will appear automatically in the 3D viewer.
                       </div>
                     )}
                   </div>
                 )}
                 {conversionDone && (
                   <Button variant="outline" size="sm" onClick={handleResetIfc} className="text-xs">
-                    Ladda upp en till
+                    Upload another
                   </Button>
                 )}
               </AccordionContent>
@@ -786,12 +786,12 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
               </AccordionTrigger>
               <AccordionContent className="px-3 pb-3 pt-1 space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Autodesk Construction Cloud-inställningar (inloggning, hub, projekt och filval) hanteras under{' '}
-                  <strong>API</strong>-fliken. Där kan du logga in, bläddra i mappar och synka BIM-data till denna byggnad.
+                  Autodesk Construction Cloud settings (login, hub, project and file selection) are managed under the{' '}
+                  <strong>API</strong> tab. There you can log in, browse folders and sync BIM data to this building.
                 </p>
                 {onSwitchToAccTab && (
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={onSwitchToAccTab}>
-                    <Layers className="h-3.5 w-3.5" /> Öppna ACC-inställningar
+                    <Layers className="h-3.5 w-3.5" /> Open ACC Settings
                   </Button>
                 )}
               </AccordionContent>
@@ -807,7 +807,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
               </AccordionTrigger>
               <AccordionContent className="px-3 pb-3 pt-1 space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Synka struktur och tillgångar från Asset+ för denna byggnad. Använd <strong>Sync</strong>-fliken för att synka alla byggnader.
+                  Sync structure and assets from Asset+ for this building. Use the <strong>Sync</strong> tab to sync all buildings.
                 </p>
                 <Button
                   onClick={handleSyncAssetPlus}
@@ -816,7 +816,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                   className="gap-1.5"
                 >
                   {isSyncingAssetPlus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                  Synka denna byggnad
+                  Sync this building
                 </Button>
               </AccordionContent>
             </AccordionItem>
@@ -831,7 +831,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
               </AccordionTrigger>
               <AccordionContent className="px-3 pb-3 pt-1 space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Ladda ner en mall med våningar och rum, fyll i tillgångar offline, och importera tillbaka.
+                  Download a template with floors and rooms, fill in assets offline, and import back.
                 </p>
                 <div className="flex items-center gap-2">
                   <ExcelTemplateDownload

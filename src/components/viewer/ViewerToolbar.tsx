@@ -571,8 +571,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
   const handleClearSlices = useCallback(() => {
     if (!viewer?.scene) return;
+    // Destroy all section planes
     const planes = Object.values(viewer.scene.sectionPlanes || {});
     planes.forEach((sp: any) => { try { sp.destroy(); } catch {} });
+    // Hide control gizmo if shown
+    if (sectionPluginRef.current?.hideControl) {
+      sectionPluginRef.current.hideControl();
+    }
   }, [viewer]);
 
   // ── X-ray toggle ─────────────────────────────────────────────────────────
