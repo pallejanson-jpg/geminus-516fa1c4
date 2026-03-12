@@ -24,6 +24,7 @@ import InsightsDrawerPanel from './InsightsDrawerPanel';
 import GunnarChat, { GunnarContext } from '@/components/chat/GunnarChat';
 import CreateSupportCase from '@/components/support/CreateSupportCase';
 import IleanEmbeddedChat from './IleanEmbeddedChat';
+import InventoryPanel from './InventoryPanel';
 
 interface GeminusPluginMenuProps {
   buildingFmGuid?: string;
