@@ -141,11 +141,11 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         const cc = viewer.cameraControl;
         const navTuning = isMobile
           ? {
-              dragRotationRate: 30,
-              rotationInertia: 0.93,
-              touchPanRate: 0.06,
-              panInertia: 0.88,
-              touchDollyRate: 0.04,
+              dragRotationRate: 70,
+              rotationInertia: 0.88,
+              touchPanRate: 0.14,
+              panInertia: 0.82,
+              touchDollyRate: 0.09,
               mouseWheelDollyRate: 35,
               keyboardDollyRate: 4,
             }
