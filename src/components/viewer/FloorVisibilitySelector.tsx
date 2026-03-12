@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { useSectionPlaneClipping, FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
+import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { useFloorData, FloorInfo } from '@/hooks/useFloorData';
 
 // Re-export FloorInfo so existing imports keep working
@@ -68,17 +68,35 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       localStorage.setItem(storageKey, JSON.stringify(Array.from(visibleFloorIds)));
     }, [visibleFloorIds, buildingFmGuid, isInitialized]);
 
-    // Section plane clipping
-    const { updateClipping, isClippingActive, calculateFloorBounds } = useSectionPlaneClipping(viewerRef, {
-      enabled: enableClipping && clippingEnabled,
-      offset: 0.1,
-      clipMode: 'ceiling',
-    });
-
     const getXeokitViewer = useCallback(() => {
       try { return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer; }
       catch { return null; }
     }, [viewerRef]);
+
+    // Lightweight floor bounds calculator (clipping is handled by ViewerToolbar)
+    const calculateFloorBounds = useCallback((floorId: string) => {
+      const viewer = getXeokitViewer();
+      if (!viewer?.metaScene?.metaObjects) return null;
+      const metaObj = viewer.metaScene.metaObjects[floorId];
+      if (!metaObj) return null;
+      const getAllChildIds = (mo: any): string[] => {
+        const ids = [mo.id];
+        (mo.children || []).forEach((c: any) => ids.push(...getAllChildIds(c)));
+        return ids;
+      };
+      const childIds = getAllChildIds(metaObj);
+      let minY = Infinity, maxY = -Infinity;
+      childIds.forEach(id => {
+        const entity = viewer.scene.objects[id];
+        if (entity?.aabb) {
+          if (entity.aabb[1] < minY) minY = entity.aabb[1];
+          if (entity.aabb[4] > maxY) maxY = entity.aabb[4];
+        }
+      });
+      if (minY === Infinity) return null;
+      return { id: floorId, name: metaObj.name || 'Floor', minY, maxY, metaObjectIds: childIds };
+    }, [getXeokitViewer]);
+    const isClippingActive = false; // Clipping state managed by ViewerToolbar
 
     // ── Initialize selection when floors arrive ───────────────────────────
     useEffect(() => {
@@ -195,7 +213,6 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
           setVisibleFloorIds(allIds);
           applyFloorVisibility(allIds);
           setClippingEnabled(false);
-          updateClipping(Array.from(allIds));
         } else if (visibleMetaFloorIds && visibleMetaFloorIds.length > 0) {
           const matchingIds = new Set(
             floorsRef.current
@@ -206,7 +223,6 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
             setVisibleFloorIds(matchingIds);
             applyFloorVisibility(matchingIds);
             if (matchingIds.size === 1) setClippingEnabled(true);
-            updateClipping(Array.from(matchingIds));
           }
         }
 
@@ -214,7 +230,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       };
       window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
       return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
-    }, [applyFloorVisibility, updateClipping]);
+    }, [applyFloorVisibility]);
 
     // Apply initial visibility
     useEffect(() => {
@@ -287,29 +303,25 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         const newSet = new Set(prev);
         checked ? newSet.add(floorId) : newSet.delete(floorId);
         applyFloorVisibility(newSet);
-        updateClipping(Array.from(newSet));
         emitFloorEvent(newSet);
         return newSet;
       });
-    }, [applyFloorVisibility, updateClipping, emitFloorEvent]);
+    }, [applyFloorVisibility, emitFloorEvent]);
 
     const handleShowOnlyFloor = useCallback((floorId: string) => {
       const newSet = new Set([floorId]);
       setVisibleFloorIds(newSet);
       applyFloorVisibility(newSet);
       setClippingEnabled(true);
-      const bounds = calculateFloorBounds(floorId);
-      if (bounds && enableClipping) updateClipping([floorId]);
       emitFloorEvent(newSet);
-    }, [applyFloorVisibility, calculateFloorBounds, enableClipping, updateClipping, emitFloorEvent]);
+    }, [applyFloorVisibility, emitFloorEvent]);
 
     const handleShowAll = useCallback(() => {
       const allIds = new Set(floors.map(f => f.id));
       setVisibleFloorIds(allIds);
       applyFloorVisibility(allIds);
-      updateClipping(Array.from(allIds));
       emitFloorEvent(allIds);
-    }, [applyFloorVisibility, floors, updateClipping, emitFloorEvent]);
+    }, [applyFloorVisibility, floors, emitFloorEvent]);
 
     const allVisible = useMemo(() => floors.length > 0 && visibleFloorIds.size === floors.length, [floors, visibleFloorIds]);
     const visibleCount = visibleFloorIds.size;
