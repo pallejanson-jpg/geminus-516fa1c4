@@ -415,9 +415,10 @@ export function useSectionPlaneClipping(
     const currentFloor = storeys[currentIndex];
     if (currentIndex < storeys.length - 1) {
       const nextFloor = storeys[currentIndex + 1];
-      // Use currentFloor.maxY (ceiling slab top) instead of nextFloor.minY
-      // This ensures objects extending to the ceiling are fully visible
-      const clipHeight = Math.min(currentFloor.maxY, nextFloor.minY) + 0.05;
+      // Use nextFloor.minY (bottom of next storey slab) as clip height
+      // This ensures walls/doors extending to ceiling are fully visible
+      // while objects that erroneously exceed the next floor boundary get clipped
+      const clipHeight = nextFloor.minY + 0.05;
       return { clipHeight, nextFloorMinY: nextFloor.minY };
     } else {
       return { clipHeight: currentFloor.maxY + 0.1, nextFloorMinY: null };
