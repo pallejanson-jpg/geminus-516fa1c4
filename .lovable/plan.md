@@ -1,117 +1,170 @@
-## Plan: Mobile Viewer Startup Hardening (IMPLEMENTED ✅)
 
-### Changes Made
-1. **Mobile touch tuning** (`NativeXeokitViewer.tsx`): dragRotationRate 30→70, touchPanRate 0.06→0.14, touchDollyRate 0.04→0.09, rotationInertia 0.93→0.88, panInertia 0.88→0.82
-2. **FastNav delay** (`NativeXeokitViewer.tsx`): Added `delayBeforeRestore: true` (0.5s mobile, 0.3s desktop)
-3. **Suppress viewFit in split2d3d** (`NativeXeokitViewer.tsx`): Skips instant viewFit when `?mode=split2d3d` — floor isolation handles camera
-4. **Defer SplitPlanView mount** (`UnifiedViewer.tsx`): Mobile SplitPlanView only renders after `viewerReady=true`, shows spinner until then
-5. **Increased SplitPlanView retry** (`SplitPlanView.tsx`): 10×100ms → 30×200ms (6s total window), immediate retry on VIEWER_MODELS_LOADED
-6. **Debounced floor events** (`UnifiedViewer.tsx`): 500ms guard on FLOOR_SELECTION_CHANGED dispatches to prevent competing events
 
-### Architecture Principle
-Mobile and desktop share the same `UnifiedViewerContent` initialization logic. The ONLY difference is layout:
-- Mobile: vertical stack (2D top, 3D bottom) with touch-optimized divider (8px)
-- Desktop: horizontal ResizablePanelGroup with drag handle (4px)
+# Plan: Viewer UX Improvements (8 Items)
 
-Future changes to viewer startup MUST apply to both paths. Do NOT create separate mobile/desktop init logic.
+## Summary
+Fix mode switch order, add navigation speed settings, improve floor clipping height, add two new viewer themes, hide obstructing IfcSpace objects, fix split2d3d initial visibility, and improve navigation UX based on xeokit best practices.
 
 ---
 
-## Plan: SplitPlanView Navigation + Alignment UX (IMPLEMENTED ✅)
+## 1. Fix Mode Switch Order: 2D → 2D/3D → 3D
 
-### Changes Made
-1. **SplitPlanView click navigation** (`SplitPlanView.tsx`): Replaced first-person instant jump with MinimapPanel-style fly-to — keeps current eye height, looks down at clicked point, animates 0.5s.
-2. **AlignmentPointPicker precision** (`AlignmentPointPicker.tsx`): Now estimates surface point via ray-cast from tripod position + viewing direction × adjustable distance slider (0.5–10m). Shows captured coordinates and distance in both steps for verification.
+The order was agreed as **2D → 2D/3D → 3D** but the desktop header still shows **2D → 3D → 2D/3D**. Mobile split and non-split modes also have inconsistent ordering.
 
----
+**Changes in `src/pages/UnifiedViewer.tsx`:**
 
-## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
-
-### Changes Made
-1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
-2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
-3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
-4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
-5. **config.toml** updated with `acc-geometry-extract` function entry
-
-### Pending (Phase 2)
-- Actual GLB chunk creation from SVF geometry (requires conversion worker)
-- OBJ as optional secondary format for small models
-
----
-
-
-### Ändringar
-
-#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
-**Fil:** `supabase/functions/conversion-worker-api/index.ts`
-- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
-- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
-- Upsert till `assets` med `created_in_model: true`
-- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
-
-#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
-**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
-- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
-- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
-- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
-- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
-- Diff: soft-delete objekt som finns i DB men inte i ny IFC
-
-#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
-**Fil:** `docs/conversion-worker/worker.mjs`
-- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
-- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
-- Non-fatal: om hierarki-population misslyckas fortsätter workern
-
-#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
-**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
-- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
-- `created_in_model: true` istället för `false`
-- Diff-logik: markerar borttagna objekt efter import
-
-### Datamodell
-
-```text
-Building Storey:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
-  category:          "Building Storey"
-  created_in_model:  true
-
-Space:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
-  category:          "Space"
-  level_fm_guid:     parent storey fm_guid
-
-Instance:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
-  category:          "Instance"
-  asset_type:        ifcType (e.g. "IfcDoor")
-  level_fm_guid:     resolved storey
-  in_room_fm_guid:   resolved space
+**Desktop (lines 620-622):** Reorder to:
+```
+2D → split2d3d → 3D → split → vt → 360°
 ```
 
-### Diff-flöde
+**Mobile split mode (lines 1027-1031):** Reorder to:
+```
+2D → split2d3d → 3D
+```
 
-Vid omimport jämförs importerade fm_guids mot befintliga i DB:
-- **Nytt** → INSERT
-- **Matchat** → UPDATE (namn, typ, rumsplacering)
-- **Borttaget** → `modification_status = 'removed'` (soft-delete)
+**Mobile non-split mode (lines 1125-1129):** Reorder to:
+```
+2D → split2d3d → 3D
+```
+
+Also apply **purple active state** in `ModeButton` (line 843): change `bg-white/20 text-white shadow-inner` to `bg-primary text-primary-foreground shadow-inner`.
+
+Remove the mode text label under building name (lines 607-613).
 
 ---
 
-## Previous Plans
+## 2. Desktop Navigation Speed Settings in Viewer
 
-### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
-- Browser-primary for >20MB, edge function for ≤20MB
-- MetaModel JSON uploaded alongside XKT
-- Systems extracted and persisted
+Add a "Navigation Speed" slider in the viewer's right-side settings panel (the gear icon toolbar button). Stores values in `localStorage`.
 
-### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
-- Standalone Node.js worker polls conversion-worker-api
-- Per-storey .xkt tiles with dynamic floor loading
+**Files:**
+- `src/components/viewer/ViewerToolbar.tsx` — Add a navigation speed section in the settings popover with a slider (0.5x–3x multiplier). On change, apply multiplier to `cameraControl` properties.
+- `src/components/viewer/NativeXeokitViewer.tsx` — On init, read the stored speed multiplier and apply it to the desktop `navTuning` values.
 
-### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
-- 10 credential override columns on building_settings
-- Shared credential resolver in edge functions
-- Properties page as configuration hub
+The slider controls a single multiplier that scales `dragRotationRate`, `mouseWheelDollyRate`, `panInertia` etc. proportionally.
+
+---
+
+## 3. Floor Clipping Height Fix
+
+Currently `applyCeilingClipping` uses `Math.min(currentFloor.maxY, nextFloor.minY) + 0.05` which clips too low (0.5m above floor). Objects like walls/doors that extend to ceiling height get cut.
+
+**Fix in `src/hooks/useSectionPlaneClipping.ts` (line 420):**
+- Use `nextFloor.minY` as the clip height (the bottom of the next floor slab), not `Math.min(currentFloor.maxY, nextFloor.minY)`.
+- This ensures walls/doors up to the next floor boundary are fully visible.
+- Cap: if an object's maxY exceeds `nextFloor.minY + 0.5m`, it's an outlier and will be naturally clipped — this is the desired behavior per the user's request.
+
+---
+
+## 4. Two New Viewer Themes
+
+Create two new system themes via database migration:
+
+**a) "Model Native Colour"**
+- Empty `color_mappings` (no recoloring — shows original model colors from XKT/IFC)
+- `edge_settings: { enabled: false }`
+- `space_opacity: 0.15`
+- When applied, the theme hook skips all colorization, restoring original model colors.
+
+**b) "Geminus"**
+- A curated professional palette inspired by high-end architectural visualization:
+  - Walls: warm white `#F5F0E8`
+  - Windows/glass: soft blue-tint `#C8D8E4` with edges
+  - Doors: warm wood tone `#B8A088`
+  - Slabs/floors: light concrete `#E0DCD4`
+  - Columns/beams: structural steel `#D0CCC4`
+  - Stairs/railings: medium grey `#A8A4A0`
+  - Furniture: sage green `#8FAF8A`
+  - MEP/proxy: muted blue `#9DB4C8`
+  - Spaces: transparent `opacity: 0.08`
+- `edge_settings: { enabled: true }` with very subtle edges (color `#D8D4CC`, alpha 0.12)
+- Background: warm off-white gradient (bottom: `#E8E4DC`)
+
+**Files:**
+- New database migration to insert these two rows into `viewer_themes`.
+- `src/hooks/useViewerTheme.ts` — For "Model Native Colour" (empty mappings), add logic to restore original model colors without applying architect palette.
+
+---
+
+## 5. Hide Obstructing IfcSpace "Area" Objects by Default
+
+The screenshot shows a large green IfcSpace named "Area" covering the entire floor like a blanket.
+
+**Current behavior:** `applyArchitectColors` already hides IfcSpace objects (`entity.visible = false; entity.pickable = false`).
+
+**Investigation needed:** The object in the screenshot is visible and green, meaning either:
+- It's not being classified as IfcSpace by metaScene, or
+- It's being shown again after `applyArchitectColors` runs (e.g., by floor visibility toggle or reset).
+
+**Fix in `src/lib/architect-colors.ts`:**
+- Also match `name === 'area'` (case-insensitive) as a hide candidate, regardless of IFC type.
+
+**Fix in `src/components/viewer/FloatingFloorSwitcher.tsx` (line 171):**
+- After `setObjectsVisible(idsToShow, true)`, re-hide IfcSpace objects on the visible floor (same logic as `applyArchitectColors`).
+
+---
+
+## 6. Fix Split 2D/3D Initial Visibility
+
+When entering split2d3d mode, some floors are hidden in 3D. This happens because the floor switcher may initialize with a saved solo-floor selection from a previous session, hiding other floors.
+
+**Fix in `src/pages/UnifiedViewer.tsx`:**
+- When switching to `split2d3d` mode, dispatch a `FLOOR_SELECTION_CHANGED` event with `isAllFloorsVisible: true` to ensure 3D shows all floors initially.
+- Or: in `FloatingFloorSwitcher.tsx`, when `split2d3d` mode is detected, initialize with all floors visible regardless of localStorage.
+
+---
+
+## 7. Navigation UX Improvements (xeokit Best Practices)
+
+Based on xeokit documentation research:
+
+**a) `followPointer: true`** — Already set. Good.
+
+**b) Double-click flyTo stability:**
+The issue of "being thrown to wrong position" on double-click happens when `pickSurface` fails and falls back to picking the scene AABB center. Fix in `NativeXeokitViewer.tsx`:
+- Listen to `cameraControl` `doublePicked` / `doublePickedSurface` events.
+- Only execute `flyTo` when `pickResult.worldPos` is valid (not NaN, not at scene origin if camera is far away).
+- Add a sanity check: if the picked point is >50m vertically from current eye, reject it.
+
+**c) `constrainVertical` for first-person mode:**
+- When user switches to first-person navigation (`navMode: 'firstPerson'`), set `cc.constrainVertical = true` to prevent falling through floors.
+
+**d) `planView` nav mode for 2D:**
+- When in 2D mode, set `cc.navMode = 'planView'` for top-down navigation without rotation.
+
+**Files:** `src/components/viewer/NativeXeokitViewer.tsx`, `src/components/viewer/ViewerToolbar.tsx`
+
+---
+
+## 8. Batch Re-process: Include Asset+ and ACC Sources
+
+Update the `batch-enqueue` action in `conversion-worker-api` to also find buildings with XKT models sourced from Asset+ sync and ACC sync, not just IFC uploads.
+
+**File:** `supabase/functions/conversion-worker-api/index.ts`
+- Query `xkt_models` table for all distinct `building_fm_guid` values.
+- Create conversion jobs for each, regardless of source (IFC upload, Asset+, ACC).
+
+---
+
+## Implementation Order
+1. Mode switch order + purple active state + remove mode text
+2. Hide IfcSpace/Area objects after floor visibility changes
+3. Fix split2d3d initial all-floors visibility
+4. Floor clipping height fix
+5. Navigation UX improvements (double-click guard, constrainVertical, planView)
+6. Navigation speed slider in viewer settings
+7. Two new viewer themes (database migration + hook logic)
+8. Batch re-process expansion
+
+**Files touched:**
+- `src/pages/UnifiedViewer.tsx`
+- `src/components/viewer/NativeXeokitViewer.tsx`
+- `src/components/viewer/ViewerToolbar.tsx`
+- `src/hooks/useSectionPlaneClipping.ts`
+- `src/lib/architect-colors.ts`
+- `src/components/viewer/FloatingFloorSwitcher.tsx`
+- `src/hooks/useViewerTheme.ts`
+- `supabase/functions/conversion-worker-api/index.ts`
+- New database migration for viewer themes
+
