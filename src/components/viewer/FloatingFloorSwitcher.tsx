@@ -267,7 +267,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
         title="Show all floors"
         className={cn(
           isMobile
-            ? 'h-7 px-2 text-[10px] font-medium rounded-full'
+            ? 'h-6 px-1.5 text-[9px] font-medium rounded-full'
             : compact ? 'h-5 px-1 text-[7px] font-medium rounded' : 'h-6 px-1.5 min-w-[32px] text-[8px] sm:h-7 sm:px-2 sm:min-w-[40px] sm:text-[9px] font-medium rounded-md',
           isMobile
             ? (visibleFloorIds.size === floors.length ? 'bg-primary/30 text-primary' : 'text-white/70 hover:text-white hover:bg-white/10')
