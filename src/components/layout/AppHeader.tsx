@@ -237,6 +237,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                             <Sparkles className="mr-2 h-4 w-4" />
                             Start introduction
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => navigate('/api-docs')}>
+                            <Code className="mr-2 h-4 w-4" />
+                            API Documentation
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
                             <LogOut className="mr-2 h-4 w-4" />
