@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { useFloorData, FloorInfo } from '@/hooks/useFloorData';
+import { useFloorVisibility } from '@/hooks/useFloorVisibility';
 
 // Re-export FloorInfo so existing imports keep working
 export type { FloorInfo } from '@/hooks/useFloorData';
@@ -25,13 +26,12 @@ interface FloorVisibilitySelectorProps {
 
 const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelectorProps>(
   ({ viewerRef, buildingFmGuid, isViewerReady = true, onVisibleFloorsChange, enableClipping = true, className, listOnly = false, initialFloorFmGuid }, ref) => {
-    // ── Shared floor data hook ────────────────────────────────────────────
     const { floors, isLoading: floorsLoading } = useFloorData(viewerRef, buildingFmGuid);
+    const { applyFloorVisibility, calculateFloorBounds } = useFloorVisibility(viewerRef);
 
     const [visibleFloorIds, setVisibleFloorIds] = useState<Set<string>>(new Set());
     const [isExpanded, setIsExpanded] = useState(false);
     const [isInitialized, setIsInitialized] = useState(false);
-    const [childrenMapCache, setChildrenMapCache] = useState<Map<string, string[]> | null>(null);
     const [clippingEnabled, setClippingEnabled] = useState(false);
     const [localStorageLoaded, setLocalStorageLoaded] = useState(false);
     
@@ -68,34 +68,6 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       localStorage.setItem(storageKey, JSON.stringify(Array.from(visibleFloorIds)));
     }, [visibleFloorIds, buildingFmGuid, isInitialized]);
 
-    const getXeokitViewer = useCallback(() => {
-      try { return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer; }
-      catch { return null; }
-    }, [viewerRef]);
-
-    // Lightweight floor bounds calculator (clipping is handled by ViewerToolbar)
-    const calculateFloorBounds = useCallback((floorId: string) => {
-      const viewer = getXeokitViewer();
-      if (!viewer?.metaScene?.metaObjects) return null;
-      const metaObj = viewer.metaScene.metaObjects[floorId];
-      if (!metaObj) return null;
-      const getAllChildIds = (mo: any): string[] => {
-        const ids = [mo.id];
-        (mo.children || []).forEach((c: any) => ids.push(...getAllChildIds(c)));
-        return ids;
-      };
-      const childIds = getAllChildIds(metaObj);
-      let minY = Infinity, maxY = -Infinity;
-      childIds.forEach(id => {
-        const entity = viewer.scene.objects[id];
-        if (entity?.aabb) {
-          if (entity.aabb[1] < minY) minY = entity.aabb[1];
-          if (entity.aabb[4] > maxY) maxY = entity.aabb[4];
-        }
-      });
-      if (minY === Infinity) return null;
-      return { id: floorId, name: metaObj.name || 'Floor', minY, maxY, metaObjectIds: childIds };
-    }, [getXeokitViewer]);
     const isClippingActive = false; // Clipping state managed by ViewerToolbar
 
     // ── Initialize selection when floors arrive ───────────────────────────
@@ -129,77 +101,11 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       setIsInitialized(true);
     }, [floors, isInitialized, localStorageLoaded, initialFloorFmGuid]);
 
-    // Build children map
-    const buildChildrenMap = useCallback(() => {
-      if (childrenMapCache) return childrenMapCache;
-      const viewer = getXeokitViewer();
-      if (!viewer?.metaScene?.metaObjects) return new Map<string, string[]>();
-      const metaObjects = viewer.metaScene.metaObjects;
-      const childrenMap = new Map<string, string[]>();
-      Object.values(metaObjects).forEach((metaObj: any) => {
-        const parentId = metaObj.parent?.id;
-        if (parentId) {
-          if (!childrenMap.has(parentId)) childrenMap.set(parentId, []);
-          childrenMap.get(parentId)!.push(metaObj.id);
-        }
-      });
-      setChildrenMapCache(childrenMap);
-      return childrenMap;
-    }, [getXeokitViewer, childrenMapCache]);
-
-    const getChildIdsOptimized = useCallback((metaObjId: string, childrenMap: Map<string, string[]>): string[] => {
-      const ids: string[] = [metaObjId];
-      const children = childrenMap.get(metaObjId) || [];
-      children.forEach(childId => { ids.push(...getChildIdsOptimized(childId, childrenMap)); });
-      return ids;
-    }, []);
-
-    // Apply visibility (batch)
-    const applyFloorVisibility = useCallback((visibleIds: Set<string>) => {
-      const viewer = getXeokitViewer();
-      if (!viewer?.scene) return;
-      const scene = viewer.scene;
-      const childrenMap = buildChildrenMap();
-      const isSoloMode = visibleIds.size === 1;
-
-      const idsToShow: string[] = [];
-      floors.forEach(floor => {
-        if (visibleIds.has(floor.id)) {
-          floor.metaObjectIds.forEach(metaObjId => {
-            idsToShow.push(...getChildIdsOptimized(metaObjId, childrenMap));
-          });
-        }
-      });
-
-      if (idsToShow.length === 0) {
-        console.warn('FloorVisibilitySelector: no objects found, aborting');
-        return;
-      }
-
-      if (scene.setObjectsVisible && scene.objectIds) {
-        scene.setObjectsVisible(scene.objectIds, false);
-        scene.setObjectsVisible(idsToShow, true);
-      } else {
-        const set = new Set(idsToShow);
-        requestIdleCallback(() => {
-          Object.entries(scene.objects || {}).forEach(([id, entity]: [string, any]) => {
-            if (entity && typeof entity.visible !== 'undefined') entity.visible = set.has(id);
-          });
-        }, { timeout: 100 });
-      }
-
-      if (isSoloMode) {
-        const metaObjects = viewer.metaScene?.metaObjects || {};
-        Object.values(metaObjects).forEach((metaObj: any) => {
-          if (metaObj.type?.toLowerCase() === 'ifccovering') {
-            const entity = scene.objects?.[metaObj.id];
-            if (entity) entity.visible = false;
-          }
-        });
-      }
-
+    // Apply visibility using shared utility
+    const applyVisibility = useCallback((visibleIds: Set<string>) => {
+      applyFloorVisibility(floors, visibleIds);
       window.dispatchEvent(new CustomEvent('FLOOR_VISIBILITY_APPLIED'));
-    }, [getXeokitViewer, floors, buildChildrenMap, getChildIdsOptimized]);
+    }, [applyFloorVisibility, floors]);
 
     // Listen for external floor selection
     useEffect(() => {
@@ -211,7 +117,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         if (isAllFloorsVisible) {
           const allIds = new Set(floorsRef.current.map(f => f.id));
           setVisibleFloorIds(allIds);
-          applyFloorVisibility(allIds);
+          applyVisibility(allIds);
           setClippingEnabled(false);
         } else if (visibleMetaFloorIds && visibleMetaFloorIds.length > 0) {
           const matchingIds = new Set(
@@ -221,7 +127,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
           );
           if (matchingIds.size > 0) {
             setVisibleFloorIds(matchingIds);
-            applyFloorVisibility(matchingIds);
+            applyVisibility(matchingIds);
             if (matchingIds.size === 1) setClippingEnabled(true);
           }
         }
@@ -230,7 +136,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       };
       window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
       return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
-    }, [applyFloorVisibility]);
+    }, [applyVisibility]);
 
     // Apply initial visibility
     useEffect(() => {
@@ -239,7 +145,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       initialVisibilityAppliedRef.current = true;
 
       const timeoutId = setTimeout(() => {
-        applyFloorVisibility(visibleFloorIds);
+        applyVisibility(visibleFloorIds);
 
         const visibleFloors = floors.filter(f => visibleFloorIds.has(f.id));
         const allFmGuids = visibleFloors.flatMap(f => f.databaseLevelFmGuids);
@@ -267,7 +173,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       }, 100);
 
       return () => clearTimeout(timeoutId);
-    }, [isInitialized, floors, visibleFloorIds, applyFloorVisibility, calculateFloorBounds]);
+    }, [isInitialized, floors, visibleFloorIds, applyVisibility, calculateFloorBounds]);
 
     // ── Handlers ──────────────────────────────────────────────────────────
     const emitFloorEvent = useCallback((newSet: Set<string>) => {
@@ -302,26 +208,26 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       setVisibleFloorIds(prev => {
         const newSet = new Set(prev);
         checked ? newSet.add(floorId) : newSet.delete(floorId);
-        applyFloorVisibility(newSet);
+        applyVisibility(newSet);
         emitFloorEvent(newSet);
         return newSet;
       });
-    }, [applyFloorVisibility, emitFloorEvent]);
+    }, [applyVisibility, emitFloorEvent]);
 
     const handleShowOnlyFloor = useCallback((floorId: string) => {
       const newSet = new Set([floorId]);
       setVisibleFloorIds(newSet);
-      applyFloorVisibility(newSet);
+      applyVisibility(newSet);
       setClippingEnabled(true);
       emitFloorEvent(newSet);
-    }, [applyFloorVisibility, emitFloorEvent]);
+    }, [applyVisibility, emitFloorEvent]);
 
     const handleShowAll = useCallback(() => {
       const allIds = new Set(floors.map(f => f.id));
       setVisibleFloorIds(allIds);
-      applyFloorVisibility(allIds);
+      applyVisibility(allIds);
       emitFloorEvent(allIds);
-    }, [applyFloorVisibility, floors, emitFloorEvent]);
+    }, [applyVisibility, floors, emitFloorEvent]);
 
     const allVisible = useMemo(() => floors.length > 0 && visibleFloorIds.size === floors.length, [floors, visibleFloorIds]);
     const visibleCount = visibleFloorIds.size;

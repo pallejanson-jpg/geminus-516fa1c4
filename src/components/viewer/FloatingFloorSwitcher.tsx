@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, memo, useRef } from 'react';
-import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -9,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useFloorData, FloorInfo } from '@/hooks/useFloorData';
+import { useFloorVisibility } from '@/hooks/useFloorVisibility';
 
 // Re-export for backward compat
 export type FloorPillInfo = FloorInfo;
@@ -34,21 +34,14 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
   compact = false,
 }) => {
   const isMobile = useIsMobile();
-
-  // ── Shared floor data hook ────────────────────────────────────────────
   const { floors } = useFloorData(viewerRef, buildingFmGuid);
+  const { applyFloorVisibility, calculateFloorBounds } = useFloorVisibility(viewerRef);
 
   const [visibleFloorIds, setVisibleFloorIds] = useState<Set<string>>(new Set());
   const [isInitialized, setIsInitialized] = useState(false);
   const [overflowOpen, setOverflowOpen] = useState(false);
-  const [childrenMapCache, setChildrenMapCache] = useState<Map<string, string[]> | null>(null);
   const [isVisible, setIsVisible] = useState(true);
   const isReceivingExternalEvent = useRef(false);
-
-  const getXeokitViewer = useCallback(() => {
-    try { return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer; }
-    catch { return null; }
-  }, [viewerRef]);
 
   // Listen for visibility toggle
   useEffect(() => {
@@ -106,110 +99,33 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
     return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
   }, [floors]);
 
-  // Build children map
-  const buildChildrenMap = useCallback(() => {
-    if (childrenMapCache) return childrenMapCache;
-    const viewer = getXeokitViewer();
-    if (!viewer?.metaScene?.metaObjects) return new Map<string, string[]>();
-    const metaObjects = viewer.metaScene.metaObjects;
-    const childrenMap = new Map<string, string[]>();
-    Object.values(metaObjects).forEach((metaObj: any) => {
-      const parentId = metaObj.parent?.id;
-      if (parentId) {
-        if (!childrenMap.has(parentId)) childrenMap.set(parentId, []);
-        childrenMap.get(parentId)!.push(metaObj.id);
-      }
-    });
-    setChildrenMapCache(childrenMap);
-    return childrenMap;
-  }, [getXeokitViewer, childrenMapCache]);
-
-  const getChildIdsOptimized = useCallback((metaObjId: string, childrenMap: Map<string, string[]>): string[] => {
-    const ids: string[] = [metaObjId];
-    (childrenMap.get(metaObjId) || []).forEach(childId => { ids.push(...getChildIdsOptimized(childId, childrenMap)); });
-    return ids;
-  }, []);
-
-  const calculateFloorBounds = useCallback((floorId: string) => {
-    const viewer = getXeokitViewer();
-    if (!viewer?.metaScene?.metaObjects || !viewer?.scene?.objects) return null;
-    const floorMeta = viewer.metaScene.metaObjects[floorId];
-    if (!floorMeta) return null;
-    const getAllChildIds = (obj: any): string[] => {
-      const ids: string[] = [obj.id];
-      (obj.children || []).forEach((c: any) => { ids.push(...getAllChildIds(c)); });
-      return ids;
-    };
-    const childIds = getAllChildIds(floorMeta);
-    let minY = Infinity, maxY = -Infinity, valid = false;
-    childIds.forEach(id => {
-      const entity = viewer.scene.objects[id];
-      if (entity?.aabb) { if (entity.aabb[1] < minY) minY = entity.aabb[1]; if (entity.aabb[4] > maxY) maxY = entity.aabb[4]; valid = true; }
-    });
-    return valid ? { minY, maxY } : null;
-  }, [getXeokitViewer]);
-
-  // Apply floor visibility (batch)
-  const applyFloorVisibility = useCallback((newVisibleIds: Set<string>) => {
-    const viewer = getXeokitViewer();
-    if (!viewer?.scene) return;
-    const scene = viewer.scene;
-    const childrenMap = buildChildrenMap();
-    const isSoloMode = newVisibleIds.size === 1;
-
-    const idsToShow: string[] = [];
-    floors.forEach(floor => {
-      if (newVisibleIds.has(floor.id)) {
-        floor.metaObjectIds.forEach(metaObjId => { idsToShow.push(...getChildIdsOptimized(metaObjId, childrenMap)); });
-      }
-    });
-
-    if (idsToShow.length === 0) { console.warn('FloatingFloorSwitcher: no objects, aborting'); return; }
-
-    if (scene.setObjectsVisible && scene.objectIds) {
-      scene.setObjectsVisible(scene.objectIds, false);
-      scene.setObjectsVisible(idsToShow, true);
-    } else {
-      const set = new Set(idsToShow);
-      requestIdleCallback(() => {
-        Object.entries(scene.objects || {}).forEach(([id, entity]: [string, any]) => {
-          if (entity && typeof entity.visible !== 'undefined') entity.visible = set.has(id);
-        });
-      }, { timeout: 100 });
-    }
-
-    // Re-hide IfcSpace and "Area" objects after floor visibility changes
-    const metaObjects = viewer.metaScene?.metaObjects || {};
-    const showSet = new Set(idsToShow);
-    Object.entries(metaObjects).forEach(([id, metaObj]: [string, any]) => {
-      if (!showSet.has(id)) return;
-      const ifcType = (metaObj.type || '').toLowerCase();
-      const objName = (metaObj.name || '').toLowerCase();
-      const isSpace = ifcType.includes('ifcspace') || ifcType === 'ifc_space' || ifcType === 'space';
-      const isAreaBlanket = objName === 'area' || objName === 'areas';
-      if (isSpace || isAreaBlanket) {
-        const entity = scene.objects?.[id];
-        if (entity) {
-          entity.visible = false;
-          entity.pickable = false;
-        }
-      }
-    });
-
-    if (isSoloMode) {
-      const metaObjects2 = viewer.metaScene?.metaObjects || {};
-      Object.values(metaObjects2).forEach((metaObj: any) => {
-        if (metaObj.type?.toLowerCase() === 'ifccovering') {
-          const entity = scene.objects?.[metaObj.id];
-          if (entity) entity.visible = false;
-        }
-      });
-    }
+  // Apply visibility + save + dispatch event helper
+  const applyAndDispatch = useCallback((newVisibleIds: Set<string>) => {
+    applyFloorVisibility(floors, newVisibleIds);
 
     if (buildingFmGuid) {
       localStorage.setItem(`viewer-visible-floors-${buildingFmGuid}`, JSON.stringify(Array.from(newVisibleIds)));
     }
-  }, [getXeokitViewer, floors, buildChildrenMap, getChildIdsOptimized, buildingFmGuid]);
+
+    const visibleFloors = floors.filter(f => newVisibleIds.has(f.id));
+    const allFmGuids = visibleFloors.flatMap(f => f.databaseLevelFmGuids);
+    const allMetaIds = visibleFloors.flatMap(f => f.metaObjectIds);
+    const isSolo = newVisibleIds.size === 1;
+    const soloFloorId = isSolo ? Array.from(newVisibleIds)[0] : null;
+    const floor = soloFloorId ? floors.find(f => f.id === soloFloorId) : null;
+    const bounds = soloFloorId ? calculateFloorBounds(soloFloorId) : null;
+
+    window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+      detail: {
+        floorId: soloFloorId,
+        floorName: floor?.name || null,
+        bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
+        visibleMetaFloorIds: allMetaIds,
+        visibleFloorFmGuids: allFmGuids,
+        isAllFloorsVisible: newVisibleIds.size === floors.length,
+      } as FloorSelectionEventDetail,
+    }));
+  }, [floors, applyFloorVisibility, calculateFloorBounds, buildingFmGuid]);
 
   // Pill click handler
   const handlePillClick = useCallback((floorId: string, event: React.MouseEvent) => {
@@ -231,42 +147,14 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
     }
 
     setVisibleFloorIds(newVisibleIds);
-    applyFloorVisibility(newVisibleIds);
-
-    const visibleFloors = floors.filter(f => newVisibleIds.has(f.id));
-    const allFmGuids = visibleFloors.flatMap(f => f.databaseLevelFmGuids);
-    const allMetaIds = visibleFloors.flatMap(f => f.metaObjectIds);
-    const isSolo = newVisibleIds.size === 1;
-    const soloFloorId = isSolo ? Array.from(newVisibleIds)[0] : null;
-    const floor = soloFloorId ? floors.find(f => f.id === soloFloorId) : null;
-    const bounds = soloFloorId ? calculateFloorBounds(soloFloorId) : null;
-
-    window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
-      detail: {
-        floorId: soloFloorId,
-        floorName: floor?.name || null,
-        bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
-        visibleMetaFloorIds: allMetaIds,
-        visibleFloorFmGuids: allFmGuids,
-        isAllFloorsVisible: newVisibleIds.size === floors.length,
-      } as FloorSelectionEventDetail,
-    }));
-  }, [visibleFloorIds, floors, applyFloorVisibility, calculateFloorBounds]);
+    applyAndDispatch(newVisibleIds);
+  }, [visibleFloorIds, floors, applyAndDispatch]);
 
   const handlePillDoubleClick = useCallback(() => {
     const allIds = new Set(floors.map(f => f.id));
     setVisibleFloorIds(allIds);
-    applyFloorVisibility(allIds);
-
-    window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
-      detail: {
-        floorId: null, floorName: null, bounds: null,
-        visibleMetaFloorIds: floors.flatMap(f => f.metaObjectIds),
-        visibleFloorFmGuids: floors.flatMap(f => f.databaseLevelFmGuids),
-        isAllFloorsVisible: true,
-      } as FloorSelectionEventDetail,
-    }));
-  }, [floors, applyFloorVisibility]);
+    applyAndDispatch(allIds);
+  }, [floors, applyAndDispatch]);
 
   const getPillState = useCallback((floorId: string): 'active' | 'partial' | 'inactive' => {
     const isVis = visibleFloorIds.has(floorId);
@@ -347,22 +235,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                         if (checked) newSet.add(floor.id);
                         else if (newSet.size > 1) newSet.delete(floor.id);
                         setVisibleFloorIds(newSet);
-                        applyFloorVisibility(newSet);
-
-                        const vis = floors.filter(f => newSet.has(f.id));
-                        const isSolo = newSet.size === 1;
-                        const soloId = isSolo ? Array.from(newSet)[0] : null;
-                        const soloFloor = soloId ? floors.find(f => f.id === soloId) : null;
-                        const bounds = soloId ? calculateFloorBounds(soloId) : null;
-                        window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
-                          detail: {
-                            floorId: soloId, floorName: soloFloor?.name || null,
-                            bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
-                            visibleMetaFloorIds: vis.flatMap(f => f.metaObjectIds),
-                            visibleFloorFmGuids: vis.flatMap(f => f.databaseLevelFmGuids),
-                            isAllFloorsVisible: newSet.size === floors.length,
-                          } as FloorSelectionEventDetail,
-                        }));
+                        applyAndDispatch(newSet);
                       }}
                     />
                   </div>
