@@ -794,68 +794,59 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                     </div>
                   </div>
 
-                  {/* Insights-style compact room rows */}
-                  <div className="space-y-1 min-w-0">
-                    {filteredRooms.slice(0, 30).map((space: any) => {
-                      const roomNum = getRoomNumber(space);
-                      const area = space.grossArea || 0;
-                      const areaPercent = maxRoomArea > 0 ? (area / maxRoomArea) * 100 : 0;
-                      const spaceArea = space.attributes ? 
-                        Object.keys(space.attributes).find(k => k.toLowerCase().startsWith('nta')) : null;
-                      const ntaVal = spaceArea && space.attributes[spaceArea]?.value;
-                      const displayArea = ntaVal || (area > 0 ? area.toFixed(1) : null);
+                  {/* Insights-style compact room grid */}
+                  {filteredRooms.length === 0 ? (
+                    <div className="text-center text-muted-foreground py-6 text-sm">
+                      {roomSearch ? 'Inga rum matchade sökningen' : 'Inga rum registrerade på denna våning'}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5">
+                      {filteredRooms.slice(0, 30).map((space: any) => {
+                        const roomNum = getRoomNumber(space);
+                        const area = space.grossArea || 0;
+                        const spaceArea = space.attributes ? 
+                          Object.keys(space.attributes).find(k => k.toLowerCase().startsWith('nta')) : null;
+                        const ntaVal = spaceArea && space.attributes[spaceArea]?.value;
+                        const displayArea = ntaVal || (area > 0 ? area.toFixed(1) : null);
 
-                      return (
-                        <button
-                          key={space.fmGuid}
-                          type="button"
-                          onClick={() => setSelectedFacility({
-                            fmGuid: space.fmGuid,
-                            name: space.name,
-                            commonName: space.commonName,
-                            category: 'Space',
-                            levelFmGuid: space.levelFmGuid,
-                            buildingFmGuid: space.buildingFmGuid,
-                            attributes: space.attributes,
-                          })}
-                          className="w-full min-w-0 flex items-center gap-3 px-3 py-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-all active:scale-[0.99] text-left group"
-                        >
-                          <DoorOpen size={14} className="text-primary shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2 min-w-0">
-                              <span className="font-medium text-xs sm:text-sm truncate">
-                                {space.commonName || space.name || '(namnlöst)'}
-                              </span>
-                              <span className="text-[10px] sm:text-xs text-muted-foreground shrink-0">
-                                {displayArea ? `${displayArea} m²` : ''}
-                              </span>
+                        return (
+                          <div
+                            key={space.fmGuid}
+                            className="rounded-lg border text-center p-2.5 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-md active:scale-95"
+                            onClick={() => setSelectedFacility({
+                              fmGuid: space.fmGuid,
+                              name: space.name,
+                              commonName: space.commonName,
+                              category: 'Space',
+                              levelFmGuid: space.levelFmGuid,
+                              buildingFmGuid: space.buildingFmGuid,
+                              attributes: space.attributes,
+                            })}
+                          >
+                            <div className="text-[10px] text-muted-foreground truncate mb-0.5">
+                              {space.commonName || space.name || '(namnlöst)'}
                             </div>
-                            <div className="flex items-center gap-2 mt-0.5 min-w-0">
-                              {roomNum && <span className="text-[10px] font-mono text-muted-foreground truncate">{roomNum}</span>}
-                              <div className="flex-1 min-w-0">
-                                <Progress value={areaPercent} className="h-1" />
-                              </div>
+                            <div className="text-base font-bold leading-none text-foreground">
+                              {displayArea ? `${displayArea}` : '—'}
+                            </div>
+                            <div className="text-[9px] text-muted-foreground">
+                              {displayArea ? 'm²' : ''}
+                              {roomNum ? ` · ${roomNum}` : ''}
                             </div>
                           </div>
-                          <ChevronRight size={12} className="text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </button>
-                      );
-                    })}
-                    {filteredRooms.length > 30 && (
-                      <button
-                        type="button"
-                        onClick={() => onShowRooms(facility)}
-                        className="w-full py-2 text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        +{filteredRooms.length - 30} fler rum
-                      </button>
-                    )}
-                    {filteredRooms.length === 0 && (
-                      <div className="text-center text-muted-foreground py-6 text-sm">
-                        {roomSearch ? 'Inga rum matchade sökningen' : 'Inga rum registrerade på denna våning'}
-                      </div>
-                    )}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {filteredRooms.length > 30 && (
+                    <button
+                      type="button"
+                      onClick={() => onShowRooms(facility)}
+                      className="w-full py-2 text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      +{filteredRooms.length - 30} fler rum
+                    </button>
+                  )}
                 </CardContent>
               </Card>
             )}
