@@ -130,6 +130,19 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
             applyVisibility(matchingIds);
             if (matchingIds.size === 1) setClippingEnabled(true);
           }
+        } else if (e.detail.visibleFloorFmGuids?.length > 0) {
+          const fmMatchIds = new Set(
+            floorsRef.current
+              .filter(f => f.databaseLevelFmGuids.some(g =>
+                e.detail.visibleFloorFmGuids!.some((vg: string) => vg.toLowerCase() === g.toLowerCase())
+              ))
+              .map(f => f.id)
+          );
+          if (fmMatchIds.size > 0) {
+            setVisibleFloorIds(fmMatchIds);
+            applyVisibility(fmMatchIds);
+            if (fmMatchIds.size === 1) setClippingEnabled(true);
+          }
         }
 
         setTimeout(() => { isReceivingExternalEvent.current = false; }, 100);
