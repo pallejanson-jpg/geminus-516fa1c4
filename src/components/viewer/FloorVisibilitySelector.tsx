@@ -313,10 +313,8 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       setVisibleFloorIds(newSet);
       applyFloorVisibility(newSet);
       setClippingEnabled(true);
-      const bounds = calculateFloorBounds(floorId);
-      if (bounds && enableClipping) updateClipping([floorId]);
       emitFloorEvent(newSet);
-    }, [applyFloorVisibility, calculateFloorBounds, enableClipping, updateClipping, emitFloorEvent]);
+    }, [applyFloorVisibility, emitFloorEvent]);
 
     const handleShowAll = useCallback(() => {
       const allIds = new Set(floors.map(f => f.id));
