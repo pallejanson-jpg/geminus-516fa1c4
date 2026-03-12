@@ -183,7 +183,7 @@ export default function InventoryPanel({
         <div className="flex items-center gap-2">
           <Package className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold text-foreground">
-            INVENTORY
+            ASSET PANEL
             <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 font-normal">
               {filteredAssets.length}
               {filteredAssets.length !== allAssets.length && ` / ${allAssets.length}`}
