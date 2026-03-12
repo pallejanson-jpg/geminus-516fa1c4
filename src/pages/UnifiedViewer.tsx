@@ -1018,9 +1018,9 @@ function MobileUnifiedViewer({
             </Button>
             <div className="pointer-events-auto ml-1 flex items-center gap-0.5 rounded-lg border border-border bg-card/90 p-0.5 backdrop-blur-md">
               {([
+                { mode: '2d' as ViewMode, label: '2D', Icon: Square },
                 { mode: 'split2d3d' as ViewMode, label: '2D/3D', Icon: LayoutPanelLeft },
                 { mode: '3d' as ViewMode, label: '3D', Icon: Box },
-                { mode: '2d' as ViewMode, label: '2D', Icon: Square },
               ] as const).map(({ mode, label, Icon }) => (
                 <Button
                   key={mode}
