@@ -223,7 +223,6 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
             setVisibleFloorIds(matchingIds);
             applyFloorVisibility(matchingIds);
             if (matchingIds.size === 1) setClippingEnabled(true);
-            updateClipping(Array.from(matchingIds));
           }
         }
 
