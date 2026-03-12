@@ -38,6 +38,7 @@ import EdgeScrollIndicator from "@/components/common/EdgeScrollIndicator";
 import { ROOM_LABELS_TOGGLE_EVENT, ROOM_LABELS_CONFIG_EVENT, type RoomLabelsConfigDetail } from "@/hooks/useRoomLabels";
 import { useRoomLabelConfigs } from "@/hooks/useRoomLabelConfigs";
 import { FLOOR_PILLS_TOGGLE_EVENT } from "./FloatingFloorSwitcher";
+import { useIsMobile } from "@/hooks/use-mobile";
 // import { LEVEL_LABELS_TOGGLE_EVENT } from "@/hooks/useLevelLabels"; // disabled
 
 interface VisualizationToolbarProps {
@@ -102,6 +103,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     onExternalOpenChange,
   } = props;
 
+  const isMobile = useIsMobile();
   const { allData } = useContext(AppContext);
   const { user, isAdmin } = useAuth();
 
@@ -707,6 +709,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
   const containerClassName = cn(
     inline ? "" : "absolute top-4 right-4 z-20",
+    isMobile && !isOpen && !inline ? "hidden" : "",
     className
   );
 

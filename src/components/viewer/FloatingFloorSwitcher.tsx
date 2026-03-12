@@ -24,7 +24,7 @@ interface FloatingFloorSwitcherProps {
 export const FLOOR_PILLS_TOGGLE_EVENT = 'FLOOR_PILLS_TOGGLE';
 
 const MAX_VISIBLE_PILLS_DESKTOP = 12;
-const MAX_VISIBLE_PILLS_MOBILE = 4;
+const MAX_VISIBLE_PILLS_MOBILE = 3;
 
 const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
   viewerRef,
@@ -192,7 +192,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
       'fixed z-20 items-center gap-1 w-auto',
       'pointer-events-auto',
       isMobile
-        ? 'bottom-[4.5rem] left-1/2 -translate-x-1/2 flex flex-row bg-black/50 backdrop-blur-md rounded-full px-1.5 py-1 border border-white/10'
+        ? 'bottom-[3.5rem] left-1/2 -translate-x-1/2 flex flex-row bg-black/50 backdrop-blur-md rounded-full px-1 py-0.5 border border-white/10'
         : cn('left-3 flex flex-col', compact ? 'top-[100px] gap-px' : 'top-[140px]'),
       className
     )}>
@@ -207,7 +207,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                 onDoubleClick={handlePillDoubleClick}
                 className={cn(
                   isMobile
-                    ? 'h-7 px-2 text-[10px] font-medium rounded-full'
+                    ? 'h-6 px-1.5 text-[9px] font-medium rounded-full'
                     : compact ? 'h-5 px-1 text-[7px] font-medium rounded' : 'h-6 px-1.5 min-w-[60px] text-[9px] sm:h-7 sm:px-2 sm:min-w-[60px] sm:text-xs font-medium rounded-md text-center justify-center',
                   'transition-all duration-150 w-auto shadow-sm',
                   state === 'active' && 'bg-primary text-primary-foreground shadow-md hover:bg-primary/90',
@@ -267,7 +267,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
         title="Show all floors"
         className={cn(
           isMobile
-            ? 'h-7 px-2 text-[10px] font-medium rounded-full'
+            ? 'h-6 px-1.5 text-[9px] font-medium rounded-full'
             : compact ? 'h-5 px-1 text-[7px] font-medium rounded' : 'h-6 px-1.5 min-w-[32px] text-[8px] sm:h-7 sm:px-2 sm:min-w-[40px] sm:text-[9px] font-medium rounded-md',
           isMobile
             ? (visibleFloorIds.size === floors.length ? 'bg-primary/30 text-primary' : 'text-white/70 hover:text-white hover:bg-white/10')
