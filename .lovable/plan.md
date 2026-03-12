@@ -17,17 +17,11 @@ Future changes to viewer startup MUST apply to both paths. Do NOT create separat
 
 ---
 
-## Plan: SplitPlanView Navigation + Alignment UX (PENDING — start separately)
+## Plan: SplitPlanView Navigation + Alignment UX (IMPLEMENTED ✅)
 
-### Issue 1: SplitPlanView click navigation doesn't match MinimapPanel
-- **Root cause**: SplitPlanView does instant jump (duration:0) to first-person at 1.6m height. MinimapPanel uses 0.8s animated fly-to keeping current eye height.
-- **Fix**: Match MinimapPanel strategy — keep current eye height, look at clicked point, animate 0.5s.
-- **File**: `src/components/viewer/SplitPlanView.tsx` (lines 745-787)
-
-### Issue 2: 3D/360° alignment precision
-- **Root cause**: AlignmentPointPicker captures panorama tripod position, not the clicked surface point. Creates systematic offset.
-- **Fix**: Use ray-cast or improved UX guidance. Add visual feedback markers in both views.
-- **File**: `src/components/viewer/AlignmentPointPicker.tsx` (lines 69-93)
+### Changes Made
+1. **SplitPlanView click navigation** (`SplitPlanView.tsx`): Replaced first-person instant jump with MinimapPanel-style fly-to — keeps current eye height, looks down at clicked point, animates 0.5s.
+2. **AlignmentPointPicker precision** (`AlignmentPointPicker.tsx`): Now estimates surface point via ray-cast from tripod position + viewing direction × adjustable distance slider (0.5–10m). Shows captured coordinates and distance in both steps for verification.
 
 ---
 
