@@ -250,6 +250,18 @@ const App = () => {
             } 
           />
           
+          {/* API Documentation page */}
+          <Route 
+            path="/api-docs" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <ProtectedRoute>
+                  <ApiDocs />
+                </ProtectedRoute>
+              </Suspense>
+            } 
+          />
+          
           {/* Protected app routes */}
           <Route 
             path="/*" 

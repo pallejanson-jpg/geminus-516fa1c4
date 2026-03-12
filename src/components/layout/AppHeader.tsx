@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { 
     Search, Home, LayoutGrid, Globe, Network, User as UserIcon, 
-    Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Settings, LogOut, Shield, Sparkles, AppWindow
+    Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Settings, LogOut, Shield, Sparkles, AppWindow, Code
 } from 'lucide-react';
 import ApiSettingsModal from '@/components/settings/ApiSettingsModal';
 import ProfileModal from '@/components/settings/ProfileModal';

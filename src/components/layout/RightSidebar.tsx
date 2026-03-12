@@ -133,6 +133,56 @@ const API_CATEGORIES = [
       { method: 'POST', path: '/api/documents', description: 'Upload document' },
     ],
   },
+  {
+    name: 'Faciliate (SWG) - Work Orders',
+    endpoints: [
+      { method: 'GET', path: '/api/v2/workorder', description: 'List work orders' },
+      { method: 'GET', path: '/api/v2/workorder/{guid}', description: 'Get work order by GUID' },
+      { method: 'POST', path: '/api/v2/workorder', description: 'Create work order' },
+      { method: 'PUT', path: '/api/v2/workorder/{guid}', description: 'Update work order' },
+    ],
+  },
+  {
+    name: 'Faciliate - Buildings & Contracts',
+    endpoints: [
+      { method: 'GET', path: '/api/v2/building', description: 'List buildings' },
+      { method: 'GET', path: '/api/v2/space', description: 'List spaces' },
+      { method: 'GET', path: '/api/v2/contract', description: 'List contracts' },
+      { method: 'GET', path: '/api/v2/customer', description: 'List tenants' },
+    ],
+  },
+  {
+    name: 'Senslinc - IoT Sensors',
+    endpoints: [
+      { method: 'GET', path: '/api/sites', description: 'List monitored sites' },
+      { method: 'GET', path: '/api/sites/{code}/equipment', description: 'Equipment for site' },
+      { method: 'GET', path: '/api/equipment/{fmGuid}', description: 'Sensors linked to FM GUID' },
+    ],
+  },
+  {
+    name: 'Senslinc - Sensor Data',
+    endpoints: [
+      { method: 'GET', path: '/api/indices', description: 'List available data indices' },
+      { method: 'POST', path: '/api/search/{workspace}', description: 'Query time-series data' },
+    ],
+  },
+  {
+    name: 'Ivion - 360° Panorama',
+    endpoints: [
+      { method: 'GET', path: '/sites', description: 'List all sites' },
+      { method: 'GET', path: '/sites/{siteId}/datasets', description: 'List floor scan datasets' },
+      { method: 'GET', path: '/datasets/{id}/images', description: 'List 360° images' },
+    ],
+  },
+  {
+    name: 'Ivion - Points of Interest',
+    endpoints: [
+      { method: 'GET', path: '/sites/{siteId}/pois', description: 'List POIs for site' },
+      { method: 'POST', path: '/pois', description: 'Create POI' },
+      { method: 'PUT', path: '/pois/{poiId}', description: 'Update POI' },
+      { method: 'DELETE', path: '/pois/{poiId}', description: 'Delete POI' },
+    ],
+  },
 ];
 
 const RightSidebar: React.FC = () => {
