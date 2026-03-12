@@ -506,35 +506,35 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     if (!sdk?.SectionPlanesPlugin) { console.warn('[ViewerToolbar] SectionPlanesPlugin not in SDK'); return; }
     if (!sectionPluginRef.current) {
       sectionPluginRef.current = new sdk.SectionPlanesPlugin(viewer, {
-        overviewVisible: false,
+        overviewVisible: true,
       });
     }
-    // Try .control.activate() first, fall back to plugin-level activation
-    if (sectionPluginRef.current.control?.activate) {
-      sectionPluginRef.current.control.activate();
-    } else {
-      // Some SDK versions require creating section planes via click
-      console.log('[ViewerToolbar] SectionPlanesPlugin.control not available, using manual plane creation');
-      // Set up a click handler on the canvas to create section planes
-      const canvas = viewer.scene?.canvas?.canvas;
-      if (canvas) {
-        const clickHandler = (e: MouseEvent) => {
-          const pickResult = viewer.scene.pick({
-            canvasPos: [e.offsetX, e.offsetY],
-            pickSurface: true,
+    // Set up a click handler on the canvas to create section planes with interactive gizmo
+    const canvas = viewer.scene?.canvas?.canvas;
+    if (canvas) {
+      const clickHandler = (e: MouseEvent) => {
+        const pickResult = viewer.scene.pick({
+          canvasPos: [e.offsetX, e.offsetY],
+          pickSurface: true,
+        });
+        if (pickResult?.worldPos && pickResult?.worldNormal) {
+          const sectionPlane = sectionPluginRef.current?.createSectionPlane?.({
+            pos: pickResult.worldPos,
+            dir: pickResult.worldNormal,
           });
-          if (pickResult?.worldPos && pickResult?.worldNormal) {
-            sectionPluginRef.current?.createSectionPlane?.({
-              pos: pickResult.worldPos,
-              dir: pickResult.worldNormal,
-            });
+          // Show interactive drag gizmo/control for the created plane
+          if (sectionPlane && sectionPluginRef.current?.showControl) {
+            sectionPluginRef.current.showControl(sectionPlane.id);
+            console.log('[ViewerToolbar] Section plane created with interactive control');
           }
-        };
-        canvas.addEventListener('click', clickHandler);
-        // Store cleanup
-        (sectionPluginRef.current as any).__manualClickHandler = clickHandler;
-        (sectionPluginRef.current as any).__canvas = canvas;
-      }
+          // Remove click handler after first plane - user can reposition via gizmo
+          canvas.removeEventListener('click', clickHandler);
+          delete (sectionPluginRef.current as any).__manualClickHandler;
+        }
+      };
+      canvas.addEventListener('click', clickHandler);
+      (sectionPluginRef.current as any).__manualClickHandler = clickHandler;
+      (sectionPluginRef.current as any).__canvas = canvas;
     }
   }, [viewer]);
 
@@ -571,8 +571,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
   const handleClearSlices = useCallback(() => {
     if (!viewer?.scene) return;
+    // Destroy all section planes
     const planes = Object.values(viewer.scene.sectionPlanes || {});
     planes.forEach((sp: any) => { try { sp.destroy(); } catch {} });
+    // Hide control gizmo if shown
+    if (sectionPluginRef.current?.hideControl) {
+      sectionPluginRef.current.hideControl();
+    }
   }, [viewer]);
 
   // ── X-ray toggle ─────────────────────────────────────────────────────────

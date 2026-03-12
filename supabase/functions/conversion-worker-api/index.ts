@@ -351,6 +351,67 @@ Deno.serve(async (req) => {
       );
     }
 
+    // POST /batch-enqueue — enqueue conversion jobs for all buildings with IFC files
+    if (req.method === "POST" && action === "batch-enqueue") {
+      const { created_by } = await req.json();
+
+      // List all top-level folders in ifc-uploads bucket
+      const { data: folders, error: listErr } = await supabase.storage
+        .from("ifc-uploads")
+        .list("", { limit: 1000 });
+
+      if (listErr) throw listErr;
+
+      const buildingGuids = (folders || [])
+        .filter((f: any) => f.id && !f.name.includes("."))
+        .map((f: any) => f.name);
+
+      let enqueued = 0;
+      const skipped: string[] = [];
+
+      for (const guid of buildingGuids) {
+        // Check if there's already a pending/processing job
+        const { data: existingJob } = await supabase
+          .from("conversion_jobs")
+          .select("id")
+          .eq("building_fm_guid", guid)
+          .in("status", ["pending", "processing"])
+          .limit(1)
+          .maybeSingle();
+
+        if (existingJob) {
+          skipped.push(guid);
+          continue;
+        }
+
+        // Find IFC file in this building's folder
+        const { data: files } = await supabase.storage
+          .from("ifc-uploads")
+          .list(guid, { limit: 10 });
+
+        const ifcFile = (files || []).find((f: any) => f.name.toLowerCase().endsWith(".ifc"));
+        if (!ifcFile) {
+          skipped.push(guid);
+          continue;
+        }
+
+        const storagePath = `${guid}/${ifcFile.name}`;
+        await supabase.from("conversion_jobs").insert({
+          building_fm_guid: guid,
+          ifc_storage_path: storagePath,
+          model_name: ifcFile.name.replace(/\.ifc$/i, ""),
+          status: "pending",
+          created_by: created_by || null,
+        });
+        enqueued++;
+      }
+
+      return new Response(
+        JSON.stringify({ ok: true, enqueued, skipped: skipped.length, total_buildings: buildingGuids.length }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     return new Response(JSON.stringify({ error: "Unknown action: " + action }), {
       status: 404,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -198,8 +198,15 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }
       }
 
-      // FastNav
-      if (sdk.FastNavPlugin) {
+      // FastNav — respect user setting from localStorage
+      const fastNavEnabled = (() => {
+        try {
+          const stored = localStorage.getItem('viewer-fastnav-enabled');
+          if (stored === null) return true; // default ON
+          return stored === 'true';
+        } catch { return true; }
+      })();
+      if (sdk.FastNavPlugin && fastNavEnabled) {
         new sdk.FastNavPlugin(viewer, {
           scaleCanvasResolution: true,
           scaleCanvasResolutionFactor: 0.6,
@@ -208,6 +215,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           delayBeforeRestore: true,
           delayBeforeRestoreSeconds: isMobile ? 0.5 : 0.3,
         });
+        console.log('[NativeViewer] FastNav enabled');
+      } else {
+        console.log('[NativeViewer] FastNav disabled by user setting');
       }
 
       // XKT Loader
