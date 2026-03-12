@@ -1113,7 +1113,7 @@ async function execSearchHelpDocs(supabase: any, args: any, apiKey: string) {
     .filter((w: string) => w.length > 2)
     .slice(0, 6);
 
-  let query = supabase.from("document_chunks").select("content, file_name, metadata").eq("source_type", "help_doc");
+  let query = supabase.from("document_chunks").select("content, file_name, metadata").or("source_type.eq.help_doc,source_type.eq.api_docs");
   if (keywords.length > 0) {
     const orClauses = keywords.map((kw: string) => `content.ilike.%${kw}%`).join(",");
     query = query.or(orClauses);
