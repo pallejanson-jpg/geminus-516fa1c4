@@ -464,9 +464,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     if (mode === 'firstPerson') {
       viewer.cameraControl.navMode = 'firstPerson';
       viewer.cameraControl.followPointer = true;
+      viewer.cameraControl.constrainVertical = true;
     } else {
       viewer.cameraControl.navMode = 'orbit';
       viewer.cameraControl.followPointer = true;
+      viewer.cameraControl.constrainVertical = false;
     }
     setNavMode(mode);
   }, [viewer]);
