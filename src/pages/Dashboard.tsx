@@ -1,4 +1,4 @@
-import { Building2, FileText, Users, TrendingUp } from "lucide-react";
+import { Building2, FileText, Users, TrendingUp, FolderOpen } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const stats = [
