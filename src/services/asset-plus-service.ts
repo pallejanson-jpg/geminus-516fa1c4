@@ -26,7 +26,7 @@ export async function fetchLocalAssets(categories?: string[]): Promise<any[]> {
   while (hasMore) {
     let query = supabase
       .from("assets")
-      .select("fm_guid, category, name, common_name, building_fm_guid, level_fm_guid, in_room_fm_guid, complex_common_name, attributes, is_local, created_in_model, asset_type, synced_at, annotation_placed, symbol_id")
+      .select("fm_guid, category, name, common_name, building_fm_guid, level_fm_guid, in_room_fm_guid, complex_common_name, attributes, is_local, created_in_model, asset_type, synced_at, annotation_placed, symbol_id, gross_area")
       .order("fm_guid", { ascending: true }) // Stable ordering for pagination
       .range(offset, offset + pageSize - 1);
 
@@ -61,6 +61,7 @@ export async function fetchLocalAssets(categories?: string[]): Promise<any[]> {
         syncedAt: asset.synced_at,
         annotationPlaced: asset.annotation_placed,
         symbolId: asset.symbol_id,
+        grossArea: asset.gross_area,
       }));
       allAssets.push(...mapped);
       
@@ -88,7 +89,7 @@ export async function fetchAssetsForBuilding(buildingFmGuid: string): Promise<an
   while (hasMore) {
     const { data, error } = await supabase
       .from("assets")
-      .select("fm_guid, category, name, common_name, building_fm_guid, level_fm_guid, in_room_fm_guid, complex_common_name, attributes, is_local, created_in_model, asset_type, synced_at, annotation_placed, symbol_id, coordinate_x, coordinate_y, coordinate_z")
+      .select("fm_guid, category, name, common_name, building_fm_guid, level_fm_guid, in_room_fm_guid, complex_common_name, attributes, is_local, created_in_model, asset_type, synced_at, annotation_placed, symbol_id, coordinate_x, coordinate_y, coordinate_z, gross_area")
       .eq("building_fm_guid", buildingFmGuid)
       .eq("category", "Instance")
       .order("fm_guid", { ascending: true })
@@ -121,6 +122,7 @@ export async function fetchAssetsForBuilding(buildingFmGuid: string): Promise<an
         coordinateX: asset.coordinate_x,
         coordinateY: asset.coordinate_y,
         coordinateZ: asset.coordinate_z,
+        grossArea: asset.gross_area,
       }));
       allAssets.push(...mapped);
       

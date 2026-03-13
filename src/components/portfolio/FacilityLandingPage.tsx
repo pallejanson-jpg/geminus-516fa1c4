@@ -193,10 +193,30 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     });
   }, [allData, facility, isSpace]);
 
-  // Calculate KPIs
+  // Calculate KPIs — sum grossArea from child spaces for buildings/storeys
   const kpis = useMemo(() => {
-    const baseArea = typeof facility.area === 'number' ? facility.area : 0;
-    const areaString = baseArea > 0 ? `${baseArea.toFixed(2)} m²` : 'N/A';
+    let baseArea = 0;
+    if (isSpace) {
+      // Single space: use its own grossArea or attribute
+      const attrs = (facility as any).attributes || {};
+      const ntaKey = Object.keys(attrs).find(k => k.toLowerCase().startsWith('nta'));
+      baseArea = ntaKey ? Number(attrs[ntaKey]) || 0 : Number((facility as any).grossArea || facility.area) || 0;
+    } else if (isStorey) {
+      // Storey: sum child spaces' grossArea
+      childSpaces.forEach((space: any) => {
+        const attrs = space.attributes || {};
+        const ntaKey = Object.keys(attrs).find(k => k.toLowerCase().startsWith('nta'));
+        baseArea += ntaKey ? Number(attrs[ntaKey]) || 0 : Number(space.grossArea || space.gross_area) || 0;
+      });
+    } else {
+      // Building: sum all child spaces' grossArea
+      childSpaces.forEach((space: any) => {
+        const attrs = space.attributes || {};
+        const ntaKey = Object.keys(attrs).find(k => k.toLowerCase().startsWith('nta'));
+        baseArea += ntaKey ? Number(attrs[ntaKey]) || 0 : Number(space.grossArea || space.gross_area) || 0;
+      });
+    }
+    const areaString = baseArea > 0 ? `${Math.round(baseArea).toLocaleString()} m²` : 'N/A';
     
     return {
       floors: childStoreys.length || facility.numberOfLevels || 'N/A',
@@ -207,7 +227,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
       bia: baseArea > 0 ? `${(baseArea * 1.15).toFixed(0)} m²` : 'N/A',
       energyPerSqm: isSpace ? '85 kWh/m²' : 'N/A',
     };
-  }, [facility, childSpaces, childStoreys, isSpace]);
+  }, [facility, childSpaces, childStoreys, isSpace, isStorey]);
 
   const handleToggle3D = () => {
     if (!facility.fmGuid) return;
@@ -445,29 +465,6 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                   Basic Information
                 </CardTitle>
                 <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                  <Button 
-                    onClick={toggleFavorite} 
-                    variant="ghost" 
-                    size="icon"
-                    className="h-7 w-7 sm:h-8 sm:w-8"
-                    title={settings?.isFavorite ? "Remove from favorites" : "Add to favorites"}
-                    disabled={isSaving}
-                  >
-                    {isSaving ? (
-                      <Loader2 size={14} className="sm:w-4 sm:h-4 animate-spin" />
-                    ) : (
-                      <Star size={14} className={`sm:w-4 sm:h-4 ${settings?.isFavorite ? 'text-accent fill-current' : 'text-muted-foreground'}`} />
-                    )}
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    onClick={() => setShowSettings(prev => !prev)} 
-                    title="Building settings" 
-                    className="h-7 w-7 sm:h-8 sm:w-8"
-                  >
-                    <Settings2 size={14} className={`sm:w-4 sm:h-4 ${showSettings ? 'text-primary' : ''}`} />
-                  </Button>
                   <Button variant="ghost" size="icon" onClick={() => setShowPropertiesDialog(true)} title="View all properties" className="h-7 w-7 sm:h-8 sm:w-8">
                     <Table size={14} className="sm:w-4 sm:h-4" />
                   </Button>
