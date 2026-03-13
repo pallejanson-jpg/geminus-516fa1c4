@@ -33,7 +33,7 @@ interface GeminusPluginMenuProps {
   contextMetadata?: Record<string, any>;
 }
 
-type ActivePanel = null | 'issue' | 'workorder' | 'support' | 'insights' | 'gunnar' | 'ilean' | 'inventory';
+type ActivePanel = null | 'issue' | 'workorder' | 'support' | 'insights' | 'gunnar' | 'ilean' | 'inventory' | 'viewer';
 
 const MENU_ITEMS = [
   { id: 'issue' as const, label: 'Skapa ärende', icon: MessageSquarePlus },
@@ -41,6 +41,7 @@ const MENU_ITEMS = [
   { id: 'support' as const, label: 'Supportärende', icon: LifeBuoy },
   { id: 'inventory' as const, label: 'Asset panel', icon: Package },
   { id: 'insights' as const, label: 'Insikter', icon: BarChart2 },
+  { id: 'viewer' as const, label: 'Geminus View', icon: Eye },
   { id: 'gunnar' as const, label: 'Fråga Geminus AI', icon: Bot },
   { id: 'ilean' as const, label: 'Fråga Ilean', icon: FileText },
 ];
