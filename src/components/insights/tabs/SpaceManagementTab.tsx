@@ -145,7 +145,7 @@ export default function SpaceManagementTab({ onNavigateToRooms }: SpaceManagemen
     // Mobile-friendly pie chart label
     const renderPieLabel = isMobile 
         ? undefined 
-        : ({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`;
+        : ({ name, value }: any) => `${name} (${value})`;
 
     return (
         <div className="space-y-6">

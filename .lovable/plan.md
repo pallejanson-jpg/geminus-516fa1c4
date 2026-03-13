@@ -1,150 +1,129 @@
+## Plan: IFC & ACC Import/Sync Performance Optimization (IMPLEMENTED ✅)
 
-
-## Plan: UI/Data Fixes — Area, Mobile Duplicates, Properties, Charts, Viewer Navigation
-
-### Issues Found
-
----
-
-### 1. Area Summation Shows 0 / N/A
-
-**Root Cause:** `fetchLocalAssets()` in `asset-plus-service.ts` (line 29) does NOT select `gross_area` from the database. The mapped objects never get a `grossArea` property. As a result:
-
-- `FacilityLandingPage` KPIs (line 198): `facility.area` is always undefined → shows "N/A"
-- `BuildingInsightsView` stats (line 430-442): tries `space.grossArea` as fallback, but it's never set → area stays 0
-
-**Fix in `asset-plus-service.ts`:**
-- Add `gross_area` to the select query in both `fetchLocalAssets` and `fetchAssetsForBuilding`
-- Map it: `grossArea: asset.gross_area`
-
-**Fix in `FacilityLandingPage` KPIs (line 197-210):**
-- Instead of relying on `facility.area` (which doesn't exist), sum `grossArea` from `childSpaces` (same approach as BuildingInsightsView)
-- For storeys: sum child spaces' grossArea
-- For spaces: use the space's own grossArea
-
-**Fix in `BuildingInsightsView` stats (line 430-442):**
-- The NTA attribute lookup logic is fine as fallback, but now `space.grossArea` will actually have values
+### Changes Made
+1. **XKT compression** (`ifc-to-xkt`): Enabled `zip: true` in `writeXKTModelToArrayBuffer` — ~30% smaller XKT files
+2. **Parallel DB writes** (`ifc-to-xkt`): `persistSystemsAndConnections` + `populateAssetsFromMetaObjects` now run via `Promise.all` instead of sequentially
+3. **Streaming LD-JSON parser** (`acc-sync`): New `streamLDJSON()` async generator processes BIM property files line-by-line from `ReadableStream` — eliminates OOM risk on large Revit models
+4. **Incremental ACC sync** (`acc-sync`): `fetchAccAssets` now supports `filter[updatedAt]` parameter, only fetching assets modified since last sync — ~90% faster re-syncs
+5. **IFC derivative from ACC** (`acc-sync`): `translate-model` now requests IFC format alongside SVF. On completion, downloads the IFC derivative and feeds it into `ifc-to-xkt` for real per-storey tiling — unifying ACC and IFC geometry pipelines
+6. **Dual pipeline** (`check-translation`): Triggers both `ifc-to-xkt` (for tiled XKT) and `acc-geometry-extract` (for GLB fallback) in parallel when translation succeeds
 
 ---
 
-### 2. Mobile: Duplicate Favorite Icon + Unknown Settings Icon
+## Plan: Mobile Viewer Startup Hardening (IMPLEMENTED ✅)
 
-**Root Cause:** `FacilityLandingPage` renders the favorite star **twice**:
-1. **Top-right floating** (line 380-398): Star + Settings2 buttons in absolute position over the hero image
-2. **Inside Basic Info Card header** (line 447-473): Star + Settings2 + Table buttons again
+### Changes Made
+1. **Mobile touch tuning** (`NativeXeokitViewer.tsx`): dragRotationRate 30→70, touchPanRate 0.06→0.14, touchDollyRate 0.04→0.09, rotationInertia 0.93→0.88, panInertia 0.88→0.82
+2. **FastNav delay** (`NativeXeokitViewer.tsx`): Added `delayBeforeRestore: true` (0.5s mobile, 0.3s desktop)
+3. **Suppress viewFit in split2d3d** (`NativeXeokitViewer.tsx`): Skips instant viewFit when `?mode=split2d3d` — floor isolation handles camera
+4. **Defer SplitPlanView mount** (`UnifiedViewer.tsx`): Mobile SplitPlanView only renders after `viewerReady=true`, shows spinner until then
+5. **Increased SplitPlanView retry** (`SplitPlanView.tsx`): 10×100ms → 30×200ms (6s total window), immediate retry on VIEWER_MODELS_LOADED
+6. **Debounced floor events** (`UnifiedViewer.tsx`): 500ms guard on FLOOR_SELECTION_CHANGED dispatches to prevent competing events
 
-On small screens both are visible simultaneously → confusing duplicate icons.
+### Architecture Principle
+Mobile and desktop share the same `UnifiedViewerContent` initialization logic. The ONLY difference is layout:
+- Mobile: vertical stack (2D top, 3D bottom) with touch-optimized divider (8px)
+- Desktop: horizontal ResizablePanelGroup with drag handle (4px)
 
-**Fix:**
-- Remove the Star and Settings2 buttons from the Basic Info Card header (lines 448-470), keep only the "View all properties" (Table) button there
-- The floating top-right buttons already handle these actions
-
----
-
-### 3. Properties Dialog: Duplicate Close Buttons
-
-**Root Cause:** `UniversalPropertiesDialog` desktop view (line 1238-1262) renders:
-1. An `ArrowLeft` button (line 1246) — back/close
-2. An `X` button (line 1255) — also close
-
-Both do `onClose()`. Two close buttons is redundant.
-
-Mobile Sheet (line 1220-1231) also has an X button in the SheetHeader alongside the Sheet's own close mechanism.
-
-**Fix:**
-- Desktop: Remove the `ArrowLeft` back button, keep only the X button (consistent with other panels)
-- Mobile: The Sheet already has drag-to-close, the explicit X button is fine to keep (it's inside the header alongside the title)
+Future changes to viewer startup MUST apply to both paths. Do NOT create separate mobile/desktop init logic.
 
 ---
 
-### 4. Properties Dialog Consistency with Viewer
+## Plan: SplitPlanView Navigation + Alignment UX (IMPLEMENTED ✅)
 
-The `UniversalPropertiesDialog` is already used in the Viewer via `NativeViewerShell.tsx` — this is correct. The same component is used in `FacilityLandingPage` as well. No action needed here — it's already the same component.
-
----
-
-### 5. Annotations Analysis
-
-**Alarm annotations in Insights FM tab:** The "View all in 3D" button (line 1176-1187) dispatches `ALARM_ANNOTATIONS_SHOW_EVENT`. This works when Insights is in drawer mode inside the viewer. But when standalone, it dispatches the event to nobody — no viewer is listening. Same issue as #7.
-
-**Annotations in VisualizationToolbar:** The toolbar integrates `AnnotationCategoryList` which handles annotation visibility. This should work correctly within the viewer context.
-
-**Fix:** When Insights is standalone (not drawer mode), the alarm "View all in 3D" buttons should navigate to the viewer instead of dispatching events. Same fix as #7.
+### Changes Made
+1. **SplitPlanView click navigation** (`SplitPlanView.tsx`): Replaced first-person instant jump with MinimapPanel-style fly-to — keeps current eye height, looks down at clicked point, animates 0.5s.
+2. **AlignmentPointPicker precision** (`AlignmentPointPicker.tsx`): Now estimates surface point via ray-cast from tripod position + viewing direction × adjustable distance slider (0.5–10m). Shows captured coordinates and distance in both steps for verification.
 
 ---
 
-### 6. Room Visualization from VisualizationToolbar
+## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
 
-The toolbar triggers `FORCE_SHOW_SPACES_EVENT` and manages `RoomVisualizationPanel`. This works within the viewer context. No issues found in the code path — the toolbar correctly passes viewer refs and building GUID. If it's not working, it's likely because `buildingFmGuid` prop is missing on the toolbar — let me verify this is wired up correctly in `NativeViewerShell`.
+### Changes Made
+1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
+2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
+3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
+4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
+5. **config.toml** updated with `acc-geometry-extract` function entry
 
-Already verified: `NativeViewerShell` passes `buildingFmGuid` to `VisualizationToolbar`. This should work.
-
----
-
-### 7. Insights View Buttons → Viewer Don't Work
-
-**Root Cause:** The KPI card "View" buttons use `navigateTo3D()` which navigates to `/split-viewer?building=...`. `SplitViewer` redirects to `/viewer?building=...`. The Viewer reads `building` from searchParams.
-
-The issue is that `facility.fmGuid` could be undefined when the Facility object was created from `navigatorTreeData` without a proper fmGuid, OR the navigation is working but the viewer takes time to load (perceived as "not starting").
-
-More likely root cause: when `handleInsightsClick` is called in non-drawer, non-mobile (desktop) mode, it only updates `inlineInsightsMode` and dispatches events — it does NOT navigate. The inline viewer (`InsightsInlineViewer`) is only rendered when `!drawerMode && !isMobile` AND it requires the component to be already mounted. The issue is the **KPI cards** (floors, rooms, assets, area) use `navigateTo3D()` which navigates away, but `navigateTo3D` navigates to `/split-viewer` which redirects to `/viewer` — and the `viewer` page needs `building` param to load. This SHOULD work if `facility.fmGuid` exists.
-
-Let me check: the "View" link on each KPI card calls `navigateTo3D()` (line 673-674). But the `ViewerLink` icons on chart cards call `handleInsightsClick` which works differently.
-
-Actual fix: Ensure `navigateTo3D` and `navigateToInsights3D` use `/viewer` directly (skip `/split-viewer` redirect) for faster load. Also add a guard: if `facility.fmGuid` is falsy, show a toast instead of navigating.
+### Pending (Phase 2)
+- Actual GLB chunk creation from SVF geometry (requires conversion worker)
+- OBJ as optional secondary format for small models
 
 ---
 
-### 8. Pie Chart Values — Room Types, Asset Categories, Energy Distribution
 
-**Room Types pie:** Currently shows `name percentage%` via `renderPieLabel`. Missing: count and area per type.
+### Ändringar
 
-**Fix in `spaceTypePie` memo:** Add `area` field by summing `grossArea` for each type. Update `renderPieLabel` to show `name (count) area m²`.
+#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
+**Fil:** `supabase/functions/conversion-worker-api/index.ts`
+- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
+- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
+- Upsert till `assets` med `created_in_model: true`
+- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
 
-**Asset Categories pie:** Currently shows `name percentage%`. Missing: count per category.
+#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
+**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
+- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
+- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
+- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
+- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
+- Diff: soft-delete objekt som finns i DB men inte i ny IFC
 
-**Fix:** Update `renderPieLabel` to show `name (count)`.
+#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
+**Fil:** `docs/conversion-worker/worker.mjs`
+- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
+- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
+- Non-fatal: om hierarki-population misslyckas fortsätter workern
 
-**Energy Distribution pie:** Currently shows `name percentage%` with mock percentages. Labels should show actual values.
+#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
+**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
+- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
+- `created_in_model: true` istället för `false`
+- Diff-logik: markerar borttagna objekt efter import
 
-**Fix:** Update `renderPieLabel` or use a custom label that includes the value (e.g., "Heating 42%").
+### Datamodell
 
-**General approach:** Create a custom `renderPieLabel` function per chart that includes the relevant value data.
+```text
+Building Storey:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
+  category:          "Building Storey"
+  created_in_model:  true
+
+Space:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
+  category:          "Space"
+  level_fm_guid:     parent storey fm_guid
+
+Instance:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
+  category:          "Instance"
+  asset_type:        ifcType (e.g. "IfcDoor")
+  level_fm_guid:     resolved storey
+  in_room_fm_guid:   resolved space
+```
+
+### Diff-flöde
+
+Vid omimport jämförs importerade fm_guids mot befintliga i DB:
+- **Nytt** → INSERT
+- **Matchat** → UPDATE (namn, typ, rumsplacering)
+- **Borttaget** → `modification_status = 'removed'` (soft-delete)
 
 ---
 
-### 9. Area Showing 0
+## Previous Plans
 
-Already covered in #1 — the root cause is missing `gross_area` in the select query. Once fixed, areas will populate correctly across:
-- FacilityLandingPage KPIs
-- BuildingInsightsView stats
-- SpaceManagementTab
-- PerformanceTab
+### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
+- Browser-primary for >20MB, edge function for ≤20MB
+- MetaModel JSON uploaded alongside XKT
+- Systems extracted and persisted
 
----
+### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+- Standalone Node.js worker polls conversion-worker-api
+- Per-storey .xkt tiles with dynamic floor loading
 
-### Technical Changes
-
-**Files to modify:**
-
-1. **`src/services/asset-plus-service.ts`**
-   - Add `gross_area` to select in `fetchLocalAssets` and `fetchAssetsForBuilding`
-   - Map to `grossArea` in the response
-
-2. **`src/components/portfolio/FacilityLandingPage.tsx`**
-   - Remove duplicate Star + Settings2 buttons from Basic Info Card header (keep only Table/properties button)
-   - Fix KPI area calculation: sum `grossArea` from `childSpaces` instead of relying on `facility.area`
-
-3. **`src/components/common/UniversalPropertiesDialog.tsx`**
-   - Desktop: Remove the ArrowLeft back button, keep only X button
-
-4. **`src/components/insights/BuildingInsightsView.tsx`**
-   - Update `renderPieLabel` for Room Types: show `name (count)`
-   - Add area sum per room type to `spaceTypePie` data and show in CardDescription
-   - Update Asset Categories pie label: show `name (count)`
-   - Update Energy Distribution pie label: show `name value%`
-   - Fix `navigateTo3D` and `navigateToInsights3D`: navigate to `/viewer` directly, add fmGuid guard
-   - Alarm "View in 3D" buttons: when not in drawerMode, navigate to viewer instead of dispatching events
-
-5. **`src/lib/types.ts`** — No change needed, `Facility` already has `area` and `grossArea` fields (grossArea from the entity, not the type — but it's used via allData objects, not the Facility type directly)
-
+### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
+- 10 credential override columns on building_settings
+- Shared credential resolver in edge functions
+- Properties page as configuration hub

@@ -28,6 +28,7 @@ import { useSenslincBuildingData } from '@/hooks/useSenslincData';
 import { cn } from '@/lib/utils';
 import RoomSensorDetailSheet from '@/components/insights/RoomSensorDetailSheet';
 import { INSIGHTS_COLOR_UPDATE_EVENT, ALARM_ANNOTATIONS_SHOW_EVENT, INSIGHTS_COLOR_RESET_EVENT } from '@/lib/viewer-events';
+import { toast } from 'sonner';
 
 
 const HIERARCHY_CATEGORIES = ['Building', 'Building Storey', 'Space', 'IfcBuilding', 'IfcBuildingStorey', 'IfcSpace'];
@@ -362,15 +363,19 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             'hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))',
             'hsl(var(--chart-4))', 'hsl(var(--chart-7))', 'hsl(var(--muted-foreground))',
         ];
-        const types: Record<string, number> = {};
+        const types: Record<string, { count: number; area: number }> = {};
         floorFilteredSpaces.forEach((space: any) => {
             const name = space.commonName || space.name || 'Unknown';
-            types[name] = (types[name] || 0) + 1;
+            if (!types[name]) types[name] = { count: 0, area: 0 };
+            types[name].count++;
+            const attrs = space.attributes || {};
+            const ntaKey = Object.keys(attrs).find(k => k.toLowerCase().startsWith('nta'));
+            types[name].area += ntaKey ? Number(attrs[ntaKey]) || 0 : Number(space.grossArea) || 0;
         });
         return Object.entries(types)
-            .sort((a, b) => b[1] - a[1])
+            .sort((a, b) => b[1].count - a[1].count)
             .slice(0, 6)
-            .map(([name, value], i) => ({ name: name.length > 18 ? name.substring(0, 18) + '...' : name, fullName: name, value, color: colors[i % colors.length] }));
+            .map(([name, data], i) => ({ name: name.length > 18 ? name.substring(0, 18) + '...' : name, fullName: name, value: data.count, area: Math.round(data.area), color: colors[i % colors.length] }));
     }, [floorFilteredSpaces]);
 
     const sensorRooms = useMemo(() => {
@@ -478,7 +483,8 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         const params = new URLSearchParams({ building: facility.fmGuid, mode: '3d', insightsMode: opts.mode, xray: 'true' });
         if (opts.entity) params.set('entity', opts.entity);
         if (opts.assetType) params.set('assetType', opts.assetType);
-        navigate(`/split-viewer?${params.toString()}`);
+        if (!facility.fmGuid) { toast.error('Building GUID missing'); return; }
+        navigate(`/viewer?${params.toString()}`);
     }, [facility.fmGuid, navigate]);
 
     // Dual-path handler: drawerMode dispatches event, desktop updates inline viewer, mobile navigates
@@ -587,17 +593,18 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             navigateToInsights3D({ mode: inlineInsightsMode as any, colorMap: inlineColorMap });
         } else {
             const params = new URLSearchParams({ building: facility.fmGuid, mode: '3d' });
-            navigate(`/split-viewer?${params.toString()}`);
+            navigate(`/viewer?${params.toString()}`);
         }
     }, [inlineInsightsMode, inlineColorMap, navigateToInsights3D, facility.fmGuid, navigate]);
 
     // Legacy simple navigation (for non-colormap views)
     const navigateTo3D = (opts?: { entity?: string; visualization?: string; assetType?: string }) => {
+        if (!facility.fmGuid) { toast.error('Building GUID missing'); return; }
         const params = new URLSearchParams({ building: facility.fmGuid, mode: '3d' });
         if (opts?.entity) params.set('entity', opts.entity);
         if (opts?.visualization) params.set('visualization', opts.visualization);
         if (opts?.assetType) params.set('assetType', opts.assetType);
-        navigate(`/split-viewer?${params.toString()}`);
+        navigate(`/viewer?${params.toString()}`);
     };
 
     // Floor-by-floor energy data (MOCK) — include fmGuid for chart click navigation
@@ -622,13 +629,24 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
 
     const renderPieLabel = isMobile 
         ? undefined 
-        : ({ name, percent, x, y, midAngle }: any) => {
+        : ({ name, value, percent, x, y, midAngle }: any) => {
             const RADIAN = Math.PI / 180;
-            const radius = 10;
             const textAnchor = Math.cos(-midAngle * RADIAN) >= 0 ? 'start' : 'end';
             return (
                 <text x={x} y={y} fill="hsl(var(--foreground))" textAnchor={textAnchor} dominantBaseline="central" className="text-xs">
-                    {`${name} ${(percent * 100).toFixed(0)}%`}
+                    {`${name} (${value})`}
+                </text>
+            );
+        };
+
+    const renderEnergyPieLabel = isMobile
+        ? undefined
+        : ({ name, value, x, y, midAngle }: any) => {
+            const RADIAN = Math.PI / 180;
+            const textAnchor = Math.cos(-midAngle * RADIAN) >= 0 ? 'start' : 'end';
+            return (
+                <text x={x} y={y} fill="hsl(var(--foreground))" textAnchor={textAnchor} dominantBaseline="central" className="text-xs">
+                    {`${name} ${value}%`}
                 </text>
             );
         };
@@ -814,7 +832,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                         <div className="h-64">
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <PieChart>
-                                                    <Pie data={energyDistribution} cx="50%" cy="50%" innerRadius={isMobile ? 40 : 45} outerRadius={isMobile ? 65 : 75} paddingAngle={2} dataKey="value" label={renderPieLabel} labelLine={!isMobile}>
+                                                    <Pie data={energyDistribution} cx="50%" cy="50%" innerRadius={isMobile ? 40 : 45} outerRadius={isMobile ? 65 : 75} paddingAngle={2} dataKey="value" label={renderEnergyPieLabel} labelLine={!isMobile}>
                                                         {energyDistribution.map((entry, index) => (
                                                             <Cell key={`cell-${index}`} fill={entry.color} style={{ cursor: 'pointer' }} onClick={() => {
                                                                 // Resolve all floors to child rooms for reliable 3D matching
@@ -1175,11 +1193,16 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                             size="sm"
                                             className="ml-auto gap-1.5"
                                             onClick={() => {
-                                                // "Visa alla i 3D" — dispatch alarm annotations for the 50 latest
-                                                const alarmsForViewer = alarmList
-                                                    .slice(0, 50)
-                                                    .map((a: any) => ({ fmGuid: a.fm_guid, roomFmGuid: a.in_room_fm_guid }));
-                                                window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: alarmsForViewer } }));
+                                                if (drawerMode) {
+                                                    // Dispatch event — viewer is listening
+                                                    const alarmsForViewer = alarmList
+                                                        .slice(0, 50)
+                                                        .map((a: any) => ({ fmGuid: a.fm_guid, roomFmGuid: a.in_room_fm_guid }));
+                                                    window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: alarmsForViewer } }));
+                                                } else {
+                                                    // Navigate to viewer
+                                                    navigateTo3D({ visualization: 'alarms' });
+                                                }
                                             }}
                                         >
                                             <Eye className="h-3.5 w-3.5" />
