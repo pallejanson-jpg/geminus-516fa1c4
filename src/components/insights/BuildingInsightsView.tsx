@@ -362,15 +362,19 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             'hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))',
             'hsl(var(--chart-4))', 'hsl(var(--chart-7))', 'hsl(var(--muted-foreground))',
         ];
-        const types: Record<string, number> = {};
+        const types: Record<string, { count: number; area: number }> = {};
         floorFilteredSpaces.forEach((space: any) => {
             const name = space.commonName || space.name || 'Unknown';
-            types[name] = (types[name] || 0) + 1;
+            if (!types[name]) types[name] = { count: 0, area: 0 };
+            types[name].count++;
+            const attrs = space.attributes || {};
+            const ntaKey = Object.keys(attrs).find(k => k.toLowerCase().startsWith('nta'));
+            types[name].area += ntaKey ? Number(attrs[ntaKey]) || 0 : Number(space.grossArea) || 0;
         });
         return Object.entries(types)
-            .sort((a, b) => b[1] - a[1])
+            .sort((a, b) => b[1].count - a[1].count)
             .slice(0, 6)
-            .map(([name, value], i) => ({ name: name.length > 18 ? name.substring(0, 18) + '...' : name, fullName: name, value, color: colors[i % colors.length] }));
+            .map(([name, data], i) => ({ name: name.length > 18 ? name.substring(0, 18) + '...' : name, fullName: name, value: data.count, area: Math.round(data.area), color: colors[i % colors.length] }));
     }, [floorFilteredSpaces]);
 
     const sensorRooms = useMemo(() => {
