@@ -245,11 +245,14 @@ async function fetchAccAssets(
   projectId: string,
   region?: string,
   cursorState?: string,
+  updatedAfter?: string,
 ): Promise<{ results: AccAsset[]; cursorState?: string }> {
   const cleanProjectId = projectId.replace(/^b\./, "");
   const regionHeaders = getRegionHeader(region);
   let url = `https://developer.api.autodesk.com/construction/assets/v2/projects/${cleanProjectId}/assets?limit=200`;
   if (cursorState) url += `&cursorState=${encodeURIComponent(cursorState)}`;
+  // Incremental sync: only fetch assets updated after the last sync timestamp
+  if (updatedAfter) url += `&filter[updatedAt]=${encodeURIComponent(updatedAfter)}`;
 
   const res = await fetch(url, {
     headers: {
@@ -588,6 +591,46 @@ function parseLDJSON(text: string): any[] {
     .filter(Boolean);
 }
 
+/**
+ * Streaming LD-JSON parser for large property files.
+ * Processes line-by-line from a ReadableStream, yielding parsed objects
+ * without loading the entire response text into memory.
+ */
+async function* streamLDJSON(response: Response): AsyncGenerator<any> {
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    
+    const lines = buffer.split('\n');
+    // Keep the last partial line in the buffer
+    buffer = lines.pop() || '';
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        yield JSON.parse(trimmed);
+      } catch {
+        // skip malformed lines
+      }
+    }
+  }
+  
+  // Process any remaining data in the buffer
+  if (buffer.trim()) {
+    try {
+      yield JSON.parse(buffer.trim());
+    } catch {
+      // skip
+    }
+  }
+}
+
 // Categories to skip when extracting instances (non-physical)
 const SKIP_INSTANCE_CATEGORIES = new Set([
   'Revit Level', 'Levels', 'Revit Rooms', 'Rooms',
@@ -726,14 +769,17 @@ async function extractBimHierarchy(
         }
       }
 
-      // Fetch properties
+      // Fetch properties — use streaming parser for large LD-JSON files to avoid OOM
       if (idx.propertiesUrl) {
         const propsRes = await fetch(idx.propertiesUrl, {
           headers: { 'Authorization': `Bearer ${token}` },
         });
-        if (propsRes.ok) {
-          const propsText = await propsRes.text();
-          const props = parseLDJSON(propsText);
+        if (propsRes.ok && propsRes.body) {
+          // Stream and collect props without loading entire text into memory
+          const props: any[] = [];
+          for await (const obj of streamLDJSON(propsRes)) {
+            props.push(obj);
+          }
 
           // === Dynamic field key resolution ===
           let categoryKey = '';
@@ -1530,6 +1576,19 @@ serve(async (req: Request) => {
           const { token, is3Legged } = await getAccToken(auth.userId, supabase);
           console.log(`Using ${is3Legged ? '3-legged' : '2-legged'} token for asset sync`);
 
+          // Incremental sync: check last successful sync timestamp
+          const { data: syncState } = await supabase
+            .from("asset_sync_state")
+            .select("last_sync_completed_at")
+            .eq("subtree_id", "acc-assets")
+            .maybeSingle();
+          const lastSyncAt = body.fullSync ? undefined : (syncState?.last_sync_completed_at || undefined);
+          if (lastSyncAt) {
+            console.log(`[sync-assets] Incremental sync: fetching assets updated after ${lastSyncAt}`);
+          } else {
+            console.log(`[sync-assets] Full sync: no previous sync timestamp found`);
+          }
+
           // First, fetch location tree to resolve locationId -> building/level/room
           const nodes = await fetchAllLocationNodes(token, projectId, region);
           const mapped = buildLocationTree(nodes);
@@ -1541,13 +1600,13 @@ serve(async (req: Request) => {
           // Fetch categories
           const categoryMap = await fetchAccCategories(token, projectId, region);
 
-          // Fetch all assets with pagination
+          // Fetch assets with pagination (incremental if available)
           let totalSynced = 0;
           let cursorState: string | undefined;
 
           do {
-            const page = await fetchAccAssets(token, projectId, region, cursorState);
-            console.log(`Fetched ${page.results.length} assets (cursor: ${cursorState ? "yes" : "start"})`);
+            const page = await fetchAccAssets(token, projectId, region, cursorState, lastSyncAt);
+            console.log(`Fetched ${page.results.length} assets (cursor: ${cursorState ? "yes" : "start"}, incremental: ${!!lastSyncAt})`);
 
             if (page.results.length > 0) {
               const upserted = await upsertAccAssets(
@@ -1568,8 +1627,11 @@ serve(async (req: Request) => {
           return new Response(
             JSON.stringify({
               success: true,
-              message: `Synkade ${totalSynced} tillgångar från ACC`,
+              message: lastSyncAt
+                ? `Inkrementell synk: ${totalSynced} uppdaterade tillgångar sedan ${new Date(lastSyncAt).toLocaleString('sv-SE')}`
+                : `Synkade ${totalSynced} tillgångar från ACC`,
               totalSynced,
+              incremental: !!lastSyncAt,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
@@ -2005,15 +2067,19 @@ serve(async (req: Request) => {
           }
         }
 
-        // Use SVF-only (no OBJ which stalls large models at 99%)
+        // Request SVF (for metadata) + IFC (for per-storey XKT tiling via existing pipeline)
         // SVF2 is not supported for all designs (406 error), so we use SVF
+        // IFC derivative enables reuse of the ifc-to-xkt pipeline with real storey tiling
+        const requestIfc = body.requestIfc !== false; // default true
+        const outputFormats: any[] = [
+          { type: "svf", views: ["3d"] },
+        ];
+        if (requestIfc) {
+          outputFormats.push({ type: "ifc" });
+        }
         const translationBody = {
           input: { urn: urnBase64 },
-          output: {
-            formats: [
-              { type: "svf", views: ["3d"] },
-            ],
-          },
+          output: { formats: outputFormats },
         };
         console.log(`[translate-model] Requesting formats: ${JSON.stringify(translationBody.output.formats)}`);
         console.log(`[translate-model] Request body: ${JSON.stringify(translationBody)}`);
@@ -2104,9 +2170,10 @@ serve(async (req: Request) => {
         // A3: Use EU endpoint for wipemea URNs
         const decodedUrnCheck = atob(urnBase64.replace(/-/g, '+').replace(/_/g, '/'));
         const isEmeaCheck = decodedUrnCheck.includes('wipemea');
-        const manifestUrl = isEmeaCheck
-          ? `https://developer.api.autodesk.com/modelderivative/v2/regions/eu/designdata/${urnBase64}/manifest`
-          : `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urnBase64}/manifest`;
+        const mdBaseCheck = isEmeaCheck
+          ? "https://developer.api.autodesk.com/modelderivative/v2/regions/eu/designdata"
+          : "https://developer.api.autodesk.com/modelderivative/v2/designdata";
+        const manifestUrl = `${mdBaseCheck}/${urnBase64}/manifest`;
         console.log(`[check-translation] isEmea=${isEmeaCheck}, url=${manifestUrl}`);
 
         let manifestRes = await fetchWithRetry(manifestUrl, {
@@ -2162,10 +2229,56 @@ serve(async (req: Request) => {
 
         await supabase.from("acc_model_translations").update(updateData).eq("version_urn", versionUrn);
 
-        // When translation succeeds, trigger geometry extraction pipeline (non-blocking)
+        // When translation succeeds, trigger pipelines (non-blocking)
         if (overallStatus === "success" && body.buildingFmGuid) {
+          // Check if IFC derivative is available — if so, download and feed into ifc-to-xkt pipeline
+          const ifcDeriv = derivatives.find(d => 
+            d.outputType === 'ifc' || d.mime === 'application/octet-stream' && d.role === 'graphics'
+          );
+
+          if (ifcDeriv) {
+            console.log(`[check-translation] IFC derivative found — downloading for XKT conversion pipeline`);
+            // Download IFC derivative and upload to ifc-uploads, then trigger ifc-to-xkt
+            const ifcDownloadUrl = `${mdBaseCheck}/${urnBase64}/manifest/${encodeURIComponent(ifcDeriv.urn)}`;
+            fetch(ifcDownloadUrl, {
+              headers: { "Authorization": `Bearer ${token}` },
+            }).then(async (ifcRes) => {
+              if (!ifcRes.ok) {
+                console.warn(`[check-translation] IFC download failed: ${ifcRes.status}`);
+                return;
+              }
+              const ifcData = await ifcRes.arrayBuffer();
+              const ifcPath = `${body.buildingFmGuid}/acc-derived-${Date.now()}.ifc`;
+              const ifcBlob = new Blob([ifcData], { type: "application/octet-stream" });
+              const { error: uploadErr } = await supabase.storage
+                .from("ifc-uploads")
+                .upload(ifcPath, ifcBlob, { contentType: "application/octet-stream", upsert: true });
+              
+              if (uploadErr) {
+                console.warn(`[check-translation] IFC upload failed:`, uploadErr.message);
+                return;
+              }
+              console.log(`[check-translation] IFC uploaded (${(ifcData.byteLength/1024/1024).toFixed(1)}MB), triggering ifc-to-xkt...`);
+              
+              // Trigger ifc-to-xkt for real per-storey tiling
+              await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/ifc-to-xkt`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                },
+                body: JSON.stringify({
+                  ifcStoragePath: ifcPath,
+                  buildingFmGuid: body.buildingFmGuid,
+                  modelName: body.fileName?.replace(/\.[^.]+$/, '') || "ACC Model",
+                }),
+              }).then(r => console.log(`[check-translation] ifc-to-xkt triggered: ${r.status}`))
+                .catch(e => console.warn(`[check-translation] ifc-to-xkt trigger failed:`, e));
+            }).catch(e => console.warn(`[check-translation] IFC derivative download failed:`, e));
+          }
+
+          // Also trigger GLB geometry extract as fallback/parallel path
           console.log(`[check-translation] Translation success — triggering acc-geometry-extract for ${body.buildingFmGuid}`);
-          // Fire-and-forget: invoke the geometry extract function with userId for 3-legged token
           fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/acc-geometry-extract`, {
             method: "POST",
             headers: {
