@@ -1,75 +1,117 @@
+## Plan: Mobile Viewer Startup Hardening (IMPLEMENTED ✅)
 
+### Changes Made
+1. **Mobile touch tuning** (`NativeXeokitViewer.tsx`): dragRotationRate 30→70, touchPanRate 0.06→0.14, touchDollyRate 0.04→0.09, rotationInertia 0.93→0.88, panInertia 0.88→0.82
+2. **FastNav delay** (`NativeXeokitViewer.tsx`): Added `delayBeforeRestore: true` (0.5s mobile, 0.3s desktop)
+3. **Suppress viewFit in split2d3d** (`NativeXeokitViewer.tsx`): Skips instant viewFit when `?mode=split2d3d` — floor isolation handles camera
+4. **Defer SplitPlanView mount** (`UnifiedViewer.tsx`): Mobile SplitPlanView only renders after `viewerReady=true`, shows spinner until then
+5. **Increased SplitPlanView retry** (`SplitPlanView.tsx`): 10×100ms → 30×200ms (6s total window), immediate retry on VIEWER_MODELS_LOADED
+6. **Debounced floor events** (`UnifiedViewer.tsx`): 500ms guard on FLOOR_SELECTION_CHANGED dispatches to prevent competing events
 
-## Plan: xeokit SDK Optimization + Per-Storey Tiling for Asset+ XKT
+### Architecture Principle
+Mobile and desktop share the same `UnifiedViewerContent` initialization logic. The ONLY difference is layout:
+- Mobile: vertical stack (2D top, 3D bottom) with touch-optimized divider (8px)
+- Desktop: horizontal ResizablePanelGroup with drag handle (4px)
 
-### Analysis of Unused xeokit Optimizations
-
-After reviewing the xeokit SDK API and our current implementation, there are **three significant optimizations we're not using**:
-
-#### 1. Data Textures (`dtxEnabled: true`) — **HIGH IMPACT**
-Our `Viewer` is created without `dtxEnabled`. Data textures store geometry in GPU textures instead of Vertex Buffer Objects (VBOs), providing:
-- **~50% faster model loading** (less CPU→GPU transfer overhead)
-- **~40% lower browser memory** (geometry lives on GPU, not JS heap)
-- **Faster per-object updates** (color, visibility changes hit GPU directly)
-
-This is the single biggest optimization we're missing. Works with XKT v8+ files.
-
-**Change**: Add `dtxEnabled: true` to Viewer constructor in `NativeXeokitViewer.tsx`.
-
-#### 2. `reuseGeometries: false` on XKTLoaderPlugin — **MEDIUM IMPACT**
-When models contain many unique geometries (typical for BIM), geometry reuse creates excessive draw calls. Disabling it converts to batched representation — fewer draw calls, slightly more memory.
-
-**Change**: Set `reuseGeometries: false` on XKTLoaderPlugin creation.
-
-#### 3. `pbrEnabled: false` — **LOW IMPACT**
-PBR rendering is unnecessary for BIM models and adds GPU overhead. We should explicitly disable it.
-
-**Change**: Add `pbrEnabled: false` to Viewer constructor.
-
-#### 4. Double FastNavPlugin — **BUG FIX**
-`NativeXeokitViewer.tsx` line 259 creates a FastNavPlugin, AND `usePerformancePlugins.ts` creates ANOTHER one. Double installation wastes resources.
-
-**Change**: Remove FastNav from `usePerformancePlugins` (NativeXeokitViewer already handles it).
+Future changes to viewer startup MUST apply to both paths. Do NOT create separate mobile/desktop init logic.
 
 ---
 
-### Per-Storey Tiling for Asset+ XKT Files
+## Plan: SplitPlanView Navigation + Alignment UX (IMPLEMENTED ✅)
 
-Asset+ XKT files come pre-built from the Asset+ API — we don't have the source IFC. The `xkt-split` edge function already creates **virtual chunks** (same file, storey metadata). True binary splitting of XKT without the original IFC is not feasible because XKT is a compressed binary format without clean per-storey boundaries.
-
-**What we CAN do with Asset+ XKTs:**
-- Use the existing virtual chunk metadata + `applyFloorPriorityVisibility()` to show only the active floor
-- This is already implemented in `useFloorPriorityLoading.ts` but **not wired up** in the viewer
-
-**Change**: After loading Asset+ models, check for virtual chunks in `xkt_models` and automatically call `applyFloorPriorityVisibility()` when the user switches floors. This gives the visual effect of per-storey loading without needing real tiles.
-
-For IFC-sourced buildings (where we have the source file), the worker-based real tiling plan from the previous conversation applies.
+### Changes Made
+1. **SplitPlanView click navigation** (`SplitPlanView.tsx`): Replaced first-person instant jump with MinimapPanel-style fly-to — keeps current eye height, looks down at clicked point, animates 0.5s.
+2. **AlignmentPointPicker precision** (`AlignmentPointPicker.tsx`): Now estimates surface point via ray-cast from tripod position + viewing direction × adjustable distance slider (0.5–10m). Shows captured coordinates and distance in both steps for verification.
 
 ---
 
-### Files to Change
+## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
 
-1. **`src/components/viewer/NativeXeokitViewer.tsx`**
-   - Add `dtxEnabled: true` to Viewer constructor
-   - Add `reuseGeometries: false` to XKTLoaderPlugin
-   - Add `pbrEnabled: false` to Viewer constructor
-   - Wire up `useFloorPriorityLoading` for virtual chunks after model load
-   - Remove duplicate FastNav (or coordinate with usePerformancePlugins)
+### Changes Made
+1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
+2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
+3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
+4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
+5. **config.toml** updated with `acc-geometry-extract` function entry
 
-2. **`src/hooks/usePerformancePlugins.ts`**
-   - Remove FastNavPlugin installation (handled by NativeXeokitViewer)
-   - Keep ViewCull, SAO, LOD culling
+### Pending (Phase 2)
+- Actual GLB chunk creation from SVF geometry (requires conversion worker)
+- OBJ as optional secondary format for small models
 
-3. **`docs/conversion-worker/worker.mjs`**
-   - Fix the `includeTypes: undefined` bug in `groupByStorey()`
-   - Implement real per-storey element ID collection via `IfcRelContainedInSpatialStructure`
+---
 
-4. **`supabase/functions/conversion-worker-api/index.ts`**
-   - Add `tile_count` to job completion metadata
 
-### Expected Impact
-- `dtxEnabled` alone should reduce loading time by ~40-50% for multi-model buildings like Småviken
-- `reuseGeometries: false` reduces draw calls for complex geometry
-- Virtual chunk floor filtering gives immediate floor-switch responsiveness for Asset+ buildings
-- Real tiling (worker fix) gives true per-storey loading for IFC-sourced buildings
+### Ändringar
 
+#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
+**Fil:** `supabase/functions/conversion-worker-api/index.ts`
+- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
+- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
+- Upsert till `assets` med `created_in_model: true`
+- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
+
+#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
+**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
+- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
+- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
+- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
+- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
+- Diff: soft-delete objekt som finns i DB men inte i ny IFC
+
+#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
+**Fil:** `docs/conversion-worker/worker.mjs`
+- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
+- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
+- Non-fatal: om hierarki-population misslyckas fortsätter workern
+
+#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
+**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
+- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
+- `created_in_model: true` istället för `false`
+- Diff-logik: markerar borttagna objekt efter import
+
+### Datamodell
+
+```text
+Building Storey:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
+  category:          "Building Storey"
+  created_in_model:  true
+
+Space:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
+  category:          "Space"
+  level_fm_guid:     parent storey fm_guid
+
+Instance:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
+  category:          "Instance"
+  asset_type:        ifcType (e.g. "IfcDoor")
+  level_fm_guid:     resolved storey
+  in_room_fm_guid:   resolved space
+```
+
+### Diff-flöde
+
+Vid omimport jämförs importerade fm_guids mot befintliga i DB:
+- **Nytt** → INSERT
+- **Matchat** → UPDATE (namn, typ, rumsplacering)
+- **Borttaget** → `modification_status = 'removed'` (soft-delete)
+
+---
+
+## Previous Plans
+
+### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
+- Browser-primary for >20MB, edge function for ≤20MB
+- MetaModel JSON uploaded alongside XKT
+- Systems extracted and persisted
+
+### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+- Standalone Node.js worker polls conversion-worker-api
+- Per-storey .xkt tiles with dynamic floor loading
+
+### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
+- 10 credential override columns on building_settings
+- Shared credential resolver in edge functions
+- Properties page as configuration hub
