@@ -51,6 +51,68 @@ async function ensureWasm(): Promise<string> {
   return dir + "/";
 }
 
+function normalizeIfcType(type: string): string {
+  return (type || "").trim().toLowerCase();
+}
+
+async function loadMetaObjectsFromLatestMetadata(
+  supabase: any,
+  buildingFmGuid: string,
+  log: (msg: string) => void,
+): Promise<any[] | null> {
+  try {
+    const { data: files, error: listError } = await supabase.storage
+      .from("xkt-models")
+      .list(buildingFmGuid, { limit: 1000 });
+
+    if (listError) {
+      log(`Metadata listing failed: ${listError.message}`);
+      return null;
+    }
+
+    const metadataFiles = (files || [])
+      .filter((f: any) => typeof f?.name === "string" && f.name.endsWith("_metadata.json"))
+      .sort((a: any, b: any) => String(b.name).localeCompare(String(a.name)));
+
+    if (metadataFiles.length === 0) {
+      log("No cached metadata JSON found in xkt-models");
+      return null;
+    }
+
+    const metadataPath = `${buildingFmGuid}/${metadataFiles[0].name}`;
+    log(`Loading metadata from ${metadataPath}...`);
+
+    const { data: metadataBlob, error: downloadError } = await supabase.storage
+      .from("xkt-models")
+      .download(metadataPath);
+
+    if (downloadError || !metadataBlob) {
+      log(`Metadata download failed: ${downloadError?.message || "no data"}`);
+      return null;
+    }
+
+    const metadataText = await metadataBlob.text();
+    const metadataJson = JSON.parse(metadataText);
+    const rawMetaObjects = Array.isArray(metadataJson?.metaObjects) ? metadataJson.metaObjects : [];
+
+    const normalized = rawMetaObjects
+      .map((obj: any) => ({
+        metaObjectId: obj?.id || obj?.metaObjectId || "",
+        metaType: obj?.type || obj?.metaType || "",
+        metaObjectName: obj?.name || obj?.metaObjectName || "",
+        parentMetaObjectId: obj?.parent || obj?.parentMetaObjectId || obj?.parentId || "",
+        properties: obj?.properties || obj?.propertySets || {},
+      }))
+      .filter((obj: any) => !!obj.metaObjectId);
+
+    log(`Loaded ${normalized.length} meta objects from cached metadata`);
+    return normalized;
+  } catch (error: any) {
+    log(`Metadata parse failed: ${error?.message || String(error)}`);
+    return null;
+  }
+}
+
 // ─── System & connectivity extraction helpers ───
 
 interface ExtractedSystem {
