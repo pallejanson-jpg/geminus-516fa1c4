@@ -121,6 +121,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         transparent: true,
         saoEnabled: false,  // Disabled: SAO causes "Invalid framebuffer" on large models
         entityOffsetsEnabled: true,
+        dtxEnabled: true,   // Data textures: ~50% faster loading, ~40% less memory
+        pbrEnabled: false,  // PBR unnecessary for BIM — saves GPU overhead
       });
 
       // WebGL context loss handling — detect GPU crash and show retry UI
