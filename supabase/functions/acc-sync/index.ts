@@ -245,11 +245,14 @@ async function fetchAccAssets(
   projectId: string,
   region?: string,
   cursorState?: string,
+  updatedAfter?: string,
 ): Promise<{ results: AccAsset[]; cursorState?: string }> {
   const cleanProjectId = projectId.replace(/^b\./, "");
   const regionHeaders = getRegionHeader(region);
   let url = `https://developer.api.autodesk.com/construction/assets/v2/projects/${cleanProjectId}/assets?limit=200`;
   if (cursorState) url += `&cursorState=${encodeURIComponent(cursorState)}`;
+  // Incremental sync: only fetch assets updated after the last sync timestamp
+  if (updatedAfter) url += `&filter[updatedAt]=${encodeURIComponent(updatedAfter)}`;
 
   const res = await fetch(url, {
     headers: {
