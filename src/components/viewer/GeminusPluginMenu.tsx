@@ -1,7 +1,7 @@
 import React, { useState, useContext, useCallback, useEffect, useRef } from 'react';
 import {
   Menu, X, MessageSquarePlus, LifeBuoy, BarChart2, Bot, FileText, Wrench,
-  Send, Loader2, Package,
+  Send, Loader2, Package, Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
