@@ -259,7 +259,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
     setConversionStartTime(Date.now());
 
     const fileSizeMB = ifcFile.size / 1024 / 1024;
-    const useDirectBrowser = fileSizeMB > 20;
+    const useDirectBrowser = fileSizeMB > 10;
 
     try {
       addLog(`Reading file: ${ifcFile.name} (${fileSizeMB.toFixed(1)} MB)`);
