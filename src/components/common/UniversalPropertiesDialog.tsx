@@ -1243,9 +1243,6 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b bg-muted/30 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onClose}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
           {CATEGORY_ICONS[displayCategory] || <Database className="h-4 w-4 shrink-0" />}
           <span className="font-medium text-sm truncate">
             {headerTitle}
