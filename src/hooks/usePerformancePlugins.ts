@@ -156,9 +156,7 @@ export function usePerformancePlugins({ viewerRef, ready, isMobile }: UsePerform
         pluginsRef.current.lodInterval = undefined;
       }
       // Destroy plugins if they have a destroy method
-      pluginsRef.current.fastNav?.destroy?.();
       pluginsRef.current.viewCull?.destroy?.();
-      pluginsRef.current.fastNav = undefined;
       pluginsRef.current.viewCull = undefined;
     };
   }, [ready, isMobile, viewerRef]);
