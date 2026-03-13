@@ -482,7 +482,8 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         const params = new URLSearchParams({ building: facility.fmGuid, mode: '3d', insightsMode: opts.mode, xray: 'true' });
         if (opts.entity) params.set('entity', opts.entity);
         if (opts.assetType) params.set('assetType', opts.assetType);
-        navigate(`/split-viewer?${params.toString()}`);
+        if (!facility.fmGuid) { toast.error('Building GUID missing'); return; }
+        navigate(`/viewer?${params.toString()}`);
     }, [facility.fmGuid, navigate]);
 
     // Dual-path handler: drawerMode dispatches event, desktop updates inline viewer, mobile navigates
