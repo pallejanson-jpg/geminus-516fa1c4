@@ -772,15 +772,14 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     if (prevXrayed?.length > 0) scene.setObjectsXRayed(prevXrayed, false);
     const prevColorized = scene.colorizedObjectIds;
     if (prevColorized?.length > 0) scene.setObjectsColorized(prevColorized, false);
-    // Reset opacity for any previously transparent slabs (batch operation)
-    const resetOpacityIds = scene.objectIds.filter((id: string) => {
-      const entity = scene.objects?.[id];
-      return entity && entity.opacity < 1;
-    });
-    resetOpacityIds.forEach((id: string) => {
-      const entity = scene.objects?.[id];
-      if (entity) entity.opacity = 1.0;
-    });
+    // Reset opacity only for previously changed objects (avoid full scan)
+    const prevColorized = scene.colorizedObjectIds;
+    if (prevColorized?.length > 0) {
+      prevColorized.forEach((id: string) => {
+        const entity = scene.objects?.[id];
+        if (entity && entity.opacity < 1) entity.opacity = 1.0;
+      });
+    }
 
     // Re-apply full architect color palette as base layer after clean slate
     // This prevents raw XKT colors (red rooms, blue windows) from showing
