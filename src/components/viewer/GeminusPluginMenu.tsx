@@ -84,9 +84,21 @@ export default function GeminusPluginMenu({
   }, []);
 
   const handleOpen = useCallback((panel: ActivePanel) => {
+    if (panel === 'viewer') {
+      // Navigate to Geminus View — open in new tab if in plugin/iframe context
+      const isPlugin = source === 'fma_plus' || source === '2d_fm_access' || source === 'faciliate';
+      const url = '/view';
+      if (isPlugin || window !== window.top) {
+        window.open(url, '_blank');
+      } else {
+        window.location.href = url;
+      }
+      setExpanded(false);
+      return;
+    }
     setActivePanel(panel);
     setExpanded(false);
-  }, []);
+  }, [source]);
 
   const handleClose = useCallback(() => {
     setActivePanel(null);
