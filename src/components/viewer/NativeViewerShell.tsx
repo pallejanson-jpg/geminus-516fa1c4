@@ -12,7 +12,7 @@ import ViewerFilterPanel from './ViewerFilterPanel';
 import ViewerContextMenu from './ViewerContextMenu';
 import ViewerToolbar from './ViewerToolbar';
 import VisualizationToolbar from './VisualizationToolbar';
-import GeminusPluginMenu from './GeminusPluginMenu';
+
 import { useIsMobile } from '@/hooks/use-mobile';
 import { AppContext } from '@/context/AppContext';
 import { VIEW_MODE_REQUESTED_EVENT, LOAD_SAVED_VIEW_EVENT, VIEWER_TOOL_CHANGED_EVENT, type LoadSavedViewDetail, type ViewerToolChangedDetail } from '@/lib/viewer-events';

@@ -1170,6 +1170,27 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                     )} />
                   </Button>
 
+                  {/* Asset panel button */}
+                  <Button
+                    variant={showAssetPanel ? "secondary" : "outline"}
+                    className="w-full justify-between h-9 sm:h-10"
+                    onClick={() => setShowAssetPanel(!showAssetPanel)}
+                  >
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <div className={cn(
+                        "p-1 sm:p-1.5 rounded-md",
+                        showAssetPanel ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                      )}>
+                        <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      </div>
+                      <span className="text-xs sm:text-sm">Asset panel</span>
+                    </div>
+                    <ChevronRight className={cn(
+                      "h-3 w-3 transition-transform",
+                      showAssetPanel && "rotate-180"
+                    )} />
+                  </Button>
+
                   {isToolVisible('addAsset') && onAddAsset && (
                     <Button
                       variant="outline"

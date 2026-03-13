@@ -11,14 +11,22 @@ export interface FloorInfo {
 }
 
 // ── A-model detection (same logic as NativeXeokitViewer) ─────────────────
-const NON_ARCH_PREFIXES = ['BRAND', 'FIRE', 'V-', 'V_', 'VS-', 'VS_', 'EL-', 'EL_', 'MEP', 'SPRINKLER', 'K-', 'K_', 'R-', 'R_', 'S-', 'S_'];
+const NON_ARCH_PREFIXES = ['BRAND', 'FIRE', 'V-', 'V_', 'VS-', 'VS_', 'EL-', 'EL_', 'MEP', 'SPRINKLER', 'K-', 'K_', 'R-', 'R_', 'S-', 'S_', 'B-', 'B_'];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
 
-function isArchitecturalModel(name: string | null): boolean {
+/**
+ * Detect architectural models by name. Matches:
+ * "A-modell", "A modell", "ARK", "Arkitekt", "A_modell", names starting with "A" (single char prefix)
+ */
+export function isArchitecturalModel(name: string | null): boolean {
   if (!name || UUID_RE.test(name)) return false;
-  const upper = name.toUpperCase();
+  const upper = name.toUpperCase().trim();
   if (NON_ARCH_PREFIXES.some(p => upper.startsWith(p))) return false;
-  return upper.charAt(0) === 'A' || upper.includes('ARKITEKT');
+  // Explicit matches
+  if (upper.includes('ARKITEKT') || upper.includes('A-MODELL') || upper.includes('A_MODELL') || upper.includes('A MODELL') || upper === 'ARK') return true;
+  // Single-char prefix: "A" followed by separator or end
+  if (upper.charAt(0) === 'A' && (upper.length === 1 || /^A[\s\-_.]/.test(upper))) return true;
+  return false;
 }
 
 /**
