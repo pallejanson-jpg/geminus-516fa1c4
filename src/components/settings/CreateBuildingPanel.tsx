@@ -301,6 +301,27 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       if (jobError || !jobRow) throw new Error(`Failed to create conversion job: ${jobError?.message}`);
       const jobId = jobRow.id;
 
+      // Trigger immediate hierarchy population (non-blocking, non-fatal)
+      addLog('🏗️ Populating building hierarchy...');
+      supabase.functions.invoke('ifc-extract-systems', {
+        body: {
+          buildingFmGuid: targetBuildingFmGuid,
+          ifcPath: ifcStoragePath,
+          mode: 'enrich-guids',
+        }
+      }).then(({ data, error }) => {
+        if (error) {
+          console.warn('Immediate hierarchy population failed:', error);
+          addLog('⚠️ Hierarchy pre-population failed (worker will handle it)');
+        } else {
+          const levels = data?.levelsCreated ?? 0;
+          const spaces = data?.spacesCreated ?? 0;
+          addLog(`✅ Hierarchy populated: ${levels} levels, ${spaces} spaces`);
+        }
+      }).catch(e => {
+        console.warn('Immediate hierarchy population failed:', e);
+      });
+
       if (useDirectBrowser) {
         addLog(`File is ${fileSizeMB.toFixed(0)} MB — using browser-based conversion`);
         await runBrowserConversion(ifcFile, targetBuildingFmGuid, jobId, safeModelName, addLog, setConversionProgress);
