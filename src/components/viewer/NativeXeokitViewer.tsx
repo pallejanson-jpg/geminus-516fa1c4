@@ -881,12 +881,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       // 5. Camera: instant viewFit as fallback (no animation) if no saved start view arrives within 500ms
       if (mountedRef.current && viewer.scene) {
-        // Enable SAO after load
+        // SAO disabled — causes "Invalid framebuffer" and WebGL context loss on large models
         if (viewer.scene.sao) {
-          viewer.scene.sao.enabled = true;
-          viewer.scene.sao.intensity = 0.15;
-          viewer.scene.sao.bias = 0.5;
-          viewer.scene.sao.scale = 1000;
+          viewer.scene.sao.enabled = false;
         }
 
         // Apply architectural IFC-type-based coloring to all objects
