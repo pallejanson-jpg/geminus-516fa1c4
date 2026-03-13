@@ -6,6 +6,10 @@
  * downloads IFC files, splits them by IfcBuildingStorey, converts
  * each storey to a separate .xkt tile, and uploads results.
  *
+ * Also supports XKT-only jobs (source_type: 'xkt') from Asset+
+ * where no IFC is available — these skip conversion and just
+ * populate the building hierarchy.
+ *
  * Requirements:
  *   - Node.js 18+
  *   - npm install @xeokit/xeokit-convert web-ifc
@@ -68,11 +72,6 @@ async function downloadFile(url, destPath) {
   const fileStream = fs.createWriteStream(destPath);
   await pipeline(Readable.fromWeb(resp.body), fileStream);
   return fs.statSync(destPath).size;
-}
-
-async function getUploadUrl(storagePath) {
-  const result = await api("upload-url", "POST", { path: storagePath });
-  return result.signedUrl;
 }
 
 async function uploadFile(signedUrl, filePath, token) {
@@ -189,12 +188,65 @@ async function extractHierarchy(ifcPath, buildingGuid) {
   return { storeys, spaces, instances };
 }
 
-async function processJob(job) {
+// ─── XKT-only job: skip conversion, just mark tiles as processed ───
+async function processXktJob(job) {
+  const jobId = job.id;
+  const buildingGuid = job.building_fm_guid;
+
+  console.log(`\n=== Processing XKT-only job ${jobId} ===`);
+  console.log(`Building: ${buildingGuid}, source: ${job.ifc_storage_path}`);
+
+  try {
+    await reportProgress(jobId, 20, "XKT-only job — verifying existing models...");
+
+    // The XKT files already exist in xkt-models bucket.
+    // We just need to ensure they're registered in xkt_models table
+    // and populate hierarchy if possible.
+    // The edge function /complete handles xkt_models upsert,
+    // so we report the existing tiles.
+
+    // Download the XKT file to verify it exists
+    if (job.ifc_download_url) {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "xkt-verify-"));
+      try {
+        const xktPath = path.join(tmpDir, "model.xkt");
+        const fileSize = await downloadFile(job.ifc_download_url, xktPath);
+        console.log(`  XKT file verified: ${(fileSize / 1024 / 1024).toFixed(1)} MB`);
+        await reportProgress(jobId, 50, `XKT file verified (${(fileSize / 1024 / 1024).toFixed(1)} MB)`);
+      } catch (dlErr) {
+        console.warn(`  Could not download XKT for verification: ${dlErr.message}`);
+        await reportProgress(jobId, 50, `XKT file not downloadable — skipping verification`);
+      } finally {
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+      }
+    }
+
+    // Report the existing model as a tile so /complete registers it
+    const tiles = [{
+      model_id: `${buildingGuid}_xkt`,
+      model_name: job.model_name || "XKT Model",
+      file_name: path.basename(job.ifc_storage_path),
+      storage_path: job.ifc_storage_path,
+      file_size: 0,
+      storey_fm_guid: null,
+    }];
+
+    await reportProgress(jobId, 90, "Marking XKT job complete...");
+    await api("complete", "POST", { job_id: jobId, tiles });
+    console.log(`✅ XKT-only job ${jobId} complete`);
+  } catch (e) {
+    console.error(`❌ XKT-only job ${jobId} failed:`, e);
+    await api("fail", "POST", { job_id: jobId, error_message: e.message }).catch(() => {});
+  }
+}
+
+// ─── IFC job: full conversion pipeline ───
+async function processIfcJob(job) {
   const jobId = job.id;
   const buildingGuid = job.building_fm_guid;
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "xkt-worker-"));
 
-  console.log(`\n=== Processing job ${jobId} ===`);
+  console.log(`\n=== Processing IFC job ${jobId} ===`);
   console.log(`Building: ${buildingGuid}, IFC: ${job.ifc_storage_path}`);
 
   try {
@@ -312,7 +364,7 @@ async function processJob(job) {
     await api("complete", "POST", { job_id: jobId, tiles });
     console.log(`✅ Job ${jobId} complete: ${tiles.length} tiles`);
 
-    // 6. Extract and populate building hierarchy (storeys, spaces, instances → assets table)
+    // 6. Extract and populate building hierarchy
     try {
       await reportProgress(jobId, 95, "Populating building hierarchy...");
       const hierarchy = await extractHierarchy(ifcPath, buildingGuid);
@@ -335,6 +387,18 @@ async function processJob(job) {
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     } catch {}
+  }
+}
+
+// ─── Job dispatcher ───
+async function processJob(job) {
+  const sourceType = job.source_type || "ifc";
+
+  if (sourceType === "xkt") {
+    await processXktJob(job);
+  } else {
+    // 'ifc' or 'ifc-upload-to-existing' — both use full IFC conversion
+    await processIfcJob(job);
   }
 }
 

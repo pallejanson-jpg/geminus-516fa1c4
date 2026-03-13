@@ -813,6 +813,8 @@ export type Database = {
           model_name: string | null
           progress: number | null
           result_model_id: string | null
+          source_bucket: string
+          source_type: string
           status: string
           updated_at: string | null
         }
@@ -827,6 +829,8 @@ export type Database = {
           model_name?: string | null
           progress?: number | null
           result_model_id?: string | null
+          source_bucket?: string
+          source_type?: string
           status?: string
           updated_at?: string | null
         }
@@ -841,6 +845,8 @@ export type Database = {
           model_name?: string | null
           progress?: number | null
           result_model_id?: string | null
+          source_bucket?: string
+          source_type?: string
           status?: string
           updated_at?: string | null
         }
