@@ -494,8 +494,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const checkedNonASourceGuids = new Set<string>();
     sources.forEach(s => {
       if (checkedSources.has(s.guid)) {
-        const n = s.name.toLowerCase();
-        if (!n.startsWith('a') && !n.includes('a-modell') && !n.includes('arkitekt')) {
+        if (!isArchitecturalModel(s.name)) {
           checkedNonASourceGuids.add(s.guid);
         }
       }
