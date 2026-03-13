@@ -264,6 +264,18 @@ const App = () => {
             } 
           />
           
+          {/* Standalone AI Chat */}
+          <Route 
+            path="/ai" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <ProtectedRoute>
+                  <AiChat />
+                </ProtectedRoute>
+              </Suspense>
+            } 
+          />
+          
           {/* Protected app routes */}
           <Route 
             path="/*" 
