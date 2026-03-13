@@ -76,6 +76,9 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
   // ── Sync from Asset+ state ──
   const [isSyncingAssetPlus, setIsSyncingAssetPlus] = useState(false);
 
+  // ── Batch enqueue state ──
+  const [isBatchEnqueuing, setIsBatchEnqueuing] = useState(false);
+
   // Elapsed timer tick
   useEffect(() => {
     if (!conversionStartTime || conversionDone) return;
