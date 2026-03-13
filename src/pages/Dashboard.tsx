@@ -137,6 +137,15 @@ export default function Dashboard() {
                   </p>
                 </div>
               </button>
+              <button className="flex min-h-[44px] min-w-0 flex-col items-start gap-1 rounded-lg border border-border p-3 text-left transition-colors hover:bg-muted sm:flex-row sm:items-center sm:gap-3">
+                <FolderOpen className="h-5 w-5 text-primary shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">Docs+</p>
+                  <p className="text-xs text-muted-foreground">
+                    Manage documents
+                  </p>
+                </div>
+              </button>
             </div>
           </CardContent>
         </Card>
