@@ -1253,6 +1253,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       const alarmColor: [number, number, number] = [0.9, 0.2, 0.15]; // Red
       const roomColor: [number, number, number] = [1.0, 0.6, 0.2];   // Orange
 
+      // First pass: try to match alarm entities directly
       Object.values(metaObjects).forEach((mo: any) => {
         const sysId = normalizeGuid(mo.originalSystemId || '');
         const moId = normalizeGuid(mo.id || '');
@@ -1266,13 +1267,22 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
             entity.opacity = 1.0;
             matchedIds.push(mo.id);
           }
-        } else if (roomGuids.has(sysId) || roomGuids.has(moId)) {
+        }
+      });
+
+      // Second pass: match rooms (always, for context highlighting)
+      Object.values(metaObjects).forEach((mo: any) => {
+        if (mo.type !== 'IfcSpace') return;
+        const sysId = normalizeGuid(mo.originalSystemId || '');
+        const moId = normalizeGuid(mo.id || '');
+
+        if (roomGuids.has(sysId) || roomGuids.has(moId)) {
           const entity = scene.objects?.[mo.id];
           if (entity) {
             entity.xrayed = false;
             entity.visible = true;
-            entity.colorize = roomColor;
-            entity.opacity = 0.6;
+            entity.colorize = matchedIds.length === 0 ? alarmColor : roomColor;
+            entity.opacity = matchedIds.length === 0 ? 0.8 : 0.6;
             matchedIds.push(mo.id);
           }
         }
