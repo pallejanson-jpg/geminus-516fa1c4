@@ -611,7 +611,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       'Spaces matched:', spaces.filter(s => map.has(s.fmGuid)).length, '/', spaces.length,
       'xeokit storeys:', xeokitStoreys.length, 'xeokit spaces:', xeokitSpaces.length);
     return true;
-  }, [getXeokitViewer, levels, sharedModels, checkedSources, sources]);
+  }, [getXeokitViewer, levels, sharedModels, sources]);
 
   // Cached spaces ref for entity map (avoids rebuild on checkbox toggle)
   const spacesRef = useRef(spaces);
