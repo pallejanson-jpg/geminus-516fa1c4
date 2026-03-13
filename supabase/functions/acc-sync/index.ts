@@ -1576,6 +1576,19 @@ serve(async (req: Request) => {
           const { token, is3Legged } = await getAccToken(auth.userId, supabase);
           console.log(`Using ${is3Legged ? '3-legged' : '2-legged'} token for asset sync`);
 
+          // Incremental sync: check last successful sync timestamp
+          const { data: syncState } = await supabase
+            .from("asset_sync_state")
+            .select("last_sync_completed_at")
+            .eq("subtree_id", "acc-assets")
+            .maybeSingle();
+          const lastSyncAt = body.fullSync ? undefined : (syncState?.last_sync_completed_at || undefined);
+          if (lastSyncAt) {
+            console.log(`[sync-assets] Incremental sync: fetching assets updated after ${lastSyncAt}`);
+          } else {
+            console.log(`[sync-assets] Full sync: no previous sync timestamp found`);
+          }
+
           // First, fetch location tree to resolve locationId -> building/level/room
           const nodes = await fetchAllLocationNodes(token, projectId, region);
           const mapped = buildLocationTree(nodes);
@@ -1587,13 +1600,13 @@ serve(async (req: Request) => {
           // Fetch categories
           const categoryMap = await fetchAccCategories(token, projectId, region);
 
-          // Fetch all assets with pagination
+          // Fetch assets with pagination (incremental if available)
           let totalSynced = 0;
           let cursorState: string | undefined;
 
           do {
-            const page = await fetchAccAssets(token, projectId, region, cursorState);
-            console.log(`Fetched ${page.results.length} assets (cursor: ${cursorState ? "yes" : "start"})`);
+            const page = await fetchAccAssets(token, projectId, region, cursorState, lastSyncAt);
+            console.log(`Fetched ${page.results.length} assets (cursor: ${cursorState ? "yes" : "start"}, incremental: ${!!lastSyncAt})`);
 
             if (page.results.length > 0) {
               const upserted = await upsertAccAssets(
@@ -1614,8 +1627,11 @@ serve(async (req: Request) => {
           return new Response(
             JSON.stringify({
               success: true,
-              message: `Synkade ${totalSynced} tillgångar från ACC`,
+              message: lastSyncAt
+                ? `Inkrementell synk: ${totalSynced} uppdaterade tillgångar sedan ${new Date(lastSyncAt).toLocaleString('sv-SE')}`
+                : `Synkade ${totalSynced} tillgångar från ACC`,
               totalSynced,
+              incremental: !!lastSyncAt,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
