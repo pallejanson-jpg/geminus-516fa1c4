@@ -26,7 +26,7 @@ export async function fetchLocalAssets(categories?: string[]): Promise<any[]> {
   while (hasMore) {
     let query = supabase
       .from("assets")
-      .select("fm_guid, category, name, common_name, building_fm_guid, level_fm_guid, in_room_fm_guid, complex_common_name, attributes, is_local, created_in_model, asset_type, synced_at, annotation_placed, symbol_id")
+      .select("fm_guid, category, name, common_name, building_fm_guid, level_fm_guid, in_room_fm_guid, complex_common_name, attributes, is_local, created_in_model, asset_type, synced_at, annotation_placed, symbol_id, gross_area")
       .order("fm_guid", { ascending: true }) // Stable ordering for pagination
       .range(offset, offset + pageSize - 1);
 
