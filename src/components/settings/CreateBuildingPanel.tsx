@@ -259,7 +259,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
     setConversionStartTime(Date.now());
 
     const fileSizeMB = ifcFile.size / 1024 / 1024;
-    const useDirectBrowser = fileSizeMB > 20;
+    const useDirectBrowser = fileSizeMB > 10;
 
     try {
       addLog(`Reading file: ${ifcFile.name} (${fileSizeMB.toFixed(1)} MB)`);
@@ -358,7 +358,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
 
         if (!isWorkerLimit) {
           const errorString = JSON.stringify(fnError ?? '') + JSON.stringify(convResult ?? '') + (fnError?.message ?? '');
-          isWorkerLimit = errorString.includes('WORKER_LIMIT') || errorString.includes('not having enough compute resources') || errorString.includes('546');
+          isWorkerLimit = errorString.includes('WORKER_LIMIT') || errorString.includes('not having enough compute resources') || errorString.includes('546') || errorString.includes('Memory limit');
         }
 
         if (fnError && !isWorkerLimit) {
