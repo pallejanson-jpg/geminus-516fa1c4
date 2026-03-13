@@ -770,12 +770,11 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     scene.setObjectsPickable(scene.objectIds, true);
     const prevXrayed = scene.xrayedObjectIds;
     if (prevXrayed?.length > 0) scene.setObjectsXRayed(prevXrayed, false);
-    const prevColorized = scene.colorizedObjectIds;
-    if (prevColorized?.length > 0) scene.setObjectsColorized(prevColorized, false);
+    const prevColorizedIds = scene.colorizedObjectIds;
+    if (prevColorizedIds?.length > 0) scene.setObjectsColorized(prevColorizedIds, false);
     // Reset opacity only for previously changed objects (avoid full scan)
-    const prevColorized = scene.colorizedObjectIds;
-    if (prevColorized?.length > 0) {
-      prevColorized.forEach((id: string) => {
+    if (prevColorizedIds?.length > 0) {
+      prevColorizedIds.forEach((id: string) => {
         const entity = scene.objects?.[id];
         if (entity && entity.opacity < 1) entity.opacity = 1.0;
       });
