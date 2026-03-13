@@ -119,8 +119,19 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       const viewer = new sdk.Viewer({
         canvasElement: canvasRef.current,
         transparent: true,
-        saoEnabled: true,
+        saoEnabled: false,  // Disabled: SAO causes "Invalid framebuffer" on large models
         entityOffsetsEnabled: true,
+      });
+
+      // WebGL context loss handling — detect GPU crash and show retry UI
+      const canvas = canvasRef.current;
+      canvas.addEventListener('webglcontextlost', (e: Event) => {
+        e.preventDefault();
+        console.error('[NativeViewer] ⚠️ WebGL context lost');
+        if (mountedRef.current) {
+          setErrorMsg('GPU-minnet tog slut. Försök ladda om sidan.');
+          setPhase('error');
+        }
       });
       viewerRef.current = viewer;
 
