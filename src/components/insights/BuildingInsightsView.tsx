@@ -592,7 +592,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             navigateToInsights3D({ mode: inlineInsightsMode as any, colorMap: inlineColorMap });
         } else {
             const params = new URLSearchParams({ building: facility.fmGuid, mode: '3d' });
-            navigate(`/split-viewer?${params.toString()}`);
+            navigate(`/viewer?${params.toString()}`);
         }
     }, [inlineInsightsMode, inlineColorMap, navigateToInsights3D, facility.fmGuid, navigate]);
 
