@@ -379,7 +379,7 @@ const CesiumGlobeView: React.FC = () => {
       }
     } catch { /* ignore */ }
 
-    // Wait 1.2 seconds showing the whole globe, then fly in to the Nordics
+    // Wait 3 seconds showing the whole globe, then fly in to the Nordics
     const lats = mapFacilities.map(f => f.lat);
     const lngs = mapFacilities.map(f => f.lng);
     const flyInTimer = setTimeout(() => {
@@ -387,9 +387,9 @@ const CesiumGlobeView: React.FC = () => {
       viewer.camera.flyTo({
         destination: toCartesian((Math.min(...lats) + Math.max(...lats)) / 2, (Math.min(...lngs) + Math.max(...lngs)) / 2, 1500000),
         orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
-        duration: 2.2,
+        duration: 2.5,
       });
-    }, 1200);
+    }, 3000);
 
     return () => clearTimeout(flyInTimer);
   }, [mapFacilities, viewerReady]);
