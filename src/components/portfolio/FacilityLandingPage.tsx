@@ -465,29 +465,6 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                   Basic Information
                 </CardTitle>
                 <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                  <Button 
-                    onClick={toggleFavorite} 
-                    variant="ghost" 
-                    size="icon"
-                    className="h-7 w-7 sm:h-8 sm:w-8"
-                    title={settings?.isFavorite ? "Remove from favorites" : "Add to favorites"}
-                    disabled={isSaving}
-                  >
-                    {isSaving ? (
-                      <Loader2 size={14} className="sm:w-4 sm:h-4 animate-spin" />
-                    ) : (
-                      <Star size={14} className={`sm:w-4 sm:h-4 ${settings?.isFavorite ? 'text-accent fill-current' : 'text-muted-foreground'}`} />
-                    )}
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    onClick={() => setShowSettings(prev => !prev)} 
-                    title="Building settings" 
-                    className="h-7 w-7 sm:h-8 sm:w-8"
-                  >
-                    <Settings2 size={14} className={`sm:w-4 sm:h-4 ${showSettings ? 'text-primary' : ''}`} />
-                  </Button>
                   <Button variant="ghost" size="icon" onClick={() => setShowPropertiesDialog(true)} title="View all properties" className="h-7 w-7 sm:h-8 sm:w-8">
                     <Table size={14} className="sm:w-4 sm:h-4" />
                   </Button>

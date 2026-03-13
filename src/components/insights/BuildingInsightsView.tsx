@@ -598,11 +598,12 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
 
     // Legacy simple navigation (for non-colormap views)
     const navigateTo3D = (opts?: { entity?: string; visualization?: string; assetType?: string }) => {
+        if (!facility.fmGuid) { toast.error('Building GUID missing'); return; }
         const params = new URLSearchParams({ building: facility.fmGuid, mode: '3d' });
         if (opts?.entity) params.set('entity', opts.entity);
         if (opts?.visualization) params.set('visualization', opts.visualization);
         if (opts?.assetType) params.set('assetType', opts.assetType);
-        navigate(`/split-viewer?${params.toString()}`);
+        navigate(`/viewer?${params.toString()}`);
     };
 
     // Floor-by-floor energy data (MOCK) — include fmGuid for chart click navigation

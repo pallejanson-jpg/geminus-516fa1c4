@@ -122,6 +122,7 @@ export async function fetchAssetsForBuilding(buildingFmGuid: string): Promise<an
         coordinateX: asset.coordinate_x,
         coordinateY: asset.coordinate_y,
         coordinateZ: asset.coordinate_z,
+        grossArea: asset.gross_area,
       }));
       allAssets.push(...mapped);
       
