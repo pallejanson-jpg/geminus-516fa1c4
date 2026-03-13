@@ -168,6 +168,12 @@ const QuickActions: React.FC<QuickActionsProps> = ({
             </Button>
           )}
 
+          {/* Docs+ */}
+          <Button variant="ghost" onClick={() => onShowDocs(facility)} className={btnClass}>
+            <FolderOpen size={iconSize} className="text-primary" />
+            <span className={labelClass}>Docs+</span>
+          </Button>
+
           {/* Felanmälan */}
           {onFaultReport && (
             <Button variant="ghost" onClick={() => onFaultReport(facility)} className={btnClass}>
