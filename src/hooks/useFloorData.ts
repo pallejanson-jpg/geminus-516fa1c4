@@ -102,8 +102,15 @@ export function useFloorData(
       const objIds = new Set(Object.keys(model.objects || {}));
       modelObjectSets.set(modelId, objIds);
 
-      // Check if this is an A-model
-      const isArch = isArchitecturalModel(modelId) || isArchitecturalModel((model as any).id);
+      // Resolve friendly name from modelNamesMap (DB lookup) for A-model detection
+      const friendlyName =
+        modelNamesMap.get(modelId) ||
+        modelNamesMap.get(modelId.toLowerCase()) ||
+        modelNamesMap.get(modelId.replace(/\.xkt$/i, '')) ||
+        modelNamesMap.get(modelId.replace(/\.xkt$/i, '').toLowerCase()) ||
+        null;
+
+      const isArch = isArchitecturalModel(friendlyName) || isArchitecturalModel(modelId);
       if (isArch) {
         hasAModel = true;
         objIds.forEach(id => aModelObjectIds.add(id));
@@ -111,7 +118,7 @@ export function useFloorData(
     });
 
     return { modelObjectSets, hasAModel, aModelObjectIds };
-  }, [getXeokitViewer]);
+  }, [getXeokitViewer, modelNamesMap]);
 
   // ── Extract floors from metaScene ───────────────────────────────────────
   const extractFloors = useCallback((): FloorInfo[] => {
