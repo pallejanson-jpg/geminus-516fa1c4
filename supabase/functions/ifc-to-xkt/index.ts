@@ -614,16 +614,16 @@ Deno.serve(async (req) => {
     const { systems, connections, objectExternalIds } = extractSystemsAndConnections(metaObjectsList as any[]);
     await appendLog(`Found ${systems.length} systems, ${connections.length} connections, ${objectExternalIds.length} objects`, 68);
 
-    // 5. Write XKT to ArrayBuffer
+    // 5. Write XKT to ArrayBuffer (zip: true for ~30% smaller files)
     const stats: Record<string, any> = { texturesSize: 0 };
     const xktArrayBuffer = (xeokitConvert as any).writeXKTModelToArrayBuffer(
       xktModel,
       null,
       stats,
-      { zip: false }
+      { zip: true }
     );
     const xktSizeMB = xktArrayBuffer.byteLength / 1024 / 1024;
-    await appendLog(`XKT generated: ${xktSizeMB.toFixed(2)} MB`, 70);
+    await appendLog(`XKT generated: ${xktSizeMB.toFixed(2)} MB (compressed)`, 70);
 
     // 6. Upload XKT to storage
     await appendLog("Uploading XKT to storage...", 75);
