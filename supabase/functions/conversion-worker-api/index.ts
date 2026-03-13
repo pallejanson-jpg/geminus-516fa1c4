@@ -46,15 +46,18 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Generate signed URL for IFC file
+      // Generate signed URL from the correct bucket
+      const bucket = data.source_bucket || "ifc-uploads";
       const { data: urlData } = await supabase.storage
-        .from("ifc-uploads")
+        .from(bucket)
         .createSignedUrl(data.ifc_storage_path, 3600);
 
       return new Response(
         JSON.stringify({
           job: {
             ...data,
+            source_type: data.source_type || "ifc",
+            source_bucket: bucket,
             ifc_download_url: urlData?.signedUrl || null,
           },
         }),
@@ -397,6 +400,8 @@ Deno.serve(async (req) => {
         // Try to find IFC file first
         let storagePath: string | null = null;
         let modelName = guid;
+        let sourceType = "ifc";
+        let sourceBucket = "ifc-uploads";
 
         if (ifcBuildingGuids.has(guid)) {
           const { data: files } = await supabase.storage
@@ -406,6 +411,8 @@ Deno.serve(async (req) => {
           if (ifcFile) {
             storagePath = `${guid}/${ifcFile.name}`;
             modelName = ifcFile.name.replace(/\.ifc$/i, "");
+            sourceType = "ifc";
+            sourceBucket = "ifc-uploads";
           }
         }
 
@@ -420,6 +427,8 @@ Deno.serve(async (req) => {
           if (xktModel) {
             storagePath = xktModel.storage_path;
             modelName = xktModel.model_name || guid;
+            sourceType = "xkt";
+            sourceBucket = "xkt-models";
           }
         }
 
@@ -434,6 +443,8 @@ Deno.serve(async (req) => {
           model_name: modelName,
           status: "pending",
           created_by: created_by || null,
+          source_type: sourceType,
+          source_bucket: sourceBucket,
         });
         enqueued++;
       }
