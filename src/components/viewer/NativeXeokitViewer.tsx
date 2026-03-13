@@ -219,7 +219,12 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         const navCubeCanvas = document.createElement('canvas');
         navCubeCanvas.id = `native-navcube-${buildingFmGuid.substring(0, 8)}`;
         navCubeCanvas.style.cssText = 'position:absolute;bottom:60px;right:10px;width:150px;height:150px;pointer-events:auto;';
-        canvasRef.current.parentElement?.appendChild(navCubeCanvas);
+        const parentEl = canvasRef.current?.parentElement;
+        if (parentEl) {
+          parentEl.appendChild(navCubeCanvas);
+        } else {
+          console.warn('[NativeViewer] NavCube: no parent element for canvas');
+        }
 
         let usedCustom = false;
         if (!(window as any).NavCubePlugin) {
