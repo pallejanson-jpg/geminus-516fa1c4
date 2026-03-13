@@ -271,7 +271,7 @@ Deno.serve(async (req) => {
       if (updateErr) throw updateErr;
 
       return new Response(
-        JSON.stringify({ ok: true, tiles_created: modelRecords.length }),
+        JSON.stringify({ ok: true, tiles_created: modelRecords.length, tile_count: tiles.length }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
