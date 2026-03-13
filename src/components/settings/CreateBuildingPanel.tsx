@@ -275,6 +275,10 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       if (!user) throw new Error('Not authenticated');
 
       const safeModelName = ifcFile.name.replace(/\.ifc$/i, '');
+      
+      // Determine if this is an IFC upload to an existing building (e.g. Asset+ building)
+      const isUploadToExisting = !createdBuilding && existingBuildings.some(b => b.fmGuid === targetBuildingFmGuid);
+      
       const { data: jobRow, error: jobError } = await supabase
         .from('conversion_jobs')
         .insert({
@@ -285,7 +289,9 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           progress: 0,
           log_messages: [],
           created_by: user.id,
-        })
+          source_type: isUploadToExisting ? 'ifc-upload-to-existing' : 'ifc',
+          source_bucket: 'ifc-uploads',
+        } as any)
         .select('id')
         .single();
 
