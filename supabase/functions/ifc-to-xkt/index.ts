@@ -669,20 +669,19 @@ Deno.serve(async (req) => {
       throw new Error(errMsg);
     }
 
-    // 8. Persist systems, connections, and external IDs
-    await appendLog("Saving systems and connectivity...", 85);
-    await persistSystemsAndConnections(
-      supabase,
-      buildingFmGuid,
-      systems,
-      connections,
-      objectExternalIds,
-      appendLog
-    );
-
-    // 9. Populate assets table with building hierarchy (storeys, spaces, instances)
-    await appendLog("Populating building hierarchy in assets...", 90);
-    await populateAssetsFromMetaObjects(supabase, buildingFmGuid, metaObjectsList as any[], appendLog);
+    // 8+9. Persist systems AND populate assets in parallel (independent DB operations)
+    await appendLog("Saving systems, connectivity, and building hierarchy in parallel...", 85);
+    await Promise.all([
+      persistSystemsAndConnections(
+        supabase,
+        buildingFmGuid,
+        systems,
+        connections,
+        objectExternalIds,
+        appendLog
+      ),
+      populateAssetsFromMetaObjects(supabase, buildingFmGuid, metaObjectsList as any[], appendLog),
+    ]);
 
     await updateJob({
       status: "done",
