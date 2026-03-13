@@ -1313,7 +1313,13 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/90 z-10 p-6 text-center">
           <AlertCircle className="h-8 w-8 text-destructive mb-3" />
           <p className="text-sm text-destructive font-medium mb-2">Failed to load 3D model</p>
-          <p className="text-xs text-muted-foreground max-w-md">{errorMsg}</p>
+          <p className="text-xs text-muted-foreground max-w-md mb-4">{errorMsg}</p>
+          <button
+            className="px-4 py-2 rounded bg-primary text-primary-foreground text-sm hover:opacity-90"
+            onClick={() => { setPhase('init'); initialize(); }}
+          >
+            Försök igen
+          </button>
         </div>
       )}
 
