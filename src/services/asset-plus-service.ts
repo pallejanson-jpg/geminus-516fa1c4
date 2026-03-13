@@ -61,6 +61,7 @@ export async function fetchLocalAssets(categories?: string[]): Promise<any[]> {
         syncedAt: asset.synced_at,
         annotationPlaced: asset.annotation_placed,
         symbolId: asset.symbol_id,
+        grossArea: asset.gross_area,
       }));
       allAssets.push(...mapped);
       
