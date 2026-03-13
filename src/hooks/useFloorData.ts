@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useModelNames } from '@/hooks/useModelNames';
 
 export interface FloorInfo {
   id: string;           // Representative metaObject ID for this floor group
@@ -7,6 +8,17 @@ export interface FloorInfo {
   shortName: string;
   metaObjectIds: string[];        // All metaObject IDs with this name (from all models)
   databaseLevelFmGuids: string[]; // All database fmGuids for this floor
+}
+
+// ── A-model detection (same logic as NativeXeokitViewer) ─────────────────
+const NON_ARCH_PREFIXES = ['BRAND', 'FIRE', 'V-', 'V_', 'VS-', 'VS_', 'EL-', 'EL_', 'MEP', 'SPRINKLER', 'K-', 'K_', 'R-', 'R_', 'S-', 'S_'];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
+
+function isArchitecturalModel(name: string | null): boolean {
+  if (!name || UUID_RE.test(name)) return false;
+  const upper = name.toUpperCase();
+  if (NON_ARCH_PREFIXES.some(p => upper.startsWith(p))) return false;
+  return upper.charAt(0) === 'A' || upper.includes('ARKITEKT');
 }
 
 /**
@@ -18,11 +30,17 @@ export interface FloorInfo {
  *   1. DB `assets` table `common_name` (authoritative)
  *   2. xeokit metaObject.name (fallback)
  *   3. Sequential "Plan N" for GUID-like names
+ *
+ * Model priority:
+ *   When multiple models exist, only storeys from A-models (architectural)
+ *   are used as the primary floor list. Non-A storey metaObjectIds are still
+ *   merged into matching floors for correct visibility toggling.
  */
 export function useFloorData(
   viewerRef: React.MutableRefObject<any>,
   buildingFmGuid: string | undefined | null
 ) {
+  const { modelNamesMap } = useModelNames(buildingFmGuid);
   const [floorNamesMap, setFloorNamesMap] = useState<Map<string, string>>(new Map());
   const [floors, setFloors] = useState<FloorInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -70,18 +88,55 @@ export function useFloorData(
     }
   }, [viewerRef]);
 
+  // ── Build model→objectIds lookup + detect A-models ──────────────────────
+  const classifyModels = useCallback(() => {
+    const viewer = getXeokitViewer();
+    if (!viewer?.scene?.models) return { modelObjectSets: new Map<string, Set<string>>(), hasAModel: false, aModelObjectIds: new Set<string>() };
+
+    const sceneModels = viewer.scene.models;
+    const modelObjectSets = new Map<string, Set<string>>();
+    let hasAModel = false;
+    const aModelObjectIds = new Set<string>();
+
+    Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
+      const objIds = new Set(Object.keys(model.objects || {}));
+      modelObjectSets.set(modelId, objIds);
+
+      // Resolve friendly name from modelNamesMap (DB lookup) for A-model detection
+      const friendlyName =
+        modelNamesMap.get(modelId) ||
+        modelNamesMap.get(modelId.toLowerCase()) ||
+        modelNamesMap.get(modelId.replace(/\.xkt$/i, '')) ||
+        modelNamesMap.get(modelId.replace(/\.xkt$/i, '').toLowerCase()) ||
+        null;
+
+      const isArch = isArchitecturalModel(friendlyName) || isArchitecturalModel(modelId);
+      if (isArch) {
+        hasAModel = true;
+        objIds.forEach(id => aModelObjectIds.add(id));
+      }
+    });
+
+    return { modelObjectSets, hasAModel, aModelObjectIds };
+  }, [getXeokitViewer, modelNamesMap]);
+
   // ── Extract floors from metaScene ───────────────────────────────────────
   const extractFloors = useCallback((): FloorInfo[] => {
     const viewer = getXeokitViewer();
     if (!viewer?.metaScene?.metaObjects) return [];
 
     const metaObjects = viewer.metaScene.metaObjects;
-    const floorsByName = new Map<string, FloorInfo>();
-    // Track GUID-named floors separately so they don't merge
+    const { hasAModel, aModelObjectIds } = classifyModels();
+
+    // Phase 1: Extract A-model storeys (or all if no A-model exists)
+    const primaryFloors = new Map<string, FloorInfo>();
     let guidCounter = 0;
 
     Object.values(metaObjects).forEach((metaObject: any) => {
       if (metaObject?.type?.toLowerCase() !== 'ifcbuildingstorey') return;
+
+      // If A-models exist, skip storeys that don't belong to A-models
+      if (hasAModel && !aModelObjectIds.has(metaObject.id)) return;
 
       const fmGuid = metaObject.originalSystemId || metaObject.id;
 
@@ -96,7 +151,6 @@ export function useFloorData(
       if (dbName) {
         displayName = dbName;
       } else if (displayName.match(/^[0-9A-Fa-f-]{30,}$/)) {
-        // GUID-like name — give each a UNIQUE placeholder to prevent merging
         guidCounter++;
         displayName = `Plan ${guidCounter}`;
         isGuidName = true;
@@ -105,17 +159,15 @@ export function useFloorData(
       const shortMatch = displayName.match(/(\d+)/);
       const shortName = shortMatch ? shortMatch[1] : displayName.substring(0, 10);
 
-      // Only merge floors with the SAME resolved display name (not GUID placeholders)
-      if (!isGuidName && floorsByName.has(displayName)) {
-        const existing = floorsByName.get(displayName)!;
+      if (!isGuidName && primaryFloors.has(displayName)) {
+        const existing = primaryFloors.get(displayName)!;
         existing.metaObjectIds.push(metaObject.id);
         if (!existing.databaseLevelFmGuids.includes(fmGuid)) {
           existing.databaseLevelFmGuids.push(fmGuid);
         }
       } else {
-        // Use a unique key for GUID floors to prevent merging
         const key = isGuidName ? `__guid_${guidCounter}` : displayName;
-        floorsByName.set(key, {
+        primaryFloors.set(key, {
           id: metaObject.id,
           name: displayName,
           shortName,
@@ -125,11 +177,49 @@ export function useFloorData(
       }
     });
 
-    const result = Array.from(floorsByName.values());
+    // Phase 2: If A-models exist, merge non-A storey metaObjectIds into matching floors
+    // This ensures toggling a floor pill also hides/shows V-model objects on that floor.
+    if (hasAModel) {
+      Object.values(metaObjects).forEach((metaObject: any) => {
+        if (metaObject?.type?.toLowerCase() !== 'ifcbuildingstorey') return;
+        if (aModelObjectIds.has(metaObject.id)) return; // Already processed
+
+        const fmGuid = metaObject.originalSystemId || metaObject.id;
+
+        // Find matching floor by databaseLevelFmGuid or by name
+        const dbName =
+          floorNamesMap.get(fmGuid) ||
+          floorNamesMap.get(fmGuid.toLowerCase()) ||
+          floorNamesMap.get(fmGuid.toUpperCase());
+        const moName = dbName || metaObject.name || '';
+
+        for (const floor of primaryFloors.values()) {
+          // Match by DB fmGuid
+          const guidMatch = floor.databaseLevelFmGuids.some(g =>
+            g.toLowerCase() === fmGuid.toLowerCase()
+          );
+          // Match by display name (strip model suffix like " - 01")
+          const strippedName = moName.replace(/\s*-\s*\d+$/, '').trim();
+          const nameMatch = floor.name === moName || floor.name === strippedName;
+
+          if (guidMatch || nameMatch) {
+            if (!floor.metaObjectIds.includes(metaObject.id)) {
+              floor.metaObjectIds.push(metaObject.id);
+            }
+            if (!floor.databaseLevelFmGuids.includes(fmGuid)) {
+              floor.databaseLevelFmGuids.push(fmGuid);
+            }
+            break;
+          }
+        }
+      });
+    }
+
+    const result = Array.from(primaryFloors.values());
     result.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 
     return result;
-  }, [getXeokitViewer, floorNamesMap]);
+  }, [getXeokitViewer, floorNamesMap, classifyModels]);
 
   // ── Poll for floors until available ─────────────────────────────────────
   useEffect(() => {
