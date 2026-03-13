@@ -89,7 +89,7 @@ export async function fetchAssetsForBuilding(buildingFmGuid: string): Promise<an
   while (hasMore) {
     const { data, error } = await supabase
       .from("assets")
-      .select("fm_guid, category, name, common_name, building_fm_guid, level_fm_guid, in_room_fm_guid, complex_common_name, attributes, is_local, created_in_model, asset_type, synced_at, annotation_placed, symbol_id, coordinate_x, coordinate_y, coordinate_z")
+      .select("fm_guid, category, name, common_name, building_fm_guid, level_fm_guid, in_room_fm_guid, complex_common_name, attributes, is_local, created_in_model, asset_type, synced_at, annotation_placed, symbol_id, coordinate_x, coordinate_y, coordinate_z, gross_area")
       .eq("building_fm_guid", buildingFmGuid)
       .eq("category", "Instance")
       .order("fm_guid", { ascending: true })
