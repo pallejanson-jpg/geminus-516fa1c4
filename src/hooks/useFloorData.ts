@@ -40,6 +40,7 @@ export function useFloorData(
   viewerRef: React.MutableRefObject<any>,
   buildingFmGuid: string | undefined | null
 ) {
+  const { modelNamesMap } = useModelNames(buildingFmGuid);
   const [floorNamesMap, setFloorNamesMap] = useState<Map<string, string>>(new Map());
   const [floors, setFloors] = useState<FloorInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
