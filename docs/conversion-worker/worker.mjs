@@ -271,7 +271,20 @@ async function processIfcJob(job) {
     const ifcApi = new WebIFC.IfcAPI();
     await ifcApi.Init();
     const ifcData = fs.readFileSync(ifcPath);
-    const modelId = ifcApi.OpenModel(ifcData);
+
+    // Validate: first bytes should be "ISO-10303" for IFC files
+    const header = ifcData.slice(0, 20).toString("utf8");
+    if (!header.includes("ISO") && !header.includes("IFC")) {
+      throw new Error(`File does not look like IFC (header: "${header.slice(0, 16)}"). Possibly a binary XKT file was queued as IFC.`);
+    }
+
+    let modelId;
+    try {
+      modelId = ifcApi.OpenModel(ifcData);
+    } catch (openErr) {
+      console.error(`  web-ifc OpenModel failed. File size: ${(fileSize / 1024 / 1024).toFixed(1)} MB, header: "${header.slice(0, 16)}"`);
+      throw openErr;
+    }
 
     const storeys = groupByStorey(ifcApi, modelId);
     ifcApi.CloseModel(modelId);
