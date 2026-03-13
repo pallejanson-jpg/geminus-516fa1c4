@@ -628,15 +628,6 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         />
       )}
 
-      {/* Geminus menu in full 3D mode */}
-      {isViewerReady && showGeminusMenu && (
-        <GeminusPluginMenu
-          buildingFmGuid={buildingFmGuid}
-          buildingName={buildingName}
-          source="xeokit_3d"
-          contextMetadata={{ viewMode }}
-        />
-      )}
 
       {/* Context menu */}
       {contextMenu && (
