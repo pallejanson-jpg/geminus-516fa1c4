@@ -392,13 +392,18 @@ async function processIfcJob(job) {
       await reportProgress(jobId, progress, `Converting storey ${i + 1}/${storeys.length}: ${storey.name}`);
 
       try {
-        await convert2xkt({
+        const convertOpts = {
           source: ifcPath,
           outputXKTModel: null,
           output: xktPath,
-          includeTypes: storey.guid ? undefined : undefined,
           log: (msg) => console.log(`  [xkt] ${msg}`),
-        });
+        };
+        // If we have per-storey element IDs, use includeEntityIds to filter
+        if (storey.elementIds && storey.elementIds.length > 0) {
+          convertOpts.includeEntityIds = storey.elementIds.map(String);
+          console.log(`  Filtering storey "${storey.name}": ${storey.elementIds.length} element IDs`);
+        }
+        await convert2xkt(convertOpts);
 
         const xktSize = fs.existsSync(xktPath) ? fs.statSync(xktPath).size : 0;
 
