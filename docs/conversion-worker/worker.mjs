@@ -393,11 +393,18 @@ async function processIfcJob(job) {
 // ─── Job dispatcher ───
 async function processJob(job) {
   const sourceType = job.source_type || "ifc";
+  const storagePath = job.ifc_storage_path || "";
 
-  if (sourceType === "xkt") {
+  // Extension guard: if the file ends in .xkt, ALWAYS treat as XKT job
+  // regardless of source_type — prevents IFC parser from crashing on binary XKT data
+  const isXktFile = storagePath.toLowerCase().endsWith(".xkt");
+
+  if (sourceType === "xkt" || isXktFile) {
+    if (isXktFile && sourceType !== "xkt") {
+      console.warn(`⚠️ File extension is .xkt but source_type='${sourceType}' — forcing XKT path`);
+    }
     await processXktJob(job);
   } else {
-    // 'ifc' or 'ifc-upload-to-existing' — both use full IFC conversion
     await processIfcJob(job);
   }
 }
