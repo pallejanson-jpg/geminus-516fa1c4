@@ -121,6 +121,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         transparent: true,
         saoEnabled: false,  // Disabled: SAO causes "Invalid framebuffer" on large models
         entityOffsetsEnabled: true,
+        dtxEnabled: true,   // Data textures: ~50% faster loading, ~40% less memory
+        pbrEnabled: false,  // PBR unnecessary for BIM — saves GPU overhead
       });
 
       // WebGL context loss handling — detect GPU crash and show retry UI
@@ -271,7 +273,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       }
 
       // XKT Loader
-      const xktLoader = new sdk.XKTLoaderPlugin(viewer);
+      const xktLoader = new sdk.XKTLoaderPlugin(viewer, {
+        reuseGeometries: false,  // Better for unique BIM geometry — fewer draw calls
+      });
 
       // GLTFLoaderPlugin for manifest-driven GLB chunk loading
       let gltfLoader: any = null;
@@ -915,6 +919,23 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         onViewerReady?.(viewer);
         // Dispatch VIEWER_MODELS_LOADED for hooks like useObjectMoveMode
         window.dispatchEvent(new CustomEvent('VIEWER_MODELS_LOADED', { detail: { buildingFmGuid } }));
+
+        // Wire up virtual chunk floor filtering for Asset+ buildings
+        // (buildings with storey chunks but same XKT file — visibility filtering)
+        if (chunkModels.length > 0 && !hasRealTiles) {
+          const virtualChunks = chunkModels
+            .sort((a, b) => (a.chunk_order ?? 0) - (b.chunk_order ?? 0))
+            .map(c => ({
+              modelId: c.model_id,
+              modelName: c.model_name || c.model_id,
+              storeyFmGuid: c.storey_fm_guid!,
+              chunkOrder: c.chunk_order ?? 0,
+              parentModelId: c.parent_model_id || '',
+              storagePath: c.storage_path,
+            }));
+          (window as any).__xktVirtualChunks = virtualChunks;
+          console.log(`[NativeViewer] 🏗️ Virtual chunk floor filtering available: ${virtualChunks.length} storeys`);
+        }
 
         // Always perform instant viewFit after models load (duration: 0, no animation)
         // If a saved start view exists, NativeViewerShell will apply it on top of this.
