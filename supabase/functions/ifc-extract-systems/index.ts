@@ -6,7 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-/** Download WASM files and symlink so web-ifc can find them */
+/** Download WASM files and monkey-patch Deno.readFileSync so web-ifc can find them */
 async function ensureWasm(): Promise<string> {
   const dir = "/tmp/web-ifc-wasm";
   try { await Deno.mkdir(dir, { recursive: true }); } catch (_) { /* exists */ }
@@ -31,19 +31,21 @@ async function ensureWasm(): Promise<string> {
     }
   }
 
-  // web-ifc in Deno edge runtime ignores wasmPath and resolves to an internal npm path.
-  // Create a symlink so it finds our /tmp files at the expected location.
-  const symlinkParent = "/var/tmp/sb-compile-edge-runtime/node_modules/localhost/web-ifc/0.0.57";
-  try {
-    await Deno.mkdir(symlinkParent, { recursive: true });
-    const symlinkTarget = `${symlinkParent}/tmp`;
-    try { await Deno.lstat(symlinkTarget); } catch {
-      await Deno.symlink("/tmp", symlinkTarget);
-      console.log(`Created symlink: ${symlinkTarget} -> /tmp`);
+  // web-ifc in Deno edge runtime resolves WASM to an internal npm path we can't write to.
+  // Intercept file reads to redirect from the expected path to our /tmp copy.
+  const expectedPrefix = "/var/tmp/sb-compile-edge-runtime/node_modules/localhost/web-ifc/0.0.57/tmp/web-ifc-wasm/";
+  const originalReadFileSync = Deno.readFileSync;
+  // @ts-ignore - monkey-patching for WASM resolution
+  Deno.readFileSync = (path: string | URL) => {
+    const p = typeof path === "string" ? path : path.toString();
+    if (p.startsWith(expectedPrefix)) {
+      const fileName = p.substring(expectedPrefix.length);
+      const redirected = `${dir}/${fileName}`;
+      console.log(`WASM redirect: ${p} -> ${redirected}`);
+      return originalReadFileSync(redirected);
     }
-  } catch (e) {
-    console.warn(`Could not create symlink (will try direct path): ${e}`);
-  }
+    return originalReadFileSync(path);
+  };
 
   console.log(`WASM ready at ${dir}/`);
   return dir + "/";
