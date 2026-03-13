@@ -11,7 +11,7 @@ import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { ANNOTATION_FILTER_EVENT } from '@/lib/viewer-events';
-import { useFloorData } from '@/hooks/useFloorData';
+import { useFloorData, isArchitecturalModel } from '@/hooks/useFloorData';
 import { useModelData } from '@/hooks/useModelData';
 import { getDescendantIds, hideSpaceAndAreaObjects } from '@/hooks/useFloorVisibility';
 import { applyArchitectColors, recolorArchitectObjects } from '@/lib/architect-colors';
