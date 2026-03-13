@@ -1203,6 +1203,17 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   }, [checkedSources, checkedLevels, checkedSpaces, checkedCategories,
     levelColors, spaceColors, categoryColors, autoColorEnabled, autoColorSpaces, autoColorCategories, applyFilterVisibility, isVisible]);
 
+  // Track active viewer theme so cleanup can re-apply it
+  const activeThemeIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      activeThemeIdRef.current = detail?.themeId ?? null;
+    };
+    window.addEventListener(VIEWER_THEME_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(VIEWER_THEME_CHANGED_EVENT, handler);
+  }, []);
+
   // Cleanup when panel closes: reset viewer state
   useEffect(() => {
     if (isVisible) return;
@@ -1217,6 +1228,18 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       const entity = scene.objects?.[id];
       if (entity && entity.opacity < 1) entity.opacity = 1.0;
     });
+
+    // Re-apply active theme or fall back to standard architect colors
+    if (activeThemeIdRef.current) {
+      window.dispatchEvent(new CustomEvent(VIEWER_THEME_REQUESTED_EVENT, {
+        detail: { themeId: activeThemeIdRef.current }
+      }));
+    } else {
+      applyArchitectColors(viewer);
+    }
+
+    // Always hide IfcSpace objects (standard behavior)
+    hideSpaceAndAreaObjects(viewer);
   }, [isVisible, getXeokitViewer]);
 
   // ── Handlers ────────────────────────────────────────────────────────────
