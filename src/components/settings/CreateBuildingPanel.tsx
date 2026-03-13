@@ -306,7 +306,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       supabase.functions.invoke('ifc-extract-systems', {
         body: {
           buildingFmGuid: targetBuildingFmGuid,
-          ifcPath: ifcStoragePath,
+          ifcStoragePath: ifcStoragePath,
           mode: 'enrich-guids',
         }
       }).then(({ data, error }) => {
@@ -316,7 +316,8 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         } else {
           const levels = data?.levelsCreated ?? 0;
           const spaces = data?.spacesCreated ?? 0;
-          addLog(`✅ Hierarchy populated: ${levels} levels, ${spaces} spaces`);
+          const instances = data?.instancesCreated ?? 0;
+          addLog(`✅ Hierarchy populated: ${levels} levels, ${spaces} spaces, ${instances} instances`);
         }
       }).catch(e => {
         console.warn('Immediate hierarchy population failed:', e);

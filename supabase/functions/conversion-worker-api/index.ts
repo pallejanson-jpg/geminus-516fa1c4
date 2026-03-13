@@ -58,15 +58,45 @@ Deno.serve(async (req) => {
   const action = url.pathname.split("/").pop();
 
   try {
-    // GET /pending — oldest pending job
+    // GET /pending — oldest pending job (XKT-first priority + atomic claim + stale recovery)
     if (req.method === "GET" && action === "pending") {
-      const { data, error } = await supabase
+      // 1. Recover stale "processing" jobs (>120 min without update)
+      const staleThreshold = new Date(Date.now() - 120 * 60 * 1000).toISOString();
+      await supabase
+        .from("conversion_jobs")
+        .update({ status: "pending", progress: 0, log_messages: ["Recovered from stale processing state"], updated_at: new Date().toISOString() })
+        .eq("status", "processing")
+        .lt("updated_at", staleThreshold);
+
+      // 2. Priority: XKT jobs first (fast), then IFC jobs
+      let data: any = null;
+      let error: any = null;
+
+      // Try XKT jobs first
+      const xktResult = await supabase
         .from("conversion_jobs")
         .select("*")
         .eq("status", "pending")
+        .eq("source_type", "xkt")
         .order("created_at", { ascending: true })
         .limit(1)
         .maybeSingle();
+
+      if (xktResult.data) {
+        data = xktResult.data;
+        error = xktResult.error;
+      } else {
+        // Fallback: any pending job
+        const anyResult = await supabase
+          .from("conversion_jobs")
+          .select("*")
+          .eq("status", "pending")
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        data = anyResult.data;
+        error = anyResult.error;
+      }
 
       if (error) throw error;
 
@@ -76,17 +106,39 @@ Deno.serve(async (req) => {
         });
       }
 
+      // 3. Atomic claim: set status to "processing" immediately
+      const { data: claimed, error: claimErr } = await supabase
+        .from("conversion_jobs")
+        .update({
+          status: "processing",
+          progress: 1,
+          log_messages: ["Job claimed by worker via /pending"],
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", data.id)
+        .eq("status", "pending")
+        .select()
+        .maybeSingle();
+
+      if (claimErr) throw claimErr;
+      if (!claimed) {
+        // Another worker grabbed it, return null
+        return new Response(JSON.stringify({ job: null }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       // Generate signed URL from the correct bucket
-      const bucket = data.source_bucket || "ifc-uploads";
+      const bucket = claimed.source_bucket || "ifc-uploads";
       const { data: urlData } = await supabase.storage
         .from(bucket)
-        .createSignedUrl(data.ifc_storage_path, 3600);
+        .createSignedUrl(claimed.ifc_storage_path, 3600);
 
       return new Response(
         JSON.stringify({
           job: {
-            ...data,
-            source_type: data.source_type || "ifc",
+            ...claimed,
+            source_type: claimed.source_type || "ifc",
             source_bucket: bucket,
             ifc_download_url: urlData?.signedUrl || null,
           },
