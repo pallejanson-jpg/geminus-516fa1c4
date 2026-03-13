@@ -591,6 +591,46 @@ function parseLDJSON(text: string): any[] {
     .filter(Boolean);
 }
 
+/**
+ * Streaming LD-JSON parser for large property files.
+ * Processes line-by-line from a ReadableStream, yielding parsed objects
+ * without loading the entire response text into memory.
+ */
+async function* streamLDJSON(response: Response): AsyncGenerator<any> {
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    
+    const lines = buffer.split('\n');
+    // Keep the last partial line in the buffer
+    buffer = lines.pop() || '';
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        yield JSON.parse(trimmed);
+      } catch {
+        // skip malformed lines
+      }
+    }
+  }
+  
+  // Process any remaining data in the buffer
+  if (buffer.trim()) {
+    try {
+      yield JSON.parse(buffer.trim());
+    } catch {
+      // skip
+    }
+  }
+}
+
 // Categories to skip when extracting instances (non-physical)
 const SKIP_INSTANCE_CATEGORIES = new Set([
   'Revit Level', 'Levels', 'Revit Rooms', 'Rooms',
