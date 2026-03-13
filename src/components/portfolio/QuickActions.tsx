@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Globe, Package, BarChart, Eye,
-  DoorOpen, Plus, ClipboardList, AlertTriangle 
+  DoorOpen, Plus, ClipboardList, AlertTriangle, FolderOpen
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
