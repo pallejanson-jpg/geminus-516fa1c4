@@ -2067,15 +2067,19 @@ serve(async (req: Request) => {
           }
         }
 
-        // Use SVF-only (no OBJ which stalls large models at 99%)
+        // Request SVF (for metadata) + IFC (for per-storey XKT tiling via existing pipeline)
         // SVF2 is not supported for all designs (406 error), so we use SVF
+        // IFC derivative enables reuse of the ifc-to-xkt pipeline with real storey tiling
+        const requestIfc = body.requestIfc !== false; // default true
+        const outputFormats: any[] = [
+          { type: "svf", views: ["3d"] },
+        ];
+        if (requestIfc) {
+          outputFormats.push({ type: "ifc" });
+        }
         const translationBody = {
           input: { urn: urnBase64 },
-          output: {
-            formats: [
-              { type: "svf", views: ["3d"] },
-            ],
-          },
+          output: { formats: outputFormats },
         };
         console.log(`[translate-model] Requesting formats: ${JSON.stringify(translationBody.output.formats)}`);
         console.log(`[translate-model] Request body: ${JSON.stringify(translationBody)}`);
