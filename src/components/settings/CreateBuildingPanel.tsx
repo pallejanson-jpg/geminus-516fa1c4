@@ -599,6 +599,44 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
     setConversionProgress(0);
   };
 
+  // ── Batch enqueue all buildings ──
+  const handleBatchEnqueue = async () => {
+    setIsBatchEnqueuing(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('No session');
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const resp = await fetch(`${supabaseUrl}/functions/v1/conversion-worker-api/batch-enqueue`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
+        body: JSON.stringify({ created_by: user.id }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${resp.status}`);
+      }
+
+      const result = await resp.json();
+      toast({
+        title: 'Byggnader köade',
+        description: `${result.enqueued} jobb köade, ${result.skipped} hoppades över (av ${result.total_buildings} byggnader).`,
+      });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Batch-enqueue misslyckades', description: err.message });
+    } finally {
+      setIsBatchEnqueuing(false);
+    }
+  };
+
   const selectedBuilding = existingBuildings.find(b => b.fmGuid === selectedBuildingFmGuid);
 
   return (
