@@ -149,21 +149,22 @@ function extractSystemsAndConnections(metaObjects: any[]): {
   const systemNameGroups = new Map<string, string[]>();
 
   for (const m of metaObjects) {
-    const t = m.metaType || m.type || "";
+    const rawType = m.metaType || m.type || "";
+    const t = normalizeIfcType(rawType);
     const id = m.metaObjectId || m.id || "";
     const name = m.metaObjectName || m.name || "";
     const parentId = m.parentMetaObjectId || m.parentId || "";
 
-    if (id && t && !t.startsWith("IfcRel") && t !== "IfcSystem" && t !== "IfcDistributionSystem") {
-      objectExternalIds.push({ metaObjectId: id, ifcType: t });
+    if (id && rawType && !t.startsWith("ifcrel") && t !== "ifcsystem" && t !== "ifcdistributionsystem") {
+      objectExternalIds.push({ metaObjectId: id, ifcType: rawType });
     }
 
-    if (t === "IfcSystem" || t === "IfcDistributionSystem") {
-      const discipline = inferDiscipline(name, t);
+    if (t === "ifcsystem" || t === "ifcdistributionsystem") {
+      const discipline = inferDiscipline(name, rawType);
       const sys: ExtractedSystem = {
         id,
         name: name || id,
-        type: t,
+        type: rawType || "IfcSystem",
         discipline,
         memberIds: [],
       };
@@ -184,14 +185,14 @@ function extractSystemsAndConnections(metaObjects: any[]): {
       systemNameGroups.get(systemName)!.push(id);
     }
 
-    if (t.startsWith("IfcRelConnects") || t === "IfcRelFlowControlElements") {
+    if (t.startsWith("ifcrelconnects") || t === "ifcrelflowcontrolelements") {
       const relatingId = m.relatingElement || m.relatingPort || "";
       const relatedId = m.relatedElement || m.relatedPort || "";
       if (relatingId && relatedId) {
         connections.push({
           fromId: relatingId,
           toId: relatedId,
-          type: inferConnectionType(t),
+          type: inferConnectionType(rawType),
           direction: "forward",
         });
       }
