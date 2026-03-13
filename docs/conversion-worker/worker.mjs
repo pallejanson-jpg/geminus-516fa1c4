@@ -92,18 +92,23 @@ async function uploadFile(signedUrl, filePath, token) {
 
 /**
  * Group IFC model elements by IfcBuildingStorey.
+ * Collects descendant element expressIDs per storey via IfcRelContainedInSpatialStructure
+ * and IfcRelAggregates so convert2xkt can filter per storey.
  */
 function groupByStorey(ifcApi, modelId) {
   const storeys = [];
-  const allLines = ifcApi.GetAllLines(modelId);
+
+  // IFC type constants (web-ifc)
+  const IFCBUILDINGSTOREY = 3124254112;
+  const IFCRELCONTAINEDINSPATIALSTRUCTURE = 3242617779;
+  const IFCRELAGGREGATES = 160246688;
 
   // Find all IfcBuildingStorey elements
-  const IFCBUILDINGSTOREY = 3124254112; // web-ifc type ID
   let storeyLines;
   try {
     storeyLines = ifcApi.GetLineIDsWithType(modelId, IFCBUILDINGSTOREY);
   } catch {
-    // Fallback: scan all lines for storey type
+    const allLines = ifcApi.GetAllLines(modelId);
     storeyLines = [];
     for (let i = 0; i < allLines.size(); i++) {
       try {
@@ -115,25 +120,106 @@ function groupByStorey(ifcApi, modelId) {
     }
   }
 
-  if (storeyLines.size ? storeyLines.size() === 0 : storeyLines.length === 0) {
+  const storeyCount = storeyLines.size ? storeyLines.size() : storeyLines.length;
+  if (storeyCount === 0) {
     console.log("No IfcBuildingStorey found — returning single tile");
-    return [{ name: "full_model", guid: null, lineIds: null }];
+    return [{ name: "full_model", guid: null, elementIds: null }];
   }
 
-  const count = storeyLines.size ? storeyLines.size() : storeyLines.length;
-  for (let i = 0; i < count; i++) {
+  // Build spatial containment map: storeyExpressId → Set of descendant expressIDs
+  const storeyElementMap = new Map(); // storeyExpressId → Set<expressId>
+  const storeyExpressIds = new Set();
+
+  for (let i = 0; i < storeyCount; i++) {
+    const id = storeyLines.size ? storeyLines.get(i) : storeyLines[i];
+    storeyExpressIds.add(id);
+    storeyElementMap.set(id, new Set([id]));
+  }
+
+  // Helper: get lines of a type
+  function getLinesOfType(typeId) {
+    try {
+      const ids = ifcApi.GetLineIDsWithType(modelId, typeId);
+      const count = ids.size ? ids.size() : ids.length || 0;
+      const result = [];
+      for (let j = 0; j < count; j++) {
+        const lid = ids.size ? ids.get(j) : ids[j];
+        try { result.push(ifcApi.GetLine(modelId, lid, true)); } catch {}
+      }
+      return result;
+    } catch { return []; }
+  }
+
+  // Walk IfcRelContainedInSpatialStructure — maps elements to their containing storey
+  for (const rel of getLinesOfType(IFCRELCONTAINEDINSPATIALSTRUCTURE)) {
+    const relatingStructure = rel?.RelatingStructure;
+    const relatingId = relatingStructure?.expressID ?? relatingStructure?.value;
+    if (!relatingId || !storeyElementMap.has(relatingId)) continue;
+
+    const elements = rel?.RelatedElements || [];
+    const elArr = Array.isArray(elements) ? elements : [];
+    for (const el of elArr) {
+      const elId = el?.expressID ?? el?.value;
+      if (elId) storeyElementMap.get(relatingId).add(elId);
+    }
+  }
+
+  // Walk IfcRelAggregates — handles nested decomposition (storey → space → elements)
+  const aggregateMap = new Map(); // parentId → [childId]
+  for (const rel of getLinesOfType(IFCRELAGGREGATES)) {
+    const relatingObj = rel?.RelatingObject;
+    const parentId = relatingObj?.expressID ?? relatingObj?.value;
+    if (!parentId) continue;
+
+    const children = rel?.RelatedObjects || [];
+    const childArr = Array.isArray(children) ? children : [];
+    for (const child of childArr) {
+      const childId = child?.expressID ?? child?.value;
+      if (childId) {
+        if (!aggregateMap.has(parentId)) aggregateMap.set(parentId, []);
+        aggregateMap.get(parentId).push(childId);
+      }
+    }
+  }
+
+  // Recursively expand aggregate children into storey sets
+  function expandAggregates(parentId, targetSet) {
+    const children = aggregateMap.get(parentId);
+    if (!children) return;
+    for (const childId of children) {
+      targetSet.add(childId);
+      expandAggregates(childId, targetSet);
+    }
+  }
+
+  for (const [storeyId, elementSet] of storeyElementMap) {
+    const snapshot = [...elementSet];
+    for (const elId of snapshot) {
+      expandAggregates(elId, elementSet);
+    }
+  }
+
+  // Build result
+  for (let i = 0; i < storeyCount; i++) {
     const id = storeyLines.size ? storeyLines.get(i) : storeyLines[i];
     try {
       const storey = ifcApi.GetLine(modelId, id);
       const name = storey?.Name?.value || storey?.LongName?.value || `storey_${i}`;
       const guid = storey?.GlobalId?.value || null;
-      storeys.push({ name, guid, expressId: id });
+      const elementIds = storeyElementMap.get(id);
+      storeys.push({
+        name,
+        guid,
+        expressId: id,
+        elementIds: elementIds ? [...elementIds] : null,
+      });
+      console.log(`  Storey "${name}": ${elementIds?.size || 0} elements`);
     } catch (e) {
       console.warn(`Failed to read storey ${id}:`, e.message);
     }
   }
 
-  console.log(`Found ${storeys.length} storeys:`, storeys.map((s) => s.name));
+  console.log(`Found ${storeys.length} storeys with element IDs`);
   return storeys;
 }
 
