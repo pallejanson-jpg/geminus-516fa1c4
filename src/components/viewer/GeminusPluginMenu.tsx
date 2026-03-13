@@ -1,7 +1,7 @@
 import React, { useState, useContext, useCallback, useEffect, useRef } from 'react';
 import {
   Menu, X, MessageSquarePlus, LifeBuoy, BarChart2, Bot, FileText, Wrench,
-  Send, Loader2, Package,
+  Send, Loader2, Package, Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
@@ -33,7 +33,7 @@ interface GeminusPluginMenuProps {
   contextMetadata?: Record<string, any>;
 }
 
-type ActivePanel = null | 'issue' | 'workorder' | 'support' | 'insights' | 'gunnar' | 'ilean' | 'inventory';
+type ActivePanel = null | 'issue' | 'workorder' | 'support' | 'insights' | 'gunnar' | 'ilean' | 'inventory' | 'viewer';
 
 const MENU_ITEMS = [
   { id: 'issue' as const, label: 'Skapa ärende', icon: MessageSquarePlus },
@@ -41,6 +41,7 @@ const MENU_ITEMS = [
   { id: 'support' as const, label: 'Supportärende', icon: LifeBuoy },
   { id: 'inventory' as const, label: 'Asset panel', icon: Package },
   { id: 'insights' as const, label: 'Insikter', icon: BarChart2 },
+  { id: 'viewer' as const, label: 'Geminus View', icon: Eye },
   { id: 'gunnar' as const, label: 'Fråga Geminus AI', icon: Bot },
   { id: 'ilean' as const, label: 'Fråga Ilean', icon: FileText },
 ];
@@ -83,9 +84,21 @@ export default function GeminusPluginMenu({
   }, []);
 
   const handleOpen = useCallback((panel: ActivePanel) => {
+    if (panel === 'viewer') {
+      // Navigate to Geminus View — open in new tab if in plugin/iframe context
+      const isPlugin = source === 'fma_plus' || source === '2d_fm_access' || source === 'faciliate';
+      const url = '/view';
+      if (isPlugin || window !== window.top) {
+        window.open(url, '_blank');
+      } else {
+        window.location.href = url;
+      }
+      setExpanded(false);
+      return;
+    }
     setActivePanel(panel);
     setExpanded(false);
-  }, []);
+  }, [source]);
 
   const handleClose = useCallback(() => {
     setActivePanel(null);
@@ -231,14 +244,23 @@ export default function GeminusPluginMenu({
         />
       )}
 
-      {/* Insights */}
-      {buildingFmGuid && (
-        <InsightsDrawerPanel
-          buildingFmGuid={buildingFmGuid}
-          buildingName={buildingName}
-          open={activePanel === 'insights'}
-          onClose={handleClose}
-        />
+      {/* Insights — fixed floating panel */}
+      {activePanel === 'insights' && buildingFmGuid && (
+        <div className={cn(
+          "fixed z-50 bg-card/95 backdrop-blur-md border border-border shadow-2xl flex flex-col overflow-hidden animate-in fade-in duration-200",
+          isMobile
+            ? "inset-x-0 top-0 slide-in-from-bottom-4"
+            : "bottom-24 right-6 w-[480px] max-h-[70vh] rounded-xl slide-in-from-bottom-4"
+        )}
+        style={isMobile ? { bottom: 0, paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' } : undefined}
+        >
+          <InsightsDrawerPanel
+            buildingFmGuid={buildingFmGuid}
+            buildingName={buildingName}
+            open={true}
+            onClose={handleClose}
+          />
+        </div>
       )}
 
       {/* Gunnar Chat — fullscreen on mobile, floating panel on desktop */}
