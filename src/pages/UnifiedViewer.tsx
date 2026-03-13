@@ -524,10 +524,33 @@ const UnifiedViewerContent: React.FC<{
   }, [isSplit2D3D]);
 
   // ─── Loading / Error states ────────────────────────────────────────
-  if (isLoading) {
+  // NOTE: We no longer show a full-screen "Loading viewer..." overlay here.
+  // Instead we let the NativeXeokitViewer handle its own loading spinner,
+  // which eliminates the double-spinner issue (especially from saved views).
+  if (isLoading || !buildingData) {
+    // Still need to wait for buildingData before rendering the header/content
+    if (!buildingFmGuid) {
+      return (
+        <div className="h-screen bg-background">
+          <BuildingSelector />
+        </div>
+      );
+    }
+    if (error) {
+      return (
+        <div className="h-screen flex items-center justify-center p-4 bg-background">
+          <div className="text-center max-w-md">
+            <Layers className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <p className="text-destructive font-medium mb-2">{error}</p>
+            <Button variant="outline" onClick={handleGoBack}>Back</Button>
+          </div>
+        </div>
+      );
+    }
+    // Show a minimal loading state that doesn't compete with the viewer's own spinner
     return (
       <div className="h-screen flex items-center justify-center bg-black">
-        <p className="text-sm text-muted-foreground">Loading viewer...</p>
+        <Loader2 className="h-6 w-6 animate-spin text-white/30" />
       </div>
     );
   }
