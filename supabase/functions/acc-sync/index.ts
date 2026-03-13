@@ -2170,9 +2170,10 @@ serve(async (req: Request) => {
         // A3: Use EU endpoint for wipemea URNs
         const decodedUrnCheck = atob(urnBase64.replace(/-/g, '+').replace(/_/g, '/'));
         const isEmeaCheck = decodedUrnCheck.includes('wipemea');
-        const manifestUrl = isEmeaCheck
-          ? `https://developer.api.autodesk.com/modelderivative/v2/regions/eu/designdata/${urnBase64}/manifest`
-          : `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urnBase64}/manifest`;
+        const mdBaseCheck = isEmeaCheck
+          ? "https://developer.api.autodesk.com/modelderivative/v2/regions/eu/designdata"
+          : "https://developer.api.autodesk.com/modelderivative/v2/designdata";
+        const manifestUrl = `${mdBaseCheck}/${urnBase64}/manifest`;
         console.log(`[check-translation] isEmea=${isEmeaCheck}, url=${manifestUrl}`);
 
         let manifestRes = await fetchWithRetry(manifestUrl, {
