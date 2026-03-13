@@ -832,7 +832,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                         <div className="h-64">
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <PieChart>
-                                                    <Pie data={energyDistribution} cx="50%" cy="50%" innerRadius={isMobile ? 40 : 45} outerRadius={isMobile ? 65 : 75} paddingAngle={2} dataKey="value" label={renderPieLabel} labelLine={!isMobile}>
+                                                    <Pie data={energyDistribution} cx="50%" cy="50%" innerRadius={isMobile ? 40 : 45} outerRadius={isMobile ? 65 : 75} paddingAngle={2} dataKey="value" label={renderEnergyPieLabel} labelLine={!isMobile}>
                                                         {energyDistribution.map((entry, index) => (
                                                             <Cell key={`cell-${index}`} fill={entry.color} style={{ cursor: 'pointer' }} onClick={() => {
                                                                 // Resolve all floors to child rooms for reliable 3D matching
