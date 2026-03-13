@@ -1193,11 +1193,16 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                             size="sm"
                                             className="ml-auto gap-1.5"
                                             onClick={() => {
-                                                // "Visa alla i 3D" — dispatch alarm annotations for the 50 latest
-                                                const alarmsForViewer = alarmList
-                                                    .slice(0, 50)
-                                                    .map((a: any) => ({ fmGuid: a.fm_guid, roomFmGuid: a.in_room_fm_guid }));
-                                                window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: alarmsForViewer } }));
+                                                if (drawerMode) {
+                                                    // Dispatch event — viewer is listening
+                                                    const alarmsForViewer = alarmList
+                                                        .slice(0, 50)
+                                                        .map((a: any) => ({ fmGuid: a.fm_guid, roomFmGuid: a.in_room_fm_guid }));
+                                                    window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: alarmsForViewer } }));
+                                                } else {
+                                                    // Navigate to viewer
+                                                    navigateTo3D({ visualization: 'alarms' });
+                                                }
                                             }}
                                         >
                                             <Eye className="h-3.5 w-3.5" />
