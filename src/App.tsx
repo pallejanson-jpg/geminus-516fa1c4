@@ -278,6 +278,18 @@ const App = () => {
             } 
           />
           
+          {/* Geminus View — standalone IFC viewer */}
+          <Route 
+            path="/view" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <ProtectedRoute>
+                  <GeminusView />
+                </ProtectedRoute>
+              </Suspense>
+            } 
+          />
+          
           {/* Protected app routes */}
           <Route 
             path="/*" 
