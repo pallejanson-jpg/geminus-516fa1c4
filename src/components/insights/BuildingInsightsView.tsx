@@ -622,13 +622,24 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
 
     const renderPieLabel = isMobile 
         ? undefined 
-        : ({ name, percent, x, y, midAngle }: any) => {
+        : ({ name, value, percent, x, y, midAngle }: any) => {
             const RADIAN = Math.PI / 180;
-            const radius = 10;
             const textAnchor = Math.cos(-midAngle * RADIAN) >= 0 ? 'start' : 'end';
             return (
                 <text x={x} y={y} fill="hsl(var(--foreground))" textAnchor={textAnchor} dominantBaseline="central" className="text-xs">
-                    {`${name} ${(percent * 100).toFixed(0)}%`}
+                    {`${name} (${value})`}
+                </text>
+            );
+        };
+
+    const renderEnergyPieLabel = isMobile
+        ? undefined
+        : ({ name, value, x, y, midAngle }: any) => {
+            const RADIAN = Math.PI / 180;
+            const textAnchor = Math.cos(-midAngle * RADIAN) >= 0 ? 'start' : 'end';
+            return (
+                <text x={x} y={y} fill="hsl(var(--foreground))" textAnchor={textAnchor} dominantBaseline="central" className="text-xs">
+                    {`${name} ${value}%`}
                 </text>
             );
         };
