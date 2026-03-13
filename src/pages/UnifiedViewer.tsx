@@ -555,25 +555,7 @@ const UnifiedViewerContent: React.FC<{
     );
   }
 
-  if (!buildingFmGuid) {
-    return (
-      <div className="h-screen bg-background">
-        <BuildingSelector />
-      </div>
-    );
-  }
-
-  if (error || !buildingData) {
-    return (
-      <div className="h-screen flex items-center justify-center p-4 bg-background">
-        <div className="text-center max-w-md">
-          <Layers className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <p className="text-destructive font-medium mb-2">{error || 'Building data not found'}</p>
-          <Button variant="outline" onClick={handleGoBack}>Back</Button>
-        </div>
-      </div>
-    );
-  }
+  // (buildingFmGuid and error checks moved into the isLoading block above)
 
   // ─── Mobile: Simplified tab layout ─────────────────────────────────
   if (isMobile) {
