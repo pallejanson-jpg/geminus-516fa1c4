@@ -769,14 +769,17 @@ async function extractBimHierarchy(
         }
       }
 
-      // Fetch properties
+      // Fetch properties — use streaming parser for large LD-JSON files to avoid OOM
       if (idx.propertiesUrl) {
         const propsRes = await fetch(idx.propertiesUrl, {
           headers: { 'Authorization': `Bearer ${token}` },
         });
-        if (propsRes.ok) {
-          const propsText = await propsRes.text();
-          const props = parseLDJSON(propsText);
+        if (propsRes.ok && propsRes.body) {
+          // Stream and collect props without loading entire text into memory
+          const props: any[] = [];
+          for await (const obj of streamLDJSON(propsRes)) {
+            props.push(obj);
+          }
 
           // === Dynamic field key resolution ===
           let categoryKey = '';
