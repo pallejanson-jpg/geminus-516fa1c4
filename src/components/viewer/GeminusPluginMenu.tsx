@@ -244,14 +244,23 @@ export default function GeminusPluginMenu({
         />
       )}
 
-      {/* Insights */}
-      {buildingFmGuid && (
-        <InsightsDrawerPanel
-          buildingFmGuid={buildingFmGuid}
-          buildingName={buildingName}
-          open={activePanel === 'insights'}
-          onClose={handleClose}
-        />
+      {/* Insights — fixed floating panel */}
+      {activePanel === 'insights' && buildingFmGuid && (
+        <div className={cn(
+          "fixed z-50 bg-card/95 backdrop-blur-md border border-border shadow-2xl flex flex-col overflow-hidden animate-in fade-in duration-200",
+          isMobile
+            ? "inset-x-0 top-0 slide-in-from-bottom-4"
+            : "bottom-24 right-6 w-[480px] max-h-[70vh] rounded-xl slide-in-from-bottom-4"
+        )}
+        style={isMobile ? { bottom: 0, paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' } : undefined}
+        >
+          <InsightsDrawerPanel
+            buildingFmGuid={buildingFmGuid}
+            buildingName={buildingName}
+            open={true}
+            onClose={handleClose}
+          />
+        </div>
       )}
 
       {/* Gunnar Chat — fullscreen on mobile, floating panel on desktop */}
