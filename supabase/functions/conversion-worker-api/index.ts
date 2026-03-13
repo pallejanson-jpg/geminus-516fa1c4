@@ -10,10 +10,40 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Auth: shared secret
+  // Auth: shared secret OR JWT admin
   const workerSecret = Deno.env.get("WORKER_API_SECRET");
   const provided = req.headers.get("x-worker-secret");
-  if (!workerSecret || provided !== workerSecret) {
+  const hasWorkerSecret = workerSecret && provided === workerSecret;
+
+  // Allow JWT-based admin auth for batch-enqueue from the UI
+  let jwtUserId: string | null = null;
+  if (!hasWorkerSecret) {
+    const authHeader = req.headers.get("authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user } } = await userClient.auth.getUser();
+      if (user) {
+        // Check admin role using service client
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const svcClient = createClient(supabaseUrl, serviceKey);
+        const { data: roleData } = await svcClient
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user.id)
+          .eq("role", "admin")
+          .maybeSingle();
+        if (roleData) {
+          jwtUserId = user.id;
+        }
+      }
+    }
+  }
+
+  if (!hasWorkerSecret && !jwtUserId) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
