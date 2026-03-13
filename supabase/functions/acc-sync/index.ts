@@ -2228,10 +2228,56 @@ serve(async (req: Request) => {
 
         await supabase.from("acc_model_translations").update(updateData).eq("version_urn", versionUrn);
 
-        // When translation succeeds, trigger geometry extraction pipeline (non-blocking)
+        // When translation succeeds, trigger pipelines (non-blocking)
         if (overallStatus === "success" && body.buildingFmGuid) {
+          // Check if IFC derivative is available — if so, download and feed into ifc-to-xkt pipeline
+          const ifcDeriv = derivatives.find(d => 
+            d.outputType === 'ifc' || d.mime === 'application/octet-stream' && d.role === 'graphics'
+          );
+
+          if (ifcDeriv) {
+            console.log(`[check-translation] IFC derivative found — downloading for XKT conversion pipeline`);
+            // Download IFC derivative and upload to ifc-uploads, then trigger ifc-to-xkt
+            const ifcDownloadUrl = `${mdBaseCheck}/${urnBase64}/manifest/${encodeURIComponent(ifcDeriv.urn)}`;
+            fetch(ifcDownloadUrl, {
+              headers: { "Authorization": `Bearer ${token}` },
+            }).then(async (ifcRes) => {
+              if (!ifcRes.ok) {
+                console.warn(`[check-translation] IFC download failed: ${ifcRes.status}`);
+                return;
+              }
+              const ifcData = await ifcRes.arrayBuffer();
+              const ifcPath = `${body.buildingFmGuid}/acc-derived-${Date.now()}.ifc`;
+              const ifcBlob = new Blob([ifcData], { type: "application/octet-stream" });
+              const { error: uploadErr } = await supabase.storage
+                .from("ifc-uploads")
+                .upload(ifcPath, ifcBlob, { contentType: "application/octet-stream", upsert: true });
+              
+              if (uploadErr) {
+                console.warn(`[check-translation] IFC upload failed:`, uploadErr.message);
+                return;
+              }
+              console.log(`[check-translation] IFC uploaded (${(ifcData.byteLength/1024/1024).toFixed(1)}MB), triggering ifc-to-xkt...`);
+              
+              // Trigger ifc-to-xkt for real per-storey tiling
+              await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/ifc-to-xkt`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                },
+                body: JSON.stringify({
+                  ifcStoragePath: ifcPath,
+                  buildingFmGuid: body.buildingFmGuid,
+                  modelName: body.fileName?.replace(/\.[^.]+$/, '') || "ACC Model",
+                }),
+              }).then(r => console.log(`[check-translation] ifc-to-xkt triggered: ${r.status}`))
+                .catch(e => console.warn(`[check-translation] ifc-to-xkt trigger failed:`, e));
+            }).catch(e => console.warn(`[check-translation] IFC derivative download failed:`, e));
+          }
+
+          // Also trigger GLB geometry extract as fallback/parallel path
           console.log(`[check-translation] Translation success — triggering acc-geometry-extract for ${body.buildingFmGuid}`);
-          // Fire-and-forget: invoke the geometry extract function with userId for 3-legged token
           fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/acc-geometry-extract`, {
             method: "POST",
             headers: {
