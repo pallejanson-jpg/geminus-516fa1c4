@@ -400,6 +400,8 @@ Deno.serve(async (req) => {
         // Try to find IFC file first
         let storagePath: string | null = null;
         let modelName = guid;
+        let sourceType = "ifc";
+        let sourceBucket = "ifc-uploads";
 
         if (ifcBuildingGuids.has(guid)) {
           const { data: files } = await supabase.storage
@@ -409,6 +411,8 @@ Deno.serve(async (req) => {
           if (ifcFile) {
             storagePath = `${guid}/${ifcFile.name}`;
             modelName = ifcFile.name.replace(/\.ifc$/i, "");
+            sourceType = "ifc";
+            sourceBucket = "ifc-uploads";
           }
         }
 
@@ -423,6 +427,8 @@ Deno.serve(async (req) => {
           if (xktModel) {
             storagePath = xktModel.storage_path;
             modelName = xktModel.model_name || guid;
+            sourceType = "xkt";
+            sourceBucket = "xkt-models";
           }
         }
 
@@ -437,6 +443,8 @@ Deno.serve(async (req) => {
           model_name: modelName,
           status: "pending",
           created_by: created_by || null,
+          source_type: sourceType,
+          source_bucket: sourceBucket,
         });
         enqueued++;
       }
