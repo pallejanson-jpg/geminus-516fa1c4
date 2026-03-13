@@ -119,8 +119,19 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       const viewer = new sdk.Viewer({
         canvasElement: canvasRef.current,
         transparent: true,
-        saoEnabled: true,
+        saoEnabled: false,  // Disabled: SAO causes "Invalid framebuffer" on large models
         entityOffsetsEnabled: true,
+      });
+
+      // WebGL context loss handling — detect GPU crash and show retry UI
+      const canvas = canvasRef.current;
+      canvas.addEventListener('webglcontextlost', (e: Event) => {
+        e.preventDefault();
+        console.error('[NativeViewer] ⚠️ WebGL context lost');
+        if (mountedRef.current) {
+          setErrorMsg('GPU-minnet tog slut. Försök ladda om sidan.');
+          setPhase('error');
+        }
       });
       viewerRef.current = viewer;
 
@@ -208,7 +219,12 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         const navCubeCanvas = document.createElement('canvas');
         navCubeCanvas.id = `native-navcube-${buildingFmGuid.substring(0, 8)}`;
         navCubeCanvas.style.cssText = 'position:absolute;bottom:60px;right:10px;width:150px;height:150px;pointer-events:auto;';
-        canvasRef.current.parentElement?.appendChild(navCubeCanvas);
+        const parentEl = canvasRef.current?.parentElement;
+        if (parentEl) {
+          parentEl.appendChild(navCubeCanvas);
+        } else {
+          console.warn('[NativeViewer] NavCube: no parent element for canvas');
+        }
 
         let usedCustom = false;
         if (!(window as any).NavCubePlugin) {
@@ -870,12 +886,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       // 5. Camera: instant viewFit as fallback (no animation) if no saved start view arrives within 500ms
       if (mountedRef.current && viewer.scene) {
-        // Enable SAO after load
+        // SAO disabled — causes "Invalid framebuffer" and WebGL context loss on large models
         if (viewer.scene.sao) {
-          viewer.scene.sao.enabled = true;
-          viewer.scene.sao.intensity = 0.15;
-          viewer.scene.sao.bias = 0.5;
-          viewer.scene.sao.scale = 1000;
+          viewer.scene.sao.enabled = false;
         }
 
         // Apply architectural IFC-type-based coloring to all objects
@@ -1300,7 +1313,13 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/90 z-10 p-6 text-center">
           <AlertCircle className="h-8 w-8 text-destructive mb-3" />
           <p className="text-sm text-destructive font-medium mb-2">Failed to load 3D model</p>
-          <p className="text-xs text-muted-foreground max-w-md">{errorMsg}</p>
+          <p className="text-xs text-muted-foreground max-w-md mb-4">{errorMsg}</p>
+          <button
+            className="px-4 py-2 rounded bg-primary text-primary-foreground text-sm hover:opacity-90"
+            onClick={() => { setPhase('init'); initialize(); }}
+          >
+            Försök igen
+          </button>
         </div>
       )}
 
