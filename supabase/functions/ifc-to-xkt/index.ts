@@ -614,16 +614,16 @@ Deno.serve(async (req) => {
     const { systems, connections, objectExternalIds } = extractSystemsAndConnections(metaObjectsList as any[]);
     await appendLog(`Found ${systems.length} systems, ${connections.length} connections, ${objectExternalIds.length} objects`, 68);
 
-    // 5. Write XKT to ArrayBuffer
+    // 5. Write XKT to ArrayBuffer (zip: true for ~30% smaller files)
     const stats: Record<string, any> = { texturesSize: 0 };
     const xktArrayBuffer = (xeokitConvert as any).writeXKTModelToArrayBuffer(
       xktModel,
       null,
       stats,
-      { zip: false }
+      { zip: true }
     );
     const xktSizeMB = xktArrayBuffer.byteLength / 1024 / 1024;
-    await appendLog(`XKT generated: ${xktSizeMB.toFixed(2)} MB`, 70);
+    await appendLog(`XKT generated: ${xktSizeMB.toFixed(2)} MB (compressed)`, 70);
 
     // 6. Upload XKT to storage
     await appendLog("Uploading XKT to storage...", 75);
@@ -669,20 +669,19 @@ Deno.serve(async (req) => {
       throw new Error(errMsg);
     }
 
-    // 8. Persist systems, connections, and external IDs
-    await appendLog("Saving systems and connectivity...", 85);
-    await persistSystemsAndConnections(
-      supabase,
-      buildingFmGuid,
-      systems,
-      connections,
-      objectExternalIds,
-      appendLog
-    );
-
-    // 9. Populate assets table with building hierarchy (storeys, spaces, instances)
-    await appendLog("Populating building hierarchy in assets...", 90);
-    await populateAssetsFromMetaObjects(supabase, buildingFmGuid, metaObjectsList as any[], appendLog);
+    // 8+9. Persist systems AND populate assets in parallel (independent DB operations)
+    await appendLog("Saving systems, connectivity, and building hierarchy in parallel...", 85);
+    await Promise.all([
+      persistSystemsAndConnections(
+        supabase,
+        buildingFmGuid,
+        systems,
+        connections,
+        objectExternalIds,
+        appendLog
+      ),
+      populateAssetsFromMetaObjects(supabase, buildingFmGuid, metaObjectsList as any[], appendLog),
+    ]);
 
     await updateJob({
       status: "done",
