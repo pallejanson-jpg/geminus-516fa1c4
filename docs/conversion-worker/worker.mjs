@@ -271,7 +271,20 @@ async function processIfcJob(job) {
     const ifcApi = new WebIFC.IfcAPI();
     await ifcApi.Init();
     const ifcData = fs.readFileSync(ifcPath);
-    const modelId = ifcApi.OpenModel(ifcData);
+
+    // Validate: first bytes should be "ISO-10303" for IFC files
+    const header = ifcData.slice(0, 20).toString("utf8");
+    if (!header.includes("ISO") && !header.includes("IFC")) {
+      throw new Error(`File does not look like IFC (header: "${header.slice(0, 16)}"). Possibly a binary XKT file was queued as IFC.`);
+    }
+
+    let modelId;
+    try {
+      modelId = ifcApi.OpenModel(ifcData);
+    } catch (openErr) {
+      console.error(`  web-ifc OpenModel failed. File size: ${(fileSize / 1024 / 1024).toFixed(1)} MB, header: "${header.slice(0, 16)}"`);
+      throw openErr;
+    }
 
     const storeys = groupByStorey(ifcApi, modelId);
     ifcApi.CloseModel(modelId);
@@ -393,11 +406,18 @@ async function processIfcJob(job) {
 // ─── Job dispatcher ───
 async function processJob(job) {
   const sourceType = job.source_type || "ifc";
+  const storagePath = job.ifc_storage_path || "";
 
-  if (sourceType === "xkt") {
+  // Extension guard: if the file ends in .xkt, ALWAYS treat as XKT job
+  // regardless of source_type — prevents IFC parser from crashing on binary XKT data
+  const isXktFile = storagePath.toLowerCase().endsWith(".xkt");
+
+  if (sourceType === "xkt" || isXktFile) {
+    if (isXktFile && sourceType !== "xkt") {
+      console.warn(`⚠️ File extension is .xkt but source_type='${sourceType}' — forcing XKT path`);
+    }
     await processXktJob(job);
   } else {
-    // 'ifc' or 'ifc-upload-to-existing' — both use full IFC conversion
     await processIfcJob(job);
   }
 }
