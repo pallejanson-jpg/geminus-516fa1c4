@@ -56,6 +56,8 @@ Deno.serve(async (req) => {
         JSON.stringify({
           job: {
             ...data,
+            source_type: data.source_type || "ifc",
+            source_bucket: bucket,
             ifc_download_url: urlData?.signedUrl || null,
           },
         }),
