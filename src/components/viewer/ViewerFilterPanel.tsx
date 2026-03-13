@@ -421,24 +421,24 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       }
     }
 
-    // Detect A-model IDs (name starts with 'A' or contains 'arkitekt')
+    // Detect A-model IDs using shared isArchitecturalModel logic
     const aModelSceneIds = new Set<string>();
     if (sharedModels.length > 0) {
       sharedModels.forEach(m => {
-        const n = m.name.toLowerCase();
-        if (n.startsWith('a') || n.includes('a-modell') || n.includes('arkitekt')) {
+        if (isArchitecturalModel(m.name)) {
           aModelSceneIds.add(m.id);
         }
       });
     }
 
-    // Also add model IDs from scene that we know are A-models (by matching name)
+    // Fallback: if no A-models detected from sharedModels, check scene model IDs directly
     if (aModelSceneIds.size === 0) {
-      // If sharedModels hasn't resolved names yet, try all scene model IDs
-      // since we only load A-models in native viewer
       const sceneModelIds = Object.keys(sceneModels);
-      if (sceneModelIds.length > 0) {
-        console.log(`[FilterPanel] No A-models from sharedModels, treating all ${sceneModelIds.length} scene models as A-models`);
+      sceneModelIds.forEach(id => {
+        if (isArchitecturalModel(id)) aModelSceneIds.add(id);
+      });
+      // Only treat ALL as A-models if there's exactly 1 model (single-model building)
+      if (aModelSceneIds.size === 0 && sceneModelIds.length === 1) {
         sceneModelIds.forEach(id => aModelSceneIds.add(id));
       }
     }
