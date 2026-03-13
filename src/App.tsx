@@ -42,6 +42,8 @@ const PluginPage = lazy(() => import("@/pages/PluginPage"));
 const HomeLandingV2 = lazy(() => import("@/pages/HomeLandingV2"));
 // API Documentation page
 const ApiDocs = lazy(() => import("@/pages/ApiDocs"));
+// Standalone AI Chat page
+const AiChat = lazy(() => import("@/pages/AiChat"));
 
 const queryClient = new QueryClient();
 
