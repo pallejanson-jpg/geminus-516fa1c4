@@ -19,6 +19,7 @@ import SidePopPanel from "./SidePopPanel";
 import XrayToggle from "./XrayToggle";
 import AnnotationCategoryList from "./AnnotationCategoryList";
 import CreateViewDialog from "./CreateViewDialog";
+import InventoryPanel from "./InventoryPanel";
 import CreateIssueDialog from "./CreateIssueDialog";
 import FloatingIssueListPanel, { type BcfIssue } from "./FloatingIssueListPanel";
 import IssueDetailSheet from "./IssueDetailSheet";
