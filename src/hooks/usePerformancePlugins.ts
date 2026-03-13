@@ -56,26 +56,9 @@ export function usePerformancePlugins({ viewerRef, ready, isMobile }: UsePerform
         URL.revokeObjectURL(sdkBlobUrl);
         if (cancelled) return;
 
-        // 1. FastNavPlugin — check user setting
-        const fastNavEnabled = (() => {
-          try {
-            const stored = localStorage.getItem('viewer-fastnav-enabled');
-            return stored !== null ? JSON.parse(stored) : true; // default ON
-          } catch { return true; }
-        })();
-
-        if (sdk.FastNavPlugin && !pluginsRef.current.fastNav && fastNavEnabled) {
-          pluginsRef.current.fastNav = new sdk.FastNavPlugin(xeokitViewer, {
-            scaleCanvasResolution: true,
-            scaleCanvasResolutionFactor: isMobile ? 0.5 : 0.6,
-            hideEdges: true,
-            hideTransparentObjects: false, // keep spaces visible
-            hideSAO: true,
-          });
-          console.log('[perf-plugins] FastNavPlugin installed', { factor: isMobile ? 0.5 : 0.6 });
-        } else if (!fastNavEnabled) {
-          console.log('[perf-plugins] FastNavPlugin disabled by user setting');
-        }
+        // 1. FastNavPlugin — SKIPPED: already installed by NativeXeokitViewer
+        // Avoid double installation which wastes resources
+        console.log('[perf-plugins] FastNavPlugin skipped (handled by NativeXeokitViewer)');
 
         // 2. ViewCullPlugin (frustum culling)
         if (sdk.ViewCullPlugin && !pluginsRef.current.viewCull) {
