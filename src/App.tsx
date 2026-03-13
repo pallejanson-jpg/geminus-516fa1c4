@@ -44,6 +44,8 @@ const HomeLandingV2 = lazy(() => import("@/pages/HomeLandingV2"));
 const ApiDocs = lazy(() => import("@/pages/ApiDocs"));
 // Standalone AI Chat page
 const AiChat = lazy(() => import("@/pages/AiChat"));
+// Geminus View — standalone IFC viewer + building selector
+const GeminusView = lazy(() => import("@/pages/GeminusView"));
 
 const queryClient = new QueryClient();
 
