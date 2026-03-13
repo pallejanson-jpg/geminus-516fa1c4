@@ -46,9 +46,10 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Generate signed URL for IFC file
+      // Generate signed URL from the correct bucket
+      const bucket = data.source_bucket || "ifc-uploads";
       const { data: urlData } = await supabase.storage
-        .from("ifc-uploads")
+        .from(bucket)
         .createSignedUrl(data.ifc_storage_path, 3600);
 
       return new Response(
