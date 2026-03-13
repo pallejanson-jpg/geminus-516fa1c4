@@ -136,7 +136,7 @@ export default function GeminusView() {
 
     (async () => {
       try {
-        const xeokitModule = await import('/lib/xeokit/xeokit-sdk.es.js');
+        const xeokitModule = await (Function('return import("/lib/xeokit/xeokit-sdk.es.js")')() as Promise<any>);
         const { Viewer, XKTLoaderPlugin, NavCubePlugin } = xeokitModule;
 
         const viewer = new Viewer({
