@@ -1,53 +1,117 @@
+## Plan: Mobile Viewer Startup Hardening (IMPLEMENTED ✅)
 
-Mål: få kön att flyta (XKT först), stoppa “fastnar på första IFC”, och få A-1 in i Portfolio/Navigator utan ny uppladdning.
+### Changes Made
+1. **Mobile touch tuning** (`NativeXeokitViewer.tsx`): dragRotationRate 30→70, touchPanRate 0.06→0.14, touchDollyRate 0.04→0.09, rotationInertia 0.93→0.88, panInertia 0.88→0.82
+2. **FastNav delay** (`NativeXeokitViewer.tsx`): Added `delayBeforeRestore: true` (0.5s mobile, 0.3s desktop)
+3. **Suppress viewFit in split2d3d** (`NativeXeokitViewer.tsx`): Skips instant viewFit when `?mode=split2d3d` — floor isolation handles camera
+4. **Defer SplitPlanView mount** (`UnifiedViewer.tsx`): Mobile SplitPlanView only renders after `viewerReady=true`, shows spinner until then
+5. **Increased SplitPlanView retry** (`SplitPlanView.tsx`): 10×100ms → 30×200ms (6s total window), immediate retry on VIEWER_MODELS_LOADED
+6. **Debounced floor events** (`UnifiedViewer.tsx`): 500ms guard on FLOOR_SELECTION_CHANGED dispatches to prevent competing events
 
-1) Vad jag hittade (orsak)
-- `conversion-worker-api /pending` hämtar idag alltid äldsta `pending`-jobb (`created_at ASC`) utan prioritering.
-- Aktuell kö visar många `pending` och **0 `processing`**; stora IFC-jobbet `6773e761...` ligger kvar som `pending` med `progress=33`.
-- Loggar för det jobbet upprepar samma början (“Downloading IFC…”, “Parsing…”, “Converting storey 1/18…”), vilket tyder på återstart/retry på samma jobb.
-- A-1 (`4d9c7202...`) har bara 2 asset-rader (Building + Model), inga Plan/Rum/Instance än.
-- UI-anropet till `ifc-extract-systems` använder fel payload-nyckel (`ifcPath`), medan funktionen kräver `ifcStoragePath`.
-- `ifc-extract-systems` returnerar idag systems/connectivity men populerar inte `assets`-hierarkin i nuvarande implementation.
+### Architecture Principle
+Mobile and desktop share the same `UnifiedViewerContent` initialization logic. The ONLY difference is layout:
+- Mobile: vertical stack (2D top, 3D bottom) with touch-optimized divider (8px)
+- Desktop: horizontal ResizablePanelGroup with drag handle (4px)
 
-2) Plan för ändring
+Future changes to viewer startup MUST apply to both paths. Do NOT create separate mobile/desktop init logic.
 
-A. Prioritering i `conversion-worker-api` (XKT före IFC)
-- Uppdatera `GET /pending`:
-  - Först hämta äldsta `pending` med `source_type='xkt'`.
-  - Om ingen finns: hämta äldsta övriga `pending` (IFC-varianter).
-- Behåll signerad URL-logik oförändrad.
+---
 
-B. Avhjälp “fastnar”
-- Göra jobb-plockningen robust så samma `pending`-jobb inte återstartas i loop:
-  - Antingen:
-    - API “claimar” jobbet direkt när `/pending` returnerar det (sätter `status='processing'` atomärt), eller
-    - Worker uppdateras att alltid kalla `/claim` innan processning.
-- Rekommenderat i denna kodbas: API-claim i `/pending` (fungerar även med nuvarande worker-script).
-- Lägg till stale-hantering för `processing` (timeout, t.ex. 120 min) så döda jobb inte blockerar kön permanent.
+## Plan: SplitPlanView Navigation + Alignment UX (IMPLEMENTED ✅)
 
-C. Fixa A-1-hierarki utan ny IFC-uppladdning
-- I `CreateBuildingPanel`:
-  - ändra invoke-body till `{ buildingFmGuid, ifcStoragePath, mode: 'enrich-guids' }`.
-  - justera loggning efter verkligt svarsfält (inte `levelsCreated/spacesCreated` om de inte returneras).
-- I `ifc-extract-systems`:
-  - implementera “enrich-guids”-flöde som också upsertar `assets` (Building Storey, Space, Instance) med deterministiska GUIDs.
-- Backfill för redan uppladdade A-1-filer (ARK.ifc + RIV.ifc):
-  - trigga `ifc-extract-systems` mot befintliga storage paths.
-  - ingen ny uppladdning krävs.
+### Changes Made
+1. **SplitPlanView click navigation** (`SplitPlanView.tsx`): Replaced first-person instant jump with MinimapPanel-style fly-to — keeps current eye height, looks down at clicked point, animates 0.5s.
+2. **AlignmentPointPicker precision** (`AlignmentPointPicker.tsx`): Now estimates surface point via ray-cast from tripod position + viewing direction × adjustable distance slider (0.5–10m). Shows captured coordinates and distance in both steps for verification.
 
-3) Svar på din fråga om A-1
-- Nej, du ska inte behöva läsa in IFC igen.
-- Efter fix + backfill kan vi använda redan uppladdade filer och fylla Plan/Rum/Asset till databasen direkt.
+---
 
-4) Tekniska detaljer
-- Filer som ändras:
-  - `supabase/functions/conversion-worker-api/index.ts`
-  - `supabase/functions/ifc-extract-systems/index.ts`
-  - `src/components/settings/CreateBuildingPanel.tsx`
-- Ingen databasmigration krävs för grundfixen.
-- Verifiering efter implementation:
-  1. Köa alla byggnader.
-  2. Kontrollera att XKT-jobb plockas före IFC i `conversion_jobs`.
-  3. Kontrollera att minst ett jobb går till `processing` (inte bara `pending`).
-  4. Kör backfill för A-1 och verifiera att `assets` får Storey/Space/Instance.
-  5. Bekräfta att A-1 syns i Portfolio/Navigator utan ny IFC-upload.
+## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
+
+### Changes Made
+1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
+2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
+3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
+4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
+5. **config.toml** updated with `acc-geometry-extract` function entry
+
+### Pending (Phase 2)
+- Actual GLB chunk creation from SVF geometry (requires conversion worker)
+- OBJ as optional secondary format for small models
+
+---
+
+
+### Ändringar
+
+#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
+**Fil:** `supabase/functions/conversion-worker-api/index.ts`
+- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
+- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
+- Upsert till `assets` med `created_in_model: true`
+- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
+
+#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
+**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
+- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
+- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
+- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
+- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
+- Diff: soft-delete objekt som finns i DB men inte i ny IFC
+
+#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
+**Fil:** `docs/conversion-worker/worker.mjs`
+- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
+- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
+- Non-fatal: om hierarki-population misslyckas fortsätter workern
+
+#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
+**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
+- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
+- `created_in_model: true` istället för `false`
+- Diff-logik: markerar borttagna objekt efter import
+
+### Datamodell
+
+```text
+Building Storey:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
+  category:          "Building Storey"
+  created_in_model:  true
+
+Space:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
+  category:          "Space"
+  level_fm_guid:     parent storey fm_guid
+
+Instance:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
+  category:          "Instance"
+  asset_type:        ifcType (e.g. "IfcDoor")
+  level_fm_guid:     resolved storey
+  in_room_fm_guid:   resolved space
+```
+
+### Diff-flöde
+
+Vid omimport jämförs importerade fm_guids mot befintliga i DB:
+- **Nytt** → INSERT
+- **Matchat** → UPDATE (namn, typ, rumsplacering)
+- **Borttaget** → `modification_status = 'removed'` (soft-delete)
+
+---
+
+## Previous Plans
+
+### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
+- Browser-primary for >20MB, edge function for ≤20MB
+- MetaModel JSON uploaded alongside XKT
+- Systems extracted and persisted
+
+### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+- Standalone Node.js worker polls conversion-worker-api
+- Per-storey .xkt tiles with dynamic floor loading
+
+### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
+- 10 credential override columns on building_settings
+- Shared credential resolver in edge functions
+- Properties page as configuration hub
