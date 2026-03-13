@@ -9,7 +9,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers, Timer, Cloud, FileSpreadsheet, KeyRound, Pencil, RefreshCw, Database, ChevronDown
+  Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers, Timer, Cloud, FileSpreadsheet, KeyRound, Pencil, RefreshCw, Database, ChevronDown, PlayCircle
 } from 'lucide-react';
 import ExcelTemplateDownload from '@/components/import/ExcelTemplateDownload';
 import ExcelImportDialog from '@/components/import/ExcelImportDialog';
@@ -75,6 +75,9 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
 
   // ── Sync from Asset+ state ──
   const [isSyncingAssetPlus, setIsSyncingAssetPlus] = useState(false);
+
+  // ── Batch enqueue state ──
+  const [isBatchEnqueuing, setIsBatchEnqueuing] = useState(false);
 
   // Elapsed timer tick
   useEffect(() => {
@@ -596,6 +599,44 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
     setConversionProgress(0);
   };
 
+  // ── Batch enqueue all buildings ──
+  const handleBatchEnqueue = async () => {
+    setIsBatchEnqueuing(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('No session');
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const resp = await fetch(`${supabaseUrl}/functions/v1/conversion-worker-api/batch-enqueue`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
+        body: JSON.stringify({ created_by: user.id }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${resp.status}`);
+      }
+
+      const result = await resp.json();
+      toast({
+        title: 'Byggnader köade',
+        description: `${result.enqueued} jobb köade, ${result.skipped} hoppades över (av ${result.total_buildings} byggnader).`,
+      });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Batch-enqueue misslyckades', description: err.message });
+    } finally {
+      setIsBatchEnqueuing(false);
+    }
+  };
+
   const selectedBuilding = existingBuildings.find(b => b.fmGuid === selectedBuildingFmGuid);
 
   return (
@@ -685,6 +726,25 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           </div>
         </div>
       )}
+
+      {/* ══════ Batch Enqueue All ══════ */}
+      <div className="border-t pt-4">
+        <Button
+          variant="outline"
+          className="w-full gap-2"
+          onClick={handleBatchEnqueue}
+          disabled={isBatchEnqueuing}
+        >
+          {isBatchEnqueuing ? (
+            <><Loader2 className="h-4 w-4 animate-spin" />Köar byggnader...</>
+          ) : (
+            <><PlayCircle className="h-4 w-4" />Köa alla byggnader</>
+          )}
+        </Button>
+        <p className="text-[11px] text-muted-foreground mt-1.5">
+          Skapar konverteringsjobb för alla byggnader med IFC- eller XKT-filer.
+        </p>
+      </div>
 
       {/* ══════ Actions for selected building ══════ */}
       {selectedBuildingFmGuid && (
