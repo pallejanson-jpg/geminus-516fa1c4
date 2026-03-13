@@ -11,7 +11,7 @@ import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { ANNOTATION_FILTER_EVENT } from '@/lib/viewer-events';
-import { useFloorData } from '@/hooks/useFloorData';
+import { useFloorData, isArchitecturalModel } from '@/hooks/useFloorData';
 import { useModelData } from '@/hooks/useModelData';
 import { getDescendantIds, hideSpaceAndAreaObjects } from '@/hooks/useFloorVisibility';
 import { applyArchitectColors, recolorArchitectObjects } from '@/lib/architect-colors';
@@ -421,24 +421,24 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       }
     }
 
-    // Detect A-model IDs (name starts with 'A' or contains 'arkitekt')
+    // Detect A-model IDs using shared isArchitecturalModel logic
     const aModelSceneIds = new Set<string>();
     if (sharedModels.length > 0) {
       sharedModels.forEach(m => {
-        const n = m.name.toLowerCase();
-        if (n.startsWith('a') || n.includes('a-modell') || n.includes('arkitekt')) {
+        if (isArchitecturalModel(m.name)) {
           aModelSceneIds.add(m.id);
         }
       });
     }
 
-    // Also add model IDs from scene that we know are A-models (by matching name)
+    // Fallback: if no A-models detected from sharedModels, check scene model IDs directly
     if (aModelSceneIds.size === 0) {
-      // If sharedModels hasn't resolved names yet, try all scene model IDs
-      // since we only load A-models in native viewer
       const sceneModelIds = Object.keys(sceneModels);
-      if (sceneModelIds.length > 0) {
-        console.log(`[FilterPanel] No A-models from sharedModels, treating all ${sceneModelIds.length} scene models as A-models`);
+      sceneModelIds.forEach(id => {
+        if (isArchitecturalModel(id)) aModelSceneIds.add(id);
+      });
+      // Only treat ALL as A-models if there's exactly 1 model (single-model building)
+      if (aModelSceneIds.size === 0 && sceneModelIds.length === 1) {
         sceneModelIds.forEach(id => aModelSceneIds.add(id));
       }
     }
@@ -494,8 +494,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const checkedNonASourceGuids = new Set<string>();
     sources.forEach(s => {
       if (checkedSources.has(s.guid)) {
-        const n = s.name.toLowerCase();
-        if (!n.startsWith('a') && !n.includes('a-modell') && !n.includes('arkitekt')) {
+        if (!isArchitecturalModel(s.name)) {
           checkedNonASourceGuids.add(s.guid);
         }
       }
@@ -612,7 +611,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       'Spaces matched:', spaces.filter(s => map.has(s.fmGuid)).length, '/', spaces.length,
       'xeokit storeys:', xeokitStoreys.length, 'xeokit spaces:', xeokitSpaces.length);
     return true;
-  }, [getXeokitViewer, levels, sharedModels, checkedSources, sources]);
+  }, [getXeokitViewer, levels, sharedModels, sources]);
 
   // Cached spaces ref for entity map (avoids rebuild on checkbox toggle)
   const spacesRef = useRef(spaces);
@@ -771,17 +770,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     scene.setObjectsPickable(scene.objectIds, true);
     const prevXrayed = scene.xrayedObjectIds;
     if (prevXrayed?.length > 0) scene.setObjectsXRayed(prevXrayed, false);
-    const prevColorized = scene.colorizedObjectIds;
-    if (prevColorized?.length > 0) scene.setObjectsColorized(prevColorized, false);
-    // Reset opacity for any previously transparent slabs (batch operation)
-    const resetOpacityIds = scene.objectIds.filter((id: string) => {
-      const entity = scene.objects?.[id];
-      return entity && entity.opacity < 1;
-    });
-    resetOpacityIds.forEach((id: string) => {
-      const entity = scene.objects?.[id];
-      if (entity) entity.opacity = 1.0;
-    });
+    const prevColorizedIds = scene.colorizedObjectIds;
+    if (prevColorizedIds?.length > 0) scene.setObjectsColorized(prevColorizedIds, false);
+    // Reset opacity only for previously changed objects (avoid full scan)
+    if (prevColorizedIds?.length > 0) {
+      prevColorizedIds.forEach((id: string) => {
+        const entity = scene.objects?.[id];
+        if (entity && entity.opacity < 1) entity.opacity = 1.0;
+      });
+    }
 
     // Re-apply full architect color palette as base layer after clean slate
     // This prevents raw XKT colors (red rooms, blue windows) from showing
