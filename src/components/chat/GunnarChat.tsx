@@ -641,11 +641,11 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       </ScrollArea>
 
       {/* Input */}
-      <div className="border-t border-border p-4 shrink-0">
+      <div className="border-t border-border p-3 sm:p-4 shrink-0">
         {suggestedFollowups.length > 0 && (
-          <div className="mb-3 flex flex-wrap gap-2">
+          <div className="mb-2 sm:mb-3 flex flex-wrap gap-1.5 sm:gap-2">
             {suggestedFollowups.map((q, i) => (
-              <Button key={i} onClick={() => handleFollowupClick(q)} className="gap-1.5 text-xs h-7" variant="outline" size="sm">
+              <Button key={i} onClick={() => handleFollowupClick(q)} className="gap-1 text-xs h-7" variant="outline" size="sm">
                 {q}
               </Button>
             ))}
@@ -653,7 +653,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         )}
         {/* Quick action: FM Advisor */}
         {messages.length <= 2 && !isLoading && (
-          <div className="mb-3">
+          <div className="mb-2 sm:mb-3">
             <Button
               variant="outline"
               size="sm"
@@ -665,48 +665,47 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
             </Button>
           </div>
         )}
-        <div className="flex gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 sm:h-9 sm:w-9 shrink-0"
+              onClick={() => {
+                if (voiceOutputEnabled) {
+                  window.speechSynthesis.cancel();
+                  setVoiceOutputEnabled(false);
+                } else {
+                  setVoiceOutputEnabled(true);
+                }
+              }}
+              title={voiceOutputEnabled ? 'Disable voice output' : 'Enable voice output'}
+            >
+              {voiceOutputEnabled ? (
+                <Volume2 className={cn("h-3.5 w-3.5 sm:h-4 sm:w-4", isSpeaking && "animate-pulse text-primary")} />
+              ) : (
+                <VolumeX className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
+              )}
+            </Button>
+            {isVoiceSupported && (
+              <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-9 sm:w-9 shrink-0" onClick={toggleListening} disabled={isLoading}>
+                {isListening ? <MicOff className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-destructive" /> : <Mic className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+              </Button>
+            )}
+          </div>
           <Input
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about your properties..."
+            placeholder="Ställ en fråga..."
             disabled={isLoading}
-            className="flex-1"
+            className="flex-1 min-w-0"
           />
-          <Button
-            variant="outline"
-            size="icon"
-            className="shrink-0"
-            onClick={() => {
-              if (voiceOutputEnabled) {
-                window.speechSynthesis.cancel();
-                setVoiceOutputEnabled(false);
-              } else {
-                setVoiceOutputEnabled(true);
-              }
-            }}
-            title={voiceOutputEnabled ? 'Disable voice output' : 'Enable voice output'}
-          >
-            {voiceOutputEnabled ? (
-              <Volume2 className={cn("h-4 w-4", isSpeaking && "animate-pulse text-primary")} />
-            ) : (
-              <VolumeX className="h-4 w-4 text-muted-foreground" />
-            )}
-          </Button>
-          {isVoiceSupported && (
-            <Button variant="outline" size="icon" className="shrink-0" onClick={toggleListening} disabled={isLoading}>
-              {isListening ? <MicOff className="h-4 w-4 text-destructive" /> : <Mic className="h-4 w-4" />}
-            </Button>
-          )}
-          <Button onClick={handleSend} disabled={isLoading || !input.trim()}>
+          <Button onClick={handleSend} disabled={isLoading || !input.trim()} size="icon" className="h-9 w-9 shrink-0">
             <Send className="h-4 w-4" />
           </Button>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Press Enter to send • Gunnar understands Swedish and English
-        </p>
       </div>
     </>
   );
@@ -759,7 +758,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         </ScrollArea>
 
         {/* Compact input */}
-        <div className="border-t border-border p-3 shrink-0">
+        <div className="border-t border-border p-2 sm:p-3 shrink-0">
           {suggestedFollowups.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-1.5">
               {suggestedFollowups.map((q, i) => (
@@ -769,43 +768,45 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
               ))}
             </div>
           )}
-          <div className="flex gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
+            <div className="flex items-center shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 sm:h-8 sm:w-8 shrink-0"
+                onClick={() => {
+                  if (voiceOutputEnabled) {
+                    window.speechSynthesis.cancel();
+                    setVoiceOutputEnabled(false);
+                  } else {
+                    setVoiceOutputEnabled(true);
+                  }
+                }}
+                title={voiceOutputEnabled ? 'Disable voice output' : 'Enable voice output'}
+              >
+                {voiceOutputEnabled ? (
+                  <Volume2 className={cn("h-3.5 w-3.5", isSpeaking && "animate-pulse text-primary")} />
+                ) : (
+                  <VolumeX className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
+              </Button>
+              {isVoiceSupported && (
+                <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8 shrink-0" onClick={toggleListening} disabled={isLoading}>
+                  {isListening ? <MicOff className="h-3.5 w-3.5 text-destructive" /> : <Mic className="h-3.5 w-3.5" />}
+                </Button>
+              )}
+            </div>
             <Input
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Fråga om dina fastigheter..."
+              placeholder="Ställ en fråga..."
               disabled={isLoading}
-              className="flex-1 h-9 text-sm"
+              className="flex-1 min-w-0 h-8 sm:h-9 text-sm"
             />
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-9 w-9 shrink-0"
-              onClick={() => {
-                if (voiceOutputEnabled) {
-                  window.speechSynthesis.cancel();
-                  setVoiceOutputEnabled(false);
-                } else {
-                  setVoiceOutputEnabled(true);
-                }
-              }}
-              title={voiceOutputEnabled ? 'Disable voice output' : 'Enable voice output'}
-            >
-              {voiceOutputEnabled ? (
-                <Volume2 className={cn("h-4 w-4", isSpeaking && "animate-pulse text-primary")} />
-              ) : (
-                <VolumeX className="h-4 w-4 text-muted-foreground" />
-              )}
-            </Button>
-            {isVoiceSupported && (
-              <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" onClick={toggleListening} disabled={isLoading}>
-                {isListening ? <MicOff className="h-4 w-4 text-destructive" /> : <Mic className="h-4 w-4" />}
-              </Button>
-            )}
-            <Button onClick={handleSend} disabled={isLoading || !input.trim()} className="h-9 w-9 shrink-0" size="icon">
-              <Send className="h-4 w-4" />
+            <Button onClick={handleSend} disabled={isLoading || !input.trim()} className="h-8 w-8 sm:h-9 sm:w-9 shrink-0" size="icon">
+              <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </Button>
           </div>
         </div>
