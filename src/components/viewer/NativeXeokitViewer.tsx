@@ -164,7 +164,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         } catch {}
         speedMultiplier = Math.max(0.25, Math.min(3, speedMultiplier));
 
-        const navTuning = isMobile
+        const navTuning = isMobileRef.current
           ? {
               dragRotationRate: 70,
               rotationInertia: 0.88,
