@@ -268,7 +268,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           hideEdges: true,
           hideSAO: true,
           delayBeforeRestore: true,
-          delayBeforeRestoreSeconds: isMobile ? 0.5 : 0.3,
+          delayBeforeRestoreSeconds: isMobileRef.current ? 0.5 : 0.3,
         });
         console.log('[NativeViewer] FastNav enabled');
       } else {
