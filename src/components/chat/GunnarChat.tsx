@@ -548,7 +548,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     }
   }, [executeAction]);
 
-  const KNOWN_ACTIONS = new Set(['flyTo', 'openViewer', 'showFloor', 'selectInTree', 'switchTo2D', 'switchTo3D', 'showFloorIn3D', 'isolateModel', 'showDrawing', 'openViewer3D', 'selectBuilding']);
+  const KNOWN_ACTIONS = new Set(['flyTo', 'openViewer', 'showFloor', 'selectInTree', 'switchTo2D', 'switchTo3D', 'showFloorIn3D', 'isolateModel', 'showDrawing', 'openViewer3D', 'selectBuilding', 'changeLang', 'listVoices', 'selectVoice']);
 
   /** Custom renderers for react-markdown to intercept action links */
   const markdownComponents: Components = useMemo(() => ({
