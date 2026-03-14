@@ -9,7 +9,7 @@ import { SIDEBAR_ORDER_STORAGE_KEY, SIDEBAR_SETTINGS_CHANGED_EVENT, IVION_DEFAUL
 import type { SidebarItem } from '@/lib/constants';
 import { getSidebarOrder } from '@/components/settings/AppMenuSettings';
 import { cn } from '@/lib/utils';
-import { SIDEBAR_ITEM_META } from '@/lib/sidebar-config';
+import { SIDEBAR_ITEM_META, getCurrentContext } from '@/lib/sidebar-config';
 
 // Core navigation items
 const CORE_NAV = [
