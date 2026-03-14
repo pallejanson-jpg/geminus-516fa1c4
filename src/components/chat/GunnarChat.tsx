@@ -392,11 +392,11 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     };
   }, []);
 
-  // In embedded/standalone mode (/ai), skip onClose() after navigation actions
-  // because onClose navigates to "/" which overrides the action's navigate()
+  // In standalone mode (/ai), never close back to "/" after action navigation.
   const closeAfterAction = useCallback(() => {
-    if (!embedded) onClose();
-  }, [embedded, onClose]);
+    if (embedded || context?.activeApp === 'ai-standalone') return;
+    onClose();
+  }, [embedded, context?.activeApp, onClose]);
 
   const executeAction = useCallback((action: GunnarAction) => {
     switch (action.action) {
