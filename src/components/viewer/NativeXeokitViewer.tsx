@@ -599,7 +599,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       // On mobile, split into primary (A-models) and secondary (rest) for lazy loading
       let secondaryQueue: ModelInfo[] = [];
-      if (isMobile && loadList.length > 1) {
+      if (isMobileRef.current && loadList.length > 1) {
         const aModels = loadList.filter(m => isArchitectural(m.model_name));
         const nonAModels = loadList.filter(m => !isArchitectural(m.model_name));
         if (aModels.length > 0 && nonAModels.length > 0) {
