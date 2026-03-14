@@ -472,7 +472,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         if (action.buildingFmGuid) {
           const floorPart = action.floorFmGuid ? `&floor=${action.floorFmGuid}` : '';
           navigate(`/viewer?building=${action.buildingFmGuid}&mode=3d${floorPart}`);
-          onClose();
+          closeAfterAction();
           toast.success('Öppnar 3D-viewer');
         }
         break;
