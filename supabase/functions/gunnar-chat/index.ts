@@ -1387,44 +1387,10 @@ async function saveConversation(supabase: any, userId: string, buildingFmGuid: s
    ───────────────────────────────────────────── */
 
 async function buildSystemPrompt(supabase: any, context: any, userProfile: any, previousConversation: any) {
-  // Pre-fetch building directory with FM Access mapping
-  let buildingDirectory = "";
-  try {
-    const [buildingsResult, settingsResult] = await Promise.all([
-      supabase
-        .from("assets")
-        .select("fm_guid, common_name, name")
-        .eq("category", "Building")
-        .order("common_name")
-        .limit(50),
-      supabase
-        .from("building_settings")
-        .select("fm_guid, fm_access_building_guid, ivion_site_id")
-        .limit(50),
-    ]);
+  // Building directory is now fetched lazily via query_assets/query_building_settings tools
+  // Only pre-fetch BIM models for the CURRENT building (small, high-value context)
 
-    const settingsMap: Record<string, any> = {};
-    for (const s of settingsResult.data || []) {
-      settingsMap[s.fm_guid] = s;
-    }
-
-    if (buildingsResult.data?.length) {
-      const lines = buildingsResult.data.map((b: any) => {
-        const s = settingsMap[b.fm_guid] || {};
-        let line = `  - "${b.common_name || b.name}"`;
-        if (s.fm_access_building_guid) line += ` [FM Access connected]`;
-        if (s.ivion_site_id) line += ` [360° available]`;
-        // Internal lookup ref (hidden from user, for tool calls only)
-        line += ` {ref:${b.fm_guid}}`;
-        return line;
-      });
-      buildingDirectory = `\nAVAILABLE BUILDINGS IN THE PORTFOLIO (use {ref:...} values ONLY in tool calls, NEVER show them to users):\n${lines.join("\n")}`;
-    }
-  } catch (e) {
-    console.error("Failed to fetch building directory:", e);
-  }
-
-  // Pre-fetch BIM models for the current building
+  let modelsCtx = "";
   let modelsCtx = "";
   const bGuid = context?.currentBuilding?.fmGuid;
   if (bGuid) {
