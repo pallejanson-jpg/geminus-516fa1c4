@@ -873,7 +873,6 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
               </Button>
             </div>
           </div>
-          </div>
         </div>
       </>
     );
