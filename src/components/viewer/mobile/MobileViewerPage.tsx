@@ -14,7 +14,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft, Square, Box, LayoutPanelLeft, View,
-  Loader2, Filter, Settings2, BarChart2, SlidersHorizontal,
+  Loader2, Filter, BarChart2, SlidersHorizontal,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import NativeViewerShell from '@/components/viewer/NativeViewerShell';
