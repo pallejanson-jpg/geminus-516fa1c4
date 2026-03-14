@@ -285,6 +285,22 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     []
   );
 
+  /** Trim conversation history: keep last 8 turns, strip action tokens from assistant messages */
+  const trimHistory = useCallback((msgs: Message[]): Message[] => {
+    const trimmed = msgs.slice(-8);
+    return trimmed.map(m => {
+      if (m.role === 'assistant') {
+        // Strip action links to reduce token count
+        const cleaned = m.content
+          .replace(/\[([^\]]*)\]\(action:[^)]+\)/g, '$1')
+          .replace(/\*\*(?:Förslag|Suggestions):\*\*[\s\S]*$/i, '')
+          .trim();
+        return { ...m, content: cleaned };
+      }
+      return m;
+    });
+  }, []);
+
   const sendMessage = async (text: string, advisorMode?: boolean) => {
     if ((!text.trim() && !advisorMode) || isLoading) return;
     const userMessage: Message = { role: "user", content: advisorMode ? "Analyze this building and give me advice" : text.trim() };
@@ -296,7 +312,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     setProactiveInsights([]);
 
     try {
-      const apiMessages = newMessages.filter((_, i) => i > 0);
+      const apiMessages = trimHistory(newMessages.filter((_, i) => i > 0));
       const response = await streamChat(apiMessages, context, advisorMode);
 
       const followups = extractFollowups(response);
