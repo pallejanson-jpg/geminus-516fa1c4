@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Type, MessageSquarePlus, MessageSquare, Tags, Scan, EyeOff, Eye, ZoomIn, Info, Move, Trash2, MousePointer, PointerOff, Check } from 'lucide-react';
+import { getContextMenuSettings, CONTEXT_MENU_SETTINGS_CHANGED_EVENT } from './ContextMenuSettings';
 
 interface ViewerContextMenuProps {
   position: { x: number; y: number };
@@ -46,7 +47,20 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   roomLabelsActive,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => {
+    const settings = getContextMenuSettings();
+    return new Set(settings.filter(s => !s.visible).map(s => s.id));
+  });
 
+  // Listen for settings changes
+  useEffect(() => {
+    const handler = () => {
+      const settings = getContextMenuSettings();
+      setHiddenIds(new Set(settings.filter(s => !s.visible).map(s => s.id)));
+    };
+    window.addEventListener(CONTEXT_MENU_SETTINGS_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(CONTEXT_MENU_SETTINGS_CHANGED_EVENT, handler);
+  }, []);
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
@@ -65,24 +79,25 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   const handleClick = (action: () => void) => { action(); onClose(); };
 
   // Build items — entity-specific items always shown but disabled when no entity
+  // Filter by ContextMenuSettings visibility
   const hasEntity = !!entityId;
   const items: { icon: any; label: string; action: () => void; disabled?: boolean; separator?: boolean; active?: boolean }[] = [];
 
   // Entity-specific actions (always visible, disabled when no entity)
-  items.push({ icon: Info, label: 'Properties', action: onShowProperties || (() => {}), disabled: !hasEntity || !onShowProperties });
-  items.push({ icon: MousePointer, label: 'Select', action: onSelectEntity || (() => {}), disabled: !hasEntity || !onSelectEntity });
-  items.push({ icon: ZoomIn, label: 'Zoom to', action: onZoomTo || (() => {}), disabled: !hasEntity || !onZoomTo });
-  items.push({ icon: Scan, label: 'Isolate', action: onIsolateEntity || (() => {}), disabled: !hasEntity || !onIsolateEntity });
-  items.push({ icon: EyeOff, label: 'Hide', action: onHideEntity || (() => {}), disabled: !hasEntity || !onHideEntity });
-  items.push({ icon: Move, label: 'Move object', action: onMoveObject || (() => {}), disabled: !hasEntity || !onMoveObject });
-  items.push({ icon: Trash2, label: 'Delete object', action: onDeleteObject || (() => {}), disabled: !hasEntity || !onDeleteObject });
+  if (!hiddenIds.has('properties')) items.push({ icon: Info, label: 'Properties', action: onShowProperties || (() => {}), disabled: !hasEntity || !onShowProperties });
+  if (!hiddenIds.has('select')) items.push({ icon: MousePointer, label: 'Select', action: onSelectEntity || (() => {}), disabled: !hasEntity || !onSelectEntity });
+  if (!hiddenIds.has('zoomToFit')) items.push({ icon: ZoomIn, label: 'Zoom to', action: onZoomTo || (() => {}), disabled: !hasEntity || !onZoomTo });
+  if (!hiddenIds.has('isolate')) items.push({ icon: Scan, label: 'Isolate', action: onIsolateEntity || (() => {}), disabled: !hasEntity || !onIsolateEntity });
+  if (!hiddenIds.has('hideSelected')) items.push({ icon: EyeOff, label: 'Hide', action: onHideEntity || (() => {}), disabled: !hasEntity || !onHideEntity });
+  if (!hiddenIds.has('moveObject')) items.push({ icon: Move, label: 'Move object', action: onMoveObject || (() => {}), disabled: !hasEntity || !onMoveObject });
+  if (!hiddenIds.has('deleteObject')) items.push({ icon: Trash2, label: 'Delete object', action: onDeleteObject || (() => {}), disabled: !hasEntity || !onDeleteObject });
 
   // Separator + always-available actions
-  if (onShowAll) items.push({ icon: Eye, label: 'Show all', action: onShowAll, separator: true });
+  if (!hiddenIds.has('showAll') && onShowAll) items.push({ icon: Eye, label: 'Show all', action: onShowAll, separator: true });
   if (onSelectNone) items.push({ icon: PointerOff, label: 'Select none', action: onSelectNone });
   items.push({ icon: Tags, label: 'Show labels', action: onShowLabels, active: labelsActive });
   items.push({ icon: Type, label: 'Show room labels', action: onShowRoomLabels, active: roomLabelsActive });
-  items.push({ icon: MessageSquarePlus, label: 'Create issue', action: onCreateIssue });
+  if (!hiddenIds.has('createIssue')) items.push({ icon: MessageSquarePlus, label: 'Create issue', action: onCreateIssue });
   items.push({ icon: MessageSquare, label: 'Show issues', action: onViewIssues });
 
   return (
