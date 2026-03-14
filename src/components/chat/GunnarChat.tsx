@@ -13,6 +13,8 @@ import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import { useNavigate } from "react-router-dom";
 import { useWebSpeechRecognition } from "@/hooks/useWebSpeechRecognition";
+import { getGunnarSettings, saveGunnarSettings, GUNNAR_SETTINGS_CHANGED_EVENT } from "@/components/settings/GunnarSettings";
+import type { GunnarSettingsData } from "@/components/settings/GunnarSettings";
 
 type Message = {
   role: "user" | "assistant";
