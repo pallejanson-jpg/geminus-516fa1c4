@@ -19,7 +19,20 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all([
+        // Delete old cache buckets
+        ...keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)),
+        // Purge stale .vite/deps chunks from current cache
+        caches.open(CACHE_NAME).then((cache) =>
+          cache.keys().then((reqs) =>
+            Promise.all(
+              reqs
+                .filter((r) => r.url.includes('.vite/deps/'))
+                .map((r) => cache.delete(r))
+            )
+          )
+        ),
+      ])
     )
   );
   self.clients.claim();
@@ -59,13 +72,20 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Network-first for Vite dep chunks — hashes change between deploys
+  if (url.pathname.includes('.vite/deps/') || url.pathname.includes('node_modules/.vite/')) {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
   // Cache-first for hashed build assets (/assets/...) — they're immutable
   if (url.pathname.startsWith('/assets/')) {
     event.respondWith(
       caches.match(event.request).then((cached) => {
         if (cached) return cached;
         return fetch(event.request).then((response) => {
-          // Only cache valid JS/CSS, not HTML error pages
           const ct = response.headers.get('content-type') || '';
           if (response.ok && (ct.includes('javascript') || ct.includes('css') || ct.includes('wasm'))) {
             const clone = response.clone();
