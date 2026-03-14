@@ -809,6 +809,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
           const lookX = camera.look[0], lookY = camera.look[1], lookZ = camera.look[2];
           const dx = camera.eye[0] - lookX, dy = camera.eye[1] - lookY, dz = camera.eye[2] - lookZ;
           const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+          // Cancel previous momentum BEFORE setting 2D camera
+          try { viewer.cameraFlight?.cancel?.(); } catch {}
+
           camera.projection = 'ortho';
           camera.ortho.scale = dist * 1.2;
           // Set camera instantly to top-down view
@@ -820,8 +824,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
           viewer.cameraControl.navMode = 'planView';
           viewer.cameraControl.followPointer = false;
         }
-        // Cancel any ongoing camera flight that could re-apply momentum
-        try { viewer.cameraFlight?.cancel?.(); } catch {}
+
         // Kill any residual inertia from 3D orbit/pan so the view doesn't spin
         if (viewer.scene?.camera) {
           const cam = viewer.scene.camera;
