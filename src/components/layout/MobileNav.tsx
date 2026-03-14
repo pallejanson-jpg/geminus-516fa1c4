@@ -182,6 +182,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
                     {sidebarOrder.map((item) => {
                       const meta = SIDEBAR_ITEM_META[item.id];
                       if (!meta) return null;
+                      if (!meta.contexts.includes(currentContext)) return null;
                       const IconComp = meta.icon;
                       const isActive = activeApp === item.id;
                       return (
