@@ -1108,6 +1108,44 @@ async function execGetFaciliateObject(args: any) {
   return data.data || data;
 }
 
+/* ── Building name resolution ── */
+
+async function execResolveBuildingByName(supabase: any, args: any) {
+  const searchName = `%${args.name}%`;
+  // Search in assets for buildings matching the name
+  const { data: buildings, error } = await supabase
+    .from("assets")
+    .select("fm_guid, name, common_name, building_fm_guid, attributes")
+    .eq("category", "Building")
+    .or(`common_name.ilike.${searchName},name.ilike.${searchName}`)
+    .limit(10);
+  if (error) throw error;
+  if (!buildings?.length) {
+    // Fallback: search building_settings with a join to assets
+    const { data: allBuildings } = await supabase
+      .from("assets")
+      .select("fm_guid, name, common_name")
+      .eq("category", "Building")
+      .limit(50);
+    return {
+      found: false,
+      message: `No building matching "${args.name}" found.`,
+      available_buildings: (allBuildings || []).map((b: any) => ({
+        fm_guid: b.fm_guid,
+        name: b.common_name || b.name,
+      })),
+    };
+  }
+  return {
+    found: true,
+    buildings: buildings.map((b: any) => ({
+      fm_guid: b.fm_guid,
+      name: b.common_name || b.name,
+      building_fm_guid: b.building_fm_guid || b.fm_guid,
+    })),
+  };
+}
+
 /* ─────────────────────────────────────────────
    executeTool — ALIGNED with tool declarations
    ───────────────────────────────────────────── */
@@ -1127,12 +1165,14 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
     case "query_saved_views": return execQuerySavedViews(supabase, args);
     case "query_annotation_symbols": return execQueryAnnotationSymbols(supabase, args);
     case "get_floor_details": return execGetFloorDetails(supabase, args);
+    // Building resolution
+    case "resolve_building_by_name": return execResolveBuildingByName(supabase, args);
     // Senslinc
     case "senslinc_get_equipment": return execSenslincGetEquipment(args);
     case "senslinc_get_sites": return execSenslincGetSites(args);
     case "senslinc_search_data": return execSenslincSearchData(args);
     case "senslinc_get_indices": return execSenslincGetIndices();
-    // FM Access — LIVE API (now properly routed!)
+    // FM Access — LIVE API
     case "fm_access_get_drawings": return execFmAccessGetDrawings(args);
     case "fm_access_get_hierarchy": return execFmAccessGetHierarchy(args);
     case "fm_access_search_objects": return execFmAccessSearchObjects(args);
