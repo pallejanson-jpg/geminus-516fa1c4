@@ -24,6 +24,7 @@ const LeftSidebar: React.FC = () => {
     
     const t = THEMES[theme];
     const [sidebarOrder, setSidebarOrder] = useState<SidebarItem[]>(getSidebarOrder);
+    const currentContext = getCurrentContext(activeApp, selectedFacility);
 
     // Listen for changes from AppMenuSettings
     useEffect(() => {
