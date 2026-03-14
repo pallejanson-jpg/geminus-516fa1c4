@@ -92,11 +92,25 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
     modes.push({ mode: '360', label: '360°', Icon: View });
   }
 
-  // NativeViewerShell provides its own filter, context menu, toolbar, and 
-  // visualization settings. On mobile non-split modes we let the Shell's own
-  // MobileViewerOverlay handle filter+settings via hideMobileOverlay=false.
-  // In split mode the Shell is confined to the bottom half and we hide its
-  // overlay; instead we surface filter/settings in our own header.
+  const handleModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    if (mode === '2d') {
+      window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } }));
+      window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '2d' } }));
+    } else if (mode === '3d') {
+      window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: false } }));
+      window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
+    } else if (mode === 'split2d3d') {
+      window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: false } }));
+      window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
+    }
+  };
+
+  // NativeViewerShell provides its own filter, context menu, toolbar, and
+  // visualization settings. On mobile non-split modes we keep shell overlay hidden
+  // and control filter/viz from this top header to avoid duplicate toolbars.
+  // In split mode the Shell is confined to the bottom half; we keep its overlay hidden
+  // and surface filter/settings in this header only.
 
   return (
     <div
