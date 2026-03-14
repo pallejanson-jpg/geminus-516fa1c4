@@ -693,6 +693,14 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
           }
         }
 
+        // Force-disable X-ray in strict 2D plan mode
+        const allIds = scene.objectIds || [];
+        if (allIds.length > 0) {
+          scene.setObjectsXRayed(allIds, false);
+        }
+        scene.alphaDepthMask = true;
+        setIsXrayActive(false);
+
         // Remove any existing 3D ceiling clipping first
         try { remove3DClipping(); } catch {}
 
@@ -731,12 +739,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         const origEdgeAlpha = edgeMat?.edgeAlpha ?? 0.5;
         const origEdgeWidth = edgeMat?.edgeWidth ?? 1;
 
-        const SLAB_TYPES = new Set(['ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase', 'ifcroof', 'ifccovering', 'ifcplate']);
+        const SLAB_TYPES = new Set(['ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase', 'ifcplate']);
         const WALL_TYPES = new Set(['ifcwall', 'ifcwallstandardcase']);
         const DOOR_WINDOW_TYPES = new Set(['ifcdoor', 'ifcwindow']);
         const FURNITURE_TYPES = new Set(['ifcfurnishingelement', 'ifcrailing', 'ifcstair', 'ifcstairflight']);
         const SPACE_TYPES = new Set(['ifcspace']);
-        // Fix: metaScene lives on the viewer, not scene
         const metaObjects = viewer?.metaScene?.metaObjects || scene?.metaScene?.metaObjects || {};
         const metaCount = Object.keys(metaObjects).length;
         console.log(`[ViewerToolbar] 2D styling: found ${metaCount} metaObjects`);
@@ -755,27 +762,26 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
           if (SLAB_TYPES.has(typeLower)) {
             saveOrig(entity, mo.id);
-            entity.visible = true; entity.pickable = false; entity.opacity = 0; entity.edges = false;
+            entity.visible = true; entity.pickable = true; entity.opacity = 1; entity.colorize = [0.94, 0.94, 0.94]; entity.edges = true;
+            visibleCount++;
           } else if (SPACE_TYPES.has(typeLower)) {
             saveOrig(entity, mo.id);
-            entity.visible = true; entity.pickable = true; entity.opacity = 0.02; entity.colorize = [0.5, 0.7, 0.9];
-            visibleCount++;
+            entity.visible = false; entity.pickable = false; entity.opacity = 0; entity.colorize = null;
           } else if (WALL_TYPES.has(typeLower)) {
             saveOrig(entity, mo.id);
-            entity.colorize = [0.2, 0.2, 0.2]; entity.opacity = 1.0; entity.edges = true; entity.pickable = true;
+            entity.colorize = [0, 0, 0]; entity.opacity = 1; entity.edges = true; entity.pickable = true;
             visibleCount++;
           } else if (DOOR_WINDOW_TYPES.has(typeLower)) {
             saveOrig(entity, mo.id);
-            entity.colorize = [0.6, 0.6, 0.65]; entity.opacity = 0.8; entity.edges = true; entity.pickable = true;
+            entity.colorize = [0.12, 0.12, 0.12]; entity.opacity = 1; entity.edges = true; entity.pickable = true;
             visibleCount++;
           } else if (FURNITURE_TYPES.has(typeLower)) {
             saveOrig(entity, mo.id);
-            entity.colorize = [0.75, 0.75, 0.75]; entity.opacity = 0.6; entity.pickable = true;
+            entity.colorize = [0.3, 0.3, 0.3]; entity.opacity = 0.95; entity.edges = true; entity.pickable = true;
             visibleCount++;
           } else {
-            // Catch-all: beams, columns, stairs, railings, etc. — keep visible and pickable
             saveOrig(entity, mo.id);
-            entity.colorize = [0.5, 0.5, 0.5]; entity.opacity = 0.7; entity.edges = true; entity.pickable = true;
+            entity.colorize = [0.35, 0.35, 0.35]; entity.opacity = 0.9; entity.edges = true; entity.pickable = true;
             visibleCount++;
           }
         });

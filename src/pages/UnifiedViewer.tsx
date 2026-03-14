@@ -792,6 +792,9 @@ const UnifiedViewerContent: React.FC<{
                 viewerRef={viewerInstanceRef}
                 buildingFmGuid={buildingData.fmGuid}
                 className="h-full"
+                syncFloorSelection={false}
+                lockCameraToFloor={false}
+                monochrome
               />
             </div>
             {/* Thin draggable divider */}
