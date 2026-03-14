@@ -755,6 +755,7 @@ const UnifiedViewerContent: React.FC<{
               buildingFmGuid={buildingData.fmGuid}
               onClose={is3DMode ? handleGoBack : () => {}}
               hideBackButton
+              hideFloorSwitcher={isSplit2D3D}
               showGeminusMenu={viewMode === '3d'}
             />
           ) : (
