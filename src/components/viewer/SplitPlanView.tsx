@@ -373,8 +373,10 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     const preferredStoreyId = findCurrentStoreyId();
     if (!preferredStoreyId) return;
 
-    // Dispatch floor selection to keep 3D in sync (deduped)
-    dispatchFloorSync(preferredStoreyId);
+    // Optional: sync selected 2D floor into 3D floor filter/clipping
+    if (syncFloorSelection) {
+      dispatchFloorSync(preferredStoreyId);
+    }
 
     const selectedFloor = resolveFloorFromStoreyId(preferredStoreyId);
     setSelectedFloorId(selectedFloor?.id ?? preferredStoreyId);
