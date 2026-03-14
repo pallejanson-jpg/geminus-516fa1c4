@@ -29,6 +29,9 @@ const TAB_COLORING_MAP: Record<string, MapColoringMode> = {
     space: 'co2',
     asset: 'work-orders',
     portfolio: 'none',
+    predictive: 'none',
+    optimization: 'none',
+    search: 'none',
 };
 
 export default function InsightsView({ selectedBuilding }: InsightsViewProps) {
