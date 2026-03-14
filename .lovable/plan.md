@@ -1,105 +1,129 @@
+## Plan: IFC & ACC Import/Sync Performance Optimization (IMPLEMENTED ✅)
 
-Mål: göra Jinus/Geminus AI stabil, snabb, relevant och naturlig i tal – på nivå “production-grade”.
+### Changes Made
+1. **XKT compression** (`ifc-to-xkt`): Enabled `zip: true` in `writeXKTModelToArrayBuffer` — ~30% smaller XKT files
+2. **Parallel DB writes** (`ifc-to-xkt`): `persistSystemsAndConnections` + `populateAssetsFromMetaObjects` now run via `Promise.all` instead of sequentially
+3. **Streaming LD-JSON parser** (`acc-sync`): New `streamLDJSON()` async generator processes BIM property files line-by-line from `ReadableStream` — eliminates OOM risk on large Revit models
+4. **Incremental ACC sync** (`acc-sync`): `fetchAccAssets` now supports `filter[updatedAt]` parameter, only fetching assets modified since last sync — ~90% faster re-syncs
+5. **IFC derivative from ACC** (`acc-sync`): `translate-model` now requests IFC format alongside SVF. On completion, downloads the IFC derivative and feeds it into `ifc-to-xkt` for real per-storey tiling — unifying ACC and IFC geometry pipelines
+6. **Dual pipeline** (`check-translation`): Triggers both `ifc-to-xkt` (for tiled XKT) and `acc-geometry-extract` (for GLB fallback) in parallel when translation succeeds
 
-1) Vad som är fel idag (faktisk diagnos)
-- Stabilitet:
-  - Backend-funktionen hade nyligen 503 p.g.a. boot-fel (dubbeldeklaration av `modelsCtx`) i version 686.
-  - Senaste körning (version 688) svarar 200, men detta har sannolikt gett röda toastar hos användare.
-- Svarstid:
-  - Enkel fråga (“Hej”) tog ~6.0s server-exekvering.
-  - Flödet gör ofta extra AI-anrop: först verktygsbeslut, sedan separat stream-svar.
-  - Systemprompten är mycket stor och tung (många domänregler + exempel), vilket ökar tokenkostnad/latens.
-- Konstiga svar:
-  - Prompten innehåller motstridiga regler (“alltid action-knappar”, “alltid nästa steg”, samtidigt kort hälsning utan actions).
-  - Verktygsytan är överlastad och delvis inkonsistent: `fm_access_get_*` finns i tool-listan men saknar implementation i `executeTool`.
-  - Historik trimmas hårt till 8 meddelanden → modellen tappar kontext i längre dialog.
-- Röstkvalitet:
-  - Fortfarande beroende av browser-TTS; kvalitet varierar mellan enheter.
-  - Röstval saknar robust kvalitetsrankning per klient/session, vilket kan ge mekanisk fallback-röst.
+---
 
-2) Kritiska rotorsaker (prioriterad)
-1. Promptarkitektur (för stor + motsägelsefull)
-2. Tool-arkitektur (för många tools + mismatch mellan deklaration och exekvering)
-3. Latensarkitektur (onödiga dubbla modellanrop)
-4. Minneshantering (aggressiv trimning + bug i konversationsupsert för `building_fm_guid = null`)
-5. Voice pipeline (brist på robust voice discovery/ranking och prosodiprofilering)
+## Plan: Mobile Viewer Startup Hardening (IMPLEMENTED ✅)
 
-3) Åtgärdsplan (implementationsplan)
-Fas A — Stabilitet och korrekthet (högst prio, 1 sprint)
-- Rensa tool-contract:
-  - Antingen implementera `fm_access_get_drawings/fm_access_get_hierarchy/fm_access_search_objects/fm_access_get_floors`
-  - eller ta bort dem ur `tools`.
-- Inför strict tool schema-guard:
-  - validera tool-arguments och fånga JSON-parsefel robust.
-- Fixa konversationsupsert:
-  - null-safe matchning för `building_fm_guid` (inte `eq("")`), så samma kontext uppdateras i stället för att skapa nya rader.
-- Lägg till felklassning i klienttoast:
-  - skilj på 401/429/402/503/timeout och ge tydliga, handlingsbara fel.
+### Changes Made
+1. **Mobile touch tuning** (`NativeXeokitViewer.tsx`): dragRotationRate 30→70, touchPanRate 0.06→0.14, touchDollyRate 0.04→0.09, rotationInertia 0.93→0.88, panInertia 0.88→0.82
+2. **FastNav delay** (`NativeXeokitViewer.tsx`): Added `delayBeforeRestore: true` (0.5s mobile, 0.3s desktop)
+3. **Suppress viewFit in split2d3d** (`NativeXeokitViewer.tsx`): Skips instant viewFit when `?mode=split2d3d` — floor isolation handles camera
+4. **Defer SplitPlanView mount** (`UnifiedViewer.tsx`): Mobile SplitPlanView only renders after `viewerReady=true`, shows spinner until then
+5. **Increased SplitPlanView retry** (`SplitPlanView.tsx`): 10×100ms → 30×200ms (6s total window), immediate retry on VIEWER_MODELS_LOADED
+6. **Debounced floor events** (`UnifiedViewer.tsx`): 500ms guard on FLOOR_SELECTION_CHANGED dispatches to prevent competing events
 
-Fas B — Svarshastighet (1 sprint)
-- Komprimera systemprompten kraftigt:
-  - behåll kärnregler; flytta exempel till korta policy-block.
-- Inför intent-router före full tool-loop:
-  - “small talk/help/language/voice” går direkt till snabb väg utan tung verktygscykel.
-- Optimera AI-loop:
-  - om modellen inte behöver tools i första beslutet, streama direkt.
-- Begränsa tool-lista dynamiskt per intent/domän i stället för att skicka allt varje gång.
-- Mätning:
-  - logga TTFT, totaltid, antal tool calls, tokenstorlek per request.
+### Architecture Principle
+Mobile and desktop share the same `UnifiedViewerContent` initialization logic. The ONLY difference is layout:
+- Mobile: vertical stack (2D top, 3D bottom) with touch-optimized divider (8px)
+- Desktop: horizontal ResizablePanelGroup with drag handle (4px)
 
-Fas C — Svarskvalitet (1 sprint)
-- Prompt redesign:
-  - ta bort motsägelser; definiera tydlig prioritet:
-    1) korrekt fakta
-    2) kort direkt svar
-    3) max 1–3 relevanta actions när det finns faktisk nästa handling.
-- Inför “grounded answer mode”:
-  - svar ska baseras på faktiska tool-resultat och säga “ingen data” när det saknas.
-- Höj minneskvalitet:
-  - återställ mer kontext (inte bara 8 meddelanden) + sammanfattningsminne för längre dialoger.
+Future changes to viewer startup MUST apply to both paths. Do NOT create separate mobile/desktop init logic.
 
-Fas D — Röst (webbröst maximerad, 1 sprint)
-- Voice discovery förbättras:
-  - vänta på `voiceschanged`, bygg kvalitetspoäng per röst och persist i settings.
-- Prosodi förbättras:
-  - språkprofiler (sv/en), bättre segmentering, pauser, punktlisteläsning.
-- Rösttestpanel:
-  - A/B-test mellan toppröster och spara användarens preferens.
-- Felsäkring:
-  - fallback-kedja om vald röst saknas efter browser-update.
+---
 
-4) Konkreta leverabler per fil
-- `supabase/functions/gunnar-chat/index.ts`
-  - tool-list/executeTool alignment, prompt-komprimering, intent-router, bättre felhantering, null-safe conversation upsert.
-- `src/components/chat/GunnarChat.tsx`
-  - bättre feltoast-mappning, robust action parsing/validation, förbättrad voice initialization + quality ranking.
-- `src/components/settings/GunnarSettings.tsx`
-  - förbättrad rösttest/preview med toppröster och tydlig fallbackstatus.
+## Plan: SplitPlanView Navigation + Alignment UX (IMPLEMENTED ✅)
 
-5) Acceptanskriterier (definition of done)
-- Stabilitet:
-  - 0 st 5xx vid normal användning under testpass.
-- Hastighet:
-  - TTFT < 1.8s för enkla frågor, totaltid < 4s i median.
-- Kvalitet:
-  - Inga “Unknown tool”-fall i loggar.
-  - Inga irrelevanta byggnadslistor vid enkel hälsning.
-- Röst:
-  - konsekvent val av högst rankad tillgänglig röst på samma enhet/browser.
-- UX:
-  - inga röda toastar utan tydlig orsak + åtgärdsförslag.
+### Changes Made
+1. **SplitPlanView click navigation** (`SplitPlanView.tsx`): Replaced first-person instant jump with MinimapPanel-style fly-to — keeps current eye height, looks down at clicked point, animates 0.5s.
+2. **AlignmentPointPicker precision** (`AlignmentPointPicker.tsx`): Now estimates surface point via ray-cast from tripod position + viewing direction × adjustable distance slider (0.5–10m). Shows captured coordinates and distance in both steps for verification.
 
-6) Teknisk detaljdel (varför detta ger störst effekt)
-- Största kvalitetslyftet kommer inte i första hand från “annan modell”, utan från:
-  1) mindre och renare prompt,
-  2) korrekt tool-kontrakt,
-  3) snabbare exekveringsväg för enkla intents,
-  4) bättre minne.
-- Datapunkter från nuvarande drift visar att grundfunktionen svarar, men med för hög latens och för mycket promptstyrd “över-beteende” (för många actions/konstigt svarsmönster).
+---
 
-7) Genomförandeordning
-1. Fas A (stabilitet + tool-contract + minnesbugg)
-2. Fas B (latensoptimering + mätning)
-3. Fas C (svarskvalitet/prompt redesign)
-4. Fas D (röstförfining)
-5. Slutlig E2E-verifiering i sidopanel och /ai
+## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
+
+### Changes Made
+1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
+2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
+3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
+4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
+5. **config.toml** updated with `acc-geometry-extract` function entry
+
+### Pending (Phase 2)
+- Actual GLB chunk creation from SVF geometry (requires conversion worker)
+- OBJ as optional secondary format for small models
+
+---
+
+
+### Ändringar
+
+#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
+**Fil:** `supabase/functions/conversion-worker-api/index.ts`
+- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
+- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
+- Upsert till `assets` med `created_in_model: true`
+- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
+
+#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
+**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
+- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
+- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
+- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
+- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
+- Diff: soft-delete objekt som finns i DB men inte i ny IFC
+
+#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
+**Fil:** `docs/conversion-worker/worker.mjs`
+- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
+- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
+- Non-fatal: om hierarki-population misslyckas fortsätter workern
+
+#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
+**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
+- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
+- `created_in_model: true` istället för `false`
+- Diff-logik: markerar borttagna objekt efter import
+
+### Datamodell
+
+```text
+Building Storey:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
+  category:          "Building Storey"
+  created_in_model:  true
+
+Space:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
+  category:          "Space"
+  level_fm_guid:     parent storey fm_guid
+
+Instance:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
+  category:          "Instance"
+  asset_type:        ifcType (e.g. "IfcDoor")
+  level_fm_guid:     resolved storey
+  in_room_fm_guid:   resolved space
+```
+
+### Diff-flöde
+
+Vid omimport jämförs importerade fm_guids mot befintliga i DB:
+- **Nytt** → INSERT
+- **Matchat** → UPDATE (namn, typ, rumsplacering)
+- **Borttaget** → `modification_status = 'removed'` (soft-delete)
+
+---
+
+## Previous Plans
+
+### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
+- Browser-primary for >20MB, edge function for ≤20MB
+- MetaModel JSON uploaded alongside XKT
+- Systems extracted and persisted
+
+### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+- Standalone Node.js worker polls conversion-worker-api
+- Per-storey .xkt tiles with dynamic floor loading
+
+### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
+- 10 credential override columns on building_settings
+- Shared credential resolver in edge functions
+- Properties page as configuration hub
