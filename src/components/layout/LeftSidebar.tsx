@@ -137,10 +137,18 @@ const LeftSidebar: React.FC = () => {
                     
                     <div className="h-px bg-border my-1.5 sm:my-2 mx-0.5 sm:mx-1" />
                     
-                    {/* Dynamic items from saved order */}
+                    {/* Context label when building is selected */}
+                    {selectedFacility && (
+                        <p className={`text-[10px] font-medium uppercase tracking-wider px-1 truncate ${isSidebarExpanded ? 'text-muted-foreground' : 'hidden'}`}>
+                            {selectedFacility.commonName || selectedFacility.name || 'Byggnad'}
+                        </p>
+                    )}
+                    
+                    {/* Dynamic items from saved order, filtered by context */}
                     {sidebarOrder.map((item) => {
                         const meta = SIDEBAR_ITEM_META[item.id];
                         if (!meta) return null;
+                        if (!meta.contexts.includes(currentContext)) return null;
                         const IconComp = meta.icon;
                         return (
                             <React.Fragment key={item.id}>
