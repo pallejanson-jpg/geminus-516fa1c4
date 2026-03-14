@@ -627,7 +627,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
             <Sparkles className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h2 className="font-semibold">Gunnar</h2>
+            <h2 className="font-semibold">Geminus AI</h2>
             <p className="text-xs text-muted-foreground">
               {context?.currentBuilding?.name || "AI Property Assistant"}
             </p>
