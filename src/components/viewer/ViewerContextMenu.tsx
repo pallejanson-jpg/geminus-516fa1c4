@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Type, MessageSquarePlus, MessageSquare, Tags, Scan, EyeOff, Eye, ZoomIn, Info, Move, Trash2, MousePointer, PointerOff, Check } from 'lucide-react';
+import { getContextMenuSettings, CONTEXT_MENU_SETTINGS_CHANGED_EVENT } from './ContextMenuSettings';
 
 interface ViewerContextMenuProps {
   position: { x: number; y: number };
