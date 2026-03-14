@@ -8,7 +8,7 @@ const AI_MODEL_FALLBACK = "google/gemini-2.5-flash-lite";
 const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 /* ─────────────────────────────────────────────
-   Tool definitions for the AI model
+   Tool definitions
    ───────────────────────────────────────────── */
 
 const tools = [
@@ -16,19 +16,19 @@ const tools = [
     type: "function",
     function: {
       name: "query_assets",
-      description: "Query assets from the database with optional filters. Returns a list of matching assets or a count. Categories: Building, Building Storey, Space, Instance, Door. Use count_only=true to get counts without fetching all rows.",
+      description: "Query assets with optional filters. Categories: Building, Building Storey, Space, Instance, Door. Use count_only=true for counts.",
       parameters: {
         type: "object",
         properties: {
-          building_fm_guid: { type: "string", description: "Filter by building fm_guid" },
-          category: { type: "string", description: "Filter by category (Building, Building Storey, Space, Instance, Door)" },
-          level_fm_guid: { type: "string", description: "Filter by level/storey fm_guid" },
-          in_room_fm_guid: { type: "string", description: "Filter by room fm_guid" },
-          asset_type: { type: "string", description: "Filter by asset_type (e.g. brandsläckare, fläkt). Partial match." },
-          name_search: { type: "string", description: "Search in name/common_name fields (partial match)" },
-          attribute_search: { type: "string", description: "Search inside the attributes JSONB column. Use for NTA, BTA, material, installation year etc. Partial match on both keys and values." },
-          count_only: { type: "boolean", description: "If true, return only the count" },
-          limit: { type: "number", description: "Max rows to return (default 50)" },
+          building_fm_guid: { type: "string" },
+          category: { type: "string" },
+          level_fm_guid: { type: "string" },
+          in_room_fm_guid: { type: "string" },
+          asset_type: { type: "string", description: "Partial match on asset_type" },
+          name_search: { type: "string", description: "Partial match on name/common_name" },
+          attribute_search: { type: "string", description: "Search in attributes JSONB" },
+          count_only: { type: "boolean" },
+          limit: { type: "number", description: "Max rows (default 50)" },
         },
         required: [],
         additionalProperties: false,
@@ -39,14 +39,14 @@ const tools = [
     type: "function",
     function: {
       name: "aggregate_assets",
-      description: "Aggregate/group assets to get counts, total area, or average area per group. Much faster than fetching all rows and counting manually. Use this for questions like 'how many of each type?', 'total area per floor', etc.",
+      description: "Group assets by field and get count/sum_area/avg_area. Fast for 'how many of each type?', 'total area per floor'.",
       parameters: {
         type: "object",
         properties: {
-          building_fm_guid: { type: "string", description: "Filter by building fm_guid" },
-          group_by: { type: "string", enum: ["asset_type", "category", "level_fm_guid"], description: "Field to group by" },
-          metric: { type: "string", enum: ["count", "sum_area", "avg_area"], description: "What to calculate per group. Default: count" },
-          category_filter: { type: "string", description: "Pre-filter by category before grouping (e.g. 'Instance', 'Space')" },
+          building_fm_guid: { type: "string" },
+          group_by: { type: "string", enum: ["asset_type", "category", "level_fm_guid"] },
+          metric: { type: "string", enum: ["count", "sum_area", "avg_area"] },
+          category_filter: { type: "string" },
         },
         required: ["group_by"],
         additionalProperties: false,
@@ -57,11 +57,11 @@ const tools = [
     type: "function",
     function: {
       name: "compare_buildings",
-      description: "Compare 2 or more buildings side by side. Returns summary data (floors, rooms, assets, area, open issues, work orders) for each building in a single call.",
+      description: "Compare 2+ buildings side by side. Returns summary for each.",
       parameters: {
         type: "object",
         properties: {
-          fm_guids: { type: "array", items: { type: "string" }, description: "Array of building fm_guids to compare" },
+          fm_guids: { type: "array", items: { type: "string" } },
         },
         required: ["fm_guids"],
         additionalProperties: false,
@@ -72,14 +72,14 @@ const tools = [
     type: "function",
     function: {
       name: "work_order_trends",
-      description: "Analyze work order trends over time. Groups work orders by month or week to answer 'are fault reports increasing?' without fetching hundreds of rows.",
+      description: "Analyze work order trends by week/month. Answers 'are fault reports increasing?'",
       parameters: {
         type: "object",
         properties: {
-          building_fm_guid: { type: "string", description: "Filter by building fm_guid" },
-          period: { type: "string", enum: ["week", "month"], description: "Group by week or month. Default: month" },
-          months_back: { type: "number", description: "How many months of history to include. Default: 6" },
-          status: { type: "string", description: "Filter by status" },
+          building_fm_guid: { type: "string" },
+          period: { type: "string", enum: ["week", "month"] },
+          months_back: { type: "number" },
+          status: { type: "string" },
         },
         required: [],
         additionalProperties: false,
@@ -90,16 +90,16 @@ const tools = [
     type: "function",
     function: {
       name: "query_work_orders",
-      description: "Query work orders (felanmälningar/arbetsordrar) with optional filters. Can filter by status, priority, category, and building.",
+      description: "Query work orders (felanmälningar) with filters on status/priority/category/building.",
       parameters: {
         type: "object",
         properties: {
-          building_fm_guid: { type: "string", description: "Filter by building fm_guid" },
-          status: { type: "string", description: "Filter by status (open, in_progress, completed, closed)" },
-          priority: { type: "string", description: "Filter by priority" },
-          category: { type: "string", description: "Filter by category" },
-          count_only: { type: "boolean", description: "If true, return only the count" },
-          limit: { type: "number", description: "Max rows to return (default 20)" },
+          building_fm_guid: { type: "string" },
+          status: { type: "string" },
+          priority: { type: "string" },
+          category: { type: "string" },
+          count_only: { type: "boolean" },
+          limit: { type: "number" },
         },
         required: [],
         additionalProperties: false,
@@ -110,16 +110,16 @@ const tools = [
     type: "function",
     function: {
       name: "query_issues",
-      description: "Query BCF issues (ärenden/avvikelser) with optional filters.",
+      description: "Query BCF issues (ärenden/avvikelser) with filters.",
       parameters: {
         type: "object",
         properties: {
-          building_fm_guid: { type: "string", description: "Filter by building fm_guid" },
-          status: { type: "string", description: "Filter by status (open, in_progress, resolved, closed)" },
-          priority: { type: "string", description: "Filter by priority (low, medium, high, critical)" },
-          issue_type: { type: "string", description: "Filter by issue_type (fault, observation, etc.)" },
-          count_only: { type: "boolean", description: "If true, return only the count" },
-          limit: { type: "number", description: "Max rows to return (default 20)" },
+          building_fm_guid: { type: "string" },
+          status: { type: "string" },
+          priority: { type: "string" },
+          issue_type: { type: "string" },
+          count_only: { type: "boolean" },
+          limit: { type: "number" },
         },
         required: [],
         additionalProperties: false,
@@ -130,7 +130,7 @@ const tools = [
     type: "function",
     function: {
       name: "get_building_summary",
-      description: "Get a comprehensive overview of a building: floors, rooms, assets, total area, open issues, and open work orders. Use this as a starting point when the user asks about a building.",
+      description: "Comprehensive building overview: floors, rooms, assets, area, issues, work orders.",
       parameters: {
         type: "object",
         properties: {
@@ -145,13 +145,13 @@ const tools = [
     type: "function",
     function: {
       name: "search_assets",
-      description: "Free-text search across asset names, common names, and asset types. Use for finding specific items by name or type. Returns fm_guid for each result so you can create action buttons.",
+      description: "Free-text search across asset names and types. Returns fm_guid for action buttons.",
       parameters: {
         type: "object",
         properties: {
-          search_term: { type: "string", description: "Text to search for (e.g. 'brandslang', 'kontor 201')" },
-          building_fm_guid: { type: "string", description: "Optionally limit search to a building" },
-          limit: { type: "number", description: "Max rows (default 20)" },
+          search_term: { type: "string" },
+          building_fm_guid: { type: "string" },
+          limit: { type: "number" },
         },
         required: ["search_term"],
         additionalProperties: false,
@@ -162,16 +162,16 @@ const tools = [
     type: "function",
     function: {
       name: "query_documents",
-      description: "Query documents (ritningar, handlingar, dokument) associated with a building. Can filter by file name, source system, or MIME type.",
+      description: "Query documents (ritningar, handlingar) for a building.",
       parameters: {
         type: "object",
         properties: {
-          building_fm_guid: { type: "string", description: "Filter by building fm_guid" },
-          file_name: { type: "string", description: "Search in file name (partial match)" },
-          source_system: { type: "string", description: "Filter by source system (e.g. congeria)" },
-          mime_type: { type: "string", description: "Filter by MIME type (e.g. application/pdf)" },
-          count_only: { type: "boolean", description: "If true, return only the count" },
-          limit: { type: "number", description: "Max rows to return (default 20)" },
+          building_fm_guid: { type: "string" },
+          file_name: { type: "string" },
+          source_system: { type: "string" },
+          mime_type: { type: "string" },
+          count_only: { type: "boolean" },
+          limit: { type: "number" },
         },
         required: [],
         additionalProperties: false,
@@ -182,13 +182,13 @@ const tools = [
     type: "function",
     function: {
       name: "query_building_settings",
-      description: "Get configuration/settings for buildings: favorites, geo coordinates, Ivion site IDs, hero images, FM Access links. Use to find which buildings have 360° panorama (ivion_site_id not null) or geo coordinates.",
+      description: "Get building config: favorites, geo coords, Ivion site IDs, FM Access links.",
       parameters: {
         type: "object",
         properties: {
-          fm_guid: { type: "string", description: "Get settings for a specific building" },
-          favorites_only: { type: "boolean", description: "If true, only return favorited buildings" },
-          limit: { type: "number", description: "Max rows (default 50)" },
+          fm_guid: { type: "string" },
+          favorites_only: { type: "boolean" },
+          limit: { type: "number" },
         },
         required: [],
         additionalProperties: false,
@@ -199,12 +199,12 @@ const tools = [
     type: "function",
     function: {
       name: "query_saved_views",
-      description: "Query saved camera views/bookmarks for a building. These are pre-configured viewpoints users have saved.",
+      description: "Query saved camera views/bookmarks for a building.",
       parameters: {
         type: "object",
         properties: {
-          building_fm_guid: { type: "string", description: "Filter by building fm_guid" },
-          limit: { type: "number", description: "Max rows (default 20)" },
+          building_fm_guid: { type: "string" },
+          limit: { type: "number" },
         },
         required: [],
         additionalProperties: false,
@@ -215,11 +215,11 @@ const tools = [
     type: "function",
     function: {
       name: "query_annotation_symbols",
-      description: "Query available annotation/marker symbols used for placing assets on the map/model. Returns categories and icon details.",
+      description: "Query annotation/marker symbols.",
       parameters: {
         type: "object",
         properties: {
-          category: { type: "string", description: "Filter by category" },
+          category: { type: "string" },
         },
         required: [],
         additionalProperties: false,
@@ -230,11 +230,11 @@ const tools = [
     type: "function",
     function: {
       name: "get_floor_details",
-      description: "Get detailed information about a specific floor/storey: all rooms with their areas, and all assets (equipment) on that floor.",
+      description: "Detailed info about a floor: rooms with areas, assets on that floor.",
       parameters: {
         type: "object",
         properties: {
-          floor_fm_guid: { type: "string", description: "The floor's fm_guid" },
+          floor_fm_guid: { type: "string" },
         },
         required: ["floor_fm_guid"],
         additionalProperties: false,
@@ -245,11 +245,11 @@ const tools = [
     type: "function",
     function: {
       name: "senslinc_get_equipment",
-      description: "Find IoT equipment/sensors linked to a specific FM GUID (room, asset, or building). Returns machine info, sensor data, and a dashboard URL for the Senslinc monitoring portal.",
+      description: "Find IoT equipment/sensors linked to a FM GUID. Returns dashboard URL.",
       parameters: {
         type: "object",
         properties: {
-          fm_guid: { type: "string", description: "The FM GUID of the room, asset, or building to look up in Senslinc" },
+          fm_guid: { type: "string" },
         },
         required: ["fm_guid"],
         additionalProperties: false,
@@ -260,11 +260,11 @@ const tools = [
     type: "function",
     function: {
       name: "senslinc_get_sites",
-      description: "List all Senslinc-monitored sites (buildings) and optionally get all equipment for a specific site. Use to discover which buildings have IoT sensors.",
+      description: "List Senslinc-monitored sites. Discover which buildings have IoT.",
       parameters: {
         type: "object",
         properties: {
-          site_code: { type: "string", description: "Optional site code to filter and get equipment for a specific site" },
+          site_code: { type: "string" },
         },
         required: [],
         additionalProperties: false,
@@ -275,15 +275,15 @@ const tools = [
     type: "function",
     function: {
       name: "senslinc_search_data",
-      description: "Search time-series sensor data (temperature, CO2, humidity, energy) from Senslinc Elasticsearch. Build queries with time range, machine code, and property name filters.",
+      description: "Search time-series sensor data (temperature, CO2, humidity, energy).",
       parameters: {
         type: "object",
         properties: {
-          workspace_key: { type: "string", description: "The Elasticsearch workspace/index key to search in. Use senslinc_get_indices to discover valid values." },
-          time_range: { type: "string", description: "Time range for data, e.g. 'now-24h', 'now-7d', 'now-1M'. Default: 'now-24h'" },
-          property_name: { type: "string", description: "Filter by property/metric name (e.g. 'temperature', 'co2', 'humidity')" },
-          machine_code: { type: "string", description: "Filter by machine code (often the FM GUID)" },
-          size: { type: "number", description: "Max results to return (default 100)" },
+          workspace_key: { type: "string" },
+          time_range: { type: "string", description: "e.g. 'now-24h', 'now-7d'" },
+          property_name: { type: "string" },
+          machine_code: { type: "string" },
+          size: { type: "number" },
         },
         required: ["workspace_key"],
         additionalProperties: false,
@@ -294,7 +294,7 @@ const tools = [
     type: "function",
     function: {
       name: "senslinc_get_indices",
-      description: "List available Senslinc Elasticsearch indices/workspaces. Use this to discover valid workspace_key values before calling senslinc_search_data.",
+      description: "List Senslinc Elasticsearch indices. Use to discover workspace_key values.",
       parameters: {
         type: "object",
         properties: {},
@@ -308,11 +308,11 @@ const tools = [
     type: "function",
     function: {
       name: "fm_access_get_drawings",
-      description: "Get drawings (ritningar) from FM Access for a building, grouped by discipline/tab (Arkitekt, El, VVS, etc.). Requires the FM Access building GUID (different from the Geminus fm_guid — use query_building_settings to find the fm_access_building_guid for a building).",
+      description: "Get drawings from FM Access grouped by discipline (Arkitekt, El, VVS). Requires fm_access_building_guid (use query_building_settings to find it).",
       parameters: {
         type: "object",
         properties: {
-          fm_access_building_guid: { type: "string", description: "The FM Access building GUID (from building_settings.fm_access_building_guid)" },
+          fm_access_building_guid: { type: "string" },
         },
         required: ["fm_access_building_guid"],
         additionalProperties: false,
@@ -323,11 +323,11 @@ const tools = [
     type: "function",
     function: {
       name: "fm_access_get_hierarchy",
-      description: "Get the full object hierarchy from FM Access for a building. Returns all objects (floors, rooms, equipment) with counts. Useful for answering 'how many objects are there in this building?'",
+      description: "Get full object hierarchy from FM Access for a building with counts.",
       parameters: {
         type: "object",
         properties: {
-          fm_access_building_guid: { type: "string", description: "The FM Access building GUID" },
+          fm_access_building_guid: { type: "string" },
         },
         required: ["fm_access_building_guid"],
         additionalProperties: false,
@@ -338,11 +338,11 @@ const tools = [
     type: "function",
     function: {
       name: "fm_access_search_objects",
-      description: "Search for objects in FM Access by text query. Returns matching objects with their GUIDs and class types.",
+      description: "Search FM Access objects by text query.",
       parameters: {
         type: "object",
         properties: {
-          query: { type: "string", description: "Search text" },
+          query: { type: "string" },
         },
         required: ["query"],
         additionalProperties: false,
@@ -353,11 +353,11 @@ const tools = [
     type: "function",
     function: {
       name: "fm_access_get_floors",
-      description: "Get list of floors from FM Access for a building.",
+      description: "Get floors from FM Access for a building.",
       parameters: {
         type: "object",
         properties: {
-          fm_access_building_guid: { type: "string", description: "The FM Access building GUID" },
+          fm_access_building_guid: { type: "string" },
         },
         required: ["fm_access_building_guid"],
         additionalProperties: false,
@@ -369,13 +369,13 @@ const tools = [
     type: "function",
     function: {
       name: "viewer_show_floor",
-      description: "Generate an action link to isolate and show a specific floor in the 3D viewer. Returns markdown action link that the user can click.",
+      description: "Generate action link to show a floor in 3D viewer.",
       parameters: {
         type: "object",
         properties: {
-          building_fm_guid: { type: "string", description: "Building fm_guid" },
-          floor_fm_guid: { type: "string", description: "Floor fm_guid to show" },
-          floor_name: { type: "string", description: "Floor display name" },
+          building_fm_guid: { type: "string" },
+          floor_fm_guid: { type: "string" },
+          floor_name: { type: "string" },
         },
         required: ["building_fm_guid", "floor_fm_guid"],
         additionalProperties: false,
@@ -386,13 +386,13 @@ const tools = [
     type: "function",
     function: {
       name: "viewer_show_model",
-      description: "Generate an action link to isolate a specific BIM model in the viewer. Model naming conventions: A-modell/ARK = Arkitekt, K-modell = Konstruktion, V-modell/VVS = VVS, E-modell/EL = El, S-modell = Sprinkler.",
+      description: "Generate action link to isolate a BIM model. A-modell=Arkitekt, K=Konstruktion, V=VVS, E=El, S=Sprinkler.",
       parameters: {
         type: "object",
         properties: {
-          building_fm_guid: { type: "string", description: "Building fm_guid" },
-          model_id: { type: "string", description: "Model ID to isolate" },
-          model_name: { type: "string", description: "Model display name" },
+          building_fm_guid: { type: "string" },
+          model_id: { type: "string" },
+          model_name: { type: "string" },
         },
         required: ["building_fm_guid", "model_id"],
         additionalProperties: false,
@@ -403,13 +403,13 @@ const tools = [
     type: "function",
     function: {
       name: "viewer_open_3d",
-      description: "Generate an action link to open the 3D viewer for a building, optionally focused on a specific floor.",
+      description: "Generate action link to open 3D viewer for a building.",
       parameters: {
         type: "object",
         properties: {
-          building_fm_guid: { type: "string", description: "Building fm_guid" },
-          floor_fm_guid: { type: "string", description: "Optional floor to focus on" },
-          floor_name: { type: "string", description: "Floor name for URL" },
+          building_fm_guid: { type: "string" },
+          floor_fm_guid: { type: "string" },
+          floor_name: { type: "string" },
         },
         required: ["building_fm_guid"],
         additionalProperties: false,
@@ -420,46 +420,46 @@ const tools = [
     type: "function",
     function: {
       name: "viewer_show_drawing",
-      description: "Generate an action link to show a 2D drawing from FM Access in the viewer.",
+      description: "Generate action link to show 2D drawing.",
       parameters: {
         type: "object",
         properties: {
-          building_fm_guid: { type: "string", description: "Building fm_guid" },
-          floor_name: { type: "string", description: "Floor name to show the drawing for" },
+          building_fm_guid: { type: "string" },
+          floor_name: { type: "string" },
         },
         required: ["building_fm_guid"],
         additionalProperties: false,
       },
     },
   },
-  // ── Document content Q&A tool (pre-indexed) ──
+  // ── Document Q&A ──
   {
     type: "function",
     function: {
       name: "ask_about_documents",
-      description: "Ask a question about the CONTENT of documents (PDFs, text files) stored for a building. Searches pre-indexed document chunks in the database. Use when users ask 'what does document X say?', 'find info about Y in the documents', 'summarize the radon report', etc.",
+      description: "Ask about document CONTENT. Searches pre-indexed chunks. Use for 'what does document X say?'",
       parameters: {
         type: "object",
         properties: {
-          building_fm_guid: { type: "string", description: "Building fm_guid to scope documents" },
-          question: { type: "string", description: "The question to answer about the document content" },
-          file_name_filter: { type: "string", description: "Optional: filter to specific document(s) by name (partial match)" },
+          building_fm_guid: { type: "string" },
+          question: { type: "string" },
+          file_name_filter: { type: "string" },
         },
         required: ["question"],
         additionalProperties: false,
       },
     },
   },
-  // ── Help docs search tool ──
+  // ── Help docs ──
   {
     type: "function",
     function: {
       name: "search_help_docs",
-      description: "Search the platform's help documentation and knowledge base. Use when users ask about how to use Geminus, what features are available, how integrations work, or any platform usage questions. Also useful for support-related questions.",
+      description: "Search platform help documentation and knowledge base.",
       parameters: {
         type: "object",
         properties: {
-          question: { type: "string", description: "The question about platform usage or features" },
+          question: { type: "string" },
         },
         required: ["question"],
         additionalProperties: false,
@@ -471,18 +471,18 @@ const tools = [
     type: "function",
     function: {
       name: "create_work_order",
-      description: "Create a new work order / fault report (felanmälan). Returns the created work order. IMPORTANT: Before calling this, present the details to the user and ask for confirmation. Only call after the user says yes.",
+      description: "Create a work order / fault report. Ask user for confirmation FIRST.",
       parameters: {
         type: "object",
         properties: {
-          title: { type: "string", description: "Title of the work order" },
-          description: { type: "string", description: "Detailed description" },
-          building_fm_guid: { type: "string", description: "Building fm_guid" },
-          building_name: { type: "string", description: "Building name for display" },
-          priority: { type: "string", enum: ["low", "medium", "high", "critical"], description: "Priority level. Default: medium" },
-          category: { type: "string", description: "Category of the issue" },
-          space_fm_guid: { type: "string", description: "Optional room fm_guid" },
-          space_name: { type: "string", description: "Optional room name" },
+          title: { type: "string" },
+          description: { type: "string" },
+          building_fm_guid: { type: "string" },
+          building_name: { type: "string" },
+          priority: { type: "string", enum: ["low", "medium", "high", "critical"] },
+          category: { type: "string" },
+          space_fm_guid: { type: "string" },
+          space_name: { type: "string" },
         },
         required: ["title", "description", "building_fm_guid"],
         additionalProperties: false,
@@ -493,31 +493,31 @@ const tools = [
     type: "function",
     function: {
       name: "update_issue_status",
-      description: "Update the status of a BCF issue. IMPORTANT: Before calling this, present the change to the user and ask for confirmation. Only call after the user says yes.",
+      description: "Update BCF issue status. Ask user for confirmation FIRST.",
       parameters: {
         type: "object",
         properties: {
-          issue_id: { type: "string", description: "The UUID of the issue to update" },
-          new_status: { type: "string", enum: ["open", "in_progress", "resolved", "closed"], description: "The new status" },
+          issue_id: { type: "string" },
+          new_status: { type: "string", enum: ["open", "in_progress", "resolved", "closed"] },
         },
         required: ["issue_id", "new_status"],
         additionalProperties: false,
       },
     },
   },
-  // ── FM Access local search tool ──
+  // ── FM Access local search ──
   {
     type: "function",
     function: {
       name: "search_fm_access_local",
-      description: "Search locally synced FM Access data: drawings (ritningar), documents (dokument), and DoU (drift & underhåll) instructions. Much faster than live API calls. Use for questions about available drawings, documents, or maintenance instructions for a building.",
+      description: "Search locally synced FM Access data: drawings, documents, DoU instructions. Fast.",
       parameters: {
         type: "object",
         properties: {
-          building_fm_guid: { type: "string", description: "Filter by building fm_guid" },
-          search_term: { type: "string", description: "Text to search for in names, file names, content" },
-          data_type: { type: "string", enum: ["drawings", "documents", "dou", "all"], description: "Which type of data to search. Default: all" },
-          limit: { type: "number", description: "Max rows (default 20)" },
+          building_fm_guid: { type: "string" },
+          search_term: { type: "string" },
+          data_type: { type: "string", enum: ["drawings", "documents", "dou", "all"] },
+          limit: { type: "number" },
         },
         required: [],
         additionalProperties: false,
@@ -529,14 +529,14 @@ const tools = [
     type: "function",
     function: {
       name: "query_faciliate",
-      description: "Query the Faciliate (SWG) system for work orders, buildings, spaces, equipment, and other facility management objects. Faciliate is a desktop FM system — use this to look up data that may not be in the Geminus database. Supports filtering and sorting.",
+      description: "Query Faciliate (SWG) for work orders, buildings, spaces, equipment.",
       parameters: {
         type: "object",
         properties: {
-          objectType: { type: "string", description: "The Faciliate object type to query, e.g. 'workorder', 'building', 'space', 'equipment', 'customer', 'contract'. Case-insensitive." },
-          filter: { type: "string", description: "Filter expression, e.g. 'Status eq \"Active\"' or 'Description like \"%brand%\"'. Uses Faciliate REST API filter syntax." },
-          take: { type: "number", description: "Max rows to return (default 20)" },
-          loadlevel: { type: "string", enum: ["guid", "basic", "simple", "fullprimary", "loadmax"], description: "How much detail to load. Default: simple" },
+          objectType: { type: "string" },
+          filter: { type: "string" },
+          take: { type: "number" },
+          loadlevel: { type: "string", enum: ["guid", "basic", "simple", "fullprimary", "loadmax"] },
         },
         required: ["objectType"],
         additionalProperties: false,
@@ -547,13 +547,13 @@ const tools = [
     type: "function",
     function: {
       name: "get_faciliate_object",
-      description: "Get a single object from Faciliate by its GUID. Use after query_faciliate to get full details of a specific work order, building, etc.",
+      description: "Get a single Faciliate object by GUID.",
       parameters: {
         type: "object",
         properties: {
-          objectType: { type: "string", description: "The Faciliate object type" },
-          guid: { type: "string", description: "The GUID of the object" },
-          loadlevel: { type: "string", enum: ["guid", "basic", "simple", "fullprimary", "loadmax"], description: "Detail level. Default: fullprimary" },
+          objectType: { type: "string" },
+          guid: { type: "string" },
+          loadlevel: { type: "string", enum: ["guid", "basic", "simple", "fullprimary", "loadmax"] },
         },
         required: ["objectType", "guid"],
         additionalProperties: false,
@@ -579,7 +579,6 @@ async function execQueryAssets(supabase: any, args: any) {
   if (args.name_search) query = query.or(`common_name.ilike.%${args.name_search}%,name.ilike.%${args.name_search}%`);
   if (args.attribute_search) query = query.ilike("attributes::text", `%${args.attribute_search}%`);
   if (!args.count_only) query = query.limit(args.limit || 50);
-
   const { data, count, error } = await query;
   if (error) throw error;
   return args.count_only ? { count } : data;
@@ -588,15 +587,12 @@ async function execQueryAssets(supabase: any, args: any) {
 async function execAggregateAssets(supabase: any, args: any) {
   const groupBy = args.group_by;
   const metric = args.metric || "count";
-
   let query = supabase.from("assets").select(`${groupBy}, gross_area`);
   if (args.building_fm_guid) query = query.eq("building_fm_guid", args.building_fm_guid);
   if (args.category_filter) query = query.eq("category", args.category_filter);
   query = query.limit(5000);
-
   const { data, error } = await query;
   if (error) throw error;
-
   const groups: Record<string, { count: number; sum_area: number }> = {};
   for (const row of data || []) {
     const key = row[groupBy] || "(tom)";
@@ -604,7 +600,6 @@ async function execAggregateAssets(supabase: any, args: any) {
     groups[key].count++;
     if (row.gross_area) groups[key].sum_area += Number(row.gross_area);
   }
-
   const results = Object.entries(groups)
     .map(([key, v]) => ({
       [groupBy]: key,
@@ -613,7 +608,6 @@ async function execAggregateAssets(supabase: any, args: any) {
       ...(metric === "avg_area" ? { avg_area_m2: v.count ? Math.round((v.sum_area / v.count) * 100) / 100 : 0 } : {}),
     }))
     .sort((a, b) => b.count - a.count);
-
   return { total_groups: results.length, groups: results.slice(0, 50) };
 }
 
@@ -628,19 +622,15 @@ async function execWorkOrderTrends(supabase: any, args: any) {
   const monthsBack = args.months_back || 6;
   const cutoff = new Date();
   cutoff.setMonth(cutoff.getMonth() - monthsBack);
-
   let query = supabase.from("work_orders")
     .select("created_at, status, priority, category")
     .gte("created_at", cutoff.toISOString())
     .order("created_at", { ascending: true })
     .limit(2000);
-
   if (args.building_fm_guid) query = query.eq("building_fm_guid", args.building_fm_guid);
   if (args.status) query = query.eq("status", args.status);
-
   const { data, error } = await query;
   if (error) throw error;
-
   const period = args.period || "month";
   const buckets: Record<string, number> = {};
   for (const wo of data || []) {
@@ -655,17 +645,10 @@ async function execWorkOrderTrends(supabase: any, args: any) {
     }
     buckets[key] = (buckets[key] || 0) + 1;
   }
-
   const trend = Object.entries(buckets)
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([period, count]) => ({ period, count }));
-
-  return {
-    total: (data || []).length,
-    period_type: period,
-    months_back: monthsBack,
-    trend,
-  };
+  return { total: (data || []).length, period_type: period, months_back: monthsBack, trend };
 }
 
 async function execQueryWorkOrders(supabase: any, args: any) {
@@ -678,7 +661,6 @@ async function execQueryWorkOrders(supabase: any, args: any) {
   if (args.priority) query = query.eq("priority", args.priority);
   if (args.category) query = query.ilike("category", `%${args.category}%`);
   if (!args.count_only) query = query.order("created_at", { ascending: false }).limit(args.limit || 20);
-
   const { data, count, error } = await query;
   if (error) throw error;
   return args.count_only ? { count } : data;
@@ -694,7 +676,6 @@ async function execQueryIssues(supabase: any, args: any) {
   if (args.priority) query = query.eq("priority", args.priority);
   if (args.issue_type) query = query.eq("issue_type", args.issue_type);
   if (!args.count_only) query = query.order("created_at", { ascending: false }).limit(args.limit || 20);
-
   const { data, count, error } = await query;
   if (error) throw error;
   return args.count_only ? { count } : data;
@@ -709,29 +690,19 @@ async function execBuildingSummary(supabase: any, args: any) {
     supabase.from("assets").select("common_name, name, gross_area, attributes").eq("fm_guid", fmGuid).maybeSingle(),
     supabase.from("assets").select("fm_guid, common_name, name").eq("building_fm_guid", fmGuid).eq("category", "Building Storey").order("name"),
   ]);
-
   const cats: Record<string, number> = {};
   const assetTypes: Record<string, number> = {};
   let totalArea = 0;
   (assets.data || []).forEach((a: any) => {
     cats[a.category] = (cats[a.category] || 0) + 1;
     if (a.category === "Space" && a.gross_area) totalArea += Number(a.gross_area);
-    if (a.category === "Instance" && a.asset_type) {
-      assetTypes[a.asset_type] = (assetTypes[a.asset_type] || 0) + 1;
-    }
+    if (a.category === "Instance" && a.asset_type) assetTypes[a.asset_type] = (assetTypes[a.asset_type] || 0) + 1;
   });
-
   const woByStatus: Record<string, number> = {};
   (workOrders.data || []).forEach((w: any) => { woByStatus[w.status] = (woByStatus[w.status] || 0) + 1; });
-
   const issuesByStatus: Record<string, number> = {};
   (issues.data || []).forEach((i: any) => { issuesByStatus[i.status] = (issuesByStatus[i.status] || 0) + 1; });
-
-  const topAssetTypes = Object.entries(assetTypes)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .map(([type, count]) => ({ type, count }));
-
+  const topAssetTypes = Object.entries(assetTypes).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([type, count]) => ({ type, count }));
   return {
     building_name: buildingRow.data?.common_name || buildingRow.data?.name || fmGuid,
     building_fm_guid: fmGuid,
@@ -752,14 +723,11 @@ async function execBuildingSummary(supabase: any, args: any) {
 
 async function execSearchAssets(supabase: any, args: any) {
   const term = `%${args.search_term}%`;
-  let query = supabase
-    .from("assets")
+  let query = supabase.from("assets")
     .select("fm_guid, name, common_name, category, asset_type, building_fm_guid, level_fm_guid, in_room_fm_guid, gross_area")
     .or(`common_name.ilike.${term},name.ilike.${term},asset_type.ilike.${term}`);
-
   if (args.building_fm_guid) query = query.eq("building_fm_guid", args.building_fm_guid);
   query = query.limit(args.limit || 20);
-
   const { data, error } = await query;
   if (error) throw error;
   return data;
@@ -775,7 +743,6 @@ async function execQueryDocuments(supabase: any, args: any) {
   if (args.source_system) query = query.eq("source_system", args.source_system);
   if (args.mime_type) query = query.ilike("mime_type", `%${args.mime_type}%`);
   if (!args.count_only) query = query.order("created_at", { ascending: false }).limit(args.limit || 20);
-
   const { data, count, error } = await query;
   if (error) throw error;
   return args.count_only ? { count } : data;
@@ -786,7 +753,6 @@ async function execQueryBuildingSettings(supabase: any, args: any) {
   if (args.fm_guid) query = query.eq("fm_guid", args.fm_guid);
   if (args.favorites_only) query = query.eq("is_favorite", true);
   query = query.limit(args.limit || 50);
-
   const { data, error } = await query;
   if (error) throw error;
   return data;
@@ -796,7 +762,6 @@ async function execQuerySavedViews(supabase: any, args: any) {
   let query = supabase.from("saved_views").select("id, name, description, building_fm_guid, building_name, view_mode, visualization_type, created_at");
   if (args.building_fm_guid) query = query.eq("building_fm_guid", args.building_fm_guid);
   query = query.order("created_at", { ascending: false }).limit(args.limit || 20);
-
   const { data, error } = await query;
   if (error) throw error;
   return data;
@@ -805,7 +770,6 @@ async function execQuerySavedViews(supabase: any, args: any) {
 async function execQueryAnnotationSymbols(supabase: any, args: any) {
   let query = supabase.from("annotation_symbols").select("id, name, category, color, icon_url, is_default");
   if (args.category) query = query.eq("category", args.category);
-
   const { data, error } = await query;
   if (error) throw error;
   return data;
@@ -817,9 +781,7 @@ async function execGetFloorDetails(supabase: any, args: any) {
     supabase.from("assets").select("fm_guid, name, common_name, gross_area").eq("level_fm_guid", floorGuid).eq("category", "Space").order("common_name"),
     supabase.from("assets").select("fm_guid, name, common_name, asset_type, in_room_fm_guid").eq("level_fm_guid", floorGuid).eq("category", "Instance").limit(100),
   ]);
-
   const totalArea = (rooms.data || []).reduce((sum: number, r: any) => sum + (Number(r.gross_area) || 0), 0);
-
   return {
     floor_fm_guid: floorGuid,
     rooms: (rooms.data || []).map((r: any) => ({ fm_guid: r.fm_guid, name: r.common_name || r.name, area_m2: r.gross_area })),
@@ -847,41 +809,26 @@ async function execCreateWorkOrder(supabase: any, args: any) {
     status: "open",
     reported_by: "Geminus AI",
   }).select().single();
-
   if (error) throw error;
   return { success: true, work_order: data };
 }
 
 async function execUpdateIssueStatus(supabase: any, args: any) {
   const updates: any = { status: args.new_status };
-  if (args.new_status === "resolved") {
-    updates.resolved_at = new Date().toISOString();
-  }
-
-  const { data, error } = await supabase
-    .from("bcf_issues")
-    .update(updates)
-    .eq("id", args.issue_id)
-    .select("id, title, status")
-    .single();
-
+  if (args.new_status === "resolved") updates.resolved_at = new Date().toISOString();
+  const { data, error } = await supabase.from("bcf_issues").update(updates).eq("id", args.issue_id).select("id, title, status").single();
   if (error) throw error;
   return { success: true, issue: data };
 }
 
-/* ─────────────────────────────────────────────
-   Senslinc IoT helpers
-   ───────────────────────────────────────────── */
+/* ── Senslinc IoT helpers ── */
 
 async function callSenslincQuery(action: string, params: Record<string, unknown>) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const resp = await fetch(`${supabaseUrl}/functions/v1/senslinc-query`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${anonKey}`,
-    },
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${anonKey}` },
     body: JSON.stringify({ action, ...params }),
   });
   return resp.json();
@@ -890,54 +837,31 @@ async function callSenslincQuery(action: string, params: Record<string, unknown>
 async function execSenslincGetEquipment(args: any) {
   return callSenslincQuery("get-dashboard-url", { fmGuid: args.fm_guid });
 }
-
 async function execSenslincGetSites(args: any) {
-  if (args.site_code) {
-    return callSenslincQuery("get-site-equipment", { siteCode: args.site_code });
-  }
-  return callSenslincQuery("get-sites", {});
+  return args.site_code ? callSenslincQuery("get-site-equipment", { siteCode: args.site_code }) : callSenslincQuery("get-sites", {});
 }
-
 async function execSenslincSearchData(args: any) {
-  const timeRange = args.time_range || "now-24h";
-  const size = args.size || 100;
-
-  const must: any[] = [
-    { range: { "@timestamp": { gte: timeRange, lte: "now" } } },
-  ];
+  const must: any[] = [{ range: { "@timestamp": { gte: args.time_range || "now-24h", lte: "now" } } }];
   const filter: any[] = [];
   if (args.machine_code) filter.push({ term: { machine_code: args.machine_code } });
   if (args.property_name) filter.push({ term: { property_name: args.property_name } });
-
-  const query: Record<string, unknown> = {
-    size,
-    query: { bool: { must, filter } },
-    sort: [{ "@timestamp": { order: "desc" } }],
-  };
-
   return callSenslincQuery("search-data", {
     workspaceKey: args.workspace_key,
-    query,
+    query: { size: args.size || 100, query: { bool: { must, filter } }, sort: [{ "@timestamp": { order: "desc" } }] },
   });
 }
-
 async function execSenslincGetIndices() {
   return callSenslincQuery("get-indices", {});
 }
 
-/* ─────────────────────────────────────────────
-   FM Access helpers
-   ───────────────────────────────────────────── */
+/* ── FM Access helpers ── */
 
 async function callFmAccessQuery(action: string, params: Record<string, unknown>) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const resp = await fetch(`${supabaseUrl}/functions/v1/fm-access-query`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${serviceKey}`,
-    },
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${serviceKey}` },
     body: JSON.stringify({ action, ...params }),
   });
   return resp.json();
@@ -946,66 +870,32 @@ async function callFmAccessQuery(action: string, params: Record<string, unknown>
 async function execFmAccessGetDrawings(args: any) {
   const result = await callFmAccessQuery("get-drawings", { buildingId: args.fm_access_building_guid });
   if (!result?.success) return { error: result?.error || "Failed to get drawings" };
-
-  // Group drawings by discipline/tab
   const drawings = result.data || [];
   const grouped: Record<string, any[]> = {};
   for (const d of drawings) {
     const tab = d.tabName || d.className || "Övrigt";
     if (!grouped[tab]) grouped[tab] = [];
-    grouped[tab].push({
-      id: d.objectId || d.drawingId,
-      name: d.objectName || d.name,
-      className: d.className,
-    });
+    grouped[tab].push({ id: d.objectId || d.drawingId, name: d.objectName || d.name, className: d.className });
   }
-
-  const summary = Object.entries(grouped).map(([tab, items]) => ({
-    tab,
-    count: items.length,
-    drawings: items.slice(0, 5),
-  }));
-
   return {
     total_drawings: drawings.length,
-    tabs: summary,
+    tabs: Object.entries(grouped).map(([tab, items]) => ({ tab, count: items.length, drawings: items.slice(0, 5) })),
   };
 }
 
 async function execFmAccessGetHierarchy(args: any) {
   const result = await callFmAccessQuery("get-hierarchy", { buildingFmGuid: args.fm_access_building_guid });
   if (!result?.success) return { error: result?.error || "Failed to get hierarchy" };
-
-  // Count objects recursively
-  function countNodes(node: any): number {
-    let count = 1;
-    if (node.children) {
-      for (const child of node.children) {
-        count += countNodes(child);
-      }
-    }
-    return count;
-  }
-
-  const data = result.data;
-  const totalObjects = Array.isArray(data) ? data.reduce((sum: number, n: any) => sum + countNodes(n), 0) : countNodes(data);
-
-  // Count by classId
+  function countNodes(node: any): number { let c = 1; if (node.children) for (const ch of node.children) c += countNodes(ch); return c; }
   function countByClass(node: any, counts: Record<string, number>) {
     const cls = node.className || `ClassId:${node.classId || 'unknown'}`;
     counts[cls] = (counts[cls] || 0) + 1;
-    if (node.children) {
-      for (const child of node.children) countByClass(child, counts);
-    }
+    if (node.children) for (const ch of node.children) countByClass(ch, counts);
   }
-
+  const data = result.data;
+  const totalObjects = Array.isArray(data) ? data.reduce((sum: number, n: any) => sum + countNodes(n), 0) : countNodes(data);
   const classCounts: Record<string, number> = {};
-  if (Array.isArray(data)) {
-    data.forEach((n: any) => countByClass(n, classCounts));
-  } else {
-    countByClass(data, classCounts);
-  }
-
+  if (Array.isArray(data)) data.forEach((n: any) => countByClass(n, classCounts)); else countByClass(data, classCounts);
   return {
     total_objects: totalObjects,
     by_class: Object.entries(classCounts).map(([cls, count]) => ({ class: cls, count })).sort((a, b) => b.count - a.count),
@@ -1024,47 +914,26 @@ async function execFmAccessGetFloors(args: any) {
   return result.data || [];
 }
 
-/* ── Document content Q&A execution (pre-indexed) ── */
+/* ── Document content Q&A ── */
 
 async function execAskAboutDocuments(supabase: any, args: any, apiKey: string) {
-  // Search pre-indexed document chunks
-  let query = supabase
-    .from("document_chunks")
-    .select("content, file_name, chunk_index, metadata")
-    .eq("source_type", "document");
-
+  let query = supabase.from("document_chunks").select("content, file_name, chunk_index, metadata").eq("source_type", "document");
   if (args.building_fm_guid) query = query.eq("building_fm_guid", args.building_fm_guid);
   if (args.file_name_filter) query = query.ilike("file_name", `%${args.file_name_filter}%`);
-
-  // Search by question keywords in content
-  const keywords = args.question
-    .replace(/[?!.,]/g, "")
-    .split(/\s+/)
-    .filter((w: string) => w.length > 2)
-    .slice(0, 5);
-
-  if (keywords.length > 0) {
-    const orClauses = keywords.map((kw: string) => `content.ilike.%${kw}%`).join(",");
-    query = query.or(orClauses);
-  }
-
+  const keywords = args.question.replace(/[?!.,]/g, "").split(/\s+/).filter((w: string) => w.length > 2).slice(0, 5);
+  if (keywords.length > 0) query = query.or(keywords.map((kw: string) => `content.ilike.%${kw}%`).join(","));
   query = query.order("chunk_index").limit(15);
   const { data: chunks, error } = await query;
   if (error) throw error;
-
   if (!chunks?.length) {
-    // Fallback without keyword filter
     let fb = supabase.from("document_chunks").select("content, file_name, chunk_index, metadata").eq("source_type", "document");
     if (args.building_fm_guid) fb = fb.eq("building_fm_guid", args.building_fm_guid);
     if (args.file_name_filter) fb = fb.ilike("file_name", `%${args.file_name_filter}%`);
     fb = fb.order("chunk_index").limit(10);
     const { data: fbChunks } = await fb;
-    if (!fbChunks?.length) {
-      return { error: "Inga indexerade dokument hittades. Administratören kan indexera dokument i Inställningar.", documents_searched: 0 };
-    }
+    if (!fbChunks?.length) return { error: "Inga indexerade dokument hittades.", documents_searched: 0 };
     return await answerFromChunks(fbChunks, args.question, apiKey);
   }
-
   return await answerFromChunks(chunks, args.question, apiKey);
 }
 
@@ -1072,126 +941,96 @@ async function answerFromChunks(chunks: any[], question: string, apiKey: string)
   const maxChars = 25000;
   let totalChars = 0;
   const selected: { name: string; content: string }[] = [];
-
   for (const chunk of chunks) {
     if (totalChars >= maxChars) break;
-    const remaining = maxChars - totalChars;
-    const content = chunk.content.slice(0, remaining);
+    const content = chunk.content.slice(0, maxChars - totalChars);
     selected.push({ name: chunk.file_name || "Okänt dokument", content });
     totalChars += content.length;
   }
-
-  const docContext = selected.map(d => `--- DOCUMENT: ${d.name} ---\n${d.content}`).join("\n\n");
-
+  const docContext = selected.map(d => `--- ${d.name} ---\n${d.content}`).join("\n\n");
   const aiResp = await fetch(AI_GATEWAY, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: AI_MODEL_PRIMARY,
       messages: [
-        { role: "system", content: "You are a document analysis assistant. Answer based ONLY on the provided document content. If the answer is not in the documents, say so. Respond in the same language as the question. Be concise and reference which document the information comes from." },
+        { role: "system", content: "Answer based ONLY on the provided document content. Be concise. Respond in the same language as the question." },
         { role: "user", content: `Documents:\n\n${docContext}\n\n---\nQuestion: ${question}` },
       ],
       max_tokens: 1000,
       temperature: 0.2,
     }),
   });
-
-  if (!aiResp.ok) return { error: "Kunde inte analysera dokumentinnehållet.", documents_searched: selected.length };
+  if (!aiResp.ok) return { error: "Kunde inte analysera dokumenten.", documents_searched: selected.length };
   const aiResult = await aiResp.json();
-  const answer = aiResult.choices?.[0]?.message?.content || "Inget svar kunde genereras.";
-  const docNames = [...new Set(selected.map(d => d.name))];
-  return { answer, documents_searched: selected.length, document_names: docNames };
+  return { answer: aiResult.choices?.[0]?.message?.content || "Inget svar.", documents_searched: selected.length, document_names: [...new Set(selected.map(d => d.name))] };
 }
 
-/* ── Help docs search execution ── */
+/* ── Help docs search ── */
 
 async function execSearchHelpDocs(supabase: any, args: any, apiKey: string) {
-  const keywords = args.question
-    .replace(/[?!.,]/g, "")
-    .split(/\s+/)
-    .filter((w: string) => w.length > 2)
-    .slice(0, 6);
-
+  const keywords = args.question.replace(/[?!.,]/g, "").split(/\s+/).filter((w: string) => w.length > 2).slice(0, 6);
   let query = supabase.from("document_chunks").select("content, file_name, metadata").or("source_type.eq.help_doc,source_type.eq.api_docs");
-  if (keywords.length > 0) {
-    const orClauses = keywords.map((kw: string) => `content.ilike.%${kw}%`).join(",");
-    query = query.or(orClauses);
-  }
+  if (keywords.length > 0) query = query.or(keywords.map((kw: string) => `content.ilike.%${kw}%`).join(","));
   query = query.limit(10);
   const { data: chunks, error } = await query;
   if (error) throw error;
-
-  if (!chunks?.length) {
-    return { answer: "Ingen hjälpdokumentation hittades i kunskapsbasen. Administratören kan lägga till hjälp-URL:er i Inställningar → AI Assistants → Knowledge Base.", sources: [] };
-  }
-
+  if (!chunks?.length) return { answer: "Ingen hjälpdokumentation hittades.", sources: [] };
   const docContext = chunks.map((c: any) => `--- ${c.file_name || c.metadata?.app_name || "Help"} ---\n${c.content}`).join("\n\n");
-
   const aiResp = await fetch(AI_GATEWAY, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: AI_MODEL_PRIMARY,
       messages: [
-        { role: "system", content: "You are a platform help assistant for Geminus. Answer based on the provided help documentation. Be helpful and specific. Respond in the same language as the question." },
-        { role: "user", content: `Help documentation:\n\n${docContext}\n\n---\nQuestion: ${args.question}` },
+        { role: "system", content: "Answer based on the provided help documentation. Be helpful and specific. Respond in the same language as the question." },
+        { role: "user", content: `Help docs:\n\n${docContext}\n\n---\nQuestion: ${args.question}` },
       ],
       max_tokens: 1000,
       temperature: 0.2,
     }),
   });
-
-  if (!aiResp.ok) return { error: "Kunde inte söka i hjälpdokumentationen." };
+  if (!aiResp.ok) return { error: "Kunde inte söka i hjälpdokumentation." };
   const aiResult = await aiResp.json();
-  const answer = aiResult.choices?.[0]?.message?.content || "Inget svar kunde genereras.";
-  const sources = [...new Set(chunks.map((c: any) => c.metadata?.app_name || c.file_name).filter(Boolean))];
-  return { answer, sources };
+  return { answer: aiResult.choices?.[0]?.message?.content || "Inget svar.", sources: [...new Set(chunks.map((c: any) => c.metadata?.app_name || c.file_name).filter(Boolean))] };
 }
 
-/* ── Viewer control tool execution ── */
+/* ── Viewer control tools ── */
 
 function execViewerShowFloor(args: any) {
   const floorName = args.floor_name || "Våning";
   return {
     action_link: `[🏢 Visa ${floorName} i 3D](action:showFloorIn3D:${args.building_fm_guid}:${args.floor_fm_guid}:${encodeURIComponent(floorName)})`,
-    instruction: `Use this action link in your response to let the user click to show floor "${floorName}" in the 3D viewer.`,
+    instruction: `Use this action link in your response.`,
   };
 }
-
 function execViewerShowModel(args: any) {
   const modelName = args.model_name || args.model_id;
   return {
     action_link: `[🏗️ Visa ${modelName}](action:isolateModel:${args.building_fm_guid}:${args.model_id})`,
-    instruction: `Use this action link in your response to let the user isolate the "${modelName}" model.`,
+    instruction: `Use this action link in your response.`,
   };
 }
-
 function execViewerOpen3D(args: any) {
   const parts = [`action:openViewer3D:${args.building_fm_guid}`];
   if (args.floor_fm_guid) parts.push(args.floor_fm_guid);
   const label = args.floor_name ? `Öppna 3D (${args.floor_name})` : 'Öppna 3D-viewer';
-  return {
-    action_link: `[🧊 ${label}](${parts.join(':')})`,
-    instruction: `Use this action link in your response.`,
-  };
+  return { action_link: `[🧊 ${label}](${parts.join(':')})`, instruction: `Use this action link in your response.` };
 }
-
 function execViewerShowDrawing(args: any) {
   const floorName = args.floor_name || '';
   return {
     action_link: `[📐 Visa ritning${floorName ? ` (${floorName})` : ''}](action:showDrawing:${args.building_fm_guid}:${encodeURIComponent(floorName)})`,
-    instruction: `Use this action link in your response to show the 2D drawing.`,
+    instruction: `Use this action link in your response.`,
   };
 }
 
-/* ── FM Access local search execution ── */
+/* ── FM Access local search ── */
 
 async function execSearchFmAccessLocal(supabase: any, args: any) {
   const dataType = args.data_type || "all";
   const limit = args.limit || 20;
   const results: Record<string, any> = {};
-
   if (dataType === "all" || dataType === "drawings") {
     let q = supabase.from("fm_access_drawings").select("drawing_id, name, class_name, floor_name, tab_name, building_fm_guid");
     if (args.building_fm_guid) q = q.eq("building_fm_guid", args.building_fm_guid);
@@ -1200,7 +1039,6 @@ async function execSearchFmAccessLocal(supabase: any, args: any) {
     const { data } = await q;
     results.drawings = data || [];
   }
-
   if (dataType === "all" || dataType === "documents") {
     let q = supabase.from("fm_access_documents").select("document_id, name, file_name, class_name, building_fm_guid");
     if (args.building_fm_guid) q = q.eq("building_fm_guid", args.building_fm_guid);
@@ -1209,7 +1047,6 @@ async function execSearchFmAccessLocal(supabase: any, args: any) {
     const { data } = await q;
     results.documents = data || [];
   }
-
   if (dataType === "all" || dataType === "dou") {
     let q = supabase.from("fm_access_dou").select("title, content, doc_type, object_fm_guid, building_fm_guid");
     if (args.building_fm_guid) q = q.eq("building_fm_guid", args.building_fm_guid);
@@ -1218,73 +1055,46 @@ async function execSearchFmAccessLocal(supabase: any, args: any) {
     const { data } = await q;
     results.dou = data || [];
   }
-
-  // Also search document_chunks for semantic matches
   if (args.search_term) {
-    let chunkQ = supabase.from("document_chunks").select("content, file_name, metadata")
-      .eq("source_type", "fm_access")
-      .ilike("content", `%${args.search_term}%`)
-      .limit(5);
+    let chunkQ = supabase.from("document_chunks").select("content, file_name, metadata").eq("source_type", "fm_access").ilike("content", `%${args.search_term}%`).limit(5);
     if (args.building_fm_guid) chunkQ = chunkQ.eq("building_fm_guid", args.building_fm_guid);
     const { data: chunks } = await chunkQ;
     if (chunks?.length) results.semantic_matches = chunks;
   }
-
   return results;
 }
 
-/* ── Faciliate (SWG) tool execution ── */
+/* ── Faciliate (SWG) tools ── */
 
 async function execQueryFaciliate(args: any) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY")!;
-
   const res = await fetch(`${supabaseUrl}/functions/v1/faciliate-proxy`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${serviceKey}`,
-    },
-    body: JSON.stringify({
-      action: "list",
-      objectType: args.objectType,
-      filter: args.filter || undefined,
-      take: args.take || 20,
-      loadlevel: args.loadlevel || "simple",
-    }),
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+    body: JSON.stringify({ action: "list", objectType: args.objectType, filter: args.filter || undefined, take: args.take || 20, loadlevel: args.loadlevel || "simple" }),
   });
-
   const data = await res.json();
-  if (data.status && data.status >= 400) {
-    return { error: `Faciliate returned status ${data.status}`, details: data.data };
-  }
+  if (data.status && data.status >= 400) return { error: `Faciliate returned status ${data.status}`, details: data.data };
   return data.data || data;
 }
 
 async function execGetFaciliateObject(args: any) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY")!;
-
   const res = await fetch(`${supabaseUrl}/functions/v1/faciliate-proxy`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${serviceKey}`,
-    },
-    body: JSON.stringify({
-      action: "get",
-      objectType: args.objectType,
-      guid: args.guid,
-      loadlevel: args.loadlevel || "fullprimary",
-    }),
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+    body: JSON.stringify({ action: "get", objectType: args.objectType, guid: args.guid, loadlevel: args.loadlevel || "fullprimary" }),
   });
-
   const data = await res.json();
-  if (data.status && data.status >= 400) {
-    return { error: `Faciliate returned status ${data.status}`, details: data.data };
-  }
+  if (data.status && data.status >= 400) return { error: `Faciliate returned status ${data.status}`, details: data.data };
   return data.data || data;
 }
+
+/* ─────────────────────────────────────────────
+   executeTool — ALIGNED with tool declarations
+   ───────────────────────────────────────────── */
 
 async function executeTool(supabase: any, name: string, args: any, apiKey?: string) {
   switch (name) {
@@ -1301,15 +1111,20 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
     case "query_saved_views": return execQuerySavedViews(supabase, args);
     case "query_annotation_symbols": return execQueryAnnotationSymbols(supabase, args);
     case "get_floor_details": return execGetFloorDetails(supabase, args);
+    // Senslinc
     case "senslinc_get_equipment": return execSenslincGetEquipment(args);
     case "senslinc_get_sites": return execSenslincGetSites(args);
     case "senslinc_search_data": return execSenslincSearchData(args);
     case "senslinc_get_indices": return execSenslincGetIndices();
-    // FM Access local search (replaces phantom fm_access_get_* tools)
+    // FM Access — LIVE API (now properly routed!)
+    case "fm_access_get_drawings": return execFmAccessGetDrawings(args);
+    case "fm_access_get_hierarchy": return execFmAccessGetHierarchy(args);
+    case "fm_access_search_objects": return execFmAccessSearchObjects(args);
+    case "fm_access_get_floors": return execFmAccessGetFloors(args);
+    // FM Access — local search
     case "search_fm_access_local": return execSearchFmAccessLocal(supabase, args);
-    // Document content Q&A
+    // Document Q&A
     case "ask_about_documents": return execAskAboutDocuments(supabase, args, apiKey!);
-    // Help docs search
     case "search_help_docs": return execSearchHelpDocs(supabase, args, apiKey!);
     // Viewer tools
     case "viewer_show_floor": return execViewerShowFloor(args);
@@ -1319,7 +1134,7 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
     // Write tools
     case "create_work_order": return execCreateWorkOrder(supabase, args);
     case "update_issue_status": return execUpdateIssueStatus(supabase, args);
-    // Faciliate tools
+    // Faciliate
     case "query_faciliate": return execQueryFaciliate(args);
     case "get_faciliate_object": return execGetFaciliateObject(args);
     default: return { error: `Unknown tool: ${name}` };
@@ -1327,7 +1142,7 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
 }
 
 /* ─────────────────────────────────────────────
-   Conversation memory helpers
+   Conversation memory — null-safe
    ───────────────────────────────────────────── */
 
 async function loadRecentConversation(supabase: any, userId: string, buildingFmGuid?: string) {
@@ -1340,31 +1155,39 @@ async function loadRecentConversation(supabase: any, userId: string, buildingFmG
 
   if (buildingFmGuid) {
     query = query.eq("building_fm_guid", buildingFmGuid);
+  } else {
+    query = query.is("building_fm_guid", null);
   }
 
   const { data } = await query;
   if (data?.[0]) {
     const age = Date.now() - new Date(data[0].updated_at).getTime();
-    if (age < 24 * 60 * 60 * 1000) {
-      return data[0];
-    }
+    if (age < 24 * 60 * 60 * 1000) return data[0];
   }
   return null;
 }
 
 async function saveConversation(supabase: any, userId: string, buildingFmGuid: string | null, messages: any[]) {
-  const recentMessages = messages.slice(-10).map((m: any) => ({
+  const recentMessages = messages.slice(-12).map((m: any) => ({
     role: m.role,
     content: typeof m.content === "string" ? m.content.slice(0, 500) : "",
   }));
 
-  const { data: existing } = await supabase
+  // Null-safe lookup: use .is() for null, .eq() for actual values
+  let lookupQuery = supabase
     .from("gunnar_conversations")
     .select("id")
     .eq("user_id", userId)
-    .eq("building_fm_guid", buildingFmGuid || "")
     .order("updated_at", { ascending: false })
     .limit(1);
+
+  if (buildingFmGuid) {
+    lookupQuery = lookupQuery.eq("building_fm_guid", buildingFmGuid);
+  } else {
+    lookupQuery = lookupQuery.is("building_fm_guid", null);
+  }
+
+  const { data: existing } = await lookupQuery;
 
   if (existing?.[0]) {
     await supabase
@@ -1383,13 +1206,73 @@ async function saveConversation(supabase: any, userId: string, buildingFmGuid: s
 }
 
 /* ─────────────────────────────────────────────
-   Build system prompt with live context from DB
+   Intent router — fast-path for simple intents
+   ───────────────────────────────────────────── */
+
+function detectSimpleIntent(messages: any[]): string | null {
+  if (!messages.length) return null;
+  const lastMsg = messages[messages.length - 1];
+  if (lastMsg.role !== "user") return null;
+  const text = lastMsg.content.toLowerCase().trim();
+
+  // Greetings
+  if (/^(hej|hallå|tja|tjena|hi|hello|hey|god\s*(morgon|kväll|dag)|good\s*(morning|evening|day))[\s!.]*$/i.test(text)) return "greeting";
+  // Thank you
+  if (/^(tack|thanks|thank\s*you|tackar)[\s!.]*$/i.test(text)) return "thanks";
+  // Help/what can you do
+  if (/^(hjälp|help|vad kan du|what can you do)[\s?!.]*$/i.test(text)) return "help";
+  // Language change
+  if (/^(byt\s*(till\s*)?(svenska|engelska|english|swedish)|switch\s*(to\s*)?(swedish|english|svenska|engelska))[\s?!.]*$/i.test(text)) return "lang_change";
+
+  return null;
+}
+
+function getSimpleIntentResponse(intent: string, text: string, speechLang: string): string {
+  const isSv = speechLang === "sv-SE" || /^(hej|hallå|tja|tjena|tack|hjälp|byt|god)/i.test(text);
+
+  switch (intent) {
+    case "greeting":
+      return isSv
+        ? "Hej! Hur kan jag hjälpa dig idag?"
+        : "Hello! How can I help you today?";
+    case "thanks":
+      return isSv
+        ? "Varsågod! Finns det något mer jag kan hjälpa dig med?"
+        : "You're welcome! Is there anything else I can help with?";
+    case "help":
+      return isSv
+        ? "Jag kan hjälpa dig med:\n\n• **Byggnadsdata** — våningar, rum, ytor, utrustning\n• **Felanmälningar** — skapa, söka, följa upp\n• **Ritningar & dokument** — hitta och visa\n• **3D-navigering** — öppna viewer, visa våningar/modeller\n• **IoT-sensordata** — temperatur, CO2, energi\n• **Plattformshjälp** — hur funktioner fungerar\n\nVad vill du veta mer om?"
+        : "I can help you with:\n\n• **Building data** — floors, rooms, areas, equipment\n• **Fault reports** — create, search, follow up\n• **Drawings & documents** — find and display\n• **3D navigation** — open viewer, show floors/models\n• **IoT sensor data** — temperature, CO2, energy\n• **Platform help** — how features work\n\nWhat would you like to know?";
+    case "lang_change": {
+      const wantsEn = /english|engelska/i.test(text);
+      return wantsEn
+        ? "Sure! [🇬🇧 Switch to English](action:changeLang:en-US)"
+        : "Självklart! [🇸🇪 Byt till svenska](action:changeLang:sv-SE)";
+    }
+    default:
+      return "";
+  }
+}
+
+/** Create a fake SSE stream from a static string */
+function createStaticStream(content: string): ReadableStream {
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      // Send as a single SSE chunk
+      const data = JSON.stringify({ choices: [{ delta: { content }, finish_reason: "stop" }] });
+      controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  });
+}
+
+/* ─────────────────────────────────────────────
+   Build system prompt — COMPRESSED
    ───────────────────────────────────────────── */
 
 async function buildSystemPrompt(supabase: any, context: any, userProfile: any, previousConversation: any) {
-  // Building directory is now fetched lazily via query_assets/query_building_settings tools
-  // Only pre-fetch BIM models for the CURRENT building (small, high-value context)
-
   let modelsCtx = "";
   const bGuid = context?.currentBuilding?.fmGuid;
   if (bGuid) {
@@ -1401,40 +1284,25 @@ async function buildSystemPrompt(supabase: any, context: any, userProfile: any, 
         .eq("is_chunk", false)
         .order("model_name")
         .limit(20);
-
       if (models?.length) {
-        const lines = models.map((m: any) => `  - "${m.model_name || m.file_name}" (model_id: ${m.model_id})`);
-        modelsCtx = `\nAVAILABLE BIM MODELS for this building:\n${lines.join("\n")}`;
+        modelsCtx = `\nBIM MODELS for current building:\n${models.map((m: any) => `  - "${m.model_name || m.file_name}" (model_id: ${m.model_id})`).join("\n")}`;
       }
-    } catch (e) {
-      console.error("Failed to fetch models:", e);
-    }
+    } catch (e) { console.error("Failed to fetch models:", e); }
   }
 
-  // Current context
   let ctx = "";
-  if (context?.currentBuilding) {
-    ctx += `\nThe user is currently viewing building: "${context.currentBuilding.name}" (fm_guid: ${context.currentBuilding.fmGuid}). Default queries to this building unless the user asks about something else.`;
-  }
-  if (context?.currentStorey) {
-    ctx += `\nActive storey: "${context.currentStorey.name}" (fm_guid: ${context.currentStorey.fmGuid})`;
-  }
-  if (context?.currentSpace) {
-    ctx += `\nActive room: "${context.currentSpace.name}" (fm_guid: ${context.currentSpace.fmGuid})`;
-  }
-  if (context?.activeApp) {
-    ctx += `\nActive app view: ${context.activeApp}`;
-  }
+  if (context?.currentBuilding) ctx += `\nCurrent building: "${context.currentBuilding.name}" (fm_guid: ${context.currentBuilding.fmGuid}). Default queries to this building.`;
+  if (context?.currentStorey) ctx += `\nActive floor: "${context.currentStorey.name}" (fm_guid: ${context.currentStorey.fmGuid})`;
+  if (context?.currentSpace) ctx += `\nActive room: "${context.currentSpace.name}" (fm_guid: ${context.currentSpace.fmGuid})`;
+  if (context?.activeApp) ctx += `\nActive app: ${context.activeApp}`;
   if (context?.viewerState) {
     const vs = context.viewerState;
-    ctx += `\nViewer state: mode=${vs.viewMode}, visible floors=${vs.visibleFloorFmGuids?.length || 0}, selected objects=${vs.selectedFmGuids?.length || 0}`;
+    ctx += `\nViewer: mode=${vs.viewMode}, floors=${vs.visibleFloorFmGuids?.length || 0}, selected=${vs.selectedFmGuids?.length || 0}`;
   }
 
   let userCtx = "";
   if (userProfile) {
-    const displayName = userProfile.display_name || "användaren";
-    const role = userProfile.role || "user";
-    userCtx = `\nUSER PROFILE:\n- Name: ${displayName}\n- Role: ${role}${role === "admin" ? " (has admin privileges, can manage work orders and issues)" : ""}`;
+    userCtx = `\nUser: ${userProfile.display_name || "user"} (${userProfile.role || "user"})`;
   }
 
   let memoryCtx = "";
@@ -1444,286 +1312,59 @@ async function buildSystemPrompt(supabase: any, context: any, userProfile: any, 
       .slice(-4)
       .map((m: any) => `${m.role}: ${m.content}`)
       .join("\n");
-    memoryCtx = `\nPREVIOUS CONVERSATION (from earlier session — you can reference this):\n${msgs}`;
+    memoryCtx = `\nPrevious conversation:\n${msgs}`;
   }
 
-  return `You are Geminus, an AI assistant for digital facility management. You help users understand, monitor, navigate, and act on data from digital twins, IoT sensors, drawings, equipment registers, and property systems. You can control the built-in 3D/BIM viewer via commands, search integrated external systems via API, and answer questions about system configuration and help documentation.
+  return `You are Geminus, an AI assistant for digital facility management. You help users with digital twins, IoT, drawings, equipment, and property systems.
 
-You have access to tools that query the database. ALWAYS use tools to get data – never guess or make up numbers. You can call multiple tools in sequence to build up a complete picture before answering.
-If a tool returns empty or no results, say that NO DATA WAS FOUND. NEVER fabricate, simulate, or make up data. Do not generate placeholder, example, or mock data under any circumstances.
-When the user asks about a building without specifying which one, use query_assets with category=Building to list available buildings and let the user choose.
+CORE RULES:
+1. ALWAYS use tools to get data — never guess or fabricate numbers/data.
+2. If no data found, say so clearly. NEVER generate mock/placeholder data.
+3. Respond in the SAME LANGUAGE as the user.
+4. Be concise: max 3 sentences of running text, use bullet points for lists.
+5. NEVER show UUIDs/GUIDs to the user — only in action link URLs.
+6. ALWAYS end with 1-3 relevant next-step suggestions as clickable action buttons.
+7. When disambiguating buildings, present them as clickable selectBuilding buttons.
+8. Ask at most ONE question at a time.
+9. Analyze data and provide insights (%, trends, anomalies), not raw data dumps.
+10. For greetings, respond naturally without action tokens. Keep it short.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PERSONALITY & TONE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Clear, concrete, and professional – never unnecessarily technical
-- You ALWAYS lead the user to the next step – never leave a conversation without an action
-- Assume digital maturity – don't explain the obvious
-- Never ask more than ONE question at a time
-- Minimize the user's typing burden – always offer clickable alternatives
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-LANGUAGE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- ALWAYS respond in the same language as the user writes or speaks
-- Never switch language mid-conversation without explicit request
-- Adapt formal/informal tone to match how the user communicates
-
-ALLOWED ACTION TOKENS (only these are valid in markdown links):
+ALLOWED ACTION TOKENS (markdown links only):
 - action:flyTo:<fmGuid>
 - action:openViewer:<fmGuid>
 - action:showFloor:<floorFmGuid>
 - action:selectInTree:<fmGuid1,fmGuid2,...>
-- action:switchTo2D
-- action:switchTo3D
-- action:showFloorIn3D:<buildingFmGuid>:<floorFmGuid>:<encodedFloorName>
-- action:isolateModel:<buildingFmGuid>:<modelId>
-- action:showDrawing:<buildingFmGuid>:<encodedFloorName>
-- action:openViewer3D:<buildingFmGuid>:<floorFmGuid>
-- action:selectBuilding:<buildingFmGuid>:<encodedBuildingName>
-- action:changeLang:<langCode> (valid langCodes: sv-SE, en-US)
-- action:listVoices
-- action:selectVoice:<encodedVoiceName>
-Do NOT generate any other action: tokens. If you want to suggest an action that has no token, describe it in plain text instead.
-IMPORTANT: For greeting/welcome messages, do NOT use any action: tokens at all. Just greet the user naturally and ask how you can help. Keep it short and conversational.
+- action:switchTo2D / action:switchTo3D
+- action:showFloorIn3D:<buildingGuid>:<floorGuid>:<encodedFloorName>
+- action:isolateModel:<buildingGuid>:<modelId>
+- action:showDrawing:<buildingGuid>:<encodedFloorName>
+- action:openViewer3D:<buildingGuid>:<floorGuid>
+- action:selectBuilding:<buildingGuid>:<encodedBuildingName>
+- action:changeLang:<sv-SE|en-US>
+- action:listVoices / action:selectVoice:<encodedVoiceName>
+Do NOT generate any other action: tokens.
 
-SPEECH & LANGUAGE CONTROL:
-When the user asks to change language, switch language, or "byt språk":
-- To Swedish: respond with [🇸🇪 Byt till svenska](action:changeLang:sv-SE)
-- To English: respond with [🇬🇧 Switch to English](action:changeLang:en-US)
-When the user asks "vilka röster finns?" or "what voices are available?":
-- Respond with [🔊 Visa tillgängliga röster](action:listVoices) as a clickable button.
+RESPONSE FORMAT:
+1. Direct answer — short, bold key figures
+2. Context (optional, max 2 sentences)
+3. Next steps — clickable action buttons
 
-CRITICAL UX RULES:
-1. **ABSOLUTELY NEVER** show fm_guid, building_fm_guid, or ANY UUID/GUID string to the user.
-2. When disambiguating between buildings, present them as clickable selectBuilding action buttons.
-3. For follow-up suggestions, format as clickable buttons when possible.
-4. **INTERACTIVE RESPONSES**: ALWAYS present options as clickable action buttons. NEVER ask the user to type a choice when a button can be used instead.
-5. When the user asks about help or support, use the search_help_docs tool.
+SPEECH/LANGUAGE: When user asks to change language, offer changeLang action. When asking about voices, offer listVoices action.
 
-${userCtx}
-${ctx}
-${modelsCtx}
-${memoryCtx}
+VIEWER CONTROL: Use viewer_show_floor, viewer_show_model, viewer_open_3d, viewer_show_drawing tools. Include their action_link in your response. Model naming: A=Arkitekt, K=Konstruktion, V=VVS, E=El, S=Sprinkler.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RESPONSE STRUCTURE — ALWAYS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Every response follows this pattern:
-1. DIRECT ANSWER – short, fact-based, with bold on key figures
-2. CONTEXT (optional) – max 2 sentences if status or deviation needs explanation
-3. NEXT STEPS – ALWAYS end with selectable alternatives as clickable action buttons
+WORK ORDERS: Always ask for confirmation before creating. Use create_work_order tool after user confirms.
 
-Use bullet points when listing equipment, documents, or alarms.
-Avoid running text longer than 3 sentences.
-When referencing specific assets, floors, or rooms, ALWAYS include ACTION BUTTONS using this exact syntax:
-   [🔍 View](action:flyTo:FM_GUID)  — fly the camera to an object
-   [📍 Open](action:openViewer:FM_GUID) — open the 3D viewer for a building
-   [🏢 Show floor](action:showFloor:FM_GUID) — switch to a specific floor
-   [🔎 Find in tree](action:selectInTree:FM_GUID1,FM_GUID2) — highlight objects in navigator
-   [📋 Switch to 2D](action:switchTo2D:) — switch viewer to 2D mode
-   [🧊 Switch to 3D](action:switchTo3D:) — switch viewer to 3D mode
-   [🏢 Visa i 3D](action:showFloorIn3D:BUILDING_GUID:FLOOR_GUID:FLOOR_NAME) — show floor in 3D viewer
-   [🏗️ Visa modell](action:isolateModel:BUILDING_GUID:MODEL_ID) — isolate a BIM model
-   [📐 Visa ritning](action:showDrawing:BUILDING_GUID:FLOOR_NAME) — show 2D drawing
-ALWAYS add action buttons when listing specific assets, rooms, or floors. The fm_guid goes in the action link URL only, NEVER in visible text.
-REMINDER: The building directory above contains fm_guids for YOUR reference when calling tools. NEVER copy these GUIDs into your responses. Users should only see building names.
-When listing multiple items, add an action button next to each one.
-When you receive data from tools, analyze it and provide insights, not just raw data. Calculate percentages, spot trends, highlight anomalies. Present findings as plain sentences, not data dumps.
-If the user asks something you can't answer with the available tools, say so clearly and suggest what they could do instead.
-If the user previously discussed something (see PREVIOUS CONVERSATION), you can reference it naturally: "As we discussed earlier..."
-NEVER generate mock, example, or placeholder data. Only present real data from tool calls. If no data is found, clearly state that.
+FM ACCESS: First get fm_access_building_guid via query_building_settings, then use fm_access_get_drawings/hierarchy/floors/search_objects. Also search_fm_access_local for fast local data.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DOMAIN 1 – ALARM MANAGEMENT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-You can:
-- List active, acknowledged, and historical alarms per property, building, floor, or zone
-- Prioritize alarms by severity: Critical / High / Medium / Info
-- Suggest actions based on alarm type and history
-- Create or link work orders directly from an alarm
-Always respond with: alarm type, location (building + floor + zone), timestamp, status
+DOCUMENT Q&A: Use ask_about_documents for content questions. Use query_documents for listing.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DOMAIN 2 – ENERGY MONITORING
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-You can:
-- Show energy consumption (electricity, heating, cooling, water) per property, building, floor, or meter
-- Compare against budget, previous period, or reference buildings
-- Identify deviations and suggest investigation
-- Show trends per day, week, month, and year
-Always respond with: consumption + unit, comparison value, deviation in % and direction (↑↓)
+HELP/SUPPORT: Use search_help_docs tool when user asks about platform usage.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DOMAIN 3 – MAINTENANCE PLANNING
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-You can:
-- Show planned and overdue maintenance activities per equipment, floor, or property
-- Create, update, and close work orders
-- Show maintenance history per equipment item
-- Flag equipment that is overdue or near service interval
-Always respond with: equipment, location, last service, next planned action, status
+FACILIATE/SWG: Use query_faciliate and get_faciliate_object for external FM system data.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DOMAIN 4 – EQUIPMENT & INVENTORY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-You can:
-- Search for specific equipment by type, floor, zone, or building
-- Show count, placement, status, and linked documentation per equipment item
-- Filter by certification status, warranty period, or last inspection
-- Answer questions about fire safety, HVAC, electrical, elevators, controls, etc.
-- Show equipment distribution per floor for the entire building
-Always respond with: count, type, placement (building + floor + room/zone), status
-When the user asks about a system or equipment type without specifying a floor, respond with a summary per floor.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DOMAIN 5 – DRAWINGS & DOCUMENTS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-You can:
-- List all available document types per building
-- List drawings per building, floor, or system (electrical, HVAC, fire, structural, etc.)
-- Open, preview, and navigate to a specific document
-- Search by revision date, document type, or responsible consultant
-- Link documents to equipment, alarms, or work orders
-Always respond with: document name, type, revision/date, linked building/floor
-When the user asks about document types without specifying a specific type, respond with a grouped overview per category (Drawings, Protocols, Certificates, Manuals, Contracts, etc.) with counts per type.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DOMAIN 6 – 3D/BIM VIEWER CONTROL
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-You can control the built-in BIM viewer directly via natural commands. When a control command is identified, translate it to the correct viewer action without asking the user to navigate manually. Always confirm what is being performed in the viewer.
-
-NAVIGATION & FLOORS:
-- "Visa plan 3" / "Gå till plan 5" / "Öppna källarplan"
-- "Visa alla plan" / "Öppna hela byggnaden"
-- "Centrera byggnaden" / "Återställ vyn"
-
-MODEL SELECTION:
-- "Visa arkitektmodellen" / "Öppna brandmodellen" / "Visa VVS-modellen"
-- "Visa plan 5 från arkitektmodellen och brandmodellen samtidigt"
-- "Dölj konstruktionsmodellen" / "Visa bara brandskydd"
-
-VIEW MODE:
-- "Sätt byggnaden i 2D-läge" / "Byt till 3D-vy"
-- "Visa sektion genom plan 2" / "Öppna tvärsektion"
-- "Isolera plan 4" / "Visa bara plan 1 och 2"
-
-PANELS & UI:
-- "Starta min asset-panel" / "Öppna utrustningslistan"
-- "Stäng alla paneler" / "Återställ standardvyn"
-
-MARKING & HIGHLIGHT:
-- "Markera brandsläckarna på plan 2"
-- "Visa brandsläckare BRS-204 i modellen"
-- "Rensa markeringar" / "Avmarkera allt"
-
-Always respond with a confirmation of what is happening in the viewer.
-If the command is ambiguous – confirm interpretation with a clickable choice before executing.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DOMAIN 7 – API-INTEGRATED SYSTEMS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-You have access to data from external systems via backend API integrations. API documentation and system documentation for all integrations are stored as documents in the platform and should always be used as source when answering questions about these systems.
-
-Integrated systems include:
-- FM Access – access control, permissions, and passage logs
-- Eon 360+ – energy data, meter data, and consumption history
-- Other systems per stored API documentation
-
-You can:
-- Search and present data directly from integrated systems on user request
-- Answer questions about what a specific system contains and what is available via API
-- Guide the user to the right data point or report within an external system
-- Combine data from multiple systems in a single answer when relevant
-- Explain how an integration is configured based on stored documentation
-Always respond with: data source (system name), retrieval timestamp, relevant unit or parameter
-If a question concerns a system that is not integrated or lacks data – say so clearly and suggest next steps.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DOMAIN 8 – SYSTEM HELP & CONFIGURATION
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-You can answer questions about how the platform is configured, how features are used, and how integrations are set up. The source for all answers is the help and system documentation stored in the platform's document database. Always use this documentation as primary source – never guess about configuration or settings.
-
-You can:
-- Explain how a function or module works in the platform
-- Describe how a specific system or integration is configured
-- Guide the user step by step through a work process
-- Refer to the right documentation or section when more details are needed
-- Answer questions about permissions, roles, and user settings
-Always respond with a clear step-by-step explanation or a direct factual answer based on documentation. Always state which document or section the answer is sourced from when relevant.
-If the answer is not in available documentation – say so clearly and suggest who the user should contact or where the information can be found.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CONTEXT RULES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Always reference specific property, building, floor, and zone when data is available
-- If context is missing (e.g., no building specified) – ask exactly ONE clarifying question with clickable alternatives
-- If data is missing in the system – say so clearly and suggest next steps (upload, contact, create)
-- Never guess values, configuration, or API responses – always show source and timestamp when relevant
-- If a viewer command is ambiguous – confirm interpretation before executing
-- If a question spans multiple domains – answer them in order and offer deeper dives per area
-- When the user has an active building, scope queries to that building by default
-
-
-EXAMPLE INTERACTIONS:
-
-Example 1 — Building overview:
-User: "Berätta om Tornet"
-Thinking: I need building data. I'll use get_building_summary with the fm_guid for Tornet.
-→ Call get_building_summary(fm_guid)
-→ Present: floors, rooms, total area, open issues, top asset types with action buttons.
-
-Example 2 — Counting by type:
-User: "Hur många brandsläckare finns det?"
-Thinking: This is an aggregation question. I'll use aggregate_assets filtered by category=Instance and group by asset_type, then look for fire-related types.
-→ Call aggregate_assets(building_fm_guid, group_by="asset_type", category_filter="Instance")
-→ Filter results for brandslackare/fire and present the count.
-
-Example 3 — Trend analysis:
-User: "Har felanmälningarna ökat den senaste tiden?"
-Thinking: I need historical work order data grouped by month.
-→ Call work_order_trends(building_fm_guid, period="month", months_back=6)
-→ Analyze: compare recent months to earlier ones, calculate % change, identify spikes.
-
-Example 4 — Creating a work order:
-User: "Det läcker vatten i rum 305"
-Thinking: The user is reporting a fault. I should propose creating a work order and ask for confirmation.
-→ Respond: "Jag kan skapa en felanmälan: **Vattenläcka i rum 305**, prioritet hög. **Ska jag göra detta?**"
-User: "Ja"
-→ Call create_work_order(title, description, building_fm_guid, priority="high", space_name="305")
-
-Example 5 — FM Access drawings:
-User: "Vilka ritningar finns det i Småviken?"
-→ Call query_building_settings to get fm_access_building_guid
-→ Call fm_access_get_drawings(fm_access_building_guid)
-→ Present grouped counts per tab
-→ Suggest: "Ska jag lista några av dem? Eller vill du se en specifik ritning?"
-
-Example 6 — 3D viewer control:
-User: "Visa mig 3D-sektion för våning 3"
-→ Call get_building_summary to find floor 3
-→ Call viewer_show_floor(building_fm_guid, floor_fm_guid, "Våning 3")
-→ Present action link + suggest model options
-
-Example 7 — Temperature by floor:
-User: "På vilka våningar har jag en högre snitttemperatur än 23 grader?"
-→ Call get_building_summary to list floors
-→ Call senslinc_get_indices for workspace_key
-→ Call senslinc_search_data for each floor with property_name=temperature
-→ Compare averages and list floors exceeding 23°C
-→ Offer: "Vill du se något av de våningarna i 3D?"
-
-Example 8 — Document content question:
-User: "Vad säger radon-protokollet för Småviken?"
-→ Call ask_about_documents(building_fm_guid, question="Vad säger radon-protokollet?", file_name_filter="radon")
-→ Present the AI answer with source document name
-→ Suggest: "Vill du se alla dokument för Småviken? Eller har du fler frågor om dokumenten?"
-
-Example 9 — Summarize documents:
-User: "Sammanfatta alla dokument i byggnaden"
-→ Call query_documents(building_fm_guid) to list documents
-→ Call ask_about_documents(building_fm_guid, question="Ge en övergripande sammanfattning av alla dokument")
-→ Present summary with document names`;
+IoT/SENSORS: Use senslinc_get_sites to find monitored buildings, senslinc_get_indices for workspace keys, senslinc_search_data for time-series data.
+${userCtx}${ctx}${modelsCtx}${memoryCtx}`;
 }
 
 /* ─────────────────────────────────────────────
@@ -1732,11 +1373,7 @@ User: "Sammanfatta alla dokument i byggnaden"
 
 async function callAI(apiKey: string, messages: any[], options: { stream?: boolean; tools?: any[]; tool_choice?: string; model?: string } = {}) {
   const model = options.model || AI_MODEL_PRIMARY;
-  const body: any = {
-    model,
-    messages,
-    stream: options.stream ?? false,
-  };
+  const body: any = { model, messages, stream: options.stream ?? false };
   if (options.tools) {
     body.tools = options.tools;
     body.tool_choice = options.tool_choice || "auto";
@@ -1744,22 +1381,17 @@ async function callAI(apiKey: string, messages: any[], options: { stream?: boole
 
   const resp = await fetch(AI_GATEWAY, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
 
   if (!resp.ok) {
     const t = await resp.text();
     console.error(`AI call error (${model}):`, resp.status, t);
-
     if (resp.status >= 500 && model === AI_MODEL_PRIMARY) {
       console.log("Falling back to", AI_MODEL_FALLBACK);
       return callAI(apiKey, messages, { ...options, model: AI_MODEL_FALLBACK });
     }
-
     if (resp.status === 429) throw { status: 429, message: "Rate limit exceeded. Please try again in a moment." };
     if (resp.status === 402) throw { status: 402, message: "AI credits exhausted." };
     throw new Error(`AI gateway error: ${resp.status}`);
@@ -1769,7 +1401,7 @@ async function callAI(apiKey: string, messages: any[], options: { stream?: boole
 }
 
 /* ─────────────────────────────────────────────
-   Main handler with iterative tool-calling loop
+   Main handler
    ───────────────────────────────────────────── */
 
 serve(async (req) => {
@@ -1778,11 +1410,10 @@ serve(async (req) => {
   }
 
   const auth = await verifyAuth(req);
-  if (!auth.authenticated) {
-    return unauthorizedResponse(auth.error);
-  }
+  if (!auth.authenticated) return unauthorizedResponse(auth.error);
 
   try {
+    const startTime = Date.now();
     const { messages, context, proactive, advisor } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
@@ -1790,7 +1421,6 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
-
     const userId = auth.userId!;
 
     const [profileResult, roleResult, previousConversation] = await Promise.all([
@@ -1799,100 +1429,114 @@ serve(async (req) => {
       loadRecentConversation(supabase, userId, context?.currentBuilding?.fmGuid),
     ]);
 
-    const userProfile = profileResult.data ? {
-      ...profileResult.data,
-      role: roleResult.data?.role || "user",
-    } : null;
+    const userProfile = profileResult.data ? { ...profileResult.data, role: roleResult.data?.role || "user" } : null;
 
     // ── Proactive insights mode ──
     if (proactive && context?.currentBuilding) {
       const buildingGuid = context.currentBuilding.fmGuid;
       const buildingName = context.currentBuilding.name;
-
       const [openIssues, openWorkOrders] = await Promise.all([
         supabase.from("bcf_issues").select("title, priority, status", { count: "exact", head: false })
           .eq("building_fm_guid", buildingGuid).eq("status", "open").limit(5),
         supabase.from("work_orders").select("title, priority, status", { count: "exact", head: false })
           .eq("building_fm_guid", buildingGuid).eq("status", "open").limit(5),
       ]);
-
       const insights: string[] = [];
       const issueCount = openIssues.data?.length || 0;
       const woCount = openWorkOrders.data?.length || 0;
-
       if (issueCount > 0) {
         const highPriority = (openIssues.data || []).filter((i: any) => i.priority === "high" || i.priority === "critical");
-        if (highPriority.length > 0) {
-          insights.push(`⚠️ **${highPriority.length} high-priority issues** in ${buildingName}`);
-        } else {
-          insights.push(`📋 **${issueCount} open issues** in ${buildingName}`);
-        }
+        insights.push(highPriority.length > 0
+          ? `⚠️ **${highPriority.length} high-priority issues** in ${buildingName}`
+          : `📋 **${issueCount} open issues** in ${buildingName}`);
       }
-
-      if (woCount > 0) {
-        insights.push(`🔧 **${woCount} open work orders** to handle`);
-      }
-
-      if (insights.length === 0) {
-        insights.push(`✅ No open issues or work orders in ${buildingName} right now.`);
-      }
-
+      if (woCount > 0) insights.push(`🔧 **${woCount} open work orders** to handle`);
+      if (insights.length === 0) insights.push(`✅ No open issues or work orders in ${buildingName} right now.`);
       return new Response(JSON.stringify({ proactive_insights: insights }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    // ── FAST-PATH: detect simple intents and skip tool loop ──
+    const simpleIntent = detectSimpleIntent(messages);
+    if (simpleIntent && !advisor) {
+      const lastText = messages[messages.length - 1]?.content || "";
+      const speechLang = context?.speechLang || "sv-SE";
+      const response = getSimpleIntentResponse(simpleIntent, lastText, speechLang);
+      console.log(`Fast-path intent: ${simpleIntent} (${Date.now() - startTime}ms)`);
+
+      // Save conversation
+      const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
+      saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, [...userMsgs, { role: "assistant", content: response }]).catch(e =>
+        console.error("Failed to save conversation:", e)
+      );
+
+      return new Response(createStaticStream(response), {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+      });
+    }
+
+    // ── Full tool-calling loop ──
     let systemPrompt = await buildSystemPrompt(supabase, context, userProfile, previousConversation);
 
     if (advisor && context?.currentBuilding) {
-      systemPrompt += `\n\nADVISOR MODE ACTIVATED: The user clicked the "Get advice" button. Perform a comprehensive FM analysis of the current building "${context.currentBuilding.name}" (fm_guid: ${context.currentBuilding.fmGuid}). Follow the FM ADVISOR MODE instructions in your system prompt. Start by calling get_building_summary, then query_work_orders and query_issues, then aggregate_assets. Present a structured advisory report.`;
+      systemPrompt += `\n\nADVISOR MODE: Perform comprehensive FM analysis of "${context.currentBuilding.name}" (fm_guid: ${context.currentBuilding.fmGuid}). Call get_building_summary, query_work_orders, query_issues, aggregate_assets. Present a structured advisory report.`;
     }
 
     const conversation: any[] = [{ role: "system", content: systemPrompt }, ...messages];
 
-    // ── Iterative tool-calling loop ──
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const resp = await callAI(LOVABLE_API_KEY, conversation, { tools, tool_choice: "auto" });
       const result = await resp.json();
       const choice = result.choices?.[0];
 
       if (!choice?.message?.tool_calls || choice.message.tool_calls.length === 0) {
-        const streamResp = await callAI(LOVABLE_API_KEY, conversation, { stream: true });
+        // No tools needed — if the model already produced content, fake-stream it
+        // Otherwise make a streaming call
+        const existingContent = choice?.message?.content;
+        if (existingContent) {
+          console.log(`Gunnar: direct answer (${Date.now() - startTime}ms, round ${round + 1})`);
+          const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
+          saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, [...userMsgs, { role: "assistant", content: existingContent }]).catch(e =>
+            console.error("Failed to save conversation:", e)
+          );
+          return new Response(createStaticStream(existingContent), {
+            headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+          });
+        }
 
+        // Fallback: make a streaming call
+        const streamResp = await callAI(LOVABLE_API_KEY, conversation, { stream: true });
         const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
         saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, userMsgs).catch(e =>
           console.error("Failed to save conversation:", e)
         );
-
+        console.log(`Gunnar: streaming fallback (${Date.now() - startTime}ms, round ${round + 1})`);
         return new Response(streamResp.body, {
           headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
         });
       }
 
       const toolCalls = choice.message.tool_calls;
-      console.log(`Gunnar round ${round + 1}: executing ${toolCalls.length} tool(s):`, toolCalls.map((tc: any) => tc.function.name));
+      console.log(`Gunnar round ${round + 1}: ${toolCalls.length} tool(s): ${toolCalls.map((tc: any) => tc.function.name).join(", ")} (${Date.now() - startTime}ms)`);
 
       conversation.push(choice.message);
 
       const toolResults = await Promise.all(
         toolCalls.map(async (tc: any) => {
-          const args = typeof tc.function.arguments === "string"
-            ? JSON.parse(tc.function.arguments)
-            : tc.function.arguments;
+          let args: any;
+          try {
+            args = typeof tc.function.arguments === "string" ? JSON.parse(tc.function.arguments) : tc.function.arguments;
+          } catch (parseErr) {
+            console.error(`Tool ${tc.function.name} JSON parse error:`, parseErr, tc.function.arguments);
+            return { role: "tool" as const, tool_call_id: tc.id, content: JSON.stringify({ error: `Invalid tool arguments: ${parseErr}` }) };
+          }
           try {
             const result = await executeTool(supabase, tc.function.name, args, LOVABLE_API_KEY);
-            return {
-              role: "tool" as const,
-              tool_call_id: tc.id,
-              content: JSON.stringify(result),
-            };
+            return { role: "tool" as const, tool_call_id: tc.id, content: JSON.stringify(result) };
           } catch (err) {
             console.error(`Tool ${tc.function.name} error:`, err);
-            return {
-              role: "tool" as const,
-              tool_call_id: tc.id,
-              content: JSON.stringify({ error: String(err) }),
-            };
+            return { role: "tool" as const, tool_call_id: tc.id, content: JSON.stringify({ error: String(err) }) };
           }
         })
       );
@@ -1900,13 +1544,11 @@ serve(async (req) => {
       conversation.push(...toolResults);
     }
 
-    console.log("Gunnar: max tool rounds reached, streaming final answer");
-
+    console.log(`Gunnar: max rounds reached, streaming final (${Date.now() - startTime}ms)`);
     const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
     saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, userMsgs).catch(e =>
       console.error("Failed to save conversation:", e)
     );
-
     const finalResp = await callAI(LOVABLE_API_KEY, conversation, { stream: true });
     return new Response(finalResp.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
