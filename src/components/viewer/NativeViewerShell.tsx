@@ -73,6 +73,18 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const [showSpaces, setShowSpaces] = useState(false);
   const [showVisualizationMenu, setShowVisualizationMenu] = useState(false);
 
+  // Listen for external toggle events (from MobileViewerPage header)
+  useEffect(() => {
+    const handleToggleFilter = () => setShowFilterPanel(p => !p);
+    const handleToggleViz = () => setShowVisualizationMenu(p => !p);
+    window.addEventListener('MOBILE_TOGGLE_FILTER_PANEL', handleToggleFilter);
+    window.addEventListener('MOBILE_TOGGLE_VIZ_MENU', handleToggleViz);
+    return () => {
+      window.removeEventListener('MOBILE_TOGGLE_FILTER_PANEL', handleToggleFilter);
+      window.removeEventListener('MOBILE_TOGGLE_VIZ_MENU', handleToggleViz);
+    };
+  }, []);
+
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
     position: { x: number; y: number };
