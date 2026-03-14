@@ -14,7 +14,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft, Square, Box, LayoutPanelLeft, View,
-  Loader2, Filter, Settings2, BarChart2,
+  Loader2, Filter, Settings2, BarChart2, SlidersHorizontal,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import NativeViewerShell from '@/components/viewer/NativeViewerShell';
@@ -144,8 +144,24 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
           ))}
         </div>
 
-        {/* Right: Insights + Settings */}
+        {/* Right: Filter + Viz + Insights */}
         <div className="flex shrink-0 gap-0.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => window.dispatchEvent(new CustomEvent('MOBILE_TOGGLE_FILTER_PANEL'))}
+          >
+            <Filter className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => window.dispatchEvent(new CustomEvent('MOBILE_TOGGLE_VIZ_MENU'))}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -202,7 +218,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
                 buildingFmGuid={buildingData.fmGuid}
                 onClose={onGoBack}
                 hideBackButton
-                hideMobileOverlay
+                hideMobileOverlay={true}
                 hideFloorSwitcher
                 showGeminusMenu={false}
               />
@@ -221,7 +237,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
                 buildingFmGuid={buildingData.fmGuid}
                 onClose={onGoBack}
                 hideBackButton
-                hideMobileOverlay={false}
+                hideMobileOverlay={true}
                 showGeminusMenu={viewMode === '3d'}
               />
             )}
