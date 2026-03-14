@@ -27,6 +27,7 @@ interface MobileNavProps {
 const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
   const { activeApp, setActiveApp, appConfigs, selectedFacility, open360WithContext } = useContext(AppContext);
   const isMobile = useIsMobile();
+  const currentContext = getCurrentContext(activeApp, selectedFacility);
 
   const [sidebarOrder, setSidebarOrder] = useState<SidebarItem[]>(getSidebarOrder);
 
