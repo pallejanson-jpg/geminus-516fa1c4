@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyAuth, unauthorizedResponse, corsHeaders } from "../_shared/auth.ts";
 
-const MAX_TOOL_ROUNDS = 2;
+const MAX_TOOL_ROUNDS = 3;
 const AI_MODEL_PRIMARY = "google/gemini-3-flash-preview";
 const AI_MODEL_FALLBACK = "google/gemini-2.5-flash-lite";
 const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
@@ -520,6 +520,22 @@ const tools = [
           limit: { type: "number" },
         },
         required: [],
+        additionalProperties: false,
+      },
+    },
+  },
+  // ── Building name resolution ──
+  {
+    type: "function",
+    function: {
+      name: "resolve_building_by_name",
+      description: "Find a building by its name or partial name. Returns fm_guid(s). ALWAYS use this first when user mentions a building by name and no building context is set.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Building name or partial name to search for" },
+        },
+        required: ["name"],
         additionalProperties: false,
       },
     },
@@ -1092,6 +1108,44 @@ async function execGetFaciliateObject(args: any) {
   return data.data || data;
 }
 
+/* ── Building name resolution ── */
+
+async function execResolveBuildingByName(supabase: any, args: any) {
+  const searchName = `%${args.name}%`;
+  // Search in assets for buildings matching the name
+  const { data: buildings, error } = await supabase
+    .from("assets")
+    .select("fm_guid, name, common_name, building_fm_guid, attributes")
+    .eq("category", "Building")
+    .or(`common_name.ilike.${searchName},name.ilike.${searchName}`)
+    .limit(10);
+  if (error) throw error;
+  if (!buildings?.length) {
+    // Fallback: search building_settings with a join to assets
+    const { data: allBuildings } = await supabase
+      .from("assets")
+      .select("fm_guid, name, common_name")
+      .eq("category", "Building")
+      .limit(50);
+    return {
+      found: false,
+      message: `No building matching "${args.name}" found.`,
+      available_buildings: (allBuildings || []).map((b: any) => ({
+        fm_guid: b.fm_guid,
+        name: b.common_name || b.name,
+      })),
+    };
+  }
+  return {
+    found: true,
+    buildings: buildings.map((b: any) => ({
+      fm_guid: b.fm_guid,
+      name: b.common_name || b.name,
+      building_fm_guid: b.building_fm_guid || b.fm_guid,
+    })),
+  };
+}
+
 /* ─────────────────────────────────────────────
    executeTool — ALIGNED with tool declarations
    ───────────────────────────────────────────── */
@@ -1111,12 +1165,14 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
     case "query_saved_views": return execQuerySavedViews(supabase, args);
     case "query_annotation_symbols": return execQueryAnnotationSymbols(supabase, args);
     case "get_floor_details": return execGetFloorDetails(supabase, args);
+    // Building resolution
+    case "resolve_building_by_name": return execResolveBuildingByName(supabase, args);
     // Senslinc
     case "senslinc_get_equipment": return execSenslincGetEquipment(args);
     case "senslinc_get_sites": return execSenslincGetSites(args);
     case "senslinc_search_data": return execSenslincSearchData(args);
     case "senslinc_get_indices": return execSenslincGetIndices();
-    // FM Access — LIVE API (now properly routed!)
+    // FM Access — LIVE API
     case "fm_access_get_drawings": return execFmAccessGetDrawings(args);
     case "fm_access_get_hierarchy": return execFmAccessGetHierarchy(args);
     case "fm_access_search_objects": return execFmAccessSearchObjects(args);
@@ -1328,6 +1384,23 @@ CORE RULES:
 8. Ask at most ONE question at a time.
 9. Analyze data and provide insights (%, trends, anomalies), not raw data dumps.
 10. For greetings, respond naturally without action tokens. Keep it short.
+
+CRITICAL — BUILDING NAME RESOLUTION:
+When the user mentions a building by name (e.g. "Småviken", "Kranen", "Tornet") and no current building context is set:
+→ ALWAYS call resolve_building_by_name FIRST to find the fm_guid.
+→ Then use the resolved fm_guid in subsequent tool calls (query_assets, get_building_summary, etc.).
+→ If multiple buildings match, present them as selectBuilding buttons and ask the user to choose.
+→ NEVER give a generic greeting when the user asks a specific data question.
+
+CRITICAL — ALARM/EQUIPMENT QUERIES:
+When user asks about "alarm", "larm", "brandlarm", "utrustning", "installationer":
+→ These are stored as assets with category="Instance" and asset_type containing e.g. "IfcAlarm", "IfcSensor", "IfcActuator", "IfcFireAlarm".
+→ Use query_assets with asset_type filter (e.g. asset_type="Alarm" or "IfcAlarm") and building_fm_guid + level_fm_guid for floor filtering.
+→ For floor filtering: first use get_building_summary to find the floor fm_guid, then filter by level_fm_guid.
+→ "Plan 2" or "Våning 2" means filter by the floor whose name contains "2" or "Plan 2".
+
+CRITICAL — ALWAYS ATTEMPT TO ANSWER:
+If the user asks a data question, you MUST attempt to use tools to find the answer. NEVER respond with just a greeting or "how can I help" when a specific question was asked.
 
 ALLOWED ACTION TOKENS (markdown links only):
 - action:flyTo:<fmGuid>
