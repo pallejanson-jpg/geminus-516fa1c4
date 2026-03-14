@@ -190,8 +190,14 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     const cleaned = cleanSpeechText(text);
     if (!cleaned) return;
     window.speechSynthesis.cancel();
+    const settings = getGunnarSettings();
     const utterance = new SpeechSynthesisUtterance(cleaned);
-    utterance.lang = "sv-SE";
+    utterance.lang = settings.speechLang;
+    if (settings.voiceName) {
+      const voices = window.speechSynthesis.getVoices();
+      const match = voices.find(v => v.name === settings.voiceName);
+      if (match) utterance.voice = match;
+    }
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
