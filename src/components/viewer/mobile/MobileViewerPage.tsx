@@ -21,6 +21,7 @@ import NativeViewerShell from '@/components/viewer/NativeViewerShell';
 import SplitPlanView from '@/components/viewer/SplitPlanView';
 import InsightsDrawerPanel from '@/components/viewer/InsightsDrawerPanel';
 import type { ViewMode } from '@/pages/UnifiedViewer';
+import { VIEW_MODE_2D_TOGGLED_EVENT, VIEW_MODE_REQUESTED_EVENT } from '@/lib/viewer-events';
 import type { LocalCoords } from '@/context/ViewerSyncContext';
 import type { IvionBimTransform } from '@/lib/ivion-bim-transform';
 import type { useBuildingViewerData } from '@/hooks/useBuildingViewerData';
