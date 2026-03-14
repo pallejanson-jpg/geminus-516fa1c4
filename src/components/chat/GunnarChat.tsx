@@ -404,7 +404,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         if (action.fmGuids?.length) {
           setAiSelectedFmGuids(action.fmGuids);
           setActiveApp('navigator');
-          onClose();
+          closeAfterAction();
           toast.success(`Showing ${action.fmGuids.length} objects in Navigator`);
         }
         break;
