@@ -545,6 +545,40 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
           buildingName: parts[2] ? decodeURIComponent(parts[2]) : undefined,
         });
         break;
+      case "changeLang": {
+        const lang = parts[1] as 'sv-SE' | 'en-US';
+        if (lang === 'sv-SE' || lang === 'en-US') {
+          saveGunnarSettings({ speechLang: lang, voiceName: null });
+          const label = lang === 'sv-SE' ? 'Svenska' : 'English';
+          const confirmMsg: Message = { role: "assistant", content: `✅ Språk ändrat till **${label}**. Både röstinmatning och uppläsning använder nu ${label}.` };
+          setMessages(prev => [...prev, confirmMsg]);
+          toast.success(`Language changed to ${label}`);
+        }
+        break;
+      }
+      case "listVoices": {
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          const currentSettings = getGunnarSettings();
+          const allVoices = window.speechSynthesis.getVoices();
+          const langPrefix = currentSettings.speechLang.split('-')[0];
+          const filtered = allVoices.filter(v => v.lang.startsWith(langPrefix));
+          if (filtered.length === 0) {
+            setMessages(prev => [...prev, { role: "assistant", content: "Inga röster tillgängliga för det valda språket i denna webbläsare." }]);
+          } else {
+            const buttons = filtered.map(v => `[🔊 ${v.name}](action:selectVoice:${encodeURIComponent(v.name)})`).join('\n');
+            setMessages(prev => [...prev, { role: "assistant", content: `Välj en röst:\n\n${buttons}` }]);
+          }
+        }
+        break;
+      }
+      case "selectVoice": {
+        const voiceName = parts[1] ? decodeURIComponent(parts[1]) : null;
+        saveGunnarSettings({ voiceName });
+        const confirmMsg: Message = { role: "assistant", content: `✅ Röst ändrad till **${voiceName || 'System default'}**.` };
+        setMessages(prev => [...prev, confirmMsg]);
+        toast.success(`Voice changed to ${voiceName || 'System default'}`);
+        break;
+      }
     }
   }, [executeAction]);
 
