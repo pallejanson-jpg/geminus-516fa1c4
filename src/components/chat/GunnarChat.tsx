@@ -331,6 +331,8 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     sendMessage(question);
   };
 
+  const speechSettings = getGunnarSettings();
+
   const {
     isListening,
     interimTranscript,
@@ -338,7 +340,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     start: startListening,
     stop: stopListening,
   } = useWebSpeechRecognition({
-    language: 'sv-SE',
+    language: speechSettings.speechLang,
     onResult: (transcript, isFinal) => {
       if (isFinal) {
         const text = transcript.trim();
