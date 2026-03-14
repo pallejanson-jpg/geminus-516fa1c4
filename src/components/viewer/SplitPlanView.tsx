@@ -1043,6 +1043,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
             src={storeyMap.imageData}
             alt="Floor plan"
             className="max-w-none cursor-crosshair"
+            style={monochrome ? { filter: 'grayscale(1) saturate(0) contrast(1.25) brightness(1.05)' } : undefined}
             draggable={false}
             onClick={handleClick}
             onLoad={centerImage}
