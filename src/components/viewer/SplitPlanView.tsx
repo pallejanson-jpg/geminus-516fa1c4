@@ -26,6 +26,12 @@ interface SplitPlanViewProps {
   viewerRef: React.MutableRefObject<any>;
   buildingFmGuid: string;
   className?: string;
+  /** When false, 2D plan interactions do not change 3D floor visibility/clipping */
+  syncFloorSelection?: boolean;
+  /** Optional legacy camera Y clamp to selected floor bounds */
+  lockCameraToFloor?: boolean;
+  /** Force neutral black/white map styling */
+  monochrome?: boolean;
 }
 
 interface PanZoom {
@@ -37,7 +43,14 @@ interface PanZoom {
 /** Unique source tag to prevent event echo loops */
 const SPLIT_PLAN_SOURCE = 'split-plan-view';
 
-const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid, className }) => {
+const SplitPlanView: React.FC<SplitPlanViewProps> = ({
+  viewerRef,
+  buildingFmGuid,
+  className,
+  syncFloorSelection = true,
+  lockCameraToFloor = false,
+  monochrome = true,
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const isMobile = useIsMobile();
@@ -360,8 +373,10 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const preferredStoreyId = findCurrentStoreyId();
     if (!preferredStoreyId) return;
 
-    // Dispatch floor selection to keep 3D in sync (deduped)
-    dispatchFloorSync(preferredStoreyId);
+    // Optional: sync selected 2D floor into 3D floor filter/clipping
+    if (syncFloorSelection) {
+      dispatchFloorSync(preferredStoreyId);
+    }
 
     const selectedFloor = resolveFloorFromStoreyId(preferredStoreyId);
     setSelectedFloorId(selectedFloor?.id ?? preferredStoreyId);
@@ -385,37 +400,70 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const maxWidth = isMobile ? 900 : 4000;
     const width = container ? Math.min(container.clientWidth * (isMobile ? 1.5 : 3), maxWidth) : 1600;
 
-    // Precompute wall IDs once (shared across floors)
+    // Precompute wall/slab IDs once (shared across floors)
     const wallCacheKey = '__global_wall_ids__';
+    const slabCacheKey = '__global_slab_ids__';
     const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifccurtainwall', 'ifccolumn', 'ifccolumnstandardcase', 'ifcbeam', 'ifcbeamstandardcase']);
+    const slabTypes = new Set(['ifcslab', 'ifcslabstandardcase', 'ifcroof', 'ifccovering', 'ifcplate']);
+
     let wallIds = wallIdCacheRef.current.get(wallCacheKey);
-    if (!wallIds) {
+    let slabIds = wallIdCacheRef.current.get(slabCacheKey);
+
+    if (!wallIds || !slabIds) {
       wallIds = [];
+      slabIds = [];
       const metaObjects = viewer.metaScene?.metaObjects || {};
       for (const [id, mo] of Object.entries(metaObjects) as [string, any][]) {
         const t = (mo?.type || '').toLowerCase();
-        if (wallTypes.has(t) && viewer.scene.objects?.[id]) {
-          wallIds.push(id);
-        }
+        if (!viewer.scene.objects?.[id]) continue;
+        if (wallTypes.has(t)) wallIds.push(id);
+        if (slabTypes.has(t)) slabIds.push(id);
       }
       wallIdCacheRef.current.set(wallCacheKey, wallIds);
+      wallIdCacheRef.current.set(slabCacheKey, slabIds);
     }
 
-    // Apply black walls for high-contrast plan
+    // Apply neutral styling while map is rendered
     const scene = viewer.scene;
-    const originalColors: { id: string; color: number[] | null }[] = [];
+    const originalStyles: { id: string; color: number[] | null; opacity: number; edges: boolean }[] = [];
+
+    const saveStyle = (id: string) => {
+      const entity = scene.objects?.[id];
+      if (!entity) return;
+      originalStyles.push({
+        id,
+        color: entity.colorize ? [...entity.colorize] : null,
+        opacity: typeof entity.opacity === 'number' ? entity.opacity : 1,
+        edges: !!entity.edges,
+      });
+    };
+
+    if (monochrome) {
+      for (const id of slabIds) {
+        const entity = scene.objects?.[id];
+        if (!entity) continue;
+        saveStyle(id);
+        entity.colorize = [0.94, 0.94, 0.94];
+        entity.opacity = 1;
+      }
+    }
+
     for (const id of wallIds) {
       const entity = scene.objects?.[id];
       if (!entity) continue;
-      originalColors.push({ id, color: entity.colorize ? [...entity.colorize] : null });
+      saveStyle(id);
       entity.colorize = [0, 0, 0];
+      entity.opacity = 1;
+      entity.edges = true;
     }
 
     const restoreColors = () => {
-      for (const { id, color } of originalColors) {
+      for (const { id, color, opacity, edges } of originalStyles) {
         const entity = scene.objects?.[id];
         if (!entity) continue;
-        if (color) { entity.colorize = color; } else { entity.colorize = null; }
+        if (color) entity.colorize = color; else entity.colorize = null;
+        entity.opacity = opacity;
+        entity.edges = edges;
       }
     };
 
@@ -440,7 +488,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     } finally {
       setIsLoading(false);
     }
-  }, [getXeokitViewer, findCurrentStoreyId, generateFallbackSnapshot, isMobile, dispatchFloorSync, resolveFloorFromStoreyId]);
+  }, [getXeokitViewer, findCurrentStoreyId, generateFallbackSnapshot, isMobile, dispatchFloorSync, resolveFloorFromStoreyId, syncFloorSelection, monochrome]);
 
   // Generate map once plugin ready + listen for external floor changes
   useEffect(() => {
@@ -581,8 +629,9 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     return () => clearInterval(interval);
   }, [getXeokitViewer, storeyMap, isMobile]);
 
-  // Dalux-style: Lock 3D camera Y to selected floor's height range
+  // Optional legacy clamp: lock 3D camera Y to selected floor bounds
   useEffect(() => {
+    if (!lockCameraToFloor) return;
     const viewer = getXeokitViewer();
     const plugin = pluginRef.current;
     if (!viewer?.scene || !plugin) return;
@@ -622,7 +671,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         try { viewer.scene.off?.(tickSub); } catch {}
       }
     };
-  }, [getXeokitViewer, storeyMap, storeyPlugin]);
+  }, [getXeokitViewer, storeyMap, storeyPlugin, lockCameraToFloor]);
 
   // Compute room labels for 2D overlay
   useEffect(() => {
@@ -909,7 +958,9 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       setError(null);
       setImgError(false);
       usedFallbackRef.current = false;
-      dispatchFloorSync(targetStoreyId);
+      if (syncFloorSelection) {
+        dispatchFloorSync(targetStoreyId);
+      }
       return;
     }
 
@@ -992,6 +1043,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
             src={storeyMap.imageData}
             alt="Floor plan"
             className="max-w-none cursor-crosshair"
+            style={monochrome ? { filter: 'grayscale(1) saturate(0) contrast(1.25) brightness(1.05)' } : undefined}
             draggable={false}
             onClick={handleClick}
             onLoad={centerImage}
