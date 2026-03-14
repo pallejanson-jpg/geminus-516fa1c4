@@ -19,7 +19,20 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all([
+        // Delete old cache buckets
+        ...keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)),
+        // Purge stale .vite/deps chunks from current cache
+        caches.open(CACHE_NAME).then((cache) =>
+          cache.keys().then((reqs) =>
+            Promise.all(
+              reqs
+                .filter((r) => r.url.includes('.vite/deps/'))
+                .map((r) => cache.delete(r))
+            )
+          )
+        ),
+      ])
     )
   );
   self.clients.claim();
