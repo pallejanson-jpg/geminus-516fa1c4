@@ -13,6 +13,8 @@ import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import { useNavigate } from "react-router-dom";
 import { useWebSpeechRecognition } from "@/hooks/useWebSpeechRecognition";
+import { getGunnarSettings, saveGunnarSettings, GUNNAR_SETTINGS_CHANGED_EVENT } from "@/components/settings/GunnarSettings";
+import type { GunnarSettingsData } from "@/components/settings/GunnarSettings";
 
 type Message = {
   role: "user" | "assistant";
@@ -188,8 +190,14 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     const cleaned = cleanSpeechText(text);
     if (!cleaned) return;
     window.speechSynthesis.cancel();
+    const settings = getGunnarSettings();
     const utterance = new SpeechSynthesisUtterance(cleaned);
-    utterance.lang = "sv-SE";
+    utterance.lang = settings.speechLang;
+    if (settings.voiceName) {
+      const voices = window.speechSynthesis.getVoices();
+      const match = voices.find(v => v.name === settings.voiceName);
+      if (match) utterance.voice = match;
+    }
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
@@ -323,6 +331,8 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     sendMessage(question);
   };
 
+  const speechSettings = getGunnarSettings();
+
   const {
     isListening,
     interimTranscript,
@@ -330,7 +340,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     start: startListening,
     stop: stopListening,
   } = useWebSpeechRecognition({
-    language: 'sv-SE',
+    language: speechSettings.speechLang,
     onResult: (transcript, isFinal) => {
       if (isFinal) {
         const text = transcript.trim();
@@ -535,10 +545,44 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
           buildingName: parts[2] ? decodeURIComponent(parts[2]) : undefined,
         });
         break;
+      case "changeLang": {
+        const lang = parts[1] as 'sv-SE' | 'en-US';
+        if (lang === 'sv-SE' || lang === 'en-US') {
+          saveGunnarSettings({ speechLang: lang, voiceName: null });
+          const label = lang === 'sv-SE' ? 'Svenska' : 'English';
+          const confirmMsg: Message = { role: "assistant", content: `✅ Språk ändrat till **${label}**. Både röstinmatning och uppläsning använder nu ${label}.` };
+          setMessages(prev => [...prev, confirmMsg]);
+          toast.success(`Language changed to ${label}`);
+        }
+        break;
+      }
+      case "listVoices": {
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          const currentSettings = getGunnarSettings();
+          const allVoices = window.speechSynthesis.getVoices();
+          const langPrefix = currentSettings.speechLang.split('-')[0];
+          const filtered = allVoices.filter(v => v.lang.startsWith(langPrefix));
+          if (filtered.length === 0) {
+            setMessages(prev => [...prev, { role: "assistant", content: "Inga röster tillgängliga för det valda språket i denna webbläsare." }]);
+          } else {
+            const buttons = filtered.map(v => `[🔊 ${v.name}](action:selectVoice:${encodeURIComponent(v.name)})`).join('\n');
+            setMessages(prev => [...prev, { role: "assistant", content: `Välj en röst:\n\n${buttons}` }]);
+          }
+        }
+        break;
+      }
+      case "selectVoice": {
+        const voiceName = parts[1] ? decodeURIComponent(parts[1]) : null;
+        saveGunnarSettings({ voiceName });
+        const confirmMsg: Message = { role: "assistant", content: `✅ Röst ändrad till **${voiceName || 'System default'}**.` };
+        setMessages(prev => [...prev, confirmMsg]);
+        toast.success(`Voice changed to ${voiceName || 'System default'}`);
+        break;
+      }
     }
   }, [executeAction]);
 
-  const KNOWN_ACTIONS = new Set(['flyTo', 'openViewer', 'showFloor', 'selectInTree', 'switchTo2D', 'switchTo3D', 'showFloorIn3D', 'isolateModel', 'showDrawing', 'openViewer3D', 'selectBuilding']);
+  const KNOWN_ACTIONS = new Set(['flyTo', 'openViewer', 'showFloor', 'selectInTree', 'switchTo2D', 'switchTo3D', 'showFloorIn3D', 'isolateModel', 'showDrawing', 'openViewer3D', 'selectBuilding', 'changeLang', 'listVoices', 'selectVoice']);
 
   /** Custom renderers for react-markdown to intercept action links */
   const markdownComponents: Components = useMemo(() => ({
@@ -583,7 +627,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
             <Sparkles className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h2 className="font-semibold">Gunnar</h2>
+            <h2 className="font-semibold">Geminus AI</h2>
             <p className="text-xs text-muted-foreground">
               {context?.currentBuilding?.name || "AI Property Assistant"}
             </p>
