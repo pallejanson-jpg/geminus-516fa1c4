@@ -348,7 +348,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
 
   /** Trim conversation history: keep last 8 turns, strip action tokens from assistant messages */
   const trimHistory = useCallback((msgs: Message[]): Message[] => {
-    const trimmed = msgs.slice(-8);
+    const trimmed = msgs.slice(-12);
     return trimmed.map(m => {
       if (m.role === 'assistant') {
         // Strip action links to reduce token count
