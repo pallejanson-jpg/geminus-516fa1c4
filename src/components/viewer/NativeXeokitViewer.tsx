@@ -1351,13 +1351,11 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         style={{ touchAction: 'none' }}
       />
 
-      {/* Loading overlay */}
-      {phase !== 'ready' && phase !== 'error' && (
+      {/* Loading overlay — only show for bootstrap/sync phases, hide during normal model loading */}
+      {phase !== 'ready' && phase !== 'error' && (phase === 'syncing' || phase === 'bootstrapping') && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm z-10">
           <Spinner className="h-8 w-8" />
-          {(phase === 'syncing' || phase === 'bootstrapping') && (
-            <p className="text-xs text-muted-foreground mt-3">Preparing 3D models for first load…</p>
-          )}
+          <p className="text-xs text-muted-foreground mt-3">Preparing 3D models for first load…</p>
         </div>
       )}
 
