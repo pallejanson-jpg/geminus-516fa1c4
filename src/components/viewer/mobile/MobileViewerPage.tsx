@@ -1,6 +1,5 @@
 /**
  * MobileViewerPage — Dedicated fullscreen mobile viewer.
- * Replaces the inline MobileUnifiedViewer with a clean, non-overlapping layout.
  * 
  * Layout:
  *  ┌──────────────────────────┐
@@ -12,10 +11,10 @@
  *  └──────────────────────────┘
  */
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft, Square, Box, LayoutPanelLeft, View,
-  Loader2, Filter, Settings2,
+  Loader2, Filter, Settings2, BarChart2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import NativeViewerShell from '@/components/viewer/NativeViewerShell';
@@ -92,6 +91,12 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
     modes.push({ mode: '360', label: '360°', Icon: View });
   }
 
+  // NativeViewerShell provides its own filter, context menu, toolbar, and 
+  // visualization settings. On mobile non-split modes we let the Shell's own
+  // MobileViewerOverlay handle filter+settings via hideMobileOverlay=false.
+  // In split mode the Shell is confined to the bottom half and we hide its
+  // overlay; instead we surface filter/settings in our own header.
+
   return (
     <div
       className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-background"
@@ -139,15 +144,15 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
           ))}
         </div>
 
-        {/* Right: filter + settings (opens VisualizationToolbar via externalOpen) */}
+        {/* Right: Insights + Settings */}
         <div className="flex shrink-0 gap-0.5">
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className={`h-7 w-7 ${insightsPanelOpen ? 'bg-primary/20 text-primary' : ''}`}
             onClick={() => setInsightsPanelOpen(!insightsPanelOpen)}
           >
-            <Settings2 className="h-3.5 w-3.5" />
+            <BarChart2 className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
@@ -188,7 +193,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
               style={{ top: '50%', transform: 'translateY(-50%)' }}
             />
 
-            {/* Bottom: 3D */}
+            {/* Bottom: 3D — NativeViewerShell handles its own toolbar, filter, context menu */}
             <div
               className="absolute left-0 right-0 bottom-0 overflow-hidden"
               style={{ height: '50%' }}
@@ -204,7 +209,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
             </div>
           </>
         ) : (
-          /* Non-split: full canvas */
+          /* Non-split: full canvas — let NativeViewerShell show its own mobile overlay */
           <div className="h-full w-full">
             {viewMode === '360' && hasIvion ? (
               <div
@@ -216,7 +221,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
                 buildingFmGuid={buildingData.fmGuid}
                 onClose={onGoBack}
                 hideBackButton
-                hideMobileOverlay
+                hideMobileOverlay={false}
                 showGeminusMenu={viewMode === '3d'}
               />
             )}
