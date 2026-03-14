@@ -101,6 +101,39 @@ const GunnarSettings: React.FC = () => {
     saveGunnarSettings({ voiceName });
   };
 
+  const handleTestVoice = useCallback(() => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    
+    const testText = settings.speechLang === 'sv-SE' 
+      ? 'Hej! Jag är Geminus AI, din digitala fastighetsassistent.'
+      : 'Hello! I am Geminus AI, your digital facility assistant.';
+    
+    const allVoices = window.speechSynthesis.getVoices();
+    const langPrefix = settings.speechLang.split('-')[0];
+    
+    let voice: SpeechSynthesisVoice | null = null;
+    if (settings.voiceName) {
+      voice = allVoices.find(v => v.name === settings.voiceName) || null;
+    }
+    if (!voice) {
+      // Pick best available
+      const langVoices = allVoices.filter(v => v.lang.startsWith(langPrefix));
+      const qualityKeywords = ['natural', 'premium', 'enhanced', 'google', 'microsoft'];
+      voice = langVoices.sort((a, b) => {
+        const scoreA = qualityKeywords.some(kw => a.name.toLowerCase().includes(kw)) ? 1 : 0;
+        const scoreB = qualityKeywords.some(kw => b.name.toLowerCase().includes(kw)) ? 1 : 0;
+        return scoreB - scoreA;
+      })[0] || null;
+    }
+    
+    const utterance = new SpeechSynthesisUtterance(testText);
+    utterance.lang = settings.speechLang;
+    utterance.rate = settings.speechLang === 'sv-SE' ? 0.95 : 1.0;
+    if (voice) utterance.voice = voice;
+    window.speechSynthesis.speak(utterance);
+  }, [settings.speechLang, settings.voiceName]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 pb-3 border-b">
