@@ -524,6 +524,22 @@ const tools = [
       },
     },
   },
+  // ── Building name resolution ──
+  {
+    type: "function",
+    function: {
+      name: "resolve_building_by_name",
+      description: "Find a building by its name or partial name. Returns fm_guid(s). ALWAYS use this first when user mentions a building by name and no building context is set.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Building name or partial name to search for" },
+        },
+        required: ["name"],
+        additionalProperties: false,
+      },
+    },
+  },
   // ── Faciliate (SWG) tools ──
   {
     type: "function",
