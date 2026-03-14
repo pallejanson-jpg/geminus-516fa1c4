@@ -230,6 +230,15 @@ const GunnarSettings: React.FC = () => {
                 {voices.length === 0 ? 'No voices available for this language' : `${voices.length} voices available`}
               </p>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTestVoice}
+              className="gap-1.5 mt-2"
+            >
+              <Volume2 className="h-3.5 w-3.5" />
+              Test voice
+            </Button>
           </AccordionContent>
         </AccordionItem>
 
