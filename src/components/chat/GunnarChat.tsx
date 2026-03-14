@@ -177,12 +177,58 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     if (open && inputRef.current) setTimeout(() => inputRef.current?.focus(), 100);
   }, [open]);
 
+  /** Clean text for TTS: remove markdown, normalize for natural prosody */
   const cleanSpeechText = useCallback((text: string) => {
     return stripFollowups(text)
+      // Remove markdown links but keep label
       .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
-      .replace(/[*_`#>-]/g, "")
+      // Remove markdown formatting
+      .replace(/[*_`#>]/g, "")
+      // Convert list markers to pauses
+      .replace(/^[-•]\s+/gm, ", ")
+      .replace(/^\d+\.\s+/gm, ", ")
+      // Add natural pauses after sentences
+      .replace(/\.\s+/g, ". ... ")
+      // Collapse whitespace
       .replace(/\s+/g, " ")
       .trim();
+  }, []);
+
+  /** Pick the best available voice for a language */
+  const getBestVoice = useCallback((lang: string, preferredName?: string | null): SpeechSynthesisVoice | null => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
+    const voices = window.speechSynthesis.getVoices();
+    
+    // If user chose a specific voice, use it
+    if (preferredName) {
+      const match = voices.find(v => v.name === preferredName);
+      if (match) return match;
+    }
+    
+    // Filter by language
+    const langPrefix = lang.split('-')[0];
+    const langVoices = voices.filter(v => v.lang.startsWith(langPrefix));
+    if (langVoices.length === 0) return null;
+    
+    // Quality scoring: prefer Google/Microsoft/Apple natural voices
+    const qualityKeywords = ['natural', 'premium', 'enhanced', 'google', 'microsoft', 'siri', 'samantha', 'daniel'];
+    const scored = langVoices.map(v => {
+      let score = 0;
+      const nameLower = v.name.toLowerCase();
+      for (const kw of qualityKeywords) {
+        if (nameLower.includes(kw)) score += 10;
+      }
+      // Prefer non-local voices (usually higher quality network voices)
+      if (!v.localService) score += 5;
+      // Exact lang match is better
+      if (v.lang === lang) score += 3;
+      // Default voice gets a small boost
+      if (v.default) score += 1;
+      return { voice: v, score };
+    });
+    
+    scored.sort((a, b) => b.score - a.score);
+    return scored[0]?.voice || null;
   }, []);
 
   const speakAssistant = useCallback((text: string) => {
@@ -191,18 +237,31 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     if (!cleaned) return;
     window.speechSynthesis.cancel();
     const settings = getGunnarSettings();
-    const utterance = new SpeechSynthesisUtterance(cleaned);
-    utterance.lang = settings.speechLang;
-    if (settings.voiceName) {
-      const voices = window.speechSynthesis.getVoices();
-      const match = voices.find(v => v.name === settings.voiceName);
-      if (match) utterance.voice = match;
-    }
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-    window.speechSynthesis.speak(utterance);
-  }, [cleanSpeechText, voiceOutputEnabled]);
+    
+    // Split long text into phrase segments for more natural delivery
+    const segments = cleaned.split(/(?<=[.!?])\s+/).filter(s => s.trim());
+    
+    const bestVoice = getBestVoice(settings.speechLang, settings.voiceName);
+    
+    // Prosody tuning per language
+    const prosody = settings.speechLang === 'sv-SE' 
+      ? { rate: 0.95, pitch: 1.0 } 
+      : { rate: 1.0, pitch: 1.0 };
+    
+    segments.forEach((segment, i) => {
+      const utterance = new SpeechSynthesisUtterance(segment.replace(/\.\.\./g, ''));
+      utterance.lang = settings.speechLang;
+      utterance.rate = prosody.rate;
+      utterance.pitch = prosody.pitch;
+      if (bestVoice) utterance.voice = bestVoice;
+      if (i === 0) utterance.onstart = () => setIsSpeaking(true);
+      if (i === segments.length - 1) {
+        utterance.onend = () => setIsSpeaking(false);
+        utterance.onerror = () => setIsSpeaking(false);
+      }
+      window.speechSynthesis.speak(utterance);
+    });
+  }, [cleanSpeechText, voiceOutputEnabled, getBestVoice]);
 
   const streamChat = useCallback(
     async (userMessages: Message[], currentContext?: GunnarContext, advisorMode?: boolean) => {
@@ -285,6 +344,22 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     []
   );
 
+  /** Trim conversation history: keep last 8 turns, strip action tokens from assistant messages */
+  const trimHistory = useCallback((msgs: Message[]): Message[] => {
+    const trimmed = msgs.slice(-8);
+    return trimmed.map(m => {
+      if (m.role === 'assistant') {
+        // Strip action links to reduce token count
+        const cleaned = m.content
+          .replace(/\[([^\]]*)\]\(action:[^)]+\)/g, '$1')
+          .replace(/\*\*(?:Förslag|Suggestions):\*\*[\s\S]*$/i, '')
+          .trim();
+        return { ...m, content: cleaned };
+      }
+      return m;
+    });
+  }, []);
+
   const sendMessage = async (text: string, advisorMode?: boolean) => {
     if ((!text.trim() && !advisorMode) || isLoading) return;
     const userMessage: Message = { role: "user", content: advisorMode ? "Analyze this building and give me advice" : text.trim() };
@@ -296,7 +371,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     setProactiveInsights([]);
 
     try {
-      const apiMessages = newMessages.filter((_, i) => i > 0);
+      const apiMessages = trimHistory(newMessages.filter((_, i) => i > 0));
       const response = await streamChat(apiMessages, context, advisorMode);
 
       const followups = extractFollowups(response);
@@ -392,6 +467,9 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     };
   }, []);
 
+  // Whether we're in embedded side-panel mode (not standalone /ai, not overlay)
+  const isEmbeddedPanel = !!embedded && context?.activeApp !== 'ai-standalone';
+
   // In standalone mode (/ai), never close back to "/" after action navigation.
   const closeAfterAction = useCallback(() => {
     if (embedded || context?.activeApp === 'ai-standalone') return;
@@ -438,44 +516,87 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         break;
       case "openViewer":
         if (action.fmGuid) {
-          navigate(`/viewer?building=${action.fmGuid}&mode=3d${viewerReturnToSuffix}`);
-          closeAfterAction();
-          toast.success('Öppnar 3D-viewer');
+          if (isEmbeddedPanel) {
+            // Side-panel: use app state instead of route navigation
+            setViewer3dFmGuid(action.fmGuid);
+            window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
+            toast.success('Öppnar 3D-viewer');
+          } else {
+            navigate(`/viewer?building=${action.fmGuid}&mode=3d${viewerReturnToSuffix}`);
+            closeAfterAction();
+            toast.success('Öppnar 3D-viewer');
+          }
         }
         break;
       case "showFloorIn3D":
         if (action.buildingFmGuid && action.floorFmGuid) {
           const floorName = action.floorName || '';
-          navigate(`/viewer?building=${action.buildingFmGuid}&mode=3d&floor=${action.floorFmGuid}&floorName=${encodeURIComponent(floorName)}${viewerReturnToSuffix}`);
-          closeAfterAction();
-          toast.success(`Visar ${floorName || 'våning'} i 3D`);
+          if (isEmbeddedPanel) {
+            setViewer3dFmGuid(action.buildingFmGuid);
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
+              window.dispatchEvent(new CustomEvent('GUNNAR_SHOW_FLOOR', { detail: { floorFmGuid: action.floorFmGuid } }));
+            }, 300);
+            toast.success(`Visar ${floorName || 'våning'} i 3D`);
+          } else {
+            navigate(`/viewer?building=${action.buildingFmGuid}&mode=3d&floor=${action.floorFmGuid}&floorName=${encodeURIComponent(floorName)}${viewerReturnToSuffix}`);
+            closeAfterAction();
+            toast.success(`Visar ${floorName || 'våning'} i 3D`);
+          }
         }
         break;
       case "isolateModel":
         if (action.buildingFmGuid && action.modelId) {
-          // Navigate to viewer and dispatch model isolation event
-          navigate(`/viewer?building=${action.buildingFmGuid}&mode=3d${viewerReturnToSuffix}`);
-          setTimeout(() => {
-            window.dispatchEvent(new CustomEvent('GUNNAR_ISOLATE_MODEL', { detail: { modelId: action.modelId } }));
-          }, 500);
-          closeAfterAction();
-          toast.success(`Isolerar modell`);
+          if (isEmbeddedPanel) {
+            setViewer3dFmGuid(action.buildingFmGuid);
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
+              window.dispatchEvent(new CustomEvent('GUNNAR_ISOLATE_MODEL', { detail: { modelId: action.modelId } }));
+            }, 300);
+            toast.success(`Isolerar modell`);
+          } else {
+            navigate(`/viewer?building=${action.buildingFmGuid}&mode=3d${viewerReturnToSuffix}`);
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('GUNNAR_ISOLATE_MODEL', { detail: { modelId: action.modelId } }));
+            }, 500);
+            closeAfterAction();
+            toast.success(`Isolerar modell`);
+          }
         }
         break;
       case "showDrawing":
         if (action.buildingFmGuid) {
           const floorName = action.floorName || '';
-          navigate(`/viewer?building=${action.buildingFmGuid}&mode=2d&floorName=${encodeURIComponent(floorName)}${viewerReturnToSuffix}`);
-          closeAfterAction();
-          toast.success(`Visar ritning${floorName ? ` för ${floorName}` : ''}`);
+          if (isEmbeddedPanel) {
+            setViewer3dFmGuid(action.buildingFmGuid);
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '2d' } }));
+            }, 300);
+            toast.success(`Visar ritning${floorName ? ` för ${floorName}` : ''}`);
+          } else {
+            navigate(`/viewer?building=${action.buildingFmGuid}&mode=2d&floorName=${encodeURIComponent(floorName)}${viewerReturnToSuffix}`);
+            closeAfterAction();
+            toast.success(`Visar ritning${floorName ? ` för ${floorName}` : ''}`);
+          }
         }
         break;
       case "openViewer3D":
         if (action.buildingFmGuid) {
-          const floorPart = action.floorFmGuid ? `&floor=${action.floorFmGuid}` : '';
-          navigate(`/viewer?building=${action.buildingFmGuid}&mode=3d${floorPart}${viewerReturnToSuffix}`);
-          closeAfterAction();
-          toast.success('Öppnar 3D-viewer');
+          if (isEmbeddedPanel) {
+            setViewer3dFmGuid(action.buildingFmGuid);
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
+              if (action.floorFmGuid) {
+                window.dispatchEvent(new CustomEvent('GUNNAR_SHOW_FLOOR', { detail: { floorFmGuid: action.floorFmGuid } }));
+              }
+            }, 300);
+            toast.success('Öppnar 3D-viewer');
+          } else {
+            const floorPart = action.floorFmGuid ? `&floor=${action.floorFmGuid}` : '';
+            navigate(`/viewer?building=${action.buildingFmGuid}&mode=3d${floorPart}${viewerReturnToSuffix}`);
+            closeAfterAction();
+            toast.success('Öppnar 3D-viewer');
+          }
         }
         break;
       case "selectBuilding":
@@ -491,7 +612,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         }
         break;
     }
-  }, [setAiSelectedFmGuids, setActiveApp, closeAfterAction, setViewer3dFmGuid, navigate, viewerReturnToSuffix]);
+  }, [setAiSelectedFmGuids, setActiveApp, closeAfterAction, setViewer3dFmGuid, navigate, viewerReturnToSuffix, isEmbeddedPanel]);
 
   /** Parse action:type:payload links and dispatch the appropriate action */
   const handleActionLink = useCallback((href: string) => {
