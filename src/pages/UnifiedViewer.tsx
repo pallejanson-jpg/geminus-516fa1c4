@@ -199,6 +199,10 @@ const UnifiedViewerContent: React.FC<{
         }));
       }, 500);
     } else if (viewMode === 'split2d3d' && prev !== 'split2d3d') {
+      // Split 2D/3D uses a dedicated 2D panel, so keep xeokit pane explicitly in 3D mode.
+      window.dispatchEvent(new CustomEvent<ViewMode2DToggledDetail>(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: false } }));
+      window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
+
       // Reset floor isolation in 3D pane — show all objects (debounced 500ms)
       const now = Date.now();
       if (now - (lastFloorEventRef.current || 0) > 500) {
