@@ -76,6 +76,12 @@ function stripFollowups(content: string): string {
   return content.replace(/\n*\*\*(?:Förslag|Suggestions):\*\*[\s\S]*$/, "").trim();
 }
 
+/** Strip raw action tokens that leak without markdown link syntax */
+function stripRawActionTokens(content: string): string {
+  // Remove [action:type:param] patterns that are NOT inside markdown link syntax ](...)
+  return content.replace(/\[action:[^\]]+\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 function getContextualGreeting(context?: GunnarContext): string {
    if (context?.activeApp === 'support') {
      return `Hi! You're in the support section. Ask me about how the platform works, available features, or how to solve a specific problem!`;
@@ -210,11 +216,15 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     const langVoices = voices.filter(v => v.lang.startsWith(langPrefix));
     if (langVoices.length === 0) return null;
     
-    // Quality scoring: prefer Google/Microsoft/Apple natural voices
+    // Quality scoring: prefer neural/wavenet/studio voices
+    const highQualityKeywords = ['neural', 'wavenet', 'studio'];
     const qualityKeywords = ['natural', 'premium', 'enhanced', 'google', 'microsoft', 'siri', 'samantha', 'daniel'];
     const scored = langVoices.map(v => {
       let score = 0;
       const nameLower = v.name.toLowerCase();
+      for (const kw of highQualityKeywords) {
+        if (nameLower.includes(kw)) score += 20;
+      }
       for (const kw of qualityKeywords) {
         if (nameLower.includes(kw)) score += 10;
       }
@@ -238,21 +248,21 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     window.speechSynthesis.cancel();
     const settings = getGunnarSettings();
     
-    // Split long text into phrase segments for more natural delivery
-    const segments = cleaned.split(/(?<=[.!?])\s+/).filter(s => s.trim());
+    // Split on sentences AND commas/semicolons for more natural phrasing
+    const segments = cleaned.split(/(?<=[.!?;,])\s+/).filter(s => s.trim());
     
     const bestVoice = getBestVoice(settings.speechLang, settings.voiceName);
     
-    // Prosody tuning per language
-    const prosody = settings.speechLang === 'sv-SE' 
-      ? { rate: 0.95, pitch: 1.0 } 
-      : { rate: 1.0, pitch: 1.0 };
+    // Prosody tuning — slower for more natural delivery
+    const baseRate = settings.speechLang === 'sv-SE' ? 0.85 : 0.88;
     
     segments.forEach((segment, i) => {
       const utterance = new SpeechSynthesisUtterance(segment.replace(/\.\.\./g, ''));
       utterance.lang = settings.speechLang;
-      utterance.rate = prosody.rate;
-      utterance.pitch = prosody.pitch;
+      utterance.rate = baseRate;
+      // Slight pitch variation between segments for natural prosody
+      utterance.pitch = 1.0 + (i % 2 === 0 ? 0.03 : -0.03);
+      utterance.volume = 0.9;
       if (bestVoice) utterance.voice = bestVoice;
       if (i === 0) utterance.onstart = () => setIsSpeaking(true);
       if (i === segments.length - 1) {
@@ -804,7 +814,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
               )}>
                 {msg.role === "assistant" ? (
                   <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1">
-                    <ReactMarkdown components={markdownComponents}>{msg.content}</ReactMarkdown>
+                    <ReactMarkdown components={markdownComponents}>{stripRawActionTokens(msg.content)}</ReactMarkdown>
                   </div>
                 ) : (
                   <p className="whitespace-pre-wrap">{msg.content}</p>
