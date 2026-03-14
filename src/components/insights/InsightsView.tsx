@@ -155,6 +155,18 @@ export default function InsightsView({ selectedBuilding }: InsightsViewProps) {
                         <TabsContent value="portfolio" className="mt-0">
                             <PortfolioManagementTab onColorMap={setChartColoringMode} />
                         </TabsContent>
+
+                        <TabsContent value="predictive" className="mt-0">
+                            <PredictiveMaintenanceTab />
+                        </TabsContent>
+
+                        <TabsContent value="optimization" className="mt-0">
+                            <RoomOptimizationTab />
+                        </TabsContent>
+
+                        <TabsContent value="search" className="mt-0">
+                            <RagSearchTab />
+                        </TabsContent>
                     </Tabs>
                 </div>
 
