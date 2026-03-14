@@ -456,7 +456,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
           setTimeout(() => {
             window.dispatchEvent(new CustomEvent('GUNNAR_ISOLATE_MODEL', { detail: { modelId: action.modelId } }));
           }, 500);
-          onClose();
+          closeAfterAction();
           toast.success(`Isolerar modell`);
         }
         break;
