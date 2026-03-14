@@ -9,7 +9,7 @@ import { SIDEBAR_ORDER_STORAGE_KEY, SIDEBAR_SETTINGS_CHANGED_EVENT, IVION_DEFAUL
 import type { SidebarItem } from '@/lib/constants';
 import { getSidebarOrder } from '@/components/settings/AppMenuSettings';
 import { cn } from '@/lib/utils';
-import { SIDEBAR_ITEM_META } from '@/lib/sidebar-config';
+import { SIDEBAR_ITEM_META, getCurrentContext } from '@/lib/sidebar-config';
 
 // Core navigation items
 const CORE_NAV = [
@@ -27,6 +27,7 @@ interface MobileNavProps {
 const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
   const { activeApp, setActiveApp, appConfigs, selectedFacility, open360WithContext } = useContext(AppContext);
   const isMobile = useIsMobile();
+  const currentContext = getCurrentContext(activeApp, selectedFacility);
 
   const [sidebarOrder, setSidebarOrder] = useState<SidebarItem[]>(getSidebarOrder);
 
@@ -181,6 +182,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
                     {sidebarOrder.map((item) => {
                       const meta = SIDEBAR_ITEM_META[item.id];
                       if (!meta) return null;
+                      if (!meta.contexts.includes(currentContext)) return null;
                       const IconComp = meta.icon;
                       const isActive = activeApp === item.id;
                       return (
