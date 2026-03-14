@@ -26,6 +26,12 @@ interface SplitPlanViewProps {
   viewerRef: React.MutableRefObject<any>;
   buildingFmGuid: string;
   className?: string;
+  /** When false, 2D plan interactions do not change 3D floor visibility/clipping */
+  syncFloorSelection?: boolean;
+  /** Optional legacy camera Y clamp to selected floor bounds */
+  lockCameraToFloor?: boolean;
+  /** Force neutral black/white map styling */
+  monochrome?: boolean;
 }
 
 interface PanZoom {
@@ -37,7 +43,14 @@ interface PanZoom {
 /** Unique source tag to prevent event echo loops */
 const SPLIT_PLAN_SOURCE = 'split-plan-view';
 
-const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid, className }) => {
+const SplitPlanView: React.FC<SplitPlanViewProps> = ({
+  viewerRef,
+  buildingFmGuid,
+  className,
+  syncFloorSelection = true,
+  lockCameraToFloor = false,
+  monochrome = true,
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const isMobile = useIsMobile();
