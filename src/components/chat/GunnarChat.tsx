@@ -392,6 +392,12 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     };
   }, []);
 
+  // In embedded/standalone mode (/ai), skip onClose() after navigation actions
+  // because onClose navigates to "/" which overrides the action's navigate()
+  const closeAfterAction = useCallback(() => {
+    if (!embedded) onClose();
+  }, [embedded, onClose]);
+
   const executeAction = useCallback((action: GunnarAction) => {
     switch (action.action) {
       case "selectInTree":
