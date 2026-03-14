@@ -392,13 +392,19 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     };
   }, []);
 
+  // In embedded/standalone mode (/ai), skip onClose() after navigation actions
+  // because onClose navigates to "/" which overrides the action's navigate()
+  const closeAfterAction = useCallback(() => {
+    if (!embedded) onClose();
+  }, [embedded, onClose]);
+
   const executeAction = useCallback((action: GunnarAction) => {
     switch (action.action) {
       case "selectInTree":
         if (action.fmGuids?.length) {
           setAiSelectedFmGuids(action.fmGuids);
           setActiveApp('navigator');
-          onClose();
+          closeAfterAction();
           toast.success(`Showing ${action.fmGuids.length} objects in Navigator`);
         }
         break;
@@ -431,7 +437,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       case "openViewer":
         if (action.fmGuid) {
           navigate(`/viewer?building=${action.fmGuid}&mode=3d`);
-          onClose();
+          closeAfterAction();
           toast.success('Öppnar 3D-viewer');
         }
         break;
@@ -439,7 +445,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         if (action.buildingFmGuid && action.floorFmGuid) {
           const floorName = action.floorName || '';
           navigate(`/viewer?building=${action.buildingFmGuid}&mode=3d&floor=${action.floorFmGuid}&floorName=${encodeURIComponent(floorName)}`);
-          onClose();
+          closeAfterAction();
           toast.success(`Visar ${floorName || 'våning'} i 3D`);
         }
         break;
@@ -450,7 +456,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
           setTimeout(() => {
             window.dispatchEvent(new CustomEvent('GUNNAR_ISOLATE_MODEL', { detail: { modelId: action.modelId } }));
           }, 500);
-          onClose();
+          closeAfterAction();
           toast.success(`Isolerar modell`);
         }
         break;
@@ -458,7 +464,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         if (action.buildingFmGuid) {
           const floorName = action.floorName || '';
           navigate(`/viewer?building=${action.buildingFmGuid}&mode=2d&floorName=${encodeURIComponent(floorName)}`);
-          onClose();
+          closeAfterAction();
           toast.success(`Visar ritning${floorName ? ` för ${floorName}` : ''}`);
         }
         break;
@@ -466,7 +472,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         if (action.buildingFmGuid) {
           const floorPart = action.floorFmGuid ? `&floor=${action.floorFmGuid}` : '';
           navigate(`/viewer?building=${action.buildingFmGuid}&mode=3d${floorPart}`);
-          onClose();
+          closeAfterAction();
           toast.success('Öppnar 3D-viewer');
         }
         break;
@@ -483,7 +489,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         }
         break;
     }
-  }, [setAiSelectedFmGuids, setActiveApp, onClose, setViewer3dFmGuid, navigate]);
+  }, [setAiSelectedFmGuids, setActiveApp, closeAfterAction, setViewer3dFmGuid, navigate]);
 
   /** Parse action:type:payload links and dispatch the appropriate action */
   const handleActionLink = useCallback((href: string) => {
