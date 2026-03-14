@@ -132,7 +132,13 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     ];
 
     return (
-        <header className={`sticky top-0 z-30 h-14 sm:h-16 ${t.bgSec} border-b ${t.border} flex items-center justify-between px-2 sm:px-4 gap-1 sm:gap-4 overflow-hidden`}>
+        <header
+            className={`sticky top-0 z-30 ${t.bgSec} border-b ${t.border} flex items-center justify-between px-2 sm:px-4 gap-1 sm:gap-4 overflow-hidden`}
+            style={{
+                height: 'calc(env(safe-area-inset-top, 0px) + 3.5rem)',
+                paddingTop: 'env(safe-area-inset-top, 0px)',
+            }}
+        >
             {/* Left section */}
             <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                 <AppButton 
