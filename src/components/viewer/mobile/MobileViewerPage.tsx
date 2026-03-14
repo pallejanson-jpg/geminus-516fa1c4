@@ -195,7 +195,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
                 onClose={onGoBack}
                 hideBackButton
                 hideMobileOverlay
-                hideFloorSwitcher={false}
+                hideFloorSwitcher
                 showGeminusMenu={false}
               />
             </div>
