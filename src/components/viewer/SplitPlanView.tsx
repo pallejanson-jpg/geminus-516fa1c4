@@ -398,37 +398,70 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     const maxWidth = isMobile ? 900 : 4000;
     const width = container ? Math.min(container.clientWidth * (isMobile ? 1.5 : 3), maxWidth) : 1600;
 
-    // Precompute wall IDs once (shared across floors)
+    // Precompute wall/slab IDs once (shared across floors)
     const wallCacheKey = '__global_wall_ids__';
+    const slabCacheKey = '__global_slab_ids__';
     const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifccurtainwall', 'ifccolumn', 'ifccolumnstandardcase', 'ifcbeam', 'ifcbeamstandardcase']);
+    const slabTypes = new Set(['ifcslab', 'ifcslabstandardcase', 'ifcroof', 'ifccovering', 'ifcplate']);
+
     let wallIds = wallIdCacheRef.current.get(wallCacheKey);
-    if (!wallIds) {
+    let slabIds = wallIdCacheRef.current.get(slabCacheKey);
+
+    if (!wallIds || !slabIds) {
       wallIds = [];
+      slabIds = [];
       const metaObjects = viewer.metaScene?.metaObjects || {};
       for (const [id, mo] of Object.entries(metaObjects) as [string, any][]) {
         const t = (mo?.type || '').toLowerCase();
-        if (wallTypes.has(t) && viewer.scene.objects?.[id]) {
-          wallIds.push(id);
-        }
+        if (!viewer.scene.objects?.[id]) continue;
+        if (wallTypes.has(t)) wallIds.push(id);
+        if (slabTypes.has(t)) slabIds.push(id);
       }
       wallIdCacheRef.current.set(wallCacheKey, wallIds);
+      wallIdCacheRef.current.set(slabCacheKey, slabIds);
     }
 
-    // Apply black walls for high-contrast plan
+    // Apply neutral styling while map is rendered
     const scene = viewer.scene;
-    const originalColors: { id: string; color: number[] | null }[] = [];
+    const originalStyles: { id: string; color: number[] | null; opacity: number; edges: boolean }[] = [];
+
+    const saveStyle = (id: string) => {
+      const entity = scene.objects?.[id];
+      if (!entity) return;
+      originalStyles.push({
+        id,
+        color: entity.colorize ? [...entity.colorize] : null,
+        opacity: typeof entity.opacity === 'number' ? entity.opacity : 1,
+        edges: !!entity.edges,
+      });
+    };
+
+    if (monochrome) {
+      for (const id of slabIds) {
+        const entity = scene.objects?.[id];
+        if (!entity) continue;
+        saveStyle(id);
+        entity.colorize = [0.94, 0.94, 0.94];
+        entity.opacity = 1;
+      }
+    }
+
     for (const id of wallIds) {
       const entity = scene.objects?.[id];
       if (!entity) continue;
-      originalColors.push({ id, color: entity.colorize ? [...entity.colorize] : null });
+      saveStyle(id);
       entity.colorize = [0, 0, 0];
+      entity.opacity = 1;
+      entity.edges = true;
     }
 
     const restoreColors = () => {
-      for (const { id, color } of originalColors) {
+      for (const { id, color, opacity, edges } of originalStyles) {
         const entity = scene.objects?.[id];
         if (!entity) continue;
-        if (color) { entity.colorize = color; } else { entity.colorize = null; }
+        if (color) entity.colorize = color; else entity.colorize = null;
+        entity.opacity = opacity;
+        entity.edges = edges;
       }
     };
 
