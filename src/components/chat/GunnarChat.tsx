@@ -177,12 +177,58 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     if (open && inputRef.current) setTimeout(() => inputRef.current?.focus(), 100);
   }, [open]);
 
+  /** Clean text for TTS: remove markdown, normalize for natural prosody */
   const cleanSpeechText = useCallback((text: string) => {
     return stripFollowups(text)
+      // Remove markdown links but keep label
       .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
-      .replace(/[*_`#>-]/g, "")
+      // Remove markdown formatting
+      .replace(/[*_`#>]/g, "")
+      // Convert list markers to pauses
+      .replace(/^[-•]\s+/gm, ", ")
+      .replace(/^\d+\.\s+/gm, ", ")
+      // Add natural pauses after sentences
+      .replace(/\.\s+/g, ". ... ")
+      // Collapse whitespace
       .replace(/\s+/g, " ")
       .trim();
+  }, []);
+
+  /** Pick the best available voice for a language */
+  const getBestVoice = useCallback((lang: string, preferredName?: string | null): SpeechSynthesisVoice | null => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
+    const voices = window.speechSynthesis.getVoices();
+    
+    // If user chose a specific voice, use it
+    if (preferredName) {
+      const match = voices.find(v => v.name === preferredName);
+      if (match) return match;
+    }
+    
+    // Filter by language
+    const langPrefix = lang.split('-')[0];
+    const langVoices = voices.filter(v => v.lang.startsWith(langPrefix));
+    if (langVoices.length === 0) return null;
+    
+    // Quality scoring: prefer Google/Microsoft/Apple natural voices
+    const qualityKeywords = ['natural', 'premium', 'enhanced', 'google', 'microsoft', 'siri', 'samantha', 'daniel'];
+    const scored = langVoices.map(v => {
+      let score = 0;
+      const nameLower = v.name.toLowerCase();
+      for (const kw of qualityKeywords) {
+        if (nameLower.includes(kw)) score += 10;
+      }
+      // Prefer non-local voices (usually higher quality network voices)
+      if (!v.localService) score += 5;
+      // Exact lang match is better
+      if (v.lang === lang) score += 3;
+      // Default voice gets a small boost
+      if (v.default) score += 1;
+      return { voice: v, score };
+    });
+    
+    scored.sort((a, b) => b.score - a.score);
+    return scored[0]?.voice || null;
   }, []);
 
   const speakAssistant = useCallback((text: string) => {
@@ -191,18 +237,31 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     if (!cleaned) return;
     window.speechSynthesis.cancel();
     const settings = getGunnarSettings();
-    const utterance = new SpeechSynthesisUtterance(cleaned);
-    utterance.lang = settings.speechLang;
-    if (settings.voiceName) {
-      const voices = window.speechSynthesis.getVoices();
-      const match = voices.find(v => v.name === settings.voiceName);
-      if (match) utterance.voice = match;
-    }
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-    window.speechSynthesis.speak(utterance);
-  }, [cleanSpeechText, voiceOutputEnabled]);
+    
+    // Split long text into phrase segments for more natural delivery
+    const segments = cleaned.split(/(?<=[.!?])\s+/).filter(s => s.trim());
+    
+    const bestVoice = getBestVoice(settings.speechLang, settings.voiceName);
+    
+    // Prosody tuning per language
+    const prosody = settings.speechLang === 'sv-SE' 
+      ? { rate: 0.95, pitch: 1.0 } 
+      : { rate: 1.0, pitch: 1.0 };
+    
+    segments.forEach((segment, i) => {
+      const utterance = new SpeechSynthesisUtterance(segment.replace(/\.\.\./g, ''));
+      utterance.lang = settings.speechLang;
+      utterance.rate = prosody.rate;
+      utterance.pitch = prosody.pitch;
+      if (bestVoice) utterance.voice = bestVoice;
+      if (i === 0) utterance.onstart = () => setIsSpeaking(true);
+      if (i === segments.length - 1) {
+        utterance.onend = () => setIsSpeaking(false);
+        utterance.onerror = () => setIsSpeaking(false);
+      }
+      window.speechSynthesis.speak(utterance);
+    });
+  }, [cleanSpeechText, voiceOutputEnabled, getBestVoice]);
 
   const streamChat = useCallback(
     async (userMessages: Message[], currentContext?: GunnarContext, advisorMode?: boolean) => {
