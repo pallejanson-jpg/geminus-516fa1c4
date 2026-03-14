@@ -68,6 +68,10 @@ const UnifiedViewerContent: React.FC<{
   const entityFmGuid = searchParams.get('entity');
   const floorFmGuid = searchParams.get('floor');
   const floorName = searchParams.get('floorName') || '';
+  const returnToParam = searchParams.get('returnTo');
+  const resolvedReturnPath = returnToParam && returnToParam.startsWith('/') && !returnToParam.startsWith('//')
+    ? returnToParam
+    : '/';
   const visualizationParam = searchParams.get('visualization') as import('@/lib/visualization-utils').VisualizationType | null;
   const insightsModeParam = searchParams.get('insightsMode') || null;
   const xrayParam = searchParams.get('xray') === 'true';
@@ -473,9 +477,9 @@ const UnifiedViewerContent: React.FC<{
   const handleGoBack = useCallback(() => {
     // Clear viewer context to prevent redirect loops from NativeViewerPage
     setViewer3dFmGuid(null);
-    // Always navigate to portfolio/home — navigate(-1) is unreliable in embedded previews
-    navigate('/');
-  }, [navigate, setViewer3dFmGuid]);
+    // Respect explicit return path (e.g. standalone /ai), otherwise fallback to home.
+    navigate(resolvedReturnPath);
+  }, [navigate, setViewer3dFmGuid, resolvedReturnPath]);
 
   const handleRetrySDK = useCallback(() => {
     retrySDK();
