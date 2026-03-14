@@ -391,10 +391,15 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     } catch (error) {
       console.error("Chat error:", error);
       const isAbort = error instanceof DOMException && error.name === "AbortError";
+      const errStatus = (error as any)?.status;
+      const errMsg = isAbort
+        ? "Förfrågan tog för lång tid. Försök igen."
+        : (error as any)?.message || (error instanceof Error ? error.message : "Kunde inte hämta svar");
+      
       toastHook({
         variant: "destructive",
-        title: "Error",
-        description: isAbort ? "Request timed out. Please try again." : (error instanceof Error ? error.message : "Could not get a response"),
+        title: errStatus === 429 ? "Rate limit" : errStatus === 402 ? "Kredit" : errStatus === 503 ? "Tjänstfel" : "Fel",
+        description: errMsg,
       });
       setMessages(messages);
     } finally {
