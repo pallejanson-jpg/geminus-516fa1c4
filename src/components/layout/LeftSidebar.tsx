@@ -6,7 +6,7 @@ import type { SidebarItem } from '@/lib/constants';
 import { AppContext } from '@/context/AppContext';
 import { getSidebarOrder } from '@/components/settings/AppMenuSettings';
 import { supabase } from '@/integrations/supabase/client';
-import { SIDEBAR_ITEM_META } from '@/lib/sidebar-config';
+import { SIDEBAR_ITEM_META, getCurrentContext } from '@/lib/sidebar-config';
 
 const LeftSidebar: React.FC = () => {
     const { 
