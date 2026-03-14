@@ -14,13 +14,14 @@
 import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft, Square, Box, LayoutPanelLeft, View,
-  Loader2, Filter, Settings2, BarChart2, SlidersHorizontal,
+  Loader2, Filter, BarChart2, SlidersHorizontal,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import NativeViewerShell from '@/components/viewer/NativeViewerShell';
 import SplitPlanView from '@/components/viewer/SplitPlanView';
 import InsightsDrawerPanel from '@/components/viewer/InsightsDrawerPanel';
 import type { ViewMode } from '@/pages/UnifiedViewer';
+import { VIEW_MODE_2D_TOGGLED_EVENT, VIEW_MODE_REQUESTED_EVENT } from '@/lib/viewer-events';
 import type { LocalCoords } from '@/context/ViewerSyncContext';
 import type { IvionBimTransform } from '@/lib/ivion-bim-transform';
 import type { useBuildingViewerData } from '@/hooks/useBuildingViewerData';
@@ -91,11 +92,25 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
     modes.push({ mode: '360', label: '360°', Icon: View });
   }
 
-  // NativeViewerShell provides its own filter, context menu, toolbar, and 
-  // visualization settings. On mobile non-split modes we let the Shell's own
-  // MobileViewerOverlay handle filter+settings via hideMobileOverlay=false.
-  // In split mode the Shell is confined to the bottom half and we hide its
-  // overlay; instead we surface filter/settings in our own header.
+  const handleModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    if (mode === '2d') {
+      window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } }));
+      window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '2d' } }));
+    } else if (mode === '3d') {
+      window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: false } }));
+      window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
+    } else if (mode === 'split2d3d') {
+      window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: false } }));
+      window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
+    }
+  };
+
+  // NativeViewerShell provides its own filter, context menu, toolbar, and
+  // visualization settings. On mobile non-split modes we keep shell overlay hidden
+  // and control filter/viz from this top header to avoid duplicate toolbars.
+  // In split mode the Shell is confined to the bottom half; we keep its overlay hidden
+  // and surface filter/settings in this header only.
 
   return (
     <div
@@ -136,7 +151,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
               className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${
                 viewMode !== mode ? 'text-muted-foreground hover:text-foreground' : ''
               }`}
-              onClick={() => setViewMode(mode)}
+              onClick={() => handleModeChange(mode)}
             >
               <Icon className="h-3 w-3" />
               {label}
