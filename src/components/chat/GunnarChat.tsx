@@ -437,7 +437,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       case "openViewer":
         if (action.fmGuid) {
           navigate(`/viewer?building=${action.fmGuid}&mode=3d`);
-          onClose();
+          closeAfterAction();
           toast.success('Öppnar 3D-viewer');
         }
         break;
