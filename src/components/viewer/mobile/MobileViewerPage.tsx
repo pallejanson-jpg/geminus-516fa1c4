@@ -151,7 +151,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
               className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${
                 viewMode !== mode ? 'text-muted-foreground hover:text-foreground' : ''
               }`}
-              onClick={() => setViewMode(mode)}
+              onClick={() => handleModeChange(mode)}
             >
               <Icon className="h-3 w-3" />
               {label}
