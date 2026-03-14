@@ -77,3 +77,12 @@ verify_jwt = false
 
 [functions.acc-geometry-extract]
 verify_jwt = false
+
+[functions.predictive-maintenance]
+verify_jwt = false
+
+[functions.rag-search]
+verify_jwt = false
+
+[functions.room-optimization]
+verify_jwt = false
