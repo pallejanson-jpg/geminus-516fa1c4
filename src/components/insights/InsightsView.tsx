@@ -8,6 +8,9 @@ import FacilityManagementTab from './tabs/FacilityManagementTab';
 import SpaceManagementTab from './tabs/SpaceManagementTab';
 import AssetManagementTab from './tabs/AssetManagementTab';
 import PortfolioManagementTab from './tabs/PortfolioManagementTab';
+import PredictiveMaintenanceTab from './tabs/PredictiveMaintenanceTab';
+import RoomOptimizationTab from './tabs/RoomOptimizationTab';
+import RagSearchTab from './tabs/RagSearchTab';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2, Expand, Shrink } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -26,6 +29,9 @@ const TAB_COLORING_MAP: Record<string, MapColoringMode> = {
     space: 'co2',
     asset: 'work-orders',
     portfolio: 'none',
+    predictive: 'none',
+    optimization: 'none',
+    search: 'none',
 };
 
 export default function InsightsView({ selectedBuilding }: InsightsViewProps) {
@@ -118,6 +124,15 @@ export default function InsightsView({ selectedBuilding }: InsightsViewProps) {
                                 <TabsTrigger value="portfolio" className="text-[11px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
                                     Portfolio
                                 </TabsTrigger>
+                                <TabsTrigger value="predictive" className="text-[11px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                    🔮 Prediktivt
+                                </TabsTrigger>
+                                <TabsTrigger value="optimization" className="text-[11px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                    📐 Optimering
+                                </TabsTrigger>
+                                <TabsTrigger value="search" className="text-[11px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                    🔍 RAG Sök
+                                </TabsTrigger>
                             </TabsList>
                         </div>
 
@@ -139,6 +154,18 @@ export default function InsightsView({ selectedBuilding }: InsightsViewProps) {
 
                         <TabsContent value="portfolio" className="mt-0">
                             <PortfolioManagementTab onColorMap={setChartColoringMode} />
+                        </TabsContent>
+
+                        <TabsContent value="predictive" className="mt-0">
+                            <PredictiveMaintenanceTab />
+                        </TabsContent>
+
+                        <TabsContent value="optimization" className="mt-0">
+                            <RoomOptimizationTab />
+                        </TabsContent>
+
+                        <TabsContent value="search" className="mt-0">
+                            <RagSearchTab />
                         </TabsContent>
                     </Tabs>
                 </div>
