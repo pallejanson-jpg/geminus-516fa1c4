@@ -392,6 +392,9 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     };
   }, []);
 
+  // Whether we're in embedded side-panel mode (not standalone /ai, not overlay)
+  const isEmbeddedPanel = !!embedded && context?.activeApp !== 'ai-standalone';
+
   // In standalone mode (/ai), never close back to "/" after action navigation.
   const closeAfterAction = useCallback(() => {
     if (embedded || context?.activeApp === 'ai-standalone') return;
@@ -438,44 +441,87 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         break;
       case "openViewer":
         if (action.fmGuid) {
-          navigate(`/viewer?building=${action.fmGuid}&mode=3d${viewerReturnToSuffix}`);
-          closeAfterAction();
-          toast.success('Öppnar 3D-viewer');
+          if (isEmbeddedPanel) {
+            // Side-panel: use app state instead of route navigation
+            setViewer3dFmGuid(action.fmGuid);
+            window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
+            toast.success('Öppnar 3D-viewer');
+          } else {
+            navigate(`/viewer?building=${action.fmGuid}&mode=3d${viewerReturnToSuffix}`);
+            closeAfterAction();
+            toast.success('Öppnar 3D-viewer');
+          }
         }
         break;
       case "showFloorIn3D":
         if (action.buildingFmGuid && action.floorFmGuid) {
           const floorName = action.floorName || '';
-          navigate(`/viewer?building=${action.buildingFmGuid}&mode=3d&floor=${action.floorFmGuid}&floorName=${encodeURIComponent(floorName)}${viewerReturnToSuffix}`);
-          closeAfterAction();
-          toast.success(`Visar ${floorName || 'våning'} i 3D`);
+          if (isEmbeddedPanel) {
+            setViewer3dFmGuid(action.buildingFmGuid);
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
+              window.dispatchEvent(new CustomEvent('GUNNAR_SHOW_FLOOR', { detail: { floorFmGuid: action.floorFmGuid } }));
+            }, 300);
+            toast.success(`Visar ${floorName || 'våning'} i 3D`);
+          } else {
+            navigate(`/viewer?building=${action.buildingFmGuid}&mode=3d&floor=${action.floorFmGuid}&floorName=${encodeURIComponent(floorName)}${viewerReturnToSuffix}`);
+            closeAfterAction();
+            toast.success(`Visar ${floorName || 'våning'} i 3D`);
+          }
         }
         break;
       case "isolateModel":
         if (action.buildingFmGuid && action.modelId) {
-          // Navigate to viewer and dispatch model isolation event
-          navigate(`/viewer?building=${action.buildingFmGuid}&mode=3d${viewerReturnToSuffix}`);
-          setTimeout(() => {
-            window.dispatchEvent(new CustomEvent('GUNNAR_ISOLATE_MODEL', { detail: { modelId: action.modelId } }));
-          }, 500);
-          closeAfterAction();
-          toast.success(`Isolerar modell`);
+          if (isEmbeddedPanel) {
+            setViewer3dFmGuid(action.buildingFmGuid);
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
+              window.dispatchEvent(new CustomEvent('GUNNAR_ISOLATE_MODEL', { detail: { modelId: action.modelId } }));
+            }, 300);
+            toast.success(`Isolerar modell`);
+          } else {
+            navigate(`/viewer?building=${action.buildingFmGuid}&mode=3d${viewerReturnToSuffix}`);
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('GUNNAR_ISOLATE_MODEL', { detail: { modelId: action.modelId } }));
+            }, 500);
+            closeAfterAction();
+            toast.success(`Isolerar modell`);
+          }
         }
         break;
       case "showDrawing":
         if (action.buildingFmGuid) {
           const floorName = action.floorName || '';
-          navigate(`/viewer?building=${action.buildingFmGuid}&mode=2d&floorName=${encodeURIComponent(floorName)}${viewerReturnToSuffix}`);
-          closeAfterAction();
-          toast.success(`Visar ritning${floorName ? ` för ${floorName}` : ''}`);
+          if (isEmbeddedPanel) {
+            setViewer3dFmGuid(action.buildingFmGuid);
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '2d' } }));
+            }, 300);
+            toast.success(`Visar ritning${floorName ? ` för ${floorName}` : ''}`);
+          } else {
+            navigate(`/viewer?building=${action.buildingFmGuid}&mode=2d&floorName=${encodeURIComponent(floorName)}${viewerReturnToSuffix}`);
+            closeAfterAction();
+            toast.success(`Visar ritning${floorName ? ` för ${floorName}` : ''}`);
+          }
         }
         break;
       case "openViewer3D":
         if (action.buildingFmGuid) {
-          const floorPart = action.floorFmGuid ? `&floor=${action.floorFmGuid}` : '';
-          navigate(`/viewer?building=${action.buildingFmGuid}&mode=3d${floorPart}${viewerReturnToSuffix}`);
-          closeAfterAction();
-          toast.success('Öppnar 3D-viewer');
+          if (isEmbeddedPanel) {
+            setViewer3dFmGuid(action.buildingFmGuid);
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
+              if (action.floorFmGuid) {
+                window.dispatchEvent(new CustomEvent('GUNNAR_SHOW_FLOOR', { detail: { floorFmGuid: action.floorFmGuid } }));
+              }
+            }, 300);
+            toast.success('Öppnar 3D-viewer');
+          } else {
+            const floorPart = action.floorFmGuid ? `&floor=${action.floorFmGuid}` : '';
+            navigate(`/viewer?building=${action.buildingFmGuid}&mode=3d${floorPart}${viewerReturnToSuffix}`);
+            closeAfterAction();
+            toast.success('Öppnar 3D-viewer');
+          }
         }
         break;
       case "selectBuilding":
@@ -491,7 +537,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         }
         break;
     }
-  }, [setAiSelectedFmGuids, setActiveApp, closeAfterAction, setViewer3dFmGuid, navigate, viewerReturnToSuffix]);
+  }, [setAiSelectedFmGuids, setActiveApp, closeAfterAction, setViewer3dFmGuid, navigate, viewerReturnToSuffix, isEmbeddedPanel]);
 
   /** Parse action:type:payload links and dispatch the appropriate action */
   const handleActionLink = useCallback((href: string) => {
