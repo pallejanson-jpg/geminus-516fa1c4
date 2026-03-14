@@ -1,11 +1,10 @@
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useMemo, useState, useCallback } from "react";
 import GunnarChat from "@/components/chat/GunnarChat";
 import type { GunnarContext } from "@/components/chat/GunnarChat";
 
 const AiChat = () => {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const [autoVoice, setAutoVoice] = useState(searchParams.get("voice") === "true");
 
   const buildingGuid = searchParams.get("building");
@@ -15,9 +14,8 @@ const AiChat = () => {
     currentBuilding: buildingGuid ? { fmGuid: buildingGuid, name: "" } : undefined,
   }), [buildingGuid]);
 
-  const handleClose = useCallback(() => {
-    navigate("/");
-  }, [navigate]);
+  // Standalone /ai should never auto-close back to home route.
+  const handleClose = useCallback(() => {}, []);
 
   const handleAutoVoiceConsumed = useCallback(() => {
     setAutoVoice(false);
