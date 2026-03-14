@@ -552,9 +552,10 @@ const UnifiedViewerContent: React.FC<{
       );
     }
     // Show a minimal loading state that doesn't compete with the viewer's own spinner
+    // On mobile, use transparent bg so there's no visible "flash" before the viewer spinner takes over
     return (
-      <div className="h-screen flex items-center justify-center bg-black">
-        <Loader2 className="h-6 w-6 animate-spin text-white/30" />
+      <div className={`h-screen flex items-center justify-center ${isMobile ? 'bg-background' : 'bg-black'}`}>
+        {!isMobile && <Loader2 className="h-6 w-6 animate-spin text-white/30" />}
       </div>
     );
   }
