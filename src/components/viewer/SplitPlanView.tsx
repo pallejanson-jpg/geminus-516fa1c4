@@ -795,22 +795,13 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
 
     if (!worldPos || !viewer.cameraFlight) return;
 
-    // Robust camera fly: keep current eye height and approach angle,
-    // translate horizontally to clicked point. Prevents degenerate
-    // straight-down poses that cause NaN on subsequent interactions.
-    const eye = viewer.camera.eye;
-    const look = viewer.camera.look;
+    // Standard Minimap metodik: flytta kameran till klickad XY-position
+    // men behåll nuvarande ögonhöjd för stabil navigation.
+    const currentEyeY = Number.isFinite(viewer.camera.eye?.[1]) ? viewer.camera.eye[1] : 20;
 
-    // Validate current camera state
-    const currentEyeY = Number.isFinite(eye?.[1]) ? eye[1] : 20;
-    const dx = (eye?.[0] ?? 0) - (look?.[0] ?? 0);
-    const dz = (eye?.[2] ?? 0) - (look?.[2] ?? 0);
-
-    // Preserve the eye→look offset vector (viewing direction), just translate
+    const nextEye: [number, number, number] = [worldPos[0], currentEyeY, worldPos[2]];
     const nextLook: [number, number, number] = [worldPos[0], worldPos[1], worldPos[2]];
-    const nextEye: [number, number, number] = [worldPos[0] + dx, currentEyeY, worldPos[2] + dz];
 
-    // NaN guard
     if (!nextEye.every((v) => Number.isFinite(v)) || !nextLook.every((v) => Number.isFinite(v))) {
       console.warn('[SplitPlanView] Skipping flyTo — invalid camera coords');
       return;
@@ -820,7 +811,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       eye: nextEye,
       look: nextLook,
       up: [0, 1, 0],
-      duration: 0.5,
+      duration: 0.8,
     });
   }, [getXeokitViewer]);
 
