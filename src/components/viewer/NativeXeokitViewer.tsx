@@ -621,7 +621,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       setLoadProgress({ loaded: 0, total: loadList.length });
 
       // 4. Load models — desktop uses 2 concurrent, mobile stays at 1
-      const CONCURRENT = isMobile ? 1 : 2;
+      const CONCURRENT = isMobileRef.current ? 1 : 2;
       let loaded = 0;
       const queue = [...loadList] as ModelInfo[];
 
