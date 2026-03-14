@@ -629,8 +629,9 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     return () => clearInterval(interval);
   }, [getXeokitViewer, storeyMap, isMobile]);
 
-  // Dalux-style: Lock 3D camera Y to selected floor's height range
+  // Optional legacy clamp: lock 3D camera Y to selected floor bounds
   useEffect(() => {
+    if (!lockCameraToFloor) return;
     const viewer = getXeokitViewer();
     const plugin = pluginRef.current;
     if (!viewer?.scene || !plugin) return;
