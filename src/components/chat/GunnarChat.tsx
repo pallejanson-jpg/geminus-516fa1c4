@@ -76,6 +76,12 @@ function stripFollowups(content: string): string {
   return content.replace(/\n*\*\*(?:Förslag|Suggestions):\*\*[\s\S]*$/, "").trim();
 }
 
+/** Strip raw action tokens that leak without markdown link syntax */
+function stripRawActionTokens(content: string): string {
+  // Remove [action:type:param] patterns that are NOT inside markdown link syntax ](...)
+  return content.replace(/\[action:[^\]]+\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 function getContextualGreeting(context?: GunnarContext): string {
    if (context?.activeApp === 'support') {
      return `Hi! You're in the support section. Ask me about how the platform works, available features, or how to solve a specific problem!`;
