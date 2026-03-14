@@ -52,6 +52,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<any>(null);
   const isMobile = useIsMobile();
+  // Use ref for isMobile to avoid re-creating initialize callback when it changes
+  const isMobileRef = useRef(isMobile);
+  isMobileRef.current = isMobile;
   const [phase, setPhase] = useState<LoadPhase>('init');
   const [loadProgress, setLoadProgress] = useState({ loaded: 0, total: 0 });
   const [errorMsg, setErrorMsg] = useState('');
@@ -161,7 +164,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         } catch {}
         speedMultiplier = Math.max(0.25, Math.min(3, speedMultiplier));
 
-        const navTuning = isMobile
+        const navTuning = isMobileRef.current
           ? {
               dragRotationRate: 70,
               rotationInertia: 0.88,
@@ -265,7 +268,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           hideEdges: true,
           hideSAO: true,
           delayBeforeRestore: true,
-          delayBeforeRestoreSeconds: isMobile ? 0.5 : 0.3,
+          delayBeforeRestoreSeconds: isMobileRef.current ? 0.5 : 0.3,
         });
         console.log('[NativeViewer] FastNav enabled');
       } else {
@@ -596,7 +599,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       // On mobile, split into primary (A-models) and secondary (rest) for lazy loading
       let secondaryQueue: ModelInfo[] = [];
-      if (isMobile && loadList.length > 1) {
+      if (isMobileRef.current && loadList.length > 1) {
         const aModels = loadList.filter(m => isArchitectural(m.model_name));
         const nonAModels = loadList.filter(m => !isArchitectural(m.model_name));
         if (aModels.length > 0 && nonAModels.length > 0) {
@@ -618,7 +621,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       setLoadProgress({ loaded: 0, total: loadList.length });
 
       // 4. Load models — desktop uses 2 concurrent, mobile stays at 1
-      const CONCURRENT = isMobile ? 1 : 2;
+      const CONCURRENT = isMobileRef.current ? 1 : 2;
       let loaded = 0;
       const queue = [...loadList] as ModelInfo[];
 
@@ -998,7 +1001,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         setPhase('error');
       }
     }
-  }, [buildingFmGuid, isMobile]);
+  }, [buildingFmGuid]);
 
   useEffect(() => {
     initialize();
