@@ -665,12 +665,13 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
             </Button>
           </div>
         )}
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <div className="flex items-center gap-1 shrink-0">
+        <div className="flex flex-col gap-1 sm:gap-0">
+          {/* Mic/speaker row - mobile only */}
+          <div className="flex items-center gap-1 sm:hidden">
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 sm:h-9 sm:w-9 shrink-0"
+              className="h-6 w-6 shrink-0"
               onClick={() => {
                 if (voiceOutputEnabled) {
                   window.speechSynthesis.cancel();
@@ -682,29 +683,60 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
               title={voiceOutputEnabled ? 'Disable voice output' : 'Enable voice output'}
             >
               {voiceOutputEnabled ? (
-                <Volume2 className={cn("h-3.5 w-3.5 sm:h-4 sm:w-4", isSpeaking && "animate-pulse text-primary")} />
+                <Volume2 className={cn("h-3 w-3", isSpeaking && "animate-pulse text-primary")} />
               ) : (
-                <VolumeX className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
+                <VolumeX className="h-3 w-3 text-muted-foreground" />
               )}
             </Button>
             {isVoiceSupported && (
-              <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-9 sm:w-9 shrink-0" onClick={toggleListening} disabled={isLoading}>
-                {isListening ? <MicOff className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-destructive" /> : <Mic className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={toggleListening} disabled={isLoading}>
+                {isListening ? <MicOff className="h-3 w-3 text-destructive" /> : <Mic className="h-3 w-3" />}
               </Button>
             )}
           </div>
-          <Input
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ställ en fråga..."
-            disabled={isLoading}
-            className="flex-1 min-w-0"
-          />
-          <Button onClick={handleSend} disabled={isLoading || !input.trim()} size="icon" className="h-9 w-9 shrink-0">
-            <Send className="h-4 w-4" />
-          </Button>
+          {/* Input row */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Mic/speaker - desktop only */}
+            <div className="hidden sm:flex items-center gap-1 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 shrink-0"
+                onClick={() => {
+                  if (voiceOutputEnabled) {
+                    window.speechSynthesis.cancel();
+                    setVoiceOutputEnabled(false);
+                  } else {
+                    setVoiceOutputEnabled(true);
+                  }
+                }}
+                title={voiceOutputEnabled ? 'Disable voice output' : 'Enable voice output'}
+              >
+                {voiceOutputEnabled ? (
+                  <Volume2 className={cn("h-4 w-4", isSpeaking && "animate-pulse text-primary")} />
+                ) : (
+                  <VolumeX className="h-4 w-4 text-muted-foreground" />
+                )}
+              </Button>
+              {isVoiceSupported && (
+                <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={toggleListening} disabled={isLoading}>
+                  {isListening ? <MicOff className="h-4 w-4 text-destructive" /> : <Mic className="h-4 w-4" />}
+                </Button>
+              )}
+            </div>
+            <Input
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ställ en fråga..."
+              disabled={isLoading}
+              className="flex-1 min-w-0"
+            />
+            <Button onClick={handleSend} disabled={isLoading || !input.trim()} size="icon" className="h-9 w-9 shrink-0">
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
     </>
