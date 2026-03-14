@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Sparkles, RotateCcw, Eye, MapPin } from 'lucide-react';
+import { Sparkles, RotateCcw, Eye, MapPin, Languages } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const GUNNAR_SETTINGS_KEY = 'gunnar-settings';
 export const GUNNAR_SETTINGS_CHANGED_EVENT = 'gunnar-settings-changed';
@@ -11,11 +12,15 @@ export const GUNNAR_SETTINGS_CHANGED_EVENT = 'gunnar-settings-changed';
 export interface GunnarSettingsData {
   visible: boolean;
   buttonPosition: { x: number; y: number } | null;
+  speechLang: 'sv-SE' | 'en-US';
+  voiceName: string | null;
 }
 
 const DEFAULT_SETTINGS: GunnarSettingsData = {
   visible: false,
   buttonPosition: null,
+  speechLang: 'sv-SE',
+  voiceName: null,
 };
 
 export function getGunnarSettings(): GunnarSettingsData {
@@ -43,8 +48,28 @@ export function saveGunnarSettings(settings: Partial<GunnarSettingsData>): void 
   }
 }
 
+function useAvailableVoices(lang: string) {
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+
+    const update = () => {
+      const all = window.speechSynthesis.getVoices();
+      setVoices(all.filter(v => v.lang.startsWith(lang.split('-')[0])));
+    };
+
+    update();
+    window.speechSynthesis.addEventListener('voiceschanged', update);
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', update);
+  }, [lang]);
+
+  return voices;
+}
+
 const GunnarSettings: React.FC = () => {
   const [settings, setSettings] = useState<GunnarSettingsData>(getGunnarSettings);
+  const voices = useAvailableVoices(settings.speechLang);
 
   useEffect(() => {
     const handler = (e: CustomEvent<GunnarSettingsData>) => {
@@ -62,6 +87,18 @@ const GunnarSettings: React.FC = () => {
   const handleResetPosition = () => {
     setSettings(prev => ({ ...prev, buttonPosition: null }));
     saveGunnarSettings({ buttonPosition: null });
+  };
+
+  const handleLangChange = (lang: string) => {
+    const speechLang = lang as 'sv-SE' | 'en-US';
+    setSettings(prev => ({ ...prev, speechLang, voiceName: null }));
+    saveGunnarSettings({ speechLang, voiceName: null });
+  };
+
+  const handleVoiceChange = (name: string) => {
+    const voiceName = name === '__default__' ? null : name;
+    setSettings(prev => ({ ...prev, voiceName }));
+    saveGunnarSettings({ voiceName });
   };
 
   return (
@@ -110,6 +147,59 @@ const GunnarSettings: React.FC = () => {
           </AccordionContent>
         </AccordionItem>
 
+        <AccordionItem value="speech" className="border rounded-lg">
+          <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="p-2 rounded-md bg-muted text-muted-foreground">
+                <Languages className="h-5 w-5" />
+              </div>
+              <div className="text-left">
+                <h4 className="font-medium text-sm">Speech & Language</h4>
+                <p className="text-xs text-muted-foreground">
+                  {settings.speechLang === 'sv-SE' ? 'Svenska' : 'English'}
+                  {settings.voiceName ? ` · ${settings.voiceName}` : ''}
+                </p>
+              </div>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-4 pb-4 pt-2 space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Language</Label>
+              <Select value={settings.speechLang} onValueChange={handleLangChange}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sv-SE">🇸🇪 Svenska</SelectItem>
+                  <SelectItem value="en-US">🇬🇧 English</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Controls both speech recognition and text-to-speech
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Voice</Label>
+              <Select value={settings.voiceName || '__default__'} onValueChange={handleVoiceChange}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__default__">System default</SelectItem>
+                  {voices.map(v => (
+                    <SelectItem key={v.name} value={v.name}>
+                      {v.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {voices.length === 0 ? 'No voices available for this language' : `${voices.length} voices available`}
+              </p>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
         <AccordionItem value="position" className="border rounded-lg">
           <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
             <div className="flex items-center gap-3 flex-1">
@@ -150,7 +240,7 @@ const GunnarSettings: React.FC = () => {
 
       <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
         <p className="font-medium text-foreground mb-1">Tip</p>
-        <p>You can drag the Geminus AI button to any position on the screen. The position is saved automatically.</p>
+        <p>You can drag the Geminus AI button to any position on the screen. You can also ask Geminus AI to change language or voice via chat!</p>
       </div>
     </div>
   );
