@@ -216,11 +216,15 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     const langVoices = voices.filter(v => v.lang.startsWith(langPrefix));
     if (langVoices.length === 0) return null;
     
-    // Quality scoring: prefer Google/Microsoft/Apple natural voices
+    // Quality scoring: prefer neural/wavenet/studio voices
+    const highQualityKeywords = ['neural', 'wavenet', 'studio'];
     const qualityKeywords = ['natural', 'premium', 'enhanced', 'google', 'microsoft', 'siri', 'samantha', 'daniel'];
     const scored = langVoices.map(v => {
       let score = 0;
       const nameLower = v.name.toLowerCase();
+      for (const kw of highQualityKeywords) {
+        if (nameLower.includes(kw)) score += 20;
+      }
       for (const kw of qualityKeywords) {
         if (nameLower.includes(kw)) score += 10;
       }
