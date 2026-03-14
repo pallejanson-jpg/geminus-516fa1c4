@@ -248,21 +248,21 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     window.speechSynthesis.cancel();
     const settings = getGunnarSettings();
     
-    // Split long text into phrase segments for more natural delivery
-    const segments = cleaned.split(/(?<=[.!?])\s+/).filter(s => s.trim());
+    // Split on sentences AND commas/semicolons for more natural phrasing
+    const segments = cleaned.split(/(?<=[.!?;,])\s+/).filter(s => s.trim());
     
     const bestVoice = getBestVoice(settings.speechLang, settings.voiceName);
     
-    // Prosody tuning per language
-    const prosody = settings.speechLang === 'sv-SE' 
-      ? { rate: 0.95, pitch: 1.0 } 
-      : { rate: 1.0, pitch: 1.0 };
+    // Prosody tuning — slower for more natural delivery
+    const baseRate = settings.speechLang === 'sv-SE' ? 0.85 : 0.88;
     
     segments.forEach((segment, i) => {
       const utterance = new SpeechSynthesisUtterance(segment.replace(/\.\.\./g, ''));
       utterance.lang = settings.speechLang;
-      utterance.rate = prosody.rate;
-      utterance.pitch = prosody.pitch;
+      utterance.rate = baseRate;
+      // Slight pitch variation between segments for natural prosody
+      utterance.pitch = 1.0 + (i % 2 === 0 ? 0.03 : -0.03);
+      utterance.volume = 0.9;
       if (bestVoice) utterance.voice = bestVoice;
       if (i === 0) utterance.onstart = () => setIsSpeaking(true);
       if (i === segments.length - 1) {
