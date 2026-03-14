@@ -403,8 +403,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     // Precompute wall/slab IDs once (shared across floors)
     const wallCacheKey = '__global_wall_ids__';
     const slabCacheKey = '__global_slab_ids__';
-    const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifccurtainwall', 'ifccolumn', 'ifccolumnstandardcase', 'ifcbeam', 'ifcbeamstandardcase']);
-    const slabTypes = new Set(['ifcslab', 'ifcslabstandardcase', 'ifcroof', 'ifccovering', 'ifcplate']);
+    const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifcwallelementedcase', 'ifccurtainwall', 'ifccolumn', 'ifccolumnstandardcase', 'ifcbeam', 'ifcbeamstandardcase']);
+    const slabTypes = new Set(['ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase', 'ifcroof', 'ifccovering', 'ifcplate']);
 
     let wallIds = wallIdCacheRef.current.get(wallCacheKey);
     let slabIds = wallIdCacheRef.current.get(slabCacheKey);
