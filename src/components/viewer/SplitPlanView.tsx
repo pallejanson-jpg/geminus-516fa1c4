@@ -793,14 +793,24 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
 
     if (!worldPos || !viewer.cameraFlight) return;
 
-    // Match MinimapPanel strategy: keep current eye height, look down
-    // at the clicked point, animate smoothly.
-    const currentEyeY = viewer.camera.eye?.[1] ?? 10;
+    // Robust camera fly: keep current eye height and approach angle,
+    // translate horizontally to clicked point. Prevents degenerate
+    // straight-down poses that cause NaN on subsequent interactions.
+    const eye = viewer.camera.eye;
+    const look = viewer.camera.look;
 
-    const nextEye: [number, number, number] = [worldPos[0], currentEyeY, worldPos[2]];
+    // Validate current camera state
+    const currentEyeY = Number.isFinite(eye?.[1]) ? eye[1] : 20;
+    const dx = (eye?.[0] ?? 0) - (look?.[0] ?? 0);
+    const dz = (eye?.[2] ?? 0) - (look?.[2] ?? 0);
+
+    // Preserve the eye→look offset vector (viewing direction), just translate
     const nextLook: [number, number, number] = [worldPos[0], worldPos[1], worldPos[2]];
+    const nextEye: [number, number, number] = [worldPos[0] + dx, currentEyeY, worldPos[2] + dz];
 
+    // NaN guard
     if (!nextEye.every((v) => Number.isFinite(v)) || !nextLook.every((v) => Number.isFinite(v))) {
+      console.warn('[SplitPlanView] Skipping flyTo — invalid camera coords');
       return;
     }
 
