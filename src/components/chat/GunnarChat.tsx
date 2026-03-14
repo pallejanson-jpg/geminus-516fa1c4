@@ -289,11 +289,13 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
           signal: controller.signal,
         });
 
-        if (!resp.ok) {
+      if (!resp.ok) {
           const errorData = await resp.json().catch(() => ({}));
-          if (resp.status === 429) throw new Error("Too many requests. Please wait a moment.");
-          if (resp.status === 402) throw new Error("AI credits exhausted. Contact your administrator.");
-          throw new Error(errorData.error || `Request failed with status ${resp.status}`);
+          if (resp.status === 429) throw { status: 429, message: "För många förfrågningar. Vänta en stund och försök igen." };
+          if (resp.status === 402) throw { status: 402, message: "AI-kredit förbrukad. Kontakta din administratör." };
+          if (resp.status === 401) throw { status: 401, message: "Du är inte inloggad. Logga in och försök igen." };
+          if (resp.status === 503) throw { status: 503, message: "AI-tjänsten är tillfälligt otillgänglig. Försök igen om en stund." };
+          throw new Error(errorData.error || `Förfrågan misslyckades (${resp.status})`);
         }
         if (!resp.body) throw new Error("No response");
 
@@ -346,7 +348,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
 
   /** Trim conversation history: keep last 8 turns, strip action tokens from assistant messages */
   const trimHistory = useCallback((msgs: Message[]): Message[] => {
-    const trimmed = msgs.slice(-8);
+    const trimmed = msgs.slice(-12);
     return trimmed.map(m => {
       if (m.role === 'assistant') {
         // Strip action links to reduce token count
@@ -389,10 +391,15 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     } catch (error) {
       console.error("Chat error:", error);
       const isAbort = error instanceof DOMException && error.name === "AbortError";
+      const errStatus = (error as any)?.status;
+      const errMsg = isAbort
+        ? "Förfrågan tog för lång tid. Försök igen."
+        : (error as any)?.message || (error instanceof Error ? error.message : "Kunde inte hämta svar");
+      
       toastHook({
         variant: "destructive",
-        title: "Error",
-        description: isAbort ? "Request timed out. Please try again." : (error instanceof Error ? error.message : "Could not get a response"),
+        title: errStatus === 429 ? "Rate limit" : errStatus === 402 ? "Kredit" : errStatus === 503 ? "Tjänstfel" : "Fel",
+        description: errMsg,
       });
       setMessages(messages);
     } finally {
