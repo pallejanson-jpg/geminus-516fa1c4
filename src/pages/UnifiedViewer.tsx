@@ -333,7 +333,7 @@ const UnifiedViewerContent: React.FC<{
       let cancelled = false;
 
       const dispatch2D = () => {
-        if (cancelled) return; // Don't dispatch if effect was cleaned up
+        if (cancelled) return;
         window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } }));
         window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '2d' } }));
         if (floorFmGuid) {
@@ -351,9 +351,15 @@ const UnifiedViewerContent: React.FC<{
         }
       };
 
-      // Only dispatch 2D mode after models are loaded — not on hardcoded timers
+      // Dispatch immediately when switching to 2D while viewer is already ready
+      // (models are already loaded at this point)
+      pendingTimeout = setTimeout(dispatch2D, 150);
+
+      // Also listen for VIEWER_MODELS_LOADED for the case where 2D is set before models finish
       const modelsLoadedHandler = () => {
         if (cancelled) return;
+        // Clear the immediate timeout and re-dispatch after models
+        if (pendingTimeout) clearTimeout(pendingTimeout);
         pendingTimeout = setTimeout(dispatch2D, 300);
       };
       window.addEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
