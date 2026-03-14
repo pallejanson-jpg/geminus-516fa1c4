@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Sparkles, RotateCcw, Eye, MapPin, Languages } from 'lucide-react';
+import { Sparkles, RotateCcw, Eye, MapPin, Languages, Volume2 } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -101,6 +101,39 @@ const GunnarSettings: React.FC = () => {
     saveGunnarSettings({ voiceName });
   };
 
+  const handleTestVoice = useCallback(() => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    
+    const testText = settings.speechLang === 'sv-SE' 
+      ? 'Hej! Jag är Geminus AI, din digitala fastighetsassistent.'
+      : 'Hello! I am Geminus AI, your digital facility assistant.';
+    
+    const allVoices = window.speechSynthesis.getVoices();
+    const langPrefix = settings.speechLang.split('-')[0];
+    
+    let voice: SpeechSynthesisVoice | null = null;
+    if (settings.voiceName) {
+      voice = allVoices.find(v => v.name === settings.voiceName) || null;
+    }
+    if (!voice) {
+      // Pick best available
+      const langVoices = allVoices.filter(v => v.lang.startsWith(langPrefix));
+      const qualityKeywords = ['natural', 'premium', 'enhanced', 'google', 'microsoft'];
+      voice = langVoices.sort((a, b) => {
+        const scoreA = qualityKeywords.some(kw => a.name.toLowerCase().includes(kw)) ? 1 : 0;
+        const scoreB = qualityKeywords.some(kw => b.name.toLowerCase().includes(kw)) ? 1 : 0;
+        return scoreB - scoreA;
+      })[0] || null;
+    }
+    
+    const utterance = new SpeechSynthesisUtterance(testText);
+    utterance.lang = settings.speechLang;
+    utterance.rate = settings.speechLang === 'sv-SE' ? 0.95 : 1.0;
+    if (voice) utterance.voice = voice;
+    window.speechSynthesis.speak(utterance);
+  }, [settings.speechLang, settings.voiceName]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 pb-3 border-b">
@@ -197,6 +230,15 @@ const GunnarSettings: React.FC = () => {
                 {voices.length === 0 ? 'No voices available for this language' : `${voices.length} voices available`}
               </p>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTestVoice}
+              className="gap-1.5 mt-2"
+            >
+              <Volume2 className="h-3.5 w-3.5" />
+              Test voice
+            </Button>
           </AccordionContent>
         </AccordionItem>
 
