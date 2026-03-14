@@ -110,6 +110,20 @@ export const VISUALIZATION_CONFIGS: Record<VisualizationType, VisualizationConfi
     min: 0,
     max: 200,
   },
+  anomaly: {
+    type: 'anomaly',
+    label: 'Anomalier',
+    unit: 'poäng',
+    colorStops: [
+      { value: 0, color: [34, 197, 94] },     // Green - normal
+      { value: 25, color: [34, 197, 94] },    // Green
+      { value: 50, color: [234, 179, 8] },    // Yellow - mild anomaly
+      { value: 75, color: [249, 115, 22] },   // Orange - significant
+      { value: 100, color: [239, 68, 68] },   // Red - critical anomaly
+    ],
+    min: 0,
+    max: 100,
+  },
   none: {
     type: 'none',
     label: 'Ingen',
