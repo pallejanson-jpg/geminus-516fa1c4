@@ -445,7 +445,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         if (action.buildingFmGuid && action.floorFmGuid) {
           const floorName = action.floorName || '';
           navigate(`/viewer?building=${action.buildingFmGuid}&mode=3d&floor=${action.floorFmGuid}&floorName=${encodeURIComponent(floorName)}`);
-          onClose();
+          closeAfterAction();
           toast.success(`Visar ${floorName || 'våning'} i 3D`);
         }
         break;
