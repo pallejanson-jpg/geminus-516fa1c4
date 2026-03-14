@@ -47,7 +47,20 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   roomLabelsActive,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => {
+    const settings = getContextMenuSettings();
+    return new Set(settings.filter(s => !s.visible).map(s => s.id));
+  });
 
+  // Listen for settings changes
+  useEffect(() => {
+    const handler = () => {
+      const settings = getContextMenuSettings();
+      setHiddenIds(new Set(settings.filter(s => !s.visible).map(s => s.id)));
+    };
+    window.addEventListener(CONTEXT_MENU_SETTINGS_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(CONTEXT_MENU_SETTINGS_CHANGED_EVENT, handler);
+  }, []);
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
