@@ -476,14 +476,21 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
 
   // Whether we're in embedded side-panel mode (not standalone /ai, not overlay)
   const isEmbeddedPanel = !!embedded && context?.activeApp !== 'ai-standalone';
+  const isStandaloneAi = context?.activeApp === 'ai-standalone';
 
   // In standalone mode (/ai), never close back to "/" after action navigation.
   const closeAfterAction = useCallback(() => {
-    if (embedded || context?.activeApp === 'ai-standalone') return;
+    if (embedded || isStandaloneAi) return;
     onClose();
-  }, [embedded, context?.activeApp, onClose]);
+  }, [embedded, isStandaloneAi, onClose]);
 
-  const viewerReturnToSuffix = context?.activeApp === 'ai-standalone' ? '&returnTo=%2Fai' : '';
+  /** In standalone AI mode, open viewer in a new tab to preserve conversation */
+  const standaloneNavigate = useCallback((path: string) => {
+    window.open(path, '_blank');
+    toast.success('Öppnar i ny flik');
+  }, []);
+
+  const viewerReturnToSuffix = isStandaloneAi ? '&returnTo=%2Fai' : '';
 
   const executeAction = useCallback((action: GunnarAction) => {
     switch (action.action) {
