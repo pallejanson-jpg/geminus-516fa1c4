@@ -2,7 +2,7 @@
  * Visualization utilities for room color-coding based on sensor data
  */
 
-export type VisualizationType = 'temperature' | 'co2' | 'humidity' | 'occupancy' | 'area' | 'light' | 'none';
+export type VisualizationType = 'temperature' | 'co2' | 'humidity' | 'occupancy' | 'area' | 'light' | 'anomaly' | 'none';
 
 export interface ColorStop {
   value: number;
