@@ -237,7 +237,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
                 buildingFmGuid={buildingData.fmGuid}
                 onClose={onGoBack}
                 hideBackButton
-                hideMobileOverlay={false}
+                hideMobileOverlay={true}
                 showGeminusMenu={viewMode === '3d'}
               />
             )}
