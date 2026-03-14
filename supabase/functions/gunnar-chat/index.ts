@@ -1391,7 +1391,6 @@ async function buildSystemPrompt(supabase: any, context: any, userProfile: any, 
   // Only pre-fetch BIM models for the CURRENT building (small, high-value context)
 
   let modelsCtx = "";
-  let modelsCtx = "";
   const bGuid = context?.currentBuilding?.fmGuid;
   if (bGuid) {
     try {
