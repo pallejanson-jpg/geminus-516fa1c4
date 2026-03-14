@@ -671,7 +671,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
         try { viewer.scene.off?.(tickSub); } catch {}
       }
     };
-  }, [getXeokitViewer, storeyMap, storeyPlugin]);
+  }, [getXeokitViewer, storeyMap, storeyPlugin, lockCameraToFloor]);
 
   // Compute room labels for 2D overlay
   useEffect(() => {
