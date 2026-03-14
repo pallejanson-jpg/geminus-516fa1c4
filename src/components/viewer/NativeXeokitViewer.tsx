@@ -52,6 +52,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<any>(null);
   const isMobile = useIsMobile();
+  // Use ref for isMobile to avoid re-creating initialize callback when it changes
+  const isMobileRef = useRef(isMobile);
+  isMobileRef.current = isMobile;
   const [phase, setPhase] = useState<LoadPhase>('init');
   const [loadProgress, setLoadProgress] = useState({ loaded: 0, total: 0 });
   const [errorMsg, setErrorMsg] = useState('');
