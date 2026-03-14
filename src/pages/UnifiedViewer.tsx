@@ -68,6 +68,10 @@ const UnifiedViewerContent: React.FC<{
   const entityFmGuid = searchParams.get('entity');
   const floorFmGuid = searchParams.get('floor');
   const floorName = searchParams.get('floorName') || '';
+  const returnToParam = searchParams.get('returnTo');
+  const resolvedReturnPath = returnToParam && returnToParam.startsWith('/') && !returnToParam.startsWith('//')
+    ? returnToParam
+    : '/';
   const visualizationParam = searchParams.get('visualization') as import('@/lib/visualization-utils').VisualizationType | null;
   const insightsModeParam = searchParams.get('insightsMode') || null;
   const xrayParam = searchParams.get('xray') === 'true';
