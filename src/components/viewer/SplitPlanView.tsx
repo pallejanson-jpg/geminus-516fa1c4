@@ -957,7 +957,9 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       setError(null);
       setImgError(false);
       usedFallbackRef.current = false;
-      dispatchFloorSync(targetStoreyId);
+      if (syncFloorSelection) {
+        dispatchFloorSync(targetStoreyId);
+      }
       return;
     }
 
