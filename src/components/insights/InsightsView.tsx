@@ -124,6 +124,15 @@ export default function InsightsView({ selectedBuilding }: InsightsViewProps) {
                                 <TabsTrigger value="portfolio" className="text-[11px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
                                     Portfolio
                                 </TabsTrigger>
+                                <TabsTrigger value="predictive" className="text-[11px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                    🔮 Prediktivt
+                                </TabsTrigger>
+                                <TabsTrigger value="optimization" className="text-[11px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                    📐 Optimering
+                                </TabsTrigger>
+                                <TabsTrigger value="search" className="text-[11px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                    🔍 RAG Sök
+                                </TabsTrigger>
                             </TabsList>
                         </div>
 
