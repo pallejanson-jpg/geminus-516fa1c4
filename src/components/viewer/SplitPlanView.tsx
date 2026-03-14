@@ -488,7 +488,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [getXeokitViewer, findCurrentStoreyId, generateFallbackSnapshot, isMobile, dispatchFloorSync, resolveFloorFromStoreyId]);
+  }, [getXeokitViewer, findCurrentStoreyId, generateFallbackSnapshot, isMobile, dispatchFloorSync, resolveFloorFromStoreyId, syncFloorSelection, monochrome]);
 
   // Generate map once plugin ready + listen for external floor changes
   useEffect(() => {
