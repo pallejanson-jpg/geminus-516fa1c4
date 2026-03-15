@@ -116,6 +116,39 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_memory: {
+        Row: {
+          building_fm_guid: string | null
+          content: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          memory_type: string
+          source_message: string | null
+          user_id: string
+        }
+        Insert: {
+          building_fm_guid?: string | null
+          content: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          memory_type?: string
+          source_message?: string | null
+          user_id: string
+        }
+        Update: {
+          building_fm_guid?: string | null
+          content?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          memory_type?: string
+          source_message?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       annotation_symbols: {
         Row: {
           category: string
