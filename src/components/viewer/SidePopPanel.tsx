@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 
 interface SidePopPanelProps {
   isOpen: boolean;
@@ -15,8 +17,7 @@ interface SidePopPanelProps {
 
 /**
  * Side-pop panel that appears to the left or right of a parent panel.
- * Automatically positions itself based on available screen space.
- * Uses semi-transparent frosted glass effect to allow viewing the 3D model behind.
+ * On mobile, renders as a bottom Drawer instead of positioned panel.
  */
 const SidePopPanel: React.FC<SidePopPanelProps> = ({
   isOpen,
@@ -27,6 +28,7 @@ const SidePopPanel: React.FC<SidePopPanelProps> = ({
   children,
   className,
 }) => {
+  const isMobile = useIsMobile();
   const [screenWidth, setScreenWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
   const panelWidth = 220;
   const gap = 8;
@@ -40,11 +42,26 @@ const SidePopPanel: React.FC<SidePopPanelProps> = ({
 
   if (!isOpen) return null;
 
-  // Determine if panel should appear on left or right of parent
+  // Mobile: render as bottom Drawer
+  if (isMobile) {
+    return (
+      <Drawer open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+        <DrawerContent className="max-h-[60dvh]">
+          <DrawerHeader className="py-2 px-3">
+            <DrawerTitle className="text-sm">{title}</DrawerTitle>
+          </DrawerHeader>
+          <div className="p-3 overflow-y-auto max-h-[50dvh]">
+            {children}
+          </div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
+  // Desktop: positioned panel
   const parentCenter = parentPosition.x + parentWidth / 2;
   const showOnLeft = parentCenter > screenWidth / 2;
 
-  // Calculate position
   const position = showOnLeft
     ? { 
         left: Math.max(8, parentPosition.x - panelWidth - gap), 
