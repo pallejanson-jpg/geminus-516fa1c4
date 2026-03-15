@@ -716,7 +716,10 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     className
   );
 
-    return (
+  // Shared toolbar content used by both mobile Drawer and desktop sidebar
+  const toolbarContentJSX = (
+    <>
+
       <div className={containerClassName}>
         {/* Trigger button - positioned at top right */}
         {!isOpen && (
