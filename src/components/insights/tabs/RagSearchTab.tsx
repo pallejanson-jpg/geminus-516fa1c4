@@ -18,7 +18,7 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
 
   const handleSearch = () => {
     if (!query.trim()) return;
-    search(query, { buildingFmGuid: selectedFacility?.fmGuid });
+    search(query, { buildingFmGuid: effectiveFacility?.fmGuid });
   };
 
   return (
