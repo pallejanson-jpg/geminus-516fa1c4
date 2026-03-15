@@ -46,6 +46,8 @@ const ApiDocs = lazy(() => import("@/pages/ApiDocs"));
 const AiChat = lazy(() => import("@/pages/AiChat"));
 // Geminus View — standalone IFC viewer + building selector
 const GeminusView = lazy(() => import("@/pages/GeminusView"));
+// ACC-inspired mobile viewer layout mockup
+const ViewerMockup = lazy(() => import("@/pages/ViewerMockup"));
 
 const queryClient = new QueryClient();
 
@@ -285,6 +287,18 @@ const App = () => {
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                 <ProtectedRoute>
                   <GeminusView />
+                </ProtectedRoute>
+              </Suspense>
+            } 
+          />
+          
+          {/* ACC-inspired mobile viewer mockup */}
+          <Route 
+            path="/viewer-mockup" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <ProtectedRoute>
+                  <ViewerMockup />
                 </ProtectedRoute>
               </Suspense>
             } 
