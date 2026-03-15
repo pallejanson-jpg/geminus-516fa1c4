@@ -62,11 +62,11 @@ const DEFAULT_ENABLED = ['orbit', 'pan', 'fit', 'select', 'measure', 'section'];
 /* ── Action Sheet menu items ── */
 const MENU_ITEMS = [
   { id: 'viewMode', Icon: Box, label: 'View Mode', hasSubmenu: true },
-  { id: 'openIfc', Icon: Upload, label: 'Open IFC', hasSubmenu: false },
   { id: 'filter', Icon: Filter, label: 'Filter' },
   { id: 'visualization', Icon: SlidersHorizontal, label: 'Visualization' },
   { id: 'insights', Icon: BarChart2, label: 'Insights' },
   { id: 'issues', Icon: AlertTriangle, label: 'Issues' },
+  { id: 'openIfc', Icon: Upload, label: 'Open IFC', hasSubmenu: false },
   { id: 'settings', Icon: Settings, label: 'Settings' },
 ];
 
