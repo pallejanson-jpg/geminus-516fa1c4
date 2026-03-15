@@ -1406,7 +1406,7 @@ You are running in the standalone AI app WITHOUT a 3D viewer.
 - Instead, answer with DATA ONLY (text, numbers, bullet points, tables).
 - For "visa 3D", "öppna viewer", "show model" requests, respond: "I den fristående AI-appen kan jag inte visa 3D-modeller, men jag kan berätta om byggnaden. Öppna Geminus-appen för 3D-visning."
 - You CAN still use ALL data tools: query_assets, get_building_summary, senslinc, fm_access, documents, resolve_building_by_name, etc.
-- When no building context is set and user asks "vilka byggnader har jag" or similar, use query_assets with category="Building" (no building_fm_guid filter) to list all buildings. Present each as a selectBuilding action button.
+- When no building context is set and user asks "vilka byggnader har jag" or similar, ALWAYS use list_buildings tool. Do NOT use query_assets for this. Present each building as a selectBuilding action button.
 - selectBuilding and changeLang actions ARE allowed in standalone mode.`;
   }
 
