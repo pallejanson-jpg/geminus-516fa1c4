@@ -71,15 +71,16 @@ function PredictionCard({ prediction }: { prediction: MaintenancePrediction }) {
   );
 }
 
-export default function PredictiveMaintenanceTab() {
+export default function PredictiveMaintenanceTab({ facility }: { facility?: Facility }) {
   const { selectedFacility } = useContext(AppContext);
-  const { data, isLoading, error, analyze } = usePredictiveMaintenance(selectedFacility?.fmGuid);
+  const effectiveFacility = facility || selectedFacility;
+  const { data, isLoading, error, analyze } = usePredictiveMaintenance(effectiveFacility?.fmGuid);
 
   useEffect(() => {
-    if (selectedFacility?.fmGuid && !data && !isLoading) {
+    if (effectiveFacility?.fmGuid && !data && !isLoading) {
       analyze();
     }
-  }, [selectedFacility?.fmGuid]);
+  }, [effectiveFacility?.fmGuid]);
 
   if (!selectedFacility) {
     return (
