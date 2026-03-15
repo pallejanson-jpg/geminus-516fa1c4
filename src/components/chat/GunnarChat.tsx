@@ -169,7 +169,9 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     const buildingKey = context?.currentBuilding?.fmGuid;
     if (buildingKey !== currentBuildingRef.current) {
       currentBuildingRef.current = buildingKey;
-      if (messages.length === 0 || (messages.length === 1 && messages[0].role === 'assistant')) {
+      // Only reset if conversation is empty or just has the initial greeting
+      // Don't reset if user has an active conversation (more than 1 message)
+      if (messages.length <= 1) {
         setMessages([{ role: "assistant", content: getContextualGreeting(context) }]);
         setSuggestedFollowups([]);
         setProactiveInsights([]);
