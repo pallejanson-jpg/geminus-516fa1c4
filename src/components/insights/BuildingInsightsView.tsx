@@ -1403,8 +1403,12 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                             title="Show annotation and zoom to alarm"
                                                                             onClick={() => {
                                                                                 const alarms = [{ fmGuid: alarm.fm_guid, roomFmGuid: alarm.in_room_fm_guid }];
-                                                                                // Always dispatch event (works in both drawer and desktop inline viewer)
-                                                                                window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms, flyTo: true } }));
+                                                                                if (isMobile && !drawerMode) {
+                                                                                    sessionStorage.setItem('pending_alarm_annotations', JSON.stringify({ alarms, flyTo: true }));
+                                                                                    navigate(`/viewer?building=${facility.fmGuid}&mode=3d`);
+                                                                                } else {
+                                                                                    window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms, flyTo: true } }));
+                                                                                }
                                                                             }}
                                                                         >
                                                                             <Eye className="h-3.5 w-3.5" />
