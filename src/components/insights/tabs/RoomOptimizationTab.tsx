@@ -1,6 +1,7 @@
 import React, { useContext, useEffect } from 'react';
 import { AppContext } from '@/context/AppContext';
 import { useRoomOptimization, type OptimizationSuggestion } from '@/hooks/useRoomOptimization';
+import type { Facility } from '@/lib/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
