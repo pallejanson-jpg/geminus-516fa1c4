@@ -31,13 +31,14 @@ import {
 } from '@/components/ui/drawer';
 
 /* ── Types ── */
-type ViewMode = '2d' | '3d' | 'split2d3d' | '360';
+type ViewMode = '2d' | '2d3d' | '3d' | '3d360' | '360';
 
-const VIEW_MODES: { mode: ViewMode; label: string; Icon: React.FC<any> }[] = [
-  { mode: '2d', label: '2D Plan', Icon: Square },
-  { mode: '3d', label: '3D Model', Icon: Box },
-  { mode: 'split2d3d', label: '2D + 3D', Icon: LayoutPanelLeft },
-  { mode: '360', label: '360° Panorama', Icon: View },
+const VIEW_MODES: { mode: ViewMode; label: string; Icon: React.FC<any>; requires360?: boolean }[] = [
+  { mode: '2d', label: '2D', Icon: Square },
+  { mode: '2d3d', label: '2D + 3D', Icon: LayoutPanelLeft },
+  { mode: '3d', label: '3D', Icon: Box },
+  { mode: '3d360', label: '3D + 360', Icon: View, requires360: true },
+  { mode: '360', label: '360', Icon: View, requires360: true },
 ];
 
 const MOCK_FLOORS = ['Roof', 'Floor 3', 'Floor 2', 'Floor 1', 'Lobby', 'Basement'];
