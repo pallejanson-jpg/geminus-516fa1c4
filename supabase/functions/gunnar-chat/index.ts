@@ -364,6 +364,21 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "fm_access_get_documents",
+      description: "Get documents (DoU, technical documentation) from FM Access for a building. Requires fm_access_building_guid (use query_building_settings to find it).",
+      parameters: {
+        type: "object",
+        properties: {
+          fm_access_building_guid: { type: "string" },
+        },
+        required: ["fm_access_building_guid"],
+        additionalProperties: false,
+      },
+    },
+  },
   // ── Viewer control tools ──
   {
     type: "function",
@@ -946,6 +961,21 @@ async function execFmAccessGetFloors(args: any) {
   return result.data || [];
 }
 
+async function execFmAccessGetDocuments(args: any) {
+  const result = await callFmAccessQuery("get-documents", { buildingId: args.fm_access_building_guid });
+  if (!result?.success) return { error: result?.error || "Failed to get documents" };
+  const docs = result.data || [];
+  return {
+    total_documents: docs.length,
+    documents: docs.slice(0, 30).map((d: any) => ({
+      id: d.objectId || d.documentId,
+      name: d.objectName || d.name,
+      fileName: d.fileName,
+      className: d.className,
+    })),
+  };
+}
+
 /* ── Document content Q&A ── */
 
 async function execAskAboutDocuments(supabase: any, args: any, apiKey: string) {
@@ -1218,6 +1248,7 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
     case "fm_access_get_hierarchy": return execFmAccessGetHierarchy(args);
     case "fm_access_search_objects": return execFmAccessSearchObjects(args);
     case "fm_access_get_floors": return execFmAccessGetFloors(args);
+    case "fm_access_get_documents": return execFmAccessGetDocuments(args);
     // FM Access — local search
     case "search_fm_access_local": return execSearchFmAccessLocal(supabase, args);
     // Document Q&A
@@ -1488,7 +1519,14 @@ VIEWER CONTROL: Use viewer_show_floor, viewer_show_model, viewer_open_3d, viewer
 
 WORK ORDERS: Always ask for confirmation before creating. Use create_work_order tool after user confirms.
 
-FM ACCESS: First get fm_access_building_guid via query_building_settings, then use fm_access_get_drawings/hierarchy/floors/search_objects. Also search_fm_access_local for fast local data.
+CRITICAL — FM ACCESS QUERIES:
+When user asks about "FM Access", "ritningar", "dokument i FM Access", "DoU", "teknisk dokumentation", or references FM Access data:
+→ NEVER use get_building_summary, query_assets, or aggregate_assets — those query LOCAL Geminus data, NOT FM Access.
+→ First call query_building_settings to get fm_access_building_guid for the current building.
+→ Then use fm_access_get_drawings, fm_access_get_documents, fm_access_get_hierarchy, fm_access_get_floors, or fm_access_search_objects for LIVE FM Access data.
+→ Use search_fm_access_local only for fast cached searches of previously synced FM Access data.
+→ If fm_access_building_guid is null/missing, tell user: "Den här byggnaden har ingen FM Access-koppling konfigurerad."
+→ All other building data (assets, work orders, issues, sensors) comes from Geminus backend — use normal tools for those.
 
 DOCUMENT Q&A: Use ask_about_documents for content questions. Use query_documents for listing.
 
