@@ -1676,6 +1676,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         </div>
       </ScrollArea>
     </div>
+    </>
   );
 };
 
