@@ -1,4 +1,5 @@
 import React, { useState, useContext, useMemo, useRef, useEffect } from 'react';
+import { extractSpaceArea } from '@/lib/building-utils';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, X, MapPin, Info, BarChart, Star, Table, Layers, 
@@ -193,27 +194,14 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     });
   }, [allData, facility, isSpace]);
 
-  // Calculate KPIs — sum grossArea from child spaces for buildings/storeys
-  const kpis = useMemo(() => {
+   // Calculate KPIs — sum area from child spaces for buildings/storeys
+    const kpis = useMemo(() => {
     let baseArea = 0;
     if (isSpace) {
-      // Single space: use its own grossArea or attribute
-      const attrs = (facility as any).attributes || {};
-      const ntaKey = Object.keys(attrs).find(k => k.toLowerCase().startsWith('nta'));
-      baseArea = ntaKey ? Number(attrs[ntaKey]) || 0 : Number((facility as any).grossArea || facility.area) || 0;
-    } else if (isStorey) {
-      // Storey: sum child spaces' grossArea
-      childSpaces.forEach((space: any) => {
-        const attrs = space.attributes || {};
-        const ntaKey = Object.keys(attrs).find(k => k.toLowerCase().startsWith('nta'));
-        baseArea += ntaKey ? Number(attrs[ntaKey]) || 0 : Number(space.grossArea || space.gross_area) || 0;
-      });
+      baseArea = extractSpaceArea(facility);
     } else {
-      // Building: sum all child spaces' grossArea
       childSpaces.forEach((space: any) => {
-        const attrs = space.attributes || {};
-        const ntaKey = Object.keys(attrs).find(k => k.toLowerCase().startsWith('nta'));
-        baseArea += ntaKey ? Number(attrs[ntaKey]) || 0 : Number(space.grossArea || space.gross_area) || 0;
+        baseArea += extractSpaceArea(space);
       });
     }
     const areaString = baseArea > 0 ? `${Math.round(baseArea).toLocaleString()} m²` : 'N/A';
