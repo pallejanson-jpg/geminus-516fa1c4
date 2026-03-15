@@ -1,4 +1,5 @@
 import React, { useContext, useMemo, useState, useEffect, useCallback } from 'react';
+import { extractSpaceArea } from '@/lib/building-utils';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useXktPreload } from '@/hooks/useXktPreload';
