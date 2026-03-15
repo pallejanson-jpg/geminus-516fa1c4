@@ -36,6 +36,37 @@ export default function PluginPage() {
   const activeBuildingGuid = buildingParam || selectedBuilding?.fm_guid;
   const activeBuildingName = selectedBuilding?.name;
 
+  // PWA manifest swap for "Add to Home Screen" branding
+  useEffect(() => {
+    const manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    const originalHref = manifestLink?.getAttribute('href');
+    if (manifestLink) manifestLink.setAttribute('href', '/manifest-plugin.json');
+
+    const setMeta = (name: string, content: string) => {
+      let el = document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`);
+      if (!el) {
+        el = document.createElement('meta');
+        el.name = name;
+        document.head.appendChild(el);
+      }
+      const prev = el.getAttribute('content');
+      el.setAttribute('content', content);
+      return { el, prev };
+    };
+
+    const title = setMeta('apple-mobile-web-app-title', 'Geminus Panel');
+    const capable = setMeta('apple-mobile-web-app-capable', 'yes');
+    const prevTitle = document.title;
+    document.title = 'Geminus Panel';
+
+    return () => {
+      if (manifestLink && originalHref) manifestLink.setAttribute('href', originalHref);
+      if (title.prev !== null) title.el.setAttribute('content', title.prev);
+      if (capable.prev !== null) capable.el.setAttribute('content', capable.prev);
+      document.title = prevTitle;
+    };
+  }, []);
+
   // Load buildings when no building param
   useEffect(() => {
     if (buildingParam) return;
@@ -111,7 +142,7 @@ export default function PluginPage() {
   }
 
   return (
-    <div className="fixed inset-0 bg-transparent">
+    <div className="fixed inset-0 bg-background">
       <GeminusPluginMenu
         buildingFmGuid={activeBuildingGuid}
         buildingName={activeBuildingName}

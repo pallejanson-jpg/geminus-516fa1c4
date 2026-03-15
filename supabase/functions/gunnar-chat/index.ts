@@ -540,6 +540,22 @@ const tools = [
       },
     },
   },
+  // ── List all buildings ──
+  {
+    type: "function",
+    function: {
+      name: "list_buildings",
+      description: "List all buildings in the system. Use when user asks 'what buildings do I have?' or similar without specifying a name. Returns building names and fm_guids for selectBuilding buttons.",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: { type: "number", description: "Max results (default 50)" },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
   // ── Faciliate (SWG) tools ──
   {
     type: "function",
@@ -1146,6 +1162,30 @@ async function execResolveBuildingByName(supabase: any, args: any) {
   };
 }
 
+async function execListBuildings(supabase: any, args: any) {
+  const limit = args.limit || 50;
+  const { data, error } = await supabase
+    .from("assets")
+    .select("fm_guid, name, common_name")
+    .eq("category", "Building")
+    .order("common_name", { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  // Deduplicate by fm_guid
+  const seen = new Map<string, string>();
+  for (const b of data || []) {
+    if (b.fm_guid && !seen.has(b.fm_guid)) {
+      seen.set(b.fm_guid, b.common_name || b.name || b.fm_guid);
+    }
+  }
+  const buildings = Array.from(seen, ([fm_guid, name]) => ({ fm_guid, name }));
+  return {
+    total: buildings.length,
+    buildings,
+    instruction: "Present each building as a clickable selectBuilding action button: [Building Name](action:selectBuilding:fm_guid:encodedName)",
+  };
+}
+
 /* ─────────────────────────────────────────────
    executeTool — ALIGNED with tool declarations
    ───────────────────────────────────────────── */
@@ -1167,6 +1207,7 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
     case "get_floor_details": return execGetFloorDetails(supabase, args);
     // Building resolution
     case "resolve_building_by_name": return execResolveBuildingByName(supabase, args);
+    case "list_buildings": return execListBuildings(supabase, args);
     // Senslinc
     case "senslinc_get_equipment": return execSenslincGetEquipment(args);
     case "senslinc_get_sites": return execSenslincGetSites(args);
@@ -1354,6 +1395,19 @@ async function buildSystemPrompt(supabase: any, context: any, userProfile: any, 
   if (context?.viewerState) {
     const vs = context.viewerState;
     ctx += `\nViewer: mode=${vs.viewMode}, floors=${vs.visibleFloorFmGuids?.length || 0}, selected=${vs.selectedFmGuids?.length || 0}`;
+  }
+
+  // Standalone AI mode — no viewer available
+  if (context?.activeApp === 'ai-standalone') {
+    ctx += `\n\nSTANDALONE AI MODE (CRITICAL):
+You are running in the standalone AI app WITHOUT a 3D viewer.
+- Do NOT use viewer tools (viewer_show_floor, viewer_show_model, viewer_open_3d, viewer_show_drawing).
+- Do NOT generate viewer action links (action:flyTo, action:showFloor, action:showFloorIn3D, action:isolateModel, action:showDrawing, action:openViewer3D, action:switchTo2D, action:switchTo3D).
+- Instead, answer with DATA ONLY (text, numbers, bullet points, tables).
+- For "visa 3D", "öppna viewer", "show model" requests, respond: "I den fristående AI-appen kan jag inte visa 3D-modeller, men jag kan berätta om byggnaden. Öppna Geminus-appen för 3D-visning."
+- You CAN still use ALL data tools: query_assets, get_building_summary, senslinc, fm_access, documents, resolve_building_by_name, etc.
+- When no building context is set and user asks "vilka byggnader har jag" or similar, use query_assets with category="Building" (no building_fm_guid filter) to list all buildings. Present each as a selectBuilding action button.
+- selectBuilding and changeLang actions ARE allowed in standalone mode.`;
   }
 
   let userCtx = "";
