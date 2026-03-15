@@ -31,13 +31,14 @@ import {
 } from '@/components/ui/drawer';
 
 /* ── Types ── */
-type ViewMode = '2d' | '3d' | 'split2d3d' | '360';
+type ViewMode = '2d' | '2d3d' | '3d' | '3d360' | '360';
 
-const VIEW_MODES: { mode: ViewMode; label: string; Icon: React.FC<any> }[] = [
-  { mode: '2d', label: '2D Plan', Icon: Square },
-  { mode: '3d', label: '3D Model', Icon: Box },
-  { mode: 'split2d3d', label: '2D + 3D', Icon: LayoutPanelLeft },
-  { mode: '360', label: '360° Panorama', Icon: View },
+const VIEW_MODES: { mode: ViewMode; label: string; Icon: React.FC<any>; requires360?: boolean }[] = [
+  { mode: '2d', label: '2D', Icon: Square },
+  { mode: '2d3d', label: '2D + 3D', Icon: LayoutPanelLeft },
+  { mode: '3d', label: '3D', Icon: Box },
+  { mode: '3d360', label: '3D + 360', Icon: View, requires360: true },
+  { mode: '360', label: '360', Icon: View, requires360: true },
 ];
 
 const MOCK_FLOORS = ['Roof', 'Floor 3', 'Floor 2', 'Floor 1', 'Lobby', 'Basement'];
@@ -61,11 +62,11 @@ const DEFAULT_ENABLED = ['orbit', 'pan', 'fit', 'select', 'measure', 'section'];
 /* ── Action Sheet menu items ── */
 const MENU_ITEMS = [
   { id: 'viewMode', Icon: Box, label: 'View Mode', hasSubmenu: true },
-  { id: 'openIfc', Icon: Upload, label: 'Open IFC', hasSubmenu: false },
   { id: 'filter', Icon: Filter, label: 'Filter' },
   { id: 'visualization', Icon: SlidersHorizontal, label: 'Visualization' },
   { id: 'insights', Icon: BarChart2, label: 'Insights' },
   { id: 'issues', Icon: AlertTriangle, label: 'Issues' },
+  { id: 'openIfc', Icon: Upload, label: 'Open IFC', hasSubmenu: false },
   { id: 'settings', Icon: Settings, label: 'Settings' },
 ];
 
@@ -80,6 +81,7 @@ const ViewerMockup: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const buildingName = 'Office Building A';
+  const hasIvionSiteId = false; // TODO: wire to real building settings
   const modeLabel = VIEW_MODES.find((m) => m.mode === viewMode)?.label ?? '3D';
 
   const handleMenuItem = (id: string) => {
@@ -256,19 +258,33 @@ const ViewerMockup: React.FC = () => {
                 </div>
               </DrawerHeader>
               <div className="px-2 pb-6 space-y-0.5">
-                {VIEW_MODES.map(({ mode, label, Icon }) => (
-                  <button
-                    key={mode}
-                    onClick={() => { setViewMode(mode); setSubSheet(null); setSheetOpen(false); }}
-                    className={`w-full flex items-center gap-3 px-4 py-4 rounded-lg transition-colors ${
-                      viewMode === mode ? 'bg-primary/10 text-primary' : 'hover:bg-muted/60 text-foreground'
-                    }`}
-                  >
-                    <Icon className="h-5 w-5 shrink-0" />
-                    <span className="text-sm font-medium flex-1 text-left">{label}</span>
-                    {viewMode === mode && <Eye className="h-4 w-4 text-primary" />}
-                  </button>
-                ))}
+                {VIEW_MODES.map(({ mode, label, Icon, requires360 }) => {
+                  const disabled = requires360 && !hasIvionSiteId;
+                  return (
+                    <button
+                      key={mode}
+                      onClick={() => {
+                        if (disabled) {
+                          toast.error('Requires 360 connection — set Ivion Site ID in building settings');
+                          return;
+                        }
+                        setViewMode(mode); setSubSheet(null); setSheetOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-4 rounded-lg transition-colors ${
+                        disabled
+                          ? 'opacity-40 cursor-not-allowed'
+                          : viewMode === mode ? 'bg-primary/10 text-primary' : 'hover:bg-muted/60 text-foreground'
+                      }`}
+                    >
+                      <Icon className="h-5 w-5 shrink-0" />
+                      <div className="flex-1 text-left">
+                        <span className="text-sm font-medium">{label}</span>
+                        {disabled && <p className="text-xs text-muted-foreground">Requires 360 connection</p>}
+                      </div>
+                      {viewMode === mode && !disabled && <Eye className="h-4 w-4 text-primary" />}
+                    </button>
+                  );
+                })}
               </div>
             </>
           )}
