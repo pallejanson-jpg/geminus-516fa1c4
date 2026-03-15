@@ -20,6 +20,9 @@ import { Carousel, CarouselContent, CarouselItem } from '@/components/ui/carouse
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import AlarmManagementTab from '@/components/insights/tabs/AlarmManagementTab';
+import PredictiveMaintenanceTab from '@/components/insights/tabs/PredictiveMaintenanceTab';
+import RoomOptimizationTab from '@/components/insights/tabs/RoomOptimizationTab';
+import RagSearchTab from '@/components/insights/tabs/RagSearchTab';
 import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
