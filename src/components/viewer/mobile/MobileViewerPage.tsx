@@ -160,13 +160,74 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
   /* ── Real xeokit tool handlers ── */
   const handleToolClick = useCallback((toolId: string) => {
     const viewer = getViewer();
+
+    // One-shot actions don't change activeTool
+    if (toolId === 'fit') {
+      if (viewer?.cameraFlight && viewer?.scene) {
+        viewer.cameraFlight.flyTo({ aabb: viewer.scene.aabb, duration: 0.5 });
+      }
+      return;
+    }
+
+    if (toolId === 'resetView') {
+      if (viewer?.scene) {
+        // Deselect all
+        const selected = viewer.scene.selectedObjectIds || [];
+        if (selected.length > 0) viewer.scene.setObjectsSelected(selected, false);
+        // Un-xray all
+        const xrayed = viewer.scene.xrayedObjectIds || [];
+        if (xrayed.length > 0) viewer.scene.setObjectsXRayed(xrayed, false);
+        setIsXrayActive(false);
+        // Show all objects
+        viewer.scene.setObjectsVisible(viewer.scene.objectIds, true);
+        // Fly to full scene
+        if (viewer.cameraFlight) {
+          viewer.cameraFlight.flyTo({ aabb: viewer.scene.aabb, duration: 0.5 });
+        }
+        // Reset floor solo
+        setSoloFloorId(null);
+        window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+          detail: { floorId: null, isAllFloorsVisible: true, isSoloFloor: false } as FloorSelectionEventDetail,
+        }));
+      }
+      // Reset to orbit mode
+      if (viewer?.cameraControl) {
+        viewer.cameraControl.navMode = 'orbit';
+        viewer.cameraControl.followPointer = true;
+      }
+      setActiveTool('orbit');
+      window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, {
+        detail: { tool: null } as ViewerToolChangedDetail,
+      }));
+      return;
+    }
+
+    if (toolId === 'xray') {
+      const next = !isXrayActive;
+      setIsXrayActive(next);
+      if (viewer?.scene) {
+        const ids = viewer.scene.objectIds || [];
+        if (next) {
+          const xrayMaterial = viewer.scene.xrayMaterial;
+          if (xrayMaterial) {
+            xrayMaterial.fill = true;
+            xrayMaterial.fillAlpha = 0.15;
+            xrayMaterial.edges = true;
+            xrayMaterial.edgeAlpha = 0.4;
+          }
+        }
+        viewer.scene.setObjectsXRayed(ids, next);
+      }
+      return;
+    }
+
     setActiveTool(toolId);
 
     switch (toolId) {
       case 'orbit':
         if (viewer?.cameraControl) {
           viewer.cameraControl.navMode = 'orbit';
-          viewer.cameraControl.followPointer = false;
+          viewer.cameraControl.followPointer = true;
         }
         window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, {
           detail: { tool: null } as ViewerToolChangedDetail,
@@ -174,41 +235,40 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
         break;
       case 'pan':
         if (viewer?.cameraControl) {
-          viewer.cameraControl.navMode = 'planView';
+          viewer.cameraControl.navMode = 'pan';
         }
         window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, {
           detail: { tool: null } as ViewerToolChangedDetail,
         }));
         break;
-      case 'fit':
-        if (viewer?.cameraFlight && viewer?.scene) {
-          viewer.cameraFlight.flyTo({ aabb: viewer.scene.aabb, duration: 0.5 });
-        }
-        break;
       case 'select':
+        // Set orbit mode so click-picking works on the canvas
+        if (viewer?.cameraControl) {
+          viewer.cameraControl.navMode = 'orbit';
+          viewer.cameraControl.followPointer = true;
+        }
         window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, {
           detail: { tool: 'select' } as ViewerToolChangedDetail,
         }));
         break;
       case 'measure':
+        if (viewer?.cameraControl) {
+          viewer.cameraControl.navMode = 'orbit';
+          viewer.cameraControl.followPointer = true;
+        }
         window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, {
           detail: { tool: 'measure' } as ViewerToolChangedDetail,
         }));
         break;
       case 'section':
+        if (viewer?.cameraControl) {
+          viewer.cameraControl.navMode = 'orbit';
+          viewer.cameraControl.followPointer = true;
+        }
         window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, {
           detail: { tool: 'slicer' } as ViewerToolChangedDetail,
         }));
         break;
-      case 'xray': {
-        const next = !isXrayActive;
-        setIsXrayActive(next);
-        if (viewer?.scene) {
-          const ids = viewer.scene.objectIds || [];
-          viewer.scene.setObjectsXRayed(ids, next);
-        }
-        break;
-      }
       case 'firstPerson':
         if (viewer?.cameraControl) {
           viewer.cameraControl.navMode = 'firstPerson';
@@ -220,7 +280,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
         }));
         break;
     }
-  }, [isXrayActive]);
+  }, [isXrayActive, soloFloorId]);
 
   /* ── Floor selection ── */
   const handleFloorClick = useCallback((floor: FloorInfo) => {
