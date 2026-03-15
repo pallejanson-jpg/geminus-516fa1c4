@@ -108,19 +108,10 @@ const BuildingSelector: React.FC = () => {
       (item: any) => item.category === 'Space' && item.buildingFmGuid === buildingFmGuid
     );
     
-    // Calculate total area from space attributes
+    // Calculate total area using unified extraction
     let totalArea = 0;
     spaces.forEach((space: any) => {
-      const attrs = space.attributes || {};
-      // Find NTA or Area attribute
-      Object.keys(attrs).forEach(key => {
-        if (key.toLowerCase().includes('nta') || (key.toLowerCase() === 'area' && !key.includes('per'))) {
-          const val = attrs[key]?.value;
-          if (typeof val === 'number') {
-            totalArea += val;
-          }
-        }
-      });
+      totalArea += extractSpaceArea(space);
     });
 
     return {

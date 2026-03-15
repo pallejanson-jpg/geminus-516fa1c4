@@ -41,9 +41,7 @@ export default function PortfolioManagementTab({ onColorMap }: PortfolioManageme
             let totalArea = 0;
             building.children?.forEach(storey => {
                 storey.children?.forEach(space => {
-                    const attrs = space.attributes || {};
-                    const ntaKey = Object.keys(attrs).find(k => k.toLowerCase().startsWith('nta'));
-                    totalArea += ntaKey ? Number(attrs[ntaKey]) : (space.grossArea || 0);
+                    totalArea += extractSpaceArea(space);
                 });
             });
 
