@@ -1,89 +1,129 @@
+## Plan: IFC & ACC Import/Sync Performance Optimization (IMPLEMENTED ✅)
+
+### Changes Made
+1. **XKT compression** (`ifc-to-xkt`): Enabled `zip: true` in `writeXKTModelToArrayBuffer` — ~30% smaller XKT files
+2. **Parallel DB writes** (`ifc-to-xkt`): `persistSystemsAndConnections` + `populateAssetsFromMetaObjects` now run via `Promise.all` instead of sequentially
+3. **Streaming LD-JSON parser** (`acc-sync`): New `streamLDJSON()` async generator processes BIM property files line-by-line from `ReadableStream` — eliminates OOM risk on large Revit models
+4. **Incremental ACC sync** (`acc-sync`): `fetchAccAssets` now supports `filter[updatedAt]` parameter, only fetching assets modified since last sync — ~90% faster re-syncs
+5. **IFC derivative from ACC** (`acc-sync`): `translate-model` now requests IFC format alongside SVF. On completion, downloads the IFC derivative and feeds it into `ifc-to-xkt` for real per-storey tiling — unifying ACC and IFC geometry pipelines
+6. **Dual pipeline** (`check-translation`): Triggers both `ifc-to-xkt` (for tiled XKT) and `acc-geometry-extract` (for GLB fallback) in parallel when translation succeeds
+
+---
+
+## Plan: Mobile Viewer Startup Hardening (IMPLEMENTED ✅)
+
+### Changes Made
+1. **Mobile touch tuning** (`NativeXeokitViewer.tsx`): dragRotationRate 30→70, touchPanRate 0.06→0.14, touchDollyRate 0.04→0.09, rotationInertia 0.93→0.88, panInertia 0.88→0.82
+2. **FastNav delay** (`NativeXeokitViewer.tsx`): Added `delayBeforeRestore: true` (0.5s mobile, 0.3s desktop)
+3. **Suppress viewFit in split2d3d** (`NativeXeokitViewer.tsx`): Skips instant viewFit when `?mode=split2d3d` — floor isolation handles camera
+4. **Defer SplitPlanView mount** (`UnifiedViewer.tsx`): Mobile SplitPlanView only renders after `viewerReady=true`, shows spinner until then
+5. **Increased SplitPlanView retry** (`SplitPlanView.tsx`): 10×100ms → 30×200ms (6s total window), immediate retry on VIEWER_MODELS_LOADED
+6. **Debounced floor events** (`UnifiedViewer.tsx`): 500ms guard on FLOOR_SELECTION_CHANGED dispatches to prevent competing events
+
+### Architecture Principle
+Mobile and desktop share the same `UnifiedViewerContent` initialization logic. The ONLY difference is layout:
+- Mobile: vertical stack (2D top, 3D bottom) with touch-optimized divider (8px)
+- Desktop: horizontal ResizablePanelGroup with drag handle (4px)
+
+Future changes to viewer startup MUST apply to both paths. Do NOT create separate mobile/desktop init logic.
+
+---
+
+## Plan: SplitPlanView Navigation + Alignment UX (IMPLEMENTED ✅)
+
+### Changes Made
+1. **SplitPlanView click navigation** (`SplitPlanView.tsx`): Replaced first-person instant jump with MinimapPanel-style fly-to — keeps current eye height, looks down at clicked point, animates 0.5s.
+2. **AlignmentPointPicker precision** (`AlignmentPointPicker.tsx`): Now estimates surface point via ray-cast from tripod position + viewing direction × adjustable distance slider (0.5–10m). Shows captured coordinates and distance in both steps for verification.
+
+---
+
+## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
+
+### Changes Made
+1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
+2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
+3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
+4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
+5. **config.toml** updated with `acc-geometry-extract` function entry
+
+### Pending (Phase 2)
+- Actual GLB chunk creation from SVF geometry (requires conversion worker)
+- OBJ as optional secondary format for small models
+
+---
 
 
-# Geminus AI — Lärande minne (Adaptive Memory)
+### Ändringar
 
-## Idé
-Geminus AI kan inte "tränas" i klassisk ML-mening (fine-tuning kräver GPU-infrastruktur), men vi kan bygga ett **adaptivt minnessystem** som ger samma upplevda effekt: assistenten lär sig av instruktioner, preferenser och korrigeringar och blir bättre ju mer den används.
+#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
+**Fil:** `supabase/functions/conversion-worker-api/index.ts`
+- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
+- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
+- Upsert till `assets` med `created_in_model: true`
+- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
 
-## Arkitektur
+#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
+**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
+- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
+- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
+- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
+- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
+- Diff: soft-delete objekt som finns i DB men inte i ny IFC
+
+#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
+**Fil:** `docs/conversion-worker/worker.mjs`
+- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
+- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
+- Non-fatal: om hierarki-population misslyckas fortsätter workern
+
+#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
+**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
+- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
+- `created_in_model: true` istället för `false`
+- Diff-logik: markerar borttagna objekt efter import
+
+### Datamodell
 
 ```text
-┌─────────────────────────┐
-│  Användare ger feedback  │
-│  "Kom ihåg att...",      │
-│  "Nästa gång, gör X"    │
-└────────┬────────────────┘
-         ▼
-┌─────────────────────────┐
-│  gunnar-chat edge func  │
-│  Detekterar "minnes-     │
-│  instruktion" → sparar   │
-│  i ai_memory-tabell     │
-└────────┬────────────────┘
-         ▼
-┌─────────────────────────┐
-│  Vid varje ny fråga:     │
-│  Ladda relevanta minnen  │
-│  → injicera i system-    │
-│  prompt som kontext     │
-└─────────────────────────┘
+Building Storey:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
+  category:          "Building Storey"
+  created_in_model:  true
+
+Space:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
+  category:          "Space"
+  level_fm_guid:     parent storey fm_guid
+
+Instance:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
+  category:          "Instance"
+  asset_type:        ifcType (e.g. "IfcDoor")
+  level_fm_guid:     resolved storey
+  in_room_fm_guid:   resolved space
 ```
 
-## Tre typer av "lärande"
+### Diff-flöde
 
-1. **Användarinstruktioner** — "Kom ihåg att jag vill ha svar på engelska", "Visa alltid larmdata först"
-2. **Korrigeringar** — "Nej, det var fel. Småviken har 5 våningar, inte 13" → sparas så att AI:n inte upprepar misstaget
-3. **Frekvensbaserat** — systemet noterar vilka verktyg/byggnader som används mest och prioriterar dem
+Vid omimport jämförs importerade fm_guids mot befintliga i DB:
+- **Nytt** → INSERT
+- **Matchat** → UPDATE (namn, typ, rumsplacering)
+- **Borttaget** → `modification_status = 'removed'` (soft-delete)
 
-## Databasändringar
+---
 
-Ny tabell `ai_memory`:
+## Previous Plans
 
-| Kolumn | Typ | Beskrivning |
-|--------|-----|-------------|
-| id | uuid | PK |
-| user_id | uuid | FK auth.users |
-| building_fm_guid | text (nullable) | Byggnadsspecifikt minne |
-| memory_type | text | 'instruction', 'correction', 'preference' |
-| content | text | Minnesinnehållet |
-| source_message | text | Användarens ursprungliga meddelande |
-| created_at | timestamptz | |
-| expires_at | timestamptz (nullable) | Valfritt utgångsdatum |
+### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
+- Browser-primary for >20MB, edge function for ≤20MB
+- MetaModel JSON uploaded alongside XKT
+- Systems extracted and persisted
 
-RLS: Användare kan bara läsa/skriva sina egna minnen.
+### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+- Standalone Node.js worker polls conversion-worker-api
+- Per-storey .xkt tiles with dynamic floor loading
 
-## Edge function-ändringar (`gunnar-chat/index.ts`)
-
-### 1. Nytt verktyg: `save_memory`
-AI:n anropar detta när användaren ger en instruktion eller korrigering:
-```
-save_memory — "Save a user instruction or correction for future reference"
-  params: content (string), memory_type (instruction|correction|preference), building_fm_guid (optional)
-```
-
-### 2. Minnesinjicering vid varje begäran
-Före AI-anropet: ladda de senaste ~20 minnena för användaren (+ eventuellt byggnadsspecifika) och injicera dem som en `LEARNED CONTEXT`-sektion i systemprompt:
-```
-LEARNED CONTEXT (user preferences & corrections):
-- "Visa alltid svar på engelska"
-- "Småviken har korrekt 5 våningsplan"
-- "Föredrar att se larmdata först"
-```
-
-### 3. System prompt-tillägg
-Instruera AI:n att:
-- Upptäcka när användaren ger en instruktion ("kom ihåg", "nästa gång", "jag föredrar")
-- Anropa `save_memory` för att spara det
-- Bekräfta kort: "Noterat! Jag kommer ihåg det."
-- Använda `LEARNED CONTEXT` aktivt vid framtida svar
-
-## UI-ändring (valfritt, ej i första iteration)
-Inget nytt UI behövs — allt sker via chatten. Användaren säger "Kom ihåg att..." och Geminus AI sparar det.
-
-## Sammanfattning
-- **1 ny tabell** (`ai_memory`) med RLS
-- **1 nytt verktyg** (`save_memory`) i edge function
-- **Minnesladding** vid varje begäran (~5 rader kod)
-- **System prompt-tillägg** (~10 rader)
-- Ingen ML-infrastruktur krävs — allt körs inom befintlig arkitektur
-
+### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
+- 10 credential override columns on building_settings
+- Shared credential resolver in edge functions
+- Properties page as configuration hub
