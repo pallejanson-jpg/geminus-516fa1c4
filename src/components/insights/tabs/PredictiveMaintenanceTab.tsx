@@ -1,6 +1,7 @@
 import React, { useContext, useEffect } from 'react';
 import { AppContext } from '@/context/AppContext';
 import { usePredictiveMaintenance, type MaintenancePrediction } from '@/hooks/usePredictiveMaintenance';
+import type { Facility } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -70,17 +71,18 @@ function PredictionCard({ prediction }: { prediction: MaintenancePrediction }) {
   );
 }
 
-export default function PredictiveMaintenanceTab() {
+export default function PredictiveMaintenanceTab({ facility }: { facility?: Facility }) {
   const { selectedFacility } = useContext(AppContext);
-  const { data, isLoading, error, analyze } = usePredictiveMaintenance(selectedFacility?.fmGuid);
+  const effectiveFacility = facility || selectedFacility;
+  const { data, isLoading, error, analyze } = usePredictiveMaintenance(effectiveFacility?.fmGuid);
 
   useEffect(() => {
-    if (selectedFacility?.fmGuid && !data && !isLoading) {
+    if (effectiveFacility?.fmGuid && !data && !isLoading) {
       analyze();
     }
-  }, [selectedFacility?.fmGuid]);
+  }, [effectiveFacility?.fmGuid]);
 
-  if (!selectedFacility) {
+  if (!effectiveFacility) {
     return (
       <div className="text-center py-12 text-muted-foreground">
         <Activity className="h-12 w-12 mx-auto mb-3 opacity-40" />

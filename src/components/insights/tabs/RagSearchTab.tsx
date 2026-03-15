@@ -1,5 +1,6 @@
 import React, { useContext, useState } from 'react';
 import { AppContext } from '@/context/AppContext';
+import type { Facility } from '@/lib/types';
 import { useRagSearch } from '@/hooks/useRagSearch';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,14 +10,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Search, FileText, BookOpen, Sparkles, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export default function RagSearchTab() {
+export default function RagSearchTab({ facility }: { facility?: Facility }) {
   const { selectedFacility } = useContext(AppContext);
+  const effectiveFacility = facility || selectedFacility;
   const { data, isLoading, error, search } = useRagSearch();
   const [query, setQuery] = useState('');
 
   const handleSearch = () => {
     if (!query.trim()) return;
-    search(query, { buildingFmGuid: selectedFacility?.fmGuid });
+    search(query, { buildingFmGuid: effectiveFacility?.fmGuid });
   };
 
   return (
