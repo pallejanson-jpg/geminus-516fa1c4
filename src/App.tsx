@@ -16,7 +16,7 @@ const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
 const IvionInventory = lazy(() => import("@/pages/IvionInventory"));
 // AI Asset Scan page
 const AiAssetScan = lazy(() => import("@/pages/AiAssetScan"));
-// Unified Viewer page (fullscreen, all modes)
+// Unified Viewer page (legacy, kept as fallback)
 const UnifiedViewerPage = lazy(() => import("@/pages/UnifiedViewer"));
 // Onboarding wizard
 const Onboarding = lazy(() => import("@/pages/Onboarding"));
