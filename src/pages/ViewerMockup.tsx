@@ -1,27 +1,25 @@
 /**
- * ViewerMockup — ACC/Dalux-inspired mobile viewer layout.
- *
- * Purpose: Iterate on layout before changing the real viewer.
- * Focus: Maximize canvas area with minimal topbar + compact bottom toolbar + action sheet.
+ * ViewerMockup — ACC/Dalux-inspired mobile viewer layout with REAL 3D engine.
  *
  * Layout:
  *  ┌─────────────────────────────┐
  *  │ × [Building Name] 3D   [☰] │  ← Transparent topbar, ~32px
  *  │                             │
- *  │       3D CANVAS             │  ← Maximized area
+ *  │    NativeViewerShell        │  ← Real xeokit 3D canvas
  *  │                             │
  *  │ [🏠][✋][⬡][📐][✂️][⚡][⚙️]  │  ← Compact bottom toolbar, ~44px
  *  └─────────────────────────────┘
  */
 
-import React, { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useRef, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   X, Menu, Orbit, Hand, Maximize, MousePointer, Ruler,
   Scissors, Square, Box, LayoutPanelLeft, View,
   Layers, Filter, SlidersHorizontal, BarChart2,
   AlertTriangle, Settings, ChevronRight, Eye,
   Upload, Scan, Navigation, Compass, PenTool, User,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -29,6 +27,10 @@ import { toast } from 'sonner';
 import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle,
 } from '@/components/ui/drawer';
+import NativeViewerShell from '@/components/viewer/NativeViewerShell';
+import { useBuildingViewerData } from '@/hooks/useBuildingViewerData';
+import { useContext } from 'react';
+import { AppContext } from '@/context/AppContext';
 
 /* ── Types ── */
 type ViewMode = '2d' | '2d3d' | '3d' | '3d360' | '360';
@@ -40,8 +42,6 @@ const VIEW_MODES: { mode: ViewMode; label: string; Icon: React.FC<any>; requires
   { mode: '3d360', label: '3D + 360', Icon: View, requires360: true },
   { mode: '360', label: '360', Icon: View, requires360: true },
 ];
-
-const MOCK_FLOORS = ['Roof', 'Floor 3', 'Floor 2', 'Floor 1', 'Lobby', 'Basement'];
 
 /* ── All available tools (for toolbar config) ── */
 const ALL_TOOLS: { id: string; Icon: React.FC<any>; label: string }[] = [
@@ -72,16 +72,22 @@ const MENU_ITEMS = [
 
 const ViewerMockup: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const buildingFmGuid = searchParams.get('building');
+  const { allData } = useContext(AppContext);
+
   const [viewMode, setViewMode] = useState<ViewMode>('3d');
   const [activeTool, setActiveTool] = useState('orbit');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [subSheet, setSubSheet] = useState<'viewMode' | 'toolbarConfig' | null>(null);
-  const [selectedFloor, setSelectedFloor] = useState('Floor 1');
   const [enabledTools, setEnabledTools] = useState<string[]>(DEFAULT_ENABLED);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const buildingName = 'Office Building A';
-  const hasIvionSiteId = false; // TODO: wire to real building settings
+  // Get building data
+  const { buildingData, isLoading, error } = useBuildingViewerData(buildingFmGuid);
+
+  const buildingName = buildingData?.name || 'Building';
+  const hasIvionSiteId = !!buildingData?.ivionSiteId;
   const modeLabel = VIEW_MODES.find((m) => m.mode === viewMode)?.label ?? '3D';
 
   const handleMenuItem = (id: string) => {
@@ -111,6 +117,31 @@ const ViewerMockup: React.FC = () => {
 
   const visibleTools = ALL_TOOLS.filter((t) => enabledTools.includes(t.id));
 
+  // Loading / error states
+  if (!buildingFmGuid) {
+    return (
+      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black text-white">
+        <p>No building selected</p>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black">
+        <Loader2 className="h-8 w-8 animate-spin text-white/50" />
+      </div>
+    );
+  }
+
+  if (error || !buildingData) {
+    return (
+      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black text-white">
+        <p>Building not found</p>
+      </div>
+    );
+  }
+
   return (
     <div
       className="fixed inset-0 z-40 flex flex-col bg-black"
@@ -130,12 +161,17 @@ const ViewerMockup: React.FC = () => {
         onChange={handleFileSelected}
       />
 
-      {/* ── Fake canvas background ── */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 flex items-center justify-center">
-        <div className="text-center space-y-2 opacity-30">
-          <Box className="h-16 w-16 mx-auto text-muted-foreground" />
-          <p className="text-muted-foreground text-sm">3D Canvas</p>
-        </div>
+      {/* ── Real 3D canvas (NativeViewerShell) ── */}
+      <div className="absolute inset-0">
+        <NativeViewerShell
+          buildingFmGuid={buildingData.fmGuid}
+          onClose={() => navigate(-1)}
+          hideBackButton
+          hideMobileOverlay
+          hideToolbar
+          hideFloorSwitcher
+          showGeminusMenu={false}
+        />
       </div>
 
       {/* ── Transparent top bar ── */}
@@ -175,14 +211,6 @@ const ViewerMockup: React.FC = () => {
 
       {/* ── Spacer ── */}
       <div className="flex-1" />
-
-      {/* ── Selected floor pill (floating) ── */}
-      <div className="relative z-50 flex justify-center pb-2 pointer-events-none">
-        <div className="pointer-events-auto bg-black/50 backdrop-blur-sm rounded-full px-3 py-1 flex items-center gap-1.5 border border-white/10">
-          <Layers className="h-3 w-3 text-white/70" />
-          <span className="text-xs font-medium text-white/90">{selectedFloor}</span>
-        </div>
-      </div>
 
       {/* ── Compact bottom toolbar (edge-to-edge / transparent) ── */}
       <div
