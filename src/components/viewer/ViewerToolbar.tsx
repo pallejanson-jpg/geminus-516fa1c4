@@ -750,12 +750,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         const metaObjects = viewer?.metaScene?.metaObjects || scene?.metaScene?.metaObjects || {};
         const metaCount = Object.keys(metaObjects).length;
         console.log(`[ViewerToolbar] 2D styling: found ${metaCount} metaObjects`);
-        const colorized = new Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean }>();
+        const colorized = new Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean; offset: number[] | null }>();
 
         let visibleCount = 0;
 
         const saveOrig = (entity: any, id: string) => {
-          colorized.set(id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
+          colorized.set(id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible, offset: entity.offset ? [...entity.offset] : null });
         };
 
         Object.values(metaObjects).forEach((mo: any) => {
