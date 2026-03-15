@@ -150,7 +150,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
   const initialCameraRef = useRef<{ eye: number[]; look: number[]; up: number[] } | null>(null);
 
   const viewModeRef = useRef<ViewMode>(viewMode);
-  const colorizedFor2dRef = useRef<Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean }>>(new Map());
+  const colorizedFor2dRef = useRef<Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean; offset: number[] | null }>>(new Map());
   const [currentFloorId, setCurrentFloorId] = useState<string | null>(null);
   const [currentFloorBounds, setCurrentFloorBounds] = useState<{ minY: number; maxY: number } | null>(null);
 
@@ -750,12 +750,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         const metaObjects = viewer?.metaScene?.metaObjects || scene?.metaScene?.metaObjects || {};
         const metaCount = Object.keys(metaObjects).length;
         console.log(`[ViewerToolbar] 2D styling: found ${metaCount} metaObjects`);
-        const colorized = new Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean }>();
+        const colorized = new Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean; offset: number[] | null }>();
 
         let visibleCount = 0;
 
         const saveOrig = (entity: any, id: string) => {
-          colorized.set(id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
+          colorized.set(id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible, offset: entity.offset ? [...entity.offset] : null });
         };
 
         Object.values(metaObjects).forEach((mo: any) => {
@@ -767,9 +767,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
             saveOrig(entity, mo.id);
             entity.visible = true; entity.pickable = true; entity.opacity = 1; entity.colorize = [0.94, 0.94, 0.94]; entity.edges = true;
             visibleCount++;
-          } else if (SPACE_TYPES.has(typeLower)) {
+         } else if (SPACE_TYPES.has(typeLower)) {
             saveOrig(entity, mo.id);
-            entity.visible = false; entity.pickable = false; entity.opacity = 0; entity.colorize = null;
+            entity.visible = true; entity.pickable = true; entity.opacity = 0.15; entity.colorize = [0.7, 0.85, 0.95]; entity.edges = true;
+            // Lower spaces so furniture/equipment wins pick priority in top-down 2D
+            const origOffset = entity.offset ? [...entity.offset] : [0, 0, 0];
+            entity.offset = [origOffset[0], origOffset[1] - 0.3, origOffset[2]];
+            visibleCount++;
           } else if (WALL_TYPES.has(typeLower)) {
             saveOrig(entity, mo.id);
             entity.colorize = [0, 0, 0]; entity.opacity = 1; entity.edges = true; entity.pickable = true;
@@ -797,6 +801,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
             if (entity) {
               if (orig.colorize) entity.colorize = orig.colorize; else entity.colorize = null;
               entity.opacity = orig.opacity; entity.edges = orig.edges; entity.pickable = orig.pickable; entity.visible = orig.visible;
+              if (orig.offset) entity.offset = orig.offset; else entity.offset = [0, 0, 0];
             }
           });
           colorized.clear();
@@ -872,6 +877,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
           if (entity) {
             if (orig.colorize) entity.colorize = orig.colorize; else entity.colorize = null;
             entity.opacity = orig.opacity; entity.edges = orig.edges; entity.pickable = orig.pickable; entity.visible = orig.visible;
+            if (orig.offset) entity.offset = orig.offset; else entity.offset = [0, 0, 0];
           }
         });
         colorizedFor2dRef.current.clear();
