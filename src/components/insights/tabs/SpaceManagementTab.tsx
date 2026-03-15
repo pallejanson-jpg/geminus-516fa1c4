@@ -45,6 +45,7 @@ export default function SpaceManagementTab({ onNavigateToRooms }: SpaceManagemen
                     const area = extractSpaceArea(space);
                     totalArea += area;
 
+                    const attrs = space.attributes || {};
                     const spaceType = attrs.spaceType || attrs.roomType || 'Unknown';
                     if (!spaceTypes[spaceType]) {
                         spaceTypes[spaceType] = { count: 0, area: 0 };
