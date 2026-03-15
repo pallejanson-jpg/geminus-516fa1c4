@@ -1,5 +1,5 @@
 import React, { useState, useContext, useMemo } from 'react';
-import { extractNtaFromAttributes } from '@/lib/building-utils';
+import { extractSpaceArea } from '@/lib/building-utils';
 import { Search, LayoutGrid, List, Filter, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
