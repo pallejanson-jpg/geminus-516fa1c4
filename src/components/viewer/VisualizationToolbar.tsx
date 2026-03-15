@@ -716,6 +716,352 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     className
   );
 
+  // Shared content JSX used by both mobile Drawer and desktop sidebar
+  const toolbarContent = (
+    <div className="space-y-2 sm:space-y-3">
+      {/* BIM Models - click to open side panel */}
+      <div className="flex items-center justify-between py-1.5">
+        <div className="flex items-center gap-2">
+          <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
+            <Box className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          </div>
+          <span className="text-xs sm:text-sm">BIM models</span>
+        </div>
+        <Button
+          variant={activeSubMenu === 'models' ? "secondary" : "ghost"}
+          size="sm"
+          className="h-6 px-2"
+          onClick={() => setActiveSubMenu(activeSubMenu === 'models' ? null : 'models')}
+        >
+          <ChevronRight className={cn(
+            "h-3 w-3 transition-transform",
+            activeSubMenu === 'models' && "rotate-180"
+          )} />
+        </Button>
+      </div>
+
+      {/* Floors - click to open side panel */}
+      <div className="flex items-center justify-between py-1.5">
+        <div className="flex items-center gap-2">
+          <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
+            <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          </div>
+          <span className="text-xs sm:text-sm">Floors</span>
+        </div>
+        <Button
+          variant={activeSubMenu === 'floors' ? "secondary" : "ghost"}
+          size="sm"
+          className="h-6 px-2"
+          onClick={() => setActiveSubMenu(activeSubMenu === 'floors' ? null : 'floors')}
+          disabled={!isViewerReady}
+        >
+          <ChevronRight className={cn(
+            "h-3 w-3 transition-transform",
+            activeSubMenu === 'floors' && "rotate-180"
+          )} />
+        </Button>
+      </div>
+
+      <Separator />
+
+      {/* Visibility section */}
+      <div>
+        <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1.5 sm:mb-2 block">
+          Visibility
+        </Label>
+
+        <div className="space-y-2 sm:space-y-3">
+          {/* 2D Plan View Toggle */}
+          <div className="flex items-center justify-between py-1.5 sm:py-2">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className={cn("p-1 sm:p-1.5 rounded-md", is2DMode ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                <SquareDashed className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </div>
+              <span className="text-xs sm:text-sm">2D/3D</span>
+            </div>
+            <Switch checked={is2DMode} onCheckedChange={handle2DModeToggle} />
+          </div>
+
+          {/* Model Tree Toggle */}
+          {onToggleTreeView && (
+            <div className="flex items-center justify-between py-1.5 sm:py-2">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className={cn("p-1 sm:p-1.5 rounded-md", showTreeView ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                  <TreeDeciduous className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                </div>
+                <span className="text-xs sm:text-sm">Model tree</span>
+              </div>
+              <Switch checked={showTreeView} onCheckedChange={(checked) => onToggleTreeView(checked)} />
+            </div>
+          )}
+
+          {isToolVisible('spaces') && (
+            <div className="flex items-center justify-between py-1.5 sm:py-2">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className={cn("p-1 sm:p-1.5 rounded-md", showSpaces ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                  <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                </div>
+                <span className="text-xs sm:text-sm">Show spaces</span>
+              </div>
+              <Switch checked={showSpaces} onCheckedChange={handleToggleSpaces} />
+            </div>
+          )}
+
+          {/* X-ray Toggle */}
+          {isToolVisible('xray') && (
+            <XrayToggle viewerRef={viewerRef} />
+          )}
+
+          {isToolVisible('annotations') && (
+            <div className="flex items-center justify-between py-1.5 sm:py-2">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className={cn("p-1 sm:p-1.5 rounded-md", showAnnotations ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                  <MessageSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                </div>
+                <span className="text-xs sm:text-sm">Show annotations</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Switch checked={showAnnotations} onCheckedChange={handleToggleAnnotations} />
+                <Button
+                  variant={activeSubMenu === 'annotations' ? "secondary" : "ghost"}
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={() => setActiveSubMenu(activeSubMenu === 'annotations' ? null : 'annotations')}
+                >
+                  <ChevronRight className={cn(
+                    "h-3 w-3 transition-transform",
+                    activeSubMenu === 'annotations' && "rotate-180"
+                  )} />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {isToolVisible('visualization') && onToggleVisualization && (
+            <div className="flex items-center justify-between py-1.5 sm:py-2">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className={cn("p-1 sm:p-1.5 rounded-md", showVisualization ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                  <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                </div>
+                <span className="text-xs sm:text-sm">Room visualization</span>
+              </div>
+              <Switch checked={showVisualization} onCheckedChange={handleToggleVisualization} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Viewer Settings - Collapsible Section */}
+      <Collapsible open={viewerSettingsOpen} onOpenChange={setViewerSettingsOpen}>
+        <CollapsibleTrigger asChild>
+          <button className="flex items-center justify-between w-full py-2 hover:bg-muted/50 rounded-md transition-colors px-1">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
+                <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </div>
+              <span className="text-xs sm:text-sm font-medium">Viewer settings</span>
+            </div>
+            <ChevronDown className={cn(
+              "h-4 w-4 text-muted-foreground transition-transform",
+              viewerSettingsOpen && "rotate-180"
+            )} />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-3 pt-2">
+          {/* Clip height slider */}
+          <div className="space-y-1.5 sm:space-y-2">
+            <div className="flex items-center gap-2 sm:gap-3 mb-1">
+              <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
+                <Scissors className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </div>
+              <span className="text-xs sm:text-sm">Clip height (2D view)</span>
+              <span className="text-xs font-medium ml-auto">{clipHeight.toFixed(1)}m</span>
+            </div>
+            <div className="pl-8 sm:pl-10">
+              <Slider value={[clipHeight]} onValueChange={handleClipHeightChange} min={0.5} max={2.5} step={0.1} className="w-full" />
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Height above floor</p>
+            </div>
+          </div>
+
+          {/* 3D Ceiling clip height slider */}
+          <div className="space-y-1.5 sm:space-y-2">
+            <div className="flex items-center gap-2 sm:gap-3 mb-1">
+              <div className={cn("p-1 sm:p-1.5 rounded-md", isSoloFloor && !is2DMode ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                <Box className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </div>
+              <span className="text-xs sm:text-sm">Ceiling clip (3D solo)</span>
+              <span className="text-xs font-medium ml-auto">{clipHeight3D >= 0 ? '+' : ''}{clipHeight3D.toFixed(1)}m</span>
+            </div>
+            <div className="pl-8 sm:pl-10">
+              <Slider value={[clipHeight3D]} onValueChange={handleClipHeight3DChange} min={-1.5} max={1.5} step={0.1} className="w-full" disabled={is2DMode || !isSoloFloor} />
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+                {isSoloFloor && !is2DMode ? "Offset from next floor level" : "Enabled when a single floor is isolated in 3D"}
+              </p>
+            </div>
+          </div>
+
+          {/* Room Labels Selector */}
+          <div className="space-y-1.5 sm:space-y-2">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className={cn("p-1 sm:p-1.5 rounded-md", showRoomLabels ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                <Type className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </div>
+              <span className="text-xs sm:text-sm">Room labels</span>
+            </div>
+            <div className="pl-8 sm:pl-10">
+              {loadingRoomLabelConfigs ? (
+                <div className="text-xs text-muted-foreground">Loading...</div>
+              ) : (
+                <Select
+                  value={showRoomLabels && activeRoomLabelConfigId ? activeRoomLabelConfigId : 'off'}
+                  onValueChange={handleRoomLabelConfigSelect}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Off" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="off">Off</SelectItem>
+                    {roomLabelConfigs.map((config) => (
+                      <SelectItem key={config.id} value={config.id}>
+                        {config.name}{config.is_default ? ' (default)' : ''}
+                      </SelectItem>
+                    ))}
+                    {roomLabelConfigs.length === 0 && (
+                      <SelectItem value="__none" disabled>No configurations</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          </div>
+
+          {/* Viewer Theme Selector */}
+          <ViewerThemeSelector viewerRef={viewerRef} disabled={!isViewerReady} />
+
+          {/* Background color palette */}
+          <div className="py-1.5 sm:py-2">
+            <div className="flex items-center gap-2 sm:gap-3 mb-2">
+              <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
+                <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </div>
+              <span className="text-xs sm:text-sm">Background color</span>
+            </div>
+            <div className="pl-8 sm:pl-10">
+              <div className="grid grid-cols-5 gap-1.5">
+                {ARCHITECT_BACKGROUND_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    title={preset.name}
+                    onClick={() => handleBackgroundChange(preset.id as BackgroundPresetId)}
+                    className={cn(
+                      "w-5 h-5 sm:w-6 sm:h-6 rounded-md border-2 transition-all",
+                      "hover:scale-110 focus:outline-none focus:ring-2 focus:ring-primary/50",
+                      architectBackground === preset.id ? "border-primary ring-2 ring-primary/30" : "border-border/40"
+                    )}
+                    style={{ background: `linear-gradient(180deg, rgb(255, 255, 255) 0%, ${preset.bottom} 100%)` }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Floor Pills Toggle */}
+          <div className="flex items-center justify-between py-1.5 sm:py-2">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className={cn("p-1 sm:p-1.5 rounded-md", showFloorPills ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </div>
+              <span className="text-xs sm:text-sm">Floor switcher (pills)</span>
+            </div>
+            <Switch
+              checked={showFloorPills}
+              onCheckedChange={(checked) => {
+                setShowFloorPills(checked);
+                localStorage.setItem('viewer-show-floor-pills', String(checked));
+                window.dispatchEvent(new CustomEvent(FLOOR_PILLS_TOGGLE_EVENT, { detail: { visible: checked } }));
+              }}
+            />
+          </div>
+
+          {/* Lighting Controls */}
+          <LightingControlsPanel viewerRef={viewerRef} isViewerReady={isViewerReady} />
+        </CollapsibleContent>
+      </Collapsible>
+
+      <Separator />
+
+      {/* Actions section */}
+      <div>
+        <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1.5 sm:mb-2 block">
+          Actions
+        </Label>
+
+        <div className="space-y-1">
+          {/* Create View button */}
+          <Button variant="outline" className="w-full justify-start gap-2 sm:gap-3 h-9 sm:h-10" onClick={captureViewState} disabled={!isViewerReady}>
+            <div className="p-1 sm:p-1.5 rounded-md bg-primary/10 text-primary">
+              <Camera className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </div>
+            <span className="text-xs sm:text-sm">Create view</span>
+          </Button>
+
+          {/* Create Issue button */}
+          {isToolVisible('issues') && (
+            <Button variant="outline" className="w-full justify-start gap-2 sm:gap-3 h-9 sm:h-10" onClick={captureIssueState} disabled={!isViewerReady}>
+              <div className="p-1 sm:p-1.5 rounded-md bg-primary/10 text-primary">
+                <MessageSquarePlus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </div>
+              <span className="text-xs sm:text-sm">Create issue</span>
+            </Button>
+          )}
+
+          {/* Issue List button */}
+          {isToolVisible('issues') && (
+            <Button
+              variant="outline"
+              className={cn("w-full justify-between gap-2 sm:gap-3 h-9 sm:h-10", showIssueList && "bg-primary/10 border-primary/30")}
+              onClick={() => setShowIssueList(!showIssueList)}
+            >
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className={cn("p-1 sm:p-1.5 rounded-md", showIssueList ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                  <MessageSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                </div>
+                <span className="text-xs sm:text-sm">Issues</span>
+              </div>
+              <ChevronRight className={cn("h-3 w-3 transition-transform", showIssueList && "rotate-180")} />
+            </Button>
+          )}
+
+          {/* Asset Panel button */}
+          <Button
+            variant="outline"
+            className={cn("w-full justify-between gap-2 sm:gap-3 h-9 sm:h-10", showAssetPanel && "bg-primary/10 border-primary/30")}
+            onClick={() => setShowAssetPanel(!showAssetPanel)}
+          >
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className={cn("p-1 sm:p-1.5 rounded-md", showAssetPanel ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </div>
+              <span className="text-xs sm:text-sm">Asset panel</span>
+            </div>
+            <ChevronRight className={cn("h-3 w-3 transition-transform", showAssetPanel && "rotate-180")} />
+          </Button>
+
+          {isToolVisible('addAsset') && onAddAsset && (
+            <Button variant="outline" className="w-full justify-start gap-2 sm:gap-3 h-9 sm:h-10" onClick={handleAddAsset}>
+              <div className="p-1 sm:p-1.5 rounded-md bg-primary/10 text-primary">
+                <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </div>
+              <span className="text-xs sm:text-sm">Register asset</span>
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
     return (
       <div className={containerClassName}>
         {/* Trigger button - positioned at top right */}
@@ -741,11 +1087,15 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               <DrawerHeader className="py-2 px-3">
                 <DrawerTitle className="text-sm">Display</DrawerTitle>
               </DrawerHeader>
-              <TooltipProvider delayDuration={300}>
-              <div ref={scrollWrapRef} className="relative flex-1 min-h-0 overflow-hidden">
-                <ScrollArea className="h-full p-3 max-h-[60dvh]">
-               {/* --- Shared toolbar content START (same for mobile drawer and desktop sidebar) --- */}
+              <div className="px-3 pb-3 overflow-y-auto max-h-[60dvh]">
+                {toolbarContent}
+              </div>
+            </DrawerContent>
+          </Drawer>
+        )}
 
+        {/* Desktop: Fixed right sidebar panel */}
+        {isOpen && !isMobile && (
           <>
             {/* Backdrop — click outside to close */}
             <div className="fixed inset-0 z-[59]" onClick={() => handleSetIsOpen(false)} />
@@ -767,463 +1117,12 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               {/* Content - scrollable */}
               <div ref={scrollWrapRef} className="relative flex-1 min-h-0 overflow-hidden">
                 <ScrollArea className="h-full p-3">
-               <div className="space-y-2 sm:space-y-3">
-              {/* BIM Models - click to open side panel */}
-              <div className="flex items-center justify-between py-1.5">
-                <div className="flex items-center gap-2">
-                  <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
-                    <Box className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                  </div>
-                  <span className="text-xs sm:text-sm">BIM models</span>
-                </div>
-                <Button
-                  variant={activeSubMenu === 'models' ? "secondary" : "ghost"}
-                  size="sm"
-                  className="h-6 px-2"
-                  onClick={() => setActiveSubMenu(activeSubMenu === 'models' ? null : 'models')}
-                >
-                  <ChevronRight className={cn(
-                    "h-3 w-3 transition-transform",
-                    activeSubMenu === 'models' && "rotate-180"
-                  )} />
-                </Button>
+                  {toolbarContent}
+                </ScrollArea>
+
+                {/* Always-visible edge indicator on the panel's right edge */}
+                <EdgeScrollIndicator viewport={scrollViewportEl} />
               </div>
-
-              {/* Floors - click to open side panel */}
-              <div className="flex items-center justify-between py-1.5">
-                <div className="flex items-center gap-2">
-                  <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
-                    <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                  </div>
-                  <span className="text-xs sm:text-sm">Floors</span>
-                </div>
-                <Button
-                  variant={activeSubMenu === 'floors' ? "secondary" : "ghost"}
-                  size="sm"
-                  className="h-6 px-2"
-                  onClick={() => setActiveSubMenu(activeSubMenu === 'floors' ? null : 'floors')}
-                  disabled={!isViewerReady}
-                >
-                  <ChevronRight className={cn(
-                    "h-3 w-3 transition-transform",
-                    activeSubMenu === 'floors' && "rotate-180"
-                  )} />
-                </Button>
-              </div>
-
-              <Separator />
-
-              {/* Visibility section - "Visa" */}
-              <div>
-                 <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1.5 sm:mb-2 block">
-                   Visibility
-                </Label>
-
-                <div className="space-y-2 sm:space-y-3">
-                  {/* 2D Plan View Toggle */}
-                  <div className="flex items-center justify-between py-1.5 sm:py-2">
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      <div
-                        className={cn(
-                          "p-1 sm:p-1.5 rounded-md",
-                          is2DMode
-                            ? "bg-primary/10 text-primary"
-                            : "bg-muted text-muted-foreground"
-                        )}
-                      >
-                        <SquareDashed className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm">2D/3D</span>
-                    </div>
-                    <Switch checked={is2DMode} onCheckedChange={handle2DModeToggle} />
-                  </div>
-
-                  {/* Model Tree Toggle */}
-                  {onToggleTreeView && (
-                    <div className="flex items-center justify-between py-1.5 sm:py-2">
-                      <div className="flex items-center gap-2 sm:gap-3">
-                        <div
-                          className={cn(
-                            "p-1 sm:p-1.5 rounded-md",
-                            showTreeView
-                              ? "bg-primary/10 text-primary"
-                              : "bg-muted text-muted-foreground"
-                          )}
-                        >
-                          <TreeDeciduous className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                        </div>
-                        <span className="text-xs sm:text-sm">Model tree</span>
-                      </div>
-                      <Switch 
-                        checked={showTreeView} 
-                        onCheckedChange={(checked) => onToggleTreeView(checked)} 
-                      />
-                    </div>
-                  )}
-
-                  {isToolVisible('spaces') && (
-                    <div className="flex items-center justify-between py-1.5 sm:py-2">
-                      <div className="flex items-center gap-2 sm:gap-3">
-                        <div
-                          className={cn(
-                            "p-1 sm:p-1.5 rounded-md",
-                            showSpaces
-                              ? "bg-primary/10 text-primary"
-                              : "bg-muted text-muted-foreground"
-                          )}
-                        >
-                          <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                        </div>
-                        <span className="text-xs sm:text-sm">Show spaces</span>
-                      </div>
-                      <Switch checked={showSpaces} onCheckedChange={handleToggleSpaces} />
-                    </div>
-                  )}
-
-                  {/* X-ray Toggle */}
-                  {isToolVisible('xray') && (
-                    <XrayToggle viewerRef={viewerRef} />
-                  )}
-
-                  {isToolVisible('annotations') && (
-                    <div className="flex items-center justify-between py-1.5 sm:py-2">
-                      <div className="flex items-center gap-2 sm:gap-3">
-                        <div
-                          className={cn(
-                            "p-1 sm:p-1.5 rounded-md",
-                            showAnnotations
-                              ? "bg-primary/10 text-primary"
-                              : "bg-muted text-muted-foreground"
-                          )}
-                        >
-                          <MessageSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                        </div>
-                        <span className="text-xs sm:text-sm">Show annotations</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Switch checked={showAnnotations} onCheckedChange={handleToggleAnnotations} />
-                        <Button
-                          variant={activeSubMenu === 'annotations' ? "secondary" : "ghost"}
-                          size="sm"
-                          className="h-6 w-6 p-0"
-                          onClick={() => setActiveSubMenu(activeSubMenu === 'annotations' ? null : 'annotations')}
-                        >
-                          <ChevronRight className={cn(
-                            "h-3 w-3 transition-transform",
-                            activeSubMenu === 'annotations' && "rotate-180"
-                          )} />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {isToolVisible('visualization') && onToggleVisualization && (
-                    <div className="flex items-center justify-between py-1.5 sm:py-2">
-                      <div className="flex items-center gap-2 sm:gap-3">
-                        <div
-                          className={cn(
-                            "p-1 sm:p-1.5 rounded-md",
-                            showVisualization
-                              ? "bg-primary/10 text-primary"
-                              : "bg-muted text-muted-foreground"
-                          )}
-                        >
-                          <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                        </div>
-                        <span className="text-xs sm:text-sm">Room visualization</span>
-                      </div>
-                      <Switch checked={showVisualization} onCheckedChange={handleToggleVisualization} />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Viewer Settings - Collapsible Section */}
-              <Collapsible open={viewerSettingsOpen} onOpenChange={setViewerSettingsOpen}>
-                <CollapsibleTrigger asChild>
-                  <button className="flex items-center justify-between w-full py-2 hover:bg-muted/50 rounded-md transition-colors px-1">
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
-                        <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm font-medium">Viewer settings</span>
-                    </div>
-                    <ChevronDown className={cn(
-                      "h-4 w-4 text-muted-foreground transition-transform",
-                      viewerSettingsOpen && "rotate-180"
-                    )} />
-                  </button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="space-y-3 pt-2">
-                  {/* Clip height slider - moved from main menu to Viewer Settings */}
-                  <div className="space-y-1.5 sm:space-y-2">
-                    <div className="flex items-center gap-2 sm:gap-3 mb-1">
-                      <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
-                        <Scissors className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm">Clip height (2D view)</span>
-                      <span className="text-xs font-medium ml-auto">
-                        {clipHeight.toFixed(1)}m
-                      </span>
-                    </div>
-                    <div className="pl-8 sm:pl-10">
-                      <Slider
-                        value={[clipHeight]}
-                        onValueChange={handleClipHeightChange}
-                        min={0.5}
-                        max={2.5}
-                        step={0.1}
-                        className="w-full"
-                      />
-                      <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
-                        Height above floor
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* 3D Ceiling clip height slider - for solo floor mode */}
-                  <div className="space-y-1.5 sm:space-y-2">
-                    <div className="flex items-center gap-2 sm:gap-3 mb-1">
-                      <div className={cn(
-                        "p-1 sm:p-1.5 rounded-md",
-                        isSoloFloor && !is2DMode 
-                          ? "bg-primary/10 text-primary" 
-                          : "bg-muted text-muted-foreground"
-                      )}>
-                        <Box className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm">Ceiling clip (3D solo)</span>
-                      <span className="text-xs font-medium ml-auto">
-                        {clipHeight3D >= 0 ? '+' : ''}{clipHeight3D.toFixed(1)}m
-                      </span>
-                    </div>
-                    <div className="pl-8 sm:pl-10">
-                      <Slider
-                        value={[clipHeight3D]}
-                        onValueChange={handleClipHeight3DChange}
-                        min={-1.5}
-                        max={1.5}
-                        step={0.1}
-                        className="w-full"
-                        disabled={is2DMode || !isSoloFloor}
-                      />
-                       <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
-                         {isSoloFloor && !is2DMode 
-                           ? "Offset from next floor level" 
-                           : "Enabled when a single floor is isolated in 3D"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Level Labels Toggle — disabled */}
-
-                  {/* Room Labels Selector - Dropdown matching other selectors */}
-                  <div className="space-y-1.5 sm:space-y-2">
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      <div className={cn(
-                        "p-1 sm:p-1.5 rounded-md",
-                        showRoomLabels ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                      )}>
-                        <Type className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm">Room labels</span>
-                    </div>
-                    <div className="pl-8 sm:pl-10">
-                      {loadingRoomLabelConfigs ? (
-                        <div className="text-xs text-muted-foreground">Loading...</div>
-                      ) : (
-                        <Select
-                          value={showRoomLabels && activeRoomLabelConfigId ? activeRoomLabelConfigId : 'off'}
-                          onValueChange={handleRoomLabelConfigSelect}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Off" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="off">Off</SelectItem>
-                            {roomLabelConfigs.map((config) => (
-                              <SelectItem key={config.id} value={config.id}>
-                                {config.name}{config.is_default ? ' (default)' : ''}
-                              </SelectItem>
-                            ))}
-                            {roomLabelConfigs.length === 0 && (
-                              <SelectItem value="__none" disabled>
-                                No configurations
-                              </SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Viewer Theme Selector */}
-                  <ViewerThemeSelector 
-                    viewerRef={viewerRef}
-                    disabled={!isViewerReady}
-                  />
-
-                  {/* Background color palette */}
-                  <div className="py-1.5 sm:py-2">
-                    <div className="flex items-center gap-2 sm:gap-3 mb-2">
-                      <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
-                        <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm">Background color</span>
-                    </div>
-                    <div className="pl-8 sm:pl-10">
-                      <div className="grid grid-cols-5 gap-1.5">
-                        {ARCHITECT_BACKGROUND_PRESETS.map((preset) => (
-                          <button
-                            key={preset.id}
-                            title={preset.name}
-                            onClick={() => handleBackgroundChange(preset.id as BackgroundPresetId)}
-                            className={cn(
-                              "w-5 h-5 sm:w-6 sm:h-6 rounded-md border-2 transition-all",
-                              "hover:scale-110 focus:outline-none focus:ring-2 focus:ring-primary/50",
-                              architectBackground === preset.id
-                                ? "border-primary ring-2 ring-primary/30"
-                                : "border-border/40"
-                            )}
-                            style={{
-                              background: `linear-gradient(180deg, rgb(255, 255, 255) 0%, ${preset.bottom} 100%)`
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Floor Pills Toggle */}
-                  <div className="flex items-center justify-between py-1.5 sm:py-2">
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      <div className={cn(
-                        "p-1 sm:p-1.5 rounded-md",
-                        showFloorPills ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                      )}>
-                        <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm">Floor switcher (pills)</span>
-                    </div>
-                    <Switch 
-                      checked={showFloorPills} 
-                      onCheckedChange={(checked) => {
-                        setShowFloorPills(checked);
-                        localStorage.setItem('viewer-show-floor-pills', String(checked));
-                        window.dispatchEvent(new CustomEvent(FLOOR_PILLS_TOGGLE_EVENT, {
-                          detail: { visible: checked }
-                        }));
-                      }} 
-                    />
-                  </div>
-
-                  {/* Lighting Controls */}
-                  <LightingControlsPanel
-                    viewerRef={viewerRef}
-                    isViewerReady={isViewerReady}
-                  />
-                </CollapsibleContent>
-              </Collapsible>
-
-              <Separator />
-
-              {/* Actions section */}
-              <div>
-                <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1.5 sm:mb-2 block">
-                   Actions
-                </Label>
-
-                <div className="space-y-1">
-                  {/* Create View button */}
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start gap-2 sm:gap-3 h-9 sm:h-10"
-                    onClick={captureViewState}
-                    disabled={!isViewerReady}
-                  >
-                    <div className="p-1 sm:p-1.5 rounded-md bg-primary/10 text-primary">
-                      <Camera className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                    </div>
-                    <span className="text-xs sm:text-sm">Create view</span>
-                  </Button>
-
-                  {/* Create Issue button - NEW */}
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start gap-2 sm:gap-3 h-9 sm:h-10"
-                    onClick={captureIssueState}
-                    disabled={!isViewerReady}
-                  >
-                    <div className="p-1 sm:p-1.5 rounded-md bg-amber-500/10 text-amber-600">
-                      <MessageSquarePlus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                    </div>
-                    <span className="text-xs sm:text-sm">Create issue</span>
-                  </Button>
-
-                  {/* Issues list button - independent toggle */}
-                  <Button
-                    variant={showIssueList ? "secondary" : "outline"}
-                    className="w-full justify-between h-9 sm:h-10"
-                    onClick={() => setShowIssueList(!showIssueList)}
-                  >
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      <div className={cn(
-                        "p-1 sm:p-1.5 rounded-md",
-                        showIssueList ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                      )}>
-                        <MessageSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm">Show issues</span>
-                    </div>
-                    <ChevronRight className={cn(
-                      "h-3 w-3 transition-transform",
-                      showIssueList && "rotate-180"
-                    )} />
-                  </Button>
-
-                  {/* Asset panel button */}
-                  <Button
-                    variant={showAssetPanel ? "secondary" : "outline"}
-                    className="w-full justify-between h-9 sm:h-10"
-                    onClick={() => setShowAssetPanel(!showAssetPanel)}
-                  >
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      <div className={cn(
-                        "p-1 sm:p-1.5 rounded-md",
-                        showAssetPanel ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                      )}>
-                        <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm">Asset panel</span>
-                    </div>
-                    <ChevronRight className={cn(
-                      "h-3 w-3 transition-transform",
-                      showAssetPanel && "rotate-180"
-                    )} />
-                  </Button>
-
-                  {isToolVisible('addAsset') && onAddAsset && (
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start gap-2 sm:gap-3 h-9 sm:h-10"
-                      onClick={handleAddAsset}
-                    >
-                      <div className="p-1 sm:p-1.5 rounded-md bg-primary/10 text-primary">
-                        <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm">Register asset</span>
-                    </Button>
-                  )}
-                </div>
-              </div>
-               </div>
-             </ScrollArea>
-
-             {/* Always-visible edge indicator on the panel's right edge */}
-             <EdgeScrollIndicator viewport={scrollViewportEl} />
-           </div>
             </TooltipProvider>
             </div>
           
@@ -1333,9 +1232,56 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             isAdmin={isAdmin}
           />
         </>
-      )}
-    </div>
-  );
+        )}
+
+        {/* Mobile: Side-pop panels rendered as Drawers (handled inside SidePopPanel) */}
+        {isOpen && isMobile && (
+          <>
+            <SidePopPanel
+              isOpen={activeSubMenu === 'models'}
+              onClose={() => setActiveSubMenu(null)}
+              title="BIM models"
+              parentPosition={position}
+              parentWidth={panelWidth}
+            >
+              <ModelVisibilitySelector viewerRef={viewerRef} buildingFmGuid={buildingFmGuid} listOnly={true} />
+            </SidePopPanel>
+
+            <SidePopPanel
+              isOpen={activeSubMenu === 'floors'}
+              onClose={() => setActiveSubMenu(null)}
+              title="Floors"
+              parentPosition={position}
+              parentWidth={panelWidth}
+            >
+              <FloorVisibilitySelector viewerRef={viewerRef} buildingFmGuid={buildingFmGuid} isViewerReady={isViewerReady} onVisibleFloorsChange={handleVisibleFloorsChange} enableClipping={true} listOnly={true} />
+            </SidePopPanel>
+
+            <SidePopPanel
+              isOpen={activeSubMenu === 'annotations'}
+              onClose={() => setActiveSubMenu(null)}
+              title="Annotation types"
+              parentPosition={position}
+              parentWidth={panelWidth}
+            >
+              <AnnotationCategoryList viewerRef={viewerRef} buildingFmGuid={buildingFmGuid} />
+            </SidePopPanel>
+
+            {buildingFmGuid && (
+              <InventoryPanel buildingFmGuid={buildingFmGuid} buildingName={buildingName} open={showAssetPanel} onClose={() => setShowAssetPanel(false)} />
+            )}
+
+            <FloatingIssueListPanel isOpen={showIssueList} onClose={() => setShowIssueList(false)} buildingFmGuid={buildingFmGuid} onSelectIssue={handleSelectIssue} onCreateIssue={captureIssueState} parentPosition={position} parentWidth={panelWidth} />
+
+            <CreateViewDialog open={showCreateViewDialog} onClose={() => { setShowCreateViewDialog(false); setPendingViewState(null); }} onSave={handleSaveView} viewState={pendingViewState} isSaving={isSavingView} />
+
+            <CreateIssueDialog open={showCreateIssueDialog} onClose={() => { setShowCreateIssueDialog(false); setPendingIssueState(null); }} onSubmit={handleSubmitIssue} screenshotUrl={pendingIssueState?.screenshot} buildingName={buildingName} isSubmitting={isSubmittingIssue} selectedObjectIds={pendingIssueState?.selectedObjects} />
+
+            <IssueDetailSheet issue={selectedIssue} open={showIssueDetail} onClose={() => { setShowIssueDetail(false); setSelectedIssue(null); }} onGoToViewpoint={handleGoToIssueViewpoint} isAdmin={isAdmin} />
+          </>
+        )}
+      </div>
+    );
 };
 
 export default VisualizationToolbar;
