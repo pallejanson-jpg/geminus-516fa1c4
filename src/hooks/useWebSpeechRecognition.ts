@@ -38,6 +38,7 @@ declare global {
 export interface UseWebSpeechRecognitionOptions {
   language?: string;
   continuous?: boolean;
+  silenceTimeoutMs?: number;
   onResult?: (transcript: string, isFinal: boolean) => void;
   onError?: (error: string) => void;
 }
@@ -57,7 +58,8 @@ export function useWebSpeechRecognition(
 ): UseWebSpeechRecognitionReturn {
   const {
     language = 'sv-SE',
-    continuous = false,
+    continuous = true,
+    silenceTimeoutMs = 2500,
     onResult,
     onError,
   } = options;
@@ -68,17 +70,35 @@ export function useWebSpeechRecognition(
   const [error, setError] = useState<string | null>(null);
   
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const accumulatedRef = useRef('');
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isSupported = typeof window !== 'undefined' && 
     !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 
+  const clearSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+  }, []);
+
   const stop = useCallback(() => {
+    clearSilenceTimer();
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       recognitionRef.current = null;
     }
+    // Deliver accumulated transcript on stop
+    const final = accumulatedRef.current.trim();
+    if (final) {
+      setTranscript(final);
+      setInterimTranscript('');
+      onResult?.(final, true);
+    }
+    accumulatedRef.current = '';
     setIsListening(false);
-  }, []);
+  }, [clearSilenceTimer, onResult]);
 
   const start = useCallback(() => {
     if (!isSupported) {
@@ -89,9 +109,11 @@ export function useWebSpeechRecognition(
     }
 
     // Stop any existing recognition
+    clearSilenceTimer();
     if (recognitionRef.current) {
       recognitionRef.current.abort();
     }
+    accumulatedRef.current = '';
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return;
@@ -106,30 +128,43 @@ export function useWebSpeechRecognition(
       setError(null);
       setTranscript('');
       setInterimTranscript('');
+      accumulatedRef.current = '';
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let finalTranscript = '';
+      // Reset silence timer on any result
+      clearSilenceTimer();
+
+      let sessionFinal = '';
       let interim = '';
 
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      for (let i = 0; i < event.results.length; i++) {
         const result = event.results[i];
         const text = result[0].transcript;
-
         if (result.isFinal) {
-          finalTranscript += text;
+          sessionFinal += text;
         } else {
           interim += text;
         }
       }
 
-      if (finalTranscript) {
-        setTranscript(finalTranscript);
-        setInterimTranscript('');
-        onResult?.(finalTranscript, true);
-      } else {
-        setInterimTranscript(interim);
-        onResult?.(interim, false);
+      // Accumulate all final results for the session
+      if (sessionFinal) {
+        accumulatedRef.current = sessionFinal;
+      }
+
+      const currentFull = (accumulatedRef.current + ' ' + interim).trim();
+      setInterimTranscript(interim);
+      onResult?.(currentFull, false);
+
+      // Start silence timer — if no new results within timeout, auto-stop
+      if (continuous && silenceTimeoutMs > 0) {
+        silenceTimerRef.current = setTimeout(() => {
+          // Auto-stop after silence
+          if (recognitionRef.current) {
+            recognitionRef.current.stop();
+          }
+        }, silenceTimeoutMs);
       }
     };
 
@@ -160,6 +195,15 @@ export function useWebSpeechRecognition(
     };
 
     recognition.onend = () => {
+      clearSilenceTimer();
+      // Deliver accumulated transcript
+      const final = accumulatedRef.current.trim();
+      if (final) {
+        setTranscript(final);
+        setInterimTranscript('');
+        onResult?.(final, true);
+      }
+      accumulatedRef.current = '';
       setIsListening(false);
       recognitionRef.current = null;
     };
@@ -173,16 +217,17 @@ export function useWebSpeechRecognition(
       setError(errorMsg);
       onError?.(errorMsg);
     }
-  }, [isSupported, language, continuous, onResult, onError]);
+  }, [isSupported, language, continuous, silenceTimeoutMs, onResult, onError, clearSilenceTimer]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      clearSilenceTimer();
       if (recognitionRef.current) {
         recognitionRef.current.abort();
       }
     };
-  }, []);
+  }, [clearSilenceTimer]);
 
   return {
     isListening,

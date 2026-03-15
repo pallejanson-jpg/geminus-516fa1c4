@@ -111,7 +111,7 @@ export default function PluginPage() {
   }
 
   return (
-    <div className="fixed inset-0 bg-transparent">
+    <div className="fixed inset-0 bg-background">
       <GeminusPluginMenu
         buildingFmGuid={activeBuildingGuid}
         buildingName={activeBuildingName}
