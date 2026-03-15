@@ -1,129 +1,72 @@
-## Plan: IFC & ACC Import/Sync Performance Optimization (IMPLEMENTED ✅)
 
-### Changes Made
-1. **XKT compression** (`ifc-to-xkt`): Enabled `zip: true` in `writeXKTModelToArrayBuffer` — ~30% smaller XKT files
-2. **Parallel DB writes** (`ifc-to-xkt`): `persistSystemsAndConnections` + `populateAssetsFromMetaObjects` now run via `Promise.all` instead of sequentially
-3. **Streaming LD-JSON parser** (`acc-sync`): New `streamLDJSON()` async generator processes BIM property files line-by-line from `ReadableStream` — eliminates OOM risk on large Revit models
-4. **Incremental ACC sync** (`acc-sync`): `fetchAccAssets` now supports `filter[updatedAt]` parameter, only fetching assets modified since last sync — ~90% faster re-syncs
-5. **IFC derivative from ACC** (`acc-sync`): `translate-model` now requests IFC format alongside SVF. On completion, downloads the IFC derivative and feeds it into `ifc-to-xkt` for real per-storey tiling — unifying ACC and IFC geometry pipelines
-6. **Dual pipeline** (`check-translation`): Triggers both `ifc-to-xkt` (for tiled XKT) and `acc-geometry-extract` (for GLB fallback) in parallel when translation succeeds
 
----
+# ViewerMockup Refinements + Native Color Support
 
-## Plan: Mobile Viewer Startup Hardening (IMPLEMENTED ✅)
+## Part 1: ViewerMockup Changes (`src/pages/ViewerMockup.tsx`)
 
-### Changes Made
-1. **Mobile touch tuning** (`NativeXeokitViewer.tsx`): dragRotationRate 30→70, touchPanRate 0.06→0.14, touchDollyRate 0.04→0.09, rotationInertia 0.93→0.88, panInertia 0.88→0.82
-2. **FastNav delay** (`NativeXeokitViewer.tsx`): Added `delayBeforeRestore: true` (0.5s mobile, 0.3s desktop)
-3. **Suppress viewFit in split2d3d** (`NativeXeokitViewer.tsx`): Skips instant viewFit when `?mode=split2d3d` — floor isolation handles camera
-4. **Defer SplitPlanView mount** (`UnifiedViewer.tsx`): Mobile SplitPlanView only renders after `viewerReady=true`, shows spinner until then
-5. **Increased SplitPlanView retry** (`SplitPlanView.tsx`): 10×100ms → 30×200ms (6s total window), immediate retry on VIEWER_MODELS_LOADED
-6. **Debounced floor events** (`UnifiedViewer.tsx`): 500ms guard on FLOOR_SELECTION_CHANGED dispatches to prevent competing events
+### 1. All text to English
+- Building name: "Office Building A"
+- Floors: Roof, Floor 3, Floor 2, Floor 1, Lobby, Basement
+- All labels, menu items, drawer titles, back buttons
 
-### Architecture Principle
-Mobile and desktop share the same `UnifiedViewerContent` initialization logic. The ONLY difference is layout:
-- Mobile: vertical stack (2D top, 3D bottom) with touch-optimized divider (8px)
-- Desktop: horizontal ResizablePanelGroup with drag handle (4px)
+### 2. Remove "Floors" from hamburger menu
+- Remove `floors` from `MENU_ITEMS` and its sub-sheet — the floating pill is sufficient
 
-Future changes to viewer startup MUST apply to both paths. Do NOT create separate mobile/desktop init logic.
+### 3. Edge-to-edge canvas
+- Bottom toolbar: replace `bg-background/90` with transparent gradient (`linear-gradient(to top, rgba(0,0,0,0.5), transparent)`)
+- Canvas already covers `absolute inset-0` — buttons keep safe-area padding
 
----
+### 4. Toolbar customization via Settings button
+- Add `ALL_AVAILABLE_TOOLS` array (~10 tools: orbit, pan, fit, select, measure, section, xray, firstPerson, annotations, markup)
+- New state: `enabledTools: string[]` defaults to current 6
+- Gear icon as last item in toolbar — opens `toolbarConfig` sub-sheet with toggle switches
+- Bottom bar renders only enabled tools + the settings button
 
-## Plan: SplitPlanView Navigation + Alignment UX (IMPLEMENTED ✅)
-
-### Changes Made
-1. **SplitPlanView click navigation** (`SplitPlanView.tsx`): Replaced first-person instant jump with MinimapPanel-style fly-to — keeps current eye height, looks down at clicked point, animates 0.5s.
-2. **AlignmentPointPicker precision** (`AlignmentPointPicker.tsx`): Now estimates surface point via ray-cast from tripod position + viewing direction × adjustable distance slider (0.5–10m). Shows captured coordinates and distance in both steps for verification.
+### 5. "Open IFC" menu item
+- Add to menu with Upload icon
+- Triggers hidden `<input type="file" accept=".ifc,.xkt">`
+- Shows toast "IFC loaded (local only)" as placeholder
 
 ---
 
-## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
+## Part 2: Model Colors — Your Question
 
-### Changes Made
-1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
-2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
-3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
-4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
-5. **config.toml** updated with `acc-geometry-extract` function entry
+**Yes, you're right.** The ACC screenshots show Revit's original material colors (textured facades, colored mullions, etc.). The reason Geminus looks different is **not** because the IFC data lacks those colors — it's because we **overwrite** them.
 
-### Pending (Phase 2)
-- Actual GLB chunk creation from SVF geometry (requires conversion worker)
-- OBJ as optional secondary format for small models
+Currently, every time a model loads, `applyArchitectColors()` runs and replaces all object colors with a fixed palette (warm beige walls, grey slabs, green furniture). The original XKT/IFC colors are discarded.
 
----
+The "Model Native Colour" theme already exists in `useViewerTheme.ts` and restores originals — but only if they were captured before the overwrite. The fix is straightforward:
 
+### What to change in the real viewer (separate task, not mockup)
 
-### Ändringar
+| File | Change |
+|------|--------|
+| `src/lib/architect-colors.ts` | Before overwriting, store each entity's original `colorize` value in a global `Map` so it can be restored |
+| `src/hooks/useViewerTheme.ts` | When "Model Native Colour" is selected, read from that stored map instead of relying on the theme hook's own capture (which may run after architect colors already applied) |
+| `src/components/viewer/NativeXeokitViewer.tsx` | After all models load, capture original colors BEFORE calling `applyArchitectColors()` |
 
-#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
-**Fil:** `supabase/functions/conversion-worker-api/index.ts`
-- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
-- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
-- Upsert till `assets` med `created_in_model: true`
-- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
+This would let users toggle between "Architect" (our clean palette) and "Native" (Revit's original materials) — matching what ACC shows.
 
-#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
-**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
-- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
-- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
-- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
-- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
-- Diff: soft-delete objekt som finns i DB men inte i ny IFC
+### Testing with the real building
+Since you have both the IFC and the ACC version of the same building, you could:
+1. Load the IFC in Geminus → switch to "Model Native Colour" theme → compare with ACC screenshots
+2. The colors should match because XKT preserves the IFC material colors — we just need to stop overwriting them before capturing
 
-#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
-**Fil:** `docs/conversion-worker/worker.mjs`
-- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
-- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
-- Non-fatal: om hierarki-population misslyckas fortsätter workern
-
-#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
-**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
-- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
-- `created_in_model: true` istället för `false`
-- Diff-logik: markerar borttagna objekt efter import
-
-### Datamodell
-
-```text
-Building Storey:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
-  category:          "Building Storey"
-  created_in_model:  true
-
-Space:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
-  category:          "Space"
-  level_fm_guid:     parent storey fm_guid
-
-Instance:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
-  category:          "Instance"
-  asset_type:        ifcType (e.g. "IfcDoor")
-  level_fm_guid:     resolved storey
-  in_room_fm_guid:   resolved space
-```
-
-### Diff-flöde
-
-Vid omimport jämförs importerade fm_guids mot befintliga i DB:
-- **Nytt** → INSERT
-- **Matchat** → UPDATE (namn, typ, rumsplacering)
-- **Borttaget** → `modification_status = 'removed'` (soft-delete)
+This is a separate implementation task from the mockup changes above.
 
 ---
 
-## Previous Plans
+## Files to change now
 
-### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
-- Browser-primary for >20MB, edge function for ≤20MB
-- MetaModel JSON uploaded alongside XKT
-- Systems extracted and persisted
+| File | Changes |
+|------|--------|
+| `src/pages/ViewerMockup.tsx` | English text, remove floors menu, edge-to-edge toolbar, toolbar config with settings button, Open IFC menu item |
 
-### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
-- Standalone Node.js worker polls conversion-worker-api
-- Per-storey .xkt tiles with dynamic floor loading
+## Future task (not this PR)
 
-### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
-- 10 credential override columns on building_settings
-- Shared credential resolver in edge functions
-- Properties page as configuration hub
+| File | Changes |
+|------|--------|
+| `src/lib/architect-colors.ts` | Capture original colors before overwriting |
+| `src/hooks/useViewerTheme.ts` | Use captured originals for Native Colour theme |
+| `src/components/viewer/NativeXeokitViewer.tsx` | Capture originals before first `applyArchitectColors()` call |
+
