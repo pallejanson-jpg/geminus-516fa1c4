@@ -977,7 +977,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     const embeddedContent = (
       <>
         {/* Messages */}
-        <ScrollArea className="flex-1 p-3" ref={scrollRef}>
+        <ScrollArea className="flex-1 min-h-0 p-3" ref={scrollRef}>
           <div className="space-y-3">
             {messages.map((msg, i) => (
               <div key={i} className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}>
