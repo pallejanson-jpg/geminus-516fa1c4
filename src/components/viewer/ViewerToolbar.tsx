@@ -1013,7 +1013,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
               <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent side="top" className="w-64 p-2" align="end">
+          <PopoverContent side="top" className="w-64 p-2 max-h-[60dvh] overflow-y-auto" align="end">
             <p className="text-xs font-medium mb-2 text-muted-foreground">Navigation Speed</p>
             <div className="flex items-center gap-2 mb-3 px-1">
               <Gauge className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
