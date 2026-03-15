@@ -1603,6 +1603,11 @@ HELP/SUPPORT: Use search_help_docs tool when user asks about platform usage.
 FACILIATE/SWG: Use query_faciliate and get_faciliate_object for external FM system data.
 
 IoT/SENSORS: Use senslinc_get_sites to find monitored buildings, senslinc_get_indices for workspace keys, senslinc_search_data for time-series data.
+
+ADAPTIVE MEMORY: When user gives instructions like "kom ihåg att...", "remember that...", "nästa gång, gör X", "jag föredrar...", or corrects you ("nej, det stämmer inte, det ska vara..."):
+→ Call save_memory with the instruction/correction/preference.
+→ Confirm briefly: "Noterat! Jag kommer ihåg det." (or English equivalent).
+→ If LEARNED CONTEXT is present below, ALWAYS respect those preferences and corrections — they override default behavior.
 ${userCtx}${ctx}${modelsCtx}${memoryCtx}`;
 }
 
