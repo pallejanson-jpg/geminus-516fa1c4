@@ -364,6 +364,21 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "fm_access_get_documents",
+      description: "Get documents (DoU, technical documentation) from FM Access for a building. Requires fm_access_building_guid (use query_building_settings to find it).",
+      parameters: {
+        type: "object",
+        properties: {
+          fm_access_building_guid: { type: "string" },
+        },
+        required: ["fm_access_building_guid"],
+        additionalProperties: false,
+      },
+    },
+  },
   // ── Viewer control tools ──
   {
     type: "function",
