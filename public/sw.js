@@ -42,6 +42,27 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
+  // Route manifest.json to the correct variant based on the requesting page
+  if (url.pathname === '/manifest.json' && event.request.destination === 'manifest') {
+    event.respondWith(
+      (async () => {
+        // Determine which page is requesting the manifest
+        const client = await self.clients.get(event.clientId);
+        const clientUrl = client ? new URL(client.url).pathname : '/';
+        let manifestPath = '/manifest.json';
+        if (clientUrl.startsWith('/ai')) manifestPath = '/manifest-ai.json';
+        else if (clientUrl.startsWith('/plugin')) manifestPath = '/manifest-plugin.json';
+        try {
+          return await fetch(manifestPath);
+        } catch {
+          const cached = await caches.match(manifestPath);
+          return cached || await caches.match('/manifest.json');
+        }
+      })()
+    );
+    return;
+  }
+
   // Skip non-GET
   if (event.request.method !== 'GET') return;
 
