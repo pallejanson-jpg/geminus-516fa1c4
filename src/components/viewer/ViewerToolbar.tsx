@@ -150,7 +150,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
   const initialCameraRef = useRef<{ eye: number[]; look: number[]; up: number[] } | null>(null);
 
   const viewModeRef = useRef<ViewMode>(viewMode);
-  const colorizedFor2dRef = useRef<Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean }>>(new Map());
+  const colorizedFor2dRef = useRef<Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean; offset: number[] | null }>>(new Map());
   const [currentFloorId, setCurrentFloorId] = useState<string | null>(null);
   const [currentFloorBounds, setCurrentFloorBounds] = useState<{ minY: number; maxY: number } | null>(null);
 
