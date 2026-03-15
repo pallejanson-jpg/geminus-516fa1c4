@@ -278,6 +278,16 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     });
   }, [cleanSpeechText, voiceOutputEnabled, getBestVoice]);
 
+  // Compute effective context: merge local building override with prop context
+  const effectiveContext = useMemo<GunnarContext | undefined>(() => {
+    if (!localBuildingContext) return context;
+    return {
+      ...context,
+      activeApp: context?.activeApp || 'ai-standalone',
+      currentBuilding: localBuildingContext,
+    };
+  }, [context, localBuildingContext]);
+
   const streamChat = useCallback(
     async (userMessages: Message[], currentContext?: GunnarContext, advisorMode?: boolean) => {
       const { data: { session } } = await supabase.auth.getSession();
