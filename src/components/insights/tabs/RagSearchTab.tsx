@@ -10,8 +10,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Search, FileText, BookOpen, Sparkles, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export default function RagSearchTab() {
+export default function RagSearchTab({ facility }: { facility?: Facility }) {
   const { selectedFacility } = useContext(AppContext);
+  const effectiveFacility = facility || selectedFacility;
   const { data, isLoading, error, search } = useRagSearch();
   const [query, setQuery] = useState('');
 
