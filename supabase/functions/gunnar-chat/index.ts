@@ -1519,7 +1519,14 @@ VIEWER CONTROL: Use viewer_show_floor, viewer_show_model, viewer_open_3d, viewer
 
 WORK ORDERS: Always ask for confirmation before creating. Use create_work_order tool after user confirms.
 
-FM ACCESS: First get fm_access_building_guid via query_building_settings, then use fm_access_get_drawings/hierarchy/floors/search_objects. Also search_fm_access_local for fast local data.
+CRITICAL — FM ACCESS QUERIES:
+When user asks about "FM Access", "ritningar", "dokument i FM Access", "DoU", "teknisk dokumentation", or references FM Access data:
+→ NEVER use get_building_summary, query_assets, or aggregate_assets — those query LOCAL Geminus data, NOT FM Access.
+→ First call query_building_settings to get fm_access_building_guid for the current building.
+→ Then use fm_access_get_drawings, fm_access_get_documents, fm_access_get_hierarchy, fm_access_get_floors, or fm_access_search_objects for LIVE FM Access data.
+→ Use search_fm_access_local only for fast cached searches of previously synced FM Access data.
+→ If fm_access_building_guid is null/missing, tell user: "Den här byggnaden har ingen FM Access-koppling konfigurerad."
+→ All other building data (assets, work orders, issues, sensors) comes from Geminus backend — use normal tools for those.
 
 DOCUMENT Q&A: Use ask_about_documents for content questions. Use query_documents for listing.
 
