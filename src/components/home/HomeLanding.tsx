@@ -9,7 +9,7 @@ import GunnarChat from "@/components/chat/GunnarChat";
 import { useAllBuildingSettings } from "@/hooks/useAllBuildingSettings";
 import { AppContext } from "@/context/AppContext";
 import { BUILDING_IMAGES } from "@/lib/constants";
-import { extractNtaFromAttributes } from "@/lib/building-utils";
+import { extractSpaceArea } from "@/lib/building-utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext } from "@/components/ui/carousel";
