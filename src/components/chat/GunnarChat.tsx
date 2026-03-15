@@ -181,9 +181,12 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     }
   }, [context?.currentBuilding?.fmGuid]);
 
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, proactiveInsights]);
+   useEffect(() => {
+     // Use messagesEndRef for reliable auto-scroll inside Radix ScrollArea
+     if (messagesEndRef.current) {
+       messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+     }
+   }, [messages, proactiveInsights]);
 
   useEffect(() => {
     if (open && inputRef.current) setTimeout(() => inputRef.current?.focus(), 100);
