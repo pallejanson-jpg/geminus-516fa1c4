@@ -48,6 +48,7 @@ export const FORCE_SHOW_SPACES_EVENT = 'FORCE_SHOW_SPACES';
 
 // Import floor selection event from the canonical source
 import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
+import { VISUALIZATION_QUICK_SELECT_EVENT } from './VisualizationQuickBar';
 
 // LocalStorage key for persisting visualization settings
 const STORAGE_KEY = 'roomVisualizationSettings';
@@ -123,7 +124,18 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   const [hasRealData, setHasRealData] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Cache for space entity IDs - built from metaScene, invalidated on floor changes
+  // Listen for quick-select events from VisualizationQuickBar
+  useEffect(() => {
+    const handler = (e: CustomEvent<{ type: VisualizationType }>) => {
+      setVisualizationType(e.detail.type);
+      if (e.detail.type !== 'none' && !hasRealData) {
+        setUseMockData(true);
+      }
+    };
+    window.addEventListener(VISUALIZATION_QUICK_SELECT_EVENT, handler as EventListener);
+    return () => window.removeEventListener(VISUALIZATION_QUICK_SELECT_EVENT, handler as EventListener);
+  }, [hasRealData]);
+
   const [entityIdCache, setEntityIdCache] = useState<Map<string, string[]>>(new Map());
   const [cacheKey, setCacheKey] = useState<string>(''); // For cache invalidation
   

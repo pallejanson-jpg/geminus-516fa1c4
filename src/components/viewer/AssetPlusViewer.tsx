@@ -11,6 +11,7 @@ import MinimapPanel from './MinimapPanel';
 import FloorCarousel, { FloorInfo } from './FloorCarousel';
 import FloatingFloorSwitcher from './FloatingFloorSwitcher';
 import VisualizationLegendBarOverlay from './VisualizationLegendOverlay';
+import VisualizationQuickBar from './VisualizationQuickBar';
 // AnnotationToggleMenu removed - consolidated into VisualizationToolbar flyout
 import AssetPropertiesDialog from './AssetPropertiesDialog';
 import ViewerContextMenu from './ViewerContextMenu';
@@ -4985,6 +4986,15 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
               {/* Visualization Legend Bar - independent of right panel */}
               <VisualizationLegendBarOverlay />
+
+              {/* Quick visualization type selector */}
+              {!compactMode && (
+                <div
+                  className="absolute z-[45] pointer-events-auto bottom-14 left-1/2 -translate-x-1/2"
+                >
+                  <VisualizationQuickBar />
+                </div>
+              )}
               
               <ViewerToolbar 
                 viewer={viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer}
