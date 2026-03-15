@@ -1356,6 +1356,19 @@ async function buildSystemPrompt(supabase: any, context: any, userProfile: any, 
     ctx += `\nViewer: mode=${vs.viewMode}, floors=${vs.visibleFloorFmGuids?.length || 0}, selected=${vs.selectedFmGuids?.length || 0}`;
   }
 
+  // Standalone AI mode — no viewer available
+  if (context?.activeApp === 'ai-standalone') {
+    ctx += `\n\nSTANDALONE AI MODE (CRITICAL):
+You are running in the standalone AI app WITHOUT a 3D viewer.
+- Do NOT use viewer tools (viewer_show_floor, viewer_show_model, viewer_open_3d, viewer_show_drawing).
+- Do NOT generate viewer action links (action:flyTo, action:showFloor, action:showFloorIn3D, action:isolateModel, action:showDrawing, action:openViewer3D, action:switchTo2D, action:switchTo3D).
+- Instead, answer with DATA ONLY (text, numbers, bullet points, tables).
+- For "visa 3D", "öppna viewer", "show model" requests, respond: "I den fristående AI-appen kan jag inte visa 3D-modeller, men jag kan berätta om byggnaden. Öppna Geminus-appen för 3D-visning."
+- You CAN still use ALL data tools: query_assets, get_building_summary, senslinc, fm_access, documents, resolve_building_by_name, etc.
+- When no building context is set and user asks "vilka byggnader har jag" or similar, use query_assets with category="Building" (no building_fm_guid filter) to list all buildings. Present each as a selectBuilding action button.
+- selectBuilding and changeLang actions ARE allowed in standalone mode.`;
+  }
+
   let userCtx = "";
   if (userProfile) {
     userCtx = `\nUser: ${userProfile.display_name || "user"} (${userProfile.role || "user"})`;
