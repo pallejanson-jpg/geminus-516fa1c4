@@ -1720,6 +1720,8 @@ serve(async (req) => {
 
     // ── Full tool-calling loop ──
     let systemPrompt = await buildSystemPrompt(supabase, context, userProfile, previousConversation);
+    // Inject learned memories
+    if (userMemories) systemPrompt += userMemories;
 
     if (advisor && context?.currentBuilding) {
       systemPrompt += `\n\nADVISOR MODE: Perform comprehensive FM analysis of "${context.currentBuilding.name}" (fm_guid: ${context.currentBuilding.fmGuid}). Call get_building_summary, query_work_orders, query_issues, aggregate_assets. Present a structured advisory report.`;
