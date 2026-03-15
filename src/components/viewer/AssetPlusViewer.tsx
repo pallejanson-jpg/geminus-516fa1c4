@@ -4989,12 +4989,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
               {/* Quick visualization type selector */}
               {!compactMode && (
-                <div className={cn(
-                  'absolute z-[45] pointer-events-auto',
-                  isMobile
-                    ? 'bottom-14 left-1/2 -translate-x-1/2'
-                    : 'bottom-14 left-1/2 -translate-x-1/2',
-                )}>
+                <div
+                  className="absolute z-[45] pointer-events-auto bottom-14 left-1/2 -translate-x-1/2"
+                >
                   <VisualizationQuickBar />
                 </div>
               )}
