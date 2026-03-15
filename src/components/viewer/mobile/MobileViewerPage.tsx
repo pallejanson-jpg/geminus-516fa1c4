@@ -18,7 +18,7 @@ import {
   Scissors, Square, Box, LayoutPanelLeft, View,
   Filter, SlidersHorizontal, BarChart2, AlertTriangle,
   Settings, ChevronRight, Eye, Loader2, Scan, User,
-  Compass, PenTool,
+  Compass, PenTool, RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
