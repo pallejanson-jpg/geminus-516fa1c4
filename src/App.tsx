@@ -304,18 +304,6 @@ const App = () => {
             } 
           />
           
-          {/* ACC-inspired mobile viewer mockup */}
-          <Route 
-            path="/viewer-mockup" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <ProtectedRoute>
-                  <ViewerMockup />
-                </ProtectedRoute>
-              </Suspense>
-            } 
-          />
-          
           {/* Protected app routes */}
           <Route 
             path="/*" 
