@@ -399,7 +399,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
 
     try {
       const apiMessages = trimHistory(newMessages.filter((_, i) => i > 0));
-      const response = await streamChat(apiMessages, context, advisorMode);
+      const response = await streamChat(apiMessages, effectiveContext, advisorMode);
 
       const followups = extractFollowups(response);
       if (followups.length > 0) {
