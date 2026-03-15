@@ -368,9 +368,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             const name = space.commonName || space.name || 'Unknown';
             if (!types[name]) types[name] = { count: 0, area: 0 };
             types[name].count++;
-            const attrs = space.attributes || {};
-            const ntaKey = Object.keys(attrs).find(k => k.toLowerCase().startsWith('nta'));
-            types[name].area += ntaKey ? Number(attrs[ntaKey]) || 0 : Number(space.grossArea) || 0;
+            types[name].area += extractSpaceArea(space);
         });
         return Object.entries(types)
             .sort((a, b) => b[1].count - a[1].count)
