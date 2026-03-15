@@ -961,6 +961,21 @@ async function execFmAccessGetFloors(args: any) {
   return result.data || [];
 }
 
+async function execFmAccessGetDocuments(args: any) {
+  const result = await callFmAccessQuery("get-documents", { buildingId: args.fm_access_building_guid });
+  if (!result?.success) return { error: result?.error || "Failed to get documents" };
+  const docs = result.data || [];
+  return {
+    total_documents: docs.length,
+    documents: docs.slice(0, 30).map((d: any) => ({
+      id: d.objectId || d.documentId,
+      name: d.objectName || d.name,
+      fileName: d.fileName,
+      className: d.className,
+    })),
+  };
+}
+
 /* ── Document content Q&A ── */
 
 async function execAskAboutDocuments(supabase: any, args: any, apiKey: string) {
