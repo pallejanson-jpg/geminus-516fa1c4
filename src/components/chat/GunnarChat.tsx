@@ -120,8 +120,9 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
   const [proactiveInsights, setProactiveInsights] = useState<string[]>([]);
   const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+   const scrollRef = useRef<HTMLDivElement>(null);
+   const messagesEndRef = useRef<HTMLDivElement>(null);
+   const inputRef = useRef<HTMLInputElement>(null);
   const { toast: toastHook } = useToast();
   const prevContextRef = useRef<string>("");
   const proactiveFetchedRef = useRef<string>("");
@@ -180,9 +181,12 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     }
   }, [context?.currentBuilding?.fmGuid]);
 
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, proactiveInsights]);
+   useEffect(() => {
+     // Use messagesEndRef for reliable auto-scroll inside Radix ScrollArea
+     if (messagesEndRef.current) {
+       messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+     }
+   }, [messages, proactiveInsights]);
 
   useEffect(() => {
     if (open && inputRef.current) setTimeout(() => inputRef.current?.focus(), 100);
@@ -876,6 +880,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
               </div>
             </div>
           )}
+          <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
 
@@ -1011,6 +1016,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
                 </div>
               </div>
             )}
+            <div ref={messagesEndRef} />
           </div>
         </ScrollArea>
 
