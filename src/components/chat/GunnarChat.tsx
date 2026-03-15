@@ -911,13 +911,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
               variant="ghost"
               size="icon"
               className="h-6 w-6 shrink-0"
-              onClick={() => {
-                if (voiceOutputEnabled) {
-                  window.speechSynthesis.cancel();
-                  setVoiceOutputEnabled(false);
-                } else {
-                  setVoiceOutputEnabled(true);
-                }
+              onClick={toggleVoiceOutput}
               }}
               title={voiceOutputEnabled ? 'Disable voice output' : 'Enable voice output'}
             >
