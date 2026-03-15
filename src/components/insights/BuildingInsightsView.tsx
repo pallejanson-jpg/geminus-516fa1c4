@@ -1325,7 +1325,12 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                         .filter((a: any) => a.level_fm_guid === level.levelGuid)
                                                                         .slice(0, 50)
                                                                         .map((a: any) => ({ fmGuid: a.fm_guid, roomFmGuid: a.in_room_fm_guid }));
-                                                                    window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: levelAlarms } }));
+                                                                    if (isMobile && !drawerMode) {
+                                                                        sessionStorage.setItem('pending_alarm_annotations', JSON.stringify({ alarms: levelAlarms }));
+                                                                        navigate(`/viewer?building=${facility.fmGuid}&mode=3d`);
+                                                                    } else {
+                                                                        window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: levelAlarms } }));
+                                                                    }
                                                                 }}
                                                             >
                                                                 <MapPin className="h-3.5 w-3.5" />
