@@ -81,6 +81,7 @@ const ViewerMockup: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const buildingName = 'Office Building A';
+  const hasIvionSiteId = false; // TODO: wire to real building settings
   const modeLabel = VIEW_MODES.find((m) => m.mode === viewMode)?.label ?? '3D';
 
   const handleMenuItem = (id: string) => {
