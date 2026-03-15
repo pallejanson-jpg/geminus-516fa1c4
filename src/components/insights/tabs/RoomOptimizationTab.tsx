@@ -58,17 +58,18 @@ function SuggestionCard({ suggestion }: { suggestion: OptimizationSuggestion }) 
   );
 }
 
-export default function RoomOptimizationTab() {
+export default function RoomOptimizationTab({ facility }: { facility?: Facility }) {
   const { selectedFacility } = useContext(AppContext);
-  const { data, isLoading, error, analyze } = useRoomOptimization(selectedFacility?.fmGuid);
+  const effectiveFacility = facility || selectedFacility;
+  const { data, isLoading, error, analyze } = useRoomOptimization(effectiveFacility?.fmGuid);
 
   useEffect(() => {
-    if (selectedFacility?.fmGuid && !data && !isLoading) {
+    if (effectiveFacility?.fmGuid && !data && !isLoading) {
       analyze();
     }
-  }, [selectedFacility?.fmGuid]);
+  }, [effectiveFacility?.fmGuid]);
 
-  if (!selectedFacility) {
+  if (!effectiveFacility) {
     return (
       <div className="text-center py-12 text-muted-foreground">
         <LayoutGrid className="h-12 w-12 mx-auto mb-3 opacity-40" />

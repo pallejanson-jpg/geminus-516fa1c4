@@ -82,7 +82,7 @@ export default function PredictiveMaintenanceTab({ facility }: { facility?: Faci
     }
   }, [effectiveFacility?.fmGuid]);
 
-  if (!selectedFacility) {
+  if (!effectiveFacility) {
     return (
       <div className="text-center py-12 text-muted-foreground">
         <Activity className="h-12 w-12 mx-auto mb-3 opacity-40" />
