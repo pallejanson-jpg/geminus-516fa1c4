@@ -607,6 +607,24 @@ const tools = [
       },
     },
   },
+  // ── Adaptive Memory ──
+  {
+    type: "function",
+    function: {
+      name: "save_memory",
+      description: "Save a user instruction, correction, or preference for future reference. Use when user says 'kom ihåg', 'remember', 'nästa gång', 'jag föredrar', or corrects you.",
+      parameters: {
+        type: "object",
+        properties: {
+          content: { type: "string", description: "The instruction/correction/preference to remember" },
+          memory_type: { type: "string", enum: ["instruction", "correction", "preference"] },
+          building_fm_guid: { type: "string", description: "If memory is building-specific" },
+        },
+        required: ["content", "memory_type"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 /* ─────────────────────────────────────────────
@@ -1154,6 +1172,54 @@ async function execGetFaciliateObject(args: any) {
   return data.data || data;
 }
 
+/* ── Adaptive Memory ── */
+
+async function execSaveMemory(supabase: any, args: any, userId: string) {
+  if (!userId) return { error: "No user context" };
+  const { error } = await supabase.from("ai_memory").insert({
+    user_id: userId,
+    content: args.content,
+    memory_type: args.memory_type || "instruction",
+    building_fm_guid: args.building_fm_guid || null,
+    source_message: args.source_message || null,
+  });
+  if (error) throw error;
+  return { success: true, message: "Memory saved" };
+}
+
+async function loadUserMemories(supabase: any, userId: string, buildingFmGuid?: string): Promise<string> {
+  // Load up to 20 memories: global + building-specific
+  let query = supabase
+    .from("ai_memory")
+    .select("content, memory_type, building_fm_guid")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  // Include both global (null building) and building-specific memories
+  if (buildingFmGuid) {
+    query = query.or(`building_fm_guid.is.null,building_fm_guid.eq.${buildingFmGuid}`);
+  } else {
+    query = query.is("building_fm_guid", null);
+  }
+
+  // Filter out expired memories
+  const { data } = await query;
+  if (!data?.length) return "";
+
+  const now = new Date();
+  const valid = data.filter((m: any) => !m.expires_at || new Date(m.expires_at) > now);
+  if (!valid.length) return "";
+
+  const lines = valid.map((m: any) => {
+    const prefix = m.memory_type === "correction" ? "⚠️" : m.memory_type === "preference" ? "🎯" : "📝";
+    const scope = m.building_fm_guid ? " (building-specific)" : "";
+    return `${prefix} ${m.content}${scope}`;
+  });
+
+  return `\n\nLEARNED CONTEXT (user preferences & corrections — ALWAYS respect these):\n${lines.join("\n")}`;
+}
+
 /* ── Building name resolution ── */
 
 async function execResolveBuildingByName(supabase: any, args: any) {
@@ -1265,6 +1331,8 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
     // Faciliate
     case "query_faciliate": return execQueryFaciliate(args);
     case "get_faciliate_object": return execGetFaciliateObject(args);
+    // Adaptive Memory
+    case "save_memory": return execSaveMemory(supabase, args, (globalThis as any).__currentUserId);
     default: return { error: `Unknown tool: ${name}` };
   }
 }
@@ -1535,6 +1603,11 @@ HELP/SUPPORT: Use search_help_docs tool when user asks about platform usage.
 FACILIATE/SWG: Use query_faciliate and get_faciliate_object for external FM system data.
 
 IoT/SENSORS: Use senslinc_get_sites to find monitored buildings, senslinc_get_indices for workspace keys, senslinc_search_data for time-series data.
+
+ADAPTIVE MEMORY: When user gives instructions like "kom ihåg att...", "remember that...", "nästa gång, gör X", "jag föredrar...", or corrects you ("nej, det stämmer inte, det ska vara..."):
+→ Call save_memory with the instruction/correction/preference.
+→ Confirm briefly: "Noterat! Jag kommer ihåg det." (or English equivalent).
+→ If LEARNED CONTEXT is present below, ALWAYS respect those preferences and corrections — they override default behavior.
 ${userCtx}${ctx}${modelsCtx}${memoryCtx}`;
 }
 
@@ -1593,11 +1666,14 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
     const userId = auth.userId!;
+    // Store userId for tool execution context
+    (globalThis as any).__currentUserId = userId;
 
-    const [profileResult, roleResult, previousConversation] = await Promise.all([
+    const [profileResult, roleResult, previousConversation, userMemories] = await Promise.all([
       supabase.from("profiles").select("display_name, avatar_url").eq("user_id", userId).maybeSingle(),
       supabase.from("user_roles").select("role").eq("user_id", userId).maybeSingle(),
       loadRecentConversation(supabase, userId, context?.currentBuilding?.fmGuid),
+      loadUserMemories(supabase, userId, context?.currentBuilding?.fmGuid),
     ]);
 
     const userProfile = profileResult.data ? { ...profileResult.data, role: roleResult.data?.role || "user" } : null;
@@ -1649,6 +1725,8 @@ serve(async (req) => {
 
     // ── Full tool-calling loop ──
     let systemPrompt = await buildSystemPrompt(supabase, context, userProfile, previousConversation);
+    // Inject learned memories
+    if (userMemories) systemPrompt += userMemories;
 
     if (advisor && context?.currentBuilding) {
       systemPrompt += `\n\nADVISOR MODE: Perform comprehensive FM analysis of "${context.currentBuilding.name}" (fm_guid: ${context.currentBuilding.fmGuid}). Call get_building_summary, query_work_orders, query_issues, aggregate_assets. Present a structured advisory report.`;
