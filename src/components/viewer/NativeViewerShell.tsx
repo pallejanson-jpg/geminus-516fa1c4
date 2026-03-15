@@ -72,6 +72,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const [viewMode, setViewMode] = useState<'2d' | '3d' | '360'>('3d');
   const [showSpaces, setShowSpaces] = useState(false);
   const [showVisualizationMenu, setShowVisualizationMenu] = useState(false);
+  const [showRoomVisualization, setShowRoomVisualization] = useState(false);
 
   // Listen for external toggle events (from MobileViewerPage header)
   useEffect(() => {
@@ -635,6 +636,8 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
             const assetViewer = viewerShimRef.current?.assetViewer || viewerShimRef.current?.$refs?.AssetViewer;
             assetViewer?.onShowSpacesChanged?.(show);
           }}
+          showVisualization={showRoomVisualization}
+          onToggleVisualization={(visible) => setShowRoomVisualization(visible)}
           externalOpen={showVisualizationMenu}
           onExternalOpenChange={setShowVisualizationMenu}
         />

@@ -142,6 +142,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
   const [isCrosshairActive, setIsCrosshairActive] = useState(false);
   const [enabledTools, setEnabledTools] = useState<string[]>(getEnabledTools);
   const [showConfig, setShowConfig] = useState(false);
+  const [navSpeed, setNavSpeed] = useState(() => {
+    try { return parseInt(localStorage.getItem('viewer-nav-speed') || '100'); } catch { return 100; }
+  });
 
   // Store initial camera for reset
   const initialCameraRef = useRef<{ eye: number[]; look: number[]; up: number[] } | null>(null);
@@ -1021,10 +1024,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
                 min={25}
                 max={300}
                 step={25}
-                value={[(() => {
-                  try { return parseInt(localStorage.getItem('viewer-nav-speed') || '100'); } catch { return 100; }
-                })()]}
+                value={[navSpeed]}
                 onValueChange={([val]) => {
+                  setNavSpeed(val);
                   localStorage.setItem('viewer-nav-speed', String(val));
                   if (viewer?.cameraControl) {
                     const m = val / 100;
@@ -1039,7 +1041,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
                 className="flex-1"
               />
               <span className="text-[10px] text-muted-foreground w-8 text-right">
-                {(() => { try { return localStorage.getItem('viewer-nav-speed') || '100'; } catch { return '100'; } })()}%
+                {navSpeed}%
               </span>
             </div>
             <Separator className="my-2" />
