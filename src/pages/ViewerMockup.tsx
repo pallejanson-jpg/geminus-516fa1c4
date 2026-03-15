@@ -1,28 +1,31 @@
 /**
- * ViewerMockup — ACC/Dalux-inspirerad mobil viewer layout.
+ * ViewerMockup — ACC/Dalux-inspired mobile viewer layout.
  *
- * Syfte: Iterera på layouten innan vi ändrar riktiga viewern.
- * Fokus: Maximera canvasyta med minimal topbar + kompakt bottom-toolbar + action-sheet.
+ * Purpose: Iterate on layout before changing the real viewer.
+ * Focus: Maximize canvas area with minimal topbar + compact bottom toolbar + action sheet.
  *
  * Layout:
  *  ┌─────────────────────────────┐
- *  │ × [Byggnadsnamn] 3D    [☰] │  ← Transparent topbar, ~32px
+ *  │ × [Building Name] 3D   [☰] │  ← Transparent topbar, ~32px
  *  │                             │
- *  │       3D CANVAS             │  ← Maximerad yta
+ *  │       3D CANVAS             │  ← Maximized area
  *  │                             │
- *  │ [🏠][✋][⬡][📐][✂️][⚡]     │  ← Kompakt bottom-toolbar, ~44px
+ *  │ [🏠][✋][⬡][📐][✂️][⚡][⚙️]  │  ← Compact bottom toolbar, ~44px
  *  └─────────────────────────────┘
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   X, Menu, Orbit, Hand, Maximize, MousePointer, Ruler,
   Scissors, Square, Box, LayoutPanelLeft, View,
   Layers, Filter, SlidersHorizontal, BarChart2,
   AlertTriangle, Settings, ChevronRight, Eye,
+  Upload, Scan, Navigation, Compass, PenTool, User,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { toast } from 'sonner';
 import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle,
 } from '@/components/ui/drawer';
@@ -32,32 +35,38 @@ type ViewMode = '2d' | '3d' | 'split2d3d' | '360';
 
 const VIEW_MODES: { mode: ViewMode; label: string; Icon: React.FC<any> }[] = [
   { mode: '2d', label: '2D Plan', Icon: Square },
-  { mode: '3d', label: '3D Modell', Icon: Box },
+  { mode: '3d', label: '3D Model', Icon: Box },
   { mode: 'split2d3d', label: '2D + 3D', Icon: LayoutPanelLeft },
   { mode: '360', label: '360° Panorama', Icon: View },
 ];
 
-const MOCK_FLOORS = ['Tak', 'Vån 3', 'Vån 2', 'Vån 1', 'Entré', 'Källare'];
+const MOCK_FLOORS = ['Roof', 'Floor 3', 'Floor 2', 'Floor 1', 'Lobby', 'Basement'];
 
-/* ── Bottom toolbar tools ── */
-const TOOLS = [
+/* ── All available tools (for toolbar config) ── */
+const ALL_TOOLS: { id: string; Icon: React.FC<any>; label: string }[] = [
   { id: 'orbit', Icon: Orbit, label: 'Orbit' },
   { id: 'pan', Icon: Hand, label: 'Pan' },
   { id: 'fit', Icon: Maximize, label: 'Fit' },
-  { id: 'select', Icon: MousePointer, label: 'Välj' },
-  { id: 'measure', Icon: Ruler, label: 'Mät' },
-  { id: 'section', Icon: Scissors, label: 'Snitt' },
-] as const;
+  { id: 'select', Icon: MousePointer, label: 'Select' },
+  { id: 'measure', Icon: Ruler, label: 'Measure' },
+  { id: 'section', Icon: Scissors, label: 'Section' },
+  { id: 'xray', Icon: Scan, label: 'X-Ray' },
+  { id: 'firstPerson', Icon: User, label: 'First Person' },
+  { id: 'navCube', Icon: Compass, label: 'Nav Cube' },
+  { id: 'markup', Icon: PenTool, label: 'Markup' },
+];
+
+const DEFAULT_ENABLED = ['orbit', 'pan', 'fit', 'select', 'measure', 'section'];
 
 /* ── Action Sheet menu items ── */
 const MENU_ITEMS = [
-  { id: 'viewMode', Icon: Box, label: 'Visningsläge', hasSubmenu: true },
-  { id: 'floors', Icon: Layers, label: 'Våningar', hasSubmenu: true },
+  { id: 'viewMode', Icon: Box, label: 'View Mode', hasSubmenu: true },
+  { id: 'openIfc', Icon: Upload, label: 'Open IFC', hasSubmenu: false },
   { id: 'filter', Icon: Filter, label: 'Filter' },
-  { id: 'visualization', Icon: SlidersHorizontal, label: 'Visualisering' },
-  { id: 'insights', Icon: BarChart2, label: 'Insikter' },
-  { id: 'issues', Icon: AlertTriangle, label: 'Ärenden' },
-  { id: 'settings', Icon: Settings, label: 'Inställningar' },
+  { id: 'visualization', Icon: SlidersHorizontal, label: 'Visualization' },
+  { id: 'insights', Icon: BarChart2, label: 'Insights' },
+  { id: 'issues', Icon: AlertTriangle, label: 'Issues' },
+  { id: 'settings', Icon: Settings, label: 'Settings' },
 ];
 
 const ViewerMockup: React.FC = () => {
@@ -65,22 +74,40 @@ const ViewerMockup: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('3d');
   const [activeTool, setActiveTool] = useState('orbit');
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [subSheet, setSubSheet] = useState<'viewMode' | 'floors' | null>(null);
-  const [selectedFloor, setSelectedFloor] = useState('Vån 1');
+  const [subSheet, setSubSheet] = useState<'viewMode' | 'toolbarConfig' | null>(null);
+  const [selectedFloor, setSelectedFloor] = useState('Floor 1');
+  const [enabledTools, setEnabledTools] = useState<string[]>(DEFAULT_ENABLED);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const buildingName = 'Kontorsbyggnad A';
+  const buildingName = 'Office Building A';
   const modeLabel = VIEW_MODES.find((m) => m.mode === viewMode)?.label ?? '3D';
 
   const handleMenuItem = (id: string) => {
     if (id === 'viewMode') {
       setSubSheet('viewMode');
-    } else if (id === 'floors') {
-      setSubSheet('floors');
+    } else if (id === 'openIfc') {
+      setSheetOpen(false);
+      setTimeout(() => fileInputRef.current?.click(), 300);
     } else {
-      // Close sheet for non-submenu items (placeholder)
       setSheetOpen(false);
     }
   };
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      toast.success(`IFC loaded (local only): ${file.name}`);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const toggleTool = (toolId: string) => {
+    setEnabledTools((prev) =>
+      prev.includes(toolId) ? prev.filter((t) => t !== toolId) : [...prev, toolId]
+    );
+  };
+
+  const visibleTools = ALL_TOOLS.filter((t) => enabledTools.includes(t.id));
 
   return (
     <div
@@ -92,6 +119,15 @@ const ViewerMockup: React.FC = () => {
         overscrollBehavior: 'none',
       }}
     >
+      {/* Hidden file input for Open IFC */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".ifc,.xkt"
+        className="hidden"
+        onChange={handleFileSelected}
+      />
+
       {/* ── Fake canvas background ── */}
       <div className="absolute inset-0 bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 flex items-center justify-center">
         <div className="text-center space-y-2 opacity-30">
@@ -109,7 +145,6 @@ const ViewerMockup: React.FC = () => {
           background: 'linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, transparent 100%)',
         }}
       >
-        {/* Close */}
         <Button
           variant="ghost"
           size="icon"
@@ -119,7 +154,6 @@ const ViewerMockup: React.FC = () => {
           <X className="h-5 w-5" />
         </Button>
 
-        {/* Building name + mode */}
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="text-white text-sm font-medium truncate max-w-[180px]">
             {buildingName}
@@ -127,7 +161,6 @@ const ViewerMockup: React.FC = () => {
           <span className="text-white/60 text-xs">{modeLabel}</span>
         </div>
 
-        {/* Hamburger */}
         <Button
           variant="ghost"
           size="icon"
@@ -138,50 +171,60 @@ const ViewerMockup: React.FC = () => {
         </Button>
       </div>
 
-      {/* ── Spacer to push toolbar to bottom ── */}
+      {/* ── Spacer ── */}
       <div className="flex-1" />
 
       {/* ── Selected floor pill (floating) ── */}
       <div className="relative z-50 flex justify-center pb-2 pointer-events-none">
-        <div className="pointer-events-auto bg-background/80 backdrop-blur-sm rounded-full px-3 py-1 flex items-center gap-1.5 border border-border/40">
-          <Layers className="h-3 w-3 text-primary" />
-          <span className="text-xs font-medium text-foreground">{selectedFloor}</span>
+        <div className="pointer-events-auto bg-black/50 backdrop-blur-sm rounded-full px-3 py-1 flex items-center gap-1.5 border border-white/10">
+          <Layers className="h-3 w-3 text-white/70" />
+          <span className="text-xs font-medium text-white/90">{selectedFloor}</span>
         </div>
       </div>
 
-      {/* ── Compact bottom toolbar ── */}
+      {/* ── Compact bottom toolbar (edge-to-edge / transparent) ── */}
       <div
-        className="relative z-50 flex items-center justify-around bg-background/90 backdrop-blur-sm border-t border-border/30"
+        className="relative z-50 flex items-center justify-around pointer-events-none"
         style={{
           paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 6px)',
-          paddingTop: '6px',
+          paddingTop: '16px',
           paddingLeft: 'env(safe-area-inset-left, 0px)',
           paddingRight: 'env(safe-area-inset-right, 0px)',
+          background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 100%)',
         }}
       >
-        {TOOLS.map(({ id, Icon, label }) => (
+        {visibleTools.map(({ id, Icon, label }) => (
           <button
             key={id}
             onClick={() => setActiveTool(id)}
-            className={`flex flex-col items-center gap-0.5 p-1.5 rounded-lg transition-colors ${
+            className={`pointer-events-auto flex flex-col items-center gap-0.5 p-1.5 rounded-lg transition-colors ${
               activeTool === id
-                ? 'text-primary bg-primary/10'
-                : 'text-muted-foreground hover:text-foreground'
+                ? 'text-primary'
+                : 'text-white/70 hover:text-white'
             }`}
             title={label}
           >
             <Icon className="h-5 w-5" />
           </button>
         ))}
+
+        {/* Settings gear — always visible */}
+        <button
+          onClick={() => { setSubSheet('toolbarConfig'); setSheetOpen(true); }}
+          className="pointer-events-auto flex flex-col items-center gap-0.5 p-1.5 rounded-lg transition-colors text-white/50 hover:text-white"
+          title="Toolbar Settings"
+        >
+          <Settings className="h-4 w-4" />
+        </button>
       </div>
 
-      {/* ── Action Sheet (main menu) ── */}
+      {/* ── Action Sheet ── */}
       <Drawer open={sheetOpen} onOpenChange={setSheetOpen}>
         <DrawerContent className="max-h-[85dvh]">
           {subSheet === null && (
             <>
               <DrawerHeader className="pb-2">
-                <DrawerTitle className="text-base">Meny</DrawerTitle>
+                <DrawerTitle className="text-base">Menu</DrawerTitle>
               </DrawerHeader>
               <div className="px-2 pb-6 space-y-0.5">
                 {MENU_ITEMS.map(({ id, Icon, label, hasSubmenu }) => (
@@ -195,9 +238,6 @@ const ViewerMockup: React.FC = () => {
                     {id === 'viewMode' && (
                       <span className="text-xs text-muted-foreground">{modeLabel}</span>
                     )}
-                    {id === 'floors' && (
-                      <span className="text-xs text-muted-foreground">{selectedFloor}</span>
-                    )}
                     {hasSubmenu && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                   </button>
                 ))}
@@ -210,9 +250,9 @@ const ViewerMockup: React.FC = () => {
               <DrawerHeader className="pb-2">
                 <div className="flex items-center gap-2">
                   <Button variant="ghost" size="sm" onClick={() => setSubSheet(null)} className="h-7 px-2">
-                    ← Tillbaka
+                    ← Back
                   </Button>
-                  <DrawerTitle className="text-base">Visningsläge</DrawerTitle>
+                  <DrawerTitle className="text-base">View Mode</DrawerTitle>
                 </div>
               </DrawerHeader>
               <div className="px-2 pb-6 space-y-0.5">
@@ -233,29 +273,29 @@ const ViewerMockup: React.FC = () => {
             </>
           )}
 
-          {subSheet === 'floors' && (
+          {subSheet === 'toolbarConfig' && (
             <>
               <DrawerHeader className="pb-2">
                 <div className="flex items-center gap-2">
                   <Button variant="ghost" size="sm" onClick={() => setSubSheet(null)} className="h-7 px-2">
-                    ← Tillbaka
+                    ← Back
                   </Button>
-                  <DrawerTitle className="text-base">Våningar</DrawerTitle>
+                  <DrawerTitle className="text-base">Toolbar</DrawerTitle>
                 </div>
               </DrawerHeader>
               <div className="px-2 pb-6 space-y-0.5">
-                {MOCK_FLOORS.map((floor) => (
-                  <button
-                    key={floor}
-                    onClick={() => { setSelectedFloor(floor); setSubSheet(null); setSheetOpen(false); }}
-                    className={`w-full flex items-center gap-3 px-4 py-4 rounded-lg transition-colors ${
-                      selectedFloor === floor ? 'bg-primary/10 text-primary' : 'hover:bg-muted/60 text-foreground'
-                    }`}
+                {ALL_TOOLS.map(({ id, Icon, label }) => (
+                  <div
+                    key={id}
+                    className="w-full flex items-center gap-3 px-4 py-3.5 rounded-lg"
                   >
-                    <Layers className="h-5 w-5 shrink-0" />
-                    <span className="text-sm font-medium flex-1 text-left">{floor}</span>
-                    {selectedFloor === floor && <Eye className="h-4 w-4 text-primary" />}
-                  </button>
+                    <Icon className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <span className="text-sm font-medium text-foreground flex-1 text-left">{label}</span>
+                    <Switch
+                      checked={enabledTools.includes(id)}
+                      onCheckedChange={() => toggleTool(id)}
+                    />
+                  </div>
                 ))}
               </div>
             </>
