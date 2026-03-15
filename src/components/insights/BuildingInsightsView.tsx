@@ -1437,6 +1437,17 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                 </>
                             )}
                         </TabsContent>
+
+                        {/* ML Tabs */}
+                        <TabsContent value="predictive" className="mt-0">
+                            <PredictiveMaintenanceTab facility={facility} />
+                        </TabsContent>
+                        <TabsContent value="optimization" className="mt-0">
+                            <RoomOptimizationTab facility={facility} />
+                        </TabsContent>
+                        <TabsContent value="rag" className="mt-0">
+                            <RagSearchTab facility={facility} />
+                        </TabsContent>
                     </Tabs>
                 </div>
 
