@@ -127,6 +127,9 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
   const proactiveFetchedRef = useRef<string>("");
   const abortRef = useRef<AbortController | null>(null);
   const spokenMessageKeyRef = useRef<string>("");
+  const ttsUnlockedRef = useRef(false);
+  // Local override for building context set via selectBuilding (avoids AppContext navigation)
+  const [localBuildingContext, setLocalBuildingContext] = useState<{ fmGuid: string; name: string } | null>(null);
 
   // Fetch proactive insights when context has a building
   useEffect(() => {
