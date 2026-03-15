@@ -1248,6 +1248,7 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
     case "fm_access_get_hierarchy": return execFmAccessGetHierarchy(args);
     case "fm_access_search_objects": return execFmAccessSearchObjects(args);
     case "fm_access_get_floors": return execFmAccessGetFloors(args);
+    case "fm_access_get_documents": return execFmAccessGetDocuments(args);
     // FM Access — local search
     case "search_fm_access_local": return execSearchFmAccessLocal(supabase, args);
     // Document Q&A
