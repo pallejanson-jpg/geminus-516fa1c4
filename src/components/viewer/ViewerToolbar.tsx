@@ -767,9 +767,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
             saveOrig(entity, mo.id);
             entity.visible = true; entity.pickable = true; entity.opacity = 1; entity.colorize = [0.94, 0.94, 0.94]; entity.edges = true;
             visibleCount++;
-          } else if (SPACE_TYPES.has(typeLower)) {
+         } else if (SPACE_TYPES.has(typeLower)) {
             saveOrig(entity, mo.id);
-            entity.visible = false; entity.pickable = false; entity.opacity = 0; entity.colorize = null;
+            entity.visible = true; entity.pickable = true; entity.opacity = 0.15; entity.colorize = [0.7, 0.85, 0.95]; entity.edges = true;
+            // Lower spaces so furniture/equipment wins pick priority in top-down 2D
+            const origOffset = entity.offset ? [...entity.offset] : [0, 0, 0];
+            entity.offset = [origOffset[0], origOffset[1] - 0.3, origOffset[2]];
+            visibleCount++;
           } else if (WALL_TYPES.has(typeLower)) {
             saveOrig(entity, mo.id);
             entity.colorize = [0, 0, 0]; entity.opacity = 1; entity.edges = true; entity.pickable = true;
