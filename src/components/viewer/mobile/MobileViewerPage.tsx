@@ -50,6 +50,7 @@ const ALL_TOOLS: { id: string; Icon: React.FC<any>; label: string }[] = [
   { id: 'orbit', Icon: Orbit, label: 'Orbit' },
   { id: 'pan', Icon: Hand, label: 'Pan' },
   { id: 'fit', Icon: Maximize, label: 'Fit' },
+  { id: 'resetView', Icon: RotateCcw, label: 'Reset View' },
   { id: 'select', Icon: MousePointer, label: 'Select' },
   { id: 'measure', Icon: Ruler, label: 'Measure' },
   { id: 'section', Icon: Scissors, label: 'Section' },
@@ -59,7 +60,7 @@ const ALL_TOOLS: { id: string; Icon: React.FC<any>; label: string }[] = [
   { id: 'markup', Icon: PenTool, label: 'Markup' },
 ];
 
-const DEFAULT_ENABLED = ['orbit', 'pan', 'fit', 'select', 'measure', 'section'];
+const DEFAULT_ENABLED = ['orbit', 'pan', 'fit', 'resetView', 'select', 'measure', 'section'];
 
 /* ── Action Sheet menu items ── */
 const MENU_ITEMS = [
