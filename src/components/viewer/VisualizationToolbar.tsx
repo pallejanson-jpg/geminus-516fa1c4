@@ -716,10 +716,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     className
   );
 
-  // Shared toolbar content used by both mobile Drawer and desktop sidebar
-  const toolbarContentJSX = (
-    <>
-
+    return (
       <div className={containerClassName}>
         {/* Trigger button - positioned at top right */}
         {!isOpen && (
@@ -737,8 +734,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           </Button>
         )}
 
-        {/* Mobile: Bottom Drawer | Desktop: Fixed right sidebar */}
-        {isOpen && isMobile ? (
+        {/* Mobile: Bottom Drawer */}
+        {isOpen && isMobile && (
           <Drawer open={isOpen} onOpenChange={handleSetIsOpen}>
             <DrawerContent className="max-h-[75dvh]">
               <DrawerHeader className="py-2 px-3">
@@ -748,16 +745,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               <div ref={scrollWrapRef} className="relative flex-1 min-h-0 overflow-hidden">
                 <ScrollArea className="h-full p-3 max-h-[60dvh]">
                <div className="space-y-2 sm:space-y-3">
-                {/* Mobile drawer content rendered below via shared JSX */}
-                {renderToolbarContent()}
-               </div>
-              </ScrollArea>
-              <EdgeScrollIndicator viewport={scrollViewportEl} />
-              </div>
-              </TooltipProvider>
-            </DrawerContent>
-          </Drawer>
-        ) : isOpen && (
+
           <>
             {/* Backdrop — click outside to close */}
             <div className="fixed inset-0 z-[59]" onClick={() => handleSetIsOpen(false)} />
