@@ -1331,6 +1331,8 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
     // Faciliate
     case "query_faciliate": return execQueryFaciliate(args);
     case "get_faciliate_object": return execGetFaciliateObject(args);
+    // Adaptive Memory
+    case "save_memory": return execSaveMemory(supabase, args, (globalThis as any).__currentUserId);
     default: return { error: `Unknown tool: ${name}` };
   }
 }
