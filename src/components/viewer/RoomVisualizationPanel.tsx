@@ -93,19 +93,6 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     };
   }, [buildingFmGuid]);
 
-  // Listen for quick-select events from VisualizationQuickBar
-  useEffect(() => {
-    const handler = (e: CustomEvent<{ type: VisualizationType }>) => {
-      setVisualizationType(e.detail.type);
-      // Auto-enable mock data when activating if no real data
-      if (e.detail.type !== 'none' && !hasRealData) {
-        setUseMockData(true);
-      }
-    };
-    window.addEventListener(VISUALIZATION_QUICK_SELECT_EVENT, handler as EventListener);
-    return () => window.removeEventListener(VISUALIZATION_QUICK_SELECT_EVENT, handler as EventListener);
-  }, [hasRealData]);
-
   // Effective visible floor guids: prefer event-based, fall back to prop
   const visibleFloorFmGuids = eventFloorGuids ?? visibleFloorFmGuidsProp;
   
