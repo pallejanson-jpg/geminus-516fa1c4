@@ -1183,6 +1183,7 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
     case "get_floor_details": return execGetFloorDetails(supabase, args);
     // Building resolution
     case "resolve_building_by_name": return execResolveBuildingByName(supabase, args);
+    case "list_buildings": return execListBuildings(supabase, args);
     // Senslinc
     case "senslinc_get_equipment": return execSenslincGetEquipment(args);
     case "senslinc_get_sites": return execSenslincGetSites(args);
