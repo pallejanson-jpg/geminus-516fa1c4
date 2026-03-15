@@ -607,6 +607,24 @@ const tools = [
       },
     },
   },
+  // ── Adaptive Memory ──
+  {
+    type: "function",
+    function: {
+      name: "save_memory",
+      description: "Save a user instruction, correction, or preference for future reference. Use when user says 'kom ihåg', 'remember', 'nästa gång', 'jag föredrar', or corrects you.",
+      parameters: {
+        type: "object",
+        properties: {
+          content: { type: "string", description: "The instruction/correction/preference to remember" },
+          memory_type: { type: "string", enum: ["instruction", "correction", "preference"] },
+          building_fm_guid: { type: "string", description: "If memory is building-specific" },
+        },
+        required: ["content", "memory_type"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 /* ─────────────────────────────────────────────
