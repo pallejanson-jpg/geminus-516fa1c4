@@ -258,19 +258,33 @@ const ViewerMockup: React.FC = () => {
                 </div>
               </DrawerHeader>
               <div className="px-2 pb-6 space-y-0.5">
-                {VIEW_MODES.map(({ mode, label, Icon }) => (
-                  <button
-                    key={mode}
-                    onClick={() => { setViewMode(mode); setSubSheet(null); setSheetOpen(false); }}
-                    className={`w-full flex items-center gap-3 px-4 py-4 rounded-lg transition-colors ${
-                      viewMode === mode ? 'bg-primary/10 text-primary' : 'hover:bg-muted/60 text-foreground'
-                    }`}
-                  >
-                    <Icon className="h-5 w-5 shrink-0" />
-                    <span className="text-sm font-medium flex-1 text-left">{label}</span>
-                    {viewMode === mode && <Eye className="h-4 w-4 text-primary" />}
-                  </button>
-                ))}
+                {VIEW_MODES.map(({ mode, label, Icon, requires360 }) => {
+                  const disabled = requires360 && !hasIvionSiteId;
+                  return (
+                    <button
+                      key={mode}
+                      onClick={() => {
+                        if (disabled) {
+                          toast.error('Requires 360 connection — set Ivion Site ID in building settings');
+                          return;
+                        }
+                        setViewMode(mode); setSubSheet(null); setSheetOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-4 rounded-lg transition-colors ${
+                        disabled
+                          ? 'opacity-40 cursor-not-allowed'
+                          : viewMode === mode ? 'bg-primary/10 text-primary' : 'hover:bg-muted/60 text-foreground'
+                      }`}
+                    >
+                      <Icon className="h-5 w-5 shrink-0" />
+                      <div className="flex-1 text-left">
+                        <span className="text-sm font-medium">{label}</span>
+                        {disabled && <p className="text-xs text-muted-foreground">Requires 360 connection</p>}
+                      </div>
+                      {viewMode === mode && !disabled && <Eye className="h-4 w-4 text-primary" />}
+                    </button>
+                  );
+                })}
               </div>
             </>
           )}
