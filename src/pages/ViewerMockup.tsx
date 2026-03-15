@@ -11,7 +11,7 @@
  *  └─────────────────────────────┘
  */
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   X, Menu, Orbit, Hand, Maximize, MousePointer, Ruler,
@@ -19,7 +19,7 @@ import {
   Layers, Filter, SlidersHorizontal, BarChart2,
   AlertTriangle, Settings, ChevronRight, Eye,
   Upload, Scan, Navigation, Compass, PenTool, User,
-  Loader2,
+  Loader2, RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -31,6 +31,11 @@ import NativeViewerShell from '@/components/viewer/NativeViewerShell';
 import { useBuildingViewerData } from '@/hooks/useBuildingViewerData';
 import { useContext } from 'react';
 import { AppContext } from '@/context/AppContext';
+import {
+  VIEWER_TOOL_CHANGED_EVENT,
+  VIEW_MODE_REQUESTED_EVENT,
+  type ViewerToolChangedDetail,
+} from '@/lib/viewer-events';
 
 /* ── Types ── */
 type ViewMode = '2d' | '2d3d' | '3d' | '3d360' | '360';
@@ -70,6 +75,9 @@ const MENU_ITEMS = [
   { id: 'settings', Icon: Settings, label: 'Settings' },
 ];
 
+/* ── Helper: get xeokit viewer from global ref ── */
+const getViewer = () => (window as any).__nativeXeokitViewer;
+
 const ViewerMockup: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -81,6 +89,7 @@ const ViewerMockup: React.FC = () => {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [subSheet, setSubSheet] = useState<'viewMode' | 'toolbarConfig' | null>(null);
   const [enabledTools, setEnabledTools] = useState<string[]>(DEFAULT_ENABLED);
+  const [isXrayActive, setIsXrayActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Get building data
@@ -90,16 +99,139 @@ const ViewerMockup: React.FC = () => {
   const hasIvionSiteId = !!buildingData?.ivionSiteId;
   const modeLabel = VIEW_MODES.find((m) => m.mode === viewMode)?.label ?? '3D';
 
-  const handleMenuItem = (id: string) => {
-    if (id === 'viewMode') {
-      setSubSheet('viewMode');
-    } else if (id === 'openIfc') {
-      setSheetOpen(false);
-      setTimeout(() => fileInputRef.current?.click(), 300);
-    } else {
-      setSheetOpen(false);
+  /* ── Real xeokit tool handlers ── */
+
+  const handleToolClick = useCallback((toolId: string) => {
+    const viewer = getViewer();
+    setActiveTool(toolId);
+
+    switch (toolId) {
+      case 'orbit':
+        if (viewer?.cameraControl) {
+          viewer.cameraControl.navMode = 'orbit';
+          viewer.cameraControl.followPointer = false;
+        }
+        // Clear active tool
+        window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, {
+          detail: { tool: null } as ViewerToolChangedDetail,
+        }));
+        break;
+
+      case 'pan':
+        if (viewer?.cameraControl) {
+          viewer.cameraControl.navMode = 'planView';
+        }
+        window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, {
+          detail: { tool: null } as ViewerToolChangedDetail,
+        }));
+        break;
+
+      case 'fit':
+        if (viewer?.cameraFlight && viewer?.scene) {
+          viewer.cameraFlight.flyTo({ aabb: viewer.scene.aabb, duration: 0.5 });
+        }
+        break;
+
+      case 'select':
+        window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, {
+          detail: { tool: 'select' } as ViewerToolChangedDetail,
+        }));
+        break;
+
+      case 'measure':
+        window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, {
+          detail: { tool: 'measure' } as ViewerToolChangedDetail,
+        }));
+        break;
+
+      case 'section':
+        window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, {
+          detail: { tool: 'slicer' } as ViewerToolChangedDetail,
+        }));
+        break;
+
+      case 'xray': {
+        const next = !isXrayActive;
+        setIsXrayActive(next);
+        if (viewer?.scene) {
+          const ids = viewer.scene.objectIds || [];
+          viewer.scene.setObjectsXRayed(ids, next);
+        }
+        break;
+      }
+
+      case 'firstPerson':
+        if (viewer?.cameraControl) {
+          viewer.cameraControl.navMode = 'firstPerson';
+          viewer.cameraControl.followPointer = true;
+          viewer.cameraControl.constrainVertical = true;
+        }
+        window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, {
+          detail: { tool: null } as ViewerToolChangedDetail,
+        }));
+        break;
+
+      case 'navCube':
+        toast.info('Nav Cube toggled');
+        break;
+
+      case 'markup':
+        toast.info('Markup mode — coming soon');
+        break;
     }
-  };
+  }, [isXrayActive]);
+
+  /* ── Menu item handlers ── */
+
+  const handleMenuItem = useCallback((id: string) => {
+    switch (id) {
+      case 'viewMode':
+        setSubSheet('viewMode');
+        break;
+
+      case 'filter':
+        setSheetOpen(false);
+        // Toggle the filter panel in NativeViewerShell
+        setTimeout(() => {
+          window.dispatchEvent(new Event('MOBILE_TOGGLE_FILTER_PANEL'));
+        }, 200);
+        break;
+
+      case 'visualization':
+        setSheetOpen(false);
+        setTimeout(() => {
+          window.dispatchEvent(new Event('MOBILE_TOGGLE_VIZ_MENU'));
+        }, 200);
+        break;
+
+      case 'insights':
+        setSheetOpen(false);
+        setTimeout(() => {
+          window.dispatchEvent(new Event('MOBILE_TOGGLE_VIZ_MENU'));
+        }, 200);
+        break;
+
+      case 'issues':
+        setSheetOpen(false);
+        setTimeout(() => {
+          window.dispatchEvent(new Event('MOBILE_TOGGLE_VIZ_MENU'));
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('OPEN_ISSUE_LIST'));
+          }, 300);
+        }, 200);
+        break;
+
+      case 'openIfc':
+        setSheetOpen(false);
+        setTimeout(() => fileInputRef.current?.click(), 300);
+        break;
+
+      case 'settings':
+        setSheetOpen(false);
+        toast.info('Settings — coming soon');
+        break;
+    }
+  }, []);
 
   const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -116,6 +248,17 @@ const ViewerMockup: React.FC = () => {
   };
 
   const visibleTools = ALL_TOOLS.filter((t) => enabledTools.includes(t.id));
+
+  // Handle view mode change
+  const handleViewModeChange = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
+    // Dispatch to the real viewer
+    if (mode === '2d' || mode === '3d') {
+      window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, {
+        detail: { mode },
+      }));
+    }
+  }, []);
 
   // Loading / error states
   if (!buildingFmGuid) {
@@ -169,7 +312,7 @@ const ViewerMockup: React.FC = () => {
           hideBackButton
           hideMobileOverlay
           hideToolbar
-          hideFloorSwitcher
+          hideFloorSwitcher={false}
           showGeminusMenu={false}
         />
       </div>
@@ -226,11 +369,13 @@ const ViewerMockup: React.FC = () => {
         {visibleTools.map(({ id, Icon, label }) => (
           <button
             key={id}
-            onClick={() => setActiveTool(id)}
+            onClick={() => handleToolClick(id)}
             className={`pointer-events-auto flex flex-col items-center gap-0.5 p-1.5 rounded-lg transition-colors ${
               activeTool === id
                 ? 'text-primary'
-                : 'text-white/70 hover:text-white'
+                : id === 'xray' && isXrayActive
+                  ? 'text-primary'
+                  : 'text-white/70 hover:text-white'
             }`}
             title={label}
           >
@@ -296,7 +441,9 @@ const ViewerMockup: React.FC = () => {
                           toast.error('Requires 360 connection — set Ivion Site ID in building settings');
                           return;
                         }
-                        setViewMode(mode); setSubSheet(null); setSheetOpen(false);
+                        handleViewModeChange(mode);
+                        setSubSheet(null);
+                        setSheetOpen(false);
                       }}
                       className={`w-full flex items-center gap-3 px-4 py-4 rounded-lg transition-colors ${
                         disabled
