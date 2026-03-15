@@ -42,9 +42,7 @@ export default function SpaceManagementTab({ onNavigateToRooms }: SpaceManagemen
             building.children?.forEach(storey => {
                 storey.children?.forEach(space => {
                     totalSpaces++;
-                    const attrs = space.attributes || {};
-                    const ntaKey = Object.keys(attrs).find(k => k.toLowerCase().startsWith('nta'));
-                    const area = ntaKey ? Number(attrs[ntaKey]) : (space.grossArea || 0);
+                    const area = extractSpaceArea(space);
                     totalArea += area;
 
                     const spaceType = attrs.spaceType || attrs.roomType || 'Unknown';

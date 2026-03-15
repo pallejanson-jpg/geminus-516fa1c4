@@ -1,4 +1,5 @@
 import React, { useContext, useState, useMemo, useEffect } from 'react';
+import { extractSpaceArea } from '@/lib/building-utils';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AppContext } from '@/context/AppContext';
 import { Card, CardContent } from '@/components/ui/card';

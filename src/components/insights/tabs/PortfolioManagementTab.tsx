@@ -1,4 +1,5 @@
 import React, { useContext, useMemo } from 'react';
+import { extractSpaceArea } from '@/lib/building-utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
