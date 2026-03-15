@@ -20,6 +20,9 @@ import { Carousel, CarouselContent, CarouselItem } from '@/components/ui/carouse
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import AlarmManagementTab from '@/components/insights/tabs/AlarmManagementTab';
+import PredictiveMaintenanceTab from '@/components/insights/tabs/PredictiveMaintenanceTab';
+import RoomOptimizationTab from '@/components/insights/tabs/RoomOptimizationTab';
+import RagSearchTab from '@/components/insights/tabs/RagSearchTab';
 import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -725,6 +728,15 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                         <Badge variant="destructive" className="text-[9px] h-4 px-1 ml-0.5">{alarmCount > 999 ? '999+' : alarmCount}</Badge>
                                     )}
                                 </TabsTrigger>
+                                <TabsTrigger value="predictive" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                    🔮 Prediktivt
+                                </TabsTrigger>
+                                <TabsTrigger value="optimization" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                    📐 Optimering
+                                </TabsTrigger>
+                                <TabsTrigger value="rag" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                    🔍 RAG Sök
+                                </TabsTrigger>
                             </TabsList>
                         </div>
 
@@ -1313,7 +1325,12 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                         .filter((a: any) => a.level_fm_guid === level.levelGuid)
                                                                         .slice(0, 50)
                                                                         .map((a: any) => ({ fmGuid: a.fm_guid, roomFmGuid: a.in_room_fm_guid }));
-                                                                    window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: levelAlarms } }));
+                                                                    if (isMobile && !drawerMode) {
+                                                                        sessionStorage.setItem('pending_alarm_annotations', JSON.stringify({ alarms: levelAlarms }));
+                                                                        navigate(`/viewer?building=${facility.fmGuid}&mode=3d`);
+                                                                    } else {
+                                                                        window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: levelAlarms } }));
+                                                                    }
                                                                 }}
                                                             >
                                                                 <MapPin className="h-3.5 w-3.5" />
@@ -1386,8 +1403,12 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                             title="Show annotation and zoom to alarm"
                                                                             onClick={() => {
                                                                                 const alarms = [{ fmGuid: alarm.fm_guid, roomFmGuid: alarm.in_room_fm_guid }];
-                                                                                // Always dispatch event (works in both drawer and desktop inline viewer)
-                                                                                window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms, flyTo: true } }));
+                                                                                if (isMobile && !drawerMode) {
+                                                                                    sessionStorage.setItem('pending_alarm_annotations', JSON.stringify({ alarms, flyTo: true }));
+                                                                                    navigate(`/viewer?building=${facility.fmGuid}&mode=3d`);
+                                                                                } else {
+                                                                                    window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms, flyTo: true } }));
+                                                                                }
                                                                             }}
                                                                         >
                                                                             <Eye className="h-3.5 w-3.5" />
@@ -1424,6 +1445,17 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                     </Card>
                                 </>
                             )}
+                        </TabsContent>
+
+                        {/* ML Tabs */}
+                        <TabsContent value="predictive" className="mt-0">
+                            <PredictiveMaintenanceTab facility={facility} />
+                        </TabsContent>
+                        <TabsContent value="optimization" className="mt-0">
+                            <RoomOptimizationTab facility={facility} />
+                        </TabsContent>
+                        <TabsContent value="rag" className="mt-0">
+                            <RagSearchTab facility={facility} />
                         </TabsContent>
                     </Tabs>
                 </div>

@@ -834,6 +834,21 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     };
   }, [flashEntityById, fmGuid]);
 
+  // Read pending alarm annotations from sessionStorage (set by Insights on mobile before navigation)
+  useEffect(() => {
+    if (modelLoadState !== 'loaded' || initStep !== 'ready') return;
+    const raw = sessionStorage.getItem('pending_alarm_annotations');
+    if (!raw) return;
+    sessionStorage.removeItem('pending_alarm_annotations');
+    try {
+      const parsed = JSON.parse(raw);
+      // Dispatch the event with a small delay to ensure listeners are ready
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: parsed }));
+      }, 500);
+    } catch { /* ignore */ }
+  }, [modelLoadState, initStep]);
+
   const { broadcastCamera } = useViewerCameraSync({
     viewerRef: viewerInstanceRef,
     enabled: syncEnabled,
