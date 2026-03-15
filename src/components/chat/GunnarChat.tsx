@@ -127,6 +127,9 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
   const proactiveFetchedRef = useRef<string>("");
   const abortRef = useRef<AbortController | null>(null);
   const spokenMessageKeyRef = useRef<string>("");
+  const ttsUnlockedRef = useRef(false);
+  // Local override for building context set via selectBuilding (avoids AppContext navigation)
+  const [localBuildingContext, setLocalBuildingContext] = useState<{ fmGuid: string; name: string } | null>(null);
 
   // Fetch proactive insights when context has a building
   useEffect(() => {
@@ -166,7 +169,9 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     const buildingKey = context?.currentBuilding?.fmGuid;
     if (buildingKey !== currentBuildingRef.current) {
       currentBuildingRef.current = buildingKey;
-      if (messages.length === 0 || (messages.length === 1 && messages[0].role === 'assistant')) {
+      // Only reset if conversation is empty or just has the initial greeting
+      // Don't reset if user has an active conversation (more than 1 message)
+      if (messages.length <= 1) {
         setMessages([{ role: "assistant", content: getContextualGreeting(context) }]);
         setSuggestedFollowups([]);
         setProactiveInsights([]);
@@ -272,6 +277,16 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       window.speechSynthesis.speak(utterance);
     });
   }, [cleanSpeechText, voiceOutputEnabled, getBestVoice]);
+
+  // Compute effective context: merge local building override with prop context
+  const effectiveContext = useMemo<GunnarContext | undefined>(() => {
+    if (!localBuildingContext) return context;
+    return {
+      ...context,
+      activeApp: context?.activeApp || 'ai-standalone',
+      currentBuilding: localBuildingContext,
+    };
+  }, [context, localBuildingContext]);
 
   const streamChat = useCallback(
     async (userMessages: Message[], currentContext?: GunnarContext, advisorMode?: boolean) => {
@@ -384,7 +399,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
 
     try {
       const apiMessages = trimHistory(newMessages.filter((_, i) => i > 0));
-      const response = await streamChat(apiMessages, context, advisorMode);
+      const response = await streamChat(apiMessages, effectiveContext, advisorMode);
 
       const followups = extractFollowups(response);
       if (followups.length > 0) {
@@ -452,6 +467,23 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     if (isListening) stopListening();
     else startListening();
   }, [isListening, isLoading, isVoiceSupported, startListening, stopListening]);
+
+  /** Toggle TTS with iOS unlock on first enable */
+  const toggleVoiceOutput = useCallback(() => {
+    if (voiceOutputEnabled) {
+      window.speechSynthesis?.cancel();
+      setVoiceOutputEnabled(false);
+    } else {
+      // iOS requires a user-gesture-initiated speak() to unlock the API
+      if (!ttsUnlockedRef.current && 'speechSynthesis' in window) {
+        const unlock = new SpeechSynthesisUtterance('');
+        unlock.volume = 0;
+        window.speechSynthesis.speak(unlock);
+        ttsUnlockedRef.current = true;
+      }
+      setVoiceOutputEnabled(true);
+    }
+  }, [voiceOutputEnabled]);
 
   // Auto-start voice mode when opened via deep link (?gunnar=voice)
   useEffect(() => {
@@ -639,15 +671,10 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       case "selectBuilding":
         if (action.buildingFmGuid) {
           const bName = action.buildingName || 'byggnaden';
-          if (!isStandaloneContext) {
-            setSelectedFacility({
-              fmGuid: action.buildingFmGuid,
-              name: bName,
-              commonName: bName,
-              category: 'Building',
-            });
-          }
-          void sendMessage(`Jag menar ${bName}`);
+          // Set local building context — avoids AppContext navigation/reset
+          setLocalBuildingContext({ fmGuid: action.buildingFmGuid, name: bName });
+          // Send follow-up with explicit building reference
+          void sendMessage(`Berätta om ${bName}`);
         }
         break;
     }
@@ -884,14 +911,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
               variant="ghost"
               size="icon"
               className="h-6 w-6 shrink-0"
-              onClick={() => {
-                if (voiceOutputEnabled) {
-                  window.speechSynthesis.cancel();
-                  setVoiceOutputEnabled(false);
-                } else {
-                  setVoiceOutputEnabled(true);
-                }
-              }}
+              onClick={toggleVoiceOutput}
               title={voiceOutputEnabled ? 'Disable voice output' : 'Enable voice output'}
             >
               {voiceOutputEnabled ? (
@@ -914,14 +934,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
                 variant="ghost"
                 size="icon"
                 className="h-9 w-9 shrink-0"
-                onClick={() => {
-                  if (voiceOutputEnabled) {
-                    window.speechSynthesis.cancel();
-                    setVoiceOutputEnabled(false);
-                  } else {
-                    setVoiceOutputEnabled(true);
-                  }
-                }}
+              onClick={toggleVoiceOutput}
                 title={voiceOutputEnabled ? 'Disable voice output' : 'Enable voice output'}
               >
                 {voiceOutputEnabled ? (
@@ -1019,14 +1032,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
                 variant="ghost"
                 size="icon"
                 className="h-6 w-6 shrink-0"
-                onClick={() => {
-                  if (voiceOutputEnabled) {
-                    window.speechSynthesis.cancel();
-                    setVoiceOutputEnabled(false);
-                  } else {
-                    setVoiceOutputEnabled(true);
-                  }
-                }}
+              onClick={toggleVoiceOutput}
                 title={voiceOutputEnabled ? 'Disable voice output' : 'Enable voice output'}
               >
                 {voiceOutputEnabled ? (
@@ -1049,14 +1055,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 shrink-0"
-                  onClick={() => {
-                    if (voiceOutputEnabled) {
-                      window.speechSynthesis.cancel();
-                      setVoiceOutputEnabled(false);
-                    } else {
-                      setVoiceOutputEnabled(true);
-                    }
-                  }}
+              onClick={toggleVoiceOutput}
                   title={voiceOutputEnabled ? 'Disable voice output' : 'Enable voice output'}
                 >
                   {voiceOutputEnabled ? (
