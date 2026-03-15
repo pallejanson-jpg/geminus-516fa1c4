@@ -1162,7 +1162,31 @@ async function execResolveBuildingByName(supabase: any, args: any) {
   };
 }
 
-/* ─────────────────────────────────────────────
+async function execListBuildings(supabase: any, args: any) {
+  const limit = args.limit || 50;
+  const { data, error } = await supabase
+    .from("assets")
+    .select("fm_guid, name, common_name")
+    .eq("category", "Building")
+    .order("common_name", { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  // Deduplicate by fm_guid
+  const seen = new Map<string, string>();
+  for (const b of data || []) {
+    if (b.fm_guid && !seen.has(b.fm_guid)) {
+      seen.set(b.fm_guid, b.common_name || b.name || b.fm_guid);
+    }
+  }
+  const buildings = Array.from(seen, ([fm_guid, name]) => ({ fm_guid, name }));
+  return {
+    total: buildings.length,
+    buildings,
+    instruction: "Present each building as a clickable selectBuilding action button: [Building Name](action:selectBuilding:fm_guid:encodedName)",
+  };
+}
+
+
    executeTool — ALIGNED with tool declarations
    ───────────────────────────────────────────── */
 
