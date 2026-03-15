@@ -487,6 +487,10 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
   // Whether we're in embedded side-panel mode (not standalone /ai, not overlay)
   const isEmbeddedPanel = !!embedded && context?.activeApp !== 'ai-standalone';
   const isStandaloneAi = context?.activeApp === 'ai-standalone';
+  // Standalone plugin: embedded but without a viewer listening (PWA mode)
+  const isStandalonePlugin = !!embedded && !!(context as any)?.contextMetadata?.standalone;
+  // True for BOTH standalone AI and standalone plugin — never navigate away
+  const isStandaloneContext = isStandaloneAi || isStandalonePlugin;
 
   // In standalone mode (/ai), never close back to "/" after action navigation.
   const closeAfterAction = useCallback(() => {
