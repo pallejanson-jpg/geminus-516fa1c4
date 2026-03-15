@@ -744,7 +744,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               <TooltipProvider delayDuration={300}>
               <div ref={scrollWrapRef} className="relative flex-1 min-h-0 overflow-hidden">
                 <ScrollArea className="h-full p-3 max-h-[60dvh]">
-               <div className="space-y-2 sm:space-y-3">
+               {/* --- Shared toolbar content START (same for mobile drawer and desktop sidebar) --- */}
 
           <>
             {/* Backdrop — click outside to close */}
