@@ -142,6 +142,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
   const [isCrosshairActive, setIsCrosshairActive] = useState(false);
   const [enabledTools, setEnabledTools] = useState<string[]>(getEnabledTools);
   const [showConfig, setShowConfig] = useState(false);
+  const [navSpeed, setNavSpeed] = useState(() => {
+    try { return parseInt(localStorage.getItem('viewer-nav-speed') || '100'); } catch { return 100; }
+  });
 
   // Store initial camera for reset
   const initialCameraRef = useRef<{ eye: number[]; look: number[]; up: number[] } | null>(null);
