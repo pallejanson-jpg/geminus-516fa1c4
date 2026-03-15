@@ -105,11 +105,12 @@ export default function GeminusPluginMenu({
   }, []);
 
   // Build Gunnar context from plugin menu props + live FM Access context
-  const gunnarContext: GunnarContext = {
+  const gunnarContext: GunnarContext & { contextMetadata?: Record<string, any> } = {
     activeApp: source === 'fma_plus' ? 'fma_plus' : source === 'fma_native' ? 'fma_native' : source === '2d_fm_access' ? 'fma_plus' : source,
     currentBuilding: buildingFmGuid ? { fmGuid: buildingFmGuid, name: buildingName || 'Byggnad' } : undefined,
     currentStorey: contextMetadata?.floorGuid ? { fmGuid: contextMetadata.floorGuid, name: contextMetadata.floorName || '' } : undefined,
     currentSpace: contextMetadata?.roomGuid ? { fmGuid: contextMetadata.roomGuid, name: contextMetadata.roomName || '' } : undefined,
+    contextMetadata: { standalone: !!contextMetadata?.standalone },
   };
 
   // ── Issue submit handler ──
