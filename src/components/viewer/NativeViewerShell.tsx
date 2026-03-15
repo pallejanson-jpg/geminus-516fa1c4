@@ -636,6 +636,8 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
             const assetViewer = viewerShimRef.current?.assetViewer || viewerShimRef.current?.$refs?.AssetViewer;
             assetViewer?.onShowSpacesChanged?.(show);
           }}
+          showVisualization={showRoomVisualization}
+          onToggleVisualization={(visible) => setShowRoomVisualization(visible)}
           externalOpen={showVisualizationMenu}
           onExternalOpenChange={setShowVisualizationMenu}
         />
