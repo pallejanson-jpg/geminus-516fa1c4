@@ -801,6 +801,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
             if (entity) {
               if (orig.colorize) entity.colorize = orig.colorize; else entity.colorize = null;
               entity.opacity = orig.opacity; entity.edges = orig.edges; entity.pickable = orig.pickable; entity.visible = orig.visible;
+              if (orig.offset) entity.offset = orig.offset; else entity.offset = [0, 0, 0];
             }
           });
           colorized.clear();
