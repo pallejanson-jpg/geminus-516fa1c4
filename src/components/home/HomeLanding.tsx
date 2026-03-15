@@ -132,7 +132,7 @@ export default function HomeLanding() {
       if (!liveBuilding) return rb;
       const buildingSpaces = allData.filter((a: any) => a.category === 'Space' && a.buildingFmGuid === rb.fmGuid);
       const buildingStoreys = allData.filter((a: any) => a.category === 'Building Storey' && a.buildingFmGuid === rb.fmGuid);
-      const totalArea = buildingSpaces.reduce((sum: number, space: any) => sum + extractNtaFromAttributes(space.attributes), 0);
+      const totalArea = buildingSpaces.reduce((sum: number, space: any) => sum + extractSpaceArea(space), 0);
       const heroImage = getHeroImage(rb.fmGuid, BUILDING_IMAGES[index % BUILDING_IMAGES.length]);
       return {
         ...rb,

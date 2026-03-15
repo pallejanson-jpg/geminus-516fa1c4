@@ -64,15 +64,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             building.children?.forEach(storey => {
                 storey.children?.forEach(space => {
                     totalRooms++;
-                    const attrs = space.attributes || {};
-                    const ntaKey = Object.keys(attrs).find(k => k.toLowerCase().startsWith('nta'));
-                    if (ntaKey && attrs[ntaKey]) {
-                        totalArea += Number(attrs[ntaKey]) || 0;
-                    } else if (attrs.area) {
-                        totalArea += Number(attrs.area) || 0;
-                    } else if (space.grossArea) {
-                        totalArea += Number(space.grossArea) || 0;
-                    }
+                    totalArea += extractSpaceArea(space);
                 });
             });
         });
