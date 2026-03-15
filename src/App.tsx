@@ -122,25 +122,25 @@ const App = () => {
             } 
           />
           
-          {/* Viewer — new layout (promoted from mockup) */}
+          {/* Viewer — UnifiedViewer (restored as primary) */}
           <Route 
             path="/viewer" 
             element={
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                 <ProtectedRoute>
-                  <ViewerMockup />
+                  <UnifiedViewerPage />
                 </ProtectedRoute>
               </Suspense>
             } 
           />
 
-          {/* Legacy viewer — old UnifiedViewer kept as fallback */}
+          {/* Viewer Mockup — new mobile layout (saved as separate route) */}
           <Route 
-            path="/viewer-legacy" 
+            path="/viewer-mockup" 
             element={
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                 <ProtectedRoute>
-                  <UnifiedViewerPage />
+                  <ViewerMockup />
                 </ProtectedRoute>
               </Suspense>
             } 
