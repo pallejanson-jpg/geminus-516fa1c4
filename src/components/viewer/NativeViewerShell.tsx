@@ -72,6 +72,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const [viewMode, setViewMode] = useState<'2d' | '3d' | '360'>('3d');
   const [showSpaces, setShowSpaces] = useState(false);
   const [showVisualizationMenu, setShowVisualizationMenu] = useState(false);
+  const [showRoomVisualization, setShowRoomVisualization] = useState(false);
 
   // Listen for external toggle events (from MobileViewerPage header)
   useEffect(() => {
