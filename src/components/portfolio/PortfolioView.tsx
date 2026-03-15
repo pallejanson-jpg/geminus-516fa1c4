@@ -1,5 +1,5 @@
 import React, { useState, useContext, useMemo } from 'react';
-import { extractNtaFromAttributes } from '@/lib/building-utils';
+import { extractSpaceArea } from '@/lib/building-utils';
 import { Search, LayoutGrid, List, Filter, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -76,11 +76,8 @@ const PortfolioView: React.FC = () => {
         (a: any) => a.category === 'Building Storey' && a.buildingFmGuid === building.fmGuid
       );
       
-      // Calculate total area by summing NTA from each space's attributes
-      const totalArea = buildingSpaces.reduce((sum: number, space: any) => {
-        const nta = extractNtaFromAttributes(space.attributes);
-        return sum + nta;
-      }, 0);
+      // Calculate total area using unified extraction
+      const totalArea = buildingSpaces.reduce((sum: number, space: any) => sum + extractSpaceArea(space), 0);
 
       // Use hero image from building_settings, with fallback to stock images
       const heroImage = getHeroImage(building.fmGuid, BUILDING_IMAGES[index % BUILDING_IMAGES.length]);

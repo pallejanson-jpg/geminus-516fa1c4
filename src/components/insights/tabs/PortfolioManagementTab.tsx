@@ -1,4 +1,5 @@
 import React, { useContext, useMemo } from 'react';
+import { extractSpaceArea } from '@/lib/building-utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
@@ -41,9 +42,7 @@ export default function PortfolioManagementTab({ onColorMap }: PortfolioManageme
             let totalArea = 0;
             building.children?.forEach(storey => {
                 storey.children?.forEach(space => {
-                    const attrs = space.attributes || {};
-                    const ntaKey = Object.keys(attrs).find(k => k.toLowerCase().startsWith('nta'));
-                    totalArea += ntaKey ? Number(attrs[ntaKey]) : (space.grossArea || 0);
+                    totalArea += extractSpaceArea(space);
                 });
             });
 

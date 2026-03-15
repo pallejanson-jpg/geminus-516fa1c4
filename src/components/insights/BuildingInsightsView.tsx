@@ -1,4 +1,5 @@
 import React, { useContext, useMemo, useState, useEffect, useCallback } from 'react';
+import { extractSpaceArea } from '@/lib/building-utils';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useXktPreload } from '@/hooks/useXktPreload';
@@ -368,9 +369,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             const name = space.commonName || space.name || 'Unknown';
             if (!types[name]) types[name] = { count: 0, area: 0 };
             types[name].count++;
-            const attrs = space.attributes || {};
-            const ntaKey = Object.keys(attrs).find(k => k.toLowerCase().startsWith('nta'));
-            types[name].area += ntaKey ? Number(attrs[ntaKey]) || 0 : Number(space.grossArea) || 0;
+            types[name].area += extractSpaceArea(space);
         });
         return Object.entries(types)
             .sort((a, b) => b[1].count - a[1].count)
@@ -435,15 +434,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     const stats = useMemo(() => {
         let totalArea = 0;
         buildingSpaces.forEach((space: any) => {
-            const attrs = space.attributes || {};
-            const ntaKey = Object.keys(attrs).find(k => k.toLowerCase().startsWith('nta'));
-            if (ntaKey && attrs[ntaKey]) {
-                totalArea += Number(attrs[ntaKey]) || 0;
-            } else if (attrs.area) {
-                totalArea += Number(attrs.area) || 0;
-            } else if (space.grossArea) {
-                totalArea += Number(space.grossArea) || 0;
-            }
+            totalArea += extractSpaceArea(space);
         });
 
         // Space types grouped by commonName (REAL from allData)
