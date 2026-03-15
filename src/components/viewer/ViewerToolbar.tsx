@@ -1024,10 +1024,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
                 min={25}
                 max={300}
                 step={25}
-                value={[(() => {
-                  try { return parseInt(localStorage.getItem('viewer-nav-speed') || '100'); } catch { return 100; }
-                })()]}
+                value={[navSpeed]}
                 onValueChange={([val]) => {
+                  setNavSpeed(val);
                   localStorage.setItem('viewer-nav-speed', String(val));
                   if (viewer?.cameraControl) {
                     const m = val / 100;
@@ -1042,7 +1041,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
                 className="flex-1"
               />
               <span className="text-[10px] text-muted-foreground w-8 text-right">
-                {(() => { try { return localStorage.getItem('viewer-nav-speed') || '100'; } catch { return '100'; } })()}%
+                {navSpeed}%
               </span>
             </div>
             <Separator className="my-2" />
