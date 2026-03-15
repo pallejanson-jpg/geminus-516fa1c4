@@ -498,10 +498,8 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     onClose();
   }, [embedded, isStandaloneAi, onClose]);
 
-  /** In standalone AI mode, show toast instead of navigating away — never leave the PWA */
-  const standaloneNavigate = useCallback((_path: string) => {
-    toast.info('Den här funktionen kräver Geminus-appen med 3D-viewer. Öppna huvudappen för att visa detta.');
-  }, []);
+
+
 
   const viewerReturnToSuffix = isStandaloneAi ? '&returnTo=%2Fai' : '';
 
