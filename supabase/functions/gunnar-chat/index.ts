@@ -1186,7 +1186,7 @@ async function execListBuildings(supabase: any, args: any) {
   };
 }
 
-
+/* ─────────────────────────────────────────────
    executeTool — ALIGNED with tool declarations
    ───────────────────────────────────────────── */
 
