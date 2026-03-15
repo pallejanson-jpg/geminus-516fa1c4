@@ -1033,7 +1033,6 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
                 size="icon"
                 className="h-6 w-6 shrink-0"
               onClick={toggleVoiceOutput}
-                }}
                 title={voiceOutputEnabled ? 'Disable voice output' : 'Enable voice output'}
               >
                 {voiceOutputEnabled ? (
