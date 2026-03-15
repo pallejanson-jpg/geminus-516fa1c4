@@ -540,6 +540,22 @@ const tools = [
       },
     },
   },
+  // ── List all buildings ──
+  {
+    type: "function",
+    function: {
+      name: "list_buildings",
+      description: "List all buildings in the system. Use when user asks 'what buildings do I have?' or similar without specifying a name. Returns building names and fm_guids for selectBuilding buttons.",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: { type: "number", description: "Max results (default 50)" },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
   // ── Faciliate (SWG) tools ──
   {
     type: "function",
