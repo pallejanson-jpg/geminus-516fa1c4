@@ -468,6 +468,23 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     else startListening();
   }, [isListening, isLoading, isVoiceSupported, startListening, stopListening]);
 
+  /** Toggle TTS with iOS unlock on first enable */
+  const toggleVoiceOutput = useCallback(() => {
+    if (voiceOutputEnabled) {
+      window.speechSynthesis?.cancel();
+      setVoiceOutputEnabled(false);
+    } else {
+      // iOS requires a user-gesture-initiated speak() to unlock the API
+      if (!ttsUnlockedRef.current && 'speechSynthesis' in window) {
+        const unlock = new SpeechSynthesisUtterance('');
+        unlock.volume = 0;
+        window.speechSynthesis.speak(unlock);
+        ttsUnlockedRef.current = true;
+      }
+      setVoiceOutputEnabled(true);
+    }
+  }, [voiceOutputEnabled]);
+
   // Auto-start voice mode when opened via deep link (?gunnar=voice)
   useEffect(() => {
     if (autoVoice && open && isVoiceSupported && !isListening) {
