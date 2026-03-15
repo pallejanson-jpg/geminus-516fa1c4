@@ -1172,6 +1172,54 @@ async function execGetFaciliateObject(args: any) {
   return data.data || data;
 }
 
+/* ── Adaptive Memory ── */
+
+async function execSaveMemory(supabase: any, args: any, userId: string) {
+  if (!userId) return { error: "No user context" };
+  const { error } = await supabase.from("ai_memory").insert({
+    user_id: userId,
+    content: args.content,
+    memory_type: args.memory_type || "instruction",
+    building_fm_guid: args.building_fm_guid || null,
+    source_message: args.source_message || null,
+  });
+  if (error) throw error;
+  return { success: true, message: "Memory saved" };
+}
+
+async function loadUserMemories(supabase: any, userId: string, buildingFmGuid?: string): Promise<string> {
+  // Load up to 20 memories: global + building-specific
+  let query = supabase
+    .from("ai_memory")
+    .select("content, memory_type, building_fm_guid")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  // Include both global (null building) and building-specific memories
+  if (buildingFmGuid) {
+    query = query.or(`building_fm_guid.is.null,building_fm_guid.eq.${buildingFmGuid}`);
+  } else {
+    query = query.is("building_fm_guid", null);
+  }
+
+  // Filter out expired memories
+  const { data } = await query;
+  if (!data?.length) return "";
+
+  const now = new Date();
+  const valid = data.filter((m: any) => !m.expires_at || new Date(m.expires_at) > now);
+  if (!valid.length) return "";
+
+  const lines = valid.map((m: any) => {
+    const prefix = m.memory_type === "correction" ? "⚠️" : m.memory_type === "preference" ? "🎯" : "📝";
+    const scope = m.building_fm_guid ? " (building-specific)" : "";
+    return `${prefix} ${m.content}${scope}`;
+  });
+
+  return `\n\nLEARNED CONTEXT (user preferences & corrections — ALWAYS respect these):\n${lines.join("\n")}`;
+}
+
 /* ── Building name resolution ── */
 
 async function execResolveBuildingByName(supabase: any, args: any) {
