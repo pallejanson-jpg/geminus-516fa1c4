@@ -4986,6 +4986,18 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
               {/* Visualization Legend Bar - independent of right panel */}
               <VisualizationLegendBarOverlay />
+
+              {/* Quick visualization type selector */}
+              {!compactMode && (
+                <div className={cn(
+                  'absolute z-[45] pointer-events-auto',
+                  isMobile
+                    ? 'bottom-14 left-1/2 -translate-x-1/2'
+                    : 'bottom-14 left-1/2 -translate-x-1/2',
+                )}>
+                  <VisualizationQuickBar />
+                </div>
+              )}
               
               <ViewerToolbar 
                 viewer={viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer}
