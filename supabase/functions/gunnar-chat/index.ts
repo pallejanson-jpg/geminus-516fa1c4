@@ -1661,11 +1661,14 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
     const userId = auth.userId!;
+    // Store userId for tool execution context
+    (globalThis as any).__currentUserId = userId;
 
-    const [profileResult, roleResult, previousConversation] = await Promise.all([
+    const [profileResult, roleResult, previousConversation, userMemories] = await Promise.all([
       supabase.from("profiles").select("display_name, avatar_url").eq("user_id", userId).maybeSingle(),
       supabase.from("user_roles").select("role").eq("user_id", userId).maybeSingle(),
       loadRecentConversation(supabase, userId, context?.currentBuilding?.fmGuid),
+      loadUserMemories(supabase, userId, context?.currentBuilding?.fmGuid),
     ]);
 
     const userProfile = profileResult.data ? { ...profileResult.data, role: roleResult.data?.role || "user" } : null;
