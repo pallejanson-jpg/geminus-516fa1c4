@@ -644,15 +644,10 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       case "selectBuilding":
         if (action.buildingFmGuid) {
           const bName = action.buildingName || 'byggnaden';
-          if (!isStandaloneContext) {
-            setSelectedFacility({
-              fmGuid: action.buildingFmGuid,
-              name: bName,
-              commonName: bName,
-              category: 'Building',
-            });
-          }
-          void sendMessage(`Jag menar ${bName}`);
+          // Set local building context — avoids AppContext navigation/reset
+          setLocalBuildingContext({ fmGuid: action.buildingFmGuid, name: bName });
+          // Send follow-up with explicit building reference
+          void sendMessage(`Berätta om ${bName}`);
         }
         break;
     }
