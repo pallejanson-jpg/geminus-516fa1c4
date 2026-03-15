@@ -1,6 +1,7 @@
 import React, { useContext, useEffect } from 'react';
 import { AppContext } from '@/context/AppContext';
 import { usePredictiveMaintenance, type MaintenancePrediction } from '@/hooks/usePredictiveMaintenance';
+import type { Facility } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
