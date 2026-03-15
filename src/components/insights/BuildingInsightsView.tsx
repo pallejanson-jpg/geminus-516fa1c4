@@ -728,6 +728,15 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                         <Badge variant="destructive" className="text-[9px] h-4 px-1 ml-0.5">{alarmCount > 999 ? '999+' : alarmCount}</Badge>
                                     )}
                                 </TabsTrigger>
+                                <TabsTrigger value="predictive" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                    🔮 Prediktivt
+                                </TabsTrigger>
+                                <TabsTrigger value="optimization" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                    📐 Optimering
+                                </TabsTrigger>
+                                <TabsTrigger value="rag" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                    🔍 RAG Sök
+                                </TabsTrigger>
                             </TabsList>
                         </div>
 
