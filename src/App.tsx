@@ -122,9 +122,21 @@ const App = () => {
             } 
           />
           
-          {/* Unified Viewer - fullscreen mode for all view modes */}
+          {/* Viewer — new layout (promoted from mockup) */}
           <Route 
             path="/viewer" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <ProtectedRoute>
+                  <ViewerMockup />
+                </ProtectedRoute>
+              </Suspense>
+            } 
+          />
+
+          {/* Legacy viewer — old UnifiedViewer kept as fallback */}
+          <Route 
+            path="/viewer-legacy" 
             element={
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                 <ProtectedRoute>
