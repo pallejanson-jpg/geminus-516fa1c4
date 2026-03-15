@@ -16,7 +16,7 @@ const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
 const IvionInventory = lazy(() => import("@/pages/IvionInventory"));
 // AI Asset Scan page
 const AiAssetScan = lazy(() => import("@/pages/AiAssetScan"));
-// Unified Viewer page (fullscreen, all modes)
+// Unified Viewer page (legacy, kept as fallback)
 const UnifiedViewerPage = lazy(() => import("@/pages/UnifiedViewer"));
 // Onboarding wizard
 const Onboarding = lazy(() => import("@/pages/Onboarding"));
@@ -46,7 +46,7 @@ const ApiDocs = lazy(() => import("@/pages/ApiDocs"));
 const AiChat = lazy(() => import("@/pages/AiChat"));
 // Geminus View — standalone IFC viewer + building selector
 const GeminusView = lazy(() => import("@/pages/GeminusView"));
-// ACC-inspired mobile viewer layout mockup
+// New viewer (promoted from mockup)
 const ViewerMockup = lazy(() => import("@/pages/ViewerMockup"));
 
 const queryClient = new QueryClient();
@@ -122,9 +122,21 @@ const App = () => {
             } 
           />
           
-          {/* Unified Viewer - fullscreen mode for all view modes */}
+          {/* Viewer — new layout (promoted from mockup) */}
           <Route 
             path="/viewer" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <ProtectedRoute>
+                  <ViewerMockup />
+                </ProtectedRoute>
+              </Suspense>
+            } 
+          />
+
+          {/* Legacy viewer — old UnifiedViewer kept as fallback */}
+          <Route 
+            path="/viewer-legacy" 
             element={
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                 <ProtectedRoute>
@@ -287,18 +299,6 @@ const App = () => {
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                 <ProtectedRoute>
                   <GeminusView />
-                </ProtectedRoute>
-              </Suspense>
-            } 
-          />
-          
-          {/* ACC-inspired mobile viewer mockup */}
-          <Route 
-            path="/viewer-mockup" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <ProtectedRoute>
-                  <ViewerMockup />
                 </ProtectedRoute>
               </Suspense>
             } 
