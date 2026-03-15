@@ -11,6 +11,7 @@ import MinimapPanel from './MinimapPanel';
 import FloorCarousel, { FloorInfo } from './FloorCarousel';
 import FloatingFloorSwitcher from './FloatingFloorSwitcher';
 import VisualizationLegendBarOverlay from './VisualizationLegendOverlay';
+import VisualizationQuickBar from './VisualizationQuickBar';
 // AnnotationToggleMenu removed - consolidated into VisualizationToolbar flyout
 import AssetPropertiesDialog from './AssetPropertiesDialog';
 import ViewerContextMenu from './ViewerContextMenu';
