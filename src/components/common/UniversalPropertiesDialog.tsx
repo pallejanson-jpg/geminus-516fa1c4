@@ -150,22 +150,41 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
 
         if (assetError) throw assetError;
 
-        // If no direct match, try looking up via asset_external_ids table
+        // If no direct match, try looking up via asset_external_ids table or originalSystemId
         if ((!assetData || assetData.length === 0) && entityId) {
-          const { data: extIds } = await supabase
-            .from('asset_external_ids')
-            .select('fm_guid')
-            .eq('external_id', entityId)
-            .limit(5);
+          // First: try resolving via originalSystemId from xeokit metaScene
+          const viewer = (window as any).__nativeXeokitViewer;
+          const metaObj = viewer?.metaScene?.metaObjects?.[entityId];
+          const originalSystemId = metaObj?.originalSystemId;
 
-          if (extIds && extIds.length > 0) {
-            const resolvedGuids = extIds.map(e => e.fm_guid);
-            const { data: resolvedAssets } = await supabase
+          if (originalSystemId) {
+            const osidVariants = [originalSystemId, originalSystemId.toLowerCase(), originalSystemId.toUpperCase()];
+            const { data: resolvedByOsid } = await supabase
               .from('assets')
               .select('*')
-              .in('fm_guid', resolvedGuids);
-            if (resolvedAssets && resolvedAssets.length > 0) {
-              assetData = resolvedAssets;
+              .in('fm_guid', osidVariants);
+            if (resolvedByOsid && resolvedByOsid.length > 0) {
+              assetData = resolvedByOsid;
+            }
+          }
+
+          // Second: try asset_external_ids table
+          if (!assetData || assetData.length === 0) {
+            const { data: extIds } = await supabase
+              .from('asset_external_ids')
+              .select('fm_guid')
+              .eq('external_id', entityId)
+              .limit(5);
+
+            if (extIds && extIds.length > 0) {
+              const resolvedGuids = extIds.map(e => e.fm_guid);
+              const { data: resolvedAssets } = await supabase
+                .from('assets')
+                .select('*')
+                .in('fm_guid', resolvedGuids);
+              if (resolvedAssets && resolvedAssets.length > 0) {
+                assetData = resolvedAssets;
+              }
             }
           }
         }

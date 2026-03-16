@@ -839,6 +839,7 @@ const UnifiedViewerContent: React.FC<{
                 syncFloorSelection={false}
                 lockCameraToFloor={false}
                 monochrome
+                isSplitMode
                 onRoomLabelsChange={setPlanRoomLabels}
                 navigationOverlay={navPanelOpen ? (
                   <>
