@@ -18,13 +18,16 @@ import {
   Scissors, Square, Box, LayoutPanelLeft, View,
   Filter, SlidersHorizontal, BarChart2, AlertTriangle,
   Settings, ChevronRight, Eye, Loader2, Scan, User,
-  Compass, PenTool, RotateCcw,
+  Compass, PenTool, RotateCcw, Layers, ChevronUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle,
 } from '@/components/ui/drawer';
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from '@/components/ui/popover';
 import NativeViewerShell from '@/components/viewer/NativeViewerShell';
 import SplitPlanView from '@/components/viewer/SplitPlanView';
 import InsightsDrawerPanel from '@/components/viewer/InsightsDrawerPanel';
