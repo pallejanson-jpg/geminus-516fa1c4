@@ -475,6 +475,29 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         setProgress(70);
         log(`XKT generated: ${(result.xktData.byteLength / 1024 / 1024).toFixed(2)} MB`);
         log(`Hierarchy: ${result.levels.length} levels, ${result.spaces.length} spaces`);
+        
+        // Fallback: if levels/spaces are empty but metaModelJson has objects, extract from metadata
+        if (result.levels.length === 0 && result.metaModelJson?.metaObjects?.length > 0) {
+          log('⚠️ No levels/spaces from XKT metaObjects — extracting from metadata JSON fallback...');
+          for (const obj of result.metaModelJson.metaObjects) {
+            const metaType = obj.type || '';
+            const objId = obj.id || '';
+            const objName = obj.name || metaType;
+            const parentId = obj.parent || '';
+            if (metaType === 'IfcBuildingStorey') {
+              result.levels.push({ id: objId, name: objName, type: metaType });
+            } else if (metaType === 'IfcSpace') {
+              result.spaces.push({ id: objId, name: objName, type: metaType, parentId });
+            }
+          }
+          if (result.levels.length > 0 || result.spaces.length > 0) {
+            log(`✅ Metadata fallback found: ${result.levels.length} levels, ${result.spaces.length} spaces`);
+          } else {
+            log('⚠️ Metadata JSON also contains no IfcBuildingStorey/IfcSpace entries');
+          }
+        } else if (result.levels.length === 0) {
+          log('⚠️ No levels/spaces found in IFC metadata and no metaModelJson available');
+        }
         if (result.systems?.length > 0) log(`Systems: ${result.systems.length} extracted`);
 
         const modelId = `ifc-${Date.now()}`;
