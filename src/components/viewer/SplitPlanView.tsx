@@ -1152,7 +1152,15 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
           />
           {/* Room labels overlay */}
           {roomLabels.length > 0 && imgRef.current && (
-            <div className="absolute inset-0 pointer-events-none">
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                top: 0,
+                left: 0,
+                width: imgRef.current.naturalWidth || imgRef.current.clientWidth || '100%',
+                height: imgRef.current.naturalHeight || imgRef.current.clientHeight || '100%',
+              }}
+            >
               {roomLabels.map((label) => (
                 <div
                   key={label.id}
