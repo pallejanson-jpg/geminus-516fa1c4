@@ -212,7 +212,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                   state === 'inactive' && 'text-white/70 hover:text-white hover:bg-white/10',
                 )}
               >
-                <span className={cn(compact ? "text-[7px]" : "text-[9px] sm:text-xs", "truncate")}>{floor.name}</span>
+                <span className="text-[9px] sm:text-xs truncate">{floor.name}</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="left">
