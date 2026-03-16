@@ -276,8 +276,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       }
 
       const relevantFloors = sharedFloors.filter(f => {
-        const primaryGuid = f.databaseLevelFmGuids[0] || f.id;
-        return relevantLevelItems.some(l => l.fmGuid === primaryGuid);
+        const primaryGuid = normalizeGuid(f.databaseLevelFmGuids[0] || f.id);
+        return relevantLevelItems.some(l => normalizeGuid(l.fmGuid) === primaryGuid);
       });
 
       relevantFloors.forEach(floor => {
