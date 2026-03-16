@@ -231,8 +231,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
       setCurrentFloorId(floorId);
       setCurrentFloorBounds(bounds || null);
 
-      const isSolo = !isAllFloorsVisible && visibleMetaFloorIds?.length === 1;
-      const soloId = isSolo ? (visibleMetaFloorIds![0] || floorId) : null;
+      const isSolo = floorId !== null && !isAllFloorsVisible;
+      const soloId = isSolo ? (floorId || visibleMetaFloorIds?.[0]) : null;
 
       if (viewModeRef.current === '2d') {
         if (floorId) applyFloorPlanClipping(floorId);

@@ -149,14 +149,12 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
 
     setVisibleFloorIds(newVisibleIds);
     applyAndDispatch(newVisibleIds);
-    setPopoverOpen(false);
   }, [visibleFloorIds, floors, applyAndDispatch]);
 
   const handleShowAll = useCallback(() => {
     const allIds = new Set(floors.map(f => f.id));
     setVisibleFloorIds(allIds);
     applyAndDispatch(allIds);
-    setPopoverOpen(false);
   }, [floors, applyAndDispatch]);
 
   // Current floor label for the icon
