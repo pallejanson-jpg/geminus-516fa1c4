@@ -1215,6 +1215,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }));
 
     console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', scene.objectIds.length);
+    isApplyingRef.current = false;
     }); // end requestAnimationFrame
     }, 300); // debounce 300ms for performance
   }, [getXeokitViewer, checkedSources, checkedLevels, checkedSpaces, checkedCategories,
