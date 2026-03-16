@@ -780,13 +780,16 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   const rafRef = useRef<number>(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const isApplyingRef = useRef(false);
   const applyFilterVisibility = useCallback(() => {
     clearTimeout(debounceRef.current);
     cancelAnimationFrame(rafRef.current);
     debounceRef.current = setTimeout(() => {  // 300ms debounce for performance
+    if (isApplyingRef.current) return; // Re-entry guard
+    isApplyingRef.current = true;
     rafRef.current = requestAnimationFrame(() => {
     const viewer = getXeokitViewer();
-    if (!viewer?.scene) return;
+    if (!viewer?.scene) { isApplyingRef.current = false; return; }
     const scene = viewer.scene;
     const eMap = entityMapRef.current;
 
