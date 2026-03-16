@@ -1105,6 +1105,12 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
               ))}
             </div>
           )}
+          {/* Navigation overlays (editor + route display) */}
+          {navigationOverlay && (
+            <div className="absolute inset-0">
+              {navigationOverlay}
+            </div>
+          )}
           {/* Camera position indicator (inside transformed container) */}
           {cameraPos && (
             <div
