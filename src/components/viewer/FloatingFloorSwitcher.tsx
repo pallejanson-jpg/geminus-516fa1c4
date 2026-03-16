@@ -149,7 +149,6 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
 
     setVisibleFloorIds(newVisibleIds);
     applyAndDispatch(newVisibleIds);
-    setPopoverOpen(false);
   }, [visibleFloorIds, floors, applyAndDispatch]);
 
   const handleShowAll = useCallback(() => {
