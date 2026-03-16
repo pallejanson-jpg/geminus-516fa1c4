@@ -18,13 +18,16 @@ import {
   Scissors, Square, Box, LayoutPanelLeft, View,
   Filter, SlidersHorizontal, BarChart2, AlertTriangle,
   Settings, ChevronRight, Eye, Loader2, Scan, User,
-  Compass, PenTool, RotateCcw,
+  Compass, PenTool, RotateCcw, Layers, ChevronUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle,
 } from '@/components/ui/drawer';
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from '@/components/ui/popover';
 import NativeViewerShell from '@/components/viewer/NativeViewerShell';
 import SplitPlanView from '@/components/viewer/SplitPlanView';
 import InsightsDrawerPanel from '@/components/viewer/InsightsDrawerPanel';
@@ -148,6 +151,39 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
     if (mode === '2d') {
       window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } }));
       window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '2d' } }));
+      // Ensure wall clipping activates: if a floor is solo'd, re-dispatch its bounds
+      // If no floor solo'd but floors exist, solo the first floor for proper 2D clipping
+      const viewer = getViewer();
+      if (viewer?.scene) {
+        const targetFloor = soloFloorId
+          ? floors.find(f => f.id === soloFloorId)
+          : floors.length > 0 ? floors[0] : null;
+        if (targetFloor) {
+          if (!soloFloorId) {
+            setSoloFloorId(targetFloor.id);
+            viewer.scene.setObjectsVisible(viewer.scene.objectIds, false);
+            targetFloor.metaObjectIds.forEach(moId => {
+              const descendants = getDescendantIds(viewer, moId);
+              viewer.scene.setObjectsVisible(descendants, true);
+            });
+          }
+          const bounds = calculateFloorBounds(viewer, targetFloor.id);
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+              detail: {
+                floorId: targetFloor.id,
+                floorName: targetFloor.name,
+                bounds,
+                visibleMetaFloorIds: targetFloor.metaObjectIds,
+                visibleFloorFmGuids: targetFloor.databaseLevelFmGuids,
+                isAllFloorsVisible: false,
+                isSoloFloor: true,
+                soloFloorName: targetFloor.name,
+              } as FloorSelectionEventDetail,
+            }));
+          }, 100);
+        }
+      }
     } else if (mode === '3d') {
       window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: false } }));
       window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
@@ -155,7 +191,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
       window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: false } }));
       window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
     }
-  }, [setViewMode]);
+  }, [setViewMode, soloFloorId, floors]);
 
   /* ── Real xeokit tool handlers ── */
   const handleToolClick = useCallback((toolId: string) => {
@@ -381,8 +417,8 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
                   viewerRef={viewerInstanceRef}
                   buildingFmGuid={buildingData.fmGuid}
                   className="h-full"
-                  syncFloorSelection={false}
-                  lockCameraToFloor={false}
+                  syncFloorSelection={true}
+                  lockCameraToFloor={true}
                   monochrome
                 />
               </div>
@@ -439,25 +475,10 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
           <X className="h-5 w-5" />
         </Button>
 
-        {/* Mode switcher */}
-        <div className="flex items-center gap-0.5 bg-black/30 backdrop-blur-sm rounded-lg p-0.5 pointer-events-auto">
-          {modes.map(({ mode, label, Icon }) => (
-            <Button
-              key={mode}
-              size="sm"
-              variant="ghost"
-              className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${
-                viewMode === mode
-                  ? 'bg-white/20 text-white'
-                  : 'text-white/60 hover:text-white hover:bg-white/10'
-              }`}
-              onClick={() => handleModeChange(mode)}
-            >
-              <Icon className="h-3 w-3" />
-              {label}
-            </Button>
-          ))}
-        </div>
+        {/* Building name / current mode label */}
+        <span className="text-white text-xs font-medium truncate max-w-[50vw] pointer-events-none">
+          {buildingData.name}
+        </span>
 
         <Button
           variant="ghost"
@@ -472,26 +493,43 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
       {/* ── Spacer ── */}
       <div className="flex-1" />
 
-      {/* ── Floor pills (compact horizontal strip) ── */}
+      {/* ── Floor popover pill (centered above toolbar) ── */}
       {floors.length > 1 && !isSplit && (
-        <div
-          className="relative z-50 pointer-events-none px-3 pb-1"
-        >
-          <div className="flex gap-1 overflow-x-auto no-scrollbar pointer-events-auto">
-            {floors.map((floor) => (
+        <div className="relative z-50 flex justify-center pb-1 pointer-events-none">
+          <Popover>
+            <PopoverTrigger asChild>
               <button
-                key={floor.id}
-                onClick={() => handleFloorClick(floor)}
-                className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors whitespace-nowrap ${
-                  soloFloorId === floor.id
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-black/40 text-white/80 hover:bg-black/60 hover:text-white backdrop-blur-sm'
-                }`}
+                className="pointer-events-auto flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/50 backdrop-blur-sm text-white text-xs font-medium hover:bg-black/70 transition-colors"
               >
-                {floor.shortName || floor.name}
+                <Layers className="h-3.5 w-3.5" />
+                {soloFloorId
+                  ? floors.find(f => f.id === soloFloorId)?.shortName || 'All'
+                  : 'All'}
+                <ChevronUp className="h-3 w-3 opacity-60" />
               </button>
-            ))}
-          </div>
+            </PopoverTrigger>
+            <PopoverContent
+              side="top"
+              sideOffset={8}
+              className="w-auto min-w-[120px] max-w-[200px] p-1.5 bg-popover/95 backdrop-blur-md"
+            >
+              <div className="flex flex-col gap-0.5 max-h-[40dvh] overflow-y-auto">
+                {floors.map((floor) => (
+                  <button
+                    key={floor.id}
+                    onClick={() => handleFloorClick(floor)}
+                    className={`w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                      soloFloorId === floor.id
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {floor.name}
+                  </button>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       )}
 
