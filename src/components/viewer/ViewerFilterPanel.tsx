@@ -188,10 +188,16 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     levels.forEach(level => {
       if (!level.sourceGuid) return;
       const current = grouped.get(level.sourceGuid);
-      const rawName = apSources.get(level.sourceGuid) || current?.name || level.sourceGuid;
-      const resolvedName = isGuid(rawName) ? '' : rawName; // defer GUID replacement to final step
+      let rawName = apSources.get(level.sourceGuid) || current?.name || level.sourceGuid;
+      // If rawName is a GUID, try to resolve from sharedModels
+      if (isGuid(rawName)) {
+        const matchingModel = sharedModels.find(m => m.id === level.sourceGuid || m.id === rawName);
+        rawName = matchingModel?.name && !isGuid(matchingModel.name)
+          ? matchingModel.name
+          : (matchingModel?.shortName || '');
+      }
       grouped.set(level.sourceGuid, {
-        name: resolvedName,
+        name: rawName,
         storeyCount: (current?.storeyCount || 0) + 1,
       });
     });
