@@ -323,12 +323,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const normalizedCheckedSourceGuids = new Set(Array.from(checkedSources).map(g => normalizeGuid(g)));
     const normalizedCheckedLevelGuids = new Set(Array.from(checkedLevels).map(g => normalizeGuid(g)));
 
-    // Build set of ALL normalized level GUIDs from relevant levels (using allGuids which includes both xeokit + Asset+ variants)
     let visibleLevelGuids: Set<string> | null = null;
     if (levels.length > 0) {
       const allLevelGuids = new Set<string>();
 
-      // Determine relevant levels based on source + level filters
       let relevantLevels = levels;
       if (normalizedCheckedSourceGuids.size > 0) {
         relevantLevels = relevantLevels.filter(l =>
@@ -337,11 +335,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       }
       if (normalizedCheckedLevelGuids.size > 0) {
         relevantLevels = relevantLevels.filter(l =>
-          normalizedCheckedLevelGuids.has(normalizeGuid(l.fmGuid))
+          l.allGuids.some(g => normalizedCheckedLevelGuids.has(g))
         );
       }
 
-      // Add ALL known GUID variants for relevant levels (xeokit + Asset+ DB)
       relevantLevels.forEach(l => {
         l.allGuids.forEach(g => allLevelGuids.add(g));
       });
@@ -352,21 +349,27 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }
 
     let spacesSource = allSpaces;
-    if (visibleLevelGuids && visibleLevelGuids.size > 0) {
+    if (visibleLevelGuids) {
       const filtered = allSpaces.filter((a: any) => {
         const levelGuid = normalizeGuid(a.levelFmGuid || a.level_fm_guid || '');
         return visibleLevelGuids!.has(levelGuid);
       });
 
-      if (filtered.length > 0) {
+      if (filtered.length > 0 || visibleLevelGuids.size === 0) {
         spacesSource = filtered;
       } else if (entityMapRef.current.size > 0) {
-        // Fallback: use xeokit scene graph to find spaces under checked levels
         const viewer = getXeokitViewer();
         if (viewer?.metaScene?.metaObjects) {
           const sceneSpaceGuids = new Set<string>();
           const eMap = entityMapRef.current;
-          const levelGuidsToSearch = checkedLevels.size > 0 ? checkedLevels : new Set(levels.map(l => l.fmGuid));
+          const levelGuidsToSearch = checkedLevels.size > 0
+            ? new Set(
+                levels
+                  .filter(level => level.allGuids.some(g => normalizedCheckedLevelGuids.has(g)))
+                  .map(level => level.fmGuid)
+              )
+            : new Set(levels.map(l => l.fmGuid));
+
           levelGuidsToSearch.forEach(levelGuid => {
             const entityIds = eMap.get(levelGuid) || [];
             entityIds.forEach(id => {
@@ -376,15 +379,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
               }
             });
           });
-          if (sceneSpaceGuids.size > 0) {
-            spacesSource = allSpaces.filter((a: any) => {
-              const fg = normalizeGuid(a.fmGuid || a.fm_guid || '');
-              return sceneSpaceGuids.has(fg);
-            });
-          }
+
+          spacesSource = sceneSpaceGuids.size > 0
+            ? allSpaces.filter((a: any) => sceneSpaceGuids.has(normalizeGuid(a.fmGuid || a.fm_guid || '')))
+            : [];
+        } else {
+          spacesSource = [];
         }
-        // If still 0, show all rather than empty
-        if (spacesSource.length === 0) spacesSource = allSpaces;
+      } else {
+        spacesSource = [];
       }
     }
 
@@ -401,7 +404,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       })
       .filter((s: SpaceItem) => s.name && s.name !== 'Unnamed')
       .sort((a: SpaceItem, b: SpaceItem) => a.name.localeCompare(b.name, 'sv', { numeric: true }));
-  }, [buildingData, checkedLevels, checkedSources, levels, sharedFloors, getXeokitViewer]);
+  }, [buildingData, checkedLevels, checkedSources, levels, getXeokitViewer]);
 
   // ── Categories: derived from typeIndex, scoped by active filters ────────
   const categories: CategoryItem[] = useMemo(() => {
