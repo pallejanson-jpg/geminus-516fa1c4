@@ -27,6 +27,8 @@ interface BimSource {
 
 interface LevelItem {
   fmGuid: string;
+  /** All known GUIDs for this level (xeokit originalSystemId + Asset+ fm_guid variants) */
+  allGuids: string[];
   name: string;
   sourceGuid: string;
   spaceCount: number;
@@ -127,7 +129,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   // ── Shared hooks for consistent data ─────────────────────────────────
   const { floors: sharedFloors } = useFloorData(viewerRef, buildingFmGuid);
-  const { models: sharedModels, applyModelVisibility, assetPlusSources: apSources } = useModelData(viewerRef, buildingFmGuid);
+  const { models: sharedModels, applyModelVisibility, assetPlusSources: apSources, storeyLookup } = useModelData(viewerRef, buildingFmGuid);
 
   const [sourcesOpen, setSourcesOpen] = useState(true);
   const [levelsOpen, setLevelsOpen] = useState(true);
@@ -194,24 +196,43 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return sharedFloors.map(floor => {
       const levelGuidSet = new Set(floor.databaseLevelFmGuids.map(g => normalizeGuid(g)));
 
-      const matchingAsset = buildingData.find((a: any) => {
+      // Try GUID match first
+      let matchingAsset = buildingData.find((a: any) => {
         const fmGuid = normalizeGuid(a.fmGuid || a.fm_guid || '');
         return (a.category === 'Building Storey' || a.category === 'IfcBuildingStorey') &&
           levelGuidSet.has(fmGuid);
       });
 
+      // Fallback: match by name
+      if (!matchingAsset) {
+        const floorNameLower = floor.name.toLowerCase().trim();
+        matchingAsset = buildingData.find((a: any) => {
+          if (a.category !== 'Building Storey' && a.category !== 'IfcBuildingStorey') return false;
+          const assetName = (a.commonName || a.common_name || a.name || '').toLowerCase().trim();
+          return assetName === floorNameLower ||
+            assetName.includes(floorNameLower) ||
+            floorNameLower.includes(assetName);
+        });
+      }
+
       const sourceGuid = matchingAsset?.attributes?.parentBimObjectId || '';
       const fmGuid = floor.databaseLevelFmGuids[0] || floor.id;
 
-      const levelGuidNormalizedSet = new Set(floor.databaseLevelFmGuids.map(g => normalizeGuid(g)));
+      // Collect ALL known GUIDs for this level (both xeokit and Asset+ variants)
+      const allGuids = new Set(floor.databaseLevelFmGuids.map(g => normalizeGuid(g)));
+      if (matchingAsset) {
+        const assetFmGuid = matchingAsset.fmGuid || matchingAsset.fm_guid || '';
+        if (assetFmGuid) allGuids.add(normalizeGuid(assetFmGuid));
+      }
+
       const spaceCount = buildingData.filter((s: any) => {
         const cat = s.category;
         if (cat !== 'Space' && cat !== 'IfcSpace') return false;
         const levelGuid = normalizeGuid(s.levelFmGuid || s.level_fm_guid || '');
-        return levelGuidNormalizedSet.has(levelGuid);
+        return allGuids.has(levelGuid);
       }).length;
 
-      return { fmGuid, name: floor.name, sourceGuid, spaceCount };
+      return { fmGuid, allGuids: Array.from(allGuids), name: floor.name, sourceGuid, spaceCount };
     }).sort((a, b) => {
       const extract = (n: string) => { const m = n.match(/(-?\d+)/); return m ? parseInt(m[1], 10) : 0; };
       return extract(a.name) - extract(b.name);
@@ -225,12 +246,30 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     levels.forEach(level => {
       if (!level.sourceGuid) return;
       const current = grouped.get(level.sourceGuid);
-      let rawName = apSources.get(level.sourceGuid) || current?.name || level.sourceGuid;
-      if (isGuid(rawName)) {
+      // Priority: apSources (Asset+ parentCommonName) > storeyLookup > sharedModels name > fallback
+      let rawName = apSources.get(level.sourceGuid) || current?.name || '';
+      if (!rawName || isGuid(rawName)) {
+        // Try storeyLookup by level allGuids
+        for (const g of level.allGuids) {
+          const byGuid = storeyLookup.byGuid.get(g);
+          if (byGuid?.parentName && !isGuid(byGuid.parentName)) {
+            rawName = byGuid.parentName;
+            break;
+          }
+        }
+      }
+      if (!rawName || isGuid(rawName)) {
+        // Try storeyLookup by name
+        const byName = storeyLookup.byName.get(level.name.toLowerCase().trim());
+        if (byName?.parentName && !isGuid(byName.parentName)) {
+          rawName = byName.parentName;
+        }
+      }
+      if (!rawName || isGuid(rawName)) {
         const matchingModel = sharedModels.find(m => m.id === level.sourceGuid || m.id === rawName);
         rawName = matchingModel?.name && !isGuid(matchingModel.name)
           ? matchingModel.name
-          : (matchingModel?.shortName || '');
+          : (matchingModel?.shortName || level.sourceGuid);
       }
       grouped.set(level.sourceGuid, {
         name: rawName,
@@ -254,7 +293,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       name: (!val.name || isGuid(val.name)) ? `Modell ${idx + 1}` : val.name,
       storeyCount: val.storeyCount,
     })).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-  }, [levels, apSources, sharedModels]);
+  }, [levels, apSources, sharedModels, storeyLookup]);
 
   // ── Spaces: cascading from checked levels (Source→Level→Space funnel) ───
   const spaces: SpaceItem[] = useMemo(() => {
@@ -264,36 +303,28 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const normalizedCheckedSourceGuids = new Set(Array.from(checkedSources).map(g => normalizeGuid(g)));
     const normalizedCheckedLevelGuids = new Set(Array.from(checkedLevels).map(g => normalizeGuid(g)));
 
-    // Build set of ALL normalized level GUIDs from relevant floors
+    // Build set of ALL normalized level GUIDs from relevant levels (using allGuids which includes both xeokit + Asset+ variants)
     let visibleLevelGuids: Set<string> | null = null;
     if (levels.length > 0) {
       const allLevelGuids = new Set<string>();
-      let relevantFloors = sharedFloors;
 
+      // Determine relevant levels based on source + level filters
+      let relevantLevels = levels;
       if (normalizedCheckedSourceGuids.size > 0) {
-        relevantFloors = relevantFloors.filter(floor => {
-          const floorNormalizedGuids = floor.databaseLevelFmGuids.map(g => normalizeGuid(g));
-          return levels.some(level => {
-            const belongsToFloor = floorNormalizedGuids.includes(normalizeGuid(level.fmGuid));
-            return belongsToFloor && normalizedCheckedSourceGuids.has(normalizeGuid(level.sourceGuid));
-          });
-        });
+        relevantLevels = relevantLevels.filter(l =>
+          normalizedCheckedSourceGuids.has(normalizeGuid(l.sourceGuid))
+        );
       }
-
       if (normalizedCheckedLevelGuids.size > 0) {
-        relevantFloors = relevantFloors.filter(floor => {
-          const floorNormalizedGuids = floor.databaseLevelFmGuids.map(g => normalizeGuid(g));
-          return floorNormalizedGuids.some(g => normalizedCheckedLevelGuids.has(g));
-        });
+        relevantLevels = relevantLevels.filter(l =>
+          normalizedCheckedLevelGuids.has(normalizeGuid(l.fmGuid))
+        );
       }
 
-      relevantFloors.forEach(floor => {
-        floor.databaseLevelFmGuids.forEach(g => allLevelGuids.add(normalizeGuid(g)));
+      // Add ALL known GUID variants for relevant levels (xeokit + Asset+ DB)
+      relevantLevels.forEach(l => {
+        l.allGuids.forEach(g => allLevelGuids.add(g));
       });
-
-      if (normalizedCheckedLevelGuids.size > 0) {
-        normalizedCheckedLevelGuids.forEach(g => allLevelGuids.add(g));
-      }
 
       if (normalizedCheckedLevelGuids.size > 0 || normalizedCheckedSourceGuids.size > 0) {
         visibleLevelGuids = allLevelGuids;
