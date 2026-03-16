@@ -1441,6 +1441,10 @@ function getSimpleIntentResponse(intent: string, text: string, speechLang: strin
       return isSv
         ? "Jag kan hjälpa dig med:\n\n• **Byggnadsdata** — våningar, rum, ytor, utrustning\n• **Felanmälningar** — skapa, söka, följa upp\n• **Ritningar & dokument** — hitta och visa\n• **3D-navigering** — öppna viewer, visa våningar/modeller\n• **IoT-sensordata** — temperatur, CO2, energi\n• **Plattformshjälp** — hur funktioner fungerar\n\nVad vill du veta mer om?"
         : "I can help you with:\n\n• **Building data** — floors, rooms, areas, equipment\n• **Fault reports** — create, search, follow up\n• **Drawings & documents** — find and display\n• **3D navigation** — open viewer, show floors/models\n• **IoT sensor data** — temperature, CO2, energy\n• **Platform help** — how features work\n\nWhat would you like to know?";
+    case "help_fm_access":
+      return isSv
+        ? "Ja, absolut! Jag kan hjälpa dig med FM Access-data:\n\n• **Ritningar** — söka och visa planritningar per våning\n• **Dokument** — hitta teknisk dokumentation kopplad till objekt\n• **DoU-instruktioner** — drift- och underhållsinstruktioner\n• **Objektsökning** — söka efter specifika objekt i FM Access\n• **Våningsplaner** — lista våningar och hierarki\n\nJag hämtar data direkt från FM Access (Tessel HDC) i realtid. Vad vill du veta?"
+        : "Yes, absolutely! I can help you with FM Access data:\n\n• **Drawings** — search and display floor plans per level\n• **Documents** — find technical documentation linked to objects\n• **O&M instructions** — operation and maintenance instructions\n• **Object search** — search for specific objects in FM Access\n• **Floor plans** — list floors and hierarchy\n\nI fetch data directly from FM Access (Tessel HDC) in real-time. What would you like to know?";
     case "lang_change": {
       const wantsEn = /english|engelska/i.test(text);
       return wantsEn
