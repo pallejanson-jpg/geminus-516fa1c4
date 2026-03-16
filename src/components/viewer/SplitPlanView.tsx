@@ -32,6 +32,10 @@ interface SplitPlanViewProps {
   lockCameraToFloor?: boolean;
   /** Force neutral black/white map styling */
   monochrome?: boolean;
+  /** Navigation graph overlays rendered on top of the plan image */
+  navigationOverlay?: React.ReactNode;
+  /** Current room labels exposed for editor components */
+  onRoomLabelsChange?: (labels: Array<{ id: string; name: string; x: number; y: number }>) => void;
 }
 
 interface PanZoom {
