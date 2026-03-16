@@ -212,9 +212,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
     }
 
-    const result = Array.from(grouped.entries()).map(([guid, val]) => ({
+    const result = Array.from(grouped.entries()).map(([guid, val], idx) => ({
       guid,
-      name: val.name,
+      name: (!val.name || isGuid(val.name)) ? `Modell ${idx + 1}` : val.name,
       storeyCount: val.storeyCount,
     }));
 
