@@ -40,7 +40,6 @@ interface NavigationPanelProps {
 
 const NavigationPanel: React.FC<NavigationPanelProps> = ({
   buildingFmGuid,
-  allData,
   onRouteCalculated,
   onGraphLoaded,
   onEditModeChange,
