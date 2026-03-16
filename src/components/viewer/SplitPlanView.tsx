@@ -32,6 +32,10 @@ interface SplitPlanViewProps {
   lockCameraToFloor?: boolean;
   /** Force neutral black/white map styling */
   monochrome?: boolean;
+  /** Navigation graph overlays rendered on top of the plan image */
+  navigationOverlay?: React.ReactNode;
+  /** Current room labels exposed for editor components */
+  onRoomLabelsChange?: (labels: Array<{ id: string; name: string; x: number; y: number }>) => void;
 }
 
 interface PanZoom {
@@ -50,6 +54,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
   syncFloorSelection = true,
   lockCameraToFloor = false,
   monochrome = true,
+  navigationOverlay,
+  onRoomLabelsChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -742,7 +748,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     }
 
     setRoomLabels(labels);
-  }, [storeyMap, getXeokitViewer]);
+    onRoomLabelsChange?.(labels);
+  }, [storeyMap, getXeokitViewer, onRoomLabelsChange]);
 
   // Click to navigate — use storeyMapToWorldPos for accurate position,
   // then translate current camera offset to avoid disorienting jumps/invalid poses
@@ -1096,6 +1103,12 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
                   {label.name && <div style={{ fontSize: '5px', opacity: 0.85 }}>{label.name}</div>}
                 </div>
               ))}
+            </div>
+          )}
+          {/* Navigation overlays (editor + route display) */}
+          {navigationOverlay && (
+            <div className="absolute inset-0">
+              {navigationOverlay}
             </div>
           )}
           {/* Camera position indicator (inside transformed container) */}

@@ -44,6 +44,10 @@ import { IDENTITY_TRANSFORM, type IvionBimTransform } from '@/lib/ivion-bim-tran
 import { VIEWER_TOOL_CHANGED_EVENT, VIEW_MODE_2D_TOGGLED_EVENT, VIEW_MODE_REQUESTED_EVENT, LOAD_SAVED_VIEW_EVENT, type ViewerToolChangedDetail, type ViewMode2DToggledDetail, type LoadSavedViewDetail } from '@/lib/viewer-events';
 import SplitPlanView from '@/components/viewer/SplitPlanView';
 import { FLOOR_SELECTION_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
+import NavigationPanel from '@/components/viewer/NavigationPanel';
+import NavGraphEditorOverlay from '@/components/viewer/NavGraphEditorOverlay';
+import RouteDisplayOverlay from '@/components/viewer/RouteDisplayOverlay';
+import type { NavGraph, RouteResult } from '@/lib/pathfinding';
 
 import { useIsMobile } from '@/hooks/use-mobile';
 import { toast } from 'sonner';
@@ -252,6 +256,31 @@ const UnifiedViewerContent: React.FC<{
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [transform, setTransform] = useState<IvionBimTransform>(IDENTITY_TRANSFORM);
   const [insightsPanelOpen, setInsightsPanelOpen] = useState(!!insightsModeParam);
+
+  // ─── Indoor navigation state ──────────────────────────────────────
+  const [navPanelOpen, setNavPanelOpen] = useState(false);
+  const [navEditMode, setNavEditMode] = useState(false);
+  const [navGraph, setNavGraph] = useState<NavGraph>({ nodes: new Map(), edges: [] });
+  const [navRoute, setNavRoute] = useState<RouteResult | null>(null);
+  const [planRoomLabels, setPlanRoomLabels] = useState<Array<{ id: string; name: string; x: number; y: number }>>([]);
+  const [navFloorFmGuid, setNavFloorFmGuid] = useState<string | null>(null);
+
+  // Listen for toolbar toggle event
+  useEffect(() => {
+    const handler = () => setNavPanelOpen(p => !p);
+    window.addEventListener('TOGGLE_NAVIGATION_PANEL', handler);
+    return () => window.removeEventListener('TOGGLE_NAVIGATION_PANEL', handler);
+  }, []);
+
+  // Track current floor fm_guid from floor selection events
+  useEffect(() => {
+    const handler = (e: CustomEvent) => {
+      const guids = (e.detail as any)?.visibleFloorFmGuids;
+      if (guids?.length) setNavFloorFmGuid(guids[0]);
+    };
+    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+  }, []);
 
   useEffect(() => {
     if (buildingData?.transform) {
@@ -810,6 +839,22 @@ const UnifiedViewerContent: React.FC<{
                 syncFloorSelection={false}
                 lockCameraToFloor={false}
                 monochrome
+                onRoomLabelsChange={setPlanRoomLabels}
+                navigationOverlay={navPanelOpen ? (
+                  <>
+                    {navEditMode && (
+                      <NavGraphEditorOverlay
+                        graph={navGraph}
+                        onGraphChange={setNavGraph}
+                        roomLabels={planRoomLabels}
+                        floorFmGuid={navFloorFmGuid}
+                      />
+                    )}
+                    {!navEditMode && navRoute && (
+                      <RouteDisplayOverlay route={navRoute} />
+                    )}
+                  </>
+                ) : undefined}
               />
             </div>
             {/* Thin draggable divider */}
@@ -861,6 +906,22 @@ const UnifiedViewerContent: React.FC<{
           </div>
         )}
       </div>
+
+      {/* ─── Navigation sidebar panel ─── */}
+      {navPanelOpen && buildingData && (
+        <div className="absolute top-12 right-2 z-50 w-64 max-h-[80vh] bg-card border border-border rounded-lg shadow-xl overflow-hidden">
+          <NavigationPanel
+            buildingFmGuid={buildingData.fmGuid}
+            onRouteCalculated={setNavRoute}
+            onGraphLoaded={setNavGraph}
+            onEditModeChange={setNavEditMode}
+            onGraphSave={setNavGraph}
+            currentFloorFmGuid={navFloorFmGuid}
+            graph={navGraph}
+            onClose={() => setNavPanelOpen(false)}
+          />
+        </div>
+      )}
 
       {/* ─── Insights bottom-sheet panel ─── */}
       {buildingFmGuid && (

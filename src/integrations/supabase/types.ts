@@ -1311,6 +1311,33 @@ export type Database = {
         }
         Relationships: []
       }
+      navigation_graphs: {
+        Row: {
+          building_fm_guid: string
+          created_at: string
+          floor_fm_guid: string | null
+          graph_data: Json
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          building_fm_guid: string
+          created_at?: string
+          floor_fm_guid?: string | null
+          graph_data?: Json
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          building_fm_guid?: string
+          created_at?: string
+          floor_fm_guid?: string | null
+          graph_data?: Json
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       onboarding_sessions: {
         Row: {
           completed_at: string | null
