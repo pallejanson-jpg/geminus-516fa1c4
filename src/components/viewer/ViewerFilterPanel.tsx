@@ -985,7 +985,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             while (parent) {
               if (parent.type?.toLowerCase() === 'ifcbuildingstorey') {
                 const parentGuidNorm = normalizeGuid(parent.originalSystemId || parent.id || '');
-                const isVisible = Array.from(checkedLevels).some(lg => normalizeGuid(lg) === parentGuidNorm);
+                const isVisible = levels.some(level =>
+                  checkedLevels.has(level.fmGuid) && level.allGuids.some(g => g === parentGuidNorm)
+                );
                 if (isVisible) fadeIds.push(slabId);
                 break;
               }
