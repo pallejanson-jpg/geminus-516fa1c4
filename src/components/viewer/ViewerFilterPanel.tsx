@@ -246,12 +246,30 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     levels.forEach(level => {
       if (!level.sourceGuid) return;
       const current = grouped.get(level.sourceGuid);
-      let rawName = apSources.get(level.sourceGuid) || current?.name || level.sourceGuid;
-      if (isGuid(rawName)) {
+      // Priority: apSources (Asset+ parentCommonName) > storeyLookup > sharedModels name > fallback
+      let rawName = apSources.get(level.sourceGuid) || current?.name || '';
+      if (!rawName || isGuid(rawName)) {
+        // Try storeyLookup by level allGuids
+        for (const g of level.allGuids) {
+          const byGuid = storeyLookup.byGuid.get(g);
+          if (byGuid?.parentName && !isGuid(byGuid.parentName)) {
+            rawName = byGuid.parentName;
+            break;
+          }
+        }
+      }
+      if (!rawName || isGuid(rawName)) {
+        // Try storeyLookup by name
+        const byName = storeyLookup.byName.get(level.name.toLowerCase().trim());
+        if (byName?.parentName && !isGuid(byName.parentName)) {
+          rawName = byName.parentName;
+        }
+      }
+      if (!rawName || isGuid(rawName)) {
         const matchingModel = sharedModels.find(m => m.id === level.sourceGuid || m.id === rawName);
         rawName = matchingModel?.name && !isGuid(matchingModel.name)
           ? matchingModel.name
-          : (matchingModel?.shortName || '');
+          : (matchingModel?.shortName || level.sourceGuid);
       }
       grouped.set(level.sourceGuid, {
         name: rawName,
@@ -275,7 +293,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       name: (!val.name || isGuid(val.name)) ? `Modell ${idx + 1}` : val.name,
       storeyCount: val.storeyCount,
     })).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-  }, [levels, apSources, sharedModels]);
+  }, [levels, apSources, sharedModels, storeyLookup]);
 
   // ── Spaces: cascading from checked levels (Source→Level→Space funnel) ───
   const spaces: SpaceItem[] = useMemo(() => {
