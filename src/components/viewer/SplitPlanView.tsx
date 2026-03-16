@@ -60,6 +60,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
   monochrome = true,
   navigationOverlay,
   onRoomLabelsChange,
+  isSplitMode = false,
+  onEntityClick,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
