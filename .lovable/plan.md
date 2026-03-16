@@ -1,129 +1,60 @@
-## Plan: IFC & ACC Import/Sync Performance Optimization (IMPLEMENTED ✅)
-
-### Changes Made
-1. **XKT compression** (`ifc-to-xkt`): Enabled `zip: true` in `writeXKTModelToArrayBuffer` — ~30% smaller XKT files
-2. **Parallel DB writes** (`ifc-to-xkt`): `persistSystemsAndConnections` + `populateAssetsFromMetaObjects` now run via `Promise.all` instead of sequentially
-3. **Streaming LD-JSON parser** (`acc-sync`): New `streamLDJSON()` async generator processes BIM property files line-by-line from `ReadableStream` — eliminates OOM risk on large Revit models
-4. **Incremental ACC sync** (`acc-sync`): `fetchAccAssets` now supports `filter[updatedAt]` parameter, only fetching assets modified since last sync — ~90% faster re-syncs
-5. **IFC derivative from ACC** (`acc-sync`): `translate-model` now requests IFC format alongside SVF. On completion, downloads the IFC derivative and feeds it into `ifc-to-xkt` for real per-storey tiling — unifying ACC and IFC geometry pipelines
-6. **Dual pipeline** (`check-translation`): Triggers both `ifc-to-xkt` (for tiled XKT) and `acc-geometry-extract` (for GLB fallback) in parallel when translation succeeds
-
----
-
-## Plan: Mobile Viewer Startup Hardening (IMPLEMENTED ✅)
-
-### Changes Made
-1. **Mobile touch tuning** (`NativeXeokitViewer.tsx`): dragRotationRate 30→70, touchPanRate 0.06→0.14, touchDollyRate 0.04→0.09, rotationInertia 0.93→0.88, panInertia 0.88→0.82
-2. **FastNav delay** (`NativeXeokitViewer.tsx`): Added `delayBeforeRestore: true` (0.5s mobile, 0.3s desktop)
-3. **Suppress viewFit in split2d3d** (`NativeXeokitViewer.tsx`): Skips instant viewFit when `?mode=split2d3d` — floor isolation handles camera
-4. **Defer SplitPlanView mount** (`UnifiedViewer.tsx`): Mobile SplitPlanView only renders after `viewerReady=true`, shows spinner until then
-5. **Increased SplitPlanView retry** (`SplitPlanView.tsx`): 10×100ms → 30×200ms (6s total window), immediate retry on VIEWER_MODELS_LOADED
-6. **Debounced floor events** (`UnifiedViewer.tsx`): 500ms guard on FLOOR_SELECTION_CHANGED dispatches to prevent competing events
-
-### Architecture Principle
-Mobile and desktop share the same `UnifiedViewerContent` initialization logic. The ONLY difference is layout:
-- Mobile: vertical stack (2D top, 3D bottom) with touch-optimized divider (8px)
-- Desktop: horizontal ResizablePanelGroup with drag handle (4px)
-
-Future changes to viewer startup MUST apply to both paths. Do NOT create separate mobile/desktop init logic.
-
----
-
-## Plan: SplitPlanView Navigation + Alignment UX (IMPLEMENTED ✅)
-
-### Changes Made
-1. **SplitPlanView click navigation** (`SplitPlanView.tsx`): Replaced first-person instant jump with MinimapPanel-style fly-to — keeps current eye height, looks down at clicked point, animates 0.5s.
-2. **AlignmentPointPicker precision** (`AlignmentPointPicker.tsx`): Now estimates surface point via ray-cast from tripod position + viewing direction × adjustable distance slider (0.5–10m). Shows captured coordinates and distance in both steps for verification.
-
----
-
-## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
-
-### Changes Made
-1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
-2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
-3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
-4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
-5. **config.toml** updated with `acc-geometry-extract` function entry
-
-### Pending (Phase 2)
-- Actual GLB chunk creation from SVF geometry (requires conversion worker)
-- OBJ as optional secondary format for small models
-
----
 
 
-### Ändringar
+# Fix Plan — Pure 2D Issues + Split 2D/3D Camera Sync
 
-#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
-**Fil:** `supabase/functions/conversion-worker-api/index.ts`
-- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
-- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
-- Upsert till `assets` med `created_in_model: true`
-- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
+## Clarification
+- **"2D"** = pure 2D mode (xeokit in 2D plan view via `VIEW_MODE_2D_TOGGLED_EVENT`)
+- **"2D/3D"** = `split2d3d` mode where SplitPlanView is on the left and 3D viewer on the right
 
-#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
-**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
-- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
-- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
-- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
-- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
-- Diff: soft-delete objekt som finns i DB men inte i ny IFC
+## Issues & Fixes
 
-#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
-**Fil:** `docs/conversion-worker/worker.mjs`
-- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
-- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
-- Non-fatal: om hierarki-population misslyckas fortsätter workern
+### 1. Pure 2D — Clicks hit area objects instead of rooms
+**Problem:** `SplitPlanView.handleClick` (line 756) only does camera flyTo. The hover handler uses `pickStoreyMap` but click doesn't pick entities at all. Large IfcSpace/area objects cover the floor and block smaller room picks.
 
-#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
-**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
-- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
-- `created_in_model: true` istället för `false`
-- Diff-logik: markerar borttagna objekt efter import
+**Fix in `SplitPlanView.tsx`:**
+- In `handleClick`, after computing `worldPos`, also call `pickStoreyMap` to get the clicked entity
+- Filter out large area types (`IfcSite`, `IfcBuilding`) — skip entities whose AABB covers >80% of the floor AABB
+- If a valid entity is found, dispatch `VIEWER_SELECT_ENTITY` custom event with `entityId` and `originalSystemId` (fm_guid)
+- Add `onEntityClick` callback prop for parent to handle (e.g. open properties)
 
-### Datamodell
+### 2. Pure 2D — Room labels don't follow pan/zoom
+**Problem:** The room labels overlay container uses `absolute inset-0` (line 1083) which is correct and IS inside the transformed parent div (line 1059). The labels should follow pan/zoom since they're children of the transformed container.
 
-```text
-Building Storey:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
-  category:          "Building Storey"
-  created_in_model:  true
+**Likely root cause:** The `pointer-events-none` on the overlay plus the `relative` + `inline-block` parent may cause `inset-0` to not resolve to the image dimensions. The overlay may be 0×0.
 
-Space:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
-  category:          "Space"
-  level_fm_guid:     parent storey fm_guid
+**Fix in `SplitPlanView.tsx`:**
+- Instead of `inset-0`, set explicit `width` and `height` on the labels container matching `imgRef.current.naturalWidth` and `imgRef.current.naturalHeight` (the image's intrinsic pixel dimensions, which match the rendered size since `max-w-none` prevents shrinking)
 
-Instance:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
-  category:          "Instance"
-  asset_type:        ifcType (e.g. "IfcDoor")
-  level_fm_guid:     resolved storey
-  in_room_fm_guid:   resolved space
-```
+### 3. Properties dialog — can't close + shows "No data found"
+**Problem 1:** Close button exists (line 1252) but may be blocked by event propagation or z-index.
 
-### Diff-flöde
+**Fix in `UniversalPropertiesDialog.tsx`:**
+- Add `e.stopPropagation()` on the close button click handler
+- Ensure `onClose` is called with no conditions
 
-Vid omimport jämförs importerade fm_guids mot befintliga i DB:
-- **Nytt** → INSERT
-- **Matchat** → UPDATE (namn, typ, rumsplacering)
-- **Borttaget** → `modification_status = 'removed'` (soft-delete)
+**Problem 2:** Entity GUID from 2D pick is a xeokit metaObject ID, not a database `fm_guid`. The code tries `asset_external_ids` fallback (line 154) only when `entityId` prop is set, but the component receives the ID as `fmGuids` prop.
 
----
+**Fix in `UniversalPropertiesDialog.tsx`:**
+- When no assets found and `entityId` is available, also try resolving via `originalSystemId` from xeokit metaScene before querying the database
+- Pass `entityId` properly from the context menu / click handler
 
-## Previous Plans
+**Fix in `NativeViewerShell.tsx`:**
+- Ensure `propertiesEntity` stores both `fmGuid` and `entityId` separately, and passes `entityId` to `UniversalPropertiesDialog`
 
-### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
-- Browser-primary for >20MB, edge function for ≤20MB
-- MetaModel JSON uploaded alongside XKT
-- Systems extracted and persisted
+### 4. Split 2D/3D — 3D doesn't follow position from 2D clicks
+**Problem:** In `split2d3d` mode, `SplitPlanView` clicks do `viewer.cameraFlight.flyTo()` on the shared xeokit viewer — this SHOULD move the 3D camera since both panels share the same viewer instance. But `syncFloorSelection={false}` is set (line 839), and the click handler moves the camera to a first-person view (eye at 1.5m above floor), which may not be the desired behavior for split mode.
 
-### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
-- Standalone Node.js worker polls conversion-worker-api
-- Per-storey .xkt tiles with dynamic floor loading
+**Fix in `SplitPlanView.tsx`:**
+- Detect if the component is in split2d3d context (new prop `isSplitMode`)
+- In split mode, instead of first-person flyTo, do a top-down camera adjustment: move the 3D camera's `look` target to the clicked world position while preserving the current camera angle and distance
+- Alternatively, dispatch a custom event `SPLIT_PLAN_NAVIGATE` with the world position, and have UnifiedViewer / NativeViewerShell listen and fly the 3D camera there with its current perspective
 
-### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
-- 10 credential override columns on building_settings
-- Shared credential resolver in edge functions
-- Properties page as configuration hub
+**Fix in `UnifiedViewer.tsx`:**
+- Pass `isSplitMode={true}` to SplitPlanView when in split2d3d mode
+
+## Files to Edit
+1. `src/components/viewer/SplitPlanView.tsx` — entity picking on click, label sizing fix, split-mode camera dispatch
+2. `src/components/common/UniversalPropertiesDialog.tsx` — close button fix, improved GUID resolution
+3. `src/components/viewer/NativeViewerShell.tsx` — proper entityId/fmGuid separation for properties
+4. `src/pages/UnifiedViewer.tsx` — pass isSplitMode prop, listen for SPLIT_PLAN_NAVIGATE event
+
