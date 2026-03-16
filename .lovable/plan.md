@@ -1,129 +1,54 @@
-## Plan: IFC & ACC Import/Sync Performance Optimization (IMPLEMENTED ✅)
-
-### Changes Made
-1. **XKT compression** (`ifc-to-xkt`): Enabled `zip: true` in `writeXKTModelToArrayBuffer` — ~30% smaller XKT files
-2. **Parallel DB writes** (`ifc-to-xkt`): `persistSystemsAndConnections` + `populateAssetsFromMetaObjects` now run via `Promise.all` instead of sequentially
-3. **Streaming LD-JSON parser** (`acc-sync`): New `streamLDJSON()` async generator processes BIM property files line-by-line from `ReadableStream` — eliminates OOM risk on large Revit models
-4. **Incremental ACC sync** (`acc-sync`): `fetchAccAssets` now supports `filter[updatedAt]` parameter, only fetching assets modified since last sync — ~90% faster re-syncs
-5. **IFC derivative from ACC** (`acc-sync`): `translate-model` now requests IFC format alongside SVF. On completion, downloads the IFC derivative and feeds it into `ifc-to-xkt` for real per-storey tiling — unifying ACC and IFC geometry pipelines
-6. **Dual pipeline** (`check-translation`): Triggers both `ifc-to-xkt` (for tiled XKT) and `acc-geometry-extract` (for GLB fallback) in parallel when translation succeeds
-
----
-
-## Plan: Mobile Viewer Startup Hardening (IMPLEMENTED ✅)
-
-### Changes Made
-1. **Mobile touch tuning** (`NativeXeokitViewer.tsx`): dragRotationRate 30→70, touchPanRate 0.06→0.14, touchDollyRate 0.04→0.09, rotationInertia 0.93→0.88, panInertia 0.88→0.82
-2. **FastNav delay** (`NativeXeokitViewer.tsx`): Added `delayBeforeRestore: true` (0.5s mobile, 0.3s desktop)
-3. **Suppress viewFit in split2d3d** (`NativeXeokitViewer.tsx`): Skips instant viewFit when `?mode=split2d3d` — floor isolation handles camera
-4. **Defer SplitPlanView mount** (`UnifiedViewer.tsx`): Mobile SplitPlanView only renders after `viewerReady=true`, shows spinner until then
-5. **Increased SplitPlanView retry** (`SplitPlanView.tsx`): 10×100ms → 30×200ms (6s total window), immediate retry on VIEWER_MODELS_LOADED
-6. **Debounced floor events** (`UnifiedViewer.tsx`): 500ms guard on FLOOR_SELECTION_CHANGED dispatches to prevent competing events
-
-### Architecture Principle
-Mobile and desktop share the same `UnifiedViewerContent` initialization logic. The ONLY difference is layout:
-- Mobile: vertical stack (2D top, 3D bottom) with touch-optimized divider (8px)
-- Desktop: horizontal ResizablePanelGroup with drag handle (4px)
-
-Future changes to viewer startup MUST apply to both paths. Do NOT create separate mobile/desktop init logic.
-
----
-
-## Plan: SplitPlanView Navigation + Alignment UX (IMPLEMENTED ✅)
-
-### Changes Made
-1. **SplitPlanView click navigation** (`SplitPlanView.tsx`): Replaced first-person instant jump with MinimapPanel-style fly-to — keeps current eye height, looks down at clicked point, animates 0.5s.
-2. **AlignmentPointPicker precision** (`AlignmentPointPicker.tsx`): Now estimates surface point via ray-cast from tripod position + viewing direction × adjustable distance slider (0.5–10m). Shows captured coordinates and distance in both steps for verification.
-
----
-
-## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
-
-### Changes Made
-1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
-2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
-3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
-4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
-5. **config.toml** updated with `acc-geometry-extract` function entry
-
-### Pending (Phase 2)
-- Actual GLB chunk creation from SVF geometry (requires conversion worker)
-- OBJ as optional secondary format for small models
-
----
 
 
-### Ändringar
+# Fix: Floor Switcher Behavior, Clipping Heights, Model Names, Spaces Filtering
 
-#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
-**Fil:** `supabase/functions/conversion-worker-api/index.ts`
-- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
-- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
-- Upsert till `assets` med `created_in_model: true`
-- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
+## 4 Issues to Fix
 
-#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
-**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
-- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
-- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
-- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
-- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
-- Diff: soft-delete objekt som finns i DB men inte i ny IFC
+### 1. Floor switcher popover closes on selection — should stay open
+**File:** `src/components/viewer/FloatingFloorSwitcher.tsx`
+- Lines 152 and 159: `setPopoverOpen(false)` is called in both `handleFloorSelect` and `handleShowAll`
+- **Fix:** Remove `setPopoverOpen(false)` from both handlers. The popover stays open so the user can change their mind. They close it by clicking outside or clicking the trigger again.
 
-#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
-**Fil:** `docs/conversion-worker/worker.mjs`
-- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
-- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
-- Non-fatal: om hierarki-population misslyckas fortsätter workern
+### 2. Clipping height differs by view mode (3D vs 2D)
+**Current behavior:** 
+- **3D mode** (`applyCeilingClipping`): Clips at `nextFloor.minY + 0.05` — this is correct per the user's requirement ("where the next floor starts")
+- **2D mode** (`applyFloorPlanClipping`): Clips at `bounds.minY + floorCutHeight` where `floorCutHeight` defaults to `0.5m` — user says this is correct for 2D
 
-#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
-**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
-- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
-- `created_in_model: true` istället för `false`
-- Diff-logik: markerar borttagna objekt efter import
+**Problem:** The `FloatingFloorSwitcher` dispatches `FLOOR_SELECTION_CHANGED_EVENT` with bounds from `calculateFloorBounds(soloFloorId)`. The `ViewerToolbar` handler (line 237-250) then applies the correct clipping mode based on `viewModeRef.current`. This should already work correctly.
 
-### Datamodell
+**However**, the `applyAndDispatch` in FloatingFloorSwitcher (line 125) calls `calculateFloorBounds` which returns `{ minY, maxY }` of the *current* floor's own objects. The event includes these bounds. The ViewerToolbar handler at line 245 uses `soloId` (which is the metaObjectId) to call `applyCeilingClipping(soloId)`, which internally calls `calculateClipHeightFromFloorBoundary` that finds the *next* floor's minY. This is the correct approach.
 
-```text
-Building Storey:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
-  category:          "Building Storey"
-  created_in_model:  true
+**Potential issue:** The `soloId` variable in ViewerToolbar (line 235) might not match. Let me trace: `visibleMetaFloorIds` comes from `allMetaIds` in FloatingFloorSwitcher which is `visibleFloors.flatMap(f => f.metaObjectIds)`. The ViewerToolbar checks `isSolo = !isAllFloorsVisible && visibleMetaFloorIds?.length === 1` — but if a floor has multiple metaObjectIds (merged from A+E+V models), `visibleMetaFloorIds.length` could be > 1 even when only 1 floor is selected, causing `isSolo` to be false and clipping to be removed instead of applied.
 
-Space:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
-  category:          "Space"
-  level_fm_guid:     parent storey fm_guid
+**Fix:** In `ViewerToolbar` line 234-235, check `isSoloFloor` from event detail or use `floorId` directly instead of relying on `visibleMetaFloorIds.length === 1`. The FloatingFloorSwitcher already sends `floorId` as `soloFloorId` when one floor is selected.
 
-Instance:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
-  category:          "Instance"
-  asset_type:        ifcType (e.g. "IfcDoor")
-  level_fm_guid:     resolved storey
-  in_room_fm_guid:   resolved space
-```
+**File:** `src/components/viewer/ViewerToolbar.tsx` (lines 234-246)
+- Change solo detection: use `e.detail.floorId !== null && !e.detail.isAllFloorsVisible` instead of checking `visibleMetaFloorIds.length === 1`
+- Use `e.detail.floorId` directly for clipping calls
 
-### Diff-flöde
+### 3. Model names wrong in filter panel
+The `sources` memo in ViewerFilterPanel (lines 184-222) uses `apSources` from `useModelData`. If Asset+ data isn't loaded yet or parentBimObjectId/parentCommonName are missing, it falls back to `sharedModels` with `model.name`. If that name looks like a GUID, it shows "Modell 1", "Modell 2" etc.
 
-Vid omimport jämförs importerade fm_guids mot befintliga i DB:
-- **Nytt** → INSERT
-- **Matchat** → UPDATE (namn, typ, rumsplacering)
-- **Borttaget** → `modification_status = 'removed'` (soft-delete)
+**Root cause:** The `sharedModels` from `useModelData` should already resolve names via `useModelNames` and `storeyLookup`. Need to check that the filter panel actually uses the resolved names from sharedModels, not raw model IDs.
 
----
+**Fix:** In the fallback path (lines 200-212), ensure `model.name` is already the resolved friendly name from `useModelData` (which uses `useModelNames`). If `sharedModels` already has friendly names, the issue is in strategy 1 (lines 188-197) where `apSources.get(level.sourceGuid)` returns a GUID. Add the same GUID detection there.
 
-## Previous Plans
+**File:** `src/components/viewer/ViewerFilterPanel.tsx` (lines 184-222)
+- When building sources from levels, also cross-reference `sharedModels` for friendly names as a fallback when `apSources` returns a GUID or empty string
 
-### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
-- Browser-primary for >20MB, edge function for ≤20MB
-- MetaModel JSON uploaded alongside XKT
-- Systems extracted and persisted
+### 4. Spaces not filtering when a Level is selected via floor switcher
+The `spaces` memo (line 224-302) filters by `checkedLevels`. But when the user selects a floor via the FloatingFloorSwitcher, the filter panel's `checkedLevels` state is NOT updated — only the viewer visibility changes.
 
-### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
-- Standalone Node.js worker polls conversion-worker-api
-- Per-storey .xkt tiles with dynamic floor loading
+The spaces should also filter based on the externally-selected floor (from floor switcher), not just `checkedLevels` from the filter panel checkboxes.
 
-### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
-- 10 credential override columns on building_settings
-- Shared credential resolver in edge functions
-- Properties page as configuration hub
+**Fix:** Listen for `FLOOR_SELECTION_CHANGED_EVENT` in the filter panel and sync `checkedLevels` when a floor is selected externally. When a solo floor is selected, find the matching level and set it as checked. When all floors are shown, clear `checkedLevels`.
+
+**File:** `src/components/viewer/ViewerFilterPanel.tsx`
+- Add a `useEffect` that listens for `FLOOR_SELECTION_CHANGED_EVENT` and updates `checkedLevels` accordingly
+- Map `visibleFloorFmGuids` from the event to matching level fmGuids
+
+## Files to Edit
+1. `src/components/viewer/FloatingFloorSwitcher.tsx` — keep popover open after selection
+2. `src/components/viewer/ViewerToolbar.tsx` — fix solo floor detection for clipping
+3. `src/components/viewer/ViewerFilterPanel.tsx` — fix model names fallback + sync spaces with external floor selection
+
