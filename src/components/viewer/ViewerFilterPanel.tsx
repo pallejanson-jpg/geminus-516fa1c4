@@ -783,7 +783,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   const applyFilterVisibility = useCallback(() => {
     clearTimeout(debounceRef.current);
     cancelAnimationFrame(rafRef.current);
-    debounceRef.current = setTimeout(() => {
+    debounceRef.current = setTimeout(() => {  // 300ms debounce for performance
     rafRef.current = requestAnimationFrame(() => {
     const viewer = getXeokitViewer();
     if (!viewer?.scene) return;
