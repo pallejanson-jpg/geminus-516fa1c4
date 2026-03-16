@@ -188,7 +188,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     levels.forEach(level => {
       if (!level.sourceGuid) return;
       const current = grouped.get(level.sourceGuid);
-      const resolvedName = apSources.get(level.sourceGuid) || current?.name || level.sourceGuid;
+      const rawName = apSources.get(level.sourceGuid) || current?.name || level.sourceGuid;
+      const resolvedName = isGuid(rawName) ? '' : rawName; // defer GUID replacement to final step
       grouped.set(level.sourceGuid, {
         name: resolvedName,
         storeyCount: (current?.storeyCount || 0) + 1,
@@ -211,9 +212,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
     }
 
-    const result = Array.from(grouped.entries()).map(([guid, val]) => ({
+    const result = Array.from(grouped.entries()).map(([guid, val], idx) => ({
       guid,
-      name: val.name,
+      name: (!val.name || isGuid(val.name)) ? `Modell ${idx + 1}` : val.name,
       storeyCount: val.storeyCount,
     }));
 
@@ -250,12 +251,39 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     });
 
     // Fallback: if viewer-level mapping is not ready/correct yet, still show spaces
-    const spacesSource = (
-      filteredByLevel.length === 0 &&
-      allSpaces.length > 0 &&
-      levels.length > 0 &&
-      checkedLevels.size === 0
-    ) ? allSpaces : filteredByLevel;
+    let spacesSource = filteredByLevel;
+    if (filteredByLevel.length === 0 && allSpaces.length > 0) {
+      if (checkedLevels.size === 0) {
+        // No level filter = show all
+        spacesSource = allSpaces;
+      } else {
+        // Level IS selected but DB GUID matching returned 0 — use xeokit scene graph fallback
+        const viewer = getXeokitViewer();
+        if (viewer?.metaScene?.metaObjects && entityMapRef.current.size > 0) {
+          const sceneSpaceGuids = new Set<string>();
+          // Walk descendants of checked levels to find IfcSpace metaObjects
+          checkedLevels.forEach(levelGuid => {
+            const entityIds = entityMapRef.current.get(levelGuid) || [];
+            entityIds.forEach(id => {
+              const mo = viewer.metaScene.metaObjects[id];
+              if (mo && (mo.type === 'IfcSpace' || (mo.type || '').toLowerCase() === 'ifcspace')) {
+                sceneSpaceGuids.add(normalizeGuid(mo.originalSystemId || mo.id));
+              }
+            });
+          });
+          if (sceneSpaceGuids.size > 0) {
+            spacesSource = allSpaces.filter((a: any) => {
+              const fg = normalizeGuid(a.fmGuid || a.fm_guid || '');
+              return sceneSpaceGuids.has(fg);
+            });
+          }
+          // Ultimate fallback: show all spaces rather than 0
+          if (spacesSource.length === 0) spacesSource = allSpaces;
+        } else {
+          spacesSource = allSpaces;
+        }
+      }
+    }
 
     return spacesSource
       .map((a: any) => {
@@ -755,7 +783,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   const applyFilterVisibility = useCallback(() => {
     clearTimeout(debounceRef.current);
     cancelAnimationFrame(rafRef.current);
-    debounceRef.current = setTimeout(() => {
+    debounceRef.current = setTimeout(() => {  // 300ms debounce for performance
     rafRef.current = requestAnimationFrame(() => {
     const viewer = getXeokitViewer();
     if (!viewer?.scene) return;
@@ -1189,7 +1217,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
     console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', scene.objectIds.length);
     }); // end requestAnimationFrame
-    }, 150); // debounce 150ms
+    }, 300); // debounce 300ms for performance
   }, [getXeokitViewer, checkedSources, checkedLevels, checkedSpaces, checkedCategories,
     levels, spaces, categoryToIfcTypes, levelColors, spaceColors, categoryColors, autoColorEnabled, autoColorSpaces, autoColorCategories, xrayMode]);
 

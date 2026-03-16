@@ -450,6 +450,11 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       }
     }
 
+    // Bold wall edges for Dalux-style crisp plan
+    if (scene.edgeMaterial) {
+      scene.edgeMaterial.edgeWidth = 2;
+      scene.edgeMaterial.edgeColor = [0, 0, 0];
+    }
     for (const id of wallIds) {
       const entity = scene.objects?.[id];
       if (!entity) continue;
@@ -795,21 +800,23 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
 
     if (!worldPos || !viewer.cameraFlight) return;
 
-    // Preserve the camera's current horizontal offset (viewing angle) and
-    // translate both eye and look to the new clicked position.
+    // Dalux-style first-person camera: 1.5m above floor, looking straight ahead
     const eye = viewer.camera.eye;
     const look = viewer.camera.look;
-    const currentEyeY = Number.isFinite(eye?.[1]) ? eye[1] : 20;
 
-    // Calculate current horizontal offset between eye and look
-    const rawOffsetX = (eye?.[0] ?? 0) - (look?.[0] ?? 0);
-    const rawOffsetZ = (eye?.[2] ?? 0) - (look?.[2] ?? 0);
-    const hasOffset = Math.abs(rawOffsetX) > 0.1 || Math.abs(rawOffsetZ) > 0.1;
-    const finalOffsetX = hasOffset ? rawOffsetX : 0;
-    const finalOffsetZ = hasOffset ? rawOffsetZ : -10;
+    // Get current horizontal viewing direction (preserve heading)
+    const dx = (look?.[0] ?? 0) - (eye?.[0] ?? 0);
+    const dz = (look?.[2] ?? 0) - (eye?.[2] ?? 0);
+    const hLen = Math.sqrt(dx * dx + dz * dz);
+    const dirX = hLen > 0.01 ? dx / hLen : 0;
+    const dirZ = hLen > 0.01 ? dz / hLen : -1;
 
-    const nextEye: [number, number, number] = [worldPos[0] + finalOffsetX, currentEyeY, worldPos[2] + finalOffsetZ];
-    const nextLook: [number, number, number] = [worldPos[0], worldPos[1], worldPos[2]];
+    // Floor Y from clicked point, eye at person height (1.5m above floor)
+    const floorY = worldPos[1];
+    const eyeHeight = floorY + 1.5;
+
+    const nextEye: [number, number, number] = [worldPos[0], eyeHeight, worldPos[2]];
+    const nextLook: [number, number, number] = [worldPos[0] + dirX * 5, eyeHeight, worldPos[2] + dirZ * 5];
 
     if (!nextEye.every((v) => Number.isFinite(v)) || !nextLook.every((v) => Number.isFinite(v))) {
       console.warn('[SplitPlanView] Skipping flyTo — invalid camera coords');
@@ -820,7 +827,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       eye: nextEye,
       look: nextLook,
       up: [0, 1, 0],
-      duration: 0.5,
+      duration: 0.4,
     });
   }, [getXeokitViewer]);
 
