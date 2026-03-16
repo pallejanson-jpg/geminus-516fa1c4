@@ -780,13 +780,16 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   const rafRef = useRef<number>(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const isApplyingRef = useRef(false);
   const applyFilterVisibility = useCallback(() => {
     clearTimeout(debounceRef.current);
     cancelAnimationFrame(rafRef.current);
     debounceRef.current = setTimeout(() => {  // 300ms debounce for performance
+    if (isApplyingRef.current) return; // Re-entry guard
+    isApplyingRef.current = true;
     rafRef.current = requestAnimationFrame(() => {
     const viewer = getXeokitViewer();
-    if (!viewer?.scene) return;
+    if (!viewer?.scene) { isApplyingRef.current = false; return; }
     const scene = viewer.scene;
     const eMap = entityMapRef.current;
 
@@ -808,12 +811,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
     }
 
-    // Re-apply full architect color palette as base layer after clean slate
-    // This prevents raw XKT colors (red rooms, blue windows) from showing
-    applyArchitectColors(viewer);
-
-    // Step 0b: Always hide ALL IfcSpace entities after clean slate (prevent red rooms)
-    // They should only become visible when explicitly enabled via "Visa rum" or space filter
+    // Step 0b: Hide IfcSpace entities (combined with clean slate — skip redundant applyArchitectColors)
+    // Architect colors are applied on model load and don't need re-application on filter change
     if (viewer.metaScene?.metaObjects) {
       Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
         const ifcType = (mo.type || '').toLowerCase();
@@ -1216,6 +1215,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }));
 
     console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', scene.objectIds.length);
+    isApplyingRef.current = false;
     }); // end requestAnimationFrame
     }, 300); // debounce 300ms for performance
   }, [getXeokitViewer, checkedSources, checkedLevels, checkedSpaces, checkedCategories,

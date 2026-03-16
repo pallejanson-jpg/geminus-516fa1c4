@@ -500,12 +500,33 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
   const handleContextProperties = useCallback(() => {
     if (!contextMenu) return;
+    let resolvedFmGuid = contextMenu.fmGuid;
+
+    // Try to resolve the correct database fmGuid via normalized comparison
+    if (resolvedFmGuid && allData?.length) {
+      const normalizedGuid = resolvedFmGuid.toLowerCase();
+      const matchingAsset = allData.find(
+        (a: any) => a.fmGuid?.toLowerCase() === normalizedGuid
+      );
+      if (matchingAsset) {
+        resolvedFmGuid = matchingAsset.fmGuid;
+      }
+    }
+
+    // Fallback: if no fmGuid or no match, try entityId against asset_external_ids concept
+    if (!resolvedFmGuid && contextMenu.entityId && allData?.length) {
+      const byEntityId = allData.find(
+        (a: any) => a.fmGuid?.toLowerCase() === contextMenu.entityId?.toLowerCase()
+      );
+      if (byEntityId) resolvedFmGuid = byEntityId.fmGuid;
+    }
+
     setPropertiesEntity({
       entityId: contextMenu.entityId || '',
-      fmGuid: contextMenu.fmGuid,
+      fmGuid: resolvedFmGuid,
       name: contextMenu.entityName,
     });
-  }, [contextMenu]);
+  }, [contextMenu, allData]);
 
   const handleContextSelect = useCallback(() => {
     if (!contextMenu?.entityId || !xeokitViewer?.scene) return;
