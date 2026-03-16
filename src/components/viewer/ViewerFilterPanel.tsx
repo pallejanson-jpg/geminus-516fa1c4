@@ -27,6 +27,8 @@ interface BimSource {
 
 interface LevelItem {
   fmGuid: string;
+  /** All known GUIDs for this level (xeokit originalSystemId + Asset+ fm_guid variants) */
+  allGuids: string[];
   name: string;
   sourceGuid: string;
   spaceCount: number;
