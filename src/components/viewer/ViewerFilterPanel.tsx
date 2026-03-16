@@ -608,11 +608,11 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     // Match levels → storeys
     const usedStoreyIds = new Set<string>();
     levels.forEach(level => {
-      const fmNorm = normalizeGuid(level.fmGuid);
+      const levelGuidSet = new Set(level.allGuids.map(g => normalizeGuid(g)));
       const nameLower = level.name.toLowerCase().trim();
 
       let matched = eligibleStoreys.find(xs =>
-        !usedStoreyIds.has(xs.id) && normalizeGuid(xs.sysId) === fmNorm
+        !usedStoreyIds.has(xs.id) && levelGuidSet.has(normalizeGuid(xs.sysId))
       );
       if (!matched) matched = eligibleStoreys.find(xs =>
         !usedStoreyIds.has(xs.id) && xs.name.toLowerCase().trim() === nameLower
@@ -628,11 +628,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         usedStoreyIds.add(matched.id);
         const descendants = getDescendantIds(viewer, matched.id);
         map.set(level.fmGuid, descendants);
-
-        const matchingFloor = sharedFloors.find(floor =>
-          floor.databaseLevelFmGuids.some(g => normalizeGuid(g) === fmNorm)
-        );
-        matchingFloor?.databaseLevelFmGuids.forEach(g => {
+        level.allGuids.forEach(g => {
           map.set(g, descendants);
         });
       }
