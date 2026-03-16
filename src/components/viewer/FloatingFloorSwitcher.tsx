@@ -205,15 +205,11 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                 onClick={(e) => handlePillClick(floor.id, e)}
                 onDoubleClick={handlePillDoubleClick}
                 className={cn(
-                  isMobile
-                    ? 'h-6 px-1.5 text-[9px] font-medium rounded-full'
-                    : compact ? 'h-5 px-1 text-[7px] font-medium rounded' : 'h-6 px-1.5 min-w-[60px] text-[9px] sm:h-7 sm:px-2 sm:min-w-[60px] sm:text-xs font-medium rounded-md text-center justify-center',
+                  'h-6 px-1.5 text-[9px] font-medium rounded-full',
                   'transition-all duration-150 w-auto shadow-sm',
                   state === 'active' && 'bg-primary text-primary-foreground shadow-md hover:bg-primary/90',
                   state === 'partial' && 'bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30',
-                  state === 'inactive' && (isMobile
-                    ? 'text-white/70 hover:text-white hover:bg-white/10'
-                    : 'bg-background/90 backdrop-blur-sm text-muted-foreground border border-border/40 hover:bg-muted hover:text-foreground'),
+                  state === 'inactive' && 'text-white/70 hover:text-white hover:bg-white/10',
                 )}
               >
                 <span className={cn(compact ? "text-[7px]" : "text-[9px] sm:text-xs", "truncate")}>{floor.name}</span>
