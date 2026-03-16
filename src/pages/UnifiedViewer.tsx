@@ -839,6 +839,22 @@ const UnifiedViewerContent: React.FC<{
                 syncFloorSelection={false}
                 lockCameraToFloor={false}
                 monochrome
+                onRoomLabelsChange={setPlanRoomLabels}
+                navigationOverlay={navPanelOpen ? (
+                  <>
+                    {navEditMode && (
+                      <NavGraphEditorOverlay
+                        graph={navGraph}
+                        onGraphChange={setNavGraph}
+                        roomLabels={planRoomLabels}
+                        floorFmGuid={navFloorFmGuid}
+                      />
+                    )}
+                    {!navEditMode && navRoute && (
+                      <RouteDisplayOverlay route={navRoute} />
+                    )}
+                  </>
+                ) : undefined}
               />
             </div>
             {/* Thin draggable divider */}
