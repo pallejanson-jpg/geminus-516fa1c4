@@ -171,9 +171,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
 
   return (
     <div className={cn(
-      'fixed z-20 pointer-events-auto',
-      'bottom-14 left-1/2 -translate-x-1/2',
-      isMobile && 'bottom-[3.5rem]',
+      'absolute z-40 pointer-events-auto',
       className
     )}>
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
