@@ -442,25 +442,10 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
           <X className="h-5 w-5" />
         </Button>
 
-        {/* Mode switcher */}
-        <div className="flex items-center gap-0.5 bg-black/30 backdrop-blur-sm rounded-lg p-0.5 pointer-events-auto">
-          {modes.map(({ mode, label, Icon }) => (
-            <Button
-              key={mode}
-              size="sm"
-              variant="ghost"
-              className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${
-                viewMode === mode
-                  ? 'bg-white/20 text-white'
-                  : 'text-white/60 hover:text-white hover:bg-white/10'
-              }`}
-              onClick={() => handleModeChange(mode)}
-            >
-              <Icon className="h-3 w-3" />
-              {label}
-            </Button>
-          ))}
-        </div>
+        {/* Building name / current mode label */}
+        <span className="text-white text-xs font-medium truncate max-w-[50vw] pointer-events-none">
+          {buildingData.name}
+        </span>
 
         <Button
           variant="ghost"
