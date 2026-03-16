@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useCallback, useRef, useContext, useEffect } from 'react';
+import useSectionPlaneClipping from '@/hooks/useSectionPlaneClipping';
 import { OBJECT_MOVE_MODE_EVENT, OBJECT_DELETE_EVENT, useObjectMoveMode } from '@/hooks/useObjectMoveMode';
 import NativeXeokitViewer from './NativeXeokitViewer';
 import MobileViewerOverlay from './mobile/MobileViewerOverlay';
@@ -144,6 +145,56 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
     return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
   }, [updateFloorFilter]);
+
+  // ── Section plane clipping hook ──────────────────────────────────────────
+  const { applyCeilingClipping, removeSectionPlane } = useSectionPlaneClipping(viewerShimRef);
+
+  /**
+   * Resolve fmGuid(s) to xeokit metaObject storey IDs by searching the metaScene.
+   * This handles the case where UnifiedViewer dispatches with only visibleFloorFmGuids
+   * (Asset+ GUIDs) and empty visibleMetaFloorIds.
+   */
+  const resolveMetaFloorIds = useCallback((fmGuids: string[]): string[] => {
+    const viewer = (window as any).__nativeXeokitViewer;
+    if (!viewer?.metaScene?.metaObjects) return [];
+    const normalizedGuids = new Set(fmGuids.map(g => g.toLowerCase().replace(/-/g, '')));
+    const result: string[] = [];
+    Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
+      if (mo.type?.toLowerCase() !== 'ifcbuildingstorey') return;
+      const sysId = (mo.originalSystemId || mo.id || '').toLowerCase().replace(/-/g, '');
+      if (normalizedGuids.has(sysId)) {
+        result.push(mo.id);
+      }
+    });
+    return result;
+  }, []);
+
+  // Wire floor selection → section plane clipping (3D ceiling clip)
+  useEffect(() => {
+    const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
+      const { visibleMetaFloorIds, visibleFloorFmGuids, isAllFloorsVisible, skipClipping, isSoloFloor } = e.detail;
+      if (skipClipping) return;
+
+      if (isAllFloorsVisible) {
+        removeSectionPlane();
+        return;
+      }
+
+      // Resolve meta IDs: prefer explicit metaFloorIds, fallback to resolving fmGuids
+      let metaIds = visibleMetaFloorIds?.length ? visibleMetaFloorIds : [];
+      if (!metaIds.length && visibleFloorFmGuids?.length) {
+        metaIds = resolveMetaFloorIds(visibleFloorFmGuids);
+      }
+
+      if (metaIds.length === 1 && isSoloFloor) {
+        applyCeilingClipping(metaIds[0]);
+      } else if (!metaIds.length && !visibleFloorFmGuids?.length) {
+        removeSectionPlane();
+      }
+    };
+    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+  }, [applyCeilingClipping, removeSectionPlane, resolveMetaFloorIds]);
 
   const buildingName = React.useMemo(() => {
     if (!allData || !buildingFmGuid) return '';
