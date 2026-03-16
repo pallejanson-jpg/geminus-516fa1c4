@@ -582,6 +582,13 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         usedStoreyIds.add(matched.id);
         const descendants = getDescendantIds(viewer, matched.id);
         map.set(level.fmGuid, descendants);
+
+        const matchingFloor = sharedFloors.find(floor =>
+          floor.databaseLevelFmGuids.some(g => normalizeGuid(g) === fmNorm)
+        );
+        matchingFloor?.databaseLevelFmGuids.forEach(g => {
+          map.set(g, descendants);
+        });
       }
     });
 
@@ -645,7 +652,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       'Spaces matched:', allAssetSpaces.filter((s: any) => map.has(s.fmGuid || s.fm_guid)).length, '/', allAssetSpaces.length,
       'Type index:', tIdx.size, 'types');
     return true;
-  }, [getXeokitViewer, levels, sharedModels, buildingData]);
+  }, [getXeokitViewer, levels, sharedModels, buildingData, sharedFloors]);
 
   // Build map when viewer is ready (runs once per visibility)
   useEffect(() => {
