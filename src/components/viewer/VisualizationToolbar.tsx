@@ -1033,19 +1033,19 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             </Button>
           )}
 
-          {/* Asset Panel button */}
+          {/* Asset Panel button — dispatches event to parent */}
           <Button
             variant="outline"
-            className={cn("w-full justify-between gap-2 sm:gap-3 h-9 sm:h-10", showAssetPanel && "bg-primary/10 border-primary/30")}
-            onClick={() => setShowAssetPanel(!showAssetPanel)}
+            className="w-full justify-between gap-2 sm:gap-3 h-9 sm:h-10"
+            onClick={() => window.dispatchEvent(new CustomEvent('TOGGLE_ASSET_PANEL'))}
           >
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className={cn("p-1 sm:p-1.5 rounded-md", showAssetPanel ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+              <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
                 <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </div>
               <span className="text-xs sm:text-sm">Asset panel</span>
             </div>
-            <ChevronRight className={cn("h-3 w-3 transition-transform", showAssetPanel && "rotate-180")} />
+            <ChevronRight className="h-3 w-3" />
           </Button>
 
           {isToolVisible('addAsset') && onAddAsset && (
