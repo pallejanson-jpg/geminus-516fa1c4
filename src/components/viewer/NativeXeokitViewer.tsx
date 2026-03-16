@@ -599,13 +599,13 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         return (a.model_name || a.model_id).localeCompare((b.model_name || b.model_id), 'sv');
       });
 
-      // On mobile, split into primary (A-models) and secondary (rest) for lazy loading
+      // Split into primary (A-models) and secondary (rest) for lazy loading on ALL devices
       let secondaryQueue: ModelInfo[] = [];
-      if (isMobileRef.current && loadList.length > 1) {
+      if (loadList.length > 1) {
         const aModels = loadList.filter(m => isArchitectural(m.model_name));
         const nonAModels = loadList.filter(m => !isArchitectural(m.model_name));
         if (aModels.length > 0 && nonAModels.length > 0) {
-          console.log(`[NativeViewer] Mobile: loading ${aModels.length} A-models first, ${nonAModels.length} secondary models will lazy-load`);
+          console.log(`[NativeViewer] Loading ${aModels.length} A-models first, ${nonAModels.length} secondary models will lazy-load`);
           secondaryQueue = nonAModels;
           loadList.length = 0;
           loadList.push(...aModels);
