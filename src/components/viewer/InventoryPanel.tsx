@@ -519,7 +519,7 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
                     className={cn(
                       'cursor-pointer text-[11px] leading-tight',
                       selectedFmGuid === asset.fmGuid
-                        ? 'bg-blue-500/20 hover:bg-blue-500/25 text-foreground'
+                        ? 'bg-primary/20 hover:bg-primary/25 text-foreground ring-1 ring-inset ring-primary/30'
                         : 'hover:bg-muted/50',
                     )}
                     onClick={() => handleRowClick(asset)}
