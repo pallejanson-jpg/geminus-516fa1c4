@@ -258,7 +258,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         spacesSource = allSpaces;
       } else {
         // Level IS selected but DB GUID matching returned 0 — use xeokit scene graph fallback
-        const viewer = getXeokitViewer();
+        const viewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
         if (viewer?.metaScene?.metaObjects && entityMapRef.current.size > 0) {
           const sceneSpaceGuids = new Set<string>();
           // Walk descendants of checked levels to find IfcSpace metaObjects
