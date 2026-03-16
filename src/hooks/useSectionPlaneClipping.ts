@@ -35,6 +35,8 @@ export interface FloorSelectionEventDetail {
   isAllFloorsVisible?: boolean;
   isSoloFloor?: boolean;
   soloFloorName?: string;
+  /** When true, listeners should NOT apply section-plane clipping (visibility already handled). */
+  skipClipping?: boolean;
 }
 
 export interface ViewModeEventDetail {

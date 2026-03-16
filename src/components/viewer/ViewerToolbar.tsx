@@ -202,6 +202,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
       let { floorId, bounds, isAllFloorsVisible, visibleMetaFloorIds } = e.detail;
       const visibleFloorFmGuids = (e.detail as any).visibleFloorFmGuids as string[] | undefined;
+      const skipClipping = !!(e.detail as any).skipClipping;
 
       if (!floorId && visibleFloorFmGuids?.length && !visibleMetaFloorIds?.length) {
         const metaObjects = viewer?.metaScene?.metaObjects || viewer?.scene?.metaScene?.metaObjects || {};
@@ -232,6 +233,16 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
       setCurrentFloorId(floorId);
       setCurrentFloorBounds(bounds || null);
+
+      // When skipClipping is set (e.g. from FloatingFloorSwitcher which already
+      // handles visibility), don't apply additional section-plane clipping.
+      if (skipClipping) {
+        // Still remove stale clipping planes when showing all floors
+        if (isAllFloorsVisible) {
+          requestAnimationFrame(() => { try { remove3DClipping(); } catch {} });
+        }
+        return;
+      }
 
       const isSolo = floorId !== null && !isAllFloorsVisible;
       const soloId = isSolo ? (floorId || visibleMetaFloorIds?.[0]) : null;
