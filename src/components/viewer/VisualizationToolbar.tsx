@@ -41,7 +41,78 @@ import { ROOM_LABELS_TOGGLE_EVENT, ROOM_LABELS_CONFIG_EVENT, type RoomLabelsConf
 import { useRoomLabelConfigs } from "@/hooks/useRoomLabelConfigs";
 import { FLOOR_PILLS_TOGGLE_EVENT } from "./FloatingFloorSwitcher";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { VISUALIZATION_QUICK_SELECT_EVENT } from "./VisualizationQuickBar";
+import { VisualizationType, VISUALIZATION_CONFIGS } from "@/lib/visualization-utils";
 // import { LEVEL_LABELS_TOGGLE_EVENT } from "@/hooks/useLevelLabels"; // disabled
+
+const VIZ_LIST_ITEMS: { type: VisualizationType; icon: React.ElementType; label: string }[] = [
+  { type: 'temperature', icon: Thermometer, label: 'Temperatur' },
+  { type: 'co2', icon: Wind, label: 'CO₂' },
+  { type: 'humidity', icon: Droplets, label: 'Luftfuktighet' },
+  { type: 'occupancy', icon: Users, label: 'Beläggning' },
+  { type: 'area', icon: Ruler, label: 'Yta (NTA)' },
+];
+
+/** Inline sub-component: clickable list of room visualization types */
+const RoomVisualizationList: React.FC<{
+  showVisualization: boolean;
+  onToggleVisualization: (show: boolean) => void;
+}> = ({ showVisualization, onToggleVisualization }) => {
+  const [activeViz, setActiveViz] = React.useState<VisualizationType>('none');
+
+  // Stay in sync with external changes
+  React.useEffect(() => {
+    const handler = (e: CustomEvent) => {
+      setActiveViz(e.detail?.visualizationType ?? 'none');
+    };
+    window.addEventListener('VISUALIZATION_STATE_CHANGED', handler as EventListener);
+    return () => window.removeEventListener('VISUALIZATION_STATE_CHANGED', handler as EventListener);
+  }, []);
+
+  const toggle = (type: VisualizationType) => {
+    const next = activeViz === type ? 'none' : type;
+    setActiveViz(next);
+    window.dispatchEvent(
+      new CustomEvent(VISUALIZATION_QUICK_SELECT_EVENT, { detail: { type: next } })
+    );
+    // Auto-open visualization panel when selecting a type
+    if (next !== 'none' && !showVisualization) {
+      onToggleVisualization(true);
+    } else if (next === 'none' && showVisualization) {
+      onToggleVisualization(false);
+    }
+  };
+
+  return (
+    <div className="space-y-1 py-1">
+      <div className="flex items-center gap-2 sm:gap-3 py-1">
+        <div className={cn("p-1 sm:p-1.5 rounded-md", showVisualization ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+          <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+        </div>
+        <span className="text-xs sm:text-sm font-medium">Rumsvisualisering</span>
+      </div>
+      <div className="ml-7 sm:ml-9 space-y-0.5">
+        {VIZ_LIST_ITEMS.map(({ type, icon: Icon, label }) => {
+          const isActive = activeViz === type;
+          return (
+            <button
+              key={type}
+              onClick={() => toggle(type)}
+              className={cn(
+                "flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-xs transition-colors",
+                "hover:bg-muted/80",
+                isActive ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground"
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              <span>{label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 interface VisualizationToolbarProps {
   viewerRef: React.MutableRefObject<any>;
