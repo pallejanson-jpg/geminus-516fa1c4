@@ -676,6 +676,16 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         />
       )}
 
+      {/* Asset panel — independent from visualization menu */}
+      {isViewerReady && buildingFmGuid && (
+        <InventoryPanel
+          buildingFmGuid={buildingFmGuid}
+          buildingName={buildingName}
+          open={showAssetPanel}
+          onClose={() => setShowAssetPanel(false)}
+        />
+      )}
+
 
       {/* Context menu */}
       {contextMenu && (
