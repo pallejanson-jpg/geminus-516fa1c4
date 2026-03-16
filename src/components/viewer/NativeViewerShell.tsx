@@ -561,22 +561,24 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const handleContextProperties = useCallback(() => {
     if (!contextMenu) return;
     let resolvedFmGuid = contextMenu.fmGuid;
+    const normalize = (g: string) => g.toLowerCase().replace(/-/g, '');
 
-    // Try to resolve the correct database fmGuid via normalized comparison
+    // Try to resolve the correct database fmGuid via normalized comparison (strip hyphens)
     if (resolvedFmGuid && allData?.length) {
-      const normalizedGuid = resolvedFmGuid.toLowerCase();
+      const norm = normalize(resolvedFmGuid);
       const matchingAsset = allData.find(
-        (a: any) => a.fmGuid?.toLowerCase() === normalizedGuid
+        (a: any) => a.fmGuid && normalize(a.fmGuid) === norm
       );
       if (matchingAsset) {
         resolvedFmGuid = matchingAsset.fmGuid;
       }
     }
 
-    // Fallback: if no fmGuid or no match, try entityId against asset_external_ids concept
+    // Fallback: if no fmGuid or no match, try entityId against database fmGuids
     if (!resolvedFmGuid && contextMenu.entityId && allData?.length) {
+      const norm = normalize(contextMenu.entityId);
       const byEntityId = allData.find(
-        (a: any) => a.fmGuid?.toLowerCase() === contextMenu.entityId?.toLowerCase()
+        (a: any) => a.fmGuid && normalize(a.fmGuid) === norm
       );
       if (byEntityId) resolvedFmGuid = byEntityId.fmGuid;
     }
