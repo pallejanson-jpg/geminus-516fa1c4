@@ -837,15 +837,10 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           )}
 
           {isToolVisible('visualization') && onToggleVisualization && (
-            <div className="flex items-center justify-between py-1.5 sm:py-2">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className={cn("p-1 sm:p-1.5 rounded-md", showVisualization ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
-                  <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </div>
-                <span className="text-xs sm:text-sm">Room visualization</span>
-              </div>
-              <Switch checked={showVisualization} onCheckedChange={handleToggleVisualization} />
-            </div>
+            <RoomVisualizationList
+              showVisualization={showVisualization}
+              onToggleVisualization={handleToggleVisualization}
+            />
           )}
         </div>
       </div>

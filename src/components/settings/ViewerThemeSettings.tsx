@@ -73,7 +73,7 @@ const ViewerThemeSettings: React.FC = () => {
       defaultMappings[cat.key] = {
         color: cat.defaultColor,
         edges: cat.key.includes('wall') || cat.key.includes('door') || cat.key.includes('window'),
-        opacity: cat.key === 'ifcspace' ? 0.25 : undefined,
+        opacity: cat.key === 'ifcspace' ? 0.25 : (cat.key === 'ifcplate' || cat.key === 'ifccurtainwall') ? 0.3 : undefined,
       };
     });
 
