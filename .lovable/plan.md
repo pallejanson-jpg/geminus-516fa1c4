@@ -1,99 +1,129 @@
+## Plan: IFC & ACC Import/Sync Performance Optimization (IMPLEMENTED ✅)
+
+### Changes Made
+1. **XKT compression** (`ifc-to-xkt`): Enabled `zip: true` in `writeXKTModelToArrayBuffer` — ~30% smaller XKT files
+2. **Parallel DB writes** (`ifc-to-xkt`): `persistSystemsAndConnections` + `populateAssetsFromMetaObjects` now run via `Promise.all` instead of sequentially
+3. **Streaming LD-JSON parser** (`acc-sync`): New `streamLDJSON()` async generator processes BIM property files line-by-line from `ReadableStream` — eliminates OOM risk on large Revit models
+4. **Incremental ACC sync** (`acc-sync`): `fetchAccAssets` now supports `filter[updatedAt]` parameter, only fetching assets modified since last sync — ~90% faster re-syncs
+5. **IFC derivative from ACC** (`acc-sync`): `translate-model` now requests IFC format alongside SVF. On completion, downloads the IFC derivative and feeds it into `ifc-to-xkt` for real per-storey tiling — unifying ACC and IFC geometry pipelines
+6. **Dual pipeline** (`check-translation`): Triggers both `ifc-to-xkt` (for tiled XKT) and `acc-geometry-extract` (for GLB fallback) in parallel when translation succeeds
+
+---
+
+## Plan: Mobile Viewer Startup Hardening (IMPLEMENTED ✅)
+
+### Changes Made
+1. **Mobile touch tuning** (`NativeXeokitViewer.tsx`): dragRotationRate 30→70, touchPanRate 0.06→0.14, touchDollyRate 0.04→0.09, rotationInertia 0.93→0.88, panInertia 0.88→0.82
+2. **FastNav delay** (`NativeXeokitViewer.tsx`): Added `delayBeforeRestore: true` (0.5s mobile, 0.3s desktop)
+3. **Suppress viewFit in split2d3d** (`NativeXeokitViewer.tsx`): Skips instant viewFit when `?mode=split2d3d` — floor isolation handles camera
+4. **Defer SplitPlanView mount** (`UnifiedViewer.tsx`): Mobile SplitPlanView only renders after `viewerReady=true`, shows spinner until then
+5. **Increased SplitPlanView retry** (`SplitPlanView.tsx`): 10×100ms → 30×200ms (6s total window), immediate retry on VIEWER_MODELS_LOADED
+6. **Debounced floor events** (`UnifiedViewer.tsx`): 500ms guard on FLOOR_SELECTION_CHANGED dispatches to prevent competing events
+
+### Architecture Principle
+Mobile and desktop share the same `UnifiedViewerContent` initialization logic. The ONLY difference is layout:
+- Mobile: vertical stack (2D top, 3D bottom) with touch-optimized divider (8px)
+- Desktop: horizontal ResizablePanelGroup with drag handle (4px)
+
+Future changes to viewer startup MUST apply to both paths. Do NOT create separate mobile/desktop init logic.
+
+---
+
+## Plan: SplitPlanView Navigation + Alignment UX (IMPLEMENTED ✅)
+
+### Changes Made
+1. **SplitPlanView click navigation** (`SplitPlanView.tsx`): Replaced first-person instant jump with MinimapPanel-style fly-to — keeps current eye height, looks down at clicked point, animates 0.5s.
+2. **AlignmentPointPicker precision** (`AlignmentPointPicker.tsx`): Now estimates surface point via ray-cast from tripod position + viewing direction × adjustable distance slider (0.5–10m). Shows captured coordinates and distance in both steps for verification.
+
+---
+
+## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
+
+### Changes Made
+1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
+2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
+3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
+4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
+5. **config.toml** updated with `acc-geometry-extract` function entry
+
+### Pending (Phase 2)
+- Actual GLB chunk creation from SVF geometry (requires conversion worker)
+- OBJ as optional secondary format for small models
+
+---
 
 
-# Seamless Outdoor-to-Indoor Navigation
+### Ändringar
 
-## Overview
-Extend the existing MapView with Mapbox Directions API for outdoor routing to a building entrance, then transition to an indoor map view with room polygons and indoor routing when the user zooms in past a threshold (zoom ~17).
+#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
+**Fil:** `supabase/functions/conversion-worker-api/index.ts`
+- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
+- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
+- Upsert till `assets` med `created_in_model: true`
+- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
 
-## Architecture
+#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
+**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
+- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
+- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
+- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
+- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
+- Diff: soft-delete objekt som finns i DB men inte i ny IFC
+
+#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
+**Fil:** `docs/conversion-worker/worker.mjs`
+- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
+- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
+- Non-fatal: om hierarki-population misslyckas fortsätter workern
+
+#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
+**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
+- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
+- `created_in_model: true` istället för `false`
+- Diff-logik: markerar borttagna objekt efter import
+
+### Datamodell
 
 ```text
-┌──────────────────────────────────────────┐
-│  MapView (extended)                       │
-│                                           │
-│  Zoom < 17: Outdoor mode                  │
-│  ┌─────────────────────────────────┐      │
-│  │ Mapbox Directions route line    │      │
-│  │ (walking/driving to building)   │      │
-│  └─────────────────────────────────┘      │
-│                                           │
-│  Zoom ≥ 17: Indoor mode                  │
-│  ┌─────────────────────────────────┐      │
-│  │ GeoJSON room polygons layer     │      │
-│  │ + indoor nav graph route line   │      │
-│  │ + floor switcher control        │      │
-│  └─────────────────────────────────┘      │
-│                                           │
-│  NavigationMapPanel (floating panel)      │
-│  - From: user location / search           │
-│  - To: building + room selector           │
-│  - Combined distance & ETA                │
-└──────────────────────────────────────────┘
+Building Storey:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
+  category:          "Building Storey"
+  created_in_model:  true
+
+Space:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
+  category:          "Space"
+  level_fm_guid:     parent storey fm_guid
+
+Instance:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
+  category:          "Instance"
+  asset_type:        ifcType (e.g. "IfcDoor")
+  level_fm_guid:     resolved storey
+  in_room_fm_guid:   resolved space
 ```
 
-## Implementation
+### Diff-flöde
 
-### 1. Mapbox Directions integration (edge function)
-**New file:** `supabase/functions/mapbox-directions/index.ts`
-- Proxies requests to Mapbox Directions API using the existing `MAPBOX_ACCESS_TOKEN` secret
-- Input: origin coords, destination coords, profile (walking/driving)
-- Returns GeoJSON LineString route + duration + distance
+Vid omimport jämförs importerade fm_guids mot befintliga i DB:
+- **Nytt** → INSERT
+- **Matchat** → UPDATE (namn, typ, rumsplacering)
+- **Borttaget** → `modification_status = 'removed'` (soft-delete)
 
-### 2. Indoor room polygons as GeoJSON
-**New file:** `src/hooks/useIndoorGeoJSON.ts`
-- Fetches room (Space) assets for a building from `assets` table
-- For buildings with georeferencing (lat/lng + rotation in building_settings), converts BIM bounding boxes to geographic GeoJSON polygons using `localToGeo` from coordinate-transform.ts
-- Returns a GeoJSON FeatureCollection of room polygons per floor, with properties: room name, fm_guid, floor
+---
 
-### 3. Navigation map panel
-**New file:** `src/components/map/NavigationMapPanel.tsx`
-- Floating panel on the map with:
-  - "From" field: current GPS location or typed address (Mapbox Geocoding)
-  - "To" field: building selector → room selector (from assets)
-  - Profile toggle: walking / driving
-  - "Navigate" button
-- Displays combined route summary: outdoor distance + indoor distance, total ETA
-- Dispatches route data to map layers
+## Previous Plans
 
-### 4. Extended MapView with indoor layers
-**Edit:** `src/components/map/MapView.tsx`
-- Add state for navigation mode (outdoor route, indoor route, selected floor)
-- At zoom ≥ 17 near a building with coords:
-  - Render GeoJSON room polygon `Source` + `Layer` (fill + outline)
-  - Render indoor navigation graph route as a `Source` + `Layer` (dashed line)
-  - Show a compact floor switcher control
-- At any zoom with active outdoor route:
-  - Render Mapbox Directions route as a GeoJSON `Source` + `Layer` (blue line)
-- Connect outdoor route endpoint (building entrance) to indoor route start node
+### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
+- Browser-primary for >20MB, edge function for ≤20MB
+- MetaModel JSON uploaded alongside XKT
+- Systems extracted and persisted
 
-### 5. Indoor floor switcher on map
-**New file:** `src/components/map/IndoorFloorSwitcher.tsx`
-- Small vertical pill showing floor buttons (1, 2, 3...)
-- Changes which floor's room polygons and route segments are visible
-- Appears only when zoomed into indoor mode
+### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+- Standalone Node.js worker polls conversion-worker-api
+- Per-storey .xkt tiles with dynamic floor loading
 
-### 6. Route connection logic
-**Edit:** `src/lib/pathfinding.ts`
-- Add `findNearestEntranceNode(graph)` — finds the node closest to the building entrance (lowest floor, nearest to building origin)
-- Used to connect the outdoor route's last coordinate to the indoor route's first node
-
-## Data Flow
-
-1. User selects destination building + room in NavigationMapPanel
-2. Panel fetches outdoor route via `mapbox-directions` edge function (user GPS → building lat/lng)
-3. Panel loads indoor nav graph for building, runs Dijkstra from entrance node to target room
-4. Both routes rendered as Mapbox GeoJSON layers
-5. As user zooms in past threshold, outdoor route fades, room polygons + indoor route appear
-6. Floor switcher filters visible indoor data by floor
-
-## Files to Create
-1. `supabase/functions/mapbox-directions/index.ts` — Directions API proxy
-2. `src/hooks/useIndoorGeoJSON.ts` — Room polygon GeoJSON generator
-3. `src/components/map/NavigationMapPanel.tsx` — Navigation UI panel
-4. `src/components/map/IndoorFloorSwitcher.tsx` — Floor control on map
-
-## Files to Edit
-1. `src/components/map/MapView.tsx` — Add indoor layers, route layers, navigation state
-2. `src/lib/pathfinding.ts` — Add entrance node finder
-3. `supabase/config.toml` — Register new edge function (verify_jwt = false)
-
+### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
+- 10 credential override columns on building_settings
+- Shared credential resolver in edge functions
+- Properties page as configuration hub
