@@ -968,51 +968,24 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }
       }
 
-      // 6. Lazy-load secondary models on mobile (brand, el, VVS) after viewer is ready
-      // CRITICAL: Check for WebGL context loss before each model to prevent crash cascade
-      if (secondaryQueue.length > 0 && mountedRef.current) {
-        console.log(`[NativeViewer] Scheduling ${secondaryQueue.length} secondary models for lazy loading...`);
-        const lazyLoad = async () => {
-          for (const model of secondaryQueue) {
-            if (!mountedRef.current) break;
-            // Abort if WebGL context was lost (GPU crash)
-            const gl = canvasRef.current?.getContext('webgl2') || canvasRef.current?.getContext('webgl');
-            if (gl?.isContextLost?.()) {
-              console.warn('[NativeViewer] WebGL context lost — aborting secondary model queue');
-              break;
+      // 6. Store secondary models for on-demand loading via filter panel (NO auto lazy-load)
+      if (secondaryQueue.length > 0) {
+        (window as any).__secondaryModelQueue = secondaryQueue;
+        (window as any).__loadSecondaryModel = async (modelInfo: any) => {
+          if (!mountedRef.current || !viewerRef.current?.scene) return;
+          const gl = canvasRef.current?.getContext('webgl2') || canvasRef.current?.getContext('webgl');
+          if (gl?.isContextLost?.()) { console.warn('[NativeViewer] WebGL context lost'); return; }
+          try {
+            await loadModel(modelInfo);
+            if (mountedRef.current && viewerRef.current?.scene) {
+              applyArchitectColors(viewerRef.current);
             }
-            // Check if viewer was destroyed
-            if (!viewerRef.current?.scene) {
-              console.warn('[NativeViewer] Viewer destroyed — aborting secondary model queue');
-              break;
-            }
-            try {
-              await loadModel(model);
-              // Re-apply architect colors after each secondary model loads
-              if (mountedRef.current && viewerRef.current?.scene) {
-                applyArchitectColors(viewerRef.current);
-              }
-            } catch (e) {
-              console.warn(`[NativeViewer] Secondary model failed: ${model.model_id}`, e);
-              // If it's a WebGL error, stop the queue
-              if (e instanceof Error && (e.message.includes('WebGL') || e.message.includes('context'))) {
-                console.warn('[NativeViewer] WebGL error detected — stopping secondary queue');
-                break;
-              }
-            }
-            // Small delay between secondary models to avoid GPU pressure on mobile
-            await new Promise(r => setTimeout(r, 2000));
-          }
-          console.log(`%c[NativeViewer] 🎉 All secondary models loaded`, 'color:#3b82f6;font-weight:bold');
+          } catch (e) { console.warn(`[NativeViewer] On-demand model load failed: ${modelInfo.model_id}`, e); }
         };
-        // Delay 10s after ready so A-model interaction is butter-smooth first
-        setTimeout(() => {
-          if (typeof requestIdleCallback !== 'undefined') {
-            requestIdleCallback(() => lazyLoad(), { timeout: 15000 });
-          } else {
-            lazyLoad();
-          }
-        }, 10000);
+        console.log(`[NativeViewer] ${secondaryQueue.length} secondary models available for on-demand loading via filter panel`);
+        window.dispatchEvent(new CustomEvent('SECONDARY_MODELS_AVAILABLE', {
+          detail: { models: secondaryQueue.map(m => ({ model_id: m.model_id, model_name: m.model_name })) }
+        }));
       }
 
     } catch (e) {
