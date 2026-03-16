@@ -196,24 +196,43 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return sharedFloors.map(floor => {
       const levelGuidSet = new Set(floor.databaseLevelFmGuids.map(g => normalizeGuid(g)));
 
-      const matchingAsset = buildingData.find((a: any) => {
+      // Try GUID match first
+      let matchingAsset = buildingData.find((a: any) => {
         const fmGuid = normalizeGuid(a.fmGuid || a.fm_guid || '');
         return (a.category === 'Building Storey' || a.category === 'IfcBuildingStorey') &&
           levelGuidSet.has(fmGuid);
       });
 
+      // Fallback: match by name
+      if (!matchingAsset) {
+        const floorNameLower = floor.name.toLowerCase().trim();
+        matchingAsset = buildingData.find((a: any) => {
+          if (a.category !== 'Building Storey' && a.category !== 'IfcBuildingStorey') return false;
+          const assetName = (a.commonName || a.common_name || a.name || '').toLowerCase().trim();
+          return assetName === floorNameLower ||
+            assetName.includes(floorNameLower) ||
+            floorNameLower.includes(assetName);
+        });
+      }
+
       const sourceGuid = matchingAsset?.attributes?.parentBimObjectId || '';
       const fmGuid = floor.databaseLevelFmGuids[0] || floor.id;
 
-      const levelGuidNormalizedSet = new Set(floor.databaseLevelFmGuids.map(g => normalizeGuid(g)));
+      // Collect ALL known GUIDs for this level (both xeokit and Asset+ variants)
+      const allGuids = new Set(floor.databaseLevelFmGuids.map(g => normalizeGuid(g)));
+      if (matchingAsset) {
+        const assetFmGuid = matchingAsset.fmGuid || matchingAsset.fm_guid || '';
+        if (assetFmGuid) allGuids.add(normalizeGuid(assetFmGuid));
+      }
+
       const spaceCount = buildingData.filter((s: any) => {
         const cat = s.category;
         if (cat !== 'Space' && cat !== 'IfcSpace') return false;
         const levelGuid = normalizeGuid(s.levelFmGuid || s.level_fm_guid || '');
-        return levelGuidNormalizedSet.has(levelGuid);
+        return allGuids.has(levelGuid);
       }).length;
 
-      return { fmGuid, name: floor.name, sourceGuid, spaceCount };
+      return { fmGuid, allGuids: Array.from(allGuids), name: floor.name, sourceGuid, spaceCount };
     }).sort((a, b) => {
       const extract = (n: string) => { const m = n.match(/(-?\d+)/); return m ? parseInt(m[1], 10) : 0; };
       return extract(a.name) - extract(b.name);
