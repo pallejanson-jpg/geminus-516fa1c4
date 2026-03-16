@@ -748,7 +748,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     }
 
     setRoomLabels(labels);
-  }, [storeyMap, getXeokitViewer]);
+    onRoomLabelsChange?.(labels);
+  }, [storeyMap, getXeokitViewer, onRoomLabelsChange]);
 
   // Click to navigate — use storeyMapToWorldPos for accurate position,
   // then translate current camera offset to avoid disorienting jumps/invalid poses
