@@ -907,6 +907,23 @@ const UnifiedViewerContent: React.FC<{
         )}
       </div>
 
+      {/* ─── Navigation sidebar panel ─── */}
+      {navPanelOpen && buildingData && (
+        <div className="absolute top-12 right-2 z-50 w-64 max-h-[80vh] bg-card border border-border rounded-lg shadow-xl overflow-hidden">
+          <NavigationPanel
+            buildingFmGuid={buildingData.fmGuid}
+            allData={(window as any).__cachedAllData || []}
+            onRouteCalculated={setNavRoute}
+            onGraphLoaded={setNavGraph}
+            onEditModeChange={setNavEditMode}
+            onGraphSave={setNavGraph}
+            currentFloorFmGuid={navFloorFmGuid}
+            graph={navGraph}
+            onClose={() => setNavPanelOpen(false)}
+          />
+        </div>
+      )}
+
       {/* ─── Insights bottom-sheet panel ─── */}
       {buildingFmGuid && (
         <InsightsDrawerPanel
