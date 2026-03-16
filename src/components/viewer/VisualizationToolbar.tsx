@@ -1172,16 +1172,6 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             />
           </SidePopPanel>
           
-          {/* Inventory / Asset Panel */}
-          {buildingFmGuid && (
-            <InventoryPanel
-              buildingFmGuid={buildingFmGuid}
-              buildingName={buildingName}
-              open={showAssetPanel}
-              onClose={() => setShowAssetPanel(false)}
-            />
-          )}
-          
           {/* Floating Issue List Panel */}
           <FloatingIssueListPanel
             isOpen={showIssueList}
