@@ -44,6 +44,10 @@ import { IDENTITY_TRANSFORM, type IvionBimTransform } from '@/lib/ivion-bim-tran
 import { VIEWER_TOOL_CHANGED_EVENT, VIEW_MODE_2D_TOGGLED_EVENT, VIEW_MODE_REQUESTED_EVENT, LOAD_SAVED_VIEW_EVENT, type ViewerToolChangedDetail, type ViewMode2DToggledDetail, type LoadSavedViewDetail } from '@/lib/viewer-events';
 import SplitPlanView from '@/components/viewer/SplitPlanView';
 import { FLOOR_SELECTION_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
+import NavigationPanel from '@/components/viewer/NavigationPanel';
+import NavGraphEditorOverlay from '@/components/viewer/NavGraphEditorOverlay';
+import RouteDisplayOverlay from '@/components/viewer/RouteDisplayOverlay';
+import type { NavGraph, RouteResult } from '@/lib/pathfinding';
 
 import { useIsMobile } from '@/hooks/use-mobile';
 import { toast } from 'sonner';
