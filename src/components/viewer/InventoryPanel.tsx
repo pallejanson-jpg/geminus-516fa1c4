@@ -572,7 +572,7 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
       {/* Properties Dialog */}
       {propertiesAsset && (
         <UniversalPropertiesDialog
-          open={!!propertiesAsset}
+          isOpen={!!propertiesAsset}
           onClose={() => setPropertiesAsset(null)}
           entityId={propertiesAsset.fmGuid}
           entityName={propertiesAsset.name}
