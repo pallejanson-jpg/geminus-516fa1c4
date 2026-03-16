@@ -138,6 +138,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           setPhase('error');
         }
       });
+      // Suppress browser context menu on right-click (used for pan)
+      canvas.addEventListener('contextmenu', (e: Event) => e.preventDefault());
       viewerRef.current = viewer;
 
       // Expose SectionPlane class globally so useSectionPlaneClipping can create planes
