@@ -1,129 +1,87 @@
-## Plan: IFC & ACC Import/Sync Performance Optimization (IMPLEMENTED ✅)
-
-### Changes Made
-1. **XKT compression** (`ifc-to-xkt`): Enabled `zip: true` in `writeXKTModelToArrayBuffer` — ~30% smaller XKT files
-2. **Parallel DB writes** (`ifc-to-xkt`): `persistSystemsAndConnections` + `populateAssetsFromMetaObjects` now run via `Promise.all` instead of sequentially
-3. **Streaming LD-JSON parser** (`acc-sync`): New `streamLDJSON()` async generator processes BIM property files line-by-line from `ReadableStream` — eliminates OOM risk on large Revit models
-4. **Incremental ACC sync** (`acc-sync`): `fetchAccAssets` now supports `filter[updatedAt]` parameter, only fetching assets modified since last sync — ~90% faster re-syncs
-5. **IFC derivative from ACC** (`acc-sync`): `translate-model` now requests IFC format alongside SVF. On completion, downloads the IFC derivative and feeds it into `ifc-to-xkt` for real per-storey tiling — unifying ACC and IFC geometry pipelines
-6. **Dual pipeline** (`check-translation`): Triggers both `ifc-to-xkt` (for tiled XKT) and `acc-geometry-extract` (for GLB fallback) in parallel when translation succeeds
-
----
-
-## Plan: Mobile Viewer Startup Hardening (IMPLEMENTED ✅)
-
-### Changes Made
-1. **Mobile touch tuning** (`NativeXeokitViewer.tsx`): dragRotationRate 30→70, touchPanRate 0.06→0.14, touchDollyRate 0.04→0.09, rotationInertia 0.93→0.88, panInertia 0.88→0.82
-2. **FastNav delay** (`NativeXeokitViewer.tsx`): Added `delayBeforeRestore: true` (0.5s mobile, 0.3s desktop)
-3. **Suppress viewFit in split2d3d** (`NativeXeokitViewer.tsx`): Skips instant viewFit when `?mode=split2d3d` — floor isolation handles camera
-4. **Defer SplitPlanView mount** (`UnifiedViewer.tsx`): Mobile SplitPlanView only renders after `viewerReady=true`, shows spinner until then
-5. **Increased SplitPlanView retry** (`SplitPlanView.tsx`): 10×100ms → 30×200ms (6s total window), immediate retry on VIEWER_MODELS_LOADED
-6. **Debounced floor events** (`UnifiedViewer.tsx`): 500ms guard on FLOOR_SELECTION_CHANGED dispatches to prevent competing events
-
-### Architecture Principle
-Mobile and desktop share the same `UnifiedViewerContent` initialization logic. The ONLY difference is layout:
-- Mobile: vertical stack (2D top, 3D bottom) with touch-optimized divider (8px)
-- Desktop: horizontal ResizablePanelGroup with drag handle (4px)
-
-Future changes to viewer startup MUST apply to both paths. Do NOT create separate mobile/desktop init logic.
-
----
-
-## Plan: SplitPlanView Navigation + Alignment UX (IMPLEMENTED ✅)
-
-### Changes Made
-1. **SplitPlanView click navigation** (`SplitPlanView.tsx`): Replaced first-person instant jump with MinimapPanel-style fly-to — keeps current eye height, looks down at clicked point, animates 0.5s.
-2. **AlignmentPointPicker precision** (`AlignmentPointPicker.tsx`): Now estimates surface point via ray-cast from tripod position + viewing direction × adjustable distance slider (0.5–10m). Shows captured coordinates and distance in both steps for verification.
-
----
-
-## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
-
-### Changes Made
-1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
-2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
-3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
-4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
-5. **config.toml** updated with `acc-geometry-extract` function entry
-
-### Pending (Phase 2)
-- Actual GLB chunk creation from SVF geometry (requires conversion worker)
-- OBJ as optional secondary format for small models
-
----
 
 
-### Ändringar
+# Fix Viewer: Filter Panel, Right-Click, Split View, Performance
 
-#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
-**Fil:** `supabase/functions/conversion-worker-api/index.ts`
-- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
-- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
-- Upsert till `assets` med `created_in_model: true`
-- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
+## 1. Right-Click Context Menu Suppression
+**File:** `src/components/viewer/NativeXeokitViewer.tsx`
+- Add `canvas.addEventListener('contextmenu', e => e.preventDefault())` on the xeokit canvas during initialization, preventing the browser menu from appearing during right-click pan.
 
-#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
-**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
-- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
-- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
-- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
-- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
-- Diff: soft-delete objekt som finns i DB men inte i ny IFC
+## 2. Filter Panel — Source Names Never Show GUIDs
+**File:** `src/components/viewer/ViewerFilterPanel.tsx` (lines 184-220)
+- In the `sources` useMemo, after resolving a name from `apSources`, check if it still looks like a GUID using `isGuid()`. If so, replace with `Modell ${index+1}`.
+- Also apply to Strategy 2 fallback names from `sharedModels`.
 
-#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
-**Fil:** `docs/conversion-worker/worker.mjs`
-- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
-- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
-- Non-fatal: om hierarki-population misslyckas fortsätter workern
+## 3. Filter Panel — Spaces Drop to 0 When Level Selected (THE BUG)
+**Root cause:** The `spaces` useMemo (line 246-250) filters by matching `space.level_fm_guid` against the selected level's GUIDs. If spaces in the database have empty/null `level_fm_guid` (common when hierarchy extraction failed or GUIDs don't match), `filteredByLevel` returns 0 results.
 
-#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
-**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
-- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
-- `created_in_model: true` istället för `false`
-- Diff-logik: markerar borttagna objekt efter import
+The fallback at lines 253-258 ONLY triggers when `checkedLevels.size === 0` — so when a level IS selected and no spaces match the GUID, the result is 0 spaces.
 
-### Datamodell
+**Fix (two-pronged):**
+1. **Database fallback**: Extend the fallback condition at line 253-258 to also trigger when `filteredByLevel.length === 0 && checkedLevels.size > 0`. In this case, use the **xeokit scene graph** to find spaces: walk the selected level's descendants in `entityMapRef` and collect any `IfcSpace` metaObjects.
+2. **Scene-graph matching**: When building `visibleLevelGuids`, also add the xeokit storey's `originalSystemId` (which is what spaces' parent chain references). This bridges the gap between database GUIDs and xeokit's internal IDs.
 
-```text
-Building Storey:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
-  category:          "Building Storey"
-  created_in_model:  true
-
-Space:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
-  category:          "Space"
-  level_fm_guid:     parent storey fm_guid
-
-Instance:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
-  category:          "Instance"
-  asset_type:        ifcType (e.g. "IfcDoor")
-  level_fm_guid:     resolved storey
-  in_room_fm_guid:   resolved space
+```typescript
+// After filteredByLevel (line 250), replace fallback:
+let spacesSource = filteredByLevel;
+if (filteredByLevel.length === 0 && allSpaces.length > 0) {
+  if (checkedLevels.size === 0) {
+    spacesSource = allSpaces; // No filter = show all
+  } else {
+    // Fallback: find spaces via xeokit scene graph
+    const viewer = getXeokitViewer();
+    if (viewer?.metaScene?.metaObjects && entityMapRef.current.size > 0) {
+      const sceneSpaceGuids = new Set<string>();
+      checkedLevels.forEach(levelGuid => {
+        const entityIds = entityMapRef.current.get(levelGuid) || [];
+        entityIds.forEach(id => {
+          const mo = viewer.metaScene.metaObjects[id];
+          if (mo?.type === 'IfcSpace') {
+            sceneSpaceGuids.add(normalizeGuid(mo.originalSystemId || mo.id));
+          }
+        });
+      });
+      if (sceneSpaceGuids.size > 0) {
+        spacesSource = allSpaces.filter((a: any) => {
+          const fg = normalizeGuid(a.fmGuid || a.fm_guid || '');
+          return sceneSpaceGuids.has(fg);
+        });
+      }
+      // If still 0, show all spaces as ultimate fallback
+      if (spacesSource.length === 0) spacesSource = allSpaces;
+    } else {
+      spacesSource = allSpaces;
+    }
+  }
+}
 ```
 
-### Diff-flöde
+## 4. Filter Panel — Categories Filter by Level/Space
+Categories already use `entityMapRef` + `scopeIds` (lines 343-356). The issue is the same: if `entityMapRef` doesn't have entries for the checked level GUIDs, `scopeIds` is empty → all categories show unfiltered counts or 0. The entity map fix from step 3 will also fix this since `buildEntityMap` populates `map.set(level.fmGuid, descendants)`.
 
-Vid omimport jämförs importerade fm_guids mot befintliga i DB:
-- **Nytt** → INSERT
-- **Matchat** → UPDATE (namn, typ, rumsplacering)
-- **Borttaget** → `modification_status = 'removed'` (soft-delete)
+## 5. Filter Panel — Performance Optimization
+**File:** `src/components/viewer/ViewerFilterPanel.tsx`
+- Replace the "clean slate" `applyFilterVisibility` with targeted updates:
+  - Track previously modified entity IDs in a `ref`
+  - Only reset those IDs instead of all scene objects
+  - Remove duplicate IfcSpace hiding loops
+  - Increase debounce from 150ms → 300ms
 
----
+## 6. Split View 2D — Sharper Plan (Dalux-style)
+**File:** `src/components/viewer/SplitPlanView.tsx`
+- Increase `createStoreyMap` resolution to `container.clientWidth * 3` (capped at 4000px)
+- Enable `entity.edges = true` with `edgeWidth = 2` for wall entities during map generation
+- Add CSS `image-rendering: crisp-edges` to the plan image
 
-## Previous Plans
+## 7. Split View 3D — Dalux-style First-Person Camera
+**File:** `src/components/viewer/SplitPlanView.tsx` (handleClick, ~line 798-824)
+- Set eye height to `floorY + 1.5` (person-level)
+- Look direction: preserve current horizontal heading but force 0° pitch (look straight ahead, not down)
+- `nextEye = [worldPos[0], floorY + 1.5, worldPos[2]]`
+- `nextLook = [worldPos[0] + dirX*5, floorY + 1.5, worldPos[2] + dirZ*5]`
+- Reduce flyTo duration to 0.4s
 
-### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
-- Browser-primary for >20MB, edge function for ≤20MB
-- MetaModel JSON uploaded alongside XKT
-- Systems extracted and persisted
+## Files to Edit
+1. `src/components/viewer/NativeXeokitViewer.tsx` — contextmenu suppression
+2. `src/components/viewer/ViewerFilterPanel.tsx` — GUID names, spaces fallback, perf optimization
+3. `src/components/viewer/SplitPlanView.tsx` — 2D clarity + first-person camera
 
-### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
-- Standalone Node.js worker polls conversion-worker-api
-- Per-storey .xkt tiles with dynamic floor loading
-
-### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
-- 10 credential override columns on building_settings
-- Shared credential resolver in edge functions
-- Properties page as configuration hub
