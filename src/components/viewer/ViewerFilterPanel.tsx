@@ -674,9 +674,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           const sysId = normalizeGuid(mo.originalSystemId || '');
           const moName = (mo.name || '').toLowerCase().trim();
           const matchedLevel = levels.find(l =>
-            normalizeGuid(l.fmGuid) === sysId || l.name.toLowerCase().trim() === moName
+            l.allGuids.some(g => g === sysId) || l.name.toLowerCase().trim() === moName
           );
-          if (matchedLevel) {
+          if (matchedLevel?.sourceGuid) {
             const sourceKey = `source::${matchedLevel.sourceGuid}`;
             const existing = map.get(sourceKey) || [];
             map.set(sourceKey, [...existing, ...modelObjKeys]);
