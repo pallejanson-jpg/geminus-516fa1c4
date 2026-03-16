@@ -86,3 +86,6 @@ verify_jwt = false
 
 [functions.room-optimization]
 verify_jwt = false
+
+[functions.mapbox-directions]
+verify_jwt = false

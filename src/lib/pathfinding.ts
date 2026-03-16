@@ -167,6 +167,25 @@ export function mergeGraphs(graphs: NavGraph[]): NavGraph {
 }
 
 /** Calculate Euclidean distance between two normalized coordinate points */
+/** Find the nearest entrance node (lowest floor, closest to origin 0,0) */
+export function findNearestEntranceNode(graph: NavGraph): NavNode | null {
+  let best: NavNode | null = null;
+  let bestScore = Infinity;
+
+  for (const [, node] of graph.nodes) {
+    // Prefer nodes on lowest floors and closest to origin
+    const dist = Math.sqrt(node.coordinates[0] ** 2 + node.coordinates[1] ** 2);
+    // Stairwell/elevator nodes make good entrances
+    const typeBonus = (node.type === 'stairwell' || node.type === 'elevator') ? -50 : 0;
+    const score = dist + typeBonus;
+    if (score < bestScore) {
+      bestScore = score;
+      best = node;
+    }
+  }
+  return best;
+}
+
 export function euclideanDist(a: [number, number], b: [number, number]): number {
   const dx = a[0] - b[0];
   const dy = a[1] - b[1];
