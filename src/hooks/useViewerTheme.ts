@@ -187,8 +187,8 @@ export function useViewerTheme() {
             entity.edges = mapping.edges;
           }
           
-          // Apply opacity for spaces
-          if (ifcType === 'ifcspace' && mapping.opacity !== undefined) {
+          // Apply opacity for any type that defines it (glass, spaces, etc.)
+          if (mapping.opacity !== undefined) {
             entity.opacity = mapping.opacity;
           } else if (ifcType === 'ifcspace') {
             entity.opacity = theme.space_opacity ?? 0.25;
