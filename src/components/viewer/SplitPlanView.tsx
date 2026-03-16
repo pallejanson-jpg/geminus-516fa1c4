@@ -450,6 +450,11 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       }
     }
 
+    // Bold wall edges for Dalux-style crisp plan
+    if (scene.edgeMaterial) {
+      scene.edgeMaterial.edgeWidth = 2;
+      scene.edgeMaterial.edgeColor = [0, 0, 0];
+    }
     for (const id of wallIds) {
       const entity = scene.objects?.[id];
       if (!entity) continue;
