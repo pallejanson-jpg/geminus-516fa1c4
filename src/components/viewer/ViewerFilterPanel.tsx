@@ -261,31 +261,41 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const allSpaces = buildingData
       .filter((a: any) => a.category === 'Space' || a.category === 'IfcSpace');
 
+    const normalizedCheckedSourceGuids = new Set(Array.from(checkedSources).map(g => normalizeGuid(g)));
+    const normalizedCheckedLevelGuids = new Set(Array.from(checkedLevels).map(g => normalizeGuid(g)));
+
     // Build set of ALL normalized level GUIDs from relevant floors
     let visibleLevelGuids: Set<string> | null = null;
     if (levels.length > 0) {
       const allLevelGuids = new Set<string>();
-      // If sources are checked, only show levels from those sources
-      let relevantLevelItems = levels;
-      if (checkedSources.size > 0) {
-        relevantLevelItems = levels.filter(l => checkedSources.has(l.sourceGuid));
-      }
-      // If levels are checked, further narrow down
-      if (checkedLevels.size > 0) {
-        relevantLevelItems = relevantLevelItems.filter(l => checkedLevels.has(l.fmGuid));
+      let relevantFloors = sharedFloors;
+
+      if (normalizedCheckedSourceGuids.size > 0) {
+        relevantFloors = relevantFloors.filter(floor => {
+          const floorNormalizedGuids = floor.databaseLevelFmGuids.map(g => normalizeGuid(g));
+          return levels.some(level => {
+            const belongsToFloor = floorNormalizedGuids.includes(normalizeGuid(level.fmGuid));
+            return belongsToFloor && normalizedCheckedSourceGuids.has(normalizeGuid(level.sourceGuid));
+          });
+        });
       }
 
-      const relevantFloors = sharedFloors.filter(f => {
-        const primaryGuid = normalizeGuid(f.databaseLevelFmGuids[0] || f.id);
-        return relevantLevelItems.some(l => normalizeGuid(l.fmGuid) === primaryGuid);
-      });
+      if (normalizedCheckedLevelGuids.size > 0) {
+        relevantFloors = relevantFloors.filter(floor => {
+          const floorNormalizedGuids = floor.databaseLevelFmGuids.map(g => normalizeGuid(g));
+          return floorNormalizedGuids.some(g => normalizedCheckedLevelGuids.has(g));
+        });
+      }
 
       relevantFloors.forEach(floor => {
         floor.databaseLevelFmGuids.forEach(g => allLevelGuids.add(normalizeGuid(g)));
       });
-      relevantLevelItems.forEach(l => allLevelGuids.add(normalizeGuid(l.fmGuid)));
 
-      if (checkedLevels.size > 0 || checkedSources.size > 0) {
+      if (normalizedCheckedLevelGuids.size > 0) {
+        normalizedCheckedLevelGuids.forEach(g => allLevelGuids.add(g));
+      }
+
+      if (normalizedCheckedLevelGuids.size > 0 || normalizedCheckedSourceGuids.size > 0) {
         visibleLevelGuids = allLevelGuids;
       }
     }
