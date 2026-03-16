@@ -1009,6 +1009,14 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
               {tool.id === 'crosshair' && (
                 <ToolButton icon={tool.icon} label={tool.label} onClick={() => setIsCrosshairActive(p => !p)} active={isCrosshairActive} disabled={!isReady} />
               )}
+              {tool.id === 'navigation' && (
+                <ToolButton
+                  icon={tool.icon}
+                  label={tool.label}
+                  onClick={() => window.dispatchEvent(new CustomEvent('TOGGLE_NAVIGATION_PANEL'))}
+                  disabled={!isReady}
+                />
+              )}
             </React.Fragment>
           );
         })}
