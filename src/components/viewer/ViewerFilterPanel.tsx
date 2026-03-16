@@ -285,36 +285,28 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const normalizedCheckedSourceGuids = new Set(Array.from(checkedSources).map(g => normalizeGuid(g)));
     const normalizedCheckedLevelGuids = new Set(Array.from(checkedLevels).map(g => normalizeGuid(g)));
 
-    // Build set of ALL normalized level GUIDs from relevant floors
+    // Build set of ALL normalized level GUIDs from relevant levels (using allGuids which includes both xeokit + Asset+ variants)
     let visibleLevelGuids: Set<string> | null = null;
     if (levels.length > 0) {
       const allLevelGuids = new Set<string>();
-      let relevantFloors = sharedFloors;
 
+      // Determine relevant levels based on source + level filters
+      let relevantLevels = levels;
       if (normalizedCheckedSourceGuids.size > 0) {
-        relevantFloors = relevantFloors.filter(floor => {
-          const floorNormalizedGuids = floor.databaseLevelFmGuids.map(g => normalizeGuid(g));
-          return levels.some(level => {
-            const belongsToFloor = floorNormalizedGuids.includes(normalizeGuid(level.fmGuid));
-            return belongsToFloor && normalizedCheckedSourceGuids.has(normalizeGuid(level.sourceGuid));
-          });
-        });
+        relevantLevels = relevantLevels.filter(l =>
+          normalizedCheckedSourceGuids.has(normalizeGuid(l.sourceGuid))
+        );
       }
-
       if (normalizedCheckedLevelGuids.size > 0) {
-        relevantFloors = relevantFloors.filter(floor => {
-          const floorNormalizedGuids = floor.databaseLevelFmGuids.map(g => normalizeGuid(g));
-          return floorNormalizedGuids.some(g => normalizedCheckedLevelGuids.has(g));
-        });
+        relevantLevels = relevantLevels.filter(l =>
+          normalizedCheckedLevelGuids.has(normalizeGuid(l.fmGuid))
+        );
       }
 
-      relevantFloors.forEach(floor => {
-        floor.databaseLevelFmGuids.forEach(g => allLevelGuids.add(normalizeGuid(g)));
+      // Add ALL known GUID variants for relevant levels (xeokit + Asset+ DB)
+      relevantLevels.forEach(l => {
+        l.allGuids.forEach(g => allLevelGuids.add(g));
       });
-
-      if (normalizedCheckedLevelGuids.size > 0) {
-        normalizedCheckedLevelGuids.forEach(g => allLevelGuids.add(g));
-      }
 
       if (normalizedCheckedLevelGuids.size > 0 || normalizedCheckedSourceGuids.size > 0) {
         visibleLevelGuids = allLevelGuids;
