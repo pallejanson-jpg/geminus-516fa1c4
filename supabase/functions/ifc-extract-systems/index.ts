@@ -504,57 +504,72 @@ Deno.serve(async (req) => {
     await updateJob({ status: "processing", progress: 5 });
     log(`Starting IFC system extraction (mode: ${mode || "systems-only"}): ${ifcStoragePath}`);
 
-    // 1. Download IFC from storage
-    log("Downloading IFC from storage...");
-    await updateJob({ progress: 10 });
+    let metaObjectsList: any[];
 
-    const { data: ifcBlob, error: dlError } = await supabase.storage
-      .from("ifc-uploads")
-      .download(ifcStoragePath);
+    // ── metadata-only mode: skip IFC download/parse, read from cached _metadata.json ──
+    if (mode === "metadata-only") {
+      log("Mode: metadata-only — reading hierarchy from cached _metadata.json");
+      await updateJob({ progress: 20 });
 
-    if (dlError || !ifcBlob) {
-      const errMsg = `Failed to download IFC: ${dlError?.message || "no data"}`;
-      await updateJob({ status: "error", error_message: errMsg });
-      throw new Error(errMsg);
+      const cached = await loadMetaObjectsFromLatestMetadata(supabase, buildingFmGuid, log);
+      if (!cached || cached.length === 0) {
+        const errMsg = "No cached metadata found for metadata-only extraction";
+        await updateJob({ status: "error", error_message: errMsg });
+        throw new Error(errMsg);
+      }
+      metaObjectsList = cached;
+      await updateJob({ progress: 55 });
+    } else {
+      // Standard mode: download and parse the full IFC file
+      log("Downloading IFC from storage...");
+      await updateJob({ progress: 10 });
+
+      const { data: ifcBlob, error: dlError } = await supabase.storage
+        .from("ifc-uploads")
+        .download(ifcStoragePath);
+
+      if (dlError || !ifcBlob) {
+        const errMsg = `Failed to download IFC: ${dlError?.message || "no data"}`;
+        await updateJob({ status: "error", error_message: errMsg });
+        throw new Error(errMsg);
+      }
+
+      const ifcArrayBuffer = await ifcBlob.arrayBuffer();
+      const fileSizeMB = ifcArrayBuffer.byteLength / 1024 / 1024;
+      log(`IFC downloaded: ${fileSizeMB.toFixed(1)} MB`);
+      await updateJob({ progress: 20 });
+
+      // Load libraries and parse IFC metadata
+      log("Preparing WASM runtime...");
+      const wasmPath = await ensureWasm();
+      await updateJob({ progress: 25 });
+
+      const WebIFC = await import("npm:web-ifc@0.0.57");
+      const xeokitConvert = await import("npm:@xeokit/xeokit-convert@1.3.1");
+
+      const xktModel = new (xeokitConvert as any).XKTModel();
+      log("Parsing IFC metadata...");
+      await updateJob({ progress: 30 });
+
+      await (xeokitConvert as any).parseIFCIntoXKTModel({
+        WebIFC,
+        data: new Uint8Array(ifcArrayBuffer),
+        xktModel,
+        autoNormals: true,
+        wasmPath,
+        log: (msg: string) => console.log(`  ${msg}`),
+      });
+
+      xktModel.finalize();
+      log("IFC metadata parsed");
+      await updateJob({ progress: 55 });
+
+      metaObjectsList = xktModel.metaObjects
+        ? (Array.isArray(xktModel.metaObjects)
+            ? xktModel.metaObjects
+            : Object.values(xktModel.metaObjects))
+        : [];
     }
-
-    const ifcArrayBuffer = await ifcBlob.arrayBuffer();
-    const fileSizeMB = ifcArrayBuffer.byteLength / 1024 / 1024;
-    log(`IFC downloaded: ${fileSizeMB.toFixed(1)} MB`);
-    await updateJob({ progress: 20 });
-
-    // 2. Load libraries and parse IFC metadata
-    log("Preparing WASM runtime...");
-    const wasmPath = await ensureWasm();
-    await updateJob({ progress: 25 });
-
-    const WebIFC = await import("npm:web-ifc@0.0.57");
-    const xeokitConvert = await import("npm:@xeokit/xeokit-convert@1.3.1");
-
-    const xktModel = new (xeokitConvert as any).XKTModel();
-    log("Parsing IFC metadata...");
-    await updateJob({ progress: 30 });
-
-    await (xeokitConvert as any).parseIFCIntoXKTModel({
-      WebIFC,
-      data: new Uint8Array(ifcArrayBuffer),
-      xktModel,
-      autoNormals: true,
-      wasmPath,
-      log: (msg: string) => console.log(`  ${msg}`),
-    });
-
-    // We need finalize to get metaObjects populated
-    xktModel.finalize();
-    log("IFC metadata parsed");
-    await updateJob({ progress: 55 });
-
-    // 3. Extract metaObjects
-    const metaObjectsList = xktModel.metaObjects
-      ? (Array.isArray(xktModel.metaObjects)
-          ? xktModel.metaObjects
-          : Object.values(xktModel.metaObjects))
-      : [];
 
     log(`Found ${metaObjectsList.length} meta objects`);
 
