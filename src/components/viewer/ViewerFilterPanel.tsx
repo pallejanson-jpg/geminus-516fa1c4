@@ -808,12 +808,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
     }
 
-    // Re-apply full architect color palette as base layer after clean slate
-    // This prevents raw XKT colors (red rooms, blue windows) from showing
-    applyArchitectColors(viewer);
-
-    // Step 0b: Always hide ALL IfcSpace entities after clean slate (prevent red rooms)
-    // They should only become visible when explicitly enabled via "Visa rum" or space filter
+    // Step 0b: Hide IfcSpace entities (combined with clean slate — skip redundant applyArchitectColors)
+    // Architect colors are applied on model load and don't need re-application on filter change
     if (viewer.metaScene?.metaObjects) {
       Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
         const ifcType = (mo.type || '').toLowerCase();
