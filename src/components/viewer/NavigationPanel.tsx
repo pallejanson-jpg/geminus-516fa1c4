@@ -29,7 +29,6 @@ import {
 
 interface NavigationPanelProps {
   buildingFmGuid: string;
-  allData: any[];
   onRouteCalculated: (route: RouteResult | null) => void;
   onGraphLoaded: (graph: NavGraph) => void;
   onEditModeChange: (editing: boolean) => void;
