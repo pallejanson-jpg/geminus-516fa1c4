@@ -506,18 +506,17 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     if (resolvedFmGuid && allData?.length) {
       const normalizedGuid = resolvedFmGuid.toLowerCase();
       const matchingAsset = allData.find(
-        (a: any) => a.fm_guid?.toLowerCase() === normalizedGuid
+        (a: any) => a.fmGuid?.toLowerCase() === normalizedGuid
       );
       if (matchingAsset) {
-        resolvedFmGuid = matchingAsset.fm_guid;
+        resolvedFmGuid = matchingAsset.fmGuid;
       }
     }
 
     // Fallback: if no fmGuid or no match, try entityId against asset_external_ids concept
     if (!resolvedFmGuid && contextMenu.entityId && allData?.length) {
-      // Some entities have originalSystemId as entityId in the assets table
       const byEntityId = allData.find(
-        (a: any) => a.fm_guid?.toLowerCase() === contextMenu.entityId?.toLowerCase()
+        (a: any) => a.fmGuid?.toLowerCase() === contextMenu.entityId?.toLowerCase()
       );
       if (byEntityId) resolvedFmGuid = byEntityId.fm_guid;
     }
