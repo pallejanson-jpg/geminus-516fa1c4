@@ -487,21 +487,13 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       } else if (e.detail.visibleFloorFmGuids?.length > 0) {
         const matchingLevelGuids = new Set<string>();
         const normalizedVisibleGuids = e.detail.visibleFloorFmGuids.map((g: string) => normalizeGuid(g));
+
         levels.forEach(level => {
-          const normalizedLevelGuid = normalizeGuid(level.fmGuid);
-          if (normalizedVisibleGuids.some((vg: string) => vg === normalizedLevelGuid)) {
+          if (level.allGuids.some(g => normalizedVisibleGuids.includes(g))) {
             matchingLevelGuids.add(level.fmGuid);
           }
         });
-        if (matchingLevelGuids.size === 0) {
-          sharedFloors.forEach(floor => {
-            const floorNormGuids = floor.databaseLevelFmGuids.map(g => normalizeGuid(g));
-            if (normalizedVisibleGuids.some((vg: string) => floorNormGuids.includes(vg))) {
-              const levelFmGuid = floor.databaseLevelFmGuids[0] || floor.id;
-              matchingLevelGuids.add(levelFmGuid);
-            }
-          });
-        }
+
         if (matchingLevelGuids.size > 0) {
           setCheckedLevels(matchingLevelGuids);
         }
@@ -509,7 +501,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     };
     window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
     return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
-  }, [levels, sharedFloors]);
+  }, [levels]);
 
   // ── Build entity ID map (fmGuid → xeokit IDs) — runs ONCE ─────────────
   const buildEntityMap = useCallback(() => {
