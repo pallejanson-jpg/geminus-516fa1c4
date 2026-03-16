@@ -384,8 +384,8 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
                   viewerRef={viewerInstanceRef}
                   buildingFmGuid={buildingData.fmGuid}
                   className="h-full"
-                  syncFloorSelection={false}
-                  lockCameraToFloor={false}
+                  syncFloorSelection={true}
+                  lockCameraToFloor={true}
                   monochrome
                 />
               </div>
