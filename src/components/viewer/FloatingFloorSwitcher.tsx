@@ -230,7 +230,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
               <span className="text-[10px]">+{overflowPills.length}</span>
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-56 p-2 max-h-[50dvh] overflow-y-auto" align="center" side={isMobile ? "top" : "left"} sideOffset={8}>
+          <PopoverContent className="w-56 p-2 max-h-[50dvh] overflow-y-auto" align="center" side="top" sideOffset={8}>
             <div className="space-y-1 max-h-48 overflow-y-auto">
               {overflowPills.map((floor) => {
                 const isFloorVisible = visibleFloorIds.has(floor.id);
