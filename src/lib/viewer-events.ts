@@ -156,3 +156,21 @@ export interface FmAccessContextChangedDetail {
 
 /** Event dispatched to reset 3D colorization (clear xray + restore architect colors) */
 export const INSIGHTS_COLOR_RESET_EVENT = 'INSIGHTS_COLOR_RESET';
+
+/** Event dispatched when 2D plan click wants to navigate 3D camera in split mode */
+export const SPLIT_PLAN_NAVIGATE_EVENT = 'SPLIT_PLAN_NAVIGATE';
+
+/** Type for split plan navigate event detail */
+export interface SplitPlanNavigateDetail {
+  worldPos: [number, number, number];
+}
+
+/** Event dispatched when an entity is selected in the 2D plan view */
+export const VIEWER_SELECT_ENTITY_EVENT = 'VIEWER_SELECT_ENTITY';
+
+/** Type for viewer select entity event detail */
+export interface ViewerSelectEntityDetail {
+  entityId: string;
+  fmGuid: string | null;
+  entityName: string | null;
+}
