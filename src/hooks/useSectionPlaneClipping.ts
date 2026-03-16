@@ -399,25 +399,48 @@ export function useSectionPlaneClipping(
     const viewer = getXeokitViewer();
     if (!viewer?.metaScene?.metaObjects) return null;
 
-    const storeys: { id: string; name: string; minY: number; maxY: number }[] = [];
+    // Determine which model the target floor belongs to
+    const targetMeta = viewer.metaScene.metaObjects[floorId];
+    const targetModelId = targetMeta?.metaModel?.id || '';
+
+    // Collect all storeys, preferring same-model storeys for next-floor calculation
+    const allStoreys: { id: string; name: string; minY: number; maxY: number; modelId: string }[] = [];
     Object.values(viewer.metaScene.metaObjects).forEach((metaObj: any) => {
       if (metaObj.type?.toLowerCase() !== 'ifcbuildingstorey') return;
       const bounds = calculateFloorBounds(metaObj.id);
-      if (bounds) storeys.push({ id: metaObj.id, name: bounds.name, minY: bounds.minY, maxY: bounds.maxY });
+      if (bounds) allStoreys.push({ id: metaObj.id, name: bounds.name, minY: bounds.minY, maxY: bounds.maxY, modelId: metaObj.metaModel?.id || '' });
     });
 
-    if (storeys.length === 0) return null;
+    if (allStoreys.length === 0) return null;
+
+    // Deduplicate storeys by name — keep only one per unique name
+    // Prefer storeys from the same model as the target floor
+    const byName = new Map<string, typeof allStoreys[0]>();
+    allStoreys.forEach(s => {
+      const key = s.name.toLowerCase().trim();
+      const existing = byName.get(key);
+      if (!existing) {
+        byName.set(key, s);
+      } else if (s.modelId === targetModelId && existing.modelId !== targetModelId) {
+        byName.set(key, s); // Prefer same model
+      }
+    });
+
+    const storeys = Array.from(byName.values());
     storeys.sort((a, b) => a.minY - b.minY);
 
-    const currentIndex = storeys.findIndex(s => s.id === floorId);
+    // Find current floor — match by ID or by name (for cross-model matching)
+    let currentIndex = storeys.findIndex(s => s.id === floorId);
+    if (currentIndex === -1) {
+      // Fallback: match by name
+      const targetName = targetMeta?.name?.toLowerCase().trim() || '';
+      if (targetName) currentIndex = storeys.findIndex(s => s.name.toLowerCase().trim() === targetName);
+    }
     if (currentIndex === -1) return null;
 
     const currentFloor = storeys[currentIndex];
     if (currentIndex < storeys.length - 1) {
       const nextFloor = storeys[currentIndex + 1];
-      // Use nextFloor.minY (bottom of next storey slab) as clip height
-      // This ensures walls/doors extending to ceiling are fully visible
-      // while objects that erroneously exceed the next floor boundary get clipped
       const clipHeight = nextFloor.minY + 0.05;
       return { clipHeight, nextFloorMinY: nextFloor.minY };
     } else {

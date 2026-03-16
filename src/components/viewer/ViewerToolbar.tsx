@@ -778,7 +778,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
             visibleCount++;
           } else if (WALL_TYPES.has(typeLower)) {
             saveOrig(entity, mo.id);
-            entity.colorize = [0, 0, 0]; entity.opacity = 1; entity.edges = true; entity.pickable = true;
+            entity.colorize = [0.45, 0.45, 0.45]; entity.opacity = 1; entity.edges = true; entity.pickable = true;
             visibleCount++;
           } else if (DOOR_WINDOW_TYPES.has(typeLower)) {
             saveOrig(entity, mo.id);
