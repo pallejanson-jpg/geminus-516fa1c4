@@ -188,7 +188,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     levels.forEach(level => {
       if (!level.sourceGuid) return;
       const current = grouped.get(level.sourceGuid);
-      const resolvedName = apSources.get(level.sourceGuid) || current?.name || level.sourceGuid;
+      const rawName = apSources.get(level.sourceGuid) || current?.name || level.sourceGuid;
+      const resolvedName = isGuid(rawName) ? '' : rawName; // defer GUID replacement to final step
       grouped.set(level.sourceGuid, {
         name: resolvedName,
         storeyCount: (current?.storeyCount || 0) + 1,
