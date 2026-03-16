@@ -1417,6 +1417,8 @@ function detectSimpleIntent(messages: any[]): string | null {
   if (/^(tack|thanks|thank\s*you|tackar)[\s!.]*$/i.test(text)) return "thanks";
   // Help/what can you do
   if (/^(hjälp|help|vad kan du|what can you do)[\s?!.]*$/i.test(text)) return "help";
+  // FM Access capability question
+  if (/fm\s*access/i.test(text) && /kan\s+du|can\s+you|klarar|stöd|support|frågor\s+om|questions?\s+about/i.test(text)) return "help_fm_access";
   // Language change
   if (/^(byt\s*(till\s*)?(svenska|engelska|english|swedish)|switch\s*(to\s*)?(swedish|english|svenska|engelska))[\s?!.]*$/i.test(text)) return "lang_change";
 
