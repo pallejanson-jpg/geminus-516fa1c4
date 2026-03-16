@@ -54,6 +54,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
   syncFloorSelection = true,
   lockCameraToFloor = false,
   monochrome = true,
+  navigationOverlay,
+  onRoomLabelsChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
