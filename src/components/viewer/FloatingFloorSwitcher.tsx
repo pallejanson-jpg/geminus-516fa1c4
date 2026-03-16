@@ -226,7 +226,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
       {hasOverflow && (
         <Popover open={overflowOpen} onOpenChange={setOverflowOpen}>
           <PopoverTrigger asChild>
-            <Button type="button" variant="ghost" size="sm" className="h-7 px-2 min-w-[40px] text-[10px] sm:text-xs font-medium rounded-md bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground flex items-center justify-center">
+            <Button type="button" variant="ghost" size="sm" className="h-6 px-1.5 text-[9px] font-medium rounded-full text-white/70 hover:text-white hover:bg-white/10 flex items-center justify-center">
               <span className="text-[10px]">+{overflowPills.length}</span>
             </Button>
           </PopoverTrigger>
