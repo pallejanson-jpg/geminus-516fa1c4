@@ -309,10 +309,39 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           ifcStoragePath: ifcStoragePath,
           mode: 'enrich-guids',
         }
-      }).then(({ data, error }) => {
+      }).then(async ({ data, error }) => {
+        // Detect WORKER_LIMIT and auto-retry with metadata-only mode
+        let isWorkerLimit = false;
         if (error) {
+          const errStr = JSON.stringify(error);
+          isWorkerLimit = errStr.includes('WORKER_LIMIT') || errStr.includes('compute resources') || errStr.includes('546');
+        }
+
+        if (isWorkerLimit) {
+          addLog('⚠️ Server memory limit on hierarchy extraction — retrying with metadata fallback...');
+          try {
+            const { data: retryData, error: retryErr } = await supabase.functions.invoke('ifc-extract-systems', {
+              body: {
+                buildingFmGuid: targetBuildingFmGuid,
+                ifcStoragePath: ifcStoragePath,
+                mode: 'metadata-only',
+              }
+            });
+            if (retryErr) {
+              console.warn('Metadata-only hierarchy fallback failed:', retryErr);
+              addLog('⚠️ Metadata fallback also failed — hierarchy will be populated after browser conversion');
+            } else {
+              const levels = retryData?.levelsCreated ?? 0;
+              const spaces = retryData?.spacesCreated ?? 0;
+              const instances = retryData?.instancesCreated ?? 0;
+              addLog(`✅ Hierarchy populated (metadata fallback): ${levels} levels, ${spaces} spaces, ${instances} instances`);
+            }
+          } catch (retryE) {
+            console.warn('Metadata fallback retry failed:', retryE);
+          }
+        } else if (error) {
           console.warn('Immediate hierarchy population failed:', error);
-          addLog('⚠️ Hierarchy pre-population failed (worker will handle it)');
+          addLog('⚠️ Hierarchy pre-population failed (browser conversion will handle it)');
         } else {
           const levels = data?.levelsCreated ?? 0;
           const spaces = data?.spacesCreated ?? 0;
