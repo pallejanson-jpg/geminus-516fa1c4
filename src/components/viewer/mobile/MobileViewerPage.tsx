@@ -460,26 +460,43 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
       {/* ── Spacer ── */}
       <div className="flex-1" />
 
-      {/* ── Floor pills (compact horizontal strip) ── */}
+      {/* ── Floor popover pill (centered above toolbar) ── */}
       {floors.length > 1 && !isSplit && (
-        <div
-          className="relative z-50 pointer-events-none px-3 pb-1"
-        >
-          <div className="flex gap-1 overflow-x-auto no-scrollbar pointer-events-auto">
-            {floors.map((floor) => (
+        <div className="relative z-50 flex justify-center pb-1 pointer-events-none">
+          <Popover>
+            <PopoverTrigger asChild>
               <button
-                key={floor.id}
-                onClick={() => handleFloorClick(floor)}
-                className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors whitespace-nowrap ${
-                  soloFloorId === floor.id
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-black/40 text-white/80 hover:bg-black/60 hover:text-white backdrop-blur-sm'
-                }`}
+                className="pointer-events-auto flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/50 backdrop-blur-sm text-white text-xs font-medium hover:bg-black/70 transition-colors"
               >
-                {floor.shortName || floor.name}
+                <Layers className="h-3.5 w-3.5" />
+                {soloFloorId
+                  ? floors.find(f => f.id === soloFloorId)?.shortName || 'All'
+                  : 'All'}
+                <ChevronUp className="h-3 w-3 opacity-60" />
               </button>
-            ))}
-          </div>
+            </PopoverTrigger>
+            <PopoverContent
+              side="top"
+              sideOffset={8}
+              className="w-auto min-w-[120px] max-w-[200px] p-1.5 bg-popover/95 backdrop-blur-md"
+            >
+              <div className="flex flex-col gap-0.5 max-h-[40dvh] overflow-y-auto">
+                {floors.map((floor) => (
+                  <button
+                    key={floor.id}
+                    onClick={() => handleFloorClick(floor)}
+                    className={`w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                      soloFloorId === floor.id
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {floor.name}
+                  </button>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       )}
 
