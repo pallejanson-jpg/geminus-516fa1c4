@@ -795,11 +795,20 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
 
     if (!worldPos || !viewer.cameraFlight) return;
 
-    // Standard Minimap metodik: flytta kameran till klickad XY-position
-    // men behåll nuvarande ögonhöjd för stabil navigation.
-    const currentEyeY = Number.isFinite(viewer.camera.eye?.[1]) ? viewer.camera.eye[1] : 20;
+    // Preserve the camera's current horizontal offset (viewing angle) and
+    // translate both eye and look to the new clicked position.
+    const eye = viewer.camera.eye;
+    const look = viewer.camera.look;
+    const currentEyeY = Number.isFinite(eye?.[1]) ? eye[1] : 20;
 
-    const nextEye: [number, number, number] = [worldPos[0], currentEyeY, worldPos[2]];
+    // Calculate current horizontal offset between eye and look
+    const rawOffsetX = (eye?.[0] ?? 0) - (look?.[0] ?? 0);
+    const rawOffsetZ = (eye?.[2] ?? 0) - (look?.[2] ?? 0);
+    const hasOffset = Math.abs(rawOffsetX) > 0.1 || Math.abs(rawOffsetZ) > 0.1;
+    const finalOffsetX = hasOffset ? rawOffsetX : 0;
+    const finalOffsetZ = hasOffset ? rawOffsetZ : -10;
+
+    const nextEye: [number, number, number] = [worldPos[0] + finalOffsetX, currentEyeY, worldPos[2] + finalOffsetZ];
     const nextLook: [number, number, number] = [worldPos[0], worldPos[1], worldPos[2]];
 
     if (!nextEye.every((v) => Number.isFinite(v)) || !nextLook.every((v) => Number.isFinite(v))) {
@@ -811,7 +820,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       eye: nextEye,
       look: nextLook,
       up: [0, 1, 0],
-      duration: 0.8,
+      duration: 0.5,
     });
   }, [getXeokitViewer]);
 

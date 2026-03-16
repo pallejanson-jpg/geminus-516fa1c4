@@ -218,13 +218,19 @@ export default function Ivion360View({
     style.id = styleId;
     const mobileRules = isMobile ? `
       ivion .iv-sidebar { display: none !important; }
-      ivion .iv-sidebar-toggle { transform: scale(0.62); transform-origin: top left; }
-      ivion .iv-floor-selector { transform: scale(0.55); transform-origin: bottom left; max-height: 32vh !important; }
-      ivion .iv-controls { transform: scale(0.55); transform-origin: bottom right; }
-      ivion .iv-minimap { display: none !important; }
-      ivion .iv-toolbar { transform: scale(0.58); transform-origin: bottom center; }
-      ivion .iv-button { font-size: 9px !important; padding: 3px 5px !important; }
-      ivion .iv-navigation { transform: scale(0.5); transform-origin: bottom right; }
+      ivion .iv-sidebar-toggle { transform: scale(0.5); transform-origin: top left; }
+      ivion .iv-floor-selector { transform: scale(0.45); transform-origin: bottom left; max-height: 28vh !important; }
+      ivion .iv-controls { transform: scale(0.45); transform-origin: bottom right; }
+      ivion .iv-minimap { transform: scale(0.4); transform-origin: bottom right; }
+      ivion .iv-toolbar { transform: scale(0.45); transform-origin: bottom center; }
+      ivion .iv-button { font-size: 8px !important; padding: 2px 4px !important; }
+      ivion .iv-navigation { transform: scale(0.4); transform-origin: bottom right; }
+      ivion .iv-header, ivion [class*="search"], ivion [class*="Search"] {
+        transform: scale(0.5); transform-origin: top center;
+      }
+      ivion [class*="panel"], ivion [class*="Panel"] {
+        transform: scale(0.45); transform-origin: bottom right;
+      }
     ` : `
       ivion .iv-sidebar { max-width: 220px !important; }
       ivion .iv-sidebar-toggle { transform: scale(0.85); transform-origin: top left; }
