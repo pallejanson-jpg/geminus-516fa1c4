@@ -43,6 +43,8 @@ const IFC_CATEGORIES = [
   { key: 'ifcrailing', label: 'Räcken', defaultColor: '#BDBAAB' },
   { key: 'ifcfurnishingelement', label: 'Möbler', defaultColor: '#738B77' },
   { key: 'ifcbuildingelementproxy', label: 'Entourage', defaultColor: '#738B77' },
+  { key: 'ifcplate', label: 'Glas', defaultColor: '#B8D4E3' },
+  { key: 'ifccurtainwall', label: 'Glasfasad', defaultColor: '#B8D4E3' },
   { key: 'default', label: 'Övrigt', defaultColor: '#EEEEEE' },
 ];
 
