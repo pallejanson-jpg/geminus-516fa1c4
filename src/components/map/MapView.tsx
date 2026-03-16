@@ -1,6 +1,6 @@
 import React, { useState, useContext, useCallback, useEffect, useMemo, useRef } from 'react';
-import Map, { Popup, NavigationControl, GeolocateControl } from 'react-map-gl';
-import { MapPin, Maximize2, Layers, Loader2, Palette, ArrowLeft } from 'lucide-react';
+import Map, { Popup, NavigationControl, GeolocateControl, Source, Layer } from 'react-map-gl';
+import { MapPin, Maximize2, Layers, Loader2, Palette, ArrowLeft, Navigation } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,6 +19,8 @@ import { Facility } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
 import { ClusterMarker, SingleMarker } from './MapCluster';
 import BuildingSidebar from './BuildingSidebar';
+import NavigationMapPanel from './NavigationMapPanel';
+import IndoorFloorSwitcher from './IndoorFloorSwitcher';
 import Supercluster from 'supercluster';
 import {
   MapColoringMode,
@@ -29,6 +31,10 @@ import {
   COLORING_MODE_LEGENDS,
 } from '@/lib/map-coloring-utils';
 import { useMapFacilities, MapFacility } from '@/hooks/useMapFacilities';
+import { useIndoorGeoJSON } from '@/hooks/useIndoorGeoJSON';
+import { BuildingOrigin } from '@/lib/coordinate-transform';
+import { parseNavGraph, dijkstra, findNodeByRoom, findNearestEntranceNode, mergeGraphs } from '@/lib/pathfinding';
+import type { Json } from '@/integrations/supabase/types';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 interface ClusterProperties {
@@ -71,6 +77,8 @@ interface MapViewProps {
   externalColoringMode?: MapColoringMode;
 }
 
+const INDOOR_ZOOM_THRESHOLD = 17;
+
 const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSidebar, compact, externalColoringMode }) => {
   const { setSelectedFacility, setActiveApp, isLoadingData } = useContext(AppContext);
   const isMobile = useIsMobile();
@@ -85,6 +93,51 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
   const [coloringMode, setColoringMode] = useState<MapColoringMode>(initialColoringMode);
   const effectiveColoringMode = externalColoringMode ?? coloringMode;
   const mapRef = useRef<any>(null);
+
+  // Navigation state
+  const [showNavPanel, setShowNavPanel] = useState(false);
+  const [outdoorRoute, setOutdoorRoute] = useState<GeoJSON.LineString | null>(null);
+  const [indoorRoute, setIndoorRoute] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [routeSummary, setRouteSummary] = useState<{ outdoorDistance: number; outdoorDuration: number; indoorDistance: number } | null>(null);
+  const [navBuildingGuid, setNavBuildingGuid] = useState<string | null>(null);
+  const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
+
+  // Building origin for indoor mode
+  const [buildingOrigin, setBuildingOrigin] = useState<BuildingOrigin | null>(null);
+
+  const isIndoorMode = viewState.zoom >= INDOOR_ZOOM_THRESHOLD && navBuildingGuid != null;
+
+  // Fetch building origin when navBuilding changes
+  useEffect(() => {
+    if (!navBuildingGuid) { setBuildingOrigin(null); return; }
+    supabase
+      .from('building_settings')
+      .select('latitude, longitude, rotation')
+      .eq('fm_guid', navBuildingGuid)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.latitude && data?.longitude) {
+          setBuildingOrigin({ lat: data.latitude, lng: data.longitude, rotation: data.rotation || 0 });
+        }
+      });
+  }, [navBuildingGuid]);
+
+  // Indoor GeoJSON
+  const { roomPolygons, floorIds } = useIndoorGeoJSON(
+    isIndoorMode ? navBuildingGuid : null,
+    buildingOrigin,
+    selectedFloor
+  );
+
+  const floorOptions = useMemo(
+    () => floorIds.map((id, i) => ({ id, label: `${i + 1}` })),
+    [floorIds]
+  );
+
+  // Set default floor
+  useEffect(() => {
+    if (floorIds.length > 0 && !selectedFloor) setSelectedFloor(floorIds[0]);
+  }, [floorIds, selectedFloor]);
 
   // Build sidebar items from facilities
   const sidebarItems = useMemo(() =>
@@ -175,6 +228,101 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
     setMapStyle(prev => prev.includes('dark-v11') ? 'mapbox://styles/mapbox/satellite-streets-v12' : 'mapbox://styles/mapbox/dark-v11');
   }, []);
 
+  // Handle navigation
+  const handleNavigate = useCallback(async (params: {
+    origin: { lat: number; lng: number };
+    destination: { lat: number; lng: number };
+    buildingFmGuid: string;
+    targetRoomFmGuid: string | null;
+    profile: 'walking' | 'driving';
+  }) => {
+    setNavBuildingGuid(params.buildingFmGuid);
+
+    // Fetch outdoor route
+    try {
+      const { data, error } = await supabase.functions.invoke('mapbox-directions', {
+        body: {
+          origin: { lat: params.origin.lat, lng: params.origin.lng },
+          destination: { lat: params.destination.lat, lng: params.destination.lng },
+          profile: params.profile,
+        },
+      });
+
+      if (!error && data?.geometry) {
+        setOutdoorRoute(data.geometry);
+
+        let indoorDist = 0;
+
+        // Load indoor graph and compute route if room specified
+        if (params.targetRoomFmGuid) {
+          const { data: graphRows } = await supabase
+            .from('navigation_graphs')
+            .select('graph_data')
+            .eq('building_fm_guid', params.buildingFmGuid);
+
+          if (graphRows && graphRows.length > 0) {
+            const graphs = graphRows.map(r => parseNavGraph(r.graph_data as unknown as GeoJSON.FeatureCollection));
+            const merged = mergeGraphs(graphs);
+            const entrance = findNearestEntranceNode(merged);
+            const target = findNodeByRoom(merged, params.targetRoomFmGuid);
+
+            if (entrance && target) {
+              const result = dijkstra(merged, entrance.nodeId, target.nodeId);
+              if (result) {
+                indoorDist = result.totalDistance;
+                // Build GeoJSON from indoor path for display on map (convert % coords to geo if we have origin)
+                // For now store as simple line
+                const coords = result.path.map(n => [n.coordinates[0], n.coordinates[1]]);
+                setIndoorRoute({
+                  type: 'FeatureCollection',
+                  features: [{
+                    type: 'Feature',
+                    geometry: { type: 'LineString', coordinates: coords },
+                    properties: {},
+                  }],
+                });
+              }
+            }
+          }
+        }
+
+        setRouteSummary({
+          outdoorDistance: data.distance,
+          outdoorDuration: data.duration,
+          indoorDistance: indoorDist,
+        });
+
+        // Zoom to fit route
+        setViewState(prev => ({
+          ...prev,
+          latitude: (params.origin.lat + params.destination.lat) / 2,
+          longitude: (params.origin.lng + params.destination.lng) / 2,
+          zoom: 13,
+        }));
+      }
+    } catch (err) {
+      console.error('Navigation error:', err);
+    }
+  }, []);
+
+  const handleCloseNav = useCallback(() => {
+    setShowNavPanel(false);
+    setOutdoorRoute(null);
+    setIndoorRoute(null);
+    setRouteSummary(null);
+    setNavBuildingGuid(null);
+    setSelectedFloor(null);
+  }, []);
+
+  // Outdoor route GeoJSON
+  const outdoorRouteGeoJSON = useMemo((): GeoJSON.FeatureCollection | null => {
+    if (!outdoorRoute) return null;
+    return {
+      type: 'FeatureCollection',
+      features: [{ type: 'Feature', geometry: outdoorRoute, properties: {} }],
+    };
+  }, [outdoorRoute]);
+
   if (isLoading || isLoadingData) {
     return (
       <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
@@ -217,8 +365,37 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
         </Button>
       )}
 
+      {/* Navigation panel */}
+      {showNavPanel && (
+        <NavigationMapPanel
+          facilities={mapFacilities}
+          onNavigate={handleNavigate}
+          onClose={handleCloseNav}
+          routeSummary={routeSummary}
+        />
+      )}
+
+      {/* Indoor floor switcher */}
+      {isIndoorMode && (
+        <IndoorFloorSwitcher
+          floors={floorOptions}
+          selectedFloor={selectedFloor}
+          onSelectFloor={setSelectedFloor}
+        />
+      )}
+
       {/* Map Controls */}
       <div className="absolute top-3 sm:top-4 right-3 sm:right-4 z-10 flex flex-col gap-2">
+        {/* Navigation toggle */}
+        <Button
+          variant="secondary"
+          size="icon"
+          className={`h-8 w-8 sm:h-9 sm:w-9 bg-card/90 backdrop-blur-sm shadow-lg ${showNavPanel ? 'ring-2 ring-primary' : ''}`}
+          onClick={() => setShowNavPanel(prev => !prev)}
+        >
+          <Navigation size={16} className="sm:w-[18px] sm:h-[18px]" />
+        </Button>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -273,6 +450,73 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
       >
         <NavigationControl position="bottom-right" />
         <GeolocateControl position="bottom-right" />
+
+        {/* Outdoor route layer */}
+        {outdoorRouteGeoJSON && (
+          <Source id="outdoor-route" type="geojson" data={outdoorRouteGeoJSON}>
+            <Layer
+              id="outdoor-route-line"
+              type="line"
+              paint={{
+                'line-color': 'hsl(217, 91%, 60%)',
+                'line-width': 4,
+                'line-opacity': isIndoorMode ? 0.3 : 1,
+              }}
+            />
+          </Source>
+        )}
+
+        {/* Indoor room polygons */}
+        {isIndoorMode && roomPolygons.features.length > 0 && (
+          <Source id="indoor-rooms" type="geojson" data={roomPolygons}>
+            <Layer
+              id="indoor-rooms-fill"
+              type="fill"
+              paint={{
+                'fill-color': 'hsl(217, 91%, 60%)',
+                'fill-opacity': 0.15,
+              }}
+            />
+            <Layer
+              id="indoor-rooms-outline"
+              type="line"
+              paint={{
+                'line-color': 'hsl(217, 91%, 60%)',
+                'line-width': 1.5,
+                'line-opacity': 0.6,
+              }}
+            />
+            <Layer
+              id="indoor-rooms-labels"
+              type="symbol"
+              layout={{
+                'text-field': ['get', 'name'],
+                'text-size': 10,
+                'text-allow-overlap': false,
+              }}
+              paint={{
+                'text-color': 'hsl(0, 0%, 95%)',
+                'text-halo-color': 'hsl(0, 0%, 10%)',
+                'text-halo-width': 1,
+              }}
+            />
+          </Source>
+        )}
+
+        {/* Indoor route layer */}
+        {isIndoorMode && indoorRoute && (
+          <Source id="indoor-route" type="geojson" data={indoorRoute}>
+            <Layer
+              id="indoor-route-line"
+              type="line"
+              paint={{
+                'line-color': 'hsl(142, 71%, 45%)',
+                'line-width': 3,
+                'line-dasharray': [2, 1],
+              }}
+            />
+          </Source>
+        )}
 
         {clusters.map((cluster) => {
           const [longitude, latitude] = cluster.geometry.coordinates;
