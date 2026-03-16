@@ -85,9 +85,36 @@ const hexToRgb01 = (hex: string): [number, number, number] => {
 const isGuid = (str: string): boolean =>
   !!str && str.length >= 20 && /^[0-9a-f]{8}[-]?[0-9a-f]{4}/i.test(str);
 
-// normalizeGuid imported from '@/lib/utils'
+// ─── IFC type → category mapping (shared) ─────────────────────────────────────
 
-// getDescendantIds imported from useFloorVisibility
+const IFC_TO_CATEGORY: Record<string, string> = {};
+const CATEGORY_TO_IFC: Record<string, string[]> = {
+  'Wall': ['IfcWall', 'IfcWallStandardCase'],
+  'Door': ['IfcDoor'],
+  'Window': ['IfcWindow'],
+  'Slab': ['IfcSlab', 'IfcSlabStandardCase'],
+  'Roof': ['IfcRoof'],
+  'Stair': ['IfcStairFlight', 'IfcStair'],
+  'Column': ['IfcColumn'],
+  'Beam': ['IfcBeam'],
+  'Covering': ['IfcCovering'],
+  'Railing': ['IfcRailing'],
+  'Curtain Wall': ['IfcCurtainWall', 'IfcPlate'],
+  'Space': ['IfcSpace'],
+  'Building Storey': ['IfcBuildingStorey'],
+  'Furnishing': ['IfcFurnishingElement'],
+  'Flow Terminal': ['IfcFlowTerminal'],
+  'Flow Segment': ['IfcFlowSegment'],
+  'Flow Fitting': ['IfcFlowFitting'],
+  'Flow Controller': ['IfcFlowController'],
+  'Pipe': ['IfcPipeSegment', 'IfcPipeFitting'],
+  'Duct': ['IfcDuctSegment', 'IfcDuctFitting'],
+  'Member': ['IfcMember'],
+  'Proxy': ['IfcBuildingElementProxy'],
+};
+for (const [cat, types] of Object.entries(CATEGORY_TO_IFC)) {
+  types.forEach(t => { IFC_TO_CATEGORY[t] = cat; });
+}
 
 const HIGHLIGHT_COLOR: [number, number, number] = [0.25, 0.55, 0.95];
 
@@ -134,12 +161,24 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   const [showMovedAssets, setShowMovedAssets] = useState(false);
   const [showDeletedAssets, setShowDeletedAssets] = useState(false);
   const [modifiedAssets, setModifiedAssets] = useState<Array<{ fm_guid: string; modification_status: string }>>([]);
-  // Cache: level fmGuid → xeokit entity IDs (built once when viewer ready)
+
+  // ── Cached scene indices (built ONCE when viewer ready) ─────────────────
+  // fmGuid → xeokit entity IDs
   const entityMapRef = useRef<Map<string, string[]>>(new Map());
   const entityMapBuilt = useRef(false);
-
-  // Cache: IfcSpace IDs with name "Area" to auto-hide
+  // IFC type → entity IDs (for fast category counting)
+  const typeIndexRef = useRef<Map<string, string[]>>(new Map());
+  // Area space IDs to auto-hide
   const areaSpaceIdsRef = useRef<string[]>([]);
+  // Previous solidIds for delta updates
+  const prevVisibleRef = useRef<Set<string> | null>(null);
+  // Counter to force categories recalc when entity map is built
+  const [entityMapVersion, setEntityMapVersion] = useState(0);
+
+  // ── XEOKit accessor ─────────────────────────────────────────────────────
+  const getXeokitViewer = useCallback(() => {
+    return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+  }, [viewerRef]);
 
   // ── Derived data from Asset+ ────────────────────────────────────────────
 
@@ -150,12 +189,11 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     );
   }, [allData, buildingFmGuid]);
 
-  // Levels: derived from shared useFloorData hook (consistent naming with Visningsmeny)
+  // Levels: derived from shared useFloorData hook
   const levels: LevelItem[] = useMemo(() => {
     return sharedFloors.map(floor => {
       const levelGuidSet = new Set(floor.databaseLevelFmGuids.map(g => normalizeGuid(g)));
 
-      // Find matching Asset+ storey for sourceGuid (normalized comparison)
       const matchingAsset = buildingData.find((a: any) => {
         const fmGuid = normalizeGuid(a.fmGuid || a.fm_guid || '');
         return (a.category === 'Building Storey' || a.category === 'IfcBuildingStorey') &&
@@ -184,12 +222,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   const sources: BimSource[] = useMemo(() => {
     const grouped = new Map<string, { name: string; storeyCount: number }>();
 
-    // Strategy 1: Asset+ storey parentBimObjectId
     levels.forEach(level => {
       if (!level.sourceGuid) return;
       const current = grouped.get(level.sourceGuid);
       let rawName = apSources.get(level.sourceGuid) || current?.name || level.sourceGuid;
-      // If rawName is a GUID, try to resolve from sharedModels
       if (isGuid(rawName)) {
         const matchingModel = sharedModels.find(m => m.id === level.sourceGuid || m.id === rawName);
         rawName = matchingModel?.name && !isGuid(matchingModel.name)
@@ -202,77 +238,79 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
     });
 
-    // Strategy 2: If no Asset+ sources, use scene models with friendly names from sharedModels
     if (grouped.size === 0 && sharedModels.length > 0) {
       sharedModels.forEach((model, index) => {
-        // Use model name, avoid showing GUIDs — check both full UUID and partial GUID patterns
         const rawName = model.name || '';
         const looksLikeGuid = /^[0-9a-f]{8}[-]?[0-9a-f]{4}/i.test(rawName) || /^[0-9a-f-]{20,}$/i.test(rawName);
         const friendlyName = (!rawName || looksLikeGuid)
           ? (model.shortName || `Modell ${index + 1}`)
           : rawName;
-        grouped.set(model.id, {
-          name: friendlyName,
-          storeyCount: 0,
-        });
+        grouped.set(model.id, { name: friendlyName, storeyCount: 0 });
       });
     }
 
-    const result = Array.from(grouped.entries()).map(([guid, val], idx) => ({
+    return Array.from(grouped.entries()).map(([guid, val], idx) => ({
       guid,
       name: (!val.name || isGuid(val.name)) ? `Modell ${idx + 1}` : val.name,
       storeyCount: val.storeyCount,
-    }));
-
-    return result.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+    })).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
   }, [levels, apSources, sharedModels]);
 
+  // ── Spaces: cascading from checked levels (Source→Level→Space funnel) ───
   const spaces: SpaceItem[] = useMemo(() => {
     const allSpaces = buildingData
       .filter((a: any) => a.category === 'Space' || a.category === 'IfcSpace');
 
-    // Build a set of ALL database level fm guids (not just the primary one)
-    // This fixes room count dropping to 0 when a floor is selected
+    // Build set of ALL normalized level GUIDs from relevant floors
     let visibleLevelGuids: Set<string> | null = null;
     if (levels.length > 0) {
       const allLevelGuids = new Set<string>();
-      const relevantLevels = checkedLevels.size > 0
-        ? sharedFloors.filter(f => checkedLevels.has(f.databaseLevelFmGuids[0] || f.id))
-        : sharedFloors;
-      relevantLevels.forEach(floor => {
+      // If sources are checked, only show levels from those sources
+      let relevantLevelItems = levels;
+      if (checkedSources.size > 0) {
+        relevantLevelItems = levels.filter(l => checkedSources.has(l.sourceGuid));
+      }
+      // If levels are checked, further narrow down
+      if (checkedLevels.size > 0) {
+        relevantLevelItems = relevantLevelItems.filter(l => checkedLevels.has(l.fmGuid));
+      }
+
+      const relevantFloors = sharedFloors.filter(f => {
+        const primaryGuid = f.databaseLevelFmGuids[0] || f.id;
+        return relevantLevelItems.some(l => l.fmGuid === primaryGuid);
+      });
+
+      relevantFloors.forEach(floor => {
         floor.databaseLevelFmGuids.forEach(g => allLevelGuids.add(normalizeGuid(g)));
       });
-      // Also add the level fmGuids from the levels array for fallback
-      const relevantLevelItems = checkedLevels.size > 0
-        ? levels.filter(l => checkedLevels.has(l.fmGuid))
-        : levels;
       relevantLevelItems.forEach(l => allLevelGuids.add(normalizeGuid(l.fmGuid)));
-      visibleLevelGuids = allLevelGuids;
+
+      if (checkedLevels.size > 0 || checkedSources.size > 0) {
+        visibleLevelGuids = allLevelGuids;
+      }
     }
 
-    const filteredByLevel = allSpaces.filter((a: any) => {
-      if (!visibleLevelGuids) return true;
-      const levelGuid = normalizeGuid(a.levelFmGuid || a.level_fm_guid || '');
-      return visibleLevelGuids.has(levelGuid);
-    });
+    let spacesSource = allSpaces;
+    if (visibleLevelGuids && visibleLevelGuids.size > 0) {
+      const filtered = allSpaces.filter((a: any) => {
+        const levelGuid = normalizeGuid(a.levelFmGuid || a.level_fm_guid || '');
+        return visibleLevelGuids!.has(levelGuid);
+      });
 
-    // Fallback: if viewer-level mapping is not ready/correct yet, still show spaces
-    let spacesSource = filteredByLevel;
-    if (filteredByLevel.length === 0 && allSpaces.length > 0) {
-      if (checkedLevels.size === 0) {
-        // No level filter = show all
-        spacesSource = allSpaces;
-      } else {
-        // Level IS selected but DB GUID matching returned 0 — use xeokit scene graph fallback
-        const viewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-        if (viewer?.metaScene?.metaObjects && entityMapRef.current.size > 0) {
+      if (filtered.length > 0) {
+        spacesSource = filtered;
+      } else if (entityMapRef.current.size > 0) {
+        // Fallback: use xeokit scene graph to find spaces under checked levels
+        const viewer = getXeokitViewer();
+        if (viewer?.metaScene?.metaObjects) {
           const sceneSpaceGuids = new Set<string>();
-          // Walk descendants of checked levels to find IfcSpace metaObjects
-          checkedLevels.forEach(levelGuid => {
-            const entityIds = entityMapRef.current.get(levelGuid) || [];
+          const eMap = entityMapRef.current;
+          const levelGuidsToSearch = checkedLevels.size > 0 ? checkedLevels : new Set(levels.map(l => l.fmGuid));
+          levelGuidsToSearch.forEach(levelGuid => {
+            const entityIds = eMap.get(levelGuid) || [];
             entityIds.forEach(id => {
               const mo = viewer.metaScene.metaObjects[id];
-              if (mo && (mo.type === 'IfcSpace' || (mo.type || '').toLowerCase() === 'ifcspace')) {
+              if (mo && (mo.type || '').toLowerCase() === 'ifcspace') {
                 sceneSpaceGuids.add(normalizeGuid(mo.originalSystemId || mo.id));
               }
             });
@@ -283,18 +321,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
               return sceneSpaceGuids.has(fg);
             });
           }
-          // Ultimate fallback: show all spaces rather than 0
-          if (spacesSource.length === 0) spacesSource = allSpaces;
-        } else {
-          spacesSource = allSpaces;
         }
+        // If still 0, show all rather than empty
+        if (spacesSource.length === 0) spacesSource = allSpaces;
       }
     }
 
     return spacesSource
       .map((a: any) => {
         const name = (a.commonName || a.common_name || a.name || 'Unnamed').replace(/^null$/, 'Unnamed');
-        // Extract designation/number from attributes or name field
         const designation = a.attributes?.designation || a.attributes?.Designation || a.attributes?.number || '';
         return {
           fmGuid: a.fmGuid || a.fm_guid,
@@ -305,9 +340,49 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       })
       .filter((s: SpaceItem) => s.name && s.name !== 'Unnamed')
       .sort((a: SpaceItem, b: SpaceItem) => a.name.localeCompare(b.name, 'sv', { numeric: true }));
-  }, [buildingData, checkedLevels, levels, sharedFloors]);
+  }, [buildingData, checkedLevels, checkedSources, levels, sharedFloors, getXeokitViewer]);
 
-  // Auto-assign palette colors to levels
+  // ── Categories: derived from typeIndex, scoped by active filters ────────
+  const categories: CategoryItem[] = useMemo(() => {
+    const tIdx = typeIndexRef.current;
+    if (tIdx.size === 0) return [];
+
+    // Determine scope IDs from active level/space filters
+    const eMap = entityMapRef.current;
+    let scopeIds: Set<string> | null = null;
+    if (checkedSpaces.size > 0) {
+      scopeIds = new Set<string>();
+      checkedSpaces.forEach(fmGuid => {
+        eMap.get(fmGuid)?.forEach(id => scopeIds!.add(id));
+      });
+    } else if (checkedLevels.size > 0) {
+      scopeIds = new Set<string>();
+      checkedLevels.forEach(fmGuid => {
+        eMap.get(fmGuid)?.forEach(id => scopeIds!.add(id));
+      });
+    } else if (checkedSources.size > 0) {
+      scopeIds = new Set<string>();
+      levels.filter(l => checkedSources.has(l.sourceGuid)).forEach(l => {
+        eMap.get(l.fmGuid)?.forEach(id => scopeIds!.add(id));
+      });
+    }
+
+    const counts = new Map<string, number>();
+    for (const [ifcType, ids] of tIdx) {
+      const cat = IFC_TO_CATEGORY[ifcType] || ifcType.replace(/^Ifc/, '');
+      if (['Building', 'Project', 'Site', 'Building Storey', 'Space'].includes(cat)) continue;
+      const count = scopeIds ? ids.filter(id => scopeIds!.has(id)).length : ids.length;
+      if (count > 0) {
+        counts.set(cat, (counts.get(cat) || 0) + count);
+      }
+    }
+
+    return Array.from(counts.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [entityMapVersion, checkedLevels, checkedSpaces, checkedSources, levels]);
+
+  // ── Auto-assign palette colors (stable — only when list identity changes) ──
   useEffect(() => {
     const colors = new Map<string, string>();
     levels.forEach((level, idx) => {
@@ -316,7 +391,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     setLevelColors(colors);
   }, [levels]);
 
-  // Auto-assign palette colors to spaces BY NAME (same name = same color)
   useEffect(() => {
     const nameToColor = new Map<string, string>();
     const colors = new Map<string, string>();
@@ -331,17 +405,22 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     setSpaceColors(colors);
   }, [spaces]);
 
+  useEffect(() => {
+    const colors = new Map<string, string>();
+    categories.forEach((cat, idx) => {
+      colors.set(cat.name, CATEGORY_PALETTE[cat.name] || LEVEL_PALETTE[idx % LEVEL_PALETTE.length]);
+    });
+    setCategoryColors(colors);
+  }, [categories]);
+
   // ── Sync checkedLevels from external floor switcher ──────────────────
   useEffect(() => {
     const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
-      // Only respond to events from the floor switcher (not from this panel)
       if ((e.detail as any).fromFilterPanel) return;
 
       if (e.detail.isAllFloorsVisible || e.detail.floorId === null) {
-        // All floors visible → clear level filter
         setCheckedLevels(new Set());
       } else if (e.detail.visibleFloorFmGuids?.length > 0) {
-        // Map the visible floor fmGuids to matching level fmGuids
         const matchingLevelGuids = new Set<string>();
         const normalizedVisibleGuids = e.detail.visibleFloorFmGuids.map((g: string) => normalizeGuid(g));
         levels.forEach(level => {
@@ -350,7 +429,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             matchingLevelGuids.add(level.fmGuid);
           }
         });
-        // Also check sharedFloors databaseLevelFmGuids
         if (matchingLevelGuids.size === 0) {
           sharedFloors.forEach(floor => {
             const floorNormGuids = floor.databaseLevelFmGuids.map(g => normalizeGuid(g));
@@ -369,98 +447,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
   }, [levels, sharedFloors]);
 
-  // (Category colors useEffect moved below categories declaration)
-
-  // ── XEOKit accessor ─────────────────────────────────────────────────────
-
-  const getXeokitViewer = useCallback(() => {
-    return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-  }, [viewerRef]);
-
-  // Categories: derived from xeokit metaScene IFC types, filtered by selected floor/space
-  const categories: CategoryItem[] = useMemo(() => {
-    const viewer = getXeokitViewer();
-    if (!viewer?.metaScene?.metaObjects) return [];
-
-    // Build reverse map: IFC type → human-readable category name
-    const ifcTypeToCategory = new Map<string, string>();
-    const mappings: Record<string, string[]> = {
-      'Wall': ['IfcWall', 'IfcWallStandardCase'],
-      'Door': ['IfcDoor'],
-      'Window': ['IfcWindow'],
-      'Slab': ['IfcSlab', 'IfcSlabStandardCase'],
-      'Roof': ['IfcRoof'],
-      'Stair': ['IfcStairFlight', 'IfcStair'],
-      'Column': ['IfcColumn'],
-      'Beam': ['IfcBeam'],
-      'Covering': ['IfcCovering'],
-      'Railing': ['IfcRailing'],
-      'Curtain Wall': ['IfcCurtainWall', 'IfcPlate'],
-      'Space': ['IfcSpace'],
-      'Building Storey': ['IfcBuildingStorey'],
-      'Furnishing': ['IfcFurnishingElement'],
-      'Flow Terminal': ['IfcFlowTerminal'],
-      'Flow Segment': ['IfcFlowSegment'],
-      'Flow Fitting': ['IfcFlowFitting'],
-      'Flow Controller': ['IfcFlowController'],
-      'Pipe': ['IfcPipeSegment', 'IfcPipeFitting'],
-      'Duct': ['IfcDuctSegment', 'IfcDuctFitting'],
-      'Member': ['IfcMember'],
-      'Proxy': ['IfcBuildingElementProxy'],
-    };
-    for (const [cat, types] of Object.entries(mappings)) {
-      types.forEach(t => ifcTypeToCategory.set(t, cat));
-    }
-
-    // Determine which entity IDs are in scope based on level/space filters
-    const eMap = entityMapRef.current;
-    let scopeIds: Set<string> | null = null;
-    if (checkedSpaces.size > 0) {
-      scopeIds = new Set<string>();
-      checkedSpaces.forEach(fmGuid => {
-        eMap.get(fmGuid)?.forEach(id => scopeIds!.add(id));
-      });
-    } else if (checkedLevels.size > 0) {
-      scopeIds = new Set<string>();
-      checkedLevels.forEach(fmGuid => {
-        eMap.get(fmGuid)?.forEach(id => scopeIds!.add(id));
-      });
-    }
-
-    // Count entities per category from metaScene (filtered to scope)
-    const counts = new Map<string, number>();
-    Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
-      if (!mo.type) return;
-      // If scope filter is active, only count entities within scope
-      if (scopeIds && !scopeIds.has(mo.id)) return;
-      const cat = ifcTypeToCategory.get(mo.type) || mo.type.replace(/^Ifc/, '');
-      counts.set(cat, (counts.get(cat) || 0) + 1);
-    });
-
-    // Remove non-useful categories (they have their own sections)
-    counts.delete('Building');
-    counts.delete('Project');
-    counts.delete('Site');
-    counts.delete('Building Storey');
-    counts.delete('Space');
-
-    return Array.from(counts.entries())
-      .map(([name, count]) => ({ name, count }))
-      .filter(c => c.count > 0)
-      .sort((a, b) => b.count - a.count);
-  }, [getXeokitViewer, isVisible, checkedLevels, checkedSpaces]);
-
-  // Auto-assign palette colors to categories (must be after categories declaration)
-  useEffect(() => {
-    const colors = new Map<string, string>();
-    categories.forEach((cat, idx) => {
-      colors.set(cat.name, CATEGORY_PALETTE[cat.name] || LEVEL_PALETTE[idx % LEVEL_PALETTE.length]);
-    });
-    setCategoryColors(colors);
-  }, [categories]);
-
-  // ── Build entity ID map (fmGuid → xeokit IDs) ─────────────────────────
-
+  // ── Build entity ID map (fmGuid → xeokit IDs) — runs ONCE ─────────────
   const buildEntityMap = useCallback(() => {
     const viewer = getXeokitViewer();
     if (!viewer?.metaScene?.metaObjects || !viewer?.scene) return false;
@@ -468,48 +455,36 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const metaObjects = viewer.metaScene.metaObjects;
     const map = new Map<string, string[]>();
 
-    // Step 1: Collect ALL IfcBuildingStorey and IfcSpace from xeokit metaScene
-    // Also track which model each storey belongs to, to prefer A-model storeys
+    // Build typeIndex: ifcType → entity IDs (for fast category counting)
+    const tIdx = new Map<string, string[]>();
+
+    // Build entityToModelId mapping
     const sceneModels = viewer.scene.models || {};
     const entityToModelId = new Map<string, string>();
-    // Method 1: scene model objects (works in Asset+ wrapper)
     Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
       const objs = model.objects || model.entityList || {};
       if (typeof objs === 'object' && objs !== null) {
-        // Handle both Map-like and array-like structures
         const keys = Array.isArray(objs) ? objs.map((e: any) => e.id).filter(Boolean) : Object.keys(objs);
         keys.forEach((objId: string) => entityToModelId.set(objId, modelId));
       }
     });
-
-    // Method 2 (fallback): use metaObject.metaModel.id (native xeokit)
     if (entityToModelId.size === 0) {
       Object.values(metaObjects).forEach((mo: any) => {
         const modelId = mo.metaModel?.id;
         if (modelId) entityToModelId.set(mo.id, modelId);
       });
-      if (entityToModelId.size > 0) {
-        console.log(`[FilterPanel] entityToModelId built from metaModel fallback: ${entityToModelId.size} entries`);
-      }
     }
 
-    // Detect A-model IDs using shared isArchitecturalModel logic
+    // Detect A-model IDs
     const aModelSceneIds = new Set<string>();
     if (sharedModels.length > 0) {
       sharedModels.forEach(m => {
-        if (isArchitecturalModel(m.name)) {
-          aModelSceneIds.add(m.id);
-        }
+        if (isArchitecturalModel(m.name)) aModelSceneIds.add(m.id);
       });
     }
-
-    // Fallback: if no A-models detected from sharedModels, check scene model IDs directly
     if (aModelSceneIds.size === 0) {
       const sceneModelIds = Object.keys(sceneModels);
-      sceneModelIds.forEach(id => {
-        if (isArchitecturalModel(id)) aModelSceneIds.add(id);
-      });
-      // Only treat ALL as A-models if there's exactly 1 model (single-model building)
+      sceneModelIds.forEach(id => { if (isArchitecturalModel(id)) aModelSceneIds.add(id); });
       if (aModelSceneIds.size === 0 && sceneModelIds.length === 1) {
         sceneModelIds.forEach(id => aModelSceneIds.add(id));
       }
@@ -519,22 +494,27 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const xeokitSpaces: { id: string; sysId: string; name: string }[] = [];
     const areaSpaceIds: string[] = [];
 
+    // Single pass: build typeIndex + collect storeys/spaces
     Object.values(metaObjects).forEach((mo: any) => {
-      const type = (mo.type || '').toLowerCase();
-      if (type === 'ifcbuildingstorey') {
+      const type = mo.type || '';
+      if (type) {
+        const arr = tIdx.get(type);
+        if (arr) arr.push(mo.id); else tIdx.set(type, [mo.id]);
+      }
+      const typeLower = type.toLowerCase();
+      if (typeLower === 'ifcbuildingstorey') {
         xeokitStoreys.push({
           id: mo.id,
           sysId: (mo.originalSystemId || mo.id || ''),
           name: (mo.name || ''),
           modelId: entityToModelId.get(mo.id) || mo.metaModel?.id || '',
         });
-      } else if (type === 'ifcspace') {
+      } else if (typeLower === 'ifcspace') {
         xeokitSpaces.push({
           id: mo.id,
           sysId: (mo.originalSystemId || mo.id || ''),
           name: (mo.name || ''),
         });
-        // Detect "Area" spaces that cover entire floors
         const spaceName = (mo.name || '').trim().toLowerCase();
         if (spaceName === 'area' || spaceName.startsWith('area ') || spaceName.startsWith('area:')) {
           areaSpaceIds.push(mo.id);
@@ -542,69 +522,45 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       }
     });
 
-    // Store area space IDs for auto-hiding
+    typeIndexRef.current = tIdx;
     areaSpaceIdsRef.current = areaSpaceIds;
-    if (areaSpaceIds.length > 0) {
-      console.log(`[FilterPanel] Found ${areaSpaceIds.length} "Area" spaces to auto-hide`);
-    }
 
     if (xeokitStoreys.length === 0) {
       console.warn('[FilterPanel] No IfcBuildingStorey found in metaScene');
-      return false;
+      // Still save the typeIndex even if no storeys
+      entityMapRef.current = map;
+      entityMapBuilt.current = true;
+      setEntityMapVersion(v => v + 1);
+      return true;
     }
 
-    // Step 2: Match Asset+ levels → xeokit storeys (try sysId first, then name)
-    // IMPORTANT: Only map storeys from A-model by default.
-    // Only include non-A storeys when that specific source is explicitly checked.
-    // Sort storeys: A-model first, then others
+    // Sort storeys: A-model first
     const sortedStoreys = [...xeokitStoreys].sort((a, b) => {
       const aIsA = aModelSceneIds.has(a.modelId) ? 0 : 1;
       const bIsA = aModelSceneIds.has(b.modelId) ? 0 : 1;
       return aIsA - bIsA;
     });
 
-    const checkedNonASourceGuids = new Set<string>();
-    sources.forEach(s => {
-      if (checkedSources.has(s.guid)) {
-        if (!isArchitecturalModel(s.name)) {
-          checkedNonASourceGuids.add(s.guid);
-        }
-      }
-    });
-
-    // Filter storeys: A-model always, non-A only if explicitly checked
-    // Fallback: if no storey has a recognized model ID, include ALL storeys
     const hasAnyModelMapping = sortedStoreys.some(xs => xs.modelId !== '');
     const eligibleStoreys = sortedStoreys.filter(xs => {
-      // If we couldn't map any storey to a model, include everything
       if (!hasAnyModelMapping) return true;
       if (aModelSceneIds.has(xs.modelId)) return true;
-      // If modelId is empty (couldn't resolve), include as fallback
       if (xs.modelId === '') return true;
-      // Non-A storey: only include if that source is explicitly checked
-      if (checkedNonASourceGuids.size === 0) return false;
-      const matchModel = sharedModels.find(m => m.id === xs.modelId);
-      if (!matchModel) return false;
-      const matchSource = sources.find(s => s.name === matchModel.name);
-      return matchSource && checkedNonASourceGuids.has(matchSource.guid);
+      return false;
     });
 
+    // Match levels → storeys
     const usedStoreyIds = new Set<string>();
     levels.forEach(level => {
-      const fmLower = level.fmGuid.toLowerCase();
+      const fmNorm = normalizeGuid(level.fmGuid);
       const nameLower = level.name.toLowerCase().trim();
 
       let matched = eligibleStoreys.find(xs =>
-        !usedStoreyIds.has(xs.id) && xs.sysId.toLowerCase() === fmLower
-      );
-      if (!matched) matched = eligibleStoreys.find(xs =>
-        !usedStoreyIds.has(xs.id) &&
-        xs.sysId.toLowerCase().replace(/-/g, '') === fmLower.replace(/-/g, '')
+        !usedStoreyIds.has(xs.id) && normalizeGuid(xs.sysId) === fmNorm
       );
       if (!matched) matched = eligibleStoreys.find(xs =>
         !usedStoreyIds.has(xs.id) && xs.name.toLowerCase().trim() === nameLower
       );
-      // Fuzzy name: contains match
       if (!matched) matched = eligibleStoreys.find(xs =>
         !usedStoreyIds.has(xs.id) && (
           xs.name.toLowerCase().includes(nameLower) ||
@@ -619,52 +575,47 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       }
     });
 
-    // Step 3: Match Asset+ spaces → xeokit spaces (use cached ref)
+    // Match spaces
+    const allAssetSpaces = buildingData
+      .filter((a: any) => a.category === 'Space' || a.category === 'IfcSpace');
     const usedSpaceIds = new Set<string>();
-    spacesRef.current.forEach(space => {
-      const fmLower = space.fmGuid.toLowerCase();
-      const nameLower = space.name.toLowerCase().trim();
+    allAssetSpaces.forEach((space: any) => {
+      const spaceFmGuid = space.fmGuid || space.fm_guid;
+      if (!spaceFmGuid) return;
+      const fmNorm = normalizeGuid(spaceFmGuid);
+      const spaceName = (space.commonName || space.common_name || space.name || '').toLowerCase().trim();
 
       let matched = xeokitSpaces.find(xs =>
-        !usedSpaceIds.has(xs.id) && xs.sysId.toLowerCase() === fmLower
+        !usedSpaceIds.has(xs.id) && normalizeGuid(xs.sysId) === fmNorm
       );
       if (!matched) matched = xeokitSpaces.find(xs =>
-        !usedSpaceIds.has(xs.id) &&
-        xs.sysId.toLowerCase().replace(/-/g, '') === fmLower.replace(/-/g, '')
-      );
-      if (!matched) matched = xeokitSpaces.find(xs =>
-        !usedSpaceIds.has(xs.id) && xs.name.toLowerCase().trim() === nameLower
+        !usedSpaceIds.has(xs.id) && xs.name.toLowerCase().trim() === spaceName
       );
 
       if (matched) {
         usedSpaceIds.add(matched.id);
         const descendants = getDescendantIds(viewer, matched.id);
-        map.set(space.fmGuid, descendants);
+        map.set(spaceFmGuid, descendants);
       }
     });
 
-    // Step 4: Also build a source → model objects map using scene.models
-    const sceneModels2 = viewer.scene.models || {};
-    Object.entries(sceneModels2).forEach(([modelId, model]: [string, any]) => {
-      // Get object keys: try model.objects, entityList, or fallback to entityToModelId
+    // Build source → model objects map
+    Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
       let modelObjKeys: string[] = [];
       const objs = model.objects || model.entityList;
       if (objs && typeof objs === 'object') {
         modelObjKeys = Array.isArray(objs) ? objs.map((e: any) => e.id).filter(Boolean) : Object.keys(objs);
       }
-      // Fallback: collect from entityToModelId
       if (modelObjKeys.length === 0) {
         entityToModelId.forEach((mId, objId) => { if (mId === modelId) modelObjKeys.push(objId); });
       }
       for (const objId of modelObjKeys) {
         const mo = metaObjects[objId];
         if (mo?.type === 'IfcBuildingStorey') {
-          const sysId = (mo.originalSystemId || '').toLowerCase();
+          const sysId = normalizeGuid(mo.originalSystemId || '');
           const moName = (mo.name || '').toLowerCase().trim();
           const matchedLevel = levels.find(l =>
-            l.fmGuid.toLowerCase() === sysId ||
-            l.fmGuid.toLowerCase().replace(/-/g, '') === sysId.replace(/-/g, '') ||
-            l.name.toLowerCase().trim() === moName
+            normalizeGuid(l.fmGuid) === sysId || l.name.toLowerCase().trim() === moName
           );
           if (matchedLevel) {
             const sourceKey = `source::${matchedLevel.sourceGuid}`;
@@ -678,18 +629,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
     entityMapRef.current = map;
     entityMapBuilt.current = true;
+    setEntityMapVersion(v => v + 1);
     console.log('[FilterPanel] Entity map built:', map.size, 'entries.',
       'Levels matched:', levels.filter(l => map.has(l.fmGuid)).length, '/', levels.length,
-      'Spaces matched:', spaces.filter(s => map.has(s.fmGuid)).length, '/', spaces.length,
-      'xeokit storeys:', xeokitStoreys.length, 'xeokit spaces:', xeokitSpaces.length);
+      'Spaces matched:', allAssetSpaces.filter((s: any) => map.has(s.fmGuid || s.fm_guid)).length, '/', allAssetSpaces.length,
+      'Type index:', tIdx.size, 'types');
     return true;
-  }, [getXeokitViewer, levels, sharedModels, sources]);
+  }, [getXeokitViewer, levels, sharedModels, buildingData]);
 
-  // Cached spaces ref for entity map (avoids rebuild on checkbox toggle)
-  const spacesRef = useRef(spaces);
-  useEffect(() => { spacesRef.current = spaces; }, [spaces]);
-
-  // Build map when viewer is ready (only depends on levels, not spaces via checkbox)
+  // Build map when viewer is ready (runs once per visibility)
   useEffect(() => {
     if (!isVisible) return;
     entityMapBuilt.current = false;
@@ -701,10 +649,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return () => clearInterval(interval);
   }, [isVisible, buildEntityMap]);
 
-  // NOTE: Duplicate sync handler removed — kept the one at lines 334-370 which handles
-  // fromFilterPanel guard and sharedFloors fallback matching.
-
-  // ── Fetch annotation categories (non-modeled assets + issues) ────────────
+  // ── Fetch annotation categories ────────────────────────────────────────
   useEffect(() => {
     if (!isVisible || !buildingFmGuid) return;
     const fetchAnnotations = async () => {
@@ -714,7 +659,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         .eq('building_fm_guid', buildingFmGuid)
         .or('created_in_model.eq.false,asset_type.eq.IfcAlarm');
 
-      // Also fetch issue count for this building
       const { count: issueCount } = await supabase
         .from('bcf_issues')
         .select('id', { count: 'exact', head: true })
@@ -743,72 +687,33 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         groups.forEach((val, key) => categories.push({ category: key, count: val.count, color: val.color }));
       }
 
-      // Add Issues category
       if (issueCount && issueCount > 0) {
         categories.push({ category: 'Issues', count: issueCount, color: '#EF4444' });
       }
 
-      setAnnotationCategories(
-        categories.sort((a, b) => b.count - a.count)
-      );
+      setAnnotationCategories(categories.sort((a, b) => b.count - a.count));
     };
     fetchAnnotations();
   }, [isVisible, buildingFmGuid]);
 
-  // Dispatch annotation filter event when checked annotations change
+  // Dispatch annotation filter event
   useEffect(() => {
-    // Always dispatch - empty means show none when filter was explicitly used
     window.dispatchEvent(new CustomEvent(ANNOTATION_FILTER_EVENT, {
       detail: { visibleCategories: Array.from(checkedAnnotations) },
     }));
   }, [checkedAnnotations]);
 
-  // ── IFC type mapping for categories ─────────────────────────────────────
-
-  const categoryToIfcTypes = useMemo(() => {
-    const map = new Map<string, Set<string>>();
-    const mappings: Record<string, string[]> = {
-      'Building': ['IfcBuilding'],
-      'Building Storey': ['IfcBuildingStorey'],
-      'Space': ['IfcSpace'],
-      'Instance': ['IfcFurnishingElement', 'IfcFlowTerminal', 'IfcFlowSegment', 'IfcFlowFitting', 'IfcFlowController', 'IfcFlowMovingDevice', 'IfcFlowStorageDevice', 'IfcFlowTreatmentDevice', 'IfcEnergyConversionDevice', 'IfcDistributionFlowElement'],
-      'Wall': ['IfcWall', 'IfcWallStandardCase'],
-      'Door': ['IfcDoor'],
-      'Window': ['IfcWindow'],
-      'Slab': ['IfcSlab', 'IfcSlabStandardCase'],
-      'Roof': ['IfcRoof'],
-      'Stair': ['IfcStairFlight', 'IfcStair'],
-      'Column': ['IfcColumn'],
-      'Beam': ['IfcBeam'],
-      'Covering': ['IfcCovering'],
-      'Railing': ['IfcRailing'],
-      'Curtain Wall': ['IfcCurtainWall', 'IfcPlate'],
-      'Furnishing': ['IfcFurnishingElement'],
-      'Flow Terminal': ['IfcFlowTerminal'],
-      'Flow Segment': ['IfcFlowSegment'],
-      'Flow Fitting': ['IfcFlowFitting'],
-      'Flow Controller': ['IfcFlowController'],
-      'Pipe': ['IfcPipeSegment', 'IfcPipeFitting'],
-      'Duct': ['IfcDuctSegment', 'IfcDuctFitting'],
-      'Member': ['IfcMember'],
-      'Proxy': ['IfcBuildingElementProxy'],
-    };
-    for (const [cat, types] of Object.entries(mappings)) {
-      map.set(cat, new Set(types));
-    }
-    return map;
-  }, []);
-
-  // ── Apply filter + coloring (debounced) ──────────────────────────────────
+  // ── Apply filter + coloring (debounced, delta-based) ────────────────────
 
   const rafRef = useRef<number>(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const isApplyingRef = useRef(false);
+
   const applyFilterVisibility = useCallback(() => {
     clearTimeout(debounceRef.current);
     cancelAnimationFrame(rafRef.current);
-    debounceRef.current = setTimeout(() => {  // 300ms debounce for performance
-    if (isApplyingRef.current) return; // Re-entry guard
+    debounceRef.current = setTimeout(() => {
+    if (isApplyingRef.current) return;
     isApplyingRef.current = true;
     rafRef.current = requestAnimationFrame(() => {
     const viewer = getXeokitViewer();
@@ -819,92 +724,40 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const hasAnyFilter = checkedSources.size > 0 || checkedLevels.size > 0 ||
       checkedSpaces.size > 0 || checkedCategories.size > 0;
 
-    // Step 0: Clean slate — reset visibility, xray, colorize, opacity, pickable
-    scene.setObjectsVisible(scene.objectIds, true);
-    scene.setObjectsPickable(scene.objectIds, true);
+    // Step 0: Clean slate — reset xray and colorize
     const prevXrayed = scene.xrayedObjectIds;
     if (prevXrayed?.length > 0) scene.setObjectsXRayed(prevXrayed, false);
     const prevColorizedIds = scene.colorizedObjectIds;
-    if (prevColorizedIds?.length > 0) scene.setObjectsColorized(prevColorizedIds, false);
-    // Reset opacity only for previously changed objects (avoid full scan)
     if (prevColorizedIds?.length > 0) {
+      scene.setObjectsColorized(prevColorizedIds, false);
       prevColorizedIds.forEach((id: string) => {
         const entity = scene.objects?.[id];
         if (entity && entity.opacity < 1) entity.opacity = 1.0;
       });
     }
 
-    // Step 0b: Hide IfcSpace entities (combined with clean slate — skip redundant applyArchitectColors)
-    // Architect colors are applied on model load and don't need re-application on filter change
-    if (viewer.metaScene?.metaObjects) {
-      Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
-        const ifcType = (mo.type || '').toLowerCase();
-        if (ifcType === 'ifcspace' || ifcType === 'ifc_space') {
-          const entity = scene.objects?.[mo.id];
-          if (entity) { entity.visible = false; entity.pickable = false; }
-        }
-      });
-    }
-
-    // Step 1: Apply auto-colors per section (only when each section's brush is enabled)
-    if (eMap.size > 0) {
-      // Level colors
-      if (autoColorEnabled) {
-        levels.forEach(level => {
-          const color = levelColors.get(level.fmGuid);
-          const entityIds = eMap.get(level.fmGuid);
-          if (color && entityIds) {
-            const rgb = hexToRgb01(color);
-            entityIds.forEach(id => {
-              const entity = scene.objects?.[id];
-              if (entity) entity.colorize = rgb;
-            });
-          }
-        });
-      }
-
-      // Space colors — make spaces visible and colored
-      if (autoColorSpaces) {
-        spaces.forEach(space => {
-          const color = spaceColors.get(space.fmGuid) || LEVEL_PALETTE[spaces.indexOf(space) % LEVEL_PALETTE.length];
-          const rgb = hexToRgb01(color);
-          const spaceEntityIds = eMap.get(space.fmGuid);
-          spaceEntityIds?.forEach(id => {
-            const entity = scene.objects?.[id];
-            if (entity) {
-              entity.colorize = rgb;
-              entity.visible = true;
-              entity.pickable = true;
-              entity.opacity = 0.7;
-            }
-          });
-        });
-      }
-
-      // Category colors
-      if (autoColorCategories && viewer.metaScene?.metaObjects) {
-        Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
-          if (!mo.type) return;
-          const catName = mo.type.replace(/^Ifc/, '').replace(/StandardCase$/, '');
-          const catColor = categoryColors.get(catName);
-          if (catColor) {
-            const entity = scene.objects?.[mo.id];
-            if (entity) entity.colorize = hexToRgb01(catColor);
-          }
-        });
-      }
-    }
+    // Hide all IfcSpace entities by default (fast via typeIndex)
+    const spaceEntityIds = typeIndexRef.current.get('IfcSpace') || [];
+    spaceEntityIds.forEach(id => {
+      const entity = scene.objects?.[id];
+      if (entity) { entity.visible = false; entity.pickable = false; }
+    });
 
     if (!hasAnyFilter) {
-      // No filter active: hide all IfcSpace entities by default (don't auto-show spaces)
-      if (viewer.metaScene?.metaObjects) {
-        Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
-          if (mo.type === 'IfcSpace') {
-            const entity = scene.objects?.[mo.id];
-            if (entity) { entity.visible = false; entity.pickable = false; }
-          }
+      // No filter: show everything (except spaces)
+      const prev = prevVisibleRef.current;
+      if (prev) {
+        // Delta: show what was previously hidden
+        scene.setObjectsVisible(scene.objectIds, true);
+        scene.setObjectsPickable(scene.objectIds, true);
+        // Re-hide spaces
+        spaceEntityIds.forEach(id => {
+          const entity = scene.objects?.[id];
+          if (entity) { entity.visible = false; entity.pickable = false; }
         });
+        prevVisibleRef.current = null;
       }
+
       window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
         detail: {
           floorId: null, floorName: null, bounds: null,
@@ -912,41 +765,36 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           isAllFloorsVisible: true,
         } as FloorSelectionEventDetail,
       }));
+      isApplyingRef.current = false;
       return;
     }
 
-    // Step 2: Collect solid IDs per active filter, then intersect
-    // Source filtering: use model-level visibility via shared hook's batch approach
+    // Step 1: Compute solidIds via cascading filters
+    // Source filter
     let sourceIds: Set<string> | null = null;
     if (checkedSources.size > 0) {
       sourceIds = new Set<string>();
-      // Collect entity IDs from levels belonging to checked sources
       levels.filter(l => checkedSources.has(l.sourceGuid)).forEach(l => {
         eMap.get(l.fmGuid)?.forEach(id => sourceIds!.add(id));
       });
-      // Also collect from source:: keys in entityMap
       checkedSources.forEach(srcGuid => {
         eMap.get(`source::${srcGuid}`)?.forEach(id => sourceIds!.add(id));
       });
-      // Also collect from scene models matched to these sources
-      const viewer2 = getXeokitViewer();
-      const sceneModels = viewer2?.scene?.models || {};
-      const metaObjects = viewer2?.metaScene?.metaObjects;
+      // Scene model fallback
+      const checkedSourceNames = new Set(
+        sources.filter(s => checkedSources.has(s.guid)).map(s => s.name.toLowerCase())
+      );
+      const sceneModels2 = viewer.scene.models || {};
+      const metaObjects = viewer.metaScene?.metaObjects;
       if (metaObjects) {
-        // Try to match scene models to checked sources via sharedModels name matching
-        const checkedSourceNames = new Set(
-          sources.filter(s => checkedSources.has(s.guid)).map(s => s.name.toLowerCase())
-        );
         sharedModels.forEach(sm => {
           if (checkedSourceNames.has(sm.name.toLowerCase())) {
-            const sceneModel = sceneModels[sm.id];
+            const sceneModel = sceneModels2[sm.id];
             if (sceneModel) {
-              // Method 1: model.objects
               const objs = sceneModel.objects || {};
               const objKeys = Array.isArray(objs) ? objs.map((e: any) => e.id).filter(Boolean) : Object.keys(objs);
               objKeys.forEach((id: string) => sourceIds!.add(id));
-              // Method 2: metaModel fallback
-              if (objKeys.length === 0 && metaObjects) {
+              if (objKeys.length === 0) {
                 Object.values(metaObjects).forEach((mo: any) => {
                   if (mo.metaModel?.id === sm.id) sourceIds!.add(mo.id);
                 });
@@ -954,35 +802,14 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             }
           }
         });
-        // Fallback: if sourceIds still empty, try direct model objects scan
-        if (sourceIds.size === 0) {
-          Object.entries(sceneModels).forEach(([, model]: [string, any]) => {
-            const objKeys = Object.keys(model.objects || {});
-            for (const objId of objKeys) {
-              const mo = metaObjects[objId];
-              if (mo?.type === 'IfcBuildingStorey') {
-                const sysId = (mo.originalSystemId || '').toLowerCase();
-                const matchedLevel = levels.find(l =>
-                  l.fmGuid.toLowerCase() === sysId ||
-                  l.fmGuid.toLowerCase().replace(/-/g, '') === sysId.replace(/-/g, '')
-                );
-                if (matchedLevel && checkedSources.has(matchedLevel.sourceGuid)) {
-                  objKeys.forEach(id => sourceIds!.add(id));
-                }
-                break;
-              }
-            }
-          });
-        }
       }
-      // Safety: if source filter is active but produced no IDs, don't hide everything —
-      // fall back to showing all scene objects (prevents "everything disappears" bug)
       if (sourceIds.size === 0) {
         console.warn('[FilterPanel] Source filter produced 0 IDs — falling back to all objects');
         sourceIds = null;
       }
     }
 
+    // Level filter
     let levelIds: Set<string> | null = null;
     if (checkedLevels.size > 0) {
       levelIds = new Set<string>();
@@ -991,13 +818,12 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
     }
 
-    // Space filtering: collect space-only IDs AND parent level context separately
+    // Space filter
     let spaceAndContextIds: Set<string> | null = null;
-    let spaceOnlyEntityIds: Set<string> | null = null; // Only the IfcSpace entity IDs, for highlighting
+    let spaceOnlyEntityIds: Set<string> | null = null;
     if (checkedSpaces.size > 0) {
       spaceAndContextIds = new Set<string>();
       spaceOnlyEntityIds = new Set<string>();
-      // Add the space entities themselves
       checkedSpaces.forEach(fmGuid => {
         const ids = eMap.get(fmGuid);
         if (ids) {
@@ -1007,9 +833,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           });
         }
       });
-      // ALSO add all entities from parent levels so context (walls, doors, etc.) stays visible
+      // Add parent level context
       const parentLevelGuids = new Set<string>();
-      spacesRef.current.forEach(space => {
+      spaces.forEach(space => {
         if (checkedSpaces.has(space.fmGuid) && space.levelFmGuid) {
           parentLevelGuids.add(space.levelFmGuid);
         }
@@ -1019,33 +845,39 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
     }
 
+    // Category filter
     let categoryIds: Set<string> | null = null;
     if (checkedCategories.size > 0) {
       categoryIds = new Set<string>();
       const allowedIfcTypes = new Set<string>();
       checkedCategories.forEach(cat => {
-        const ifcTypes = categoryToIfcTypes.get(cat);
+        const ifcTypes = CATEGORY_TO_IFC[cat];
         if (ifcTypes) ifcTypes.forEach(t => allowedIfcTypes.add(t));
-        // Also add the raw category name and its Ifc-prefixed variant for fallback matching
         allowedIfcTypes.add(cat);
         allowedIfcTypes.add('Ifc' + cat);
         allowedIfcTypes.add('Ifc' + cat.replace(/\s+/g, ''));
       });
-      if (viewer.metaScene?.metaObjects) {
-        Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
-          if (allowedIfcTypes.has(mo.type)) categoryIds!.add(mo.id);
-        });
+      // Use typeIndex for fast lookup instead of full metaObjects scan
+      for (const [ifcType, ids] of typeIndexRef.current) {
+        if (allowedIfcTypes.has(ifcType)) {
+          ids.forEach(id => categoryIds!.add(id));
+        }
       }
     }
 
     // Intersect active filters
-    // When spaces are checked, skip levelIds from intersection (spaces already include their parent level)
-    const filterSets = [sourceIds, checkedSpaces.size > 0 ? null : levelIds, spaceAndContextIds, categoryIds].filter((s): s is Set<string> => s !== null);
+    const filterSets = [
+      sourceIds,
+      checkedSpaces.size > 0 ? null : levelIds,
+      spaceAndContextIds,
+      categoryIds,
+    ].filter((s): s is Set<string> => s !== null);
+
     let solidIds: Set<string>;
     if (filterSets.length === 0) {
       solidIds = new Set(scene.objectIds);
     } else if (filterSets.length === 1) {
-      solidIds = filterSets[0];
+      solidIds = new Set(filterSets[0]);
     } else {
       const sorted = [...filterSets].sort((a, b) => a.size - b.size);
       solidIds = new Set<string>();
@@ -1054,69 +886,83 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       }
     }
 
-    // Step 2b: Handle IfcSpace and IfcSlab visibility
-    const fadeIds: string[] = [];   // IfcSlab — semi-transparent + unpickable
-    const hideIds: string[] = []; // IfcRoof/IfcCovering — hide entirely
+    // Handle slab/roof/space visibility
+    const fadeIds: string[] = [];
+    const hideIds: string[] = [];
     const obstructTypes = new Set(['IfcRoof', 'IfcCovering']);
     const slabTypes = new Set(['IfcSlab', 'IfcSlabStandardCase', 'IfcPlate']);
-    // Collect ALL slab IDs from metaScene for floor visibility
-    const allSlabIds: string[] = [];
-    // Track which area space IDs to ensure they stay hidden
     const areaSet = new Set(areaSpaceIdsRef.current);
 
-    if (viewer.metaScene?.metaObjects) {
-      // First pass: collect all slabs in the scene for floor visibility
-      Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
-        if (slabTypes.has(mo.type)) {
-          allSlabIds.push(mo.id);
-        }
-      });
+    // Use typeIndex for slab collection (fast)
+    const allSlabIds: string[] = [];
+    for (const st of slabTypes) {
+      const ids = typeIndexRef.current.get(st);
+      if (ids) allSlabIds.push(...ids);
+    }
 
-      for (const id of solidIds) {
-        const mo = viewer.metaScene.metaObjects[id];
-        if (mo) {
-          if (obstructTypes.has(mo.type)) { 
-            hideIds.push(id); 
-            solidIds.delete(id); 
-          } else if (slabTypes.has(mo.type)) { 
-            fadeIds.push(id); 
-            solidIds.delete(id); 
-          } else if (mo.type === 'IfcSpace') {
-            // Always remove IfcSpace from solidIds — they should not be "solid"
-            // If this space is a checked space, it will be highlighted separately
-            // If it's an "Area" space, it stays hidden
-            if (areaSet.has(id)) {
-              hideIds.push(id);
-            }
-            solidIds.delete(id);
-          }
+    for (const id of solidIds) {
+      const mo = viewer.metaScene?.metaObjects?.[id];
+      if (mo) {
+        if (obstructTypes.has(mo.type)) {
+          hideIds.push(id);
+          solidIds.delete(id);
+        } else if (slabTypes.has(mo.type)) {
+          fadeIds.push(id);
+          solidIds.delete(id);
+        } else if (mo.type === 'IfcSpace') {
+          if (areaSet.has(id)) hideIds.push(id);
+          solidIds.delete(id);
         }
-      }
-
-      // Add slabs from active levels that weren't already in solidIds
-      if (checkedLevels.size > 0 && levelIds) {
-        allSlabIds.forEach(slabId => {
-          if (!fadeIds.includes(slabId) && !solidIds.has(slabId)) {
-            const slabMo = viewer.metaScene.metaObjects[slabId];
-            if (slabMo) {
-              let parent = slabMo.parent;
-              while (parent) {
-                if (parent.type?.toLowerCase() === 'ifcbuildingstorey') {
-                  const parentGuid = (parent.originalSystemId || parent.id || '').toLowerCase();
-                  const isVisible = Array.from(checkedLevels).some(lg => lg.toLowerCase() === parentGuid || lg.toLowerCase().replace(/-/g, '') === parentGuid.replace(/-/g, ''));
-                  if (isVisible) fadeIds.push(slabId);
-                  break;
-                }
-                parent = parent.parent ? viewer.metaScene.metaObjects[parent.parent.id || parent.parent] : null;
-              }
-            }
-          }
-        });
       }
     }
 
-    // Step 3: Apply visibility or X-ray for non-solid objects
-    const nonSolidIds = scene.objectIds.filter((id: string) => !solidIds.has(id));
+    // Add slabs from active levels
+    if (checkedLevels.size > 0 && levelIds) {
+      allSlabIds.forEach(slabId => {
+        if (!fadeIds.includes(slabId) && !solidIds.has(slabId)) {
+          const slabMo = viewer.metaScene?.metaObjects?.[slabId];
+          if (slabMo) {
+            let parent = slabMo.parent;
+            while (parent) {
+              if (parent.type?.toLowerCase() === 'ifcbuildingstorey') {
+                const parentGuidNorm = normalizeGuid(parent.originalSystemId || parent.id || '');
+                const isVisible = Array.from(checkedLevels).some(lg => normalizeGuid(lg) === parentGuidNorm);
+                if (isVisible) fadeIds.push(slabId);
+                break;
+              }
+              parent = parent.parent ? viewer.metaScene?.metaObjects?.[parent.parent.id || parent.parent] : null;
+            }
+          }
+        }
+      });
+    }
+
+    // Step 2: Delta visibility update
+    const newVisibleSet = new Set(solidIds);
+    fadeIds.forEach(id => newVisibleSet.add(id));
+
+    // Apply visibility: show solidIds + fadeIds, hide everything else
+    const allObjIds: string[] = scene.objectIds;
+    const toShow: string[] = [];
+    const toHide: string[] = [];
+
+    const prev = prevVisibleRef.current;
+    if (prev) {
+      // Delta: only change what's different
+      for (const id of allObjIds) {
+        const wasVisible = prev.has(id);
+        const shouldBeVisible = newVisibleSet.has(id);
+        if (shouldBeVisible && !wasVisible) toShow.push(id);
+        else if (!shouldBeVisible && wasVisible) toHide.push(id);
+      }
+    } else {
+      // First time: full apply
+      for (const id of allObjIds) {
+        if (newVisibleSet.has(id)) toShow.push(id);
+        else toHide.push(id);
+      }
+    }
+
     if (xrayMode) {
       const xrayMat = scene.xrayMaterial;
       if (xrayMat) {
@@ -1127,22 +973,26 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         xrayMat.edgeAlpha = 0.3;
         xrayMat.edgeColor = [0.4, 0.4, 0.45];
       }
+      // In xray mode: everything visible but non-solid is xrayed
+      if (toHide.length > 0) scene.setObjectsVisible(toHide, true);
+      if (toShow.length > 0) scene.setObjectsVisible(toShow, true);
+      const nonSolidIds = allObjIds.filter((id: string) => !solidIds.has(id));
       if (nonSolidIds.length > 0) scene.setObjectsXRayed(nonSolidIds, true);
       if (solidIds.size > 0) scene.setObjectsXRayed([...solidIds], false);
     } else {
-      if (nonSolidIds.length > 0) scene.setObjectsVisible(nonSolidIds, false);
+      if (toHide.length > 0) scene.setObjectsVisible(toHide, false);
+      if (toShow.length > 0) scene.setObjectsVisible(toShow, true);
     }
 
-    // Step 3b: Hide obstructions, make slabs semi-transparent
+    // Hide obstructions, fade slabs
     if (hideIds.length > 0) scene.setObjectsVisible(hideIds, false);
     fadeIds.forEach(id => {
       const entity = scene.objects?.[id];
       if (entity) { entity.visible = true; entity.opacity = 0.3; entity.pickable = false; }
     });
 
-    // Step 4: Handle checked spaces — show room solid in 3D while context is x-rayed
+    // Step 3: Handle checked spaces — show room solid + x-ray context
     if (checkedSpaces.size > 0 && spaceOnlyEntityIds && spaceOnlyEntityIds.size > 0) {
-      // X-ray the context (parent level entities minus the space entities)
       if (spaceAndContextIds) {
         const contextOnlyIds = [...spaceAndContextIds].filter(id => !spaceOnlyEntityIds!.has(id));
         if (contextOnlyIds.length > 0) {
@@ -1158,63 +1008,32 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           scene.setObjectsXRayed(contextOnlyIds, true);
         }
       }
-      // Show the selected space solid with natural colors (or user-picked color)
       spaceOnlyEntityIds.forEach(id => {
-        if (areaSet.has(id)) return; // Never show area spaces
+        if (areaSet.has(id)) return;
         const entity = scene.objects?.[id];
         if (entity) {
           entity.visible = true;
           entity.pickable = true;
           entity.xrayed = false;
           entity.opacity = 0.7;
-          // Only colorize if user has explicitly set a color for this space
-          // Find the space fmGuid for this entity id
-          let hasCustomColor = false;
-          if (autoColorSpaces) {
-            for (const [spaceFmGuid, color] of spaceColors.entries()) {
-              if (checkedSpaces.has(spaceFmGuid)) {
-                const spaceIds = eMap.get(spaceFmGuid);
-                if (spaceIds?.includes(id)) {
-                  entity.colorize = hexToRgb01(color);
-                  hasCustomColor = true;
-                  break;
-                }
-              }
-            }
-            // If auto-color enabled but no custom color, use palette
-            if (!hasCustomColor) {
-              for (const space of spaces) {
-                if (checkedSpaces.has(space.fmGuid)) {
-                  const spaceIds = eMap.get(space.fmGuid);
-                  if (spaceIds?.includes(id)) {
-                    const color = LEVEL_PALETTE[spaces.indexOf(space) % LEVEL_PALETTE.length];
-                    entity.colorize = hexToRgb01(color);
-                    hasCustomColor = true;
-                    break;
-                  }
-                }
-              }
-            }
-          }
-          // If no custom color, keep natural colors (don't colorize)
-          if (!hasCustomColor) {
-            entity.colorize = null;
-          }
+          entity.colorize = null;
         }
       });
     }
 
-    // Step 5: Ensure "Area" spaces stay hidden always
+    // Ensure area spaces stay hidden
     areaSpaceIdsRef.current.forEach(id => {
       const entity = scene.objects?.[id];
       if (entity) { entity.visible = false; entity.pickable = false; }
     });
 
-    // Step 6: Floor/space visibility event for labels and clipping
+    prevVisibleRef.current = newVisibleSet;
+
+    // Floor/space visibility event for labels and clipping
     const visibleFmGuids: string[] = [];
     if (checkedSpaces.size > 0) {
       const parentLevelGuids = new Set<string>();
-      spacesRef.current.forEach(space => {
+      spaces.forEach(space => {
         if (checkedSpaces.has(space.fmGuid) && space.levelFmGuid) {
           parentLevelGuids.add(space.levelFmGuid);
         }
@@ -1237,19 +1056,86 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       } as FloorSelectionEventDetail,
     }));
 
-    console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', scene.objectIds.length);
+    console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', scene.objectIds.length, 'delta: show', toShow.length, 'hide', toHide.length);
     isApplyingRef.current = false;
     }); // end requestAnimationFrame
-    }, 300); // debounce 300ms for performance
+    }, 300); // debounce 300ms
   }, [getXeokitViewer, checkedSources, checkedLevels, checkedSpaces, checkedCategories,
-    levels, spaces, categoryToIfcTypes, levelColors, spaceColors, categoryColors, autoColorEnabled, autoColorSpaces, autoColorCategories, xrayMode]);
+    levels, spaces, sources, sharedModels, xrayMode]);
 
-  // Apply whenever filters or colors change
+  // ── Apply coloring separately (does NOT trigger visibility recalc) ──────
+  const applyColoring = useCallback(() => {
+    const viewer = getXeokitViewer();
+    if (!viewer?.scene) return;
+    const scene = viewer.scene;
+    const eMap = entityMapRef.current;
+    if (eMap.size === 0) return;
+
+    // Level colors
+    if (autoColorEnabled) {
+      levels.forEach(level => {
+        const color = levelColors.get(level.fmGuid);
+        const entityIds = eMap.get(level.fmGuid);
+        if (color && entityIds) {
+          const rgb = hexToRgb01(color);
+          entityIds.forEach(id => {
+            const entity = scene.objects?.[id];
+            if (entity) entity.colorize = rgb;
+          });
+        }
+      });
+    }
+
+    // Space colors
+    if (autoColorSpaces) {
+      spaces.forEach(space => {
+        const color = spaceColors.get(space.fmGuid) || LEVEL_PALETTE[spaces.indexOf(space) % LEVEL_PALETTE.length];
+        const rgb = hexToRgb01(color);
+        const spaceEntityIds = eMap.get(space.fmGuid);
+        spaceEntityIds?.forEach(id => {
+          const entity = scene.objects?.[id];
+          if (entity) {
+            entity.colorize = rgb;
+            entity.visible = true;
+            entity.pickable = true;
+            entity.opacity = 0.7;
+          }
+        });
+      });
+    }
+
+    // Category colors
+    if (autoColorCategories) {
+      for (const [ifcType, ids] of typeIndexRef.current) {
+        const catName = ifcType.replace(/^Ifc/, '').replace(/StandardCase$/, '');
+        const catColor = categoryColors.get(catName);
+        if (catColor) {
+          const rgb = hexToRgb01(catColor);
+          ids.forEach(id => {
+            const entity = scene.objects?.[id];
+            if (entity) entity.colorize = rgb;
+          });
+        }
+      }
+    }
+  }, [getXeokitViewer, levels, spaces, levelColors, spaceColors, categoryColors,
+    autoColorEnabled, autoColorSpaces, autoColorCategories]);
+
+  // Apply filter when filter state changes
   useEffect(() => {
     if (!isVisible) return;
     applyFilterVisibility();
-  }, [checkedSources, checkedLevels, checkedSpaces, checkedCategories,
-    levelColors, spaceColors, categoryColors, autoColorEnabled, autoColorSpaces, autoColorCategories, applyFilterVisibility, isVisible]);
+  }, [checkedSources, checkedLevels, checkedSpaces, checkedCategories, xrayMode, applyFilterVisibility, isVisible]);
+
+  // Apply coloring separately when color settings change
+  useEffect(() => {
+    if (!isVisible) return;
+    if (autoColorEnabled || autoColorSpaces || autoColorCategories) {
+      // Apply after a short delay to let visibility settle
+      const timer = setTimeout(applyColoring, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [levelColors, spaceColors, categoryColors, autoColorEnabled, autoColorSpaces, autoColorCategories, applyColoring, isVisible]);
 
   // Track active viewer theme so cleanup can re-apply it
   const activeThemeIdRef = useRef<string | null>(null);
@@ -1262,7 +1148,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return () => window.removeEventListener(VIEWER_THEME_CHANGED_EVENT, handler);
   }, []);
 
-  // Cleanup when panel closes: reset viewer state
+  // Cleanup when panel closes
   useEffect(() => {
     if (isVisible) return;
     const viewer = getXeokitViewer();
@@ -1277,7 +1163,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       if (entity && entity.opacity < 1) entity.opacity = 1.0;
     });
 
-    // Re-apply active theme or fall back to standard architect colors
     if (activeThemeIdRef.current) {
       window.dispatchEvent(new CustomEvent(VIEWER_THEME_REQUESTED_EVENT, {
         detail: { themeId: activeThemeIdRef.current }
@@ -1285,9 +1170,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     } else {
       applyArchitectColors(viewer);
     }
-
-    // Always hide IfcSpace objects (standard behavior)
     hideSpaceAndAreaObjects(viewer);
+    prevVisibleRef.current = null;
   }, [isVisible, getXeokitViewer]);
 
   // ── Handlers ────────────────────────────────────────────────────────────
@@ -1314,11 +1198,18 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     if (!viewer?.scene) return;
     const ids = entityMapRef.current.get(fmGuid) || [];
     if (ids.length > 0) {
+      // Deselect previous
       viewer.scene.setObjectsSelected(viewer.scene.selectedObjectIds, false);
+      // Select and make visible
       ids.forEach((id: string) => {
         const entity = viewer.scene.objects?.[id];
-        if (entity) entity.selected = true;
+        if (entity) {
+          entity.selected = true;
+          entity.visible = true;
+          entity.pickable = true;
+        }
       });
+      // Fly to room
       const firstEntity = viewer.scene.objects?.[ids[0]];
       if (firstEntity?.aabb) {
         viewer.cameraFlight?.flyTo({ aabb: firstEntity.aabb, duration: 0.5 });
@@ -1354,7 +1245,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     window.dispatchEvent(new CustomEvent(ANNOTATION_FILTER_EVENT, { detail: { visibleCategories: [] } }));
   }, []);
 
-  // ── Fetch modified assets when modifications section opens or after deletion ───
+  // ── Fetch modified assets ────────────────────────────────────────────────
   const fetchModifiedRef = useRef<() => void>(() => {});
   useEffect(() => {
     if (!buildingFmGuid) return;
@@ -1370,10 +1261,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     if (modificationsOpen) fetchModified();
   }, [modificationsOpen, buildingFmGuid]);
 
-  // Listen for OBJECT_DELETE events to refresh modification count
   useEffect(() => {
     const handler = () => {
-      // Re-fetch after a short delay to let the DB update
       setTimeout(() => fetchModifiedRef.current(), 500);
     };
     window.addEventListener('OBJECT_DELETE', handler);
@@ -1388,7 +1277,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const metaObjects = viewer.metaScene.metaObjects;
     const normGuid = (g: string) => (g || '').toLowerCase().replace(/-/g, '');
 
-    // Build lookup
     const guidToEntityId = new Map<string, string>();
     Object.values(metaObjects).forEach((mo: any) => {
       const sysId = mo.originalSystemId || mo.id || '';
@@ -1398,26 +1286,22 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const movedGuids = new Set(modifiedAssets.filter(a => a.modification_status === 'moved').map(a => normGuid(a.fm_guid)));
     const deletedGuids = new Set(modifiedAssets.filter(a => a.modification_status === 'deleted').map(a => normGuid(a.fm_guid)));
 
-    // Apply moved coloring
     movedGuids.forEach(g => {
       const eid = guidToEntityId.get(g);
       if (!eid) return;
       const entity = viewer.scene.objects?.[eid];
       if (!entity) return;
       if (showMovedAssets) {
-        entity.colorize = [1, 0.6, 0.1]; // Orange
+        entity.colorize = [1, 0.6, 0.1];
       } else {
-        // Explicitly reset color when toggle is off
         entity.colorize = null;
       }
     });
 
-    // Restore architect colors for non-modified entities when toggling off
     if (!showMovedAssets && !showDeletedAssets && viewer) {
       recolorArchitectObjects(viewer);
     }
 
-    // Apply deleted visualization
     deletedGuids.forEach(g => {
       const eid = guidToEntityId.get(g);
       if (!eid) return;
@@ -1426,7 +1310,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       if (showDeletedAssets) {
         entity.visible = true;
         entity.pickable = true;
-        entity.colorize = [1, 0.2, 0.2]; // Red
+        entity.colorize = [1, 0.2, 0.2];
       } else {
         entity.visible = false;
         entity.pickable = false;
@@ -1472,7 +1356,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   return (
     <>
-    {/* Backdrop — click outside to close */}
+    {/* Backdrop */}
     <div className="fixed inset-0 z-[64]" onClick={onClose} />
     <div
       className={cn(
@@ -1492,7 +1376,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           )}
         </div>
         <div className="flex items-center gap-1">
-          {/* Show All button */}
           <Button
             variant="ghost"
             size="sm"
@@ -1659,7 +1542,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             ))}
           </FilterSection>
 
-          {/* Modification filter (moved / deleted assets) */}
+          {/* Modification filter */}
           <FilterSection
             title="Modifications"
             count={modifiedAssets.length}
@@ -1692,7 +1575,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             </div>
           </FilterSection>
 
-          {/* Annotations (non-modeled assets) */}
+          {/* Annotations */}
           {annotationCategories.length > 0 && (
             <FilterSection
               title="Annotations"

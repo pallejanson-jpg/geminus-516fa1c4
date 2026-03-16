@@ -1,67 +1,129 @@
+## Plan: IFC & ACC Import/Sync Performance Optimization (IMPLEMENTED ✅)
+
+### Changes Made
+1. **XKT compression** (`ifc-to-xkt`): Enabled `zip: true` in `writeXKTModelToArrayBuffer` — ~30% smaller XKT files
+2. **Parallel DB writes** (`ifc-to-xkt`): `persistSystemsAndConnections` + `populateAssetsFromMetaObjects` now run via `Promise.all` instead of sequentially
+3. **Streaming LD-JSON parser** (`acc-sync`): New `streamLDJSON()` async generator processes BIM property files line-by-line from `ReadableStream` — eliminates OOM risk on large Revit models
+4. **Incremental ACC sync** (`acc-sync`): `fetchAccAssets` now supports `filter[updatedAt]` parameter, only fetching assets modified since last sync — ~90% faster re-syncs
+5. **IFC derivative from ACC** (`acc-sync`): `translate-model` now requests IFC format alongside SVF. On completion, downloads the IFC derivative and feeds it into `ifc-to-xkt` for real per-storey tiling — unifying ACC and IFC geometry pipelines
+6. **Dual pipeline** (`check-translation`): Triggers both `ifc-to-xkt` (for tiled XKT) and `acc-geometry-extract` (for GLB fallback) in parallel when translation succeeds
+
+---
+
+## Plan: Mobile Viewer Startup Hardening (IMPLEMENTED ✅)
+
+### Changes Made
+1. **Mobile touch tuning** (`NativeXeokitViewer.tsx`): dragRotationRate 30→70, touchPanRate 0.06→0.14, touchDollyRate 0.04→0.09, rotationInertia 0.93→0.88, panInertia 0.88→0.82
+2. **FastNav delay** (`NativeXeokitViewer.tsx`): Added `delayBeforeRestore: true` (0.5s mobile, 0.3s desktop)
+3. **Suppress viewFit in split2d3d** (`NativeXeokitViewer.tsx`): Skips instant viewFit when `?mode=split2d3d` — floor isolation handles camera
+4. **Defer SplitPlanView mount** (`UnifiedViewer.tsx`): Mobile SplitPlanView only renders after `viewerReady=true`, shows spinner until then
+5. **Increased SplitPlanView retry** (`SplitPlanView.tsx`): 10×100ms → 30×200ms (6s total window), immediate retry on VIEWER_MODELS_LOADED
+6. **Debounced floor events** (`UnifiedViewer.tsx`): 500ms guard on FLOOR_SELECTION_CHANGED dispatches to prevent competing events
+
+### Architecture Principle
+Mobile and desktop share the same `UnifiedViewerContent` initialization logic. The ONLY difference is layout:
+- Mobile: vertical stack (2D top, 3D bottom) with touch-optimized divider (8px)
+- Desktop: horizontal ResizablePanelGroup with drag handle (4px)
+
+Future changes to viewer startup MUST apply to both paths. Do NOT create separate mobile/desktop init logic.
+
+---
+
+## Plan: SplitPlanView Navigation + Alignment UX (IMPLEMENTED ✅)
+
+### Changes Made
+1. **SplitPlanView click navigation** (`SplitPlanView.tsx`): Replaced first-person instant jump with MinimapPanel-style fly-to — keeps current eye height, looks down at clicked point, animates 0.5s.
+2. **AlignmentPointPicker precision** (`AlignmentPointPicker.tsx`): Now estimates surface point via ray-cast from tripod position + viewing direction × adjustable distance slider (0.5–10m). Shows captured coordinates and distance in both steps for verification.
+
+---
+
+## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
+
+### Changes Made
+1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
+2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
+3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
+4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
+5. **config.toml** updated with `acc-geometry-extract` function entry
+
+### Pending (Phase 2)
+- Actual GLB chunk creation from SVF geometry (requires conversion worker)
+- OBJ as optional secondary format for small models
+
+---
 
 
-# Grundlig analys & fix av ViewerFilterPanel
+### Ändringar
 
-## Identifierade problem
+#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
+**Fil:** `supabase/functions/conversion-worker-api/index.ts`
+- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
+- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
+- Upsert till `assets` med `created_in_model: true`
+- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
 
-Jag har läst igenom hela ViewerFilterPanel.tsx (1859 rader) och hittat följande grundorsaker:
+#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
+**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
+- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
+- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
+- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
+- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
+- Diff: soft-delete objekt som finns i DB men inte i ny IFC
 
-### Problem 1: Rum-antal visar 0 vid våningsbyte
-**Orsak:** `spaces`-listan (rad 230-308) filtrerar rum baserat på `checkedLevels`, men GUID-matchningen mellan Asset+ level fm_guid och xeokit-scenen misslyckas ofta. Fallback-logiken (rad 261-291) försöker använda `entityMapRef`, men den kräver att `buildEntityMap` redan körts klart — och den memon som beräknar `spaces` triggas INNAN entity-mappen är klar. Resultatet: 0 rum.
+#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
+**Fil:** `docs/conversion-worker/worker.mjs`
+- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
+- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
+- Non-fatal: om hierarki-population misslyckas fortsätter workern
 
-**Dessutom:** `spaceCount` i levels (rad 169-174) beräknas med `normalizeGuid`-matchning mot `levelFmGuid`, men Asset+-data har ofta inkonsistenta GUID-format (med/utan bindestreck, olika casing). Om matchningen missar → `spaceCount` = 0.
+#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
+**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
+- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
+- `created_in_model: true` istället för `false`
+- Diff-logik: markerar borttagna objekt efter import
 
-### Problem 2: Kategorier visar ingenting
-**Orsak:** `categories` (rad 381-451) hämtar entity-räkningar från `entityMapRef.current` — men om entity-mappen inte byggts klart (poller tar upp till 5 sekunder), returneras tom lista. Dessutom filtreras kategorier med `scopeIds` från `entityMapRef` som kan vara tom.
+### Datamodell
 
-### Problem 3: Extremt långsamt
-**Orsak — `applyFilterVisibility` (rad 807-1243):**
-1. **Full-scan varje gång:** Rad 823-835 gör `scene.setObjectsVisible(scene.objectIds, true)` → itererar ALLA objekt (kan vara 100k+) varje checkbox-klick
-2. **IfcSpace-scan duplicerad:** Rad 839-847 och rad 898-907 loopar genom ALLA metaObjects två gånger per filter-tillämpning
-3. **Slab-scan:** Rad 1067-1116 gör ytterligare en full traversal av alla metaObjects
-4. **Debounce hjälper inte:** 300ms debounce (rad 810) men `useEffect` vid rad 1248 triggas av 15+ dependencies inklusive `spaces`, `levelColors`, `spaceColors`, `categoryColors` — färgpaletterna ändras vid varje ny spaces-beräkning → cascade av re-renders
-5. **`buildEntityMap` körs upprepade gånger:** `useCallback` vid rad 464 har `levels` och `sharedModels` som dependencies, och `buildEntityMap` anropas i ett `setInterval` vid rad 698
+```text
+Building Storey:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
+  category:          "Building Storey"
+  created_in_model:  true
 
-### Problem 4: Rummet visas inte isolerat i 3D
-**Orsak:** `handleSpaceClick` (rad 1311-1327) selekterar entiteter men gör INTE visibility-filtrering. Den ändrar bara `selected`-state. Det som faktiskt filtrerar 3D-scenen är `applyFilterVisibility` som körs via `checkedSpaces` — men "x-ray context" logiken (rad 1144-1205) kräver att entity-mappen matchar rummet, vilket ofta misslyckas.
+Space:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
+  category:          "Space"
+  level_fm_guid:     parent storey fm_guid
 
-## Fixplan
+Instance:
+  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
+  category:          "Instance"
+  asset_type:        ifcType (e.g. "IfcDoor")
+  level_fm_guid:     resolved storey
+  in_room_fm_guid:   resolved space
+```
 
-### Steg 1: Separera data-byggande från rendering
-- Flytta `buildEntityMap` till en `useEffect` som körs EN GÅNG när viewer är redo, och lagra resultatet i en stabil ref
-- Låt `spaces` och `categories` memon läsa från entity-map-refen istället för att köra egna traversals
-- Eliminera beroende på `spaces` i `buildEntityMap` (cirkulärt: spaces ↔ entityMap)
+### Diff-flöde
 
-### Steg 2: Eliminera full-scene-reset
-- Istället för "reset alla → sätt tillbaka" — håll en `previousVisibleIds`-ref och bara delta-uppdatera (göm det som lagts till, visa det som tagits bort)
-- Alternativt: använd `scene.setObjectsVisible(idsToHide, false)` och `scene.setObjectsVisible(idsToShow, true)` bara för ändrade ID:n
+Vid omimport jämförs importerade fm_guids mot befintliga i DB:
+- **Nytt** → INSERT
+- **Matchat** → UPDATE (namn, typ, rumsplacering)
+- **Borttaget** → `modification_status = 'removed'` (soft-delete)
 
-### Steg 3: Fixa cascading filter-logiken  
-**Principen: Source → Level → Space → Category som en tratt:**
-1. **Sources** filtrerar vilka `levels` som visas i UI (graya ut / dölj levels som inte tillhör vald source)
-2. **Levels** filtrerar vilka `spaces` som visas (matcha via Asset+ `level_fm_guid` + xeokit-fallback)
-3. **Spaces** filtrerar vilka `categories` som visas (räkna bara IFC-typer inom valda rum/våningar)
-4. Varje steg i tratten minskar scope för nästa
+---
 
-### Steg 4: Fixa GUID-matchning
-- Normalisera ALLA GUID:s till lowercase utan bindestreck vid matchning
-- Bygg en `normalizedLevelGuidMap` en gång som mappar alla varianter → kanoniskt level-fmGuid
-- Inkludera ALLA `databaseLevelFmGuids` från `sharedFloors` i matchningen
+## Previous Plans
 
-### Steg 5: Rum-isolering i 3D vid checkbox
-- När `checkedSpaces` ändras: visa rummet som solid, x-raya kontext (walls/doors på samma våning), dölj allt annat
-- Flytta kameran automatiskt till rummet (`cameraFlight.flyTo({ aabb })`)
+### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
+- Browser-primary for >20MB, edge function for ≤20MB
+- MetaModel JSON uploaded alongside XKT
+- Systems extracted and persisted
 
-### Steg 6: Performance-optimeringar
-- Cachelagra `metaObjects`-traversal i en `typeIndex: Map<string, string[]>` (IFC-typ → entity-IDs) — byggs en gång
-- Reducera `applyFilterVisibility` dependencies till bara de states som faktiskt ändrats (break ut färg-applicering till separat effect)
-- Flytta färgpaletten ur useMemo-beroendena — färgändringar ska INTE trigga full visibility-reset
+### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
+- Standalone Node.js worker polls conversion-worker-api
+- Per-storey .xkt tiles with dynamic floor loading
 
-## Filer att ändra
-
-| Fil | Ändring |
-|---|---|
-| `src/components/viewer/ViewerFilterPanel.tsx` | Full refactor av filter-logik, entityMap-byggande, och performance |
-
-Estimat: Stor ändring, ~800 rader berörs i en fil. Ingen databasändring behövs.
-
+### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
+- 10 credential override columns on building_settings
+- Shared credential resolver in edge functions
+- Properties page as configuration hub
