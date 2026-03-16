@@ -257,6 +257,31 @@ const UnifiedViewerContent: React.FC<{
   const [transform, setTransform] = useState<IvionBimTransform>(IDENTITY_TRANSFORM);
   const [insightsPanelOpen, setInsightsPanelOpen] = useState(!!insightsModeParam);
 
+  // ─── Indoor navigation state ──────────────────────────────────────
+  const [navPanelOpen, setNavPanelOpen] = useState(false);
+  const [navEditMode, setNavEditMode] = useState(false);
+  const [navGraph, setNavGraph] = useState<NavGraph>({ nodes: new Map(), edges: [] });
+  const [navRoute, setNavRoute] = useState<RouteResult | null>(null);
+  const [planRoomLabels, setPlanRoomLabels] = useState<Array<{ id: string; name: string; x: number; y: number }>>([]);
+  const [navFloorFmGuid, setNavFloorFmGuid] = useState<string | null>(null);
+
+  // Listen for toolbar toggle event
+  useEffect(() => {
+    const handler = () => setNavPanelOpen(p => !p);
+    window.addEventListener('TOGGLE_NAVIGATION_PANEL', handler);
+    return () => window.removeEventListener('TOGGLE_NAVIGATION_PANEL', handler);
+  }, []);
+
+  // Track current floor fm_guid from floor selection events
+  useEffect(() => {
+    const handler = (e: CustomEvent) => {
+      const guids = (e.detail as any)?.visibleFloorFmGuids;
+      if (guids?.length) setNavFloorFmGuid(guids[0]);
+    };
+    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+  }, []);
+
   useEffect(() => {
     if (buildingData?.transform) {
       setTransform(buildingData.transform);
