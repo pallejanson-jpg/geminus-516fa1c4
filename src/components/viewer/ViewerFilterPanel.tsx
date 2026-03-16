@@ -331,6 +331,44 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     setSpaceColors(colors);
   }, [spaces]);
 
+  // ── Sync checkedLevels from external floor switcher ──────────────────
+  useEffect(() => {
+    const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
+      // Only respond to events from the floor switcher (not from this panel)
+      if ((e.detail as any).fromFilterPanel) return;
+
+      if (e.detail.isAllFloorsVisible || e.detail.floorId === null) {
+        // All floors visible → clear level filter
+        setCheckedLevels(new Set());
+      } else if (e.detail.visibleFloorFmGuids?.length > 0) {
+        // Map the visible floor fmGuids to matching level fmGuids
+        const matchingLevelGuids = new Set<string>();
+        const normalizedVisibleGuids = e.detail.visibleFloorFmGuids.map((g: string) => normalizeGuid(g));
+        levels.forEach(level => {
+          const normalizedLevelGuid = normalizeGuid(level.fmGuid);
+          if (normalizedVisibleGuids.some((vg: string) => vg === normalizedLevelGuid)) {
+            matchingLevelGuids.add(level.fmGuid);
+          }
+        });
+        // Also check sharedFloors databaseLevelFmGuids
+        if (matchingLevelGuids.size === 0) {
+          sharedFloors.forEach(floor => {
+            const floorNormGuids = floor.databaseLevelFmGuids.map(g => normalizeGuid(g));
+            if (normalizedVisibleGuids.some((vg: string) => floorNormGuids.includes(vg))) {
+              const levelFmGuid = floor.databaseLevelFmGuids[0] || floor.id;
+              matchingLevelGuids.add(levelFmGuid);
+            }
+          });
+        }
+        if (matchingLevelGuids.size > 0) {
+          setCheckedLevels(matchingLevelGuids);
+        }
+      }
+    };
+    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+  }, [levels, sharedFloors]);
+
   // (Category colors useEffect moved below categories declaration)
 
   // ── XEOKit accessor ─────────────────────────────────────────────────────
