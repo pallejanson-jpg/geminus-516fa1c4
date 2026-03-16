@@ -1256,9 +1256,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               <AnnotationCategoryList viewerRef={viewerRef} buildingFmGuid={buildingFmGuid} />
             </SidePopPanel>
 
-            {buildingFmGuid && (
-              <InventoryPanel buildingFmGuid={buildingFmGuid} buildingName={buildingName} open={showAssetPanel} onClose={() => setShowAssetPanel(false)} />
-            )}
+
 
             <FloatingIssueListPanel isOpen={showIssueList} onClose={() => setShowIssueList(false)} buildingFmGuid={buildingFmGuid} onSelectIssue={handleSelectIssue} onCreateIssue={captureIssueState} parentPosition={position} parentWidth={panelWidth} />
 
