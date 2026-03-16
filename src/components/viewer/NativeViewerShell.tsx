@@ -518,7 +518,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       const byEntityId = allData.find(
         (a: any) => a.fmGuid?.toLowerCase() === contextMenu.entityId?.toLowerCase()
       );
-      if (byEntityId) resolvedFmGuid = byEntityId.fm_guid;
+      if (byEntityId) resolvedFmGuid = byEntityId.fmGuid;
     }
 
     setPropertiesEntity({
