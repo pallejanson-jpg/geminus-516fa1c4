@@ -1417,6 +1417,8 @@ function detectSimpleIntent(messages: any[]): string | null {
   if (/^(tack|thanks|thank\s*you|tackar)[\s!.]*$/i.test(text)) return "thanks";
   // Help/what can you do
   if (/^(hjälp|help|vad kan du|what can you do)[\s?!.]*$/i.test(text)) return "help";
+  // FM Access capability question
+  if (/fm\s*access/i.test(text) && /kan\s+du|can\s+you|klarar|stöd|support|frågor\s+om|questions?\s+about/i.test(text)) return "help_fm_access";
   // Language change
   if (/^(byt\s*(till\s*)?(svenska|engelska|english|swedish)|switch\s*(to\s*)?(swedish|english|svenska|engelska))[\s?!.]*$/i.test(text)) return "lang_change";
 
@@ -1439,6 +1441,10 @@ function getSimpleIntentResponse(intent: string, text: string, speechLang: strin
       return isSv
         ? "Jag kan hjälpa dig med:\n\n• **Byggnadsdata** — våningar, rum, ytor, utrustning\n• **Felanmälningar** — skapa, söka, följa upp\n• **Ritningar & dokument** — hitta och visa\n• **3D-navigering** — öppna viewer, visa våningar/modeller\n• **IoT-sensordata** — temperatur, CO2, energi\n• **Plattformshjälp** — hur funktioner fungerar\n\nVad vill du veta mer om?"
         : "I can help you with:\n\n• **Building data** — floors, rooms, areas, equipment\n• **Fault reports** — create, search, follow up\n• **Drawings & documents** — find and display\n• **3D navigation** — open viewer, show floors/models\n• **IoT sensor data** — temperature, CO2, energy\n• **Platform help** — how features work\n\nWhat would you like to know?";
+    case "help_fm_access":
+      return isSv
+        ? "Ja, absolut! Jag kan hjälpa dig med FM Access-data:\n\n• **Ritningar** — söka och visa planritningar per våning\n• **Dokument** — hitta teknisk dokumentation kopplad till objekt\n• **DoU-instruktioner** — drift- och underhållsinstruktioner\n• **Objektsökning** — söka efter specifika objekt i FM Access\n• **Våningsplaner** — lista våningar och hierarki\n\nJag hämtar data direkt från FM Access (Tessel HDC) i realtid. Vad vill du veta?"
+        : "Yes, absolutely! I can help you with FM Access data:\n\n• **Drawings** — search and display floor plans per level\n• **Documents** — find technical documentation linked to objects\n• **O&M instructions** — operation and maintenance instructions\n• **Object search** — search for specific objects in FM Access\n• **Floor plans** — list floors and hierarchy\n\nI fetch data directly from FM Access (Tessel HDC) in real-time. What would you like to know?";
     case "lang_change": {
       const wantsEn = /english|engelska/i.test(text);
       return wantsEn
@@ -1539,6 +1545,16 @@ CORE RULES:
 10. For greetings, respond naturally without action tokens. Keep it short.
 11. NEVER output raw action tokens like [action:type:param]. ALL action links MUST use markdown link syntax: [Visible Label](action:type:param). Any action token without a visible label and markdown link syntax is FORBIDDEN.
 
+CRITICAL — FM ACCESS QUERIES (HIGHEST PRIORITY ROUTING):
+When user asks about "FM Access", "ritningar", "dokument i FM Access", "DoU", "teknisk dokumentation", or references FM Access data:
+→ NEVER use get_building_summary, query_assets, or aggregate_assets — those query LOCAL Geminus data, NOT FM Access.
+→ If the user asks WHETHER you can answer FM Access questions (e.g. "kan du svara på frågor om fm access?"), answer YES and explain your FM Access capabilities (drawings, documents, DoU, object search, floor hierarchy) — do NOT run any data queries.
+→ First call query_building_settings to get fm_access_building_guid for the current building.
+→ Then use fm_access_get_drawings, fm_access_get_documents, fm_access_get_hierarchy, fm_access_get_floors, or fm_access_search_objects for LIVE FM Access data.
+→ Use search_fm_access_local only for fast cached searches of previously synced FM Access data.
+→ If fm_access_building_guid is null/missing, tell user: "Den här byggnaden har ingen FM Access-koppling konfigurerad."
+→ All other building data (assets, work orders, issues, sensors) comes from Geminus backend — use normal tools for those.
+
 CRITICAL — BUILDING DISCOVERY & NAME RESOLUTION:
 When the user asks "vilka byggnader har du/jag", "which buildings", "lista byggnader", "what buildings do I have", or ANY question about listing/discovering ALL buildings:
 → ALWAYS use the list_buildings tool. Do NOT use query_assets or resolve_building_by_name for this.
@@ -1586,15 +1602,6 @@ SPEECH/LANGUAGE: When user asks to change language, offer changeLang action. Whe
 VIEWER CONTROL: Use viewer_show_floor, viewer_show_model, viewer_open_3d, viewer_show_drawing tools. Include their action_link in your response. Model naming: A=Arkitekt, K=Konstruktion, V=VVS, E=El, S=Sprinkler.
 
 WORK ORDERS: Always ask for confirmation before creating. Use create_work_order tool after user confirms.
-
-CRITICAL — FM ACCESS QUERIES:
-When user asks about "FM Access", "ritningar", "dokument i FM Access", "DoU", "teknisk dokumentation", or references FM Access data:
-→ NEVER use get_building_summary, query_assets, or aggregate_assets — those query LOCAL Geminus data, NOT FM Access.
-→ First call query_building_settings to get fm_access_building_guid for the current building.
-→ Then use fm_access_get_drawings, fm_access_get_documents, fm_access_get_hierarchy, fm_access_get_floors, or fm_access_search_objects for LIVE FM Access data.
-→ Use search_fm_access_local only for fast cached searches of previously synced FM Access data.
-→ If fm_access_building_guid is null/missing, tell user: "Den här byggnaden har ingen FM Access-koppling konfigurerad."
-→ All other building data (assets, work orders, issues, sensors) comes from Geminus backend — use normal tools for those.
 
 DOCUMENT Q&A: Use ask_about_documents for content questions. Use query_documents for listing.
 
