@@ -572,6 +572,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     }
   }, []);
 
+  // Track whether we dispatched the event to avoid re-entrant handling
+  const selfDispatchRef = useRef(false);
+
   const handleToolChange = useCallback((tool: ViewerTool) => {
     const newTool = tool === activeTool ? null : tool;
 
@@ -584,9 +587,33 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     if (newTool === 'slicer') activateSection();
 
     setActiveTool(newTool);
+    selfDispatchRef.current = true;
     window.dispatchEvent(new CustomEvent<ViewerToolChangedDetail>(VIEWER_TOOL_CHANGED_EVENT, {
       detail: { tool: newTool },
     }));
+    selfDispatchRef.current = false;
+  }, [activeTool, activateMeasure, deactivateMeasure, activateSection, deactivateSection]);
+
+  // Listen for external tool changes (e.g. from MobileViewerPage / navigation menu)
+  useEffect(() => {
+    const handler = (e: CustomEvent<ViewerToolChangedDetail>) => {
+      // Skip events we dispatched ourselves
+      if (selfDispatchRef.current) return;
+
+      const tool = e.detail.tool as ViewerTool;
+
+      // Deactivate previous
+      if (activeTool === 'measure') deactivateMeasure();
+      if (activeTool === 'slicer') deactivateSection();
+
+      // Activate new
+      if (tool === 'measure') activateMeasure();
+      if (tool === 'slicer') activateSection();
+
+      setActiveTool(tool);
+    };
+    window.addEventListener(VIEWER_TOOL_CHANGED_EVENT, handler as EventListener);
+    return () => window.removeEventListener(VIEWER_TOOL_CHANGED_EVENT, handler as EventListener);
   }, [activeTool, activateMeasure, deactivateMeasure, activateSection, deactivateSection]);
 
   const handleClearSlices = useCallback(() => {
