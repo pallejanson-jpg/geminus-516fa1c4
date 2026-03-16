@@ -151,6 +151,39 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
     if (mode === '2d') {
       window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } }));
       window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '2d' } }));
+      // Ensure wall clipping activates: if a floor is solo'd, re-dispatch its bounds
+      // If no floor solo'd but floors exist, solo the first floor for proper 2D clipping
+      const viewer = getViewer();
+      if (viewer?.scene) {
+        const targetFloor = soloFloorId
+          ? floors.find(f => f.id === soloFloorId)
+          : floors.length > 0 ? floors[0] : null;
+        if (targetFloor) {
+          if (!soloFloorId) {
+            setSoloFloorId(targetFloor.id);
+            viewer.scene.setObjectsVisible(viewer.scene.objectIds, false);
+            targetFloor.metaObjectIds.forEach(moId => {
+              const descendants = getDescendantIds(viewer, moId);
+              viewer.scene.setObjectsVisible(descendants, true);
+            });
+          }
+          const bounds = calculateFloorBounds(viewer, targetFloor.id);
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+              detail: {
+                floorId: targetFloor.id,
+                floorName: targetFloor.name,
+                bounds,
+                visibleMetaFloorIds: targetFloor.metaObjectIds,
+                visibleFloorFmGuids: targetFloor.databaseLevelFmGuids,
+                isAllFloorsVisible: false,
+                isSoloFloor: true,
+                soloFloorName: targetFloor.name,
+              } as FloorSelectionEventDetail,
+            }));
+          }, 100);
+        }
+      }
     } else if (mode === '3d') {
       window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: false } }));
       window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
@@ -158,7 +191,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
       window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: false } }));
       window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
     }
-  }, [setViewMode]);
+  }, [setViewMode, soloFloorId, floors]);
 
   /* ── Real xeokit tool handlers ── */
   const handleToolClick = useCallback((toolId: string) => {
