@@ -778,6 +778,64 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
 
     viewer.cameraFlight?.cancel?.();
 
+    // --- Entity picking: identify clicked entity ---
+    let pickedEntityId: string | null = null;
+    let pickedFmGuid: string | null = null;
+    let pickedEntityName: string | null = null;
+
+    if (!usedFallbackRef.current && plugin) {
+      try {
+        const pickResult = plugin.pickStoreyMap(map, [imgX, imgY]);
+        if (pickResult?.entity) {
+          const entityId = pickResult.entity.id;
+          const metaObj = viewer.metaScene?.metaObjects?.[entityId];
+          const ifcType = (metaObj?.type || '').toLowerCase();
+
+          // Filter out large area objects that cover the entire floor
+          const largeAreaTypes = new Set(['ifcsite', 'ifcbuilding', 'ifcproject']);
+          let isLargeArea = largeAreaTypes.has(ifcType);
+
+          // Also check if the entity's AABB covers >80% of the floor AABB
+          if (!isLargeArea && pickResult.entity.aabb) {
+            const storey = plugin.storeys?.[map.storeyId];
+            const floorAABB = storey
+              ? (plugin._fitStoreyMaps ? storey.storeyAABB : storey.modelAABB)
+              : viewer.scene?.aabb;
+            if (floorAABB) {
+              const floorArea = (floorAABB[3] - floorAABB[0]) * (floorAABB[5] - floorAABB[2]);
+              const entityAABB = pickResult.entity.aabb;
+              const entityArea = (entityAABB[3] - entityAABB[0]) * (entityAABB[5] - entityAABB[2]);
+              if (floorArea > 0 && entityArea / floorArea > 0.8) {
+                isLargeArea = true;
+              }
+            }
+          }
+
+          if (!isLargeArea) {
+            pickedEntityId = entityId;
+            pickedFmGuid = metaObj?.originalSystemId || null;
+            pickedEntityName = metaObj?.name || metaObj?.type || null;
+
+            // Select the entity in xeokit
+            const selected = viewer.scene.selectedObjectIds || [];
+            if (selected.length > 0) viewer.scene.setObjectsSelected(selected, false);
+            pickResult.entity.selected = true;
+
+            // Dispatch selection event
+            window.dispatchEvent(new CustomEvent('VIEWER_SELECT_ENTITY', {
+              detail: { entityId: pickedEntityId, fmGuid: pickedFmGuid, entityName: pickedEntityName },
+            }));
+
+            // Notify parent
+            onEntityClick?.(pickedEntityId, pickedFmGuid, pickedEntityName);
+          }
+        }
+      } catch {
+        // ignore pick errors
+      }
+    }
+
+    // --- Camera navigation ---
     let worldPos: [number, number, number] | null = null;
 
     if (!usedFallbackRef.current && plugin) {
@@ -813,6 +871,14 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
 
     if (!worldPos || !viewer.cameraFlight) return;
 
+    if (isSplitMode) {
+      // In split 2D/3D mode, dispatch event for 3D camera to follow
+      window.dispatchEvent(new CustomEvent('SPLIT_PLAN_NAVIGATE', {
+        detail: { worldPos },
+      }));
+      return;
+    }
+
     // Dalux-style first-person camera: 1.5m above floor, looking straight ahead
     const eye = viewer.camera.eye;
     const look = viewer.camera.look;
@@ -842,7 +908,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       up: [0, 1, 0],
       duration: 0.4,
     });
-  }, [getXeokitViewer]);
+  }, [getXeokitViewer, isSplitMode, onEntityClick]);
 
   // Mouse move for hover
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
