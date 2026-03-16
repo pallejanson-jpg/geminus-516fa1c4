@@ -148,7 +148,6 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   
   // Independent issue list state - stays open even when main menu closes
   const [showIssueList, setShowIssueList] = useState(false);
-  const [showAssetPanel, setShowAssetPanel] = useState(false);
   
   // Active side-pop submenu state
   const [activeSubMenu, setActiveSubMenu] = useState<'models' | 'floors' | 'annotations' | null>(null);
