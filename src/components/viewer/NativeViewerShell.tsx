@@ -605,13 +605,16 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         />
       )}
 
-      {/* Floor switcher */}
+      {/* Floor switcher — positioned below the filter icon */}
       {isViewerReady && !hideFloorSwitcher && (
         <FloatingFloorSwitcher
           viewerRef={viewerShimRef}
           buildingFmGuid={buildingFmGuid}
           isViewerReady={isViewerReady}
-          className={!isMobile ? sidebarOffset : undefined}
+          className={!isMobile
+            ? `${hideBackButton ? 'top-12' : 'top-14'} ${sidebarOffset}`
+            : 'bottom-[3.5rem] left-1/2 -translate-x-1/2'
+          }
         />
       )}
 
