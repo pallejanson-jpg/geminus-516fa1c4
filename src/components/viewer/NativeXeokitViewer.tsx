@@ -907,9 +907,38 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           scene.setObjectsXRayed(allIds, false);
         }
 
+        // Capture native model colors BEFORE applying architect palette
+        // so "Model Native Colour" theme can restore them correctly
+        const nativeColors = new Map<string, { color: number[]; opacity: number; edges: boolean }>();
+        if (scene.objects) {
+          for (const objId of allIds) {
+            const entity = scene.objects[objId];
+            if (entity) {
+              nativeColors.set(objId, {
+                color: entity.colorize ? [...entity.colorize] : [1, 1, 1],
+                opacity: entity.opacity ?? 1,
+                edges: entity.edges ?? true,
+              });
+            }
+          }
+        }
+        (window as any).__xeokitNativeColors = nativeColors;
+
         // Use shared architect color utility
         const { colorized, hiddenSpaces } = applyArchitectColors(viewer);
         console.log(`[NativeViewer] Colorized ${colorized} objects, hidden ${hiddenSpaces} IfcSpace objects`);
+
+        // Immediately apply saved theme to avoid visible flash of architect colors
+        try {
+          const savedThemeId = localStorage.getItem('viewer-active-theme-id');
+          if (savedThemeId) {
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('VIEWER_THEME_REQUESTED', {
+                detail: { themeId: savedThemeId }
+              }));
+            }, 50);
+          }
+        } catch {}
       }
 
       const totalTime = Math.round(performance.now() - t0);
