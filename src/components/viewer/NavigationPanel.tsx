@@ -54,15 +54,20 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Get rooms (IfcSpace) from allData
-  const rooms = useMemo(() => {
-    return (allData || [])
-      .filter((a: any) => {
-        const cat = (a.category || '').toLowerCase();
-        return cat === 'space' && a.building_fm_guid === buildingFmGuid;
-      })
-      .sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
-  }, [allData, buildingFmGuid]);
+  // Fetch rooms (Space category) from database
+  const [rooms, setRooms] = useState<any[]>([]);
+  useEffect(() => {
+    const fetchRooms = async () => {
+      const { data } = await supabase
+        .from('assets')
+        .select('fm_guid, name, common_name, level_fm_guid')
+        .eq('building_fm_guid', buildingFmGuid)
+        .eq('category', 'Space')
+        .order('name');
+      setRooms(data || []);
+    };
+    fetchRooms();
+  }, [buildingFmGuid]);
 
   // Load graph from database on mount
   useEffect(() => {
