@@ -146,6 +146,25 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
   }, [updateFloorFilter]);
 
+  // ── Section plane clipping hook ──────────────────────────────────────────
+  const { applyCeilingClipping, removeSectionPlane } = useSectionPlaneClipping(viewerShimRef);
+
+  // Wire floor selection → section plane clipping (3D ceiling clip)
+  useEffect(() => {
+    const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
+      const { visibleMetaFloorIds, isAllFloorsVisible, skipClipping, isSoloFloor } = e.detail;
+      if (skipClipping) return;
+
+      if (isAllFloorsVisible || !visibleMetaFloorIds?.length) {
+        removeSectionPlane();
+      } else if (visibleMetaFloorIds.length === 1 && isSoloFloor) {
+        applyCeilingClipping(visibleMetaFloorIds[0]);
+      }
+    };
+    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+  }, [applyCeilingClipping, removeSectionPlane]);
+
   const buildingName = React.useMemo(() => {
     if (!allData || !buildingFmGuid) return '';
     const b = allData.find((a: any) =>
