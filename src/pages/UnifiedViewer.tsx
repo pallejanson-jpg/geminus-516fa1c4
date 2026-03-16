@@ -115,6 +115,35 @@ const UnifiedViewerContent: React.FC<{
     return () => clearTimeout(timer);
   }, [viewMode]);
 
+  // ─── Split 2D/3D: listen for SPLIT_PLAN_NAVIGATE to fly 3D camera ──
+  useEffect(() => {
+    if (viewMode !== 'split2d3d') return;
+
+    const handler = (e: Event) => {
+      const { worldPos } = (e as CustomEvent).detail || {};
+      if (!worldPos || worldPos.length < 3) return;
+
+      const viewer = (window as any).__nativeXeokitViewer;
+      if (!viewer?.cameraFlight) return;
+
+      const eye = viewer.camera.eye;
+      const look = viewer.camera.look;
+      const offsetX = eye[0] - look[0];
+      const offsetY = eye[1] - look[1];
+      const offsetZ = eye[2] - look[2];
+
+      viewer.cameraFlight.flyTo({
+        eye: [worldPos[0] + offsetX, worldPos[1] + offsetY, worldPos[2] + offsetZ],
+        look: [worldPos[0], worldPos[1], worldPos[2]],
+        up: [0, 1, 0],
+        duration: 0.5,
+      });
+    };
+
+    window.addEventListener('SPLIT_PLAN_NAVIGATE', handler);
+    return () => window.removeEventListener('SPLIT_PLAN_NAVIGATE', handler);
+  }, [viewMode]);
+
   // ─── FM Access availability ────────────────────────────────────────
   const [hasFmAccess, setHasFmAccess] = useState(!!floorFmGuid);
   useEffect(() => {
