@@ -2,13 +2,12 @@ import React, { useState, useEffect, useCallback, memo, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useFloorData, FloorInfo } from '@/hooks/useFloorData';
 import { useFloorVisibility } from '@/hooks/useFloorVisibility';
+import { Layers } from 'lucide-react';
 
 // Re-export for backward compat
 export type FloorPillInfo = FloorInfo;
@@ -23,9 +22,6 @@ interface FloatingFloorSwitcherProps {
 
 export const FLOOR_PILLS_TOGGLE_EVENT = 'FLOOR_PILLS_TOGGLE';
 
-const MAX_VISIBLE_PILLS_DESKTOP = 12;
-const MAX_VISIBLE_PILLS_MOBILE = 3;
-
 const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
   viewerRef,
   buildingFmGuid,
@@ -39,7 +35,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
 
   const [visibleFloorIds, setVisibleFloorIds] = useState<Set<string>>(new Set());
   const [isInitialized, setIsInitialized] = useState(false);
-  const [overflowOpen, setOverflowOpen] = useState(false);
+  const [popoverOpen, setPopoverOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
   const isReceivingExternalEvent = useRef(false);
 
@@ -101,8 +97,6 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
         if (match) setVisibleFloorIds(new Set([match.id]));
       }
 
-      // If event came from filter panel, don't re-apply floor visibility
-      // (filter panel already handles its own visibility logic)
       if (fromFilterPanel) {
         setTimeout(() => { isReceivingExternalEvent.current = false; }, 100);
         return;
@@ -142,131 +136,104 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
     }));
   }, [floors, applyFloorVisibility, calculateFloorBounds, buildingFmGuid]);
 
-  // Pill click handler
-  const handlePillClick = useCallback((floorId: string, event: React.MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const isMultiSelect = event.ctrlKey || event.metaKey;
+  // Floor select handler
+  const handleFloorSelect = useCallback((floorId: string) => {
     let newVisibleIds: Set<string>;
 
-    if (isMultiSelect) {
-      newVisibleIds = new Set(visibleFloorIds);
-      if (newVisibleIds.has(floorId)) { if (newVisibleIds.size > 1) newVisibleIds.delete(floorId); }
-      else newVisibleIds.add(floorId);
+    if (visibleFloorIds.size === 1 && visibleFloorIds.has(floorId)) {
+      // Clicking already-solo floor → show all
+      newVisibleIds = new Set(floors.map(f => f.id));
     } else {
-      if (visibleFloorIds.size === 1 && visibleFloorIds.has(floorId)) {
-        newVisibleIds = new Set(floors.map(f => f.id));
-      } else {
-        newVisibleIds = new Set([floorId]);
-      }
+      newVisibleIds = new Set([floorId]);
     }
 
     setVisibleFloorIds(newVisibleIds);
     applyAndDispatch(newVisibleIds);
+    setPopoverOpen(false);
   }, [visibleFloorIds, floors, applyAndDispatch]);
 
-  const handlePillDoubleClick = useCallback(() => {
+  const handleShowAll = useCallback(() => {
     const allIds = new Set(floors.map(f => f.id));
     setVisibleFloorIds(allIds);
     applyAndDispatch(allIds);
+    setPopoverOpen(false);
   }, [floors, applyAndDispatch]);
 
-  const getPillState = useCallback((floorId: string): 'active' | 'partial' | 'inactive' => {
-    const isVis = visibleFloorIds.has(floorId);
-    const isSolo = visibleFloorIds.size === 1;
-    const isAllVisible = visibleFloorIds.size === floors.length;
-    if (isSolo && isVis) return 'active';
-    if (isVis && !isAllVisible) return 'partial';
-    return 'inactive';
-  }, [visibleFloorIds, floors.length]);
-
-  const maxVisible = isMobile ? MAX_VISIBLE_PILLS_MOBILE : MAX_VISIBLE_PILLS_DESKTOP;
-  const visiblePills = floors.slice(0, maxVisible);
-  const overflowPills = floors.slice(maxVisible);
-  const hasOverflow = overflowPills.length > 0;
+  // Current floor label for the icon
+  const currentFloorLabel = (() => {
+    if (visibleFloorIds.size === floors.length || visibleFloorIds.size === 0) return null;
+    if (visibleFloorIds.size === 1) {
+      const id = Array.from(visibleFloorIds)[0];
+      return floors.find(f => f.id === id)?.shortName || null;
+    }
+    return `${visibleFloorIds.size}`;
+  })();
 
   if (floors.length === 0 || !isViewerReady || !isVisible) return null;
 
   return (
     <div className={cn(
-      'fixed z-20 items-center gap-1 w-auto',
-      'pointer-events-auto',
-      'bottom-14 left-1/2 -translate-x-1/2 flex flex-row bg-black/50 backdrop-blur-md rounded-full px-1 py-0.5 border border-white/10',
+      'fixed z-20 pointer-events-auto',
+      'bottom-14 left-1/2 -translate-x-1/2',
       isMobile && 'bottom-[3.5rem]',
       className
     )}>
-      {visiblePills.map((floor) => {
-        const state = getPillState(floor.id);
-        return (
-          <Tooltip key={floor.id}>
-            <TooltipTrigger asChild>
-              <Button
-                type="button" variant="ghost" size="sm"
-                onClick={(e) => handlePillClick(floor.id, e)}
-                onDoubleClick={handlePillDoubleClick}
-                className={cn(
-                  'h-6 px-1.5 text-[9px] font-medium rounded-full',
-                  'transition-all duration-150 w-auto shadow-sm',
-                  state === 'active' && 'bg-primary text-primary-foreground shadow-md hover:bg-primary/90',
-                  state === 'partial' && 'bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30',
-                  state === 'inactive' && 'text-white/70 hover:text-white hover:bg-white/10',
-                )}
-              >
-                <span className="text-[9px] sm:text-xs truncate">{floor.name}</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="left">
-              <p>{floor.name}</p>
-              <p className="text-xs text-muted-foreground">{state === 'active' ? 'Solo' : state === 'partial' ? 'Part of selection' : 'Not isolated'}</p>
-            </TooltipContent>
-          </Tooltip>
-        );
-      })}
-
-      {hasOverflow && (
-        <Popover open={overflowOpen} onOpenChange={setOverflowOpen}>
-          <PopoverTrigger asChild>
-            <Button type="button" variant="ghost" size="sm" className="h-6 px-1.5 text-[9px] font-medium rounded-full text-white/70 hover:text-white hover:bg-white/10 flex items-center justify-center">
-              <span className="text-[10px]">+{overflowPills.length}</span>
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-56 p-2 max-h-[50dvh] overflow-y-auto" align="center" side="top" sideOffset={8}>
-            <div className="space-y-1 max-h-48 overflow-y-auto">
-              {overflowPills.map((floor) => {
-                const isFloorVisible = visibleFloorIds.has(floor.id);
-                return (
-                  <div key={floor.id} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-accent/50">
-                    <Label htmlFor={`floor-overflow-${floor.id}`} className="text-sm cursor-pointer flex-1 truncate">{floor.name}</Label>
-                    <Switch
-                      id={`floor-overflow-${floor.id}`}
-                      checked={isFloorVisible}
-                      onCheckedChange={(checked) => {
-                        const newSet = new Set(visibleFloorIds);
-                        if (checked) newSet.add(floor.id);
-                        else if (newSet.size > 1) newSet.delete(floor.id);
-                        setVisibleFloorIds(newSet);
-                        applyAndDispatch(newSet);
-                      }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          </PopoverContent>
-        </Popover>
-      )}
-
-      <Button
-        type="button" variant="ghost" size="sm"
-        onClick={handlePillDoubleClick}
-        title="Show all floors"
-        className={cn(
-          'h-6 px-1.5 text-[9px] font-medium rounded-full',
-          visibleFloorIds.size === floors.length ? 'bg-primary/30 text-primary' : 'text-white/70 hover:text-white hover:bg-white/10',
-        )}
-      >
-        All
-      </Button>
+      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={cn(
+              'h-8 rounded-full px-3 gap-1.5',
+              'bg-black/50 backdrop-blur-md border border-white/10',
+              'text-white/80 hover:text-white hover:bg-black/60',
+              'shadow-lg transition-all duration-150',
+            )}
+          >
+            <Layers className="h-3.5 w-3.5" />
+            {currentFloorLabel && (
+              <span className="text-xs font-medium">{currentFloorLabel}</span>
+            )}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent
+          className="w-48 p-1.5 max-h-[50dvh] overflow-y-auto"
+          align="center"
+          side="top"
+          sideOffset={8}
+        >
+          <div className="space-y-0.5">
+            {floors.map((floor) => {
+              const isActive = visibleFloorIds.size === 1 && visibleFloorIds.has(floor.id);
+              return (
+                <button
+                  key={floor.id}
+                  onClick={() => handleFloorSelect(floor.id)}
+                  className={cn(
+                    'w-full text-left px-2.5 py-1.5 rounded-md text-sm transition-colors',
+                    'hover:bg-accent/50 cursor-pointer',
+                    isActive && 'bg-primary/15 text-primary font-medium',
+                  )}
+                >
+                  {floor.name}
+                </button>
+              );
+            })}
+            <div className="border-t border-border my-1" />
+            <button
+              onClick={handleShowAll}
+              className={cn(
+                'w-full text-left px-2.5 py-1.5 rounded-md text-sm transition-colors',
+                'hover:bg-accent/50 cursor-pointer',
+                visibleFloorIds.size === floors.length && 'bg-primary/15 text-primary font-medium',
+              )}
+            >
+              Alla våningar
+            </button>
+          </div>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 });

@@ -771,8 +771,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
             saveOrig(entity, mo.id);
             entity.visible = true; entity.pickable = true; entity.opacity = 0.15; entity.colorize = [0.7, 0.85, 0.95]; entity.edges = true;
             // Lower spaces so furniture/equipment wins pick priority in top-down 2D
-            const origOffset = entity.offset ? [...entity.offset] : [0, 0, 0];
-            entity.offset = [origOffset[0], origOffset[1] - 0.3, origOffset[2]];
+            try {
+              const origOffset = entity.offset ? [...entity.offset] : [0, 0, 0];
+              entity.offset = [origOffset[0], origOffset[1] - 0.3, origOffset[2]];
+            } catch (e) { /* DTX _textureData null — safe to ignore */ }
             visibleCount++;
           } else if (WALL_TYPES.has(typeLower)) {
             saveOrig(entity, mo.id);
