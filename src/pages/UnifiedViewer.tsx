@@ -912,7 +912,6 @@ const UnifiedViewerContent: React.FC<{
         <div className="absolute top-12 right-2 z-50 w-64 max-h-[80vh] bg-card border border-border rounded-lg shadow-xl overflow-hidden">
           <NavigationPanel
             buildingFmGuid={buildingData.fmGuid}
-            allData={(window as any).__cachedAllData || []}
             onRouteCalculated={setNavRoute}
             onGraphLoaded={setNavGraph}
             onEditModeChange={setNavEditMode}
