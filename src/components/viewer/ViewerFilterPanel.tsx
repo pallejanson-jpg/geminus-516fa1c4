@@ -1217,7 +1217,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
     console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', scene.objectIds.length);
     }); // end requestAnimationFrame
-    }, 150); // debounce 150ms
+    }, 300); // debounce 300ms for performance
   }, [getXeokitViewer, checkedSources, checkedLevels, checkedSpaces, checkedCategories,
     levels, spaces, categoryToIfcTypes, levelColors, spaceColors, categoryColors, autoColorEnabled, autoColorSpaces, autoColorCategories, xrayMode]);
 
