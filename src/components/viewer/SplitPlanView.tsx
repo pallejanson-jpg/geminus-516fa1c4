@@ -36,6 +36,10 @@ interface SplitPlanViewProps {
   navigationOverlay?: React.ReactNode;
   /** Current room labels exposed for editor components */
   onRoomLabelsChange?: (labels: Array<{ id: string; name: string; x: number; y: number }>) => void;
+  /** When true, clicks dispatch SPLIT_PLAN_NAVIGATE instead of first-person flyTo */
+  isSplitMode?: boolean;
+  /** Callback when an entity is clicked (for opening properties etc.) */
+  onEntityClick?: (entityId: string, fmGuid: string | null, entityName: string | null) => void;
 }
 
 interface PanZoom {
