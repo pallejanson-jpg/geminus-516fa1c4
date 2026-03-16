@@ -12,6 +12,7 @@ import ViewerFilterPanel from './ViewerFilterPanel';
 import ViewerContextMenu from './ViewerContextMenu';
 import ViewerToolbar from './ViewerToolbar';
 import VisualizationToolbar from './VisualizationToolbar';
+import InventoryPanel from './InventoryPanel';
 
 import { useIsMobile } from '@/hooks/use-mobile';
 import { AppContext } from '@/context/AppContext';
@@ -73,6 +74,14 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const [showSpaces, setShowSpaces] = useState(false);
   const [showVisualizationMenu, setShowVisualizationMenu] = useState(false);
   const [showRoomVisualization, setShowRoomVisualization] = useState(false);
+  const [showAssetPanel, setShowAssetPanel] = useState(false);
+
+  // Listen for asset panel toggle events (from VisualizationToolbar button)
+  useEffect(() => {
+    const handler = () => setShowAssetPanel(p => !p);
+    window.addEventListener('TOGGLE_ASSET_PANEL', handler);
+    return () => window.removeEventListener('TOGGLE_ASSET_PANEL', handler);
+  }, []);
 
   // Listen for external toggle events (from MobileViewerPage header)
   useEffect(() => {
@@ -664,6 +673,16 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           onToggleVisualization={(visible) => setShowRoomVisualization(visible)}
           externalOpen={showVisualizationMenu}
           onExternalOpenChange={setShowVisualizationMenu}
+        />
+      )}
+
+      {/* Asset panel — independent from visualization menu */}
+      {isViewerReady && buildingFmGuid && (
+        <InventoryPanel
+          buildingFmGuid={buildingFmGuid}
+          buildingName={buildingName}
+          open={showAssetPanel}
+          onClose={() => setShowAssetPanel(false)}
         />
       )}
 

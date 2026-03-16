@@ -20,7 +20,7 @@ import SidePopPanel from "./SidePopPanel";
 import XrayToggle from "./XrayToggle";
 import AnnotationCategoryList from "./AnnotationCategoryList";
 import CreateViewDialog from "./CreateViewDialog";
-import InventoryPanel from "./InventoryPanel";
+// InventoryPanel moved to NativeViewerShell for independent lifecycle
 import CreateIssueDialog from "./CreateIssueDialog";
 import FloatingIssueListPanel, { type BcfIssue } from "./FloatingIssueListPanel";
 import IssueDetailSheet from "./IssueDetailSheet";
@@ -148,7 +148,6 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   
   // Independent issue list state - stays open even when main menu closes
   const [showIssueList, setShowIssueList] = useState(false);
-  const [showAssetPanel, setShowAssetPanel] = useState(false);
   
   // Active side-pop submenu state
   const [activeSubMenu, setActiveSubMenu] = useState<'models' | 'floors' | 'annotations' | null>(null);
@@ -1034,19 +1033,19 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             </Button>
           )}
 
-          {/* Asset Panel button */}
+          {/* Asset Panel button — dispatches event to parent */}
           <Button
             variant="outline"
-            className={cn("w-full justify-between gap-2 sm:gap-3 h-9 sm:h-10", showAssetPanel && "bg-primary/10 border-primary/30")}
-            onClick={() => setShowAssetPanel(!showAssetPanel)}
+            className="w-full justify-between gap-2 sm:gap-3 h-9 sm:h-10"
+            onClick={() => window.dispatchEvent(new CustomEvent('TOGGLE_ASSET_PANEL'))}
           >
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className={cn("p-1 sm:p-1.5 rounded-md", showAssetPanel ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+              <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
                 <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </div>
               <span className="text-xs sm:text-sm">Asset panel</span>
             </div>
-            <ChevronRight className={cn("h-3 w-3 transition-transform", showAssetPanel && "rotate-180")} />
+            <ChevronRight className="h-3 w-3" />
           </Button>
 
           {isToolVisible('addAsset') && onAddAsset && (
@@ -1107,7 +1106,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7"
+                  className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
                   onClick={() => handleSetIsOpen(false)}
                 >
                   <X className="h-4 w-4" />
@@ -1172,16 +1171,6 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               buildingFmGuid={buildingFmGuid}
             />
           </SidePopPanel>
-          
-          {/* Inventory / Asset Panel */}
-          {buildingFmGuid && (
-            <InventoryPanel
-              buildingFmGuid={buildingFmGuid}
-              buildingName={buildingName}
-              open={showAssetPanel}
-              onClose={() => setShowAssetPanel(false)}
-            />
-          )}
           
           {/* Floating Issue List Panel */}
           <FloatingIssueListPanel
@@ -1267,9 +1256,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               <AnnotationCategoryList viewerRef={viewerRef} buildingFmGuid={buildingFmGuid} />
             </SidePopPanel>
 
-            {buildingFmGuid && (
-              <InventoryPanel buildingFmGuid={buildingFmGuid} buildingName={buildingName} open={showAssetPanel} onClose={() => setShowAssetPanel(false)} />
-            )}
+
 
             <FloatingIssueListPanel isOpen={showIssueList} onClose={() => setShowIssueList(false)} buildingFmGuid={buildingFmGuid} onSelectIssue={handleSelectIssue} onCreateIssue={captureIssueState} parentPosition={position} parentWidth={panelWidth} />
 
