@@ -132,6 +132,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
         visibleMetaFloorIds: allMetaIds,
         visibleFloorFmGuids: allFmGuids,
         isAllFloorsVisible: newVisibleIds.size === floors.length,
+        skipClipping: true,
       } as FloorSelectionEventDetail,
     }));
   }, [floors, applyFloorVisibility, calculateFloorBounds, buildingFmGuid]);
