@@ -133,6 +133,38 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   // BIM fallback metadata state
   const [bimFallbackData, setBimFallbackData] = useState<Record<string, string> | null>(null);
 
+  // Helper to build BIM fallback from metaObject
+  const setBimFallbackFromMeta = useCallback((metaObj: any, eid: string) => {
+    const fallback: Record<string, string> = {};
+    fallback['Entity ID'] = eid;
+    if (metaObj.type) fallback['IFC Type'] = metaObj.type;
+    if (metaObj.name) fallback['Name'] = metaObj.name;
+    if (metaObj.originalSystemId) fallback['FM GUID'] = metaObj.originalSystemId;
+    if (metaObj.attributes?.LongName) fallback['Long Name'] = metaObj.attributes.LongName;
+    if (metaObj.attributes?.ObjectType) fallback['Object Type'] = metaObj.attributes.ObjectType;
+    if (metaObj.attributes?.Description) fallback['Description'] = metaObj.attributes.Description;
+    let parent = metaObj.parent;
+    while (parent) {
+      if (parent.type?.toLowerCase() === 'ifcbuildingstorey') {
+        fallback['Floor'] = parent.name || parent.id;
+        break;
+      }
+      parent = parent.parent;
+    }
+    if (metaObj.metaModel?.id) fallback['Model'] = metaObj.metaModel.id;
+    if (metaObj.propertySets) {
+      metaObj.propertySets.forEach((ps: any) => {
+        const psName = ps.name || 'Properties';
+        ps.properties?.forEach((p: any) => {
+          if (p.value !== undefined && p.value !== null && p.value !== '') {
+            fallback[`${psName} / ${p.name}`] = String(p.value);
+          }
+        });
+      });
+    }
+    setBimFallbackData(fallback);
+  }, []);
+
   // FM Access DOU & Documents
   const [douData, setDouData] = useState<any[]>([]);
   const [fmaDocuments, setFmaDocuments] = useState<any[]>([]);
