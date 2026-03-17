@@ -1188,7 +1188,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
             className="max-w-none cursor-crosshair"
             style={{
               imageRendering: 'crisp-edges',
-              ...(monochrome ? { filter: 'grayscale(1) saturate(0) contrast(1.8) brightness(1.02)' } : {}),
             }}
             draggable={false}
             onClick={handleClick}
