@@ -14,7 +14,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { updateAssetProperties, UpdatePropertyItem, deleteAssets, syncAssetToAssetPlus } from '@/services/asset-plus-service';
-import { pushAssetToFmAccess, pushPropertyChangesToFmAccess } from '@/services/fm-access-service';
+import { pushAssetToFmAccess, pushPropertyChangesToFmAccess, deleteFmAccessObject } from '@/services/fm-access-service';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -127,6 +127,10 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
 
   // BIM fallback metadata state
   const [bimFallbackData, setBimFallbackData] = useState<Record<string, string> | null>(null);
+
+  // FM Access DOU & Documents
+  const [douData, setDouData] = useState<any[]>([]);
+  const [fmaDocuments, setFmaDocuments] = useState<any[]>([]);
 
   // Fetch data for all selected items
   useEffect(() => {
@@ -256,6 +260,24 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
         } else {
           // For multi-select, start with empty form data
           setFormData({});
+        }
+
+        // Fetch FM Access DOU and documents for the object(s)
+        if (assetData && assetData.length > 0) {
+          const guidsForDou = assetData.map((a: any) => a.fm_guid);
+          const buildingGuids = [...new Set(assetData.map((a: any) => a.building_fm_guid).filter(Boolean))];
+
+          const [douResult, docsResult] = await Promise.all([
+            supabase.from('fm_access_dou').select('*').in('object_fm_guid', guidsForDou),
+            buildingGuids.length > 0
+              ? supabase.from('fm_access_documents').select('*').in('building_fm_guid', buildingGuids).limit(50)
+              : Promise.resolve({ data: [] }),
+          ]);
+          setDouData(douResult.data || []);
+          setFmaDocuments((docsResult as any).data || []);
+        } else {
+          setDouData([]);
+          setFmaDocuments([]);
         }
       } catch (error: any) {
         console.error('Failed to fetch data:', error);
@@ -731,6 +753,14 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     try {
       const result = await deleteAssets(fmGuids);
       if (result.summary.deleted > 0) {
+        // Best-effort: also delete from FM Access
+        for (const guid of fmGuids) {
+          try {
+            await deleteFmAccessObject(guid);
+          } catch (fmaErr) {
+            console.warn(`FM Access delete failed for ${guid}:`, fmaErr);
+          }
+        }
         toast.success(`${result.summary.deleted} object(s) deleted`);
         onUpdate?.();
         onClose();
@@ -1105,6 +1135,66 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                 </div>
               ))}
             </div>
+          )}
+
+          {/* FM Access DOU (Drift & Underhåll) */}
+          {douData.length > 0 && (
+            <Collapsible
+              open={openSections.has('dou')}
+              onOpenChange={() => toggleSection('dou')}
+            >
+              <CollapsibleTrigger className="flex items-center justify-between w-full p-2 bg-muted/50 rounded-md hover:bg-muted transition-colors">
+                <div className="flex items-center gap-2">
+                  {openSections.has('dou') ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5 rotate-180" />}
+                  <span className="text-sm font-medium">Drift & Underhåll</span>
+                  <Badge variant="secondary" className="text-[10px]">{douData.length}</Badge>
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-2 space-y-2">
+                {douData.map((dou) => (
+                  <div key={dou.id} className="border rounded-md p-2.5 space-y-1 bg-muted/20">
+                    {dou.title && <p className="text-sm font-medium">{dou.title}</p>}
+                    {dou.doc_type && (
+                      <Badge variant="outline" className="text-[10px]">{dou.doc_type}</Badge>
+                    )}
+                    {dou.content && (
+                      <p className="text-xs text-muted-foreground whitespace-pre-wrap">{dou.content}</p>
+                    )}
+                  </div>
+                ))}
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+
+          {/* FM Access Documents */}
+          {fmaDocuments.length > 0 && (
+            <Collapsible
+              open={openSections.has('fma-docs')}
+              onOpenChange={() => toggleSection('fma-docs')}
+            >
+              <CollapsibleTrigger className="flex items-center justify-between w-full p-2 bg-muted/50 rounded-md hover:bg-muted transition-colors">
+                <div className="flex items-center gap-2">
+                  {openSections.has('fma-docs') ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5 rotate-180" />}
+                  <span className="text-sm font-medium">Dokument (FM Access)</span>
+                  <Badge variant="secondary" className="text-[10px]">{fmaDocuments.length}</Badge>
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-2 space-y-1">
+                {fmaDocuments.map((doc) => (
+                  <div key={doc.id} className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-muted/30">
+                    <div className="min-w-0">
+                      <p className="text-sm truncate">{doc.name || doc.file_name || 'Unnamed'}</p>
+                      {doc.class_name && (
+                        <span className="text-xs text-muted-foreground">{doc.class_name}</span>
+                      )}
+                    </div>
+                    {doc.document_id && (
+                      <Badge variant="outline" className="text-[10px] shrink-0">#{doc.document_id}</Badge>
+                    )}
+                  </div>
+                ))}
+              </CollapsibleContent>
+            </Collapsible>
           )}
         </div>
       </ScrollArea>
