@@ -409,35 +409,49 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     setIsLoading(true);
 
     const container = containerRef.current;
-    const maxWidth = isMobile ? 900 : 4000;
-    const width = container ? Math.min(container.clientWidth * (isMobile ? 1.5 : 3), maxWidth) : 1600;
+    const maxWidth = isMobile ? 900 : 6000;
+    const width = container ? Math.min(container.clientWidth * (isMobile ? 1.5 : 4), maxWidth) : 2000;
 
-    // Precompute wall/slab IDs once (shared across floors)
+    // Precompute entity type buckets once (shared across floors)
     const wallCacheKey = '__global_wall_ids__';
     const slabCacheKey = '__global_slab_ids__';
+    const spaceCacheKey = '__global_space_ids__';
+    const doorCacheKey = '__global_door_ids__';
     const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifcwallelementedcase', 'ifccurtainwall', 'ifccolumn', 'ifccolumnstandardcase', 'ifcbeam', 'ifcbeamstandardcase']);
     const slabTypes = new Set(['ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase', 'ifcroof', 'ifccovering', 'ifcplate']);
+    const spaceTypes = new Set(['ifcspace']);
+    const doorTypes = new Set(['ifcdoor', 'ifcdoorstandardcase', 'ifcwindow', 'ifcwindowstandardcase']);
 
     let wallIds = wallIdCacheRef.current.get(wallCacheKey);
     let slabIds = wallIdCacheRef.current.get(slabCacheKey);
+    let spaceIds = wallIdCacheRef.current.get(spaceCacheKey);
+    let doorIds = wallIdCacheRef.current.get(doorCacheKey);
 
     if (!wallIds || !slabIds) {
       wallIds = [];
       slabIds = [];
+      spaceIds = [];
+      doorIds = [];
       const metaObjects = viewer.metaScene?.metaObjects || {};
       for (const [id, mo] of Object.entries(metaObjects) as [string, any][]) {
         const t = (mo?.type || '').toLowerCase();
         if (!viewer.scene.objects?.[id]) continue;
         if (wallTypes.has(t)) wallIds.push(id);
-        if (slabTypes.has(t)) slabIds.push(id);
+        else if (slabTypes.has(t)) slabIds.push(id);
+        else if (spaceTypes.has(t)) spaceIds!.push(id);
+        else if (doorTypes.has(t)) doorIds!.push(id);
       }
       wallIdCacheRef.current.set(wallCacheKey, wallIds);
       wallIdCacheRef.current.set(slabCacheKey, slabIds);
+      wallIdCacheRef.current.set(spaceCacheKey, spaceIds!);
+      wallIdCacheRef.current.set(doorCacheKey, doorIds!);
     }
+    if (!spaceIds) spaceIds = wallIdCacheRef.current.get(spaceCacheKey) || [];
+    if (!doorIds) doorIds = wallIdCacheRef.current.get(doorCacheKey) || [];
 
-    // Apply neutral styling while map is rendered
+    // Apply clean architectural styling before map capture
     const scene = viewer.scene;
-    const originalStyles: { id: string; color: number[] | null; opacity: number; edges: boolean }[] = [];
+    const originalStyles: { id: string; color: number[] | null; opacity: number; edges: boolean; visible: boolean }[] = [];
 
     const saveStyle = (id: string) => {
       const entity = scene.objects?.[id];
@@ -447,42 +461,74 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
         color: entity.colorize ? [...entity.colorize] : null,
         opacity: typeof entity.opacity === 'number' ? entity.opacity : 1,
         edges: !!entity.edges,
+        visible: entity.visible !== false,
       });
     };
 
+    const structuralIds = new Set([...wallIds, ...slabIds, ...spaceIds, ...doorIds]);
+
     if (monochrome) {
+      // Hide ALL non-structural entities for a clean plan
+      for (const [id, entity] of Object.entries(scene.objects || {}) as [string, any][]) {
+        if (structuralIds.has(id)) continue;
+        saveStyle(id);
+        entity.visible = false;
+      }
+
+      // Spaces: very light gray fill for room outlines
+      for (const id of spaceIds) {
+        const entity = scene.objects?.[id];
+        if (!entity) continue;
+        saveStyle(id);
+        entity.visible = true;
+        entity.colorize = [0.92, 0.92, 0.92];
+        entity.opacity = 0.5;
+        entity.edges = true;
+      }
+
+      // Slabs: hidden (would occlude plan from above)
       for (const id of slabIds) {
         const entity = scene.objects?.[id];
         if (!entity) continue;
         saveStyle(id);
-        // Keep slabs visible for spatial context but translucent so wall lines remain readable
-        entity.colorize = [1, 1, 1];
-        entity.opacity = 0.08;
+        entity.visible = false;
+      }
+
+      // Doors/windows: medium gray for context
+      for (const id of doorIds) {
+        const entity = scene.objects?.[id];
+        if (!entity) continue;
+        saveStyle(id);
+        entity.visible = true;
+        entity.colorize = [0.65, 0.65, 0.65];
+        entity.opacity = 0.5;
         entity.edges = false;
       }
     }
 
     // Bold wall edges for Dalux-style crisp plan
     if (scene.edgeMaterial) {
-      scene.edgeMaterial.edgeWidth = 3;
+      scene.edgeMaterial.edgeWidth = 4;
       scene.edgeMaterial.edgeColor = [0, 0, 0];
     }
     for (const id of wallIds) {
       const entity = scene.objects?.[id];
       if (!entity) continue;
       saveStyle(id);
-      entity.colorize = [0, 0, 0];
+      entity.visible = true;
+      entity.colorize = [0.25, 0.25, 0.25];
       entity.opacity = 1;
       entity.edges = true;
     }
 
     const restoreColors = () => {
-      for (const { id, color, opacity, edges } of originalStyles) {
+      for (const { id, color, opacity, edges, visible } of originalStyles) {
         const entity = scene.objects?.[id];
         if (!entity) continue;
         if (color) entity.colorize = color; else entity.colorize = null;
         entity.opacity = opacity;
         entity.edges = edges;
+        entity.visible = visible;
       }
     };
 
@@ -1143,7 +1189,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
             className="max-w-none cursor-crosshair"
             style={{
               imageRendering: 'crisp-edges',
-              ...(monochrome ? { filter: 'grayscale(1) saturate(0) contrast(1.8) brightness(1.02)' } : {}),
             }}
             draggable={false}
             onClick={handleClick}
@@ -1208,15 +1253,18 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
                 className="absolute"
                 style={{
                   width: 0, height: 0,
-                  borderLeft: `${isMobile ? 12 : 16}px solid transparent`,
-                  borderRight: `${isMobile ? 12 : 16}px solid transparent`,
-                  borderBottom: `${isMobile ? 22 : 30}px solid hsl(var(--primary) / 0.2)`,
+                  borderLeft: `${isMobile ? 14 : 18}px solid transparent`,
+                  borderRight: `${isMobile ? 14 : 18}px solid transparent`,
+                  borderBottom: `${isMobile ? 26 : 34}px solid rgba(59, 130, 246, 0.25)`,
                   transform: `translate(-50%, -100%) rotate(${cameraPos.angle}rad)`,
                   transformOrigin: 'center bottom',
                 }}
               />
-              {/* Camera dot */}
-              <div className={cn("absolute rounded-full bg-primary border-2 border-primary-foreground shadow-lg", isMobile ? "w-2.5 h-2.5" : "w-4 h-4")} style={{ transform: 'translate(-50%, -50%)' }} />
+              {/* Camera dot with pulse ring */}
+              <div className="absolute" style={{ transform: 'translate(-50%, -50%)' }}>
+                <div className={cn("rounded-full bg-blue-500 border-2 border-white shadow-lg relative z-10", isMobile ? "w-3 h-3" : "w-5 h-5")} />
+                <div className={cn("absolute rounded-full border-2 border-blue-400 animate-ping", isMobile ? "w-3 h-3 top-0 left-0" : "w-5 h-5 top-0 left-0")} />
+              </div>
             </div>
           )}
         </div>
