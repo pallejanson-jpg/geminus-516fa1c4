@@ -439,8 +439,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     const selected = scene?.selectedObjectIds || [];
     if (selected.length > 0) scene.setObjectsSelected(selected, false);
     // Clear user-created section planes (NOT floor clipping planes)
-    const planes = Object.values(scene.sectionPlanes || {});
-    planes.forEach((sp: any) => { try { sp.destroy(); } catch {} });
+    const planes = Object.entries(scene.sectionPlanes || {});
+    planes.forEach(([planeId, sp]: [string, any]) => {
+      // Preserve floor/ceiling clipping planes used by the floor switcher
+      if (planeId.startsWith('3d-ceiling-') || planeId.startsWith('floor-clip-') || planeId.startsWith('2d-')) return;
+      try { sp.destroy(); } catch {}
+    });
     // Clear measurements
     if (measurePluginRef.current) {
       measurePluginRef.current.clear?.();

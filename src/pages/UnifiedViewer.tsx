@@ -122,9 +122,11 @@ const UnifiedViewerContent: React.FC<{
     const handler = (e: Event) => {
       const { worldPos } = (e as CustomEvent).detail || {};
       if (!worldPos || worldPos.length < 3) return;
+      // Validate coordinates before flying
+      if (!worldPos.every((v: number) => Number.isFinite(v))) return;
 
       const viewer = (window as any).__nativeXeokitViewer;
-      if (!viewer?.cameraFlight) return;
+      if (!viewer?.cameraFlight || !viewer?.camera) return;
 
       // Preserve current horizontal heading direction
       const eye = viewer.camera.eye;
@@ -139,11 +141,23 @@ const UnifiedViewerContent: React.FC<{
       const floorY = worldPos[1];
       const eyeHeight = floorY + 1.5;
 
+      const newEye = [worldPos[0], eyeHeight, worldPos[2]];
+      const newLook = [worldPos[0] + dirX * 5, eyeHeight, worldPos[2] + dirZ * 5];
+
+      // Validate computed positions
+      if (!newEye.every((v: number) => Number.isFinite(v)) || !newLook.every((v: number) => Number.isFinite(v))) return;
+
       viewer.cameraFlight.flyTo({
-        eye: [worldPos[0], eyeHeight, worldPos[2]],
-        look: [worldPos[0] + dirX * 5, eyeHeight, worldPos[2] + dirZ * 5],
+        eye: newEye,
+        look: newLook,
         up: [0, 1, 0],
         duration: 0.5,
+      }, () => {
+        // Force a canvas redraw after flyTo completes to prevent blank 3D pane
+        try {
+          viewer.scene.canvas?.resizeCanvas?.();
+          viewer.scene.glRedraw?.();
+        } catch {}
       });
     };
 
@@ -605,7 +619,7 @@ const UnifiedViewerContent: React.FC<{
   // Trigger xeokit canvas resize when split ratio changes or entering split mode
   useEffect(() => {
     if (!isSplit2D3D) return;
-    const timer = setTimeout(() => {
+    const doResize = () => {
       try {
         const xv = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer
           ?? (window as any).__nativeXeokitViewer;
@@ -614,9 +628,13 @@ const UnifiedViewerContent: React.FC<{
           xv.scene.glRedraw?.();
         }
       } catch {}
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [isSplit2D3D, desktopSplitRatio]);
+    };
+    // Multiple resize passes: immediate, short, and delayed to catch late layout
+    const t1 = setTimeout(doResize, 50);
+    const t2 = setTimeout(doResize, 200);
+    const t3 = setTimeout(doResize, 600);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [isSplit2D3D, desktopSplitRatio, viewerReady]);
 
   // NOTE: We no longer show a full-screen "Loading viewer..." overlay here.
   // Instead we let the NativeXeokitViewer handle its own loading spinner,
