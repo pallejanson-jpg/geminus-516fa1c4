@@ -48,6 +48,8 @@ const AiChat = lazy(() => import("@/pages/AiChat"));
 const GeminusView = lazy(() => import("@/pages/GeminusView"));
 // New viewer (promoted from mockup)
 const ViewerMockup = lazy(() => import("@/pages/ViewerMockup"));
+// FM Access 2D Standalone test page
+const FmAccess2DStandalone = lazy(() => import("@/pages/FmAccess2DStandalone"));
 
 const queryClient = new QueryClient();
 
