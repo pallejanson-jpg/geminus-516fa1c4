@@ -306,6 +306,18 @@ const App = () => {
             } 
           />
           
+          {/* FM Access 2D Standalone — test page for FMA iframe viewer */}
+          <Route 
+            path="/fma-2d" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <ProtectedRoute>
+                  <FmAccess2DStandalone />
+                </ProtectedRoute>
+              </Suspense>
+            } 
+          />
+          
           {/* Protected app routes */}
           <Route 
             path="/*" 
