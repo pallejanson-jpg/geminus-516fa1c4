@@ -27,6 +27,9 @@ interface UniversalPropertiesDialogProps {
   onUpdate?: () => void;
   /** BIM entity ID from the viewer (for fallback metadata display) */
   entityId?: string;
+  /** Whether the dialog is pinned (stays open and updates on selection change) */
+  isPinned?: boolean;
+  onPinToggle?: () => void;
 }
 
 interface PropertyItem {
