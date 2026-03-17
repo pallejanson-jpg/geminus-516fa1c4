@@ -467,10 +467,17 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     };
 
     const structuralIds = new Set([...wallIds, ...slabIds, ...spaceIds, ...doorIds]);
+    const storeyScope = storeyDescendants.size > 0 ? storeyDescendants : null;
 
     if (monochrome) {
-      // Hide ALL non-structural entities for a clean plan
+      // Hide ALL entities — then selectively show storey-scoped structural ones
       for (const [id, entity] of Object.entries(scene.objects || {}) as [string, any][]) {
+        // If entity is outside storey scope, hide it
+        if (storeyScope && !storeyScope.has(id)) {
+          saveStyle(id);
+          entity.visible = false;
+          continue;
+        }
         if (structuralIds.has(id)) continue;
         saveStyle(id);
         entity.visible = false;
