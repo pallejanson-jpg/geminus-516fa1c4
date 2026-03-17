@@ -1252,15 +1252,18 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
                 className="absolute"
                 style={{
                   width: 0, height: 0,
-                  borderLeft: `${isMobile ? 12 : 16}px solid transparent`,
-                  borderRight: `${isMobile ? 12 : 16}px solid transparent`,
-                  borderBottom: `${isMobile ? 22 : 30}px solid hsl(var(--primary) / 0.2)`,
+                  borderLeft: `${isMobile ? 14 : 18}px solid transparent`,
+                  borderRight: `${isMobile ? 14 : 18}px solid transparent`,
+                  borderBottom: `${isMobile ? 26 : 34}px solid rgba(59, 130, 246, 0.25)`,
                   transform: `translate(-50%, -100%) rotate(${cameraPos.angle}rad)`,
                   transformOrigin: 'center bottom',
                 }}
               />
-              {/* Camera dot */}
-              <div className={cn("absolute rounded-full bg-primary border-2 border-primary-foreground shadow-lg", isMobile ? "w-2.5 h-2.5" : "w-4 h-4")} style={{ transform: 'translate(-50%, -50%)' }} />
+              {/* Camera dot with pulse ring */}
+              <div className="absolute" style={{ transform: 'translate(-50%, -50%)' }}>
+                <div className={cn("rounded-full bg-blue-500 border-2 border-white shadow-lg relative z-10", isMobile ? "w-3 h-3" : "w-5 h-5")} />
+                <div className={cn("absolute rounded-full border-2 border-blue-400 animate-ping", isMobile ? "w-3 h-3 top-0 left-0" : "w-5 h-5 top-0 left-0")} />
+              </div>
             </div>
           )}
         </div>
