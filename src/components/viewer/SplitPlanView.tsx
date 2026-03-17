@@ -457,7 +457,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
         saveStyle(id);
         // Keep slabs visible for spatial context but translucent so wall lines remain readable
         entity.colorize = [1, 1, 1];
-        entity.opacity = 0.18;
+        entity.opacity = 0.08;
         entity.edges = false;
       }
     }
