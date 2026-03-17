@@ -753,6 +753,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         scene.alphaDepthMask = true;
         setIsXrayActive(false);
 
+        // Auto-activate select tool in 2D so objects are immediately pickable
+        if (activeTool !== 'select') {
+          handleToolChange('select');
+        }
+
         // Remove any existing 3D ceiling clipping first
         try { remove3DClipping(); } catch {}
 
