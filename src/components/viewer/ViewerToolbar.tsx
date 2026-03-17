@@ -483,6 +483,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
   const handleNavModeChange = useCallback((mode: NavMode) => {
     if (!viewer?.cameraControl) return;
+    // Never allow orbit/firstPerson in 2D plan view
+    if (viewModeRef.current === '2d') return;
     if (mode === 'firstPerson') {
       viewer.cameraControl.navMode = 'firstPerson';
       viewer.cameraControl.followPointer = true;
