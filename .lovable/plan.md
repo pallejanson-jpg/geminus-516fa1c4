@@ -112,6 +112,19 @@ Vid omimport jämförs importerade fm_guids mot befintliga i DB:
 
 ---
 
+## Plan: CRUD-flöde & FM Access-data i Properties (IMPLEMENTED ✅)
+
+### Changes Made
+1. **FM Access Delete**: `handleDelete()` in `UniversalPropertiesDialog.tsx` now calls `deleteFmAccessObject(guid)` best-effort after successful `deleteAssets()` — completing the CRUD cycle to FM Access
+2. **DOU Section**: New collapsible "Drift & Underhåll" section in Properties dialog, fetching from `fm_access_dou` table by object `fm_guid`
+3. **Documents Section**: New collapsible "Dokument (FM Access)" section showing documents from `fm_access_documents` by `building_fm_guid`
+
+### Pending (Parkerat)
+- FM Access symbol placement via graphics API (requires dedicated edge function + API investigation)
+- FMA 2D Viewer as visualization engine (recommendation: continue using xeokit for heatmaps)
+
+---
+
 ## Previous Plans
 
 ### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
