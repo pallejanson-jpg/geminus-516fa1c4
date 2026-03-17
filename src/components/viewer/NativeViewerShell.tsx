@@ -106,6 +106,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
   // Properties dialog
   const [propertiesEntity, setPropertiesEntity] = useState<{ entityId: string; fmGuid: string | null; name: string | null } | null>(null);
+  const [propertiesPinned, setPropertiesPinned] = useState(false);
 
   // Shim ref that matches the old Asset+ ref chain for existing hooks
   const viewerShimRef = useRef<any>(null);
@@ -399,7 +400,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         if (alreadySelected && !isCtrl) {
           // Toggle off — deselect clicked entity
           pickResult.entity.selected = false;
-          setPropertiesEntity(null);
+          if (!propertiesPinned) setPropertiesEntity(null);
           return;
         }
 
@@ -411,7 +412,19 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
         pickResult.entity.selected = !alreadySelected || isCtrl;
 
-        // Do NOT auto-open properties dialog — only via right-click → Properties
+        // When properties dialog is pinned, auto-update with newly selected entity
+        if (propertiesPinned && pickResult.entity.selected) {
+          let fmGuid: string | null = null;
+          let entityName: string | null = null;
+          if (xeokitViewer.metaScene?.metaObjects) {
+            const metaObj = xeokitViewer.metaScene.metaObjects[entityId];
+            if (metaObj) {
+              fmGuid = metaObj.originalSystemId || null;
+              entityName = metaObj.name || metaObj.type || null;
+            }
+          }
+          setPropertiesEntity({ entityId, fmGuid, name: entityName });
+        }
       }
     };
 
@@ -790,9 +803,11 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       {propertiesEntity && (
         <UniversalPropertiesDialog
           isOpen={!!propertiesEntity}
-          onClose={() => setPropertiesEntity(null)}
+          onClose={() => { setPropertiesEntity(null); setPropertiesPinned(false); }}
           fmGuids={propertiesEntity.fmGuid || propertiesEntity.entityId}
           entityId={propertiesEntity.entityId}
+          isPinned={propertiesPinned}
+          onPinToggle={() => setPropertiesPinned(p => !p)}
         />
       )}
     </div>
