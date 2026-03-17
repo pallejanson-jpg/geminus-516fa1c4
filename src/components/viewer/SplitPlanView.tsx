@@ -690,11 +690,16 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       const normX = (eye[0] - aabb[0]) / xRange;
       const normZ = (eye[2] - aabb[2]) / zRange;
 
+      // StoreyViewsPlugin createStoreyMap renders top-down with inverted axes
+      // Use worldToStoreyMap-equivalent: image X = (1-normX), image Y = (1-normZ)
       setCameraPos({
         x: (1.0 - normX) * 100,
         y: (1.0 - normZ) * 100,
         angle,
       });
+
+      // Debug: log camera world pos and computed image coords for calibration
+      console.debug('[SplitPlanView] Camera debug — eye:', eye, 'aabb:', aabb, 'normX:', normX, 'normZ:', normZ, 'imgX:', (1.0-normX)*100, 'imgY:', (1.0-normZ)*100);
     };
 
     const interval = setInterval(updateCamera, isMobile ? 350 : 150);
