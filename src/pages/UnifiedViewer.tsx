@@ -126,15 +126,22 @@ const UnifiedViewerContent: React.FC<{
       const viewer = (window as any).__nativeXeokitViewer;
       if (!viewer?.cameraFlight) return;
 
+      // Preserve current horizontal heading direction
       const eye = viewer.camera.eye;
       const look = viewer.camera.look;
-      const offsetX = eye[0] - look[0];
-      const offsetY = eye[1] - look[1];
-      const offsetZ = eye[2] - look[2];
+      const dx = look[0] - eye[0];
+      const dz = look[2] - eye[2];
+      const hLen = Math.sqrt(dx * dx + dz * dz);
+      const dirX = hLen > 0.01 ? dx / hLen : 0;
+      const dirZ = hLen > 0.01 ? dz / hLen : -1;
+
+      // Place camera at click point, 1.5m above floor, looking in same direction
+      const floorY = worldPos[1];
+      const eyeHeight = floorY + 1.5;
 
       viewer.cameraFlight.flyTo({
-        eye: [worldPos[0] + offsetX, worldPos[1] + offsetY, worldPos[2] + offsetZ],
-        look: [worldPos[0], worldPos[1], worldPos[2]],
+        eye: [worldPos[0], eyeHeight, worldPos[2]],
+        look: [worldPos[0] + dirX * 5, eyeHeight, worldPos[2] + dirZ * 5],
         up: [0, 1, 0],
         duration: 0.5,
       });
