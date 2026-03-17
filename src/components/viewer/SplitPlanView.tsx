@@ -522,12 +522,13 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     }
 
     const restoreColors = () => {
-      for (const { id, color, opacity, edges } of originalStyles) {
+      for (const { id, color, opacity, edges, visible } of originalStyles) {
         const entity = scene.objects?.[id];
         if (!entity) continue;
         if (color) entity.colorize = color; else entity.colorize = null;
         entity.opacity = opacity;
         entity.edges = edges;
+        entity.visible = visible;
       }
     };
 
