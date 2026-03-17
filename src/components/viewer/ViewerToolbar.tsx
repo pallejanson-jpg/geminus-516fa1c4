@@ -788,10 +788,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         const origEdgeWidth = edgeMat?.edgeWidth ?? 1;
 
         const SLAB_TYPES = new Set(['ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase', 'ifcplate']);
+        const ROOF_TYPES = new Set(['ifcroof']);
+        const COVERING_TYPES = new Set(['ifccovering']);
         const WALL_TYPES = new Set(['ifcwall', 'ifcwallstandardcase']);
         const DOOR_WINDOW_TYPES = new Set(['ifcdoor', 'ifcwindow']);
         const FURNITURE_TYPES = new Set(['ifcfurnishingelement', 'ifcrailing', 'ifcstair', 'ifcstairflight']);
         const SPACE_TYPES = new Set(['ifcspace']);
+        const HIDE_TYPES = new Set([...SLAB_TYPES, ...ROOF_TYPES, ...COVERING_TYPES]);
         const metaObjects = viewer?.metaScene?.metaObjects || scene?.metaScene?.metaObjects || {};
         const metaCount = Object.keys(metaObjects).length;
         console.log(`[ViewerToolbar] 2D styling: found ${metaCount} metaObjects`);
@@ -808,14 +811,14 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
           const entity = scene.objects?.[mo.id];
           if (!entity) return;
 
-          if (SLAB_TYPES.has(typeLower)) {
+          if (HIDE_TYPES.has(typeLower)) {
+            // Hide slabs, roofs, coverings — they occlude the plan from above
             saveOrig(entity, mo.id);
-            entity.visible = true; entity.pickable = true; entity.opacity = 1; entity.colorize = [0.94, 0.94, 0.94]; entity.edges = true;
-            visibleCount++;
+            entity.visible = false; entity.pickable = false;
          } else if (SPACE_TYPES.has(typeLower)) {
             saveOrig(entity, mo.id);
             entity.visible = true; entity.pickable = true; entity.opacity = 0.15; entity.colorize = [0.7, 0.85, 0.95]; entity.edges = true;
-            // Lower spaces so furniture/equipment wins pick priority in top-down 2D
+            // Lower spaces so equipment wins pick priority in top-down 2D
             try {
               const origOffset = entity.offset ? [...entity.offset] : [0, 0, 0];
               entity.offset = [origOffset[0], origOffset[1] - 0.3, origOffset[2]];
@@ -823,16 +826,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
             visibleCount++;
           } else if (WALL_TYPES.has(typeLower)) {
             saveOrig(entity, mo.id);
-            entity.colorize = [0.45, 0.45, 0.45]; entity.opacity = 1; entity.edges = true; entity.pickable = true;
+            entity.colorize = [0.25, 0.25, 0.25]; entity.opacity = 1; entity.edges = true; entity.pickable = false;
             visibleCount++;
           } else if (DOOR_WINDOW_TYPES.has(typeLower)) {
             saveOrig(entity, mo.id);
-            entity.colorize = [0.12, 0.12, 0.12]; entity.opacity = 1; entity.edges = true; entity.pickable = true;
+            entity.colorize = [0.12, 0.12, 0.12]; entity.opacity = 1; entity.edges = true; entity.pickable = false;
             visibleCount++;
           } else if (FURNITURE_TYPES.has(typeLower)) {
             saveOrig(entity, mo.id);
-            entity.colorize = [0.3, 0.3, 0.3]; entity.opacity = 0.95; entity.edges = true; entity.pickable = true;
-            visibleCount++;
+            entity.visible = false; entity.pickable = false;
           } else {
             saveOrig(entity, mo.id);
             entity.colorize = [0.35, 0.35, 0.35]; entity.opacity = 0.9; entity.edges = true; entity.pickable = true;
