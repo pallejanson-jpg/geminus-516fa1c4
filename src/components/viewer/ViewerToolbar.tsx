@@ -753,6 +753,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         scene.alphaDepthMask = true;
         setIsXrayActive(false);
 
+        // Auto-activate select tool in 2D so objects are immediately pickable
+        if (activeTool !== 'select') {
+          handleToolChange('select');
+        }
+
         // Remove any existing 3D ceiling clipping first
         try { remove3DClipping(); } catch {}
 
@@ -1029,10 +1034,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
             <React.Fragment key={tool.id}>
               {showSep && <Separator orientation="vertical" className="h-4 sm:h-6 mx-0.5 sm:mx-1 bg-white/20" />}
               
-              {tool.id === 'orbit' && (
+              {tool.id === 'orbit' && viewMode !== '2d' && (
                 <ToolButton icon={tool.icon} label={tool.label} onClick={() => handleNavModeChange('orbit')} active={navMode === 'orbit'} disabled={!isReady} />
               )}
-              {tool.id === 'firstPerson' && (
+              {tool.id === 'firstPerson' && viewMode !== '2d' && (
                 <ToolButton icon={tool.icon} label={tool.label} onClick={() => handleNavModeChange('firstPerson')} active={navMode === 'firstPerson'} disabled={!isReady} />
               )}
               {tool.id === 'fitView' && (
