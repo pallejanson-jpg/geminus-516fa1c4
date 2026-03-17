@@ -457,14 +457,14 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
         saveStyle(id);
         // Keep slabs visible for spatial context but translucent so wall lines remain readable
         entity.colorize = [1, 1, 1];
-        entity.opacity = 0.18;
+        entity.opacity = 0.08;
         entity.edges = false;
       }
     }
 
     // Bold wall edges for Dalux-style crisp plan
     if (scene.edgeMaterial) {
-      scene.edgeMaterial.edgeWidth = 2;
+      scene.edgeMaterial.edgeWidth = 3;
       scene.edgeMaterial.edgeColor = [0, 0, 0];
     }
     for (const id of wallIds) {
@@ -1141,7 +1141,10 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
             src={storeyMap.imageData}
             alt="Floor plan"
             className="max-w-none cursor-crosshair"
-            style={monochrome ? { filter: 'grayscale(1) saturate(0) contrast(1.8) brightness(1.02)' } : undefined}
+            style={{
+              imageRendering: 'crisp-edges',
+              ...(monochrome ? { filter: 'grayscale(1) saturate(0) contrast(1.8) brightness(1.02)' } : {}),
+            }}
             draggable={false}
             onClick={handleClick}
             onLoad={centerImage}
