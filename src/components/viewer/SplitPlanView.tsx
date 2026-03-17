@@ -412,42 +412,43 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     const maxWidth = isMobile ? 900 : 6000;
     const width = container ? Math.min(container.clientWidth * (isMobile ? 1.5 : 4), maxWidth) : 2000;
 
-    // Precompute entity type buckets once (shared across floors)
-    const wallCacheKey = '__global_wall_ids__';
-    const slabCacheKey = '__global_slab_ids__';
-    const spaceCacheKey = '__global_space_ids__';
-    const doorCacheKey = '__global_door_ids__';
+    // Build set of entity IDs that belong to the selected storey (descendants)
+    const storeyDescendants = new Set<string>();
+    const storeyMeta = viewer.metaScene?.metaObjects?.[preferredStoreyId];
+    if (storeyMeta) {
+      const stack = [...(storeyMeta.children || [])];
+      while (stack.length > 0) {
+        const node = stack.pop();
+        if (!node) continue;
+        if (viewer.scene.objects?.[node.id]) storeyDescendants.add(node.id);
+        if (node.children?.length) stack.push(...node.children);
+      }
+    }
+
+    // Precompute entity type buckets scoped to this storey
     const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifcwallelementedcase', 'ifccurtainwall', 'ifccolumn', 'ifccolumnstandardcase', 'ifcbeam', 'ifcbeamstandardcase']);
     const slabTypes = new Set(['ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase', 'ifcroof', 'ifccovering', 'ifcplate']);
     const spaceTypes = new Set(['ifcspace']);
     const doorTypes = new Set(['ifcdoor', 'ifcdoorstandardcase', 'ifcwindow', 'ifcwindowstandardcase']);
 
-    let wallIds = wallIdCacheRef.current.get(wallCacheKey);
-    let slabIds = wallIdCacheRef.current.get(slabCacheKey);
-    let spaceIds = wallIdCacheRef.current.get(spaceCacheKey);
-    let doorIds = wallIdCacheRef.current.get(doorCacheKey);
+    const wallIds: string[] = [];
+    const slabIds: string[] = [];
+    const spaceIds: string[] = [];
+    const doorIds: string[] = [];
+    const metaObjects = viewer.metaScene?.metaObjects || {};
 
-    if (!wallIds || !slabIds) {
-      wallIds = [];
-      slabIds = [];
-      spaceIds = [];
-      doorIds = [];
-      const metaObjects = viewer.metaScene?.metaObjects || {};
-      for (const [id, mo] of Object.entries(metaObjects) as [string, any][]) {
-        const t = (mo?.type || '').toLowerCase();
-        if (!viewer.scene.objects?.[id]) continue;
-        if (wallTypes.has(t)) wallIds.push(id);
-        else if (slabTypes.has(t)) slabIds.push(id);
-        else if (spaceTypes.has(t)) spaceIds!.push(id);
-        else if (doorTypes.has(t)) doorIds!.push(id);
-      }
-      wallIdCacheRef.current.set(wallCacheKey, wallIds);
-      wallIdCacheRef.current.set(slabCacheKey, slabIds);
-      wallIdCacheRef.current.set(spaceCacheKey, spaceIds!);
-      wallIdCacheRef.current.set(doorCacheKey, doorIds!);
+    // Only include entities that belong to this storey's descendants
+    const entityPool = storeyDescendants.size > 0 ? storeyDescendants : new Set(Object.keys(viewer.scene.objects || {}));
+    for (const id of entityPool) {
+      const mo = metaObjects[id] as any;
+      if (!mo) continue;
+      const t = (mo.type || '').toLowerCase();
+      if (!viewer.scene.objects?.[id]) continue;
+      if (wallTypes.has(t)) wallIds.push(id);
+      else if (slabTypes.has(t)) slabIds.push(id);
+      else if (spaceTypes.has(t)) spaceIds.push(id);
+      else if (doorTypes.has(t)) doorIds.push(id);
     }
-    if (!spaceIds) spaceIds = wallIdCacheRef.current.get(spaceCacheKey) || [];
-    if (!doorIds) doorIds = wallIdCacheRef.current.get(doorCacheKey) || [];
 
     // Apply clean architectural styling before map capture
     const scene = viewer.scene;
