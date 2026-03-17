@@ -619,7 +619,7 @@ const UnifiedViewerContent: React.FC<{
   // Trigger xeokit canvas resize when split ratio changes or entering split mode
   useEffect(() => {
     if (!isSplit2D3D) return;
-    const timer = setTimeout(() => {
+    const doResize = () => {
       try {
         const xv = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer
           ?? (window as any).__nativeXeokitViewer;
@@ -628,9 +628,13 @@ const UnifiedViewerContent: React.FC<{
           xv.scene.glRedraw?.();
         }
       } catch {}
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [isSplit2D3D, desktopSplitRatio]);
+    };
+    // Multiple resize passes: immediate, short, and delayed to catch late layout
+    const t1 = setTimeout(doResize, 50);
+    const t2 = setTimeout(doResize, 200);
+    const t3 = setTimeout(doResize, 600);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [isSplit2D3D, desktopSplitRatio, viewerReady]);
 
   // NOTE: We no longer show a full-screen "Loading viewer..." overlay here.
   // Instead we let the NativeXeokitViewer handle its own loading spinner,
