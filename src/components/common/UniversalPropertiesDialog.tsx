@@ -200,43 +200,80 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
 
         setAssets(assetData || []);
 
-        // If no assets found, try BIM metadata fallback from the viewer (with full property sets)
+        // If no assets found, auto-create a Geminus asset from BIM metadata
         if ((!assetData || assetData.length === 0) && entityId) {
           const viewer = (window as any).__nativeXeokitViewer;
           if (viewer?.metaScene?.metaObjects) {
             const metaObj = viewer.metaScene.metaObjects[entityId];
             if (metaObj) {
-              const fallback: Record<string, string> = {};
-              fallback['Entity ID'] = entityId;
-              if (metaObj.type) fallback['IFC Type'] = metaObj.type;
-              if (metaObj.name) fallback['Name'] = metaObj.name;
-              if (metaObj.originalSystemId) fallback['FM GUID'] = metaObj.originalSystemId;
-              if (metaObj.attributes?.LongName) fallback['Long Name'] = metaObj.attributes.LongName;
-              if (metaObj.attributes?.ObjectType) fallback['Object Type'] = metaObj.attributes.ObjectType;
-              if (metaObj.attributes?.Description) fallback['Description'] = metaObj.attributes.Description;
-              // Parent storey info
+              // Determine fm_guid, category, name, building, level from BIM metadata
+              const fmGuid = metaObj.originalSystemId || entityId;
+              const ifcType = metaObj.type || 'Instance';
+              // Map IFC type to Geminus category
+              const IFC_CATEGORY_MAP: Record<string, string> = {
+                'IfcWall': 'Instance', 'IfcWallStandardCase': 'Instance',
+                'IfcDoor': 'Instance', 'IfcWindow': 'Instance',
+                'IfcSlab': 'Instance', 'IfcColumn': 'Instance',
+                'IfcBeam': 'Instance', 'IfcSpace': 'Space',
+                'IfcBuildingStorey': 'Building Storey', 'IfcBuilding': 'Building',
+                'IfcFurnishingElement': 'Instance', 'IfcFlowTerminal': 'Instance',
+                'IfcFlowSegment': 'Instance', 'IfcFlowFitting': 'Instance',
+              };
+              const assetCategory = IFC_CATEGORY_MAP[ifcType] || 'Instance';
+              const assetName = metaObj.name || null;
+
+              // Find parent storey
+              let levelFmGuid: string | null = null;
               let parent = metaObj.parent;
               while (parent) {
                 if (parent.type?.toLowerCase() === 'ifcbuildingstorey') {
-                  fallback['Floor'] = parent.name || parent.id;
+                  levelFmGuid = parent.originalSystemId || parent.id;
                   break;
                 }
                 parent = parent.parent;
               }
-              // Model info
-              if (metaObj.metaModel?.id) fallback['Model'] = metaObj.metaModel.id;
-              // Property sets
-              if (metaObj.propertySets) {
-                metaObj.propertySets.forEach((ps: any) => {
-                  const psName = ps.name || 'Properties';
-                  ps.properties?.forEach((p: any) => {
-                    if (p.value !== undefined && p.value !== null && p.value !== '') {
-                      fallback[`${psName} / ${p.name}`] = String(p.value);
-                    }
+
+              // Find building fm guid from URL or context
+              const urlParams = new URLSearchParams(window.location.search);
+              const buildingFmGuid = urlParams.get('building') || null;
+
+              try {
+                // Auto-insert into assets table
+                const { data: insertedData, error: insertError } = await supabase
+                  .from('assets')
+                  .insert({
+                    fm_guid: fmGuid,
+                    category: assetCategory,
+                    name: assetName,
+                    asset_type: ifcType,
+                    building_fm_guid: buildingFmGuid,
+                    level_fm_guid: levelFmGuid,
+                    is_local: true,
+                    created_in_model: true,
+                  })
+                  .select()
+                  .single();
+
+                if (!insertError && insertedData) {
+                  console.log('[UniversalPropertiesDialog] Auto-created asset from BIM:', fmGuid);
+                  assetData = [insertedData];
+                  setAssets([insertedData]);
+                  setFormData({
+                    common_name: insertedData.common_name || '',
+                    asset_type: insertedData.asset_type || '',
+                    coordinate_x: insertedData.coordinate_x ?? '',
+                    coordinate_y: insertedData.coordinate_y ?? '',
+                    coordinate_z: insertedData.coordinate_z ?? '',
                   });
-                });
+                } else {
+                  // If insert fails (e.g. duplicate), still show BIM fallback
+                  console.warn('[UniversalPropertiesDialog] Auto-create failed, showing BIM fallback:', insertError?.message);
+                  setBimFallbackFromMeta(metaObj, entityId);
+                }
+              } catch (e) {
+                console.warn('[UniversalPropertiesDialog] Auto-create error:', e);
+                setBimFallbackFromMeta(metaObj, entityId);
               }
-              setBimFallbackData(fallback);
             }
           }
         }
