@@ -731,6 +731,14 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     try {
       const result = await deleteAssets(fmGuids);
       if (result.summary.deleted > 0) {
+        // Best-effort: also delete from FM Access
+        for (const guid of fmGuids) {
+          try {
+            await deleteFmAccessObject(guid);
+          } catch (fmaErr) {
+            console.warn(`FM Access delete failed for ${guid}:`, fmaErr);
+          }
+        }
         toast.success(`${result.summary.deleted} object(s) deleted`);
         onUpdate?.();
         onClose();
