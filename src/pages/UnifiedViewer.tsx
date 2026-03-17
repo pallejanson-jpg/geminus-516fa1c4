@@ -122,9 +122,11 @@ const UnifiedViewerContent: React.FC<{
     const handler = (e: Event) => {
       const { worldPos } = (e as CustomEvent).detail || {};
       if (!worldPos || worldPos.length < 3) return;
+      // Validate coordinates before flying
+      if (!worldPos.every((v: number) => Number.isFinite(v))) return;
 
       const viewer = (window as any).__nativeXeokitViewer;
-      if (!viewer?.cameraFlight) return;
+      if (!viewer?.cameraFlight || !viewer?.camera) return;
 
       // Preserve current horizontal heading direction
       const eye = viewer.camera.eye;
@@ -139,11 +141,23 @@ const UnifiedViewerContent: React.FC<{
       const floorY = worldPos[1];
       const eyeHeight = floorY + 1.5;
 
+      const newEye = [worldPos[0], eyeHeight, worldPos[2]];
+      const newLook = [worldPos[0] + dirX * 5, eyeHeight, worldPos[2] + dirZ * 5];
+
+      // Validate computed positions
+      if (!newEye.every((v: number) => Number.isFinite(v)) || !newLook.every((v: number) => Number.isFinite(v))) return;
+
       viewer.cameraFlight.flyTo({
-        eye: [worldPos[0], eyeHeight, worldPos[2]],
-        look: [worldPos[0] + dirX * 5, eyeHeight, worldPos[2] + dirZ * 5],
+        eye: newEye,
+        look: newLook,
         up: [0, 1, 0],
         duration: 0.5,
+      }, () => {
+        // Force a canvas redraw after flyTo completes to prevent blank 3D pane
+        try {
+          viewer.scene.canvas?.resizeCanvas?.();
+          viewer.scene.glRedraw?.();
+        } catch {}
       });
     };
 
