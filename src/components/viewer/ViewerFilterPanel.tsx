@@ -783,16 +783,21 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const hasAnyFilter = checkedSources.size > 0 || checkedLevels.size > 0 ||
       checkedSpaces.size > 0 || checkedCategories.size > 0;
 
-    // Step 0: Clean slate — reset xray and colorize
+    // Step 0: Clean slate — reset xray (but preserve colorize if no filter active, to avoid theme flash)
     const prevXrayed = scene.xrayedObjectIds;
     if (prevXrayed?.length > 0) scene.setObjectsXRayed(prevXrayed, false);
-    const prevColorizedIds = scene.colorizedObjectIds;
-    if (prevColorizedIds?.length > 0) {
-      scene.setObjectsColorized(prevColorizedIds, false);
-      prevColorizedIds.forEach((id: string) => {
-        const entity = scene.objects?.[id];
-        if (entity && entity.opacity < 1) entity.opacity = 1.0;
-      });
+    
+    // Only reset colorize when we actually have filters to apply
+    // This prevents the "native colors flash" when the panel first opens with no filters
+    if (hasAnyFilter || autoColorEnabled || autoColorSpaces || autoColorCategories) {
+      const prevColorizedIds = scene.colorizedObjectIds;
+      if (prevColorizedIds?.length > 0) {
+        scene.setObjectsColorized(prevColorizedIds, false);
+        prevColorizedIds.forEach((id: string) => {
+          const entity = scene.objects?.[id];
+          if (entity && entity.opacity < 1) entity.opacity = 1.0;
+        });
+      }
     }
 
     // Hide all IfcSpace entities by default (fast via typeIndex)

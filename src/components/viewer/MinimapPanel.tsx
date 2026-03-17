@@ -195,7 +195,7 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
     return () => { clearTimeout(timeout); clearInterval(interval); };
   }, [isVisible, generateMap]);
 
-  // Camera position
+  // Camera position — use xeokit's built-in worldPosToStoreyMap for accuracy
   useEffect(() => {
     if (!isVisible) return;
     const update = () => {
@@ -204,11 +204,28 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
       const plugin = pluginRef.current;
       if (!viewer?.camera?.eye || !map || !plugin) return;
 
+      const eye = viewer.camera.eye;
+
+      // Use xeokit's built-in worldPosToStoreyMap if available
+      if (typeof plugin.worldPosToStoreyMap === 'function') {
+        const imagePos = [0, 0];
+        try {
+          plugin.worldPosToStoreyMap(map, [eye[0], eye[1], eye[2]], imagePos);
+          setCameraPos({
+            x: (imagePos[0] / map.width) * 100,
+            y: (imagePos[1] / map.height) * 100,
+          });
+          return;
+        } catch (e) {
+          // Fall through to manual calc
+        }
+      }
+
+      // Fallback: manual calculation
       const storey = plugin.storeys[map.storeyId];
       if (!storey) return;
 
       const aabb = plugin._fitStoreyMaps ? storey.storeyAABB : storey.modelAABB;
-      const eye = viewer.camera.eye;
       const normX = (eye[0] - aabb[0]) / (aabb[3] - aabb[0]);
       const normZ = (eye[2] - aabb[2]) / (aabb[5] - aabb[2]);
 

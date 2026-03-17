@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   ArrowLeft, Pencil, Save, ChevronDown, ChevronUp, Loader2, 
   Building2, Layers, DoorOpen, Box, Database, Search, AlertCircle, Cloud,
-  Trash2, Upload, CloudOff, Tag, Check, Sparkles, X
+  Trash2, Upload, CloudOff, Tag, Check, Sparkles, X, Pin, PinOff
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +27,9 @@ interface UniversalPropertiesDialogProps {
   onUpdate?: () => void;
   /** BIM entity ID from the viewer (for fallback metadata display) */
   entityId?: string;
+  /** Whether the dialog is pinned (stays open and updates on selection change) */
+  isPinned?: boolean;
+  onPinToggle?: () => void;
 }
 
 interface PropertyItem {
@@ -81,6 +84,8 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   category,
   onUpdate,
   entityId,
+  isPinned = false,
+  onPinToggle,
 }) => {
   const isMobile = useIsMobile();
   
@@ -127,6 +132,38 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
 
   // BIM fallback metadata state
   const [bimFallbackData, setBimFallbackData] = useState<Record<string, string> | null>(null);
+
+  // Helper to build BIM fallback from metaObject
+  const setBimFallbackFromMeta = useCallback((metaObj: any, eid: string) => {
+    const fallback: Record<string, string> = {};
+    fallback['Entity ID'] = eid;
+    if (metaObj.type) fallback['IFC Type'] = metaObj.type;
+    if (metaObj.name) fallback['Name'] = metaObj.name;
+    if (metaObj.originalSystemId) fallback['FM GUID'] = metaObj.originalSystemId;
+    if (metaObj.attributes?.LongName) fallback['Long Name'] = metaObj.attributes.LongName;
+    if (metaObj.attributes?.ObjectType) fallback['Object Type'] = metaObj.attributes.ObjectType;
+    if (metaObj.attributes?.Description) fallback['Description'] = metaObj.attributes.Description;
+    let parent = metaObj.parent;
+    while (parent) {
+      if (parent.type?.toLowerCase() === 'ifcbuildingstorey') {
+        fallback['Floor'] = parent.name || parent.id;
+        break;
+      }
+      parent = parent.parent;
+    }
+    if (metaObj.metaModel?.id) fallback['Model'] = metaObj.metaModel.id;
+    if (metaObj.propertySets) {
+      metaObj.propertySets.forEach((ps: any) => {
+        const psName = ps.name || 'Properties';
+        ps.properties?.forEach((p: any) => {
+          if (p.value !== undefined && p.value !== null && p.value !== '') {
+            fallback[`${psName} / ${p.name}`] = String(p.value);
+          }
+        });
+      });
+    }
+    setBimFallbackData(fallback);
+  }, []);
 
   // FM Access DOU & Documents
   const [douData, setDouData] = useState<any[]>([]);
@@ -195,43 +232,80 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
 
         setAssets(assetData || []);
 
-        // If no assets found, try BIM metadata fallback from the viewer (with full property sets)
+        // If no assets found, auto-create a Geminus asset from BIM metadata
         if ((!assetData || assetData.length === 0) && entityId) {
           const viewer = (window as any).__nativeXeokitViewer;
           if (viewer?.metaScene?.metaObjects) {
             const metaObj = viewer.metaScene.metaObjects[entityId];
             if (metaObj) {
-              const fallback: Record<string, string> = {};
-              fallback['Entity ID'] = entityId;
-              if (metaObj.type) fallback['IFC Type'] = metaObj.type;
-              if (metaObj.name) fallback['Name'] = metaObj.name;
-              if (metaObj.originalSystemId) fallback['FM GUID'] = metaObj.originalSystemId;
-              if (metaObj.attributes?.LongName) fallback['Long Name'] = metaObj.attributes.LongName;
-              if (metaObj.attributes?.ObjectType) fallback['Object Type'] = metaObj.attributes.ObjectType;
-              if (metaObj.attributes?.Description) fallback['Description'] = metaObj.attributes.Description;
-              // Parent storey info
+              // Determine fm_guid, category, name, building, level from BIM metadata
+              const fmGuid = metaObj.originalSystemId || entityId;
+              const ifcType = metaObj.type || 'Instance';
+              // Map IFC type to Geminus category
+              const IFC_CATEGORY_MAP: Record<string, string> = {
+                'IfcWall': 'Instance', 'IfcWallStandardCase': 'Instance',
+                'IfcDoor': 'Instance', 'IfcWindow': 'Instance',
+                'IfcSlab': 'Instance', 'IfcColumn': 'Instance',
+                'IfcBeam': 'Instance', 'IfcSpace': 'Space',
+                'IfcBuildingStorey': 'Building Storey', 'IfcBuilding': 'Building',
+                'IfcFurnishingElement': 'Instance', 'IfcFlowTerminal': 'Instance',
+                'IfcFlowSegment': 'Instance', 'IfcFlowFitting': 'Instance',
+              };
+              const assetCategory = IFC_CATEGORY_MAP[ifcType] || 'Instance';
+              const assetName = metaObj.name || null;
+
+              // Find parent storey
+              let levelFmGuid: string | null = null;
               let parent = metaObj.parent;
               while (parent) {
                 if (parent.type?.toLowerCase() === 'ifcbuildingstorey') {
-                  fallback['Floor'] = parent.name || parent.id;
+                  levelFmGuid = parent.originalSystemId || parent.id;
                   break;
                 }
                 parent = parent.parent;
               }
-              // Model info
-              if (metaObj.metaModel?.id) fallback['Model'] = metaObj.metaModel.id;
-              // Property sets
-              if (metaObj.propertySets) {
-                metaObj.propertySets.forEach((ps: any) => {
-                  const psName = ps.name || 'Properties';
-                  ps.properties?.forEach((p: any) => {
-                    if (p.value !== undefined && p.value !== null && p.value !== '') {
-                      fallback[`${psName} / ${p.name}`] = String(p.value);
-                    }
+
+              // Find building fm guid from URL or context
+              const urlParams = new URLSearchParams(window.location.search);
+              const buildingFmGuid = urlParams.get('building') || null;
+
+              try {
+                // Auto-insert into assets table
+                const { data: insertedData, error: insertError } = await supabase
+                  .from('assets')
+                  .insert({
+                    fm_guid: fmGuid,
+                    category: assetCategory,
+                    name: assetName,
+                    asset_type: ifcType,
+                    building_fm_guid: buildingFmGuid,
+                    level_fm_guid: levelFmGuid,
+                    is_local: true,
+                    created_in_model: true,
+                  })
+                  .select()
+                  .single();
+
+                if (!insertError && insertedData) {
+                  console.log('[UniversalPropertiesDialog] Auto-created asset from BIM:', fmGuid);
+                  assetData = [insertedData];
+                  setAssets([insertedData]);
+                  setFormData({
+                    common_name: insertedData.common_name || '',
+                    asset_type: insertedData.asset_type || '',
+                    coordinate_x: insertedData.coordinate_x ?? '',
+                    coordinate_y: insertedData.coordinate_y ?? '',
+                    coordinate_z: insertedData.coordinate_z ?? '',
                   });
-                });
+                } else {
+                  // If insert fails (e.g. duplicate), still show BIM fallback
+                  console.warn('[UniversalPropertiesDialog] Auto-create failed, showing BIM fallback:', insertError?.message);
+                  setBimFallbackFromMeta(metaObj, entityId);
+                }
+              } catch (e) {
+                console.warn('[UniversalPropertiesDialog] Auto-create error:', e);
+                setBimFallbackFromMeta(metaObj, entityId);
               }
-              setBimFallbackData(fallback);
             }
           }
         }
@@ -1358,9 +1432,22 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           </span>
           <Badge variant="outline" className="text-xs shrink-0">{displayCategory}</Badge>
         </div>
-        <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 border-border bg-background hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); onClose(); }}>
-          <X className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          {onPinToggle && (
+            <Button
+              variant={isPinned ? 'default' : 'outline'}
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              onClick={(e) => { e.stopPropagation(); onPinToggle(); }}
+              title={isPinned ? 'Unpin (auto-updates on selection)' : 'Pin (auto-update on selection)'}
+            >
+              {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+            </Button>
+          )}
+          <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 border-border bg-background hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); onClose(); }}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {renderContent()}
