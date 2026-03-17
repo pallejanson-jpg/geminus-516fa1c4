@@ -106,6 +106,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
   // Properties dialog
   const [propertiesEntity, setPropertiesEntity] = useState<{ entityId: string; fmGuid: string | null; name: string | null } | null>(null);
+  const [propertiesPinned, setPropertiesPinned] = useState(false);
 
   // Shim ref that matches the old Asset+ ref chain for existing hooks
   const viewerShimRef = useRef<any>(null);
