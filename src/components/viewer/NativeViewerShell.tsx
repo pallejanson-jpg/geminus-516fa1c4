@@ -803,9 +803,11 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       {propertiesEntity && (
         <UniversalPropertiesDialog
           isOpen={!!propertiesEntity}
-          onClose={() => setPropertiesEntity(null)}
+          onClose={() => { setPropertiesEntity(null); setPropertiesPinned(false); }}
           fmGuids={propertiesEntity.fmGuid || propertiesEntity.entityId}
           entityId={propertiesEntity.entityId}
+          isPinned={propertiesPinned}
+          onPinToggle={() => setPropertiesPinned(p => !p)}
         />
       )}
     </div>

@@ -1432,9 +1432,22 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           </span>
           <Badge variant="outline" className="text-xs shrink-0">{displayCategory}</Badge>
         </div>
-        <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 border-border bg-background hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); onClose(); }}>
-          <X className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          {onPinToggle && (
+            <Button
+              variant={isPinned ? 'default' : 'outline'}
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              onClick={(e) => { e.stopPropagation(); onPinToggle(); }}
+              title={isPinned ? 'Unpin (auto-updates on selection)' : 'Pin (auto-update on selection)'}
+            >
+              {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+            </Button>
+          )}
+          <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 border-border bg-background hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); onClose(); }}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {renderContent()}
