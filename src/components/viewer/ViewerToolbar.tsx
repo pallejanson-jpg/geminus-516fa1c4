@@ -801,8 +801,23 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         const HIDE_TYPES = new Set([...SLAB_TYPES, ...ROOF_TYPES, ...COVERING_TYPES]);
         const metaObjects = viewer?.metaScene?.metaObjects || scene?.metaScene?.metaObjects || {};
         const metaCount = Object.keys(metaObjects).length;
-        console.log(`[ViewerToolbar] 2D styling: found ${metaCount} metaObjects`);
+        console.log(`[ViewerToolbar] 2D styling: found ${metaCount} metaObjects, floor: ${targetFloorId}`);
         const colorized = new Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean; offset: number[] | null }>();
+
+        // Build storey descendant set to scope 2D styling to the selected floor
+        const storeyDescendants = new Set<string>();
+        if (targetFloorId) {
+          const storeyMeta = metaObjects[targetFloorId];
+          if (storeyMeta) {
+            const stack = [...(storeyMeta.children || [])];
+            while (stack.length > 0) {
+              const node = stack.pop();
+              if (!node) continue;
+              storeyDescendants.add(node.id);
+              if (node.children?.length) stack.push(...node.children);
+            }
+          }
+        }
 
         let visibleCount = 0;
 
@@ -814,6 +829,14 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
           const typeLower = mo.type?.toLowerCase() || '';
           const entity = scene.objects?.[mo.id];
           if (!entity) return;
+
+          // If we have storey descendants, hide entities not belonging to this floor
+          if (storeyDescendants.size > 0 && !storeyDescendants.has(mo.id) && typeLower !== 'ifcbuildingstorey' && typeLower !== 'ifcbuilding' && typeLower !== 'ifcsite' && typeLower !== 'ifcproject') {
+            saveOrig(entity, mo.id);
+            entity.visible = false;
+            entity.pickable = false;
+            return;
+          }
 
           if (HIDE_TYPES.has(typeLower)) {
             // Hide slabs, roofs, coverings — they occlude the plan from above
