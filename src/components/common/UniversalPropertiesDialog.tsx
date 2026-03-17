@@ -261,6 +261,24 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           // For multi-select, start with empty form data
           setFormData({});
         }
+
+        // Fetch FM Access DOU and documents for the object(s)
+        if (assetData && assetData.length > 0) {
+          const guidsForDou = assetData.map((a: any) => a.fm_guid);
+          const buildingGuids = [...new Set(assetData.map((a: any) => a.building_fm_guid).filter(Boolean))];
+
+          const [douResult, docsResult] = await Promise.all([
+            supabase.from('fm_access_dou').select('*').in('object_fm_guid', guidsForDou),
+            buildingGuids.length > 0
+              ? supabase.from('fm_access_documents').select('*').in('building_fm_guid', buildingGuids).limit(50)
+              : Promise.resolve({ data: [] }),
+          ]);
+          setDouData(douResult.data || []);
+          setFmaDocuments((docsResult as any).data || []);
+        } else {
+          setDouData([]);
+          setFmaDocuments([]);
+        }
       } catch (error: any) {
         console.error('Failed to fetch data:', error);
         toast.error('Could not fetch data');
