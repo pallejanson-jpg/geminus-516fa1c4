@@ -385,7 +385,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     if (!canvas) return;
 
     const handleSelectClick = (e: MouseEvent) => {
-      if (activeToolRef.current !== 'select') return;
+      if (activeToolRef.current === 'measure' || activeToolRef.current === 'slicer') return;
       const pickResult = xeokitViewer.scene.pick({
         canvasPos: [e.offsetX, e.offsetY],
         pickSurface: false,
