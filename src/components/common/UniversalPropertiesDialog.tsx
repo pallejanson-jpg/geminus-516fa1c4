@@ -128,6 +128,10 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   // BIM fallback metadata state
   const [bimFallbackData, setBimFallbackData] = useState<Record<string, string> | null>(null);
 
+  // FM Access DOU & Documents
+  const [douData, setDouData] = useState<any[]>([]);
+  const [fmaDocuments, setFmaDocuments] = useState<any[]>([]);
+
   // Fetch data for all selected items
   useEffect(() => {
     if (!isOpen || fmGuids.length === 0) return;
