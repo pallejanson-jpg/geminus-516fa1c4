@@ -271,7 +271,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
         break;
       case 'pan':
         if (viewer?.cameraControl) {
-          viewer.cameraControl.navMode = 'pan';
+          viewer.cameraControl.navMode = 'planView';
         }
         window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, {
           detail: { tool: null } as ViewerToolChangedDetail,
