@@ -1,129 +1,101 @@
-## Plan: IFC & ACC Import/Sync Performance Optimization (IMPLEMENTED ✅)
 
-### Changes Made
-1. **XKT compression** (`ifc-to-xkt`): Enabled `zip: true` in `writeXKTModelToArrayBuffer` — ~30% smaller XKT files
-2. **Parallel DB writes** (`ifc-to-xkt`): `persistSystemsAndConnections` + `populateAssetsFromMetaObjects` now run via `Promise.all` instead of sequentially
-3. **Streaming LD-JSON parser** (`acc-sync`): New `streamLDJSON()` async generator processes BIM property files line-by-line from `ReadableStream` — eliminates OOM risk on large Revit models
-4. **Incremental ACC sync** (`acc-sync`): `fetchAccAssets` now supports `filter[updatedAt]` parameter, only fetching assets modified since last sync — ~90% faster re-syncs
-5. **IFC derivative from ACC** (`acc-sync`): `translate-model` now requests IFC format alongside SVF. On completion, downloads the IFC derivative and feeds it into `ifc-to-xkt` for real per-storey tiling — unifying ACC and IFC geometry pipelines
-6. **Dual pipeline** (`check-translation`): Triggers both `ifc-to-xkt` (for tiled XKT) and `acc-geometry-extract` (for GLB fallback) in parallel when translation succeeds
 
----
+# Analys & Plan: CRUD-flöde, FM Access-data i UI, och 2D Viewer-integration
 
-## Plan: Mobile Viewer Startup Hardening (IMPLEMENTED ✅)
+## Nuläge — Vad fungerar idag
 
-### Changes Made
-1. **Mobile touch tuning** (`NativeXeokitViewer.tsx`): dragRotationRate 30→70, touchPanRate 0.06→0.14, touchDollyRate 0.04→0.09, rotationInertia 0.93→0.88, panInertia 0.88→0.82
-2. **FastNav delay** (`NativeXeokitViewer.tsx`): Added `delayBeforeRestore: true` (0.5s mobile, 0.3s desktop)
-3. **Suppress viewFit in split2d3d** (`NativeXeokitViewer.tsx`): Skips instant viewFit when `?mode=split2d3d` — floor isolation handles camera
-4. **Defer SplitPlanView mount** (`UnifiedViewer.tsx`): Mobile SplitPlanView only renders after `viewerReady=true`, shows spinner until then
-5. **Increased SplitPlanView retry** (`SplitPlanView.tsx`): 10×100ms → 30×200ms (6s total window), immediate retry on VIEWER_MODELS_LOADED
-6. **Debounced floor events** (`UnifiedViewer.tsx`): 500ms guard on FLOOR_SELECTION_CHANGED dispatches to prevent competing events
+### CRUD mot Asset+
+| Operation | Status | Implementerat i |
+|-----------|--------|-----------------|
+| **Create** (push lokal → A+) | Fungerar | `syncAssetToAssetPlus()` → `asset-plus-create` edge fn |
+| **Read** (sync A+ → Geminus) | Fungerar | `asset-plus-sync` edge fn → `assets`-tabell |
+| **Update** (Geminus → A+) | Fungerar | `updateAssetProperties()` → `asset-plus-update` edge fn |
+| **Delete** (Geminus → A+ expire) | Fungerar | `deleteAssets()` → `asset-plus-delete` edge fn |
 
-### Architecture Principle
-Mobile and desktop share the same `UnifiedViewerContent` initialization logic. The ONLY difference is layout:
-- Mobile: vertical stack (2D top, 3D bottom) with touch-optimized divider (8px)
-- Desktop: horizontal ResizablePanelGroup with drag handle (4px)
+### CRUD mot FM Access
+| Operation | Status | Problem |
+|-----------|--------|---------|
+| **Create** (push → FMA) | Fungerar | `syncAssetWithFmAccess()` / `ensureFmAccessHierarchy()` |
+| **Read** (hämta hierarki) | Fungerar | `getHierarchy`, `getObject` via `fm-access-query` |
+| **Update** (push properties) | Fungerar | `pushPropertyChangesToFmAccess()` anropas vid spara i Properties |
+| **Delete** | **SAKNAS** | `deleteFmAccessObject()` finns i servicen men **anropas aldrig** |
 
-Future changes to viewer startup MUST apply to both paths. Do NOT create separate mobile/desktop init logic.
-
----
-
-## Plan: SplitPlanView Navigation + Alignment UX (IMPLEMENTED ✅)
-
-### Changes Made
-1. **SplitPlanView click navigation** (`SplitPlanView.tsx`): Replaced first-person instant jump with MinimapPanel-style fly-to — keeps current eye height, looks down at clicked point, animates 0.5s.
-2. **AlignmentPointPicker precision** (`AlignmentPointPicker.tsx`): Now estimates surface point via ray-cast from tripod position + viewing direction × adjustable distance slider (0.5–10m). Shows captured coordinates and distance in both steps for verification.
+### ACC → Geminus
+| Operation | Status |
+|-----------|--------|
+| **Import** (ACC → lokal DB) | Fungerar via `acc-to-assetplus` och IFC-pipeline |
+| **Push till A+** | Fungerar (samma som lokal → A+) |
+| **Push till FMA** | Samma flöde som ovan |
 
 ---
 
-## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
+## Identifierade luckor
 
-### Changes Made
-1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
-2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
-3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
-4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
-5. **config.toml** updated with `acc-geometry-extract` function entry
+### 1. Delete slår inte igenom till FM Access
+`UniversalPropertiesDialog.handleDelete()` (rad 728-747) anropar **bara** `deleteAssets()` (Asset+ expire + lokal delete). FM Access-objektet lever kvar.
 
-### Pending (Phase 2)
-- Actual GLB chunk creation from SVF geometry (requires conversion worker)
-- OBJ as optional secondary format for small models
+**Fix**: Efter lyckad `deleteAssets()`, anropa `deleteFmAccessObject(guid)` för varje borttaget objekt (best-effort, som vi redan gör med property-push).
 
----
+### 2. FM Access-data (DOU, dokument) visas inte i Geminus UI
+Data synkas till `fm_access_dou`, `fm_access_documents`, `fm_access_drawings` — men **bara** exponeras via:
+- `FmAccessDocuments.tsx` (ritningar/dokument per byggnad i FMA Native-vyn)
+- Gunnar AI (via `document_chunks` semantic search)
 
+**Saknas**: Inget sätt att se DOU-instruktioner (drift- och underhållsinformation) direkt kopplat till ett objekt i Properties-dialogen eller i objektpanelen.
 
-### Ändringar
+### 3. FM Access 2D Viewer som grafiklager
+FMA 2D Viewer bäddas redan in via `FmAccess2DPanel.tsx` (iframe). Den har:
+- PDF-ritning som bakgrund
+- Vektorgrafik-overlay (utrymmen, objekt)
+- Click-events som propageras via `postMessage`
 
-#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
-**Fil:** `supabase/functions/conversion-worker-api/index.ts`
-- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
-- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
-- Upsert till `assets` med `created_in_model: true`
-- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
-
-#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
-**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
-- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
-- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
-- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
-- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
-- Diff: soft-delete objekt som finns i DB men inte i ny IFC
-
-#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
-**Fil:** `docs/conversion-worker/worker.mjs`
-- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
-- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
-- Non-fatal: om hierarki-population misslyckas fortsätter workern
-
-#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
-**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
-- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
-- `created_in_model: true` istället för `false`
-- Diff-logik: markerar borttagna objekt efter import
-
-### Datamodell
-
-```text
-Building Storey:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
-  category:          "Building Storey"
-  created_in_model:  true
-
-Space:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
-  category:          "Space"
-  level_fm_guid:     parent storey fm_guid
-
-Instance:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
-  category:          "Instance"
-  asset_type:        ifcType (e.g. "IfcDoor")
-  level_fm_guid:     resolved storey
-  in_room_fm_guid:   resolved space
-```
-
-### Diff-flöde
-
-Vid omimport jämförs importerade fm_guids mot befintliga i DB:
-- **Nytt** → INSERT
-- **Matchat** → UPDATE (namn, typ, rumsplacering)
-- **Borttaget** → `modification_status = 'removed'` (soft-delete)
+**Symbolplacering via FMA API**: FMA har ett grafik-API (`/graphics`) för att placera symboler på ritningar. Det stöder inte realtidsplacering via deras iframe-klient — det kräver API-anrop för att skapa/uppdatera grafiska objekt på ritningar. Det är möjligt men kräver ny edge function-logik.
 
 ---
 
-## Previous Plans
+## Plan
 
-### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
-- Browser-primary for >20MB, edge function for ≤20MB
-- MetaModel JSON uploaded alongside XKT
-- Systems extracted and persisted
+### Fas 1: Komplettera Delete-flödet (liten insats)
 
-### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
-- Standalone Node.js worker polls conversion-worker-api
-- Per-storey .xkt tiles with dynamic floor loading
+**Fil: `src/components/common/UniversalPropertiesDialog.tsx`**
+- I `handleDelete()` (rad 728-747): efter lyckad `deleteAssets()`, loopa igenom raderade GUIDs och anropa `deleteFmAccessObject(guid)` med best-effort (catch + console.warn).
 
-### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
-- 10 credential override columns on building_settings
-- Shared credential resolver in edge functions
-- Properties page as configuration hub
+### Fas 2: Visa FM Access DOU-data i Properties (medel insats)
+
+**Fil: `src/components/common/UniversalPropertiesDialog.tsx`**
+- Lägg till en ny sektion "Drift & Underhåll" (DOU) som hämtar data från `fm_access_dou`-tabellen baserat på objektets `fm_guid`.
+- Visa titel + innehåll i ett collapsible-block under de befintliga egenskapssektionerna.
+- Hämta via enkel Supabase-query: `supabase.from('fm_access_dou').select('*').eq('object_fm_guid', fmGuid)`.
+
+### Fas 3: Visa FM Access Documents kopplat till objekt (medel insats)
+
+**Fil: `src/components/common/UniversalPropertiesDialog.tsx`**
+- Lägg till en "Dokument"-sektion som hämtar från `fm_access_documents` baserat på `building_fm_guid`.
+- Alternativt flytta `FmAccessDocuments`-komponenten så att den kan renderas inline i Properties-dialogen.
+
+### Fas 4: FM Access symbolplacering via API (stor insats, utredning)
+
+Det här kräver:
+1. Ny edge function `fm-access-graphics` som anropar FMA:s grafik-API för att skapa/uppdatera symbolobjekt på ritningar.
+2. Mappning mellan Geminus `annotation_symbols` och FMA:s symbolformat.
+3. Realtidsuppdatering av iframe-vyn efter placering (troligtvis via `postMessage` reload-kommando).
+
+**Rekommendation**: Parkera detta tills vi har bekräftat att FMA:s grafik-API stöder det vi behöver. Det är ett separat utvecklingsprojekt.
+
+### Fas 5: FMA 2D Viewer som alternativ till egen heatmap (utredning)
+
+FMA:s 2D-viewer har kraftfull vektorgrafik men är begränsad till iframe-integration. Vi kan **inte** styra dess rendering programmatiskt (färga rum, visa heatmaps) — det kräver FMA-interna konfigurationer. Vår egen heatmap-logik i xeokit ger mer kontroll.
+
+**Rekommendation**: Fortsätt använda xeokit för rumsvisualisering. FMA 2D bäddas in för ritningsvisning och dokumentåtkomst, inte som visualiseringsmotor.
+
+---
+
+## Sammanfattning av kodändringar
+
+| Fil | Ändring | Prioritet |
+|-----|---------|-----------|
+| `UniversalPropertiesDialog.tsx` | Anropa `deleteFmAccessObject` i `handleDelete` | Hög |
+| `UniversalPropertiesDialog.tsx` | Ny DOU-sektion (hämta `fm_access_dou` per objekt) | Medel |
+| `UniversalPropertiesDialog.tsx` | Ny dokument-sektion (hämta `fm_access_documents`) | Medel |
+| Ny edge fn `fm-access-graphics` | Symbolplacering via FMA API | Låg (utredning) |
+
