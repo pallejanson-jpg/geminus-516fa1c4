@@ -584,16 +584,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                 <div className="space-y-3 pt-2">
-                  {/* 2D/3D Toggle */}
-                  <div className="flex items-center justify-between py-1.5">
-                    <div className="flex items-center gap-2">
-                      <div className={cn("p-1.5 rounded-md", is2DMode ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
-                        <SquareDashed className="h-4 w-4" />
-                      </div>
-                      <span className="text-sm">2D/3D</span>
-                    </div>
-                    <Switch checked={is2DMode} onCheckedChange={handle2DModeToggle} />
-                  </div>
+                  {/* 2D/3D Toggle removed from right panel */}
 
                   {/* Model Tree Toggle - removed, replaced by FilterPanel */}
 
@@ -658,7 +649,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
 
               <Separator />
 
-              {/* Room Visualization - always mounted so colorization persists */}
+              {/* Color filter - always mounted so colorization persists */}
               {buildingFmGuid && (
                 <div>
                   <Button
@@ -668,7 +659,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                   >
                     <div className="flex items-center gap-2">
                       <Palette className="h-4 w-4" />
-                      <span className="font-medium text-sm">Room Visualization</span>
+                      <span className="font-medium text-sm">Color filter</span>
                     </div>
                     <ChevronDown className={cn("h-4 w-4 transition-transform", roomVizOpen && "rotate-180")} />
                   </Button>

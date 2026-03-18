@@ -137,9 +137,9 @@ const UnifiedViewerContent: React.FC<{
       const dirX = hLen > 0.01 ? dx / hLen : 0;
       const dirZ = hLen > 0.01 ? dz / hLen : -1;
 
-      // Place camera at click point, 1.5m above floor, looking in same direction
+      // Place camera at click point, 2m above floor, looking in same direction
       const floorY = worldPos[1];
-      const eyeHeight = floorY + 1.5;
+      const eyeHeight = floorY + 2.0;
 
       const newEye = [worldPos[0], eyeHeight, worldPos[2]];
       const newLook = [worldPos[0] + dirX * 5, eyeHeight, worldPos[2] + dirZ * 5];
