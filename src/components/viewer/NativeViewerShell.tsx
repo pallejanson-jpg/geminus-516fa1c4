@@ -738,6 +738,10 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     }));
   }, [contextMenu]);
 
+  const handleContextCreateAsset = useCallback(() => {
+    setIsPickingPosition(true);
+  }, []);
+
   const handleChangeViewMode = useCallback((mode: '2d' | '3d' | '360') => {
     setViewMode(mode);
     window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode } }));
