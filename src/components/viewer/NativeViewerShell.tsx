@@ -14,12 +14,13 @@ import ViewerContextMenu from './ViewerContextMenu';
 import ViewerToolbar from './ViewerToolbar';
 import VisualizationToolbar from './VisualizationToolbar';
 import InventoryPanel from './InventoryPanel';
+import InventoryFormSheet from '@/components/inventory/InventoryFormSheet';
 import RouteDisplayOverlay from './RouteDisplayOverlay';
 
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
 import { AppContext } from '@/context/AppContext';
-import { VIEW_MODE_REQUESTED_EVENT, LOAD_SAVED_VIEW_EVENT, VIEWER_TOOL_CHANGED_EVENT, type LoadSavedViewDetail, type ViewerToolChangedDetail } from '@/lib/viewer-events';
+import { VIEW_MODE_REQUESTED_EVENT, LOAD_SAVED_VIEW_EVENT, VIEWER_TOOL_CHANGED_EVENT, VIEWER_CREATE_ASSET_EVENT, type LoadSavedViewDetail, type ViewerToolChangedDetail } from '@/lib/viewer-events';
 import { ROOM_LABELS_TOGGLE_EVENT, ROOM_LABELS_CONFIG_EVENT, type RoomLabelsToggleDetail } from '@/hooks/useRoomLabels';
 import useRoomLabels from '@/hooks/useRoomLabels';
 import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDialog';
@@ -83,6 +84,11 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const [showVisualizationMenu, setShowVisualizationMenu] = useState(false);
   const [showRoomVisualization, setShowRoomVisualization] = useState(false);
   const [showAssetPanel, setShowAssetPanel] = useState(false);
+
+  // ── Inventory pick-position mode ──────────────────────────────────────
+  const [isPickingPosition, setIsPickingPosition] = useState(false);
+  const [pendingAssetPosition, setPendingAssetPosition] = useState<{ x: number; y: number; z: number } | null>(null);
+  const [showInventorySheet, setShowInventorySheet] = useState(false);
 
   // Listen for asset panel toggle events (from VisualizationToolbar button)
   useEffect(() => {
@@ -489,6 +495,53 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     return () => canvas.removeEventListener('click', handleSelectClick);
   }, [xeokitViewer]);
 
+  // ── Pick-position click handler for inventory ─────────────────────────
+  useEffect(() => {
+    if (!xeokitViewer?.scene || !isPickingPosition) return;
+    const canvas = xeokitViewer.scene.canvas?.canvas;
+    if (!canvas) return;
+
+    canvas.style.cursor = 'crosshair';
+
+    const handlePickClick = (e: MouseEvent) => {
+      const pickResult = xeokitViewer.scene.pick({
+        canvasPos: [e.offsetX, e.offsetY],
+        pickSurface: true,
+      });
+      if (pickResult?.worldPos) {
+        const [x, y, z] = pickResult.worldPos;
+        setPendingAssetPosition({ x, y, z });
+        setIsPickingPosition(false);
+        setShowInventorySheet(true);
+      }
+    };
+
+    canvas.addEventListener('click', handlePickClick);
+    return () => {
+      canvas.removeEventListener('click', handlePickClick);
+      canvas.style.cursor = '';
+    };
+  }, [xeokitViewer, isPickingPosition]);
+
+  // Listen for VIEWER_CREATE_ASSET_EVENT from mobile overlay
+  useEffect(() => {
+    const handler = () => {
+      setIsPickingPosition(true);
+    };
+    window.addEventListener(VIEWER_CREATE_ASSET_EVENT, handler);
+    return () => window.removeEventListener(VIEWER_CREATE_ASSET_EVENT, handler);
+  }, []);
+
+  // Cancel pick mode on Escape
+  useEffect(() => {
+    if (!isPickingPosition) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsPickingPosition(false);
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [isPickingPosition]);
+
   // Context menu via right-click on canvas
   useEffect(() => {
     if (!xeokitViewer?.scene) return;
@@ -685,6 +738,10 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     }));
   }, [contextMenu]);
 
+  const handleContextCreateAsset = useCallback(() => {
+    setIsPickingPosition(true);
+  }, []);
+
   const handleChangeViewMode = useCallback((mode: '2d' | '3d' | '360') => {
     setViewMode(mode);
     window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode } }));
@@ -856,6 +913,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           }}
           onMoveObject={handleContextMove}
           onDeleteObject={handleContextDelete}
+          onCreateAsset={handleContextCreateAsset}
           labelsActive={labelsVisibleRef.current}
           roomLabelsActive={roomLabelsVisibleRef.current}
         />
@@ -872,6 +930,32 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           onPinToggle={() => setPropertiesPinned(p => !p)}
         />
       )}
+
+      {/* Pick-position mode indicator */}
+      {isPickingPosition && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none">
+          <div className="bg-card/90 backdrop-blur-sm border rounded-lg px-4 py-2 shadow-lg text-sm font-medium text-foreground">
+            Klicka för att välja position
+          </div>
+        </div>
+      )}
+
+      {/* Inventory form sheet */}
+      <InventoryFormSheet
+        isOpen={showInventorySheet}
+        onClose={() => {
+          setShowInventorySheet(false);
+          setPendingAssetPosition(null);
+        }}
+        buildingFmGuid={buildingFmGuid}
+        pendingPosition={pendingAssetPosition}
+        onPickPositionRequest={() => {
+          setShowInventorySheet(false);
+          setIsPickingPosition(true);
+        }}
+        isPickingPosition={isPickingPosition}
+        onPendingPositionConsumed={() => setPendingAssetPosition(null)}
+      />
     </div>
   );
 };

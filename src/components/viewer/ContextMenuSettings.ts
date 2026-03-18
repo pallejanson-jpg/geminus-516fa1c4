@@ -20,6 +20,7 @@ export const ALL_CONTEXT_MENU_ITEMS: ContextMenuItemConfig[] = [
   { id: 'showAll',         label: 'Show all',           visible: true, group: 'viewer' },
   { id: 'moveObject',      label: 'Move object',        visible: true, group: 'geminus' },
   { id: 'deleteObject',    label: 'Delete object',      visible: true, group: 'geminus' },
+  { id: 'createAsset',     label: 'Create asset',        visible: true, group: 'geminus' },
 ];
 
 export function getContextMenuSettings(): ContextMenuItemConfig[] {
