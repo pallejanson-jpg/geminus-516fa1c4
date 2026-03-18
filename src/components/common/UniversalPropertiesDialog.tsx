@@ -270,6 +270,19 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
               const buildingFmGuid = urlParams.get('building') || null;
 
               try {
+                // Build BIM attributes from propertySets to store in JSONB
+                const bimAttrs: Record<string, any> = {};
+                if (metaObj.propertySets) {
+                  metaObj.propertySets.forEach((ps: any) => {
+                    const psName = ps.name || 'Properties';
+                    ps.properties?.forEach((p: any) => {
+                      if (p.value !== undefined && p.value !== null && p.value !== '') {
+                        bimAttrs[`${psName} / ${p.name}`] = String(p.value);
+                      }
+                    });
+                  });
+                }
+
                 // Auto-insert into assets table
                 const { data: insertedData, error: insertError } = await supabase
                   .from('assets')
@@ -282,6 +295,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                     level_fm_guid: levelFmGuid,
                     is_local: true,
                     created_in_model: true,
+                    attributes: Object.keys(bimAttrs).length > 0 ? bimAttrs : null,
                   })
                   .select()
                   .single();
