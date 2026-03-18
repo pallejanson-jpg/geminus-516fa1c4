@@ -410,7 +410,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
 
     const container = containerRef.current;
     const maxWidth = isMobile ? 900 : 6000;
-    const width = container ? Math.min(container.clientWidth * (isMobile ? 1.5 : 4), maxWidth) : 2000;
+    const width = container ? Math.min(container.clientWidth * (isMobile ? 1.5 : 5), maxWidth) : 3000;
 
     // Build set of entity IDs that belong to the selected storey (descendants)
     const storeyDescendants = new Set<string>();
