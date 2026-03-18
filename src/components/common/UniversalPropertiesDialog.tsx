@@ -1056,10 +1056,10 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     }
     
     if (typeof displayValue === 'number') {
-      return <span className="text-sm font-mono">{displayValue.toLocaleString('en-US')}</span>;
+      return <span className="text-sm">{displayValue.toLocaleString('en-US')}</span>;
     }
     
-    return <span className="text-sm break-all">{String(displayValue)}</span>;
+    return <span className="text-sm truncate max-w-[200px] block sm:text-right" title={String(displayValue)}>{String(displayValue)}</span>;
   };
 
   // Content shared between mobile and desktop
