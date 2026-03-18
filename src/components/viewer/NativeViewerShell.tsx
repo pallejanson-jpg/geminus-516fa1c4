@@ -359,7 +359,57 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     };
   }, []);
 
-  // Listen for LOAD_SAVED_VIEW_EVENT — queue if viewer not ready, apply immediately otherwise
+  // Consume pending_indoor_route from sessionStorage (navigation handoff)
+  useEffect(() => {
+    if (!isViewerReady) return;
+    try {
+      const raw = sessionStorage.getItem('pending_indoor_route');
+      if (!raw) return;
+      sessionStorage.removeItem('pending_indoor_route');
+      const payload = JSON.parse(raw);
+      if (payload.buildingFmGuid !== buildingFmGuid) return;
+
+      // If route is already computed (from MapView), use it directly
+      if (payload.route) {
+        // We need to recalculate the Dijkstra route to get a RouteResult for the overlay
+        // The route in sessionStorage is a GeoJSON FeatureCollection — we need path nodes
+        // So we re-compute from the navigation graph
+        (async () => {
+          const { data: graphRows } = await supabase
+            .from('navigation_graphs')
+            .select('graph_data')
+            .eq('building_fm_guid', buildingFmGuid);
+
+          if (!graphRows?.length) return;
+          const graphs = graphRows.map(r => parseNavGraph(r.graph_data as unknown as GeoJSON.FeatureCollection));
+          const merged = mergeGraphs(graphs);
+          const entrance = findNearestEntranceNode(merged);
+
+          if (!entrance) return;
+
+          // Try to find target from payload
+          let targetNodeId: string | null = null;
+          if (payload.targetRoomFmGuid) {
+            const target = findNodeByRoom(merged, payload.targetRoomFmGuid);
+            if (target) targetNodeId = target.nodeId;
+          }
+
+          if (!targetNodeId) {
+            // Pick the last node in the graph as fallback
+            const nodes = Array.from(merged.nodes.values());
+            if (nodes.length === 0) return;
+            targetNodeId = nodes[nodes.length - 1].nodeId;
+          }
+
+          const result = dijkstra(merged, entrance.nodeId, targetNodeId);
+          if (result) setPendingIndoorRoute(result);
+        })();
+      }
+    } catch (e) {
+      console.warn('[NativeViewerShell] Failed to parse pending_indoor_route:', e);
+    }
+  }, [isViewerReady, buildingFmGuid]);
+
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<LoadSavedViewDetail>).detail;
