@@ -503,6 +503,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
                   <StepTimeline
                     steps={allSteps}
                     indoorDistance={routeSummary.indoorDistance}
+                    indoorSteps={routeSummary.indoorSteps}
                     profile={profile}
                     onStepClick={onStepClick}
                     activeStepIndex={activeStepIndex}
