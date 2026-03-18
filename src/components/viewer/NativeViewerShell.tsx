@@ -913,6 +913,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           }}
           onMoveObject={handleContextMove}
           onDeleteObject={handleContextDelete}
+          onCreateAsset={handleContextCreateAsset}
           labelsActive={labelsVisibleRef.current}
           roomLabelsActive={roomLabelsVisibleRef.current}
         />
