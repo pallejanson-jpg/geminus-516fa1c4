@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Navigation, X, LocateFixed, Car, Footprints } from 'lucide-react';
+import { Navigation, X, LocateFixed, Car, Footprints, Bus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
