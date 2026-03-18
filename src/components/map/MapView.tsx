@@ -361,7 +361,19 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
     setRouteSummary(null);
     setNavBuildingGuid(null);
     setSelectedFloor(null);
+    setRouteOrigin(null);
+    setRouteDestination(null);
+    setOutdoorSteps(null);
   }, []);
+
+  const handleShowIndoor = useCallback(() => {
+    if (!navBuildingGuid || !indoorRoute) return;
+    sessionStorage.setItem('pending_indoor_route', JSON.stringify({
+      buildingFmGuid: navBuildingGuid,
+      route: indoorRoute,
+    }));
+    navigate(`/viewer?building=${navBuildingGuid}`);
+  }, [navBuildingGuid, indoorRoute, navigate]);
 
   // Outdoor route GeoJSON
   const outdoorRouteGeoJSON = useMemo((): GeoJSON.FeatureCollection | null => {
