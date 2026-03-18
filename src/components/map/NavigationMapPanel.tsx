@@ -15,7 +15,7 @@ interface NavigationMapPanelProps {
     destination: { lat: number; lng: number };
     buildingFmGuid: string;
     targetRoomFmGuid: string | null;
-    profile: 'walking' | 'driving';
+    profile: 'walking' | 'driving' | 'transit';
   }) => void;
   onClose: () => void;
   routeSummary?: {
