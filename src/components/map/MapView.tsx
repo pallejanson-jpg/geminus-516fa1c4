@@ -34,7 +34,8 @@ import {
 import { useMapFacilities, MapFacility } from '@/hooks/useMapFacilities';
 import { useIndoorGeoJSON } from '@/hooks/useIndoorGeoJSON';
 import { BuildingOrigin } from '@/lib/coordinate-transform';
-import { parseNavGraph, dijkstra, findNodeByRoom, findNearestEntranceNode, mergeGraphs } from '@/lib/pathfinding';
+import { parseNavGraph, dijkstra, findNodeByRoom, findNearestEntranceNode, mergeGraphs, generateIndoorSteps } from '@/lib/pathfinding';
+import { localToGeo, BuildingOrigin } from '@/lib/coordinate-transform';
 import type { Json } from '@/integrations/supabase/types';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
