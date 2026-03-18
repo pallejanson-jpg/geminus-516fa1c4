@@ -174,3 +174,12 @@ export interface ViewerSelectEntityDetail {
   fmGuid: string | null;
   entityName: string | null;
 }
+
+/** Event dispatched when "Create Asset" is triggered from context menu or mobile button */
+export const VIEWER_CREATE_ASSET_EVENT = 'VIEWER_CREATE_ASSET';
+
+/** Event dispatched when asset position has been picked in 3D */
+export const INVENTORY_POSITION_PICKED_EVENT = 'INVENTORY_POSITION_PICKED';
+
+/** Event dispatched to request annotation refresh after new asset saved */
+export const ANNOTATION_REFRESH_EVENT = 'ANNOTATION_REFRESH';
