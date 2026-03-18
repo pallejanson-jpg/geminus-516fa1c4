@@ -433,6 +433,8 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
           onNavigate={handleNavigate}
           onClose={handleCloseNav}
           routeSummary={routeSummary}
+          hasIndoorRoute={!!indoorRoute}
+          onShowIndoor={handleShowIndoor}
         />
       )}
 
