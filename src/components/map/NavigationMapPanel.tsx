@@ -49,7 +49,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
   onClose,
   routeSummary,
 }) => {
-  const [profile, setProfile] = useState<'walking' | 'driving'>('walking');
+  const [profile, setProfile] = useState<'walking' | 'driving' | 'transit'>('walking');
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [selectedBuildingGuid, setSelectedBuildingGuid] = useState<string>('');
   const [selectedRoomGuid, setSelectedRoomGuid] = useState<string>('');
