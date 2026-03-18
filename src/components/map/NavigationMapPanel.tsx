@@ -200,6 +200,14 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
             >
               <Car size={12} /> Drive
             </Button>
+            <Button
+              variant={profile === 'transit' ? 'default' : 'outline'}
+              size="sm"
+              className="flex-1 h-7 text-xs gap-1"
+              onClick={() => setProfile('transit')}
+            >
+              <Bus size={12} /> Transit
+            </Button>
           </div>
 
           {/* Navigate button */}
