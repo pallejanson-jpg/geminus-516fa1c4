@@ -100,11 +100,15 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
   const [showNavPanel, setShowNavPanel] = useState(false);
   const [outdoorRoute, setOutdoorRoute] = useState<GeoJSON.LineString | null>(null);
   const [indoorRoute, setIndoorRoute] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [routeOrigin, setRouteOrigin] = useState<{ lat: number; lng: number } | null>(null);
+  const [routeDestination, setRouteDestination] = useState<{ lat: number; lng: number } | null>(null);
+  const [outdoorSteps, setOutdoorSteps] = useState<any[] | null>(null);
   const [routeSummary, setRouteSummary] = useState<{
     outdoorDistance: number;
     outdoorDuration: number;
     indoorDistance: number;
     transitSteps?: any[];
+    outdoorSteps?: any[];
   } | null>(null);
   const [navBuildingGuid, setNavBuildingGuid] = useState<string | null>(null);
   const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
