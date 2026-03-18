@@ -14,7 +14,7 @@ import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { AppContext } from '@/context/AppContext';
-import { BUILDING_IMAGES } from '@/lib/constants';
+import { BUILDING_IMAGES, FLOOR_IMAGES } from '@/lib/constants';
 import BuildingMapPicker from '@/components/map/BuildingMapPicker';
 import { Facility } from '@/lib/types';
 import { useBuildingSettings } from '@/hooks/useBuildingSettings';

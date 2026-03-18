@@ -19,7 +19,28 @@ export const BUILDING_IMAGES = [
     "https://images.unsplash.com/photo-1516156008625-3a9d60fa1d78?q=80&w=600&auto=format&fit=crop",
     "https://images.unsplash.com/photo-1554435493-93422e8220c8?q=80&w=600&auto=format&fit=crop",
     "https://images.unsplash.com/photo-1464938050520-ef2270bb8ce8?q=80&w=600&auto=format&fit=crop",
-    "https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=600&auto=format&fit=crop"
+    "https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=600&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?q=80&w=600&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1577495508048-b635879837f1?q=80&w=600&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1448630360428-65456659e233?q=80&w=600&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1460317442991-0ec209397118?q=80&w=600&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1494145904049-0dca59b4bbad?q=80&w=600&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1487958449943-2429e8be8625?q=80&w=600&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1479839672679-a46483c0e7c8?q=80&w=600&auto=format&fit=crop",
+];
+
+/** Interior / floor-level images used for storey cards */
+export const FLOOR_IMAGES = [
+    "https://images.unsplash.com/photo-1497366754035-f200968a6e72?q=80&w=600&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1524758631624-e2822e304c36?q=80&w=600&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1497215842964-222b430dc094?q=80&w=600&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1503387762-592deb58ef4e?q=80&w=600&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1564540586988-aa4e53c3d799?q=80&w=600&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1462826303086-329426d1aef5?q=80&w=600&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1497366811353-6870744d04b2?q=80&w=600&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?q=80&w=600&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1562664377-709f2c337eb2?q=80&w=600&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1517502884422-41eaead166d4?q=80&w=600&auto=format&fit=crop",
 ];
 
 export const THEMES: Record<string, Record<string, string>> = {
