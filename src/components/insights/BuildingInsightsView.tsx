@@ -703,7 +703,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                         </CardContent>
                     </Card>
                 ))}
-            </div>
+            </div>}
 
             {/* Main content: Tabs + Desktop inline 3D viewer */}
             <div className="flex gap-4">
