@@ -26,7 +26,7 @@ import FloatingIssueListPanel, { type BcfIssue } from "./FloatingIssueListPanel"
 import IssueDetailSheet from "./IssueDetailSheet";
 import ViewerThemeSelector from "./ViewerThemeSelector";
 import RoomVisualizationPanel from "./RoomVisualizationPanel";
-import XrayToggle from "./XrayToggle";
+// XrayToggle removed from right panel
 import LightingControlsPanel from "./LightingControlsPanel";
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
 import { CLIP_HEIGHT_3D_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
@@ -608,8 +608,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                     <Switch checked={showSpaces} onCheckedChange={handleToggleSpaces} />
                   </div>
 
-                  {/* X-ray Toggle */}
-                  <XrayToggle viewerRef={viewerRef} />
+                  {/* X-ray removed from right panel */}
 
                   {/* Minimap Toggle */}
                   <div className="flex items-center justify-between py-1.5">
@@ -659,20 +658,34 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
 
               <Separator />
 
-              {/* Room Visualization - Collapsible, collapsed by default */}
+              {/* Room Visualization - always mounted so colorization persists */}
               {buildingFmGuid && (
-                <Collapsible open={roomVizOpen} onOpenChange={setRoomVizOpen}>
-                  <CollapsibleTrigger asChild>
-                    <Button variant="ghost" className="w-full justify-between h-10 px-2">
-                      <div className="flex items-center gap-2">
-                        <Palette className="h-4 w-4" />
-                        <span className="font-medium text-sm">Room Visualization</span>
+                <>
+                  <Collapsible open={roomVizOpen} onOpenChange={setRoomVizOpen}>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="ghost" className="w-full justify-between h-10 px-2">
+                        <div className="flex items-center gap-2">
+                          <Palette className="h-4 w-4" />
+                          <span className="font-medium text-sm">Room Visualization</span>
+                        </div>
+                        <ChevronDown className={cn("h-4 w-4 transition-transform", roomVizOpen && "rotate-180")} />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="pt-2">
+                        <RoomVisualizationPanel
+                          viewerRef={viewerRef}
+                          buildingFmGuid={buildingFmGuid}
+                          onShowSpaces={onShowSpacesChange}
+                          visibleFloorFmGuids={visibleFloorFmGuids && visibleFloorFmGuids.length > 0 ? visibleFloorFmGuids : undefined}
+                          embedded={true}
+                        />
                       </div>
-                      <ChevronDown className={cn("h-4 w-4 transition-transform", roomVizOpen && "rotate-180")} />
-                    </Button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="pt-2">
+                    </CollapsibleContent>
+                  </Collapsible>
+                  {/* Hidden instance keeps colorization alive when collapsible is closed */}
+                  {!roomVizOpen && (
+                    <div className="hidden">
                       <RoomVisualizationPanel
                         viewerRef={viewerRef}
                         buildingFmGuid={buildingFmGuid}
@@ -681,13 +694,114 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                         embedded={true}
                       />
                     </div>
-                  </CollapsibleContent>
-                </Collapsible>
+                  )}
+                </>
               )}
 
               <Separator />
 
-              {/* Viewer Settings - Collapsible */}
+              {/* Actions section - Collapsible, collapsed by default */}
+              <Collapsible open={actionsOpen} onOpenChange={setActionsOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" className="w-full justify-between h-10 px-2">
+                    <div className="flex items-center gap-2">
+                      <Camera className="h-4 w-4" />
+                      <span className="font-medium text-sm">Actions</span>
+                    </div>
+                    <ChevronDown className={cn("h-4 w-4 transition-transform", actionsOpen && "rotate-180")} />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                <div className="space-y-1 pt-2">
+                  <Button variant="outline" className="w-full justify-start gap-2 h-10" onClick={captureViewState} disabled={!isViewerReady}>
+                    <div className="p-1.5 rounded-md bg-primary/10 text-primary"><Camera className="h-4 w-4" /></div>
+                    <span className="text-sm">Create view</span>
+                  </Button>
+                  <Button variant="outline" className="w-full justify-start gap-2 h-10" onClick={handleSetStartView} disabled={!isViewerReady || isSavingStartView}>
+                    <div className="p-1.5 rounded-md bg-primary/10 text-primary"><Home className="h-4 w-4" /></div>
+                    <span className="text-sm">{isSavingStartView ? 'Saving…' : 'Set as start view'}</span>
+                  </Button>
+                  <Button variant="outline" className="w-full justify-start gap-2 h-10" onClick={captureIssueState} disabled={!isViewerReady}>
+                    <div className="p-1.5 rounded-md bg-amber-500/10 text-amber-600"><MessageSquarePlus className="h-4 w-4" /></div>
+                    <span className="text-sm">Create issue</span>
+                  </Button>
+                  <Button
+                    variant={showIssueList ? "secondary" : "outline"}
+                    className="w-full justify-between h-10"
+                    onClick={() => setShowIssueList(!showIssueList)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className={cn("p-1.5 rounded-md", showIssueList ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
+                        <MessageSquare className="h-4 w-4" />
+                      </div>
+                      <span className="text-sm">View issues</span>
+                    </div>
+                  </Button>
+
+                  {/* Show Issues Toggle */}
+                  <div className="flex items-center justify-between py-1.5 px-2">
+                    <div className="flex items-center gap-2">
+                      <div className={cn("p-1.5 rounded-md", showIssues ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                        <MessageSquare className="h-4 w-4" />
+                      </div>
+                      <span className="text-sm">Show Issues</span>
+                    </div>
+                    <Switch
+                      checked={showIssues}
+                      onCheckedChange={(checked) => {
+                        setShowIssues(checked);
+                        window.dispatchEvent(new CustomEvent(ISSUE_ANNOTATIONS_TOGGLE_EVENT, { detail: { visible: checked } }));
+                      }}
+                    />
+                  </div>
+
+                  {/* Show Alarms Toggle */}
+                  <div className="flex items-center justify-between py-1.5 px-2">
+                    <div className="flex items-center gap-2">
+                      <div className={cn("p-1.5 rounded-md", showAlarms ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground")}>
+                        <AlertTriangle className="h-4 w-4" />
+                      </div>
+                      <span className="text-sm">Show Alarms</span>
+                    </div>
+                    <Switch
+                      checked={showAlarms}
+                      onCheckedChange={(checked) => {
+                        setShowAlarms(checked);
+                        window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: [], flyTo: false, visible: checked } }));
+                      }}
+                    />
+                  </div>
+
+                  {/* Show Sensors Toggle */}
+                  <div className="flex items-center justify-between py-1.5 px-2">
+                    <div className="flex items-center gap-2">
+                      <div className={cn("p-1.5 rounded-md", showSensors ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                        <Radio className="h-4 w-4" />
+                      </div>
+                      <span className="text-sm">Show Sensors</span>
+                    </div>
+                    <Switch
+                      checked={showSensors}
+                      onCheckedChange={(checked) => {
+                        setShowSensors(checked);
+                        window.dispatchEvent(new CustomEvent(SENSOR_ANNOTATIONS_TOGGLE_EVENT, { detail: { visible: checked } }));
+                      }}
+                    />
+                  </div>
+
+                  {isToolVisible('addAsset') && onAddAsset && (
+                    <Button variant="outline" className="w-full justify-start gap-2 h-10" onClick={() => { onOpenChange(false); onAddAsset(); }}>
+                      <div className="p-1.5 rounded-md bg-primary/10 text-primary"><Plus className="h-4 w-4" /></div>
+                      <span className="text-sm">Register asset</span>
+                    </Button>
+                  )}
+                </div>
+                </CollapsibleContent>
+              </Collapsible>
+
+              <Separator />
+
+              {/* Settings - at the bottom */}
               <Collapsible open={viewerSettingsOpen} onOpenChange={setViewerSettingsOpen}>
                 <CollapsibleTrigger asChild>
                   <button className="flex items-center justify-between w-full py-2 hover:bg-muted/50 rounded-md transition-colors px-1">
@@ -695,7 +809,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                        <div className="p-1.5 rounded-md bg-muted text-muted-foreground">
                         <Settings className="h-4 w-4" />
                       </div>
-                      <span className="text-sm font-medium">Viewer Settings</span>
+                      <span className="text-sm font-medium">Settings</span>
                     </div>
                     <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", viewerSettingsOpen && "rotate-180")} />
                   </button>
@@ -813,107 +927,6 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
 
                   {/* Lighting Controls */}
                   <LightingControlsPanel viewerRef={viewerRef} isViewerReady={isViewerReady} />
-                </CollapsibleContent>
-              </Collapsible>
-
-              <Separator />
-
-              {/* Actions section - Collapsible, collapsed by default */}
-              <Collapsible open={actionsOpen} onOpenChange={setActionsOpen}>
-                <CollapsibleTrigger asChild>
-                  <Button variant="ghost" className="w-full justify-between h-10 px-2">
-                    <div className="flex items-center gap-2">
-                      <Camera className="h-4 w-4" />
-                      <span className="font-medium text-sm">Actions</span>
-                    </div>
-                    <ChevronDown className={cn("h-4 w-4 transition-transform", actionsOpen && "rotate-180")} />
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                <div className="space-y-1 pt-2">
-                  <Button variant="outline" className="w-full justify-start gap-2 h-10" onClick={captureViewState} disabled={!isViewerReady}>
-                    <div className="p-1.5 rounded-md bg-primary/10 text-primary"><Camera className="h-4 w-4" /></div>
-                    <span className="text-sm">Create view</span>
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start gap-2 h-10" onClick={handleSetStartView} disabled={!isViewerReady || isSavingStartView}>
-                    <div className="p-1.5 rounded-md bg-primary/10 text-primary"><Home className="h-4 w-4" /></div>
-                    <span className="text-sm">{isSavingStartView ? 'Saving…' : 'Set as start view'}</span>
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start gap-2 h-10" onClick={captureIssueState} disabled={!isViewerReady}>
-                    <div className="p-1.5 rounded-md bg-amber-500/10 text-amber-600"><MessageSquarePlus className="h-4 w-4" /></div>
-                    <span className="text-sm">Create issue</span>
-                  </Button>
-                  <Button
-                    variant={showIssueList ? "secondary" : "outline"}
-                    className="w-full justify-between h-10"
-                    onClick={() => setShowIssueList(!showIssueList)}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className={cn("p-1.5 rounded-md", showIssueList ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
-                        <MessageSquare className="h-4 w-4" />
-                      </div>
-                      <span className="text-sm">View issues</span>
-                    </div>
-                  </Button>
-
-                  {/* Show Issues Toggle */}
-                  <div className="flex items-center justify-between py-1.5 px-2">
-                    <div className="flex items-center gap-2">
-                      <div className={cn("p-1.5 rounded-md", showIssues ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
-                        <MessageSquare className="h-4 w-4" />
-                      </div>
-                      <span className="text-sm">Show Issues</span>
-                    </div>
-                    <Switch
-                      checked={showIssues}
-                      onCheckedChange={(checked) => {
-                        setShowIssues(checked);
-                        window.dispatchEvent(new CustomEvent(ISSUE_ANNOTATIONS_TOGGLE_EVENT, { detail: { visible: checked } }));
-                      }}
-                    />
-                  </div>
-
-                  {/* Show Alarms Toggle */}
-                  <div className="flex items-center justify-between py-1.5 px-2">
-                    <div className="flex items-center gap-2">
-                      <div className={cn("p-1.5 rounded-md", showAlarms ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground")}>
-                        <AlertTriangle className="h-4 w-4" />
-                      </div>
-                      <span className="text-sm">Show Alarms</span>
-                    </div>
-                    <Switch
-                      checked={showAlarms}
-                      onCheckedChange={(checked) => {
-                        setShowAlarms(checked);
-                        window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: [], flyTo: false, visible: checked } }));
-                      }}
-                    />
-                  </div>
-
-                  {/* Show Sensors Toggle */}
-                  <div className="flex items-center justify-between py-1.5 px-2">
-                    <div className="flex items-center gap-2">
-                      <div className={cn("p-1.5 rounded-md", showSensors ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
-                        <Radio className="h-4 w-4" />
-                      </div>
-                      <span className="text-sm">Show Sensors</span>
-                    </div>
-                    <Switch
-                      checked={showSensors}
-                      onCheckedChange={(checked) => {
-                        setShowSensors(checked);
-                        window.dispatchEvent(new CustomEvent(SENSOR_ANNOTATIONS_TOGGLE_EVENT, { detail: { visible: checked } }));
-                      }}
-                    />
-                  </div>
-
-                  {isToolVisible('addAsset') && onAddAsset && (
-                    <Button variant="outline" className="w-full justify-start gap-2 h-10" onClick={() => { onOpenChange(false); onAddAsset(); }}>
-                      <div className="p-1.5 rounded-md bg-primary/10 text-primary"><Plus className="h-4 w-4" /></div>
-                      <span className="text-sm">Register asset</span>
-                    </Button>
-                  )}
-                </div>
                 </CollapsibleContent>
               </Collapsible>
             </div>
