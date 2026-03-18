@@ -113,6 +113,14 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
   const [navBuildingGuid, setNavBuildingGuid] = useState<string | null>(null);
   const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
 
+  // Pick-on-map state
+  const [pickingOrigin, setPickingOrigin] = useState(false);
+  const [mapClickedPosition, setMapClickedPosition] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Active step state
+  const [activeStepIndex, setActiveStepIndex] = useState<number | null>(null);
+  const [activeStepCoords, setActiveStepCoords] = useState<{ lat: number; lng: number } | null>(null);
+
   // Building origin for indoor mode
   const [buildingOrigin, setBuildingOrigin] = useState<BuildingOrigin | null>(null);
 
@@ -239,6 +247,33 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
     setMapStyle(prev => prev.includes('dark-v11') ? 'mapbox://styles/mapbox/satellite-streets-v12' : 'mapbox://styles/mapbox/dark-v11');
   }, []);
 
+  // Handle map click for picking origin
+  const handleMapClick = useCallback((evt: any) => {
+    if (!pickingOrigin) return;
+    const { lng, lat } = evt.lngLat;
+    const pos = { lat, lng };
+    setMapClickedPosition(pos);
+    setRouteOrigin(pos);
+    setPickingOrigin(false);
+  }, [pickingOrigin]);
+
+  const handleRequestMapClick = useCallback(() => {
+    setPickingOrigin(prev => !prev);
+  }, []);
+
+  // Handle step click — flyTo
+  const handleStepClick = useCallback((index: number, coords: { lat: number; lng: number }) => {
+    setActiveStepIndex(index);
+    setActiveStepCoords(coords);
+    if (mapRef.current) {
+      mapRef.current.flyTo({
+        center: [coords.lng, coords.lat],
+        zoom: 15,
+        duration: 800,
+      });
+    }
+  }, []);
+
   // Handle navigation
   const handleNavigate = useCallback(async (params: {
     origin: { lat: number; lng: number };
@@ -250,6 +285,8 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
     setNavBuildingGuid(params.buildingFmGuid);
     setRouteOrigin(params.origin);
     setRouteDestination(params.destination);
+    setActiveStepIndex(null);
+    setActiveStepCoords(null);
 
     try {
       let geometry: GeoJSON.LineString | null = null;
@@ -364,14 +401,21 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
     setRouteOrigin(null);
     setRouteDestination(null);
     setOutdoorSteps(null);
+    setPickingOrigin(false);
+    setMapClickedPosition(null);
+    setActiveStepIndex(null);
+    setActiveStepCoords(null);
   }, []);
 
   const handleShowIndoor = useCallback(() => {
-    if (!navBuildingGuid || !indoorRoute) return;
-    sessionStorage.setItem('pending_indoor_route', JSON.stringify({
-      buildingFmGuid: navBuildingGuid,
-      route: indoorRoute,
-    }));
+    if (!navBuildingGuid) return;
+    // Navigate to viewer with building; if indoor route exists, persist it
+    if (indoorRoute) {
+      sessionStorage.setItem('pending_indoor_route', JSON.stringify({
+        buildingFmGuid: navBuildingGuid,
+        route: indoorRoute,
+      }));
+    }
     navigate(`/viewer?building=${navBuildingGuid}`);
   }, [navBuildingGuid, indoorRoute, navigate]);
 
@@ -435,6 +479,11 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
           routeSummary={routeSummary}
           hasIndoorRoute={!!indoorRoute}
           onShowIndoor={handleShowIndoor}
+          onRequestMapClick={handleRequestMapClick}
+          mapClickedPosition={mapClickedPosition}
+          onStepClick={handleStepClick}
+          activeStepIndex={activeStepIndex}
+          pickingOrigin={pickingOrigin}
         />
       )}
 
@@ -507,9 +556,11 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
         ref={mapRef}
         {...viewState}
         onMove={(evt) => setViewState(evt.viewState)}
+        onClick={handleMapClick}
         style={{ width: '100%', height: '100%' }}
         mapStyle={mapStyle}
         mapboxAccessToken={mapboxToken}
+        cursor={pickingOrigin ? 'crosshair' : undefined}
       >
         <NavigationControl position="bottom-right" />
         <GeolocateControl position="bottom-right" />
@@ -561,6 +612,13 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
             <div className="flex items-center justify-center w-7 h-7 rounded-full bg-destructive text-destructive-foreground text-xs font-bold shadow-lg border-2 border-background">
               B
             </div>
+          </Marker>
+        )}
+
+        {/* Active step marker */}
+        {activeStepCoords && (
+          <Marker latitude={activeStepCoords.lat} longitude={activeStepCoords.lng} anchor="center">
+            <div className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/80 border-2 border-primary-foreground shadow-lg animate-pulse" />
           </Marker>
         )}
 
