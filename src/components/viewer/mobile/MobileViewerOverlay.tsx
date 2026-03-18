@@ -1,6 +1,7 @@
 import React from 'react';
-import { ArrowLeft, Settings2, Filter, Square, Box, View, LayoutPanelLeft } from 'lucide-react';
+import { ArrowLeft, Settings2, Filter, Square, Box, View, LayoutPanelLeft, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { VIEWER_CREATE_ASSET_EVENT } from '@/lib/viewer-events';
 
 type ViewMode = '2d' | '3d' | '360' | 'split2d3d';
 
