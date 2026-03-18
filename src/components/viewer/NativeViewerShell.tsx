@@ -14,6 +14,7 @@ import ViewerContextMenu from './ViewerContextMenu';
 import ViewerToolbar from './ViewerToolbar';
 import VisualizationToolbar from './VisualizationToolbar';
 import InventoryPanel from './InventoryPanel';
+import InventoryFormSheet from '@/components/inventory/InventoryFormSheet';
 import RouteDisplayOverlay from './RouteDisplayOverlay';
 
 import { useIsMobile } from '@/hooks/use-mobile';
