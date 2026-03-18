@@ -960,9 +960,9 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     const dirX = hLen > 0.01 ? dx / hLen : 0;
     const dirZ = hLen > 0.01 ? dz / hLen : -1;
 
-    // Floor Y from clicked point, eye at person height (1.5m above floor)
+    // Floor Y from clicked point, eye at person height (2m above floor)
     const floorY = worldPos[1];
-    const eyeHeight = floorY + 1.5;
+    const eyeHeight = floorY + 2.0;
 
     const nextEye: [number, number, number] = [worldPos[0], eyeHeight, worldPos[2]];
     const nextLook: [number, number, number] = [worldPos[0] + dirX * 5, eyeHeight, worldPos[2] + dirZ * 5];
