@@ -140,9 +140,10 @@ export function useViewerTheme() {
           entity.edges = original.edges;
         }
       }
-      // Disable edges for cleaner native look
+      // Restore original edge settings for authentic native look
       if (scene.edgeMaterial) {
-        scene.edgeMaterial.edgeAlpha = 0;
+        scene.edgeMaterial.edgeColor = state.originalEdgeColor;
+        scene.edgeMaterial.edgeAlpha = state.originalEdgeAlpha;
       }
       state.activeThemeId = theme.id;
       setActiveTheme(theme);
