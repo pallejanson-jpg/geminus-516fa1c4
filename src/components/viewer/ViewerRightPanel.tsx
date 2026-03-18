@@ -608,8 +608,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                     <Switch checked={showSpaces} onCheckedChange={handleToggleSpaces} />
                   </div>
 
-                  {/* X-ray Toggle */}
-                  <XrayToggle viewerRef={viewerRef} />
+                  {/* X-ray removed from right panel */}
 
                   {/* Minimap Toggle */}
                   <div className="flex items-center justify-between py-1.5">
