@@ -1209,7 +1209,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                 ))}
               </CollapsibleContent>
             </Collapsible>
-          )
+          )}
           
           {/* BIP Classification Suggestions */}
           {bipSuggestions.length > 0 && (
