@@ -101,6 +101,7 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   items.push({ icon: Tags, label: 'Show labels', action: onShowLabels, active: labelsActive });
   items.push({ icon: Type, label: 'Show room labels', action: onShowRoomLabels, active: roomLabelsActive });
   if (!hiddenIds.has('createIssue')) items.push({ icon: MessageSquarePlus, label: 'Create issue', action: onCreateIssue });
+  if (!hiddenIds.has('createAsset') && onCreateAsset) items.push({ icon: ClipboardPlus, label: 'Create asset', action: onCreateAsset });
   items.push({ icon: MessageSquare, label: 'Show issues', action: onViewIssues });
 
   return (
