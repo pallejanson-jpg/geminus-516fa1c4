@@ -232,6 +232,15 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
 
         setAssets(assetData || []);
 
+        // Populate BIM fallback data from viewer metaScene (even if assets exist — for extra BIM properties)
+        if (entityId) {
+          const viewer = (window as any).__nativeXeokitViewer;
+          const metaObj = viewer?.metaScene?.metaObjects?.[entityId];
+          if (metaObj) {
+            setBimFallbackFromMeta(metaObj, entityId);
+          }
+        }
+
         // If no assets found, auto-create a Geminus asset from BIM metadata
         if ((!assetData || assetData.length === 0) && entityId) {
           const viewer = (window as any).__nativeXeokitViewer;
