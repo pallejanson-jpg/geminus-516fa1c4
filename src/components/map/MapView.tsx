@@ -83,6 +83,7 @@ const INDOOR_ZOOM_THRESHOLD = 17;
 const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSidebar, compact, externalColoringMode }) => {
   const { setSelectedFacility, setActiveApp, isLoadingData } = useContext(AppContext);
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
   const { facilities: mapFacilities } = useMapFacilities();
 
   const [mapboxToken, setMapboxToken] = useState<string | null>(null);
