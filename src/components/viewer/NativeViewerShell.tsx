@@ -17,6 +17,7 @@ import InventoryPanel from './InventoryPanel';
 import RouteDisplayOverlay from './RouteDisplayOverlay';
 
 import { useIsMobile } from '@/hooks/use-mobile';
+import { supabase } from '@/integrations/supabase/client';
 import { AppContext } from '@/context/AppContext';
 import { VIEW_MODE_REQUESTED_EVENT, LOAD_SAVED_VIEW_EVENT, VIEWER_TOOL_CHANGED_EVENT, type LoadSavedViewDetail, type ViewerToolChangedDetail } from '@/lib/viewer-events';
 import { ROOM_LABELS_TOGGLE_EVENT, ROOM_LABELS_CONFIG_EVENT, type RoomLabelsToggleDetail } from '@/hooks/useRoomLabels';
