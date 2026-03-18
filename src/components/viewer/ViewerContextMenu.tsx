@@ -44,6 +44,7 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   onSelectNone,
   onMoveObject,
   onDeleteObject,
+  onCreateAsset,
   labelsActive,
   roomLabelsActive,
 }) => {
