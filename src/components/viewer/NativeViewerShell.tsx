@@ -26,6 +26,8 @@ import { ARCHITECT_BACKGROUND_CHANGED_EVENT, ARCHITECT_BACKGROUND_PRESETS, type 
 import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { recolorArchitectObjects } from '@/lib/architect-colors';
 import { Filter, ArrowLeft } from 'lucide-react';
+import { parseNavGraph, dijkstra, findNodeByRoom, findNearestEntranceNode, mergeGraphs } from '@/lib/pathfinding';
+import type { RouteResult } from '@/lib/pathfinding';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 
