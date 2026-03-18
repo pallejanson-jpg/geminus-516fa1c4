@@ -659,7 +659,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                   >
                     <div className="flex items-center gap-2">
                       <Palette className="h-4 w-4" />
-                      <span className="font-medium text-sm">Room Visualization</span>
+                      <span className="font-medium text-sm">Color filter</span>
                     </div>
                     <ChevronDown className={cn("h-4 w-4 transition-transform", roomVizOpen && "rotate-180")} />
                   </Button>

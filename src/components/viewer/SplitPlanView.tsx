@@ -646,6 +646,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
   // Camera position overlay — use xeokit's built-in worldPosToStoreyMap for accuracy
   useEffect(() => {
     const updateCamera = () => {
+      try {
       const viewer = getXeokitViewer();
       const map = storeyMapRef.current;
       const plugin = pluginRef.current;
@@ -711,6 +712,9 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
         y: (1.0 - normZ) * 100,
         angle,
       });
+      } catch (err) {
+        // Silently ignore errors (e.g. DTXTrianglesLayer._subPortionSetOffset after model disposal)
+      }
     };
 
     const interval = setInterval(updateCamera, isMobile ? 350 : 150);
