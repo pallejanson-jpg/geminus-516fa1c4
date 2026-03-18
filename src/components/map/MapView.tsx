@@ -526,7 +526,42 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
                 'line-opacity': isIndoorMode ? 0.3 : 1,
               }}
             />
+            <Layer
+              id="outdoor-route-arrows"
+              type="symbol"
+              layout={{
+                'symbol-placement': 'line',
+                'symbol-spacing': 80,
+                'text-field': '▶',
+                'text-size': 12,
+                'text-rotate': 0,
+                'text-keep-upright': false,
+                'text-allow-overlap': true,
+              }}
+              paint={{
+                'text-color': 'hsl(0, 0%, 100%)',
+                'text-opacity': isIndoorMode ? 0.3 : 0.9,
+              }}
+            />
           </Source>
+        )}
+
+        {/* Origin marker (A) */}
+        {routeOrigin && outdoorRoute && (
+          <Marker latitude={routeOrigin.lat} longitude={routeOrigin.lng} anchor="center">
+            <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground text-xs font-bold shadow-lg border-2 border-background">
+              A
+            </div>
+          </Marker>
+        )}
+
+        {/* Destination marker (B) */}
+        {routeDestination && outdoorRoute && (
+          <Marker latitude={routeDestination.lat} longitude={routeDestination.lng} anchor="center">
+            <div className="flex items-center justify-center w-7 h-7 rounded-full bg-destructive text-destructive-foreground text-xs font-bold shadow-lg border-2 border-background">
+              B
+            </div>
+          </Marker>
         )}
 
         {/* Indoor room polygons */}
