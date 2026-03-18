@@ -495,6 +495,53 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     return () => canvas.removeEventListener('click', handleSelectClick);
   }, [xeokitViewer]);
 
+  // ── Pick-position click handler for inventory ─────────────────────────
+  useEffect(() => {
+    if (!xeokitViewer?.scene || !isPickingPosition) return;
+    const canvas = xeokitViewer.scene.canvas?.canvas;
+    if (!canvas) return;
+
+    canvas.style.cursor = 'crosshair';
+
+    const handlePickClick = (e: MouseEvent) => {
+      const pickResult = xeokitViewer.scene.pick({
+        canvasPos: [e.offsetX, e.offsetY],
+        pickSurface: true,
+      });
+      if (pickResult?.worldPos) {
+        const [x, y, z] = pickResult.worldPos;
+        setPendingAssetPosition({ x, y, z });
+        setIsPickingPosition(false);
+        setShowInventorySheet(true);
+      }
+    };
+
+    canvas.addEventListener('click', handlePickClick);
+    return () => {
+      canvas.removeEventListener('click', handlePickClick);
+      canvas.style.cursor = '';
+    };
+  }, [xeokitViewer, isPickingPosition]);
+
+  // Listen for VIEWER_CREATE_ASSET_EVENT from mobile overlay
+  useEffect(() => {
+    const handler = () => {
+      setIsPickingPosition(true);
+    };
+    window.addEventListener(VIEWER_CREATE_ASSET_EVENT, handler);
+    return () => window.removeEventListener(VIEWER_CREATE_ASSET_EVENT, handler);
+  }, []);
+
+  // Cancel pick mode on Escape
+  useEffect(() => {
+    if (!isPickingPosition) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsPickingPosition(false);
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [isPickingPosition]);
+
   // Context menu via right-click on canvas
   useEffect(() => {
     if (!xeokitViewer?.scene) return;
