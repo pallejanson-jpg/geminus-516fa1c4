@@ -127,6 +127,10 @@ const StepTimeline: React.FC<{
       }
     }
 
+    // Indoor steps — use detailed steps if available, otherwise fallback
+    const indoorSteps = (steps as any).__indoorSteps as NavigationMapPanelProps['routeSummary'] extends undefined ? never : NonNullable<NavigationMapPanelProps['routeSummary']>['indoorSteps'];
+    // We pass indoorSteps via a trick: check the steps array for a custom property
+    // Actually, let's use a simpler approach — pass via the profile parameter
     if (indoorDistance > 0) {
       result.push({
         icon: 'indoor',

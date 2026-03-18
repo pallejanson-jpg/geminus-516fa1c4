@@ -192,6 +192,104 @@ export function euclideanDist(a: [number, number], b: [number, number]): number 
   return Math.sqrt(dx * dx + dy * dy);
 }
 
+/** Generate detailed indoor turn-by-turn steps from a Dijkstra route */
+export interface IndoorStep {
+  instruction: string;
+  distance: number;
+  coordinates: [number, number]; // normalized [x%, y%]
+  type: 'walk' | 'turn' | 'stairs' | 'elevator' | 'arrive';
+  floorChange?: { fromFloor: string; toFloor: string };
+}
+
+export function generateIndoorSteps(route: RouteResult): IndoorStep[] {
+  if (!route || route.path.length < 2) return [];
+
+  const steps: IndoorStep[] = [];
+  let i = 0;
+
+  while (i < route.path.length - 1) {
+    const current = route.path[i];
+    const next = route.path[i + 1];
+
+    // Check floor transition
+    if (current.floor_fm_guid && next.floor_fm_guid && current.floor_fm_guid !== next.floor_fm_guid) {
+      const vehicle = next.type === 'elevator' || current.type === 'elevator' ? 'hissen' : 'trappan';
+      steps.push({
+        instruction: `Ta ${vehicle}`,
+        distance: euclideanDist(current.coordinates, next.coordinates),
+        coordinates: current.coordinates,
+        type: next.type === 'elevator' ? 'elevator' : 'stairs',
+        floorChange: { fromFloor: current.floor_fm_guid, toFloor: next.floor_fm_guid },
+      });
+      i++;
+      continue;
+    }
+
+    // Accumulate straight segments until a turn or end
+    let segmentDist = 0;
+    const segStart = i;
+    while (i < route.path.length - 1) {
+      const a = route.path[i];
+      const b = route.path[i + 1];
+      segmentDist += euclideanDist(a.coordinates, b.coordinates);
+
+      // Check if next segment has a turn > 30°
+      if (i + 2 < route.path.length) {
+        const c = route.path[i + 2];
+        // Floor change breaks the segment too
+        if (b.floor_fm_guid && c.floor_fm_guid && b.floor_fm_guid !== c.floor_fm_guid) {
+          i++;
+          break;
+        }
+        const angle = calcTurnAngle(a.coordinates, b.coordinates, c.coordinates);
+        if (Math.abs(angle) > 30) {
+          i++;
+          // Add the walk segment
+          steps.push({
+            instruction: `Gå rakt ~${Math.round(segmentDist)} m`,
+            distance: segmentDist,
+            coordinates: route.path[segStart].coordinates,
+            type: 'walk',
+          });
+          // Add turn instruction
+          const dir = angle > 0 ? 'höger' : 'vänster';
+          steps.push({
+            instruction: `Sväng ${dir}`,
+            distance: 0,
+            coordinates: b.coordinates,
+            type: 'turn',
+          });
+          segmentDist = 0;
+          break;
+        }
+      }
+      i++;
+    }
+
+    // Flush remaining straight segment
+    if (segmentDist > 0) {
+      steps.push({
+        instruction: i >= route.path.length - 1 ? 'Framme' : `Gå rakt ~${Math.round(segmentDist)} m`,
+        distance: segmentDist,
+        coordinates: route.path[segStart].coordinates,
+        type: i >= route.path.length - 1 ? 'arrive' : 'walk',
+      });
+    }
+  }
+
+  return steps;
+}
+
+/** Calculate turn angle in degrees (positive = right, negative = left) */
+function calcTurnAngle(a: [number, number], b: [number, number], c: [number, number]): number {
+  const abx = b[0] - a[0];
+  const aby = b[1] - a[1];
+  const bcx = c[0] - b[0];
+  const bcy = c[1] - b[1];
+  const angle = Math.atan2(abx * bcy - aby * bcx, abx * bcx + aby * bcy);
+  return (angle * 180) / Math.PI;
+}
+
 /** Convert NavGraph back to GeoJSON FeatureCollection */
 export function navGraphToGeoJSON(graph: NavGraph): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
