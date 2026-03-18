@@ -232,6 +232,15 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
 
         setAssets(assetData || []);
 
+        // Populate BIM fallback data from viewer metaScene (even if assets exist — for extra BIM properties)
+        if (entityId) {
+          const viewer = (window as any).__nativeXeokitViewer;
+          const metaObj = viewer?.metaScene?.metaObjects?.[entityId];
+          if (metaObj) {
+            setBimFallbackFromMeta(metaObj, entityId);
+          }
+        }
+
         // If no assets found, auto-create a Geminus asset from BIM metadata
         if ((!assetData || assetData.length === 0) && entityId) {
           const viewer = (window as any).__nativeXeokitViewer;
@@ -270,6 +279,19 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
               const buildingFmGuid = urlParams.get('building') || null;
 
               try {
+                // Build BIM attributes from propertySets to store in JSONB
+                const bimAttrs: Record<string, any> = {};
+                if (metaObj.propertySets) {
+                  metaObj.propertySets.forEach((ps: any) => {
+                    const psName = ps.name || 'Properties';
+                    ps.properties?.forEach((p: any) => {
+                      if (p.value !== undefined && p.value !== null && p.value !== '') {
+                        bimAttrs[`${psName} / ${p.name}`] = String(p.value);
+                      }
+                    });
+                  });
+                }
+
                 // Auto-insert into assets table
                 const { data: insertedData, error: insertError } = await supabase
                   .from('assets')
@@ -282,6 +304,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                     level_fm_guid: levelFmGuid,
                     is_local: true,
                     created_in_model: true,
+                    attributes: Object.keys(bimAttrs).length > 0 ? bimAttrs : null,
                   })
                   .select()
                   .single();
@@ -1056,10 +1079,10 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     }
     
     if (typeof displayValue === 'number') {
-      return <span className="text-sm font-mono">{displayValue.toLocaleString('en-US')}</span>;
+      return <span className="text-sm">{displayValue.toLocaleString('en-US')}</span>;
     }
     
-    return <span className="text-sm break-all">{String(displayValue)}</span>;
+    return <span className="text-sm truncate max-w-[200px] block sm:text-right" title={String(displayValue)}>{String(displayValue)}</span>;
   };
 
   // Content shared between mobile and desktop
@@ -1104,7 +1127,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
               {Object.entries(bimFallbackData).map(([key, value]) => (
                 <div key={key} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-1.5 px-2 rounded">
                   <span className="text-xs text-muted-foreground shrink-0">{key}</span>
-                  <span className="text-sm break-all sm:text-right">{value}</span>
+                  <span className="text-sm truncate max-w-[200px] block sm:text-right" title={value}>{value}</span>
                 </div>
               ))}
             </div>
@@ -1162,6 +1185,30 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                 </Collapsible>
               );
             })
+          )}
+
+          {/* BIM Properties section — shown when both assets and bimFallbackData exist */}
+          {assets.length > 0 && bimFallbackData && Object.keys(bimFallbackData).length > 0 && (
+            <Collapsible
+              open={openSections.has('bim')}
+              onOpenChange={() => toggleSection('bim')}
+            >
+              <CollapsibleTrigger className="flex items-center justify-between w-full p-2 bg-muted/50 rounded-md hover:bg-muted transition-colors">
+                <div className="flex items-center gap-2">
+                  {openSections.has('bim') ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5 rotate-180" />}
+                  <span className="text-sm font-medium">BIM Properties</span>
+                  <Badge variant="secondary" className="text-[10px]">{Object.keys(bimFallbackData).length}</Badge>
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-2 space-y-1">
+                {Object.entries(bimFallbackData).map(([key, value]) => (
+                  <div key={key} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded">
+                    <span className="text-xs text-muted-foreground shrink-0">{key}</span>
+                    <span className="text-sm truncate max-w-[180px] text-right" title={value}>{value}</span>
+                  </div>
+                ))}
+              </CollapsibleContent>
+            </Collapsible>
           )}
           
           {/* BIP Classification Suggestions */}

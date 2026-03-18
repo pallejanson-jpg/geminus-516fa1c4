@@ -410,7 +410,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
 
     const container = containerRef.current;
     const maxWidth = isMobile ? 900 : 6000;
-    const width = container ? Math.min(container.clientWidth * (isMobile ? 1.5 : 4), maxWidth) : 2000;
+    const width = container ? Math.min(container.clientWidth * (isMobile ? 1.5 : 5), maxWidth) : 3000;
 
     // Build set of entity IDs that belong to the selected storey (descendants)
     const storeyDescendants = new Set<string>();
@@ -646,6 +646,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
   // Camera position overlay — use xeokit's built-in worldPosToStoreyMap for accuracy
   useEffect(() => {
     const updateCamera = () => {
+      try {
       const viewer = getXeokitViewer();
       const map = storeyMapRef.current;
       const plugin = pluginRef.current;
@@ -711,6 +712,9 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
         y: (1.0 - normZ) * 100,
         angle,
       });
+      } catch (err) {
+        // Silently ignore errors (e.g. DTXTrianglesLayer._subPortionSetOffset after model disposal)
+      }
     };
 
     const interval = setInterval(updateCamera, isMobile ? 350 : 150);
@@ -881,7 +885,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
             }
           }
 
-          if (!isLargeArea) {
+          if (!isLargeArea && !isSplitMode) {
             pickedEntityId = entityId;
             pickedFmGuid = metaObj?.originalSystemId || null;
             pickedEntityName = metaObj?.name || metaObj?.type || null;
@@ -960,9 +964,9 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     const dirX = hLen > 0.01 ? dx / hLen : 0;
     const dirZ = hLen > 0.01 ? dz / hLen : -1;
 
-    // Floor Y from clicked point, eye at person height (1.5m above floor)
+    // Floor Y from clicked point, eye at person height (2m above floor)
     const floorY = worldPos[1];
-    const eyeHeight = floorY + 1.5;
+    const eyeHeight = floorY + 2.0;
 
     const nextEye: [number, number, number] = [worldPos[0], eyeHeight, worldPos[2]];
     const nextLook: [number, number, number] = [worldPos[0] + dirX * 5, eyeHeight, worldPos[2] + dirZ * 5];
