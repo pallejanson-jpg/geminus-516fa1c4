@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Type, MessageSquarePlus, MessageSquare, Tags, Scan, EyeOff, Eye, ZoomIn, Info, Move, Trash2, MousePointer, PointerOff, Check } from 'lucide-react';
+import { Type, MessageSquarePlus, MessageSquare, Tags, Scan, EyeOff, Eye, ZoomIn, Info, Move, Trash2, MousePointer, PointerOff, Check, ClipboardPlus } from 'lucide-react';
 import { getContextMenuSettings, CONTEXT_MENU_SETTINGS_CHANGED_EVENT } from './ContextMenuSettings';
 
 interface ViewerContextMenuProps {
@@ -21,6 +21,7 @@ interface ViewerContextMenuProps {
   onSelectNone?: () => void;
   onMoveObject?: () => void;
   onDeleteObject?: () => void;
+  onCreateAsset?: () => void;
   labelsActive?: boolean;
   roomLabelsActive?: boolean;
 }
