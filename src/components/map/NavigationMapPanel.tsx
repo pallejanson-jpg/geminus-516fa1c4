@@ -42,6 +42,12 @@ interface NavigationMapPanelProps {
     indoorDistance: number;
     transitSteps?: RouteStep[];
     outdoorSteps?: RouteStep[];
+    indoorSteps?: Array<{
+      instruction: string;
+      distance: number;
+      coordinates: { lat: number; lng: number };
+      type: string;
+    }>;
   } | null;
   hasIndoorRoute?: boolean;
   onShowIndoor?: () => void;
