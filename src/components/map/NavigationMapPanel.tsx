@@ -42,6 +42,12 @@ interface NavigationMapPanelProps {
     indoorDistance: number;
     transitSteps?: RouteStep[];
     outdoorSteps?: RouteStep[];
+    indoorSteps?: Array<{
+      instruction: string;
+      distance: number;
+      coordinates: { lat: number; lng: number };
+      type: string;
+    }>;
   } | null;
   hasIndoorRoute?: boolean;
   onShowIndoor?: () => void;
@@ -90,10 +96,16 @@ interface DisplayStep {
 const StepTimeline: React.FC<{
   steps: RouteStep[];
   indoorDistance: number;
+  indoorSteps?: Array<{
+    instruction: string;
+    distance: number;
+    coordinates: { lat: number; lng: number };
+    type: string;
+  }>;
   profile: string;
   onStepClick?: (index: number, coords: { lat: number; lng: number }) => void;
   activeStepIndex?: number | null;
-}> = ({ steps, indoorDistance, profile, onStepClick, activeStepIndex }) => {
+}> = ({ steps, indoorDistance, indoorSteps, profile, onStepClick, activeStepIndex }) => {
   const displaySteps = useMemo(() => {
     const result: DisplayStep[] = [];
 
@@ -121,7 +133,17 @@ const StepTimeline: React.FC<{
       }
     }
 
-    if (indoorDistance > 0) {
+    // Detailed indoor steps or fallback summary
+    if (indoorSteps && indoorSteps.length > 0) {
+      for (const is of indoorSteps) {
+        result.push({
+          icon: 'indoor',
+          label: is.instruction,
+          detail: is.distance > 0 ? formatDistance(is.distance) : '',
+          coordinates: is.coordinates,
+        });
+      }
+    } else if (indoorDistance > 0) {
       result.push({
         icon: 'indoor',
         label: 'Gå inomhus',
@@ -130,7 +152,7 @@ const StepTimeline: React.FC<{
     }
 
     return result;
-  }, [steps, indoorDistance, profile]);
+  }, [steps, indoorDistance, indoorSteps, profile]);
 
   if (displaySteps.length === 0) return null;
 
@@ -481,6 +503,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
                   <StepTimeline
                     steps={allSteps}
                     indoorDistance={routeSummary.indoorDistance}
+                    indoorSteps={routeSummary.indoorSteps}
                     profile={profile}
                     onStepClick={onStepClick}
                     activeStepIndex={activeStepIndex}
