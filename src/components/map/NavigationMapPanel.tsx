@@ -22,6 +22,19 @@ interface NavigationMapPanelProps {
     outdoorDistance: number;
     outdoorDuration: number;
     indoorDistance: number;
+    transitSteps?: Array<{
+      travelMode: string;
+      distance?: number;
+      duration?: string;
+      transit?: {
+        lineName: string;
+        lineColor: string | null;
+        vehicleType: string;
+        departureStop: string;
+        arrivalStop: string;
+        numStops: number;
+      };
+    }>;
   } | null;
 }
 
