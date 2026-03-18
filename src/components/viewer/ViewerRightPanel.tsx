@@ -649,7 +649,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
 
               <Separator />
 
-              {/* Room Visualization - always mounted so colorization persists */}
+              {/* Color filter - always mounted so colorization persists */}
               {buildingFmGuid && (
                 <div>
                   <Button
