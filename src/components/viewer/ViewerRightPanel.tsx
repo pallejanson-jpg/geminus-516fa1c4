@@ -798,6 +798,137 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                 </div>
                 </CollapsibleContent>
               </Collapsible>
+
+              <Separator />
+
+              {/* Settings - at the bottom */}
+              <Collapsible open={viewerSettingsOpen} onOpenChange={setViewerSettingsOpen}>
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center justify-between w-full py-2 hover:bg-muted/50 rounded-md transition-colors px-1">
+                    <div className="flex items-center gap-2">
+                       <div className="p-1.5 rounded-md bg-muted text-muted-foreground">
+                        <Settings className="h-4 w-4" />
+                      </div>
+                      <span className="text-sm font-medium">Settings</span>
+                    </div>
+                    <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", viewerSettingsOpen && "rotate-180")} />
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-3 pt-2">
+                  {/* Clip height slider (2D) */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="p-1.5 rounded-md bg-muted text-foreground/70"><Scissors className="h-4 w-4" /></div>
+                      <span className="text-sm">Clip height (2D view)</span>
+                      <span className="text-xs font-medium ml-auto">{clipHeight.toFixed(1)}m</span>
+                    </div>
+                    <div className="pl-10">
+                      <Slider value={[clipHeight]} onValueChange={handleClipHeightChange} min={0.5} max={2.5} step={0.1} className="w-full" />
+                      <p className="text-xs text-foreground/70 mt-1">Height above floor</p>
+                    </div>
+                  </div>
+
+                  {/* 3D Ceiling clip */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className={cn("p-1.5 rounded-md", isSoloFloor && !is2DMode ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
+                        <Box className="h-4 w-4" />
+                      </div>
+                      <span className="text-sm">Ceiling clip (3D Solo)</span>
+                      <span className="text-xs font-medium ml-auto">{clipHeight3D >= 0 ? '+' : ''}{clipHeight3D.toFixed(1)}m</span>
+                    </div>
+                    <div className="pl-10">
+                      <Slider value={[clipHeight3D]} onValueChange={handleClipHeight3DChange} min={-1.5} max={1.5} step={0.1} className="w-full" disabled={is2DMode || !isSoloFloor} />
+                       <p className="text-xs text-foreground/70 mt-1">
+                        {isSoloFloor && !is2DMode ? "Offset from next floor's slab" : "Enabled when a floor is isolated in 3D"}
+                       </p>
+                    </div>
+                  </div>
+
+                  {/* Room Labels Selector */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className={cn("p-1.5 rounded-md", showRoomLabels ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
+                        <Type className="h-4 w-4" />
+                      </div>
+                      <span className="text-sm">Room labels</span>
+                    </div>
+                    <div className="pl-10">
+                      {loadingRoomLabelConfigs ? (
+                        <div className="text-xs text-foreground/70">Loading...</div>
+                      ) : (
+                        <div className="space-y-1">
+                          <button
+                            className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors", !showRoomLabels ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50")}
+                            onClick={() => handleRoomLabelConfigSelect('off')}
+                          >Off</button>
+                          {roomLabelConfigs.map((config) => (
+                            <button
+                              key={config.id}
+                              className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors", activeRoomLabelConfigId === config.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50")}
+                              onClick={() => handleRoomLabelConfigSelect(config.id)}
+                            >
+                              {config.name}
+                              {config.is_default && <span className="ml-1 text-[10px] text-foreground/70">(standard)</span>}
+                            </button>
+                          ))}
+                          {roomLabelConfigs.length === 0 && (
+                            <div className="text-xs text-foreground/70 py-1">No configurations. Create in Settings.</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Viewer Theme Selector */}
+                  <ViewerThemeSelector viewerRef={viewerRef} disabled={!isViewerReady} />
+
+                  {/* Background color palette */}
+                  <div className="py-1.5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="p-1.5 rounded-md bg-muted text-foreground/70"><Palette className="h-4 w-4" /></div>
+                      <span className="text-sm">Background color</span>
+                    </div>
+                    <div className="pl-10">
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {ARCHITECT_BACKGROUND_PRESETS.map((preset) => (
+                          <button
+                            key={preset.id}
+                            title={preset.name}
+                            onClick={() => handleBackgroundChange(preset.id as BackgroundPresetId)}
+                            className={cn(
+                              "w-6 h-6 rounded-md border-2 transition-all hover:scale-110 focus:outline-none focus:ring-2 focus:ring-primary/50",
+                              architectBackground === preset.id ? "border-primary ring-2 ring-primary/30" : "border-border/40"
+                            )}
+                            style={{ background: `linear-gradient(180deg, rgb(255, 255, 255) 0%, ${preset.bottom} 100%)` }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Floor Pills Toggle */}
+                  <div className="flex items-center justify-between py-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className={cn("p-1.5 rounded-md", showFloorPills ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
+                        <Layers className="h-4 w-4" />
+                      </div>
+                      <span className="text-sm">Floor switcher (pills)</span>
+                    </div>
+                    <Switch
+                      checked={showFloorPills}
+                      onCheckedChange={(checked) => {
+                        setShowFloorPills(checked);
+                        localStorage.setItem('viewer-show-floor-pills', String(checked));
+                        window.dispatchEvent(new CustomEvent(FLOOR_PILLS_TOGGLE_EVENT, { detail: { visible: checked } }));
+                      }}
+                    />
+                  </div>
+
+                  {/* Lighting Controls */}
+                  <LightingControlsPanel viewerRef={viewerRef} isViewerReady={isViewerReady} />
+                </CollapsibleContent>
+              </Collapsible>
             </div>
           </ScrollArea>
         </SheetContent>
