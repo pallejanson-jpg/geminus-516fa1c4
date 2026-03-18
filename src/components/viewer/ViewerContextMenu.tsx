@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Type, MessageSquarePlus, MessageSquare, Tags, Scan, EyeOff, Eye, ZoomIn, Info, Move, Trash2, MousePointer, PointerOff, Check } from 'lucide-react';
+import { Type, MessageSquarePlus, MessageSquare, Tags, Scan, EyeOff, Eye, ZoomIn, Info, Move, Trash2, MousePointer, PointerOff, Check, ClipboardPlus } from 'lucide-react';
 import { getContextMenuSettings, CONTEXT_MENU_SETTINGS_CHANGED_EVENT } from './ContextMenuSettings';
 
 interface ViewerContextMenuProps {
@@ -21,6 +21,7 @@ interface ViewerContextMenuProps {
   onSelectNone?: () => void;
   onMoveObject?: () => void;
   onDeleteObject?: () => void;
+  onCreateAsset?: () => void;
   labelsActive?: boolean;
   roomLabelsActive?: boolean;
 }
@@ -43,6 +44,7 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   onSelectNone,
   onMoveObject,
   onDeleteObject,
+  onCreateAsset,
   labelsActive,
   roomLabelsActive,
 }) => {
@@ -99,6 +101,7 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   items.push({ icon: Tags, label: 'Show labels', action: onShowLabels, active: labelsActive });
   items.push({ icon: Type, label: 'Show room labels', action: onShowRoomLabels, active: roomLabelsActive });
   if (!hiddenIds.has('createIssue')) items.push({ icon: MessageSquarePlus, label: 'Create issue', action: onCreateIssue });
+  if (!hiddenIds.has('createAsset') && onCreateAsset) items.push({ icon: ClipboardPlus, label: 'Create asset', action: onCreateAsset });
   items.push({ icon: MessageSquare, label: 'Show issues', action: onViewIssues });
 
   return (

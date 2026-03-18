@@ -1,6 +1,7 @@
 import React from 'react';
-import { ArrowLeft, Settings2, Filter, Square, Box, View, LayoutPanelLeft } from 'lucide-react';
+import { ArrowLeft, Settings2, Filter, Square, Box, View, LayoutPanelLeft, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { VIEWER_CREATE_ASSET_EVENT } from '@/lib/viewer-events';
 
 type ViewMode = '2d' | '3d' | '360' | 'split2d3d';
 
@@ -101,8 +102,18 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
           </div>
         )}
 
-        {/* Right: Filter + Settings */}
+        {/* Right: Create Asset + Filter + Settings */}
         <div className="flex shrink-0 gap-1">
+          <Button
+            variant="secondary"
+            size="icon"
+            className="h-7 w-7 sm:h-8 sm:w-8 bg-card/95 backdrop-blur-sm shadow-md border"
+            onClick={() => window.dispatchEvent(new CustomEvent(VIEWER_CREATE_ASSET_EVENT))}
+            disabled={!isViewerReady}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+
           <Button
             variant={showFilterPanel ? 'default' : 'secondary'}
             size="icon"
