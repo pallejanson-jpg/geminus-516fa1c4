@@ -53,6 +53,9 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const [isViewerReady, setIsViewerReady] = useState(false);
   const pendingSavedViewRef = useRef<LoadSavedViewDetail | null>(null);
 
+  // Indoor route from navigation handoff
+  const [pendingIndoorRoute, setPendingIndoorRoute] = useState<any>(null);
+
   // Helper: apply a saved view to the xeokit viewer
   const applySavedView = useCallback((viewer: any, detail: LoadSavedViewDetail) => {
     if (!viewer?.camera) return;
