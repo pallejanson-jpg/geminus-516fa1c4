@@ -248,15 +248,17 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
     profile: 'walking' | 'driving' | 'transit';
   }) => {
     setNavBuildingGuid(params.buildingFmGuid);
+    setRouteOrigin(params.origin);
+    setRouteDestination(params.destination);
 
     try {
       let geometry: GeoJSON.LineString | null = null;
       let distance = 0;
       let duration = 0;
       let transitSteps: any[] | undefined;
+      let mapboxSteps: any[] | undefined;
 
       if (params.profile === 'transit') {
-        // Use Google Routes API for transit
         const { data, error } = await supabase.functions.invoke('google-routes', {
           body: {
             origin: { lat: params.origin.lat, lng: params.origin.lng },
@@ -271,7 +273,6 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
           transitSteps = data.steps;
         }
       } else {
-        // Use Mapbox Directions for walking/driving
         const { data, error } = await supabase.functions.invoke('mapbox-directions', {
           body: {
             origin: { lat: params.origin.lat, lng: params.origin.lng },
@@ -284,15 +285,16 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
           geometry = data.geometry;
           distance = data.distance || 0;
           duration = data.duration || 0;
+          mapboxSteps = data.steps;
         }
       }
 
       if (geometry) {
         setOutdoorRoute(geometry);
+        setOutdoorSteps(mapboxSteps || null);
 
         let indoorDist = 0;
 
-        // Load indoor graph and compute route if room specified
         if (params.targetRoomFmGuid) {
           const { data: graphRows } = await supabase
             .from('navigation_graphs')
@@ -328,15 +330,24 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
           outdoorDuration: duration,
           indoorDistance: indoorDist,
           transitSteps,
+          outdoorSteps: mapboxSteps,
         });
 
-        // Zoom to fit route
-        setViewState(prev => ({
-          ...prev,
-          latitude: (params.origin.lat + params.destination.lat) / 2,
-          longitude: (params.origin.lng + params.destination.lng) / 2,
-          zoom: 13,
-        }));
+        // fitBounds to route
+        const coords = geometry.coordinates;
+        if (coords.length > 0 && mapRef.current) {
+          let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
+          for (const c of coords) {
+            if (c[0] < minLng) minLng = c[0];
+            if (c[0] > maxLng) maxLng = c[0];
+            if (c[1] < minLat) minLat = c[1];
+            if (c[1] > maxLat) maxLat = c[1];
+          }
+          mapRef.current.fitBounds(
+            [[minLng, minLat], [maxLng, maxLat]],
+            { padding: { top: 80, bottom: 80, left: 340, right: 80 }, duration: 1000 }
+          );
+        }
       }
     } catch (err) {
       console.error('Navigation error:', err);
