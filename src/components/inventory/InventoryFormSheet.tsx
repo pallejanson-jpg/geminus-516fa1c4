@@ -2,6 +2,7 @@ import React from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import InventoryForm from './InventoryForm';
 import type { InventoryItem } from '@/pages/Inventory';
+import { ANNOTATION_REFRESH_EVENT } from '@/lib/viewer-events';
 
 interface InventoryFormSheetProps {
   isOpen: boolean;
@@ -31,6 +32,8 @@ const InventoryFormSheet: React.FC<InventoryFormSheetProps> = ({
   onPendingPositionConsumed,
 }) => {
   const handleSaved = (item: InventoryItem) => {
+    // Dispatch annotation refresh so new symbol appears immediately in viewer
+    window.dispatchEvent(new CustomEvent(ANNOTATION_REFRESH_EVENT));
     onClose();
   };
 
