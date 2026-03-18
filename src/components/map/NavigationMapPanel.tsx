@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Navigation, X, LocateFixed, Car, Footprints } from 'lucide-react';
+import { Navigation, X, LocateFixed, Car, Footprints, Bus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -15,13 +15,26 @@ interface NavigationMapPanelProps {
     destination: { lat: number; lng: number };
     buildingFmGuid: string;
     targetRoomFmGuid: string | null;
-    profile: 'walking' | 'driving';
+    profile: 'walking' | 'driving' | 'transit';
   }) => void;
   onClose: () => void;
   routeSummary?: {
     outdoorDistance: number;
     outdoorDuration: number;
     indoorDistance: number;
+    transitSteps?: Array<{
+      travelMode: string;
+      distance?: number;
+      duration?: string;
+      transit?: {
+        lineName: string;
+        lineColor: string | null;
+        vehicleType: string;
+        departureStop: string;
+        arrivalStop: string;
+        numStops: number;
+      };
+    }>;
   } | null;
 }
 
@@ -36,7 +49,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
   onClose,
   routeSummary,
 }) => {
-  const [profile, setProfile] = useState<'walking' | 'driving'>('walking');
+  const [profile, setProfile] = useState<'walking' | 'driving' | 'transit'>('walking');
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [selectedBuildingGuid, setSelectedBuildingGuid] = useState<string>('');
   const [selectedRoomGuid, setSelectedRoomGuid] = useState<string>('');
@@ -187,6 +200,14 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
             >
               <Car size={12} /> Drive
             </Button>
+            <Button
+              variant={profile === 'transit' ? 'default' : 'outline'}
+              size="sm"
+              className="flex-1 h-7 text-xs gap-1"
+              onClick={() => setProfile('transit')}
+            >
+              <Bus size={12} /> Transit
+            </Button>
           </div>
 
           {/* Navigate button */}
@@ -207,6 +228,33 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
                 <span className="text-muted-foreground">·</span>
                 <span>{formatDuration(routeSummary.outdoorDuration)}</span>
               </div>
+
+              {/* Transit steps */}
+              {routeSummary.transitSteps && routeSummary.transitSteps.length > 0 && (
+                <div className="space-y-1 pt-1 border-t border-border">
+                  {routeSummary.transitSteps
+                    .filter(s => s.transit)
+                    .map((step, i) => (
+                      <div key={i} className="flex items-center gap-1.5 text-xs">
+                        <Bus size={10} className="shrink-0 text-primary" />
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] px-1"
+                          style={step.transit?.lineColor ? { borderColor: step.transit.lineColor, color: step.transit.lineColor } : {}}
+                        >
+                          {step.transit!.lineName || step.transit!.vehicleType}
+                        </Badge>
+                        <span className="text-muted-foreground truncate">
+                          {step.transit!.departureStop} → {step.transit!.arrivalStop}
+                        </span>
+                        {step.transit!.numStops > 0 && (
+                          <span className="text-muted-foreground whitespace-nowrap">({step.transit!.numStops} stops)</span>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              )}
+
               {routeSummary.indoorDistance > 0 && (
                 <div className="flex items-center gap-2 text-xs">
                   <Badge variant="outline" className="text-[10px]">Indoor</Badge>
