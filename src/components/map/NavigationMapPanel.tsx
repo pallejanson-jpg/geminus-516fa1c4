@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Navigation, X, LocateFixed, Car, Footprints, Bus, Building2, ArrowRight, Clock } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Navigation, X, LocateFixed, Car, Footprints, Bus, Building2, ArrowRight, Clock, MapPinned, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,6 +14,7 @@ interface RouteStep {
   distance?: number;
   duration?: number;
   travelMode?: string;
+  maneuver?: { location?: [number, number] };
   transit?: {
     lineName: string;
     lineColor: string | null;
@@ -21,6 +22,7 @@ interface RouteStep {
     departureStop: string;
     arrivalStop: string;
     numStops: number;
+    departureLocation?: { lat: number; lng: number };
   };
 }
 
@@ -43,11 +45,21 @@ interface NavigationMapPanelProps {
   } | null;
   hasIndoorRoute?: boolean;
   onShowIndoor?: () => void;
+  onRequestMapClick?: () => void;
+  mapClickedPosition?: { lat: number; lng: number } | null;
+  onStepClick?: (index: number, coords: { lat: number; lng: number }) => void;
+  activeStepIndex?: number | null;
+  pickingOrigin?: boolean;
 }
 
 interface RoomOption {
   fm_guid: string;
   name: string;
+}
+
+interface GeocodingResult {
+  place_name: string;
+  center: [number, number]; // [lng, lat]
 }
 
 const formatDuration = (seconds: number) => {
@@ -68,9 +80,22 @@ const StepIcon: React.FC<{ mode?: string }> = ({ mode }) => {
   }
 };
 
-const StepTimeline: React.FC<{ steps: RouteStep[]; indoorDistance: number; profile: string }> = ({ steps, indoorDistance, profile }) => {
+interface DisplayStep {
+  icon: string;
+  label: string;
+  detail: string;
+  coordinates?: { lat: number; lng: number };
+}
+
+const StepTimeline: React.FC<{
+  steps: RouteStep[];
+  indoorDistance: number;
+  profile: string;
+  onStepClick?: (index: number, coords: { lat: number; lng: number }) => void;
+  activeStepIndex?: number | null;
+}> = ({ steps, indoorDistance, profile, onStepClick, activeStepIndex }) => {
   const displaySteps = useMemo(() => {
-    const result: Array<{ icon: string; label: string; detail: string }> = [];
+    const result: DisplayStep[] = [];
 
     for (const step of steps) {
       if (step.transit) {
@@ -78,8 +103,12 @@ const StepTimeline: React.FC<{ steps: RouteStep[]; indoorDistance: number; profi
           icon: 'TRANSIT',
           label: `${step.transit.lineName || step.transit.vehicleType}`,
           detail: `${step.transit.departureStop} → ${step.transit.arrivalStop}${step.transit.numStops > 0 ? ` (${step.transit.numStops} hållplatser)` : ''}`,
+          coordinates: step.transit.departureLocation || undefined,
         });
       } else if (step.instruction) {
+        const coords = step.maneuver?.location
+          ? { lat: step.maneuver.location[1], lng: step.maneuver.location[0] }
+          : undefined;
         result.push({
           icon: profile,
           label: step.instruction,
@@ -87,6 +116,7 @@ const StepTimeline: React.FC<{ steps: RouteStep[]; indoorDistance: number; profi
             step.distance ? formatDistance(step.distance) : '',
             step.duration ? formatDuration(step.duration) : '',
           ].filter(Boolean).join(' · '),
+          coordinates: coords,
         });
       }
     }
@@ -106,20 +136,34 @@ const StepTimeline: React.FC<{ steps: RouteStep[]; indoorDistance: number; profi
 
   return (
     <div className="space-y-0">
-      {displaySteps.map((step, i) => (
-        <div key={i} className="flex gap-2 items-start py-1">
-          <div className="flex flex-col items-center mt-0.5">
-            <StepIcon mode={step.icon} />
-            {i < displaySteps.length - 1 && (
-              <div className="w-px h-full min-h-[12px] bg-border mt-0.5" />
-            )}
+      {displaySteps.map((step, i) => {
+        const isActive = activeStepIndex === i;
+        const isClickable = !!step.coordinates && !!onStepClick;
+        return (
+          <div
+            key={i}
+            className={`flex gap-2 items-start py-1 px-1 rounded transition-colors ${
+              isActive ? 'bg-primary/15' : ''
+            } ${isClickable ? 'cursor-pointer hover:bg-muted/80' : ''}`}
+            onClick={() => {
+              if (isClickable && step.coordinates) {
+                onStepClick!(i, step.coordinates);
+              }
+            }}
+          >
+            <div className="flex flex-col items-center mt-0.5">
+              <StepIcon mode={step.icon} />
+              {i < displaySteps.length - 1 && (
+                <div className="w-px h-full min-h-[12px] bg-border mt-0.5" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium leading-tight truncate">{step.label}</p>
+              {step.detail && <p className="text-[10px] text-muted-foreground truncate">{step.detail}</p>}
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium leading-tight truncate">{step.label}</p>
-            {step.detail && <p className="text-[10px] text-muted-foreground truncate">{step.detail}</p>}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
@@ -131,6 +175,11 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
   routeSummary,
   hasIndoorRoute,
   onShowIndoor,
+  onRequestMapClick,
+  mapClickedPosition,
+  onStepClick,
+  activeStepIndex,
+  pickingOrigin,
 }) => {
   const [profile, setProfile] = useState<'walking' | 'driving' | 'transit'>('walking');
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -138,6 +187,74 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
   const [selectedRoomGuid, setSelectedRoomGuid] = useState<string>('');
   const [rooms, setRooms] = useState<RoomOption[]>([]);
   const [isLocating, setIsLocating] = useState(false);
+
+  // Geocoding state
+  const [originText, setOriginText] = useState('');
+  const [geocodingResults, setGeocodingResults] = useState<GeocodingResult[]>([]);
+  const [showGeoResults, setShowGeoResults] = useState(false);
+  const [mapboxToken, setMapboxToken] = useState<string | null>(null);
+  const geocodeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Fetch mapbox token for geocoding
+  useEffect(() => {
+    supabase.functions.invoke('get-mapbox-token').then(({ data }) => {
+      if (data?.token) setMapboxToken(data.token);
+    });
+  }, []);
+
+  // Update origin text when location changes externally
+  useEffect(() => {
+    if (userLocation) {
+      setOriginText(`${userLocation.lat.toFixed(5)}, ${userLocation.lng.toFixed(5)}`);
+      setShowGeoResults(false);
+    }
+  }, [userLocation]);
+
+  // Accept map-clicked position
+  useEffect(() => {
+    if (mapClickedPosition) {
+      setUserLocation(mapClickedPosition);
+    }
+  }, [mapClickedPosition]);
+
+  // Geocode on text change
+  useEffect(() => {
+    if (!originText || originText.length < 3 || !mapboxToken) {
+      setGeocodingResults([]);
+      return;
+    }
+    // Skip geocoding if text looks like coordinates
+    if (/^\d+\.\d+,\s*\d+\.\d+$/.test(originText.trim())) {
+      setGeocodingResults([]);
+      return;
+    }
+    if (geocodeTimeout.current) clearTimeout(geocodeTimeout.current);
+    geocodeTimeout.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(originText)}.json?access_token=${mapboxToken}&limit=5&language=sv`
+        );
+        const data = await res.json();
+        if (data.features) {
+          setGeocodingResults(data.features.map((f: any) => ({
+            place_name: f.place_name,
+            center: f.center,
+          })));
+          setShowGeoResults(true);
+        }
+      } catch {
+        setGeocodingResults([]);
+      }
+    }, 300);
+    return () => { if (geocodeTimeout.current) clearTimeout(geocodeTimeout.current); };
+  }, [originText, mapboxToken]);
+
+  const handleSelectGeoResult = useCallback((result: GeocodingResult) => {
+    setUserLocation({ lat: result.center[1], lng: result.center[0] });
+    setOriginText(result.place_name);
+    setShowGeoResults(false);
+    setGeocodingResults([]);
+  }, []);
 
   const handleLocate = useCallback(() => {
     if (!navigator.geolocation) return;
@@ -207,25 +324,67 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
             </Button>
           </div>
 
+          {/* Picking origin banner */}
+          {pickingOrigin && (
+            <div className="bg-primary/10 border border-primary/30 rounded-md px-2 py-1.5 text-xs text-primary font-medium text-center animate-pulse">
+              Klicka i kartan för att välja startpunkt
+            </div>
+          )}
+
           {/* Origin */}
-          <div className="space-y-1">
+          <div className="space-y-1 relative">
             <label className="text-xs text-muted-foreground">Från</label>
             <div className="flex gap-1.5">
-              <Input
-                readOnly
-                value={userLocation ? `${userLocation.lat.toFixed(5)}, ${userLocation.lng.toFixed(5)}` : ''}
-                placeholder="Din position"
-                className="h-8 text-xs flex-1"
-              />
+              <div className="relative flex-1">
+                <Input
+                  value={originText}
+                  onChange={(e) => {
+                    setOriginText(e.target.value);
+                    setShowGeoResults(true);
+                  }}
+                  onFocus={() => { if (geocodingResults.length > 0) setShowGeoResults(true); }}
+                  onBlur={() => setTimeout(() => setShowGeoResults(false), 200)}
+                  placeholder="Skriv adress eller välj i kartan"
+                  className="h-8 text-xs"
+                />
+                {/* Geocoding dropdown */}
+                {showGeoResults && geocodingResults.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 z-50 mt-0.5 bg-popover border border-border rounded-md shadow-lg overflow-hidden">
+                    {geocodingResults.map((r, i) => (
+                      <button
+                        key={i}
+                        className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted/80 transition-colors flex items-start gap-1.5"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => handleSelectGeoResult(r)}
+                      >
+                        <Search size={10} className="text-muted-foreground mt-0.5 shrink-0" />
+                        <span className="truncate">{r.place_name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <Button
                 variant="secondary"
                 size="icon"
                 className="h-8 w-8 shrink-0"
                 onClick={handleLocate}
                 disabled={isLocating}
+                title="Min position (GPS)"
               >
                 <LocateFixed size={14} className={isLocating ? 'animate-pulse' : ''} />
               </Button>
+              {onRequestMapClick && (
+                <Button
+                  variant={pickingOrigin ? 'default' : 'secondary'}
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  onClick={onRequestMapClick}
+                  title="Välj position i kartan"
+                >
+                  <MapPinned size={14} />
+                </Button>
+              )}
             </div>
           </div>
 
@@ -323,6 +482,8 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
                     steps={allSteps}
                     indoorDistance={routeSummary.indoorDistance}
                     profile={profile}
+                    onStepClick={onStepClick}
+                    activeStepIndex={activeStepIndex}
                   />
                 </ScrollArea>
               )}
@@ -345,8 +506,8 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
                 </div>
               )}
 
-              {/* Show in building button */}
-              {hasIndoorRoute && onShowIndoor && (
+              {/* Show in building button — visible whenever route + building selected */}
+              {routeSummary && selectedBuildingGuid && onShowIndoor && (
                 <Button
                   variant="secondary"
                   size="sm"
