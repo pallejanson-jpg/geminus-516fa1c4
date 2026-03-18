@@ -714,7 +714,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                   <CarouselContent className="-ml-2">
                     {childStoreys.map((storey, idx) => {
                       const hash = (storey.fmGuid || '').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-                      const img = BUILDING_IMAGES[hash % BUILDING_IMAGES.length];
+                      const img = FLOOR_IMAGES[hash % FLOOR_IMAGES.length];
                       return (
                         <CarouselItem key={storey.fmGuid} className="pl-2 basis-auto">
                           <button
