@@ -810,6 +810,11 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         />
       )}
 
+      {/* Indoor route overlay from navigation handoff */}
+      {pendingIndoorRoute && (
+        <RouteDisplayOverlay route={pendingIndoorRoute} />
+      )}
+
 
       {/* Context menu */}
       {contextMenu && (
