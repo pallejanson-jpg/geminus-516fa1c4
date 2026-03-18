@@ -109,6 +109,12 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
     indoorDistance: number;
     transitSteps?: any[];
     outdoorSteps?: any[];
+    indoorSteps?: Array<{
+      instruction: string;
+      distance: number;
+      coordinates: { lat: number; lng: number };
+      type: string;
+    }>;
   } | null>(null);
   const [navBuildingGuid, setNavBuildingGuid] = useState<string | null>(null);
   const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
