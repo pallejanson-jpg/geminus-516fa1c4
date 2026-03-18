@@ -1,142 +1,115 @@
-## Plan: IFC & ACC Import/Sync Performance Optimization (IMPLEMENTED ✅)
 
-### Changes Made
-1. **XKT compression** (`ifc-to-xkt`): Enabled `zip: true` in `writeXKTModelToArrayBuffer` — ~30% smaller XKT files
-2. **Parallel DB writes** (`ifc-to-xkt`): `persistSystemsAndConnections` + `populateAssetsFromMetaObjects` now run via `Promise.all` instead of sequentially
-3. **Streaming LD-JSON parser** (`acc-sync`): New `streamLDJSON()` async generator processes BIM property files line-by-line from `ReadableStream` — eliminates OOM risk on large Revit models
-4. **Incremental ACC sync** (`acc-sync`): `fetchAccAssets` now supports `filter[updatedAt]` parameter, only fetching assets modified since last sync — ~90% faster re-syncs
-5. **IFC derivative from ACC** (`acc-sync`): `translate-model` now requests IFC format alongside SVF. On completion, downloads the IFC derivative and feeds it into `ifc-to-xkt` for real per-storey tiling — unifying ACC and IFC geometry pipelines
-6. **Dual pipeline** (`check-translation`): Triggers both `ifc-to-xkt` (for tiled XKT) and `acc-geometry-extract` (for GLB fallback) in parallel when translation succeeds
+
+## Plan: Viewer UX-förbättringar (desktop)
+
+Åtgärdar 10 separata problem: Insights-panel, Properties-dialog, Room Visualization/Color filter, högermeny-cleanup, Split 2D/3D kvalitet & kamerahöjd & selektion, kamerasync efter planbyten, och 2D klickbarhet.
 
 ---
 
-## Plan: Mobile Viewer Startup Hardening (IMPLEMENTED ✅)
+### 1. Insights Drawer — ta bort KPI-kort + draggable avskiljare
 
-### Changes Made
-1. **Mobile touch tuning** (`NativeXeokitViewer.tsx`): dragRotationRate 30→70, touchPanRate 0.06→0.14, touchDollyRate 0.04→0.09, rotationInertia 0.93→0.88, panInertia 0.88→0.82
-2. **FastNav delay** (`NativeXeokitViewer.tsx`): Added `delayBeforeRestore: true` (0.5s mobile, 0.3s desktop)
-3. **Suppress viewFit in split2d3d** (`NativeXeokitViewer.tsx`): Skips instant viewFit when `?mode=split2d3d` — floor isolation handles camera
-4. **Defer SplitPlanView mount** (`UnifiedViewer.tsx`): Mobile SplitPlanView only renders after `viewerReady=true`, shows spinner until then
-5. **Increased SplitPlanView retry** (`SplitPlanView.tsx`): 10×100ms → 30×200ms (6s total window), immediate retry on VIEWER_MODELS_LOADED
-6. **Debounced floor events** (`UnifiedViewer.tsx`): 500ms guard on FLOOR_SELECTION_CHANGED dispatches to prevent competing events
+**Fil:** `src/components/insights/BuildingInsightsView.tsx`
+- Det finns redan en `drawerMode`-prop. Dölja KPI-kortraden (Floor/Rooms/Assets/Area/Energy/Rating) när `drawerMode === true`.
 
-### Architecture Principle
-Mobile and desktop share the same `UnifiedViewerContent` initialization logic. The ONLY difference is layout:
-- Mobile: vertical stack (2D top, 3D bottom) with touch-optimized divider (8px)
-- Desktop: horizontal ResizablePanelGroup with drag handle (4px)
-
-Future changes to viewer startup MUST apply to both paths. Do NOT create separate mobile/desktop init logic.
+**Fil:** `src/components/viewer/InsightsDrawerPanel.tsx`
+- Byt ut den fasta `height: 400px` till en resize-handle som gör panelen draggbar uppåt/nedåt.
+- Implementera en `mousedown`-handler på headern/avskiljaren som uppdaterar höjden via `mousemove`.
 
 ---
 
-## Plan: SplitPlanView Navigation + Alignment UX (IMPLEMENTED ✅)
+### 2. Properties — visa fler egenskaper (BIM propertySets)
 
-### Changes Made
-1. **SplitPlanView click navigation** (`SplitPlanView.tsx`): Replaced first-person instant jump with MinimapPanel-style fly-to — keeps current eye height, looks down at clicked point, animates 0.5s.
-2. **AlignmentPointPicker precision** (`AlignmentPointPicker.tsx`): Now estimates surface point via ray-cast from tripod position + viewing direction × adjustable distance slider (0.5–10m). Shows captured coordinates and distance in both steps for verification.
-
----
-
-## Plan: ACC Geometry Pipeline — GLB Per-Storey Chunks (IMPLEMENTED Phase 1)
-
-### Changes Made
-1. **Plan document** saved to `docs/plans/acc-obj-pipeline-plan.md`
-2. **Edge function `acc-geometry-extract`** — extracts SVF properties, builds Level grouping, creates manifest + geometry_index, stores in `xkt-models` bucket
-3. **Shared types** added to `src/lib/types.ts` (GeometryManifest, GeometryManifestChunk, GeometryIndexEntry)
-4. **NativeXeokitViewer** enhanced with GLTFLoaderPlugin + manifest-driven GLB chunk loading
-5. **config.toml** updated with `acc-geometry-extract` function entry
-
-### Pending (Phase 2)
-- Actual GLB chunk creation from SVF geometry (requires conversion worker)
-- OBJ as optional secondary format for small models
+**Fil:** `src/components/common/UniversalPropertiesDialog.tsx`
+- Problemet: när auto-create sker (objekt saknar databas-rad), hämtas BIM-metadata med `propertySets` och sparas i `bimFallbackData`, men efter att asset-raden skapats visas bara de fält som matchar `allProperties`-logiken (system, local, area, user-defined). BIM:s `propertySets` (Pset_WallCommon, BaseQuantities etc.) kopieras inte in i `attributes`.
+- Fix: efter auto-create, spara BIM `propertySets` i assets `attributes` JSONB-kolumnen så att de dyker upp i `user-defined`-sektionen.
+- Alternativt: om `bimFallbackData` har data OCH assets finns, visa bimFallbackData som en extra "BIM Properties"-sektion (read-only) under de andra sektionerna.
 
 ---
 
+### 3. Properties — responsivitet + stängknapp + auto-uppdatering
 
-### Ändringar
-
-#### 1. `conversion-worker-api` — ny `/populate-hierarchy` endpoint
-**Fil:** `supabase/functions/conversion-worker-api/index.ts`
-- Ny `POST /populate-hierarchy` action som accepterar `storeys`, `spaces`, `instances`
-- Deterministisk GUID-generering via SHA-256 hash → UUID v5-format
-- Upsert till `assets` med `created_in_model: true`
-- Diff-logik: markerar borttagna objekt med `modification_status = 'removed'`
-
-#### 2. `ifc-to-xkt` — `populateAssetsFromMetaObjects()`
-**Fil:** `supabase/functions/ifc-to-xkt/index.ts`
-- Ny funktion `populateAssetsFromMetaObjects()` körs efter steg 8 (persist systems)
-- Tre pass: storeys → spaces → instances (non-spatial, non-relationship)
-- Använder IFC GlobalId som `fm_guid`, fallback till deterministisk hash
-- Löser storey-tillhörighet genom att vandra uppåt i parent-kedjan
-- Diff: soft-delete objekt som finns i DB men inte i ny IFC
-
-#### 3. `worker.mjs` — anropar `/populate-hierarchy` efter konvertering
-**Fil:** `docs/conversion-worker/worker.mjs`
-- Ny `extractHierarchy()` funktion som parserar IFC med web-ifc
-- Efter `/complete`, extraherar storeys/spaces och anropar `/populate-hierarchy`
-- Non-fatal: om hierarki-population misslyckas fortsätter workern
-
-#### 4. `CreateBuildingPanel` — deterministiska GUIDs + diff
-**Fil:** `src/components/settings/CreateBuildingPanel.tsx`
-- Ändrat från `crypto.randomUUID()` till IFC GlobalId eller deterministisk hash
-- `created_in_model: true` istället för `false`
-- Diff-logik: markerar borttagna objekt efter import
-
-### Datamodell
-
-```text
-Building Storey:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcBuildingStorey")
-  category:          "Building Storey"
-  created_in_model:  true
-
-Space:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + "IfcSpace")
-  category:          "Space"
-  level_fm_guid:     parent storey fm_guid
-
-Instance:
-  fm_guid:           IFC GlobalId || sha256(buildingGuid + name + ifcType)
-  category:          "Instance"
-  asset_type:        ifcType (e.g. "IfcDoor")
-  level_fm_guid:     resolved storey
-  in_room_fm_guid:   resolved space
-```
-
-### Diff-flöde
-
-Vid omimport jämförs importerade fm_guids mot befintliga i DB:
-- **Nytt** → INSERT
-- **Matchat** → UPDATE (namn, typ, rumsplacering)
-- **Borttaget** → `modification_status = 'removed'` (soft-delete)
+**Fil:** `src/components/common/UniversalPropertiesDialog.tsx`
+- **Radbrytningar:** Ändra `break-all` → `truncate` eller `whitespace-nowrap overflow-hidden text-ellipsis` på värden.
+- **Font-stil:** Ta bort `font-mono` från numeriska värden.
+- **Stängknapp:** Finns redan (`X`-knapp i header). Verifiera att den alltid syns (den gör den — rad 1447).
+- **Auto-uppdatering vid ny selektion:** Finns redan via `isPinned`-prop. Säkerställ att pinned-läget är aktiverat som default eller att dialogen reagerar på `VIEWER_SELECT_ENTITY`-events oavsett pinned-status.
 
 ---
 
-## Plan: CRUD-flöde & FM Access-data i Properties (IMPLEMENTED ✅)
+### 4. Room Visualization → "Color filter" + toggle-logik
 
-### Changes Made
-1. **FM Access Delete**: `handleDelete()` in `UniversalPropertiesDialog.tsx` now calls `deleteFmAccessObject(guid)` best-effort after successful `deleteAssets()` — completing the CRUD cycle to FM Access
-2. **DOU Section**: New collapsible "Drift & Underhåll" section in Properties dialog, fetching from `fm_access_dou` table by object `fm_guid`
-3. **Documents Section**: New collapsible "Dokument (FM Access)" section showing documents from `fm_access_documents` by `building_fm_guid`
+**Fil:** `src/components/viewer/ViewerRightPanel.tsx`
+- Byt label från "Room Visualization" till "Color filter".
+- Gör sektionen collapsible (den är redan manuellt collapsible med `roomVizOpen` state).
+- Den nuvarande listan visar items men klick verkar inte fungera. Undersök: `RoomVisualizationPanel` embedded=true lyssnar på `VISUALIZATION_QUICK_SELECT_EVENT`. Men om den är i `hidden`-div så kan den missa events? Nej — `hidden` via CSS döljer bara, JS kör fortfarande.
+- Problem troligen: visualiseringen kräver att "Show spaces" aktiveras, och panelen försöker köra `onShowSpaces` men referensen saknas. Kolla att `onShowSpaces={onShowSpacesChange}` faktiskt triggar rätt.
+- Lägg till toggle-beteende: klicka en gång = tänd, klicka igen = släck.
 
-### Pending (Parkerat)
-- FM Access symbol placement via graphics API (requires dedicated edge function + API investigation)
-- FMA 2D Viewer as visualization engine (recommendation: continue using xeokit for heatmaps)
+**Fil:** `src/components/viewer/VisualizationToolbar.tsx`  
+- Byt "Room Visualization" → "Color filter" i mobilmenyn också om den finns.
 
 ---
 
-## Previous Plans
+### 5. Högermeny — ta bort X-ray, 2D/3D toggle, flytta Settings sist
 
-### Robust IFC → XKT Pipeline with Metadata Separation (IMPLEMENTED)
-- Browser-primary for >20MB, edge function for ≤20MB
-- MetaModel JSON uploaded alongside XKT
-- Systems extracted and persisted
+**Fil:** `src/components/viewer/ViewerRightPanel.tsx`
+- X-ray: redan borttagen (rad 611 kommentar).
+- **2D/3D toggle:** Ta bort switchen under Display-sektionen (rad 587-596).
+- **Settings:** Redan längst ner (rad 791-918). Verifierat OK.
 
-### External Conversion Worker + Per-Storey XKT Tiling (IMPLEMENTED)
-- Standalone Node.js worker polls conversion-worker-api
-- Per-storey .xkt tiles with dynamic floor loading
+---
 
-### Per-Building API Credentials for Asset+ and Senslinc (IMPLEMENTED)
-- 10 credential override columns on building_settings
-- Shared credential resolver in edge functions
-- Properties page as configuration hub
+### 6. Split 2D/3D — högre grafikkvalitet
+
+**Fil:** `src/components/viewer/SplitPlanView.tsx`
+- `width`-beräkningen (rad 413): desktop max är `6000`. Kontrollera att `container.clientWidth * 4` ger tillräckligt högt värde. Om split-panelen bara är ~50% bred → `clientWidth` ≈ 580 → `580 * 4 = 2320`. Det kan vara lågt.
+- Öka multiplikatorn till `5` eller sätt min `3000` för desktop split.
+
+---
+
+### 7. Split 2D/3D — kamerahöjd i 3D (2m)
+
+**Fil:** `src/pages/UnifiedViewer.tsx` (rad 140-145)
+- Ändra `floorY + 1.5` → `floorY + 2.0` i split-navigate-handlern.
+
+**Fil:** `src/components/viewer/SplitPlanView.tsx` (rad 965-967)
+- Ändra `floorY + 1.5` → `floorY + 2.0` i standalone click handler.
+
+---
+
+### 8. Split 2D/3D — ingen auto-selektion i 3D vid 2D-klick
+
+**Fil:** `src/components/viewer/SplitPlanView.tsx`
+- När `isSplitMode === true`, hoppa över entity-selection (rad 884-901). Redan idag dispatchar den `VIEWER_SELECT_ENTITY` och sätter `entity.selected = true`. Villkora detta med `!isSplitMode`.
+
+---
+
+### 9. Split 2D/3D — kamerasync slutar efter våningsbyten
+
+**Fil:** `src/components/viewer/SplitPlanView.tsx`
+- Kamera-uppdateringen (rad 647-719) beror på `storeyMap` (dess `storeyId`). När man byter våning regenereras kartan med nytt `storeyId` → `worldPosToStoreyMap` använder rätt storey → kameran borde fortsätta följa.
+- Problemet kan vara att `_textureData`-felet (från console logs) kraschar uppdateringen. Loggen visar `DTXTrianglesLayer._subPortionSetOffset` — detta är en xeokit-bug vid `setOffset` efter modellförstöring.
+- Trolig orsak: `setOffset` anropas på en redan förstörd modell. Wrappa `updateCamera`-funktionen i try-catch så att felet inte stoppar intervallet.
+
+---
+
+### 10. Ren 2D — förbättra klickbarhet
+
+**Fil:** `src/components/viewer/SplitPlanView.tsx`
+- `pickStoreyMap` är en pixel-baserad pick mot rasterbilden. Om objektet är litet eller om rum/space-objekten har låg opacity/kontrast missar picken.
+- Öka 2D-kartans upplösning (samma som punkt 6).
+- Alternativt: om rum-entities inte har `visible = true` under pick-time (de sätts till opacity 0.5 och visible=true under rendering, men återställs efteråt), kan pick missa dem. Lösning: vid klick, temporärt sätta spaces visible+pickable innan `pickStoreyMap`.
+
+---
+
+### Sammanfattning av filändringar
+
+| Fil | Ändringar |
+|-----|-----------|
+| `BuildingInsightsView.tsx` | Dölja KPI-kort i `drawerMode` |
+| `InsightsDrawerPanel.tsx` | Draggable resize-handle istället för fast höjd |
+| `UniversalPropertiesDialog.tsx` | Visa BIM propertySets, fixa responsivitet (truncate, ta bort font-mono), auto-uppdatering |
+| `ViewerRightPanel.tsx` | Byt "Room Visualization" → "Color filter", ta bort 2D/3D toggle |
+| `SplitPlanView.tsx` | Höjd 2m, högre upplösning, skippa selektion i split-mode, try-catch i camera-sync, förbättra pick |
+| `UnifiedViewer.tsx` | Kamerahöjd 2m i split-navigate |
+
