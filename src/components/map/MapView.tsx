@@ -33,8 +33,8 @@ import {
 } from '@/lib/map-coloring-utils';
 import { useMapFacilities, MapFacility } from '@/hooks/useMapFacilities';
 import { useIndoorGeoJSON } from '@/hooks/useIndoorGeoJSON';
-import { BuildingOrigin } from '@/lib/coordinate-transform';
-import { parseNavGraph, dijkstra, findNodeByRoom, findNearestEntranceNode, mergeGraphs } from '@/lib/pathfinding';
+import { localToGeo, BuildingOrigin } from '@/lib/coordinate-transform';
+import { parseNavGraph, dijkstra, findNodeByRoom, findNearestEntranceNode, mergeGraphs, generateIndoorSteps } from '@/lib/pathfinding';
 import type { Json } from '@/integrations/supabase/types';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
@@ -109,6 +109,12 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
     indoorDistance: number;
     transitSteps?: any[];
     outdoorSteps?: any[];
+    indoorSteps?: Array<{
+      instruction: string;
+      distance: number;
+      coordinates: { lat: number; lng: number };
+      type: string;
+    }>;
   } | null>(null);
   const [navBuildingGuid, setNavBuildingGuid] = useState<string | null>(null);
   const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
@@ -332,7 +338,25 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
 
         let indoorDist = 0;
 
+        let indoorStepsGeo: Array<{
+          instruction: string;
+          distance: number;
+          coordinates: { lat: number; lng: number };
+          type: string;
+        }> | undefined;
+
         if (params.targetRoomFmGuid) {
+          // Fetch building origin for coordinate conversion
+          const { data: bsData } = await supabase
+            .from('building_settings')
+            .select('latitude, longitude, rotation')
+            .eq('fm_guid', params.buildingFmGuid)
+            .maybeSingle();
+
+          const bOrigin = bsData?.latitude && bsData?.longitude
+            ? { lat: Number(bsData.latitude), lng: Number(bsData.longitude), rotation: Number(bsData.rotation || 0) }
+            : null;
+
           const { data: graphRows } = await supabase
             .from('navigation_graphs')
             .select('graph_data')
@@ -348,15 +372,53 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
               const result = dijkstra(merged, entrance.nodeId, target.nodeId);
               if (result) {
                 indoorDist = result.totalDistance;
-                const coords = result.path.map(n => [n.coordinates[0], n.coordinates[1]]);
-                setIndoorRoute({
-                  type: 'FeatureCollection',
-                  features: [{
-                    type: 'Feature',
-                    geometry: { type: 'LineString', coordinates: coords },
-                    properties: {},
-                  }],
-                });
+
+                // Generate detailed indoor steps
+                const rawSteps = generateIndoorSteps(result);
+
+                if (bOrigin) {
+                  // Convert normalized % coords to geo for map display
+                  const geoCoords = result.path.map(n => {
+                    // Normalized coords are [x%, y%] — treat as local meters offset (scale factor)
+                    // For buildings, the nav graph uses percentage-based coords of the floor plan
+                    // We approximate by scaling to a reasonable building size
+                    const local = { x: n.coordinates[0], y: 0, z: n.coordinates[1] };
+                    const geo = localToGeo(local, bOrigin);
+                    return [geo.lng, geo.lat] as [number, number];
+                  });
+
+                  setIndoorRoute({
+                    type: 'FeatureCollection',
+                    features: [{
+                      type: 'Feature',
+                      geometry: { type: 'LineString', coordinates: geoCoords },
+                      properties: {},
+                    }],
+                  });
+
+                  // Convert indoor step coordinates to geo
+                  indoorStepsGeo = rawSteps.map(s => {
+                    const local = { x: s.coordinates[0], y: 0, z: s.coordinates[1] };
+                    const geo = localToGeo(local, bOrigin);
+                    return {
+                      instruction: s.instruction,
+                      distance: s.distance,
+                      coordinates: { lat: geo.lat, lng: geo.lng },
+                      type: s.type,
+                    };
+                  });
+                } else {
+                  // No origin — use raw normalized coords (indoor route only in 3D)
+                  const coords = result.path.map(n => [n.coordinates[0], n.coordinates[1]]);
+                  setIndoorRoute({
+                    type: 'FeatureCollection',
+                    features: [{
+                      type: 'Feature',
+                      geometry: { type: 'LineString', coordinates: coords },
+                      properties: {},
+                    }],
+                  });
+                }
               }
             }
           }
@@ -368,6 +430,7 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
           indoorDistance: indoorDist,
           transitSteps,
           outdoorSteps: mapboxSteps,
+          indoorSteps: indoorStepsGeo,
         });
 
         // fitBounds to route
@@ -659,8 +722,8 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
           </Source>
         )}
 
-        {/* Indoor route layer */}
-        {isIndoorMode && indoorRoute && (
+        {/* Indoor route layer — show at any zoom when route exists */}
+        {indoorRoute && (
           <Source id="indoor-route" type="geojson" data={indoorRoute}>
             <Layer
               id="indoor-route-line"
@@ -669,6 +732,22 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
                 'line-color': 'hsl(142, 71%, 45%)',
                 'line-width': 3,
                 'line-dasharray': [2, 1],
+              }}
+            />
+            <Layer
+              id="indoor-route-arrows"
+              type="symbol"
+              layout={{
+                'symbol-placement': 'line',
+                'symbol-spacing': 60,
+                'text-field': '▶',
+                'text-size': 10,
+                'text-keep-upright': false,
+                'text-allow-overlap': true,
+              }}
+              paint={{
+                'text-color': 'hsl(0, 0%, 100%)',
+                'text-opacity': 0.8,
               }}
             />
           </Source>
