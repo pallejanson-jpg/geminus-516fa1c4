@@ -152,7 +152,7 @@ const StepTimeline: React.FC<{
     }
 
     return result;
-  }, [steps, indoorDistance, profile]);
+  }, [steps, indoorDistance, indoorSteps, profile]);
 
   if (displaySteps.length === 0) return null;
 
