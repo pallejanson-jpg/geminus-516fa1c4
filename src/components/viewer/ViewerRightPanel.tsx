@@ -660,42 +660,29 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
 
               {/* Room Visualization - always mounted so colorization persists */}
               {buildingFmGuid && (
-                <>
-                  <Collapsible open={roomVizOpen} onOpenChange={setRoomVizOpen}>
-                    <CollapsibleTrigger asChild>
-                      <Button variant="ghost" className="w-full justify-between h-10 px-2">
-                        <div className="flex items-center gap-2">
-                          <Palette className="h-4 w-4" />
-                          <span className="font-medium text-sm">Room Visualization</span>
-                        </div>
-                        <ChevronDown className={cn("h-4 w-4 transition-transform", roomVizOpen && "rotate-180")} />
-                      </Button>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <div className="pt-2">
-                        <RoomVisualizationPanel
-                          viewerRef={viewerRef}
-                          buildingFmGuid={buildingFmGuid}
-                          onShowSpaces={onShowSpacesChange}
-                          visibleFloorFmGuids={visibleFloorFmGuids && visibleFloorFmGuids.length > 0 ? visibleFloorFmGuids : undefined}
-                          embedded={true}
-                        />
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-                  {/* Hidden instance keeps colorization alive when collapsible is closed */}
-                  {!roomVizOpen && (
-                    <div className="hidden">
-                      <RoomVisualizationPanel
-                        viewerRef={viewerRef}
-                        buildingFmGuid={buildingFmGuid}
-                        onShowSpaces={onShowSpacesChange}
-                        visibleFloorFmGuids={visibleFloorFmGuids && visibleFloorFmGuids.length > 0 ? visibleFloorFmGuids : undefined}
-                        embedded={true}
-                      />
+                <div>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-between h-10 px-2"
+                    onClick={() => setRoomVizOpen(v => !v)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Palette className="h-4 w-4" />
+                      <span className="font-medium text-sm">Room Visualization</span>
                     </div>
-                  )}
-                </>
+                    <ChevronDown className={cn("h-4 w-4 transition-transform", roomVizOpen && "rotate-180")} />
+                  </Button>
+                  {/* Always mounted — CSS visibility only so colorization persists */}
+                  <div className={cn("pt-2", !roomVizOpen && "hidden")}>
+                    <RoomVisualizationPanel
+                      viewerRef={viewerRef}
+                      buildingFmGuid={buildingFmGuid}
+                      onShowSpaces={onShowSpacesChange}
+                      visibleFloorFmGuids={visibleFloorFmGuids && visibleFloorFmGuids.length > 0 ? visibleFloorFmGuids : undefined}
+                      embedded={true}
+                    />
+                  </div>
+                </div>
               )}
 
               <Separator />
