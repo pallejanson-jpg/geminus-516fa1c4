@@ -722,8 +722,8 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
           </Source>
         )}
 
-        {/* Indoor route layer */}
-        {isIndoorMode && indoorRoute && (
+        {/* Indoor route layer — show at any zoom when route exists */}
+        {indoorRoute && (
           <Source id="indoor-route" type="geojson" data={indoorRoute}>
             <Layer
               id="indoor-route-line"
@@ -732,6 +732,22 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
                 'line-color': 'hsl(142, 71%, 45%)',
                 'line-width': 3,
                 'line-dasharray': [2, 1],
+              }}
+            />
+            <Layer
+              id="indoor-route-arrows"
+              type="symbol"
+              layout={{
+                'symbol-placement': 'line',
+                'symbol-spacing': 60,
+                'text-field': '▶',
+                'text-size': 10,
+                'text-keep-upright': false,
+                'text-allow-overlap': true,
+              }}
+              paint={{
+                'text-color': 'hsl(0, 0%, 100%)',
+                'text-opacity': 0.8,
               }}
             />
           </Source>
