@@ -85,6 +85,11 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const [showRoomVisualization, setShowRoomVisualization] = useState(false);
   const [showAssetPanel, setShowAssetPanel] = useState(false);
 
+  // ── Inventory pick-position mode ──────────────────────────────────────
+  const [isPickingPosition, setIsPickingPosition] = useState(false);
+  const [pendingAssetPosition, setPendingAssetPosition] = useState<{ x: number; y: number; z: number } | null>(null);
+  const [showInventorySheet, setShowInventorySheet] = useState(false);
+
   // Listen for asset panel toggle events (from VisualizationToolbar button)
   useEffect(() => {
     const handler = () => setShowAssetPanel(p => !p);
