@@ -1,6 +1,7 @@
 import React, { useState, useContext, useCallback, useEffect, useMemo, useRef } from 'react';
-import Map, { Popup, NavigationControl, GeolocateControl, Source, Layer } from 'react-map-gl';
+import Map, { Popup, Marker, NavigationControl, GeolocateControl, Source, Layer } from 'react-map-gl';
 import { MapPin, Maximize2, Layers, Loader2, Palette, ArrowLeft, Navigation } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -82,6 +83,7 @@ const INDOOR_ZOOM_THRESHOLD = 17;
 const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSidebar, compact, externalColoringMode }) => {
   const { setSelectedFacility, setActiveApp, isLoadingData } = useContext(AppContext);
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
   const { facilities: mapFacilities } = useMapFacilities();
 
   const [mapboxToken, setMapboxToken] = useState<string | null>(null);
@@ -98,11 +100,15 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
   const [showNavPanel, setShowNavPanel] = useState(false);
   const [outdoorRoute, setOutdoorRoute] = useState<GeoJSON.LineString | null>(null);
   const [indoorRoute, setIndoorRoute] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [routeOrigin, setRouteOrigin] = useState<{ lat: number; lng: number } | null>(null);
+  const [routeDestination, setRouteDestination] = useState<{ lat: number; lng: number } | null>(null);
+  const [outdoorSteps, setOutdoorSteps] = useState<any[] | null>(null);
   const [routeSummary, setRouteSummary] = useState<{
     outdoorDistance: number;
     outdoorDuration: number;
     indoorDistance: number;
     transitSteps?: any[];
+    outdoorSteps?: any[];
   } | null>(null);
   const [navBuildingGuid, setNavBuildingGuid] = useState<string | null>(null);
   const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
@@ -242,15 +248,17 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
     profile: 'walking' | 'driving' | 'transit';
   }) => {
     setNavBuildingGuid(params.buildingFmGuid);
+    setRouteOrigin(params.origin);
+    setRouteDestination(params.destination);
 
     try {
       let geometry: GeoJSON.LineString | null = null;
       let distance = 0;
       let duration = 0;
       let transitSteps: any[] | undefined;
+      let mapboxSteps: any[] | undefined;
 
       if (params.profile === 'transit') {
-        // Use Google Routes API for transit
         const { data, error } = await supabase.functions.invoke('google-routes', {
           body: {
             origin: { lat: params.origin.lat, lng: params.origin.lng },
@@ -265,7 +273,6 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
           transitSteps = data.steps;
         }
       } else {
-        // Use Mapbox Directions for walking/driving
         const { data, error } = await supabase.functions.invoke('mapbox-directions', {
           body: {
             origin: { lat: params.origin.lat, lng: params.origin.lng },
@@ -278,15 +285,16 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
           geometry = data.geometry;
           distance = data.distance || 0;
           duration = data.duration || 0;
+          mapboxSteps = data.steps;
         }
       }
 
       if (geometry) {
         setOutdoorRoute(geometry);
+        setOutdoorSteps(mapboxSteps || null);
 
         let indoorDist = 0;
 
-        // Load indoor graph and compute route if room specified
         if (params.targetRoomFmGuid) {
           const { data: graphRows } = await supabase
             .from('navigation_graphs')
@@ -322,15 +330,24 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
           outdoorDuration: duration,
           indoorDistance: indoorDist,
           transitSteps,
+          outdoorSteps: mapboxSteps,
         });
 
-        // Zoom to fit route
-        setViewState(prev => ({
-          ...prev,
-          latitude: (params.origin.lat + params.destination.lat) / 2,
-          longitude: (params.origin.lng + params.destination.lng) / 2,
-          zoom: 13,
-        }));
+        // fitBounds to route
+        const coords = geometry.coordinates;
+        if (coords.length > 0 && mapRef.current) {
+          let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
+          for (const c of coords) {
+            if (c[0] < minLng) minLng = c[0];
+            if (c[0] > maxLng) maxLng = c[0];
+            if (c[1] < minLat) minLat = c[1];
+            if (c[1] > maxLat) maxLat = c[1];
+          }
+          mapRef.current.fitBounds(
+            [[minLng, minLat], [maxLng, maxLat]],
+            { padding: { top: 80, bottom: 80, left: 340, right: 80 }, duration: 1000 }
+          );
+        }
       }
     } catch (err) {
       console.error('Navigation error:', err);
@@ -344,7 +361,19 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
     setRouteSummary(null);
     setNavBuildingGuid(null);
     setSelectedFloor(null);
+    setRouteOrigin(null);
+    setRouteDestination(null);
+    setOutdoorSteps(null);
   }, []);
+
+  const handleShowIndoor = useCallback(() => {
+    if (!navBuildingGuid || !indoorRoute) return;
+    sessionStorage.setItem('pending_indoor_route', JSON.stringify({
+      buildingFmGuid: navBuildingGuid,
+      route: indoorRoute,
+    }));
+    navigate(`/viewer?building=${navBuildingGuid}`);
+  }, [navBuildingGuid, indoorRoute, navigate]);
 
   // Outdoor route GeoJSON
   const outdoorRouteGeoJSON = useMemo((): GeoJSON.FeatureCollection | null => {
@@ -404,6 +433,8 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
           onNavigate={handleNavigate}
           onClose={handleCloseNav}
           routeSummary={routeSummary}
+          hasIndoorRoute={!!indoorRoute}
+          onShowIndoor={handleShowIndoor}
         />
       )}
 
@@ -495,7 +526,42 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
                 'line-opacity': isIndoorMode ? 0.3 : 1,
               }}
             />
+            <Layer
+              id="outdoor-route-arrows"
+              type="symbol"
+              layout={{
+                'symbol-placement': 'line',
+                'symbol-spacing': 80,
+                'text-field': '▶',
+                'text-size': 12,
+                'text-rotate': 0,
+                'text-keep-upright': false,
+                'text-allow-overlap': true,
+              }}
+              paint={{
+                'text-color': 'hsl(0, 0%, 100%)',
+                'text-opacity': isIndoorMode ? 0.3 : 0.9,
+              }}
+            />
           </Source>
+        )}
+
+        {/* Origin marker (A) */}
+        {routeOrigin && outdoorRoute && (
+          <Marker latitude={routeOrigin.lat} longitude={routeOrigin.lng} anchor="center">
+            <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground text-xs font-bold shadow-lg border-2 border-background">
+              A
+            </div>
+          </Marker>
+        )}
+
+        {/* Destination marker (B) */}
+        {routeDestination && outdoorRoute && (
+          <Marker latitude={routeDestination.lat} longitude={routeDestination.lng} anchor="center">
+            <div className="flex items-center justify-center w-7 h-7 rounded-full bg-destructive text-destructive-foreground text-xs font-bold shadow-lg border-2 border-background">
+              B
+            </div>
+          </Marker>
         )}
 
         {/* Indoor room polygons */}
