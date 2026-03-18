@@ -26,7 +26,7 @@ import FloatingIssueListPanel, { type BcfIssue } from "./FloatingIssueListPanel"
 import IssueDetailSheet from "./IssueDetailSheet";
 import ViewerThemeSelector from "./ViewerThemeSelector";
 import RoomVisualizationPanel from "./RoomVisualizationPanel";
-import XrayToggle from "./XrayToggle";
+// XrayToggle removed from right panel
 import LightingControlsPanel from "./LightingControlsPanel";
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
 import { CLIP_HEIGHT_3D_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
