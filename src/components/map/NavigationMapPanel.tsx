@@ -228,6 +228,33 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
                 <span className="text-muted-foreground">·</span>
                 <span>{formatDuration(routeSummary.outdoorDuration)}</span>
               </div>
+
+              {/* Transit steps */}
+              {routeSummary.transitSteps && routeSummary.transitSteps.length > 0 && (
+                <div className="space-y-1 pt-1 border-t border-border">
+                  {routeSummary.transitSteps
+                    .filter(s => s.transit)
+                    .map((step, i) => (
+                      <div key={i} className="flex items-center gap-1.5 text-xs">
+                        <Bus size={10} className="shrink-0 text-primary" />
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] px-1"
+                          style={step.transit?.lineColor ? { borderColor: step.transit.lineColor, color: step.transit.lineColor } : {}}
+                        >
+                          {step.transit!.lineName || step.transit!.vehicleType}
+                        </Badge>
+                        <span className="text-muted-foreground truncate">
+                          {step.transit!.departureStop} → {step.transit!.arrivalStop}
+                        </span>
+                        {step.transit!.numStops > 0 && (
+                          <span className="text-muted-foreground whitespace-nowrap">({step.transit!.numStops} stops)</span>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              )}
+
               {routeSummary.indoorDistance > 0 && (
                 <div className="flex items-center gap-2 text-xs">
                   <Badge variant="outline" className="text-[10px]">Indoor</Badge>
