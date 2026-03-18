@@ -98,7 +98,12 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
   const [showNavPanel, setShowNavPanel] = useState(false);
   const [outdoorRoute, setOutdoorRoute] = useState<GeoJSON.LineString | null>(null);
   const [indoorRoute, setIndoorRoute] = useState<GeoJSON.FeatureCollection | null>(null);
-  const [routeSummary, setRouteSummary] = useState<{ outdoorDistance: number; outdoorDuration: number; indoorDistance: number } | null>(null);
+  const [routeSummary, setRouteSummary] = useState<{
+    outdoorDistance: number;
+    outdoorDuration: number;
+    indoorDistance: number;
+    transitSteps?: any[];
+  } | null>(null);
   const [navBuildingGuid, setNavBuildingGuid] = useState<string | null>(null);
   const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
 
@@ -234,22 +239,50 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
     destination: { lat: number; lng: number };
     buildingFmGuid: string;
     targetRoomFmGuid: string | null;
-    profile: 'walking' | 'driving';
+    profile: 'walking' | 'driving' | 'transit';
   }) => {
     setNavBuildingGuid(params.buildingFmGuid);
 
-    // Fetch outdoor route
     try {
-      const { data, error } = await supabase.functions.invoke('mapbox-directions', {
-        body: {
-          origin: { lat: params.origin.lat, lng: params.origin.lng },
-          destination: { lat: params.destination.lat, lng: params.destination.lng },
-          profile: params.profile,
-        },
-      });
+      let geometry: GeoJSON.LineString | null = null;
+      let distance = 0;
+      let duration = 0;
+      let transitSteps: any[] | undefined;
 
-      if (!error && data?.geometry) {
-        setOutdoorRoute(data.geometry);
+      if (params.profile === 'transit') {
+        // Use Google Routes API for transit
+        const { data, error } = await supabase.functions.invoke('google-routes', {
+          body: {
+            origin: { lat: params.origin.lat, lng: params.origin.lng },
+            destination: { lat: params.destination.lat, lng: params.destination.lng },
+          },
+        });
+
+        if (!error && data?.geometry) {
+          geometry = data.geometry;
+          distance = data.distance || 0;
+          duration = data.duration || 0;
+          transitSteps = data.steps;
+        }
+      } else {
+        // Use Mapbox Directions for walking/driving
+        const { data, error } = await supabase.functions.invoke('mapbox-directions', {
+          body: {
+            origin: { lat: params.origin.lat, lng: params.origin.lng },
+            destination: { lat: params.destination.lat, lng: params.destination.lng },
+            profile: params.profile,
+          },
+        });
+
+        if (!error && data?.geometry) {
+          geometry = data.geometry;
+          distance = data.distance || 0;
+          duration = data.duration || 0;
+        }
+      }
+
+      if (geometry) {
+        setOutdoorRoute(geometry);
 
         let indoorDist = 0;
 
@@ -270,8 +303,6 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
               const result = dijkstra(merged, entrance.nodeId, target.nodeId);
               if (result) {
                 indoorDist = result.totalDistance;
-                // Build GeoJSON from indoor path for display on map (convert % coords to geo if we have origin)
-                // For now store as simple line
                 const coords = result.path.map(n => [n.coordinates[0], n.coordinates[1]]);
                 setIndoorRoute({
                   type: 'FeatureCollection',
@@ -287,9 +318,10 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
         }
 
         setRouteSummary({
-          outdoorDistance: data.distance,
-          outdoorDuration: data.duration,
+          outdoorDistance: distance,
+          outdoorDuration: duration,
           indoorDistance: indoorDist,
+          transitSteps,
         });
 
         // Zoom to fit route
