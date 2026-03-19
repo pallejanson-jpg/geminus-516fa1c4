@@ -413,6 +413,8 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         console.warn('Immediate hierarchy population failed:', e);
       });
 
+      activeJobIdRef.current = jobId;
+
       if (useDirectBrowser) {
         addLog(`File is ${fileSizeMB.toFixed(0)} MB — using browser-based conversion`);
         await runBrowserConversion(ifcFile, targetBuildingFmGuid, jobId, safeModelName, addLog, setConversionProgress);
