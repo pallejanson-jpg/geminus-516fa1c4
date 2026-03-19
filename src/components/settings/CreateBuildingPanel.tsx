@@ -1107,6 +1107,80 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                 />
               </AccordionContent>
             </AccordionItem>
+
+            {/* ── Conversion Jobs ── */}
+            <AccordionItem value="jobs" className="border rounded-lg">
+              <AccordionTrigger className="px-3 py-2.5 hover:no-underline hover:bg-muted/50 text-sm">
+                <div className="flex items-center gap-2">
+                  <Layers className="h-4 w-4 text-muted-foreground" />
+                  <span>Conversion Jobs</span>
+                  {conversionJobs.length > 0 && (
+                    <Badge variant="secondary" className="text-[9px] px-1.5 py-0 ml-1">{conversionJobs.length}</Badge>
+                  )}
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-3 pb-3 pt-1 space-y-2">
+                {conversionJobs.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Inga konverteringsjobb för denna byggnad.</p>
+                ) : (
+                  conversionJobs.map(job => (
+                    <div key={job.id} className="border rounded-md p-2.5 space-y-1.5 bg-muted/20">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium truncate flex-1">{job.model_name || job.ifc_storage_path?.split('/').pop() || 'Unnamed'}</span>
+                        {getStatusBadge(job.status)}
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                        <span>{formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}</span>
+                        {job.progress > 0 && job.status !== 'done' && (
+                          <span>• {job.progress}%</span>
+                        )}
+                      </div>
+                      {job.status !== 'done' && job.progress > 0 && job.progress < 100 && (
+                        <Progress value={job.progress} className="h-1.5" />
+                      )}
+                      {job.error_message && (
+                        <p className="text-[10px] text-destructive bg-destructive/10 rounded px-2 py-1">{job.error_message}</p>
+                      )}
+                      {expandedJobLogs.has(job.id) && job.log_messages && job.log_messages.length > 0 && (
+                        <div className="rounded border bg-background p-2 max-h-32 overflow-y-auto">
+                          {(job.log_messages as string[]).map((msg: string, i: number) => (
+                            <p key={i} className="text-[10px] font-mono text-muted-foreground leading-relaxed">{msg}</p>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1.5 pt-1">
+                        {job.log_messages && job.log_messages.length > 0 && (
+                          <Button
+                            variant="ghost" size="sm" className="h-6 text-[10px] px-2 gap-1"
+                            onClick={() => setExpandedJobLogs(prev => {
+                              const next = new Set(prev);
+                              next.has(job.id) ? next.delete(job.id) : next.add(job.id);
+                              return next;
+                            })}
+                          >
+                            <Eye className="h-3 w-3" />
+                            {expandedJobLogs.has(job.id) ? 'Dölj loggar' : 'Visa loggar'}
+                          </Button>
+                        )}
+                        {isStuckJob(job) && (
+                          <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 gap-1" onClick={() => handleResetJob(job.id)}>
+                            <RotateCcw className="h-3 w-3" /> Återställ
+                          </Button>
+                        )}
+                        {(job.status === 'done' || job.status === 'error') && (
+                          <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 gap-1 text-destructive" onClick={() => handleDeleteJob(job.id)}>
+                            <X className="h-3 w-3" /> Radera
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+                <Button variant="ghost" size="sm" className="w-full text-xs gap-1.5" onClick={fetchConversionJobs}>
+                  <RefreshCw className="h-3 w-3" /> Uppdatera
+                </Button>
+              </AccordionContent>
+            </AccordionItem>
           </Accordion>
         </div>
       )}
