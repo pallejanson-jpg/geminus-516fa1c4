@@ -515,8 +515,19 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       }
     } catch (err: any) {
       addLog(`❌ Error: ${err.message}`);
+      // Mark job as failed if we have a jobId
+      if (activeJobIdRef.current) {
+        await supabase.from('conversion_jobs').update({
+          status: 'error',
+          error_message: err.message,
+          updated_at: new Date().toISOString(),
+        }).eq('id', activeJobIdRef.current);
+      }
       toast({ variant: 'destructive', title: 'Conversion error', description: err.message });
       setIsConverting(false);
+    } finally {
+      activeJobIdRef.current = null;
+      if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
     }
 
     async function runBrowserConversion(
