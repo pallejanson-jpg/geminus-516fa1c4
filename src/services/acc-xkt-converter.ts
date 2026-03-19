@@ -69,8 +69,8 @@ function detectFormat(data: ArrayBuffer): 'glb' | 'obj' | 'ifc' | 'unknown' {
 export interface IfcHierarchyResult {
   xktData: ArrayBuffer;
   metaModelJson: any;
-  levels: Array<{ id: string; name: string; type: string }>;
-  spaces: Array<{ id: string; name: string; type: string; parentId: string }>;
+  levels: Array<{ id: string; name: string; type: string; globalId?: string }>;
+  spaces: Array<{ id: string; name: string; type: string; parentId: string; globalId?: string }>;
   systems: Array<{ name: string; type: string; discipline: string; memberIds: string[] }>;
 }
 
@@ -211,18 +211,20 @@ export async function convertToXktWithMetadata(
       const objName = metaObj.metaObjectName || metaObj.name || metaType;
       const parentId = metaObj.parentMetaObjectId || metaObj.parentId || '';
 
-      // Build xeokit MetaModel JSON entry
+      // Build xeokit MetaModel JSON entry — include IFC GlobalId if available
+      const globalId = metaObj.originalSystemId || metaObj.globalId || metaObj.GlobalId || '';
       metaModelObjects.push({
         id: objId,
         type: metaType,
         name: objName,
         parent: parentId || undefined,
+        ...(globalId ? { globalId } : {}),
       });
 
       if (metaType === 'IfcBuildingStorey') {
-        levels.push({ id: objId, name: objName, type: metaType });
+        levels.push({ id: objId, name: objName, type: metaType, globalId: globalId || undefined });
       } else if (metaType === 'IfcSpace') {
-        spaces.push({ id: objId, name: objName, type: metaType, parentId });
+        spaces.push({ id: objId, name: objName, type: metaType, parentId, globalId: globalId || undefined });
       } else if (metaType === 'IfcSystem' || metaType === 'IfcDistributionSystem') {
         systemMap.set(objId, { name: objName, type: metaType, discipline: inferDiscipline(objName), memberIds: [] });
       }
