@@ -107,11 +107,58 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
     return () => clearInterval(id);
   }, [conversionStartTime, conversionDone]);
 
-  // Cleanup polling on unmount
+  // Track active job ID for beforeunload + heartbeat
+  const activeJobIdRef = useRef<string | null>(null);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Cleanup polling + heartbeat on unmount
   useEffect(() => {
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     };
+  }, []);
+
+  // beforeunload guard — warn user if conversion is active
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (activeJobIdRef.current) {
+        e.preventDefault();
+        e.returnValue = 'IFC-konvertering pågår. Är du säker på att du vill lämna?';
+        // Mark job as failed on unload (best-effort via sendBeacon)
+        const jobId = activeJobIdRef.current;
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/conversion_jobs?id=eq.${jobId}`;
+        const body = JSON.stringify({ status: 'error', error_message: 'Browser tab closed during conversion', updated_at: new Date().toISOString() });
+        navigator.sendBeacon?.(url, new Blob([body], { type: 'application/json' }));
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, []);
+
+  // Auto-reset own stale jobs on mount (processing > 5 min without updates)
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const { data: staleJobs } = await supabase
+        .from('conversion_jobs')
+        .select('id, model_name')
+        .eq('created_by', user.id)
+        .eq('status', 'processing')
+        .lt('updated_at', fiveMinAgo);
+      if (staleJobs && staleJobs.length > 0) {
+        for (const job of staleJobs) {
+          await supabase.from('conversion_jobs').update({
+            status: 'error',
+            error_message: 'Auto-reset: stale job detected (no progress for 5+ minutes)',
+            updated_at: new Date().toISOString(),
+          }).eq('id', job.id);
+          console.warn(`Auto-reset stale conversion job: ${job.id} (${job.model_name})`);
+        }
+      }
+    })();
   }, []);
 
   // ── Fetch buildings (merged from assets + building_settings) ──
@@ -366,6 +413,8 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         console.warn('Immediate hierarchy population failed:', e);
       });
 
+      activeJobIdRef.current = jobId;
+
       if (useDirectBrowser) {
         addLog(`File is ${fileSizeMB.toFixed(0)} MB — using browser-based conversion`);
         await runBrowserConversion(ifcFile, targetBuildingFmGuid, jobId, safeModelName, addLog, setConversionProgress);
@@ -466,8 +515,19 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       }
     } catch (err: any) {
       addLog(`❌ Error: ${err.message}`);
+      // Mark job as failed if we have a jobId
+      if (activeJobIdRef.current) {
+        await supabase.from('conversion_jobs').update({
+          status: 'error',
+          error_message: err.message,
+          updated_at: new Date().toISOString(),
+        }).eq('id', activeJobIdRef.current);
+      }
       toast({ variant: 'destructive', title: 'Conversion error', description: err.message });
       setIsConverting(false);
+    } finally {
+      activeJobIdRef.current = null;
+      if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
     }
 
     async function runBrowserConversion(
@@ -483,7 +543,14 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         catch (importErr: any) { throw new Error(`Failed to load converter: ${importErr.message}`); }
 
         log('Converter loaded, starting IFC parsing...');
+        activeJobIdRef.current = jobId;
         await supabase.from('conversion_jobs').update({ status: 'processing', progress: 20, updated_at: new Date().toISOString() }).eq('id', jobId);
+
+        // Start heartbeat: update updated_at every 30s to prove we're alive
+        if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+        heartbeatRef.current = setInterval(async () => {
+          await supabase.from('conversion_jobs').update({ updated_at: new Date().toISOString() }).eq('id', jobId).eq('status', 'processing');
+        }, 30_000);
 
         const result = await converterModule.convertToXktWithMetadata(fileBuffer, (msg: string) => { log(msg); });
         setProgress(70);
@@ -652,7 +719,17 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         toast({ title: 'IFC converted!', description: `${file.name} converted in browser and saved.` });
       } catch (clientErr: any) {
         log(`❌ Browser conversion failed: ${clientErr.message}`);
+        // Mark job as failed so it doesn't stay stuck
+        await supabase.from('conversion_jobs').update({
+          status: 'error',
+          error_message: `Browser conversion failed: ${clientErr.message}`,
+          updated_at: new Date().toISOString(),
+        }).eq('id', jobId);
         toast({ variant: 'destructive', title: 'Conversion failed', description: clientErr.message });
+      } finally {
+        // Stop heartbeat and clear active job
+        activeJobIdRef.current = null;
+        if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
       }
       setIsConverting(false);
     }
