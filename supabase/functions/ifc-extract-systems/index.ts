@@ -539,36 +539,49 @@ Deno.serve(async (req) => {
       log(`IFC downloaded: ${fileSizeMB.toFixed(1)} MB`);
       await updateJob({ progress: 20 });
 
-      // Load libraries and parse IFC metadata
-      log("Preparing WASM runtime...");
-      const wasmPath = await ensureWasm();
-      await updateJob({ progress: 25 });
+      if (fileSizeMB > 10) {
+        // File too large for WASM — auto-fallback to cached metadata
+        log(`File too large for WASM parsing (${fileSizeMB.toFixed(1)} MB > 10 MB limit). Falling back to cached metadata...`);
+        const cached = await loadMetaObjectsFromLatestMetadata(supabase, buildingFmGuid, log);
+        if (!cached || cached.length === 0) {
+          const errMsg = `IFC file is ${fileSizeMB.toFixed(1)} MB (exceeds 10 MB WASM limit) and no cached _metadata.json was found. Upload a _metadata.json file or use the browser-side converter.`;
+          await updateJob({ status: "error", error_message: errMsg });
+          throw new Error(errMsg);
+        }
+        metaObjectsList = cached;
+        await updateJob({ progress: 55 });
+      } else {
+        // Load libraries and parse IFC metadata
+        log("Preparing WASM runtime...");
+        const wasmPath = await ensureWasm();
+        await updateJob({ progress: 25 });
 
-      const WebIFC = await import("npm:web-ifc@0.0.57");
-      const xeokitConvert = await import("npm:@xeokit/xeokit-convert@1.3.1");
+        const WebIFC = await import("npm:web-ifc@0.0.57");
+        const xeokitConvert = await import("npm:@xeokit/xeokit-convert@1.3.1");
 
-      const xktModel = new (xeokitConvert as any).XKTModel();
-      log("Parsing IFC metadata...");
-      await updateJob({ progress: 30 });
+        const xktModel = new (xeokitConvert as any).XKTModel();
+        log("Parsing IFC metadata...");
+        await updateJob({ progress: 30 });
 
-      await (xeokitConvert as any).parseIFCIntoXKTModel({
-        WebIFC,
-        data: new Uint8Array(ifcArrayBuffer),
-        xktModel,
-        autoNormals: true,
-        wasmPath,
-        log: (msg: string) => console.log(`  ${msg}`),
-      });
+        await (xeokitConvert as any).parseIFCIntoXKTModel({
+          WebIFC,
+          data: new Uint8Array(ifcArrayBuffer),
+          xktModel,
+          autoNormals: true,
+          wasmPath,
+          log: (msg: string) => console.log(`  ${msg}`),
+        });
 
-      xktModel.finalize();
-      log("IFC metadata parsed");
-      await updateJob({ progress: 55 });
+        xktModel.finalize();
+        log("IFC metadata parsed");
+        await updateJob({ progress: 55 });
 
-      metaObjectsList = xktModel.metaObjects
-        ? (Array.isArray(xktModel.metaObjects)
-            ? xktModel.metaObjects
-            : Object.values(xktModel.metaObjects))
-        : [];
+        metaObjectsList = xktModel.metaObjects
+          ? (Array.isArray(xktModel.metaObjects)
+              ? xktModel.metaObjects
+              : Object.values(xktModel.metaObjects))
+          : [];
+      }
     }
 
     log(`Found ${metaObjectsList.length} meta objects`);
