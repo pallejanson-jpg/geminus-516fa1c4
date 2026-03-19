@@ -727,6 +727,79 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
 
   const selectedBuilding = existingBuildings.find(b => b.fmGuid === selectedBuildingFmGuid);
 
+  // ── Fetch conversion jobs for selected building ──
+  const fetchConversionJobs = useCallback(async () => {
+    if (!selectedBuildingFmGuid) { setConversionJobs([]); return; }
+    const { data } = await supabase
+      .from('conversion_jobs')
+      .select('*')
+      .eq('building_fm_guid', selectedBuildingFmGuid)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    setConversionJobs(data || []);
+  }, [selectedBuildingFmGuid]);
+
+  useEffect(() => { fetchConversionJobs(); }, [fetchConversionJobs]);
+
+  // Auto-refresh jobs if any are active
+  useEffect(() => {
+    if (jobPollRef.current) clearInterval(jobPollRef.current);
+    const hasActive = conversionJobs.some(j => j.status === 'pending' || j.status === 'processing');
+    if (hasActive) {
+      jobPollRef.current = setInterval(fetchConversionJobs, 10000);
+    }
+    return () => { if (jobPollRef.current) clearInterval(jobPollRef.current); };
+  }, [conversionJobs, fetchConversionJobs]);
+
+  // ── Delete building handler ──
+  const handleDeleteBuilding = async () => {
+    if (!selectedBuildingFmGuid) return;
+    setIsDeleting(true);
+    try {
+      const result = await deleteBuilding(selectedBuildingFmGuid);
+      if (result.success) {
+        toast({ title: 'Byggnad raderad', description: `${result.summary.assetsDeleted} objekt raderade, ${result.summary.expiredInAssetPlus} expirerade i Asset+.` });
+        setSelectedBuildingFmGuid('');
+        setCreatedBuilding(null);
+        fetchBuildings();
+      } else {
+        toast({ variant: 'destructive', title: 'Delvis misslyckad', description: `${result.summary.expireErrors} objekt kunde inte expireras i Asset+.` });
+        fetchBuildings();
+      }
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Radering misslyckades', description: err.message });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteJob = async (jobId: string) => {
+    await supabase.from('conversion_jobs').delete().eq('id', jobId);
+    fetchConversionJobs();
+  };
+
+  const handleResetJob = async (jobId: string) => {
+    await supabase.from('conversion_jobs').update({ status: 'pending', progress: 0, error_message: null, updated_at: new Date().toISOString() } as any).eq('id', jobId);
+    fetchConversionJobs();
+  };
+
+  const getStatusBadge = (status: string) => {
+    const map: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string }> = {
+      pending: { variant: 'secondary', label: 'Köad' },
+      processing: { variant: 'default', label: 'Bearbetar' },
+      done: { variant: 'outline', label: 'Klar' },
+      error: { variant: 'destructive', label: 'Fel' },
+    };
+    const s = map[status] || { variant: 'secondary' as const, label: status };
+    return <Badge variant={s.variant} className="text-[9px]">{s.label}</Badge>;
+  };
+
+  const isStuckJob = (job: any) => {
+    if (job.status !== 'processing') return false;
+    const updatedAt = new Date(job.updated_at).getTime();
+    return Date.now() - updatedAt > 2 * 60 * 60 * 1000; // >2h
+  };
+
   return (
     <div className="space-y-5 py-2">
       {/* ══════ Building Selector ══════ */}
