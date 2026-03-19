@@ -107,11 +107,58 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
     return () => clearInterval(id);
   }, [conversionStartTime, conversionDone]);
 
-  // Cleanup polling on unmount
+  // Track active job ID for beforeunload + heartbeat
+  const activeJobIdRef = useRef<string | null>(null);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Cleanup polling + heartbeat on unmount
   useEffect(() => {
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     };
+  }, []);
+
+  // beforeunload guard — warn user if conversion is active
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (activeJobIdRef.current) {
+        e.preventDefault();
+        e.returnValue = 'IFC-konvertering pågår. Är du säker på att du vill lämna?';
+        // Mark job as failed on unload (best-effort via sendBeacon)
+        const jobId = activeJobIdRef.current;
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/conversion_jobs?id=eq.${jobId}`;
+        const body = JSON.stringify({ status: 'error', error_message: 'Browser tab closed during conversion', updated_at: new Date().toISOString() });
+        navigator.sendBeacon?.(url, new Blob([body], { type: 'application/json' }));
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, []);
+
+  // Auto-reset own stale jobs on mount (processing > 5 min without updates)
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const { data: staleJobs } = await supabase
+        .from('conversion_jobs')
+        .select('id, model_name')
+        .eq('created_by', user.id)
+        .eq('status', 'processing')
+        .lt('updated_at', fiveMinAgo);
+      if (staleJobs && staleJobs.length > 0) {
+        for (const job of staleJobs) {
+          await supabase.from('conversion_jobs').update({
+            status: 'error',
+            error_message: 'Auto-reset: stale job detected (no progress for 5+ minutes)',
+            updated_at: new Date().toISOString(),
+          }).eq('id', job.id);
+          console.warn(`Auto-reset stale conversion job: ${job.id} (${job.model_name})`);
+        }
+      }
+    })();
   }, []);
 
   // ── Fetch buildings (merged from assets + building_settings) ──
