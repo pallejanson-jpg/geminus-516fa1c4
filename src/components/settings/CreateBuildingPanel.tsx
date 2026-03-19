@@ -706,7 +706,17 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         toast({ title: 'IFC converted!', description: `${file.name} converted in browser and saved.` });
       } catch (clientErr: any) {
         log(`❌ Browser conversion failed: ${clientErr.message}`);
+        // Mark job as failed so it doesn't stay stuck
+        await supabase.from('conversion_jobs').update({
+          status: 'error',
+          error_message: `Browser conversion failed: ${clientErr.message}`,
+          updated_at: new Date().toISOString(),
+        }).eq('id', jobId);
         toast({ variant: 'destructive', title: 'Conversion failed', description: clientErr.message });
+      } finally {
+        // Stop heartbeat and clear active job
+        activeJobIdRef.current = null;
+        if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
       }
       setIsConverting(false);
     }
