@@ -815,22 +815,52 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         {loadingBuildings ? (
           <div className="text-xs text-muted-foreground py-2">Loading buildings...</div>
         ) : (
-          <Select value={selectedBuildingFmGuid} onValueChange={(v) => { setSelectedBuildingFmGuid(v); setShowCreateForm(false); handleResetIfc(); }}>
-            <SelectTrigger className="h-10 text-sm">
-              <SelectValue placeholder="Select a building..." />
-            </SelectTrigger>
-            <SelectContent>
-              {existingBuildings.map(b => (
-                <SelectItem key={b.fmGuid} value={b.fmGuid}>
-                  <span className="flex items-center gap-2">
-                    {b.commonName}
-                    {b.hasCustomAssetPlus && <Badge variant="secondary" className="text-[9px] px-1 py-0 ml-1">Asset+</Badge>}
-                    {b.hasCustomSenslinc && <Badge variant="secondary" className="text-[9px] px-1 py-0">Senslinc</Badge>}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Select value={selectedBuildingFmGuid} onValueChange={(v) => { setSelectedBuildingFmGuid(v); setShowCreateForm(false); handleResetIfc(); }}>
+              <SelectTrigger className="h-10 text-sm flex-1">
+                <SelectValue placeholder="Select a building..." />
+              </SelectTrigger>
+              <SelectContent>
+                {existingBuildings.map(b => (
+                  <SelectItem key={b.fmGuid} value={b.fmGuid}>
+                    <span className="flex items-center gap-2">
+                      {b.commonName}
+                      {b.hasCustomAssetPlus && <Badge variant="secondary" className="text-[9px] px-1 py-0 ml-1">Asset+</Badge>}
+                      {b.hasCustomSenslinc && <Badge variant="secondary" className="text-[9px] px-1 py-0">Senslinc</Badge>}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {selectedBuildingFmGuid && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 text-destructive hover:bg-destructive/10" disabled={isDeleting}>
+                    {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-destructive" />
+                      Radera byggnad?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      <strong>{selectedBuilding?.commonName}</strong> och alla tillhörande objekt (våningsplan, rum, inventarier) raderas permanent.
+                      Synkade objekt expireras i Asset+. Denna åtgärd kan inte ångras.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Avbryt</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteBuilding} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                      Radera allt
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
         )}
 
         {!selectedBuildingFmGuid && !showCreateForm && (
