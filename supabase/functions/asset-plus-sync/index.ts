@@ -1586,109 +1586,203 @@ serve(async (req) => {
       );
     }
 
-    // ============ SYNC WITH CLEANUP (remove orphans) ============
+    // ============ SYNC WITH CLEANUP (bidirectional: pull remote + push local) ============
     if (action === 'sync-with-cleanup') {
-      console.log('Starting sync-with-cleanup');
+      console.log('Starting sync-with-cleanup (bidirectional)');
       const accessToken = await getAccessToken();
+      const apiUrl = _creds.apiUrl || Deno.env.get("ASSET_PLUS_API_URL") || "";
+      const apiKey = _creds.apiKey || Deno.env.get("ASSET_PLUS_API_KEY") || "";
+      const baseUrl = apiUrl.replace(/\/+$/, "");
       
       await updateSyncState(supabase, 'structure', 'running', undefined, undefined, {
-        subtree_name: 'Byggnad/Plan/Rum (med rensning)'
+        subtree_name: 'Byggnad/Plan/Rum (tvåvägs-synk)'
       });
       
-      // Step 1: Fetch all remote structure fmGuids
-      const filter = [
-        ["objectType", "=", 1], "or",
-        ["objectType", "=", 2], "or",
-        ["objectType", "=", 3]
-      ];
-      
+      // ── Step 1: Pull all remote objects (structure + instances) ──
       const remoteFmGuids = new Set<string>();
+      const remoteBuildingGuids = new Set<string>();
       let totalSynced = 0;
-      let skip = 0;
-      const take = 200;
-      let hasMore = true;
       
-      console.log('Fetching all remote structure objects...');
-      
-      while (hasMore) {
-        const result = await fetchAssetPlusObjects(accessToken, filter, skip, take);
+      for (const objectType of [1, 2, 3, 4]) {
+        let skip = 0;
+        const take = 200;
+        let hasMore = true;
         
-        // Collect fmGuids and upsert
-        result.data.forEach((item: any) => {
-          remoteFmGuids.add(item.fmGuid);
-        });
-        
-        if (result.data.length > 0) {
-          const synced = await upsertAssets(supabase, result.data);
-          totalSynced += synced;
+        while (hasMore) {
+          const result = await fetchAssetPlusObjects(accessToken, [["objectType", "=", objectType]], skip, take);
+          
+          result.data.forEach((item: any) => {
+            remoteFmGuids.add(item.fmGuid);
+            if (objectType === 1) remoteBuildingGuids.add(item.fmGuid);
+          });
+          
+          // Upsert structure objects locally (types 1-3)
+          if (objectType <= 3 && result.data.length > 0) {
+            const synced = await upsertAssets(supabase, result.data);
+            totalSynced += synced;
+          }
+          
+          hasMore = result.hasMore;
+          skip += take;
         }
         
-        hasMore = result.hasMore;
-        skip += take;
-        
-        console.log(`Synced ${totalSynced} structure items, collected ${remoteFmGuids.size} GUIDs...`);
-        await updateSyncState(supabase, 'structure', 'running', totalSynced);
+        console.log(`Fetched remote objectType ${objectType}: ${objectType === 1 ? remoteBuildingGuids.size : '...'} items`);
       }
       
-      console.log(`Total remote fmGuids: ${remoteFmGuids.size}`);
+      console.log(`Total remote fmGuids: ${remoteFmGuids.size} (${remoteBuildingGuids.size} buildings), synced ${totalSynced} structure`);
+      await updateSyncState(supabase, 'structure', 'running', totalSynced);
       
-      // Step 2: Find local orphans (only check synced objects, not local-only)
-      // Exclude ACC-synced objects from orphan detection
-      // Also exclude objects belonging to buildings not in Asset+ (e.g. IFC-only buildings)
-      const localItems = await fetchAllLocalFmGuids(supabase, ['Building', 'Building Storey', 'Space'], false, true);
-      console.log(`Local non-is_local structure count (excl. ACC): ${localItems.length}`);
+      // ── Step 2: Remove orphans (local objects not in remote, within Asset+ scope) ──
+      const localSyncedItems = await fetchAllLocalFmGuids(supabase, ['Building', 'Building Storey', 'Space'], false, true);
       
-      // Build set of remote building GUIDs for scope check
-      const remoteBuildingGuids = new Set<string>();
-      for (const guid of remoteFmGuids) {
-        // We already upserted these — check if the guid is a Building category
-        // Simpler: any building_fm_guid that appears in remoteFmGuids is an Asset+ building
-        remoteBuildingGuids.add(guid);
-      }
-      
-      const orphanFmGuids = localItems
+      const orphanFmGuids = localSyncedItems
         .filter(item => {
-          // Skip objects whose parent building is NOT in Asset+ (IFC-only buildings)
-          if (item.building_fm_guid && !remoteFmGuids.has(item.building_fm_guid)) {
-            return false;
-          }
-          // Also skip Building-level objects that are themselves not in remote
-          // but whose fm_guid is also their own building scope — already handled above
+          if (item.building_fm_guid && !remoteFmGuids.has(item.building_fm_guid)) return false;
           return !remoteFmGuids.has(item.fm_guid);
         })
         .map(item => item.fm_guid);
       
       console.log(`Found ${orphanFmGuids.length} orphan objects to remove`);
       
-      // Step 3: Remove orphans in batches
       let removedCount = 0;
       const batchSize = 100;
-      
       for (let i = 0; i < orphanFmGuids.length; i += batchSize) {
         const batch = orphanFmGuids.slice(i, i + batchSize);
-        
         const { error: deleteError } = await supabase
           .from('assets')
           .delete()
           .in('fm_guid', batch);
-        
         if (deleteError) {
-          console.error(`Error deleting orphans batch ${i / batchSize}:`, deleteError);
+          console.error(`Error deleting orphans batch:`, deleteError);
         } else {
           removedCount += batch.length;
-          console.log(`Removed ${removedCount}/${orphanFmGuids.length} orphans`);
+        }
+      }
+      
+      // ── Step 3: Push local objects missing from Asset+ ──
+      // Collect ALL local objects (both is_local true and false) in Asset+ building scope
+      const categoriesToPush = ['Building Storey', 'Space', 'Instance'];
+      const allLocalObjects: any[] = [];
+      
+      for (const category of categoriesToPush) {
+        for (const isLocal of [false, true]) {
+          const PAGE = 1000;
+          let from = 0;
+          let done = false;
+          while (!done) {
+            const { data, error } = await supabase
+              .from('assets')
+              .select('fm_guid, building_fm_guid, level_fm_guid, in_room_fm_guid, category, name, common_name, is_local')
+              .eq('category', category)
+              .eq('is_local', isLocal)
+              .range(from, from + PAGE - 1);
+            if (error) throw error;
+            if (data && data.length > 0) {
+              allLocalObjects.push(...data);
+              from += PAGE;
+              if (data.length < PAGE) done = true;
+            } else {
+              done = true;
+            }
+          }
+        }
+      }
+      
+      // Filter to objects in Asset+ buildings, not already in remote, exclude ACC-prefixed
+      const missingObjects = allLocalObjects.filter(obj => {
+        if (isNonAssetPlusGuid(obj.fm_guid)) return false;
+        if (remoteFmGuids.has(obj.fm_guid)) return false;
+        if (obj.building_fm_guid && !remoteBuildingGuids.has(obj.building_fm_guid)) return false;
+        return true;
+      });
+      
+      console.log(`Found ${missingObjects.length} local objects to push to Asset+`);
+      
+      // Sort by hierarchy: Storey → Space → Instance
+      const categoryOrder: Record<string, number> = { 'Building Storey': 1, 'Space': 2, 'Instance': 3 };
+      const categoryToObjectType: Record<string, number> = { 'Building Storey': 2, 'Space': 3, 'Instance': 4 };
+      missingObjects.sort((a, b) => (categoryOrder[a.category] || 99) - (categoryOrder[b.category] || 99));
+      
+      let pushedCount = 0;
+      let pushFailedCount = 0;
+      const pushErrors: Array<{ fmGuid: string; error: string }> = [];
+      
+      for (const obj of missingObjects) {
+        try {
+          const objectType = categoryToObjectType[obj.category] || 4;
+          
+          let parentFmGuid: string | null = null;
+          if (objectType === 2) parentFmGuid = obj.building_fm_guid;
+          else if (objectType === 3) parentFmGuid = obj.level_fm_guid || obj.building_fm_guid;
+          else if (objectType === 4) parentFmGuid = obj.in_room_fm_guid || obj.building_fm_guid;
+          
+          if (!parentFmGuid) {
+            pushFailedCount++;
+            pushErrors.push({ fmGuid: obj.fm_guid, error: 'No parent found' });
+            continue;
+          }
+          
+          const payload = {
+            BimObjectWithParents: [{
+              BimObject: {
+                ObjectType: objectType,
+                Designation: obj.name || obj.common_name || 'Unknown',
+                CommonName: obj.common_name || obj.name || 'Unknown',
+                ExternalType: obj.common_name || obj.name || 'Unknown',
+                APIKey: apiKey,
+                FmGuid: obj.fm_guid,
+                UsedIdentifier: 1,
+              },
+              ParentFmGuid: parentFmGuid,
+              UsedIdentifier: 1,
+            }],
+          };
+          
+          const response = await fetch(`${baseUrl}/AddObjectList`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify(payload),
+          });
+          
+          if (response.ok) {
+            await supabase
+              .from('assets')
+              .update({ is_local: false, synced_at: new Date().toISOString() })
+              .eq('fm_guid', obj.fm_guid);
+            pushedCount++;
+            console.log(`✅ Pushed ${obj.category} ${obj.fm_guid} to Asset+`);
+          } else {
+            const errorText = await response.text();
+            pushFailedCount++;
+            pushErrors.push({ fmGuid: obj.fm_guid, error: errorText || `HTTP ${response.status}` });
+          }
+        } catch (err) {
+          pushFailedCount++;
+          pushErrors.push({ fmGuid: obj.fm_guid, error: err instanceof Error ? err.message : 'Unknown error' });
         }
       }
       
       await updateSyncState(supabase, 'structure', 'completed', totalSynced);
       
+      const messageParts: string[] = [];
+      if (totalSynced > 0) messageParts.push(`synkade ${totalSynced} objekt`);
+      if (removedCount > 0) messageParts.push(`tog bort ${removedCount} föräldralösa`);
+      if (pushedCount > 0) messageParts.push(`skapade ${pushedCount} i Asset+`);
+      if (pushFailedCount > 0) messageParts.push(`${pushFailedCount} push misslyckades`);
+      if (messageParts.length === 0) messageParts.push('allt redan synkroniserat');
+      
       return new Response(
         JSON.stringify({
           success: true,
-          message: `Synkade ${totalSynced} objekt, tog bort ${removedCount} föräldralösa objekt`,
+          message: messageParts.join(', ').replace(/^./, c => c.toUpperCase()),
           totalSynced,
           orphansRemoved: removedCount,
-          orphansFound: orphanFmGuids.length
+          pushed: pushedCount,
+          pushFailed: pushFailedCount,
+          pushErrors: pushErrors.slice(0, 20),
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );

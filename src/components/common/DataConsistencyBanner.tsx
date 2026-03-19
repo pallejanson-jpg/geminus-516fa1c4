@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, RefreshCw, X, Database, Upload } from 'lucide-react';
+import { AlertTriangle, RefreshCw, X, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -12,7 +12,6 @@ interface DeltaResult {
   inSync: boolean;
   discrepancy: number;
   message: string;
-  canPush?: boolean;
 }
 
 const DISMISS_KEY = 'data-consistency-dismissed';
@@ -33,7 +32,6 @@ export const DataConsistencyBanner: React.FC = () => {
   const [deltaResult, setDeltaResult] = useState<DeltaResult | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isPushing, setIsPushing] = useState(false);
   const [dismissed, setDismissed] = useState(() => isDismissedInStorage());
   const { toast } = useToast();
 
@@ -68,7 +66,7 @@ export const DataConsistencyBanner: React.FC = () => {
     try {
       toast({
         title: 'Synkroniserar...',
-        description: 'Hämtar data och rensar bort föräldralösa objekt',
+        description: 'Tvåvägs-synk: hämtar från och pushar till Asset+',
       });
 
       const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
@@ -87,7 +85,7 @@ export const DataConsistencyBanner: React.FC = () => {
         try { localStorage.removeItem(DISMISS_KEY); } catch {}
         
         window.dispatchEvent(new CustomEvent('asset-sync-completed', {
-          detail: { totalSynced: data.totalSynced, orphansRemoved: data.orphansRemoved }
+          detail: { totalSynced: data.totalSynced, orphansRemoved: data.orphansRemoved, pushed: data.pushed }
         }));
         
         setTimeout(checkDelta, 2000);
@@ -104,47 +102,6 @@ export const DataConsistencyBanner: React.FC = () => {
     }
   };
 
-  const pushMissingToAssetPlus = async () => {
-    setIsPushing(true);
-    try {
-      toast({
-        title: 'Pushar till Asset+...',
-        description: 'Skapar lokala objekt i Asset+',
-      });
-
-      const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
-        body: { action: 'push-missing-to-assetplus' }
-      });
-      
-      if (error) throw error;
-      
-      if (data?.success) {
-        toast({
-          title: 'Push klar',
-          description: data.message,
-        });
-        setDeltaResult(null);
-        setDismissed(false);
-        try { localStorage.removeItem(DISMISS_KEY); } catch {}
-        
-        window.dispatchEvent(new CustomEvent('asset-sync-completed', {
-          detail: { pushed: data.pushed }
-        }));
-        
-        setTimeout(checkDelta, 2000);
-      }
-    } catch (error) {
-      console.error('Push failed:', error);
-      toast({
-        title: 'Push misslyckades',
-        description: error instanceof Error ? error.message : 'Okänt fel',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsPushing(false);
-    }
-  };
-
   useEffect(() => {
     if (dismissed) return;
     checkDelta();
@@ -153,8 +110,6 @@ export const DataConsistencyBanner: React.FC = () => {
   if (dismissed || deltaResult?.inSync || isChecking || !deltaResult) {
     return null;
   }
-
-  const localMoreThanRemote = deltaResult.discrepancy > 0;
 
   return (
     <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 mx-4 mt-2">
@@ -180,27 +135,15 @@ export const DataConsistencyBanner: React.FC = () => {
           <p className="mt-1 text-xs text-muted-foreground/70 italic">ACC-data påverkas inte.</p>
           
           <div className="mt-2 flex gap-2">
-            {localMoreThanRemote ? (
-              <Button
-                size="sm"
-                onClick={pushMissingToAssetPlus}
-                disabled={isPushing || isSyncing}
-                className="gap-1.5"
-              >
-                <Upload className={`h-3.5 w-3.5 ${isPushing ? 'animate-bounce' : ''}`} />
-                {isPushing ? 'Pushar...' : 'Skapa i Asset+'}
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                onClick={syncWithCleanup}
-                disabled={isSyncing || isPushing}
-                className="gap-1.5"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                {isSyncing ? 'Synkar...' : 'Synka med Asset+'}
-              </Button>
-            )}
+            <Button
+              size="sm"
+              onClick={syncWithCleanup}
+              disabled={isSyncing}
+              className="gap-1.5"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+              {isSyncing ? 'Synkar...' : 'Synka med Asset+'}
+            </Button>
             <Button
               size="sm"
               variant="ghost"
