@@ -780,17 +780,34 @@ Deno.serve(async (req) => {
       // Upsert storeys
       if (levels.length > 0) {
         const storeyRows = [];
+        const seenStoreyGuids = new Set<string>();
         for (const l of levels) {
-          const fmGuid = await deterministicGuid([buildingFmGuid, l.name || "", "IfcBuildingStorey"]);
-          storeyIdToFmGuid.set(l.id, fmGuid);
-          storeyRows.push({
-            fm_guid: fmGuid, name: l.name, common_name: l.name,
-            category: "Building Storey", building_fm_guid: buildingFmGuid, level_fm_guid: fmGuid,
-            is_local: false, created_in_model: true, synced_at: now,
-          });
+          // Use name if unique, otherwise fall back to metaObjectId for uniqueness
+          const guidKey = l.name || l.id || l.globalId || "";
+          const fmGuid = await deterministicGuid([buildingFmGuid, guidKey, "IfcBuildingStorey"]);
+          if (seenStoreyGuids.has(fmGuid)) {
+            // Collision: use id-based guid instead
+            const altGuid = await deterministicGuid([buildingFmGuid, l.id || "", "IfcBuildingStorey-id"]);
+            storeyIdToFmGuid.set(l.id, altGuid);
+            storeyRows.push({
+              fm_guid: altGuid, name: l.name, common_name: l.name,
+              category: "Building Storey", building_fm_guid: buildingFmGuid, level_fm_guid: altGuid,
+              is_local: false, created_in_model: true, synced_at: now,
+            });
+            seenStoreyGuids.add(altGuid);
+          } else {
+            seenStoreyGuids.add(fmGuid);
+            storeyIdToFmGuid.set(l.id, fmGuid);
+            storeyRows.push({
+              fm_guid: fmGuid, name: l.name, common_name: l.name,
+              category: "Building Storey", building_fm_guid: buildingFmGuid, level_fm_guid: fmGuid,
+              is_local: false, created_in_model: true, synced_at: now,
+            });
+          }
         }
         for (let i = 0; i < storeyRows.length; i += 500) {
-          await supabase.from("assets").upsert(storeyRows.slice(i, i + 500), { onConflict: "fm_guid" });
+          const { error: storeyErr } = await supabase.from("assets").upsert(storeyRows.slice(i, i + 500), { onConflict: "fm_guid" });
+          if (storeyErr) log(`⚠️ Storey upsert error: ${storeyErr.message}`);
         }
         levelsCreated = storeyRows.length;
         log(`Upserted ${levelsCreated} storeys`);
