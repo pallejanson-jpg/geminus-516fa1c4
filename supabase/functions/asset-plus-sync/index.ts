@@ -1513,19 +1513,46 @@ serve(async (req) => {
       console.log('Starting check-delta');
       const accessToken = await getAccessToken();
       
-      // Get remote structure counts and sample fmGuids
+      // Get remote structure counts
       const remoteStructureCount = await getRemoteCountByTypes(accessToken, [1, 2, 3]);
       
-      // Get local structure counts - EXCLUDE is_local objects AND ACC-synced objects
-      // ACC objects have fm_guid starting with 'acc-bim-' or 'acc-' and should not be compared to Asset+
-      const allLocalGuids = await fetchAllLocalFmGuids(supabase, ['Building', 'Building Storey', 'Space'], false, true);
-      const localStructureCount = allLocalGuids.length;
+      // Get remote building GUIDs to identify which buildings are in Asset+
+      const remoteBuildingGuids = new Set<string>();
+      let skip = 0;
+      const take = 200;
+      let hasMore = true;
+      while (hasMore) {
+        const result = await fetchAssetPlusObjects(accessToken, [["objectType", "=", 1]], skip, take);
+        result.data.forEach((item: any) => remoteBuildingGuids.add(item.fmGuid));
+        hasMore = result.hasMore;
+        skip += take;
+      }
+      console.log(`Remote building GUIDs for scope check: ${remoteBuildingGuids.size}`);
       
-      // For detailed comparison, fetch a sample of fmGuids from both sides
-      // This is a lightweight check - full comparison would require fetching all GUIDs
+      // Get local structure counts - EXCLUDE is_local, ACC, and IFC-only buildings
+      const allLocalItems = await fetchAllLocalFmGuids(supabase, ['Building', 'Building Storey', 'Space'], false, true);
+      
+      // Filter out objects belonging to buildings not in Asset+ (IFC-only buildings)
+      const scopedLocalItems = allLocalItems.filter(item => {
+        if (item.building_fm_guid && !remoteBuildingGuids.has(item.building_fm_guid)) {
+          return false;
+        }
+        // Also exclude Building-level objects that are themselves not remote buildings
+        if (!item.building_fm_guid && !remoteBuildingGuids.has(item.fm_guid)) {
+          return false;
+        }
+        return true;
+      });
+      
+      const localStructureCount = scopedLocalItems.length;
+      const totalLocalIncludingIfcOnly = allLocalItems.length;
+      const ifcOnlyCount = totalLocalIncludingIfcOnly - localStructureCount;
+      
       const discrepancy = (localStructureCount || 0) - remoteStructureCount;
       const hasOrphans = discrepancy > 0;
       const hasMissing = discrepancy < 0;
+      
+      console.log(`check-delta: local=${localStructureCount} (excl ${ifcOnlyCount} IFC-only), remote=${remoteStructureCount}, diff=${discrepancy}`);
       
       return new Response(
         JSON.stringify({
@@ -1536,6 +1563,7 @@ serve(async (req) => {
           newCount: hasMissing ? Math.abs(discrepancy) : 0,
           inSync: discrepancy === 0,
           discrepancy,
+          ifcOnlyExcluded: ifcOnlyCount,
           message: discrepancy === 0 
             ? 'Data är synkroniserad' 
             : hasOrphans 
