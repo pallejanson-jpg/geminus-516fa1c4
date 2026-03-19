@@ -1798,6 +1798,181 @@ serve(async (req) => {
       );
     }
 
+    // ============ PUSH MISSING TO ASSET+ (IFC/ACC/local objects not yet in Asset+) ============
+    if (action === 'push-missing-to-assetplus') {
+      console.log('Starting push-missing-to-assetplus');
+      const accessToken = await getAccessToken();
+      const apiUrl = _creds.apiUrl || Deno.env.get("ASSET_PLUS_API_URL") || "";
+      const apiKey = _creds.apiKey || Deno.env.get("ASSET_PLUS_API_KEY") || "";
+      const baseUrl = apiUrl.replace(/\/+$/, "");
+
+      // Step 1: Fetch ALL remote fmGuids (structure + instances)
+      const remoteFmGuids = new Set<string>();
+      const remoteBuildingGuids = new Set<string>();
+      
+      // Fetch all remote objects (types 1-4)
+      for (const objectType of [1, 2, 3, 4]) {
+        let skip = 0;
+        const take = 200;
+        let hasMore = true;
+        while (hasMore) {
+          const result = await fetchAssetPlusObjects(accessToken, [["objectType", "=", objectType]], skip, take);
+          result.data.forEach((item: any) => {
+            remoteFmGuids.add(item.fmGuid);
+            if (objectType === 1) remoteBuildingGuids.add(item.fmGuid);
+          });
+          hasMore = result.hasMore;
+          skip += take;
+        }
+      }
+      console.log(`Remote: ${remoteFmGuids.size} total objects, ${remoteBuildingGuids.size} buildings`);
+
+      // Step 2: Find local objects not in remote, scoped to Asset+ buildings
+      // Include both is_local=true and is_local=false (IFC/ACC created)
+      const categories = ['Building Storey', 'Space', 'Instance'];
+      const allLocalObjects: any[] = [];
+      
+      for (const category of categories) {
+        for (const isLocal of [false, true]) {
+          const PAGE = 1000;
+          let from = 0;
+          let done = false;
+          while (!done) {
+            const { data, error } = await supabase
+              .from('assets')
+              .select('fm_guid, building_fm_guid, level_fm_guid, in_room_fm_guid, category, name, common_name, is_local')
+              .eq('category', category)
+              .eq('is_local', isLocal)
+              .range(from, from + PAGE - 1);
+            if (error) throw error;
+            if (data && data.length > 0) {
+              allLocalObjects.push(...data);
+              from += PAGE;
+              if (data.length < PAGE) done = true;
+            } else {
+              done = true;
+            }
+          }
+        }
+      }
+
+      // Filter: only objects in Asset+ buildings, not already in remote, exclude ACC-prefixed
+      const missingObjects = allLocalObjects.filter(obj => {
+        if (isNonAssetPlusGuid(obj.fm_guid)) return false;
+        if (remoteFmGuids.has(obj.fm_guid)) return false;
+        // Must belong to an Asset+ building
+        if (obj.building_fm_guid && !remoteBuildingGuids.has(obj.building_fm_guid)) return false;
+        return true;
+      });
+
+      console.log(`Found ${missingObjects.length} local objects missing from Asset+`);
+
+      if (missingObjects.length === 0) {
+        return new Response(
+          JSON.stringify({ success: true, pushed: 0, failed: 0, message: 'Alla objekt finns redan i Asset+' }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Step 3: Push to Asset+ using AddObjectList, sorted by hierarchy
+      // Process structure first (Storey → Space), then Instances
+      const categoryOrder: Record<string, number> = { 'Building Storey': 1, 'Space': 2, 'Instance': 3 };
+      const categoryToObjectType: Record<string, number> = { 'Building Storey': 2, 'Space': 3, 'Instance': 4 };
+      missingObjects.sort((a, b) => (categoryOrder[a.category] || 99) - (categoryOrder[b.category] || 99));
+
+      let pushed = 0;
+      let failed = 0;
+      const errors: Array<{ fmGuid: string; error: string }> = [];
+
+      for (const obj of missingObjects) {
+        try {
+          const objectType = categoryToObjectType[obj.category] || 4;
+          
+          // Determine parent
+          let parentFmGuid: string | null = null;
+          if (objectType === 2) {
+            // Building Storey → parent is the building
+            parentFmGuid = obj.building_fm_guid;
+          } else if (objectType === 3) {
+            // Space → parent is level, fallback to building
+            parentFmGuid = obj.level_fm_guid || obj.building_fm_guid;
+          } else if (objectType === 4) {
+            // Instance → parent is room, fallback to building
+            parentFmGuid = obj.in_room_fm_guid || obj.building_fm_guid;
+          }
+
+          if (!parentFmGuid) {
+            console.warn(`Skipping ${obj.fm_guid} — no parent found`);
+            failed++;
+            errors.push({ fmGuid: obj.fm_guid, error: 'No parent found' });
+            continue;
+          }
+
+          const payload = {
+            BimObjectWithParents: [{
+              BimObject: {
+                ObjectType: objectType,
+                Designation: obj.name || obj.common_name || 'Unknown',
+                CommonName: obj.common_name || obj.name || 'Unknown',
+                ExternalType: obj.common_name || obj.name || 'Unknown',
+                APIKey: apiKey,
+                FmGuid: obj.fm_guid,
+                UsedIdentifier: 1,
+              },
+              ParentFmGuid: parentFmGuid,
+              UsedIdentifier: 1,
+            }],
+          };
+
+          const response = await fetch(`${baseUrl}/AddObjectList`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify(payload),
+          });
+
+          if (response.ok) {
+            // Mark as synced
+            await supabase
+              .from('assets')
+              .update({
+                is_local: false,
+                synced_at: new Date().toISOString(),
+              })
+              .eq('fm_guid', obj.fm_guid);
+            
+            pushed++;
+            console.log(`✅ Pushed ${obj.category} ${obj.fm_guid} (${obj.name}) to Asset+`);
+          } else {
+            const errorText = await response.text();
+            failed++;
+            errors.push({ fmGuid: obj.fm_guid, error: errorText || `HTTP ${response.status}` });
+            console.warn(`❌ Failed to push ${obj.fm_guid}: ${response.status}`);
+          }
+        } catch (err) {
+          failed++;
+          errors.push({ 
+            fmGuid: obj.fm_guid, 
+            error: err instanceof Error ? err.message : 'Unknown error' 
+          });
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          pushed,
+          failed,
+          total: missingObjects.length,
+          errors: errors.slice(0, 20), // Limit error details
+          message: `Skapade ${pushed} objekt i Asset+${failed > 0 ? `, ${failed} misslyckades` : ''}`,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ============ SYNC SYSTEMS (extract system data from existing assets) ============
     if (action === 'sync-systems') {
       const MAX_EXECUTION_TIME = 45000;
