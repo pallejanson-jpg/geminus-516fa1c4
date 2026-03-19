@@ -534,6 +534,8 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       file: File, buildingGuid: string, jobId: string, modelNameSafe: string,
       log: (msg: string) => void, setProgress: (p: number) => void,
     ) {
+      const localLogs: string[] = [];
+      const logAndTrack = (msg: string) => { localLogs.push(msg); log(msg); };
       try {
         const fileBuffer = await file.arrayBuffer();
         log(`Loaded ${(fileBuffer.byteLength / 1024 / 1024).toFixed(1)} MB into browser memory`);
@@ -694,6 +696,27 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           }
         }
 
+        // Post-conversion hierarchy recovery: if browser extraction found nothing,
+        // trigger server-side metadata-only extraction from the just-uploaded metadata JSON
+        if (result.levels.length === 0 && result.spaces.length === 0) {
+          log('⚠️ No hierarchy from browser — triggering server-side metadata-only extraction...');
+          try {
+            const { data: extractData, error: extractErr } = await supabase.functions.invoke(
+              'ifc-extract-systems',
+              { body: { ifcStoragePath: `${buildingGuid}/${file.name}`, buildingFmGuid: buildingGuid, mode: 'metadata-only' } }
+            );
+            if (extractErr) {
+              log(`⚠️ Server-side extraction failed: ${extractErr.message}`);
+            } else if (extractData?.levelsCreated > 0 || extractData?.spacesCreated > 0) {
+              log(`✅ Server recovered hierarchy: ${extractData.levelsCreated} levels, ${extractData.spacesCreated} spaces`);
+            } else {
+              log('⚠️ Server-side extraction also found no hierarchy in metadata');
+            }
+          } catch (recoveryErr: any) {
+            log(`⚠️ Hierarchy recovery error: ${recoveryErr.message}`);
+          }
+        }
+
         if ((result.levels?.length > 0 || result.spaces?.length > 0) && targetModelFmGuid) {
           log('Creating hierarchy in Asset+...');
           const hierarchyLevels = result.levels.map((level: any) => ({
@@ -711,6 +734,9 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           if (hError) log(`⚠️ Asset+ hierarchy failed: ${hError.message}`);
           else if (hData?.success) log(`✅ ${hData.message}`);
         }
+
+        // Persist logs to DB before marking done
+        await supabase.from('conversion_jobs').update({ log_messages: localLogs }).eq('id', jobId);
 
         await supabase.from('conversion_jobs').update({ status: 'done', progress: 100, result_model_id: modelId, updated_at: new Date().toISOString() }).eq('id', jobId);
         setProgress(100);

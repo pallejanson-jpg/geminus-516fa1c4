@@ -95,15 +95,106 @@ async function loadMetaObjectsFromLatestMetadata(
     const metadataJson = JSON.parse(metadataText);
     const rawMetaObjects = Array.isArray(metadataJson?.metaObjects) ? metadataJson.metaObjects : [];
 
-    const normalized = rawMetaObjects
-      .map((obj: any) => ({
-        metaObjectId: obj?.id || obj?.metaObjectId || "",
-        metaType: obj?.type || obj?.metaType || "",
-        metaObjectName: obj?.name || obj?.metaObjectName || "",
-        parentMetaObjectId: obj?.parent || obj?.parentMetaObjectId || obj?.parentId || "",
-        properties: obj?.properties || obj?.propertySets || {},
-      }))
-      .filter((obj: any) => !!obj.metaObjectId);
+    // Check if types are populated
+    const hasTypes = rawMetaObjects.some((o: any) => {
+      const t = o.type || o.metaType || "";
+      return t.startsWith("Ifc");
+    });
+
+    let normalized: any[];
+
+    if (hasTypes) {
+      // Standard path: types exist
+      normalized = rawMetaObjects
+        .map((obj: any) => ({
+          metaObjectId: obj?.id || obj?.metaObjectId || "",
+          metaType: obj?.type || obj?.metaType || "",
+          metaObjectName: obj?.name || obj?.metaObjectName || "",
+          parentMetaObjectId: obj?.parent || obj?.parentMetaObjectId || obj?.parentId || "",
+          properties: obj?.properties || obj?.propertySets || {},
+        }))
+        .filter((obj: any) => !!obj.metaObjectId);
+    } else {
+      // Infer IFC types from parent-child hierarchy depth
+      log("Types missing — inferring from hierarchy structure...");
+      
+      // Build parent→children map
+      const childrenMap = new Map<string, string[]>();
+      const objById = new Map<string, any>();
+      for (const obj of rawMetaObjects) {
+        const id = obj.id || obj.metaObjectId || "";
+        const parentId = obj.parent || obj.parentMetaObjectId || "";
+        if (id) objById.set(id, obj);
+        if (parentId) {
+          if (!childrenMap.has(parentId)) childrenMap.set(parentId, []);
+          childrenMap.get(parentId)!.push(id);
+        }
+      }
+
+      // Find root (no parent or parent not in set)
+      const allIds = new Set(objById.keys());
+      const roots: string[] = [];
+      for (const [id, obj] of objById) {
+        const p = obj.parent || obj.parentMetaObjectId || "";
+        if (!p || !allIds.has(p)) roots.push(id);
+      }
+
+      // Walk hierarchy: root→site→building→storeys→spaces
+      // IFC structure: IfcProject(0) → IfcSite(1) → IfcBuilding(2) → IfcBuildingStorey(3)
+      // Find the building node: the deepest ancestor that has multiple children with children
+      const typeMap = new Map<string, string>();
+      
+      function findBuildingNode(nodeId: string, depth: number): string | null {
+        const children = childrenMap.get(nodeId) || [];
+        // Building node: has 3+ direct children (storeys), at depth 1-3
+        if (depth >= 1 && depth <= 3 && children.length >= 3) {
+          // Verify children themselves have children (storeys have elements)
+          const childrenWithKids = children.filter(c => (childrenMap.get(c) || []).length > 0);
+          if (childrenWithKids.length >= 2) return nodeId;
+        }
+        // Keep descending
+        if (depth < 4) {
+          for (const cid of children) {
+            const found = findBuildingNode(cid, depth + 1);
+            if (found) return found;
+          }
+        }
+        return null;
+      }
+      
+      for (const rootId of roots) {
+        const buildingNodeId = findBuildingNode(rootId, 0);
+        if (buildingNodeId) {
+          const storeyIds = childrenMap.get(buildingNodeId) || [];
+          for (const storeyId of storeyIds) {
+            typeMap.set(storeyId, "IfcBuildingStorey");
+            const storeyChildren = childrenMap.get(storeyId) || [];
+            for (const spaceId of storeyChildren) {
+              const spaceChildren = childrenMap.get(spaceId) || [];
+              if (spaceChildren.length > 0) {
+                typeMap.set(spaceId, "IfcSpace");
+              }
+            }
+          }
+          log(`Found building node "${objById.get(buildingNodeId)?.name || buildingNodeId}" with ${storeyIds.length} storeys`);
+          break; // Only one building expected
+        }
+      }
+      log(`Inferred ${[...typeMap.values()].filter(t => t === "IfcBuildingStorey").length} storeys, ${[...typeMap.values()].filter(t => t === "IfcSpace").length} spaces from hierarchy`);
+
+      normalized = rawMetaObjects
+        .map((obj: any) => {
+          const id = obj?.id || obj?.metaObjectId || "";
+          return {
+            metaObjectId: id,
+            metaType: typeMap.get(id) || obj?.type || obj?.metaType || "",
+            metaObjectName: obj?.name || obj?.metaObjectName || "",
+            parentMetaObjectId: obj?.parent || obj?.parentMetaObjectId || obj?.parentId || "",
+            properties: obj?.properties || obj?.propertySets || {},
+          };
+        })
+        .filter((obj: any) => !!obj.metaObjectId);
+    }
 
     log(`Loaded ${normalized.length} meta objects from cached metadata`);
     return normalized;
@@ -672,7 +763,7 @@ Deno.serve(async (req) => {
     let spacesCreated = 0;
     let instancesCreated = 0;
 
-    if (mode === "enrich-guids" && (levels.length > 0 || spaces.length > 0)) {
+    if ((mode === "enrich-guids" || mode === "metadata-only") && (levels.length > 0 || spaces.length > 0)) {
       log("Populating asset hierarchy (enrich-guids mode)...");
 
       // Deterministic GUID helper
