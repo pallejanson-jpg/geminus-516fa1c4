@@ -1594,10 +1594,29 @@ serve(async (req) => {
       
       // Step 2: Find local orphans (only check synced objects, not local-only)
       // Exclude ACC-synced objects from orphan detection
-      const localFmGuids = await fetchAllLocalFmGuids(supabase, ['Building', 'Building Storey', 'Space'], false, true);
-      console.log(`Local non-is_local structure count (excl. ACC): ${localFmGuids.length}`);
+      // Also exclude objects belonging to buildings not in Asset+ (e.g. IFC-only buildings)
+      const localItems = await fetchAllLocalFmGuids(supabase, ['Building', 'Building Storey', 'Space'], false, true);
+      console.log(`Local non-is_local structure count (excl. ACC): ${localItems.length}`);
       
-      const orphanFmGuids = localFmGuids.filter(guid => !remoteFmGuids.has(guid));
+      // Build set of remote building GUIDs for scope check
+      const remoteBuildingGuids = new Set<string>();
+      for (const guid of remoteFmGuids) {
+        // We already upserted these — check if the guid is a Building category
+        // Simpler: any building_fm_guid that appears in remoteFmGuids is an Asset+ building
+        remoteBuildingGuids.add(guid);
+      }
+      
+      const orphanFmGuids = localItems
+        .filter(item => {
+          // Skip objects whose parent building is NOT in Asset+ (IFC-only buildings)
+          if (item.building_fm_guid && !remoteFmGuids.has(item.building_fm_guid)) {
+            return false;
+          }
+          // Also skip Building-level objects that are themselves not in remote
+          // but whose fm_guid is also their own building scope — already handled above
+          return !remoteFmGuids.has(item.fm_guid);
+        })
+        .map(item => item.fm_guid);
       
       console.log(`Found ${orphanFmGuids.length} orphan objects to remove`);
       
