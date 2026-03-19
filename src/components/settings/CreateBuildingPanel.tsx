@@ -85,6 +85,14 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
   // ── Batch enqueue state ──
   const [isBatchEnqueuing, setIsBatchEnqueuing] = useState(false);
 
+  // ── Delete building state ──
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // ── Conversion jobs state ──
+  const [conversionJobs, setConversionJobs] = useState<any[]>([]);
+  const [expandedJobLogs, setExpandedJobLogs] = useState<Set<string>>(new Set());
+  const jobPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // Elapsed timer tick
   useEffect(() => {
     if (!conversionStartTime || conversionDone) return;
