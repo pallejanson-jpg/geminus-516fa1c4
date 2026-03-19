@@ -530,7 +530,14 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         catch (importErr: any) { throw new Error(`Failed to load converter: ${importErr.message}`); }
 
         log('Converter loaded, starting IFC parsing...');
+        activeJobIdRef.current = jobId;
         await supabase.from('conversion_jobs').update({ status: 'processing', progress: 20, updated_at: new Date().toISOString() }).eq('id', jobId);
+
+        // Start heartbeat: update updated_at every 30s to prove we're alive
+        if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+        heartbeatRef.current = setInterval(async () => {
+          await supabase.from('conversion_jobs').update({ updated_at: new Date().toISOString() }).eq('id', jobId).eq('status', 'processing');
+        }, 30_000);
 
         const result = await converterModule.convertToXktWithMetadata(fileBuffer, (msg: string) => { log(msg); });
         setProgress(70);
