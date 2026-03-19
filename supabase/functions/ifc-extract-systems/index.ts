@@ -816,17 +816,34 @@ Deno.serve(async (req) => {
       // Upsert spaces
       if (spaces.length > 0) {
         const spaceRows = [];
+        const seenSpaceGuids = new Set<string>();
         for (const s of spaces) {
-          const fmGuid = await deterministicGuid([buildingFmGuid, s.name || "", "IfcSpace"]);
+          const guidKey = s.name || s.id || s.globalId || "";
+          const fmGuid = await deterministicGuid([buildingFmGuid, guidKey, "IfcSpace"]);
           const parentFmGuid = storeyIdToFmGuid.get(s.parentId || "") || null;
-          spaceRows.push({
-            fm_guid: fmGuid, name: s.name, common_name: s.name,
-            category: "Space", building_fm_guid: buildingFmGuid, level_fm_guid: parentFmGuid,
-            is_local: false, created_in_model: true, synced_at: now,
-          });
+          if (seenSpaceGuids.has(fmGuid)) {
+            // Collision: use id-based guid
+            const altGuid = await deterministicGuid([buildingFmGuid, s.id || "", "IfcSpace-id"]);
+            if (!seenSpaceGuids.has(altGuid)) {
+              seenSpaceGuids.add(altGuid);
+              spaceRows.push({
+                fm_guid: altGuid, name: s.name, common_name: s.name,
+                category: "Space", building_fm_guid: buildingFmGuid, level_fm_guid: parentFmGuid,
+                is_local: false, created_in_model: true, synced_at: now,
+              });
+            }
+          } else {
+            seenSpaceGuids.add(fmGuid);
+            spaceRows.push({
+              fm_guid: fmGuid, name: s.name, common_name: s.name,
+              category: "Space", building_fm_guid: buildingFmGuid, level_fm_guid: parentFmGuid,
+              is_local: false, created_in_model: true, synced_at: now,
+            });
+          }
         }
         for (let i = 0; i < spaceRows.length; i += 500) {
-          await supabase.from("assets").upsert(spaceRows.slice(i, i + 500), { onConflict: "fm_guid" });
+          const { error: spaceErr } = await supabase.from("assets").upsert(spaceRows.slice(i, i + 500), { onConflict: "fm_guid" });
+          if (spaceErr) log(`⚠️ Space upsert error: ${spaceErr.message}`);
         }
         spacesCreated = spaceRows.length;
         log(`Upserted ${spacesCreated} spaces`);
