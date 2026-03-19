@@ -541,13 +541,14 @@ function isNonAssetPlusGuid(fmGuid: string): boolean {
 
 // Fetch all fm_guids from local DB, paginating past the 1000-row default limit
 // excludeNonAssetPlus: when true, filters out fm_guids with non-Asset+ prefixes (e.g. acc-bim-*)
+// Returns objects with fm_guid and building_fm_guid for scope-aware orphan detection
 async function fetchAllLocalFmGuids(
   supabase: any,
   categories: string[],
   isLocal: boolean = false,
   excludeNonAssetPlus: boolean = false
-): Promise<string[]> {
-  const allGuids: string[] = [];
+): Promise<{ fm_guid: string; building_fm_guid: string | null }[]> {
+  const allItems: { fm_guid: string; building_fm_guid: string | null }[] = [];
   const PAGE = 1000;
   let from = 0;
   let done = false;
@@ -555,7 +556,7 @@ async function fetchAllLocalFmGuids(
   while (!done) {
     const { data, error } = await supabase
       .from('assets')
-      .select('fm_guid')
+      .select('fm_guid, building_fm_guid')
       .in('category', categories)
       .eq('is_local', isLocal)
       .range(from, from + PAGE - 1);
@@ -563,7 +564,7 @@ async function fetchAllLocalFmGuids(
     if (error) throw error;
 
     if (data && data.length > 0) {
-      data.forEach((r: any) => allGuids.push(r.fm_guid));
+      data.forEach((r: any) => allItems.push({ fm_guid: r.fm_guid, building_fm_guid: r.building_fm_guid }));
       from += PAGE;
       if (data.length < PAGE) done = true;
     } else {
@@ -572,9 +573,9 @@ async function fetchAllLocalFmGuids(
   }
 
   if (excludeNonAssetPlus) {
-    return allGuids.filter(guid => !isNonAssetPlusGuid(guid));
+    return allItems.filter(item => !isNonAssetPlusGuid(item.fm_guid));
   }
-  return allGuids;
+  return allItems;
 }
 
 serve(async (req) => {
