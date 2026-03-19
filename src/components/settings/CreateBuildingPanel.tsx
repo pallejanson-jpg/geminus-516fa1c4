@@ -6,14 +6,20 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { deleteBuilding } from '@/services/asset-plus-service';
 import {
-  Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers, Timer, Cloud, FileSpreadsheet, KeyRound, Pencil, RefreshCw, Database, ChevronDown, PlayCircle
+  Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers, Timer, Cloud, FileSpreadsheet, KeyRound, Pencil, RefreshCw, Database, ChevronDown, PlayCircle, Trash2, AlertTriangle, RotateCcw, Eye, X
 } from 'lucide-react';
 import ExcelTemplateDownload from '@/components/import/ExcelTemplateDownload';
 import ExcelImportDialog from '@/components/import/ExcelImportDialog';
 import CreatePropertyDialog from '@/components/properties/CreatePropertyDialog';
+import { formatDistanceToNow } from 'date-fns';
 
 interface CreatedBuilding {
   complexFmGuid: string;
@@ -78,6 +84,14 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
 
   // ── Batch enqueue state ──
   const [isBatchEnqueuing, setIsBatchEnqueuing] = useState(false);
+
+  // ── Delete building state ──
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // ── Conversion jobs state ──
+  const [conversionJobs, setConversionJobs] = useState<any[]>([]);
+  const [expandedJobLogs, setExpandedJobLogs] = useState<Set<string>>(new Set());
+  const jobPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Elapsed timer tick
   useEffect(() => {
@@ -713,6 +727,79 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
 
   const selectedBuilding = existingBuildings.find(b => b.fmGuid === selectedBuildingFmGuid);
 
+  // ── Fetch conversion jobs for selected building ──
+  const fetchConversionJobs = useCallback(async () => {
+    if (!selectedBuildingFmGuid) { setConversionJobs([]); return; }
+    const { data } = await supabase
+      .from('conversion_jobs')
+      .select('*')
+      .eq('building_fm_guid', selectedBuildingFmGuid)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    setConversionJobs(data || []);
+  }, [selectedBuildingFmGuid]);
+
+  useEffect(() => { fetchConversionJobs(); }, [fetchConversionJobs]);
+
+  // Auto-refresh jobs if any are active
+  useEffect(() => {
+    if (jobPollRef.current) clearInterval(jobPollRef.current);
+    const hasActive = conversionJobs.some(j => j.status === 'pending' || j.status === 'processing');
+    if (hasActive) {
+      jobPollRef.current = setInterval(fetchConversionJobs, 10000);
+    }
+    return () => { if (jobPollRef.current) clearInterval(jobPollRef.current); };
+  }, [conversionJobs, fetchConversionJobs]);
+
+  // ── Delete building handler ──
+  const handleDeleteBuilding = async () => {
+    if (!selectedBuildingFmGuid) return;
+    setIsDeleting(true);
+    try {
+      const result = await deleteBuilding(selectedBuildingFmGuid);
+      if (result.success) {
+        toast({ title: 'Byggnad raderad', description: `${result.summary.assetsDeleted} objekt raderade, ${result.summary.expiredInAssetPlus} expirerade i Asset+.` });
+        setSelectedBuildingFmGuid('');
+        setCreatedBuilding(null);
+        fetchBuildings();
+      } else {
+        toast({ variant: 'destructive', title: 'Delvis misslyckad', description: `${result.summary.expireErrors} objekt kunde inte expireras i Asset+.` });
+        fetchBuildings();
+      }
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Radering misslyckades', description: err.message });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteJob = async (jobId: string) => {
+    await supabase.from('conversion_jobs').delete().eq('id', jobId);
+    fetchConversionJobs();
+  };
+
+  const handleResetJob = async (jobId: string) => {
+    await supabase.from('conversion_jobs').update({ status: 'pending', progress: 0, error_message: null, updated_at: new Date().toISOString() } as any).eq('id', jobId);
+    fetchConversionJobs();
+  };
+
+  const getStatusBadge = (status: string) => {
+    const map: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string }> = {
+      pending: { variant: 'secondary', label: 'Köad' },
+      processing: { variant: 'default', label: 'Bearbetar' },
+      done: { variant: 'outline', label: 'Klar' },
+      error: { variant: 'destructive', label: 'Fel' },
+    };
+    const s = map[status] || { variant: 'secondary' as const, label: status };
+    return <Badge variant={s.variant} className="text-[9px]">{s.label}</Badge>;
+  };
+
+  const isStuckJob = (job: any) => {
+    if (job.status !== 'processing') return false;
+    const updatedAt = new Date(job.updated_at).getTime();
+    return Date.now() - updatedAt > 2 * 60 * 60 * 1000; // >2h
+  };
+
   return (
     <div className="space-y-5 py-2">
       {/* ══════ Building Selector ══════ */}
@@ -728,22 +815,52 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         {loadingBuildings ? (
           <div className="text-xs text-muted-foreground py-2">Loading buildings...</div>
         ) : (
-          <Select value={selectedBuildingFmGuid} onValueChange={(v) => { setSelectedBuildingFmGuid(v); setShowCreateForm(false); handleResetIfc(); }}>
-            <SelectTrigger className="h-10 text-sm">
-              <SelectValue placeholder="Select a building..." />
-            </SelectTrigger>
-            <SelectContent>
-              {existingBuildings.map(b => (
-                <SelectItem key={b.fmGuid} value={b.fmGuid}>
-                  <span className="flex items-center gap-2">
-                    {b.commonName}
-                    {b.hasCustomAssetPlus && <Badge variant="secondary" className="text-[9px] px-1 py-0 ml-1">Asset+</Badge>}
-                    {b.hasCustomSenslinc && <Badge variant="secondary" className="text-[9px] px-1 py-0">Senslinc</Badge>}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Select value={selectedBuildingFmGuid} onValueChange={(v) => { setSelectedBuildingFmGuid(v); setShowCreateForm(false); handleResetIfc(); }}>
+              <SelectTrigger className="h-10 text-sm flex-1">
+                <SelectValue placeholder="Select a building..." />
+              </SelectTrigger>
+              <SelectContent>
+                {existingBuildings.map(b => (
+                  <SelectItem key={b.fmGuid} value={b.fmGuid}>
+                    <span className="flex items-center gap-2">
+                      {b.commonName}
+                      {b.hasCustomAssetPlus && <Badge variant="secondary" className="text-[9px] px-1 py-0 ml-1">Asset+</Badge>}
+                      {b.hasCustomSenslinc && <Badge variant="secondary" className="text-[9px] px-1 py-0">Senslinc</Badge>}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {selectedBuildingFmGuid && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 text-destructive hover:bg-destructive/10" disabled={isDeleting}>
+                    {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-destructive" />
+                      Radera byggnad?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      <strong>{selectedBuilding?.commonName}</strong> och alla tillhörande objekt (våningsplan, rum, inventarier) raderas permanent.
+                      Synkade objekt expireras i Asset+. Denna åtgärd kan inte ångras.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Avbryt</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteBuilding} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                      Radera allt
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
         )}
 
         {!selectedBuildingFmGuid && !showCreateForm && (
@@ -988,6 +1105,80 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                   buildingFmGuid={targetBuildingFmGuid}
                   buildingName={selectedBuilding?.commonName || 'Building'}
                 />
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* ── Conversion Jobs ── */}
+            <AccordionItem value="jobs" className="border rounded-lg">
+              <AccordionTrigger className="px-3 py-2.5 hover:no-underline hover:bg-muted/50 text-sm">
+                <div className="flex items-center gap-2">
+                  <Layers className="h-4 w-4 text-muted-foreground" />
+                  <span>Conversion Jobs</span>
+                  {conversionJobs.length > 0 && (
+                    <Badge variant="secondary" className="text-[9px] px-1.5 py-0 ml-1">{conversionJobs.length}</Badge>
+                  )}
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-3 pb-3 pt-1 space-y-2">
+                {conversionJobs.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Inga konverteringsjobb för denna byggnad.</p>
+                ) : (
+                  conversionJobs.map(job => (
+                    <div key={job.id} className="border rounded-md p-2.5 space-y-1.5 bg-muted/20">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium truncate flex-1">{job.model_name || job.ifc_storage_path?.split('/').pop() || 'Unnamed'}</span>
+                        {getStatusBadge(job.status)}
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                        <span>{formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}</span>
+                        {job.progress > 0 && job.status !== 'done' && (
+                          <span>• {job.progress}%</span>
+                        )}
+                      </div>
+                      {job.status !== 'done' && job.progress > 0 && job.progress < 100 && (
+                        <Progress value={job.progress} className="h-1.5" />
+                      )}
+                      {job.error_message && (
+                        <p className="text-[10px] text-destructive bg-destructive/10 rounded px-2 py-1">{job.error_message}</p>
+                      )}
+                      {expandedJobLogs.has(job.id) && job.log_messages && job.log_messages.length > 0 && (
+                        <div className="rounded border bg-background p-2 max-h-32 overflow-y-auto">
+                          {(job.log_messages as string[]).map((msg: string, i: number) => (
+                            <p key={i} className="text-[10px] font-mono text-muted-foreground leading-relaxed">{msg}</p>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1.5 pt-1">
+                        {job.log_messages && job.log_messages.length > 0 && (
+                          <Button
+                            variant="ghost" size="sm" className="h-6 text-[10px] px-2 gap-1"
+                            onClick={() => setExpandedJobLogs(prev => {
+                              const next = new Set(prev);
+                              next.has(job.id) ? next.delete(job.id) : next.add(job.id);
+                              return next;
+                            })}
+                          >
+                            <Eye className="h-3 w-3" />
+                            {expandedJobLogs.has(job.id) ? 'Dölj loggar' : 'Visa loggar'}
+                          </Button>
+                        )}
+                        {isStuckJob(job) && (
+                          <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 gap-1" onClick={() => handleResetJob(job.id)}>
+                            <RotateCcw className="h-3 w-3" /> Återställ
+                          </Button>
+                        )}
+                        {(job.status === 'done' || job.status === 'error') && (
+                          <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 gap-1 text-destructive" onClick={() => handleDeleteJob(job.id)}>
+                            <X className="h-3 w-3" /> Radera
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+                <Button variant="ghost" size="sm" className="w-full text-xs gap-1.5" onClick={fetchConversionJobs}>
+                  <RefreshCw className="h-3 w-3" /> Uppdatera
+                </Button>
               </AccordionContent>
             </AccordionItem>
           </Accordion>

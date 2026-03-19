@@ -611,3 +611,31 @@ export async function getLocalAssetCount(): Promise<number> {
 
   return count || 0;
 }
+
+// ============ DELETE BUILDING ============
+
+export interface DeleteBuildingResponse {
+  success: boolean;
+  summary: {
+    assetsDeleted: number;
+    expiredInAssetPlus: number;
+    expireErrors: number;
+    log: string[];
+  };
+}
+
+/**
+ * Delete an entire building and all its assets, related data, and storage files.
+ * Synced assets are expired in Asset+ before deletion.
+ */
+export async function deleteBuilding(buildingFmGuid: string): Promise<DeleteBuildingResponse> {
+  const { data, error } = await supabase.functions.invoke("asset-plus-delete", {
+    body: { action: "deleteBuilding", buildingFmGuid },
+  });
+
+  if (error) {
+    throw new Error(error.message || "Failed to delete building");
+  }
+
+  return data as DeleteBuildingResponse;
+}
