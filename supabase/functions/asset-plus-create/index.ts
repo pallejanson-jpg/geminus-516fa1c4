@@ -58,6 +58,7 @@ interface CreateAssetItem {
   parentBuildingFmGuid?: string;
   designation: string;
   commonName?: string;
+  externalType?: string;
   properties?: Array<{
     name: string;
     value: string | number | boolean;
@@ -75,6 +76,7 @@ interface CreateRequest {
   parentBuildingFmGuid?: string;
   designation?: string;
   commonName?: string;
+  externalType?: string;
   fmGuid?: string;
   properties?: Array<{
     name: string;
@@ -124,17 +126,21 @@ async function createSingleObject(
   const fmGuid = item.fmGuid || crypto.randomUUID();
   const { parentFmGuid, isOrphan } = resolveParent(item);
 
+  const bimObject: Record<string, any> = {
+    ObjectType: ObjectType.Instance,
+    Designation: item.designation,
+    CommonName: item.commonName || item.designation,
+    APIKey: apiKey,
+    FmGuid: fmGuid,
+    UsedIdentifier: 1,
+  };
+  if (item.externalType) {
+    bimObject.ExternalType = item.externalType;
+  }
+
   const payload = {
     BimObjectWithParents: [{
-      BimObject: {
-        ObjectType: ObjectType.Instance,
-        Designation: item.designation,
-        CommonName: item.commonName || item.designation,
-        ExternalType: item.commonName || item.designation,
-        APIKey: apiKey,
-        FmGuid: fmGuid,
-        UsedIdentifier: 1,
-      },
+      BimObject: bimObject,
       ParentFmGuid: parentFmGuid,
       UsedIdentifier: 1,
     }],
@@ -276,16 +282,20 @@ async function createBatchObjects(
     (item as any)._resolvedFmGuid = fmGuid;
     const { parentFmGuid } = resolveParent(item);
 
+    const bimObject: Record<string, any> = {
+      ObjectType: ObjectType.Instance,
+      Designation: item.designation,
+      CommonName: item.commonName || item.designation,
+      APIKey: apiKey,
+      FmGuid: fmGuid,
+      UsedIdentifier: 1,
+    };
+    if (item.externalType) {
+      bimObject.ExternalType = item.externalType;
+    }
+
     return {
-      BimObject: {
-        ObjectType: ObjectType.Instance,
-        Designation: item.designation,
-        CommonName: item.commonName || item.designation,
-        ExternalType: item.commonName || item.designation,
-        APIKey: apiKey,
-        FmGuid: fmGuid,
-        UsedIdentifier: 1,
-      },
+      BimObject: bimObject,
       ParentFmGuid: parentFmGuid,
       UsedIdentifier: 1,
     };
@@ -403,6 +413,7 @@ serve(async (req) => {
           parentBuildingFmGuid: body.parentBuildingFmGuid || undefined,
           designation: body.designation || "",
           commonName: body.commonName,
+          externalType: body.externalType,
           properties: body.properties,
           coordinates: body.coordinates,
         }];
