@@ -122,7 +122,7 @@ function resolveParent(item: CreateAssetItem): { parentFmGuid: string; roomFmGui
  * using the UpsertRelationships endpoint.
  */
 async function upsertRoomRelationships(
-  relationships: Array<{ parentFmGuid: string; childFmGuid: string }>,
+  relationships: Array<{ parentFmGuid: string; childFmGuid: string; modelId?: string }>,
   accessToken: string,
   apiUrl: string,
   apiKey: string,
@@ -134,11 +134,15 @@ async function upsertRoomRelationships(
 
   const payload = {
     APIKey: apiKey,
-    Relationships: relationships.map(r => ({
-      FmGuid1: r.parentFmGuid,
-      FmGuid2: r.childFmGuid,
-      UsedIdentifier: 1,
-    })),
+    Relationships: relationships.map(r => {
+      const rel: Record<string, any> = {
+        FmGuid1: r.parentFmGuid,
+        FmGuid2: r.childFmGuid,
+        UsedIdentifier: 1,
+      };
+      if (r.modelId) rel.ModelId = r.modelId;
+      return rel;
+    }),
   };
 
   console.log(`UpsertRelationships: Moving ${relationships.length} objects to rooms`);
