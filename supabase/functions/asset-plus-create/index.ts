@@ -246,8 +246,9 @@ async function createSingleObject(
 
     // Step 2: Move to room via UpsertRelationships
     if (roomFmGuid) {
+      const modelId = createdAsset?.bimObjectWithParents?.[0]?.bimObject?.modelId || null;
       await upsertRoomRelationships(
-        [{ parentFmGuid: roomFmGuid, childFmGuid: fmGuid }],
+        [{ parentFmGuid: roomFmGuid, childFmGuid: fmGuid, modelId }],
         accessToken, apiUrl, apiKey,
       );
     }
