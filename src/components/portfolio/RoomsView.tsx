@@ -364,7 +364,27 @@ const RoomsView: React.FC<RoomsViewProps> = ({
     return result;
   }, [roomData, searchQuery, sortColumn, sortDirection, visibleColumns]);
 
-  const handleSort = (column: string) => {
+  // Build a deterministic color map: unique commonName → color
+  const roomNameColorMap = useMemo(() => {
+    const names = [...new Set(filteredRooms.map(r => String(r.commonName || '')))].sort();
+    const map: Record<string, string> = {};
+    names.forEach((name, i) => { map[name] = ROOM_NAME_COLORS[i % ROOM_NAME_COLORS.length]; });
+    return map;
+  }, [filteredRooms]);
+
+  // Extract sensor values for each room when a metric is active
+  const roomSensorValues = useMemo(() => {
+    if (activeSensorMetric === 'none') return new Map<string, number | null>();
+    const map = new Map<string, number | null>();
+    rooms.forEach(room => {
+      const val = extractSensorValue(room.attributes, activeSensorMetric);
+      map.set(room.fmGuid, val);
+    });
+    return map;
+  }, [rooms, activeSensorMetric]);
+
+  const activeSensorDef = ROOM_SENSOR_METRICS.find(m => m.key === activeSensorMetric);
+
     if (sortColumn === column) {
       setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
