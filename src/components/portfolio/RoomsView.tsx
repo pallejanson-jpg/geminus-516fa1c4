@@ -12,9 +12,14 @@ import {
   Settings2,
   GripVertical,
   Info,
+  Thermometer,
+  Wind,
+  Droplets,
+  Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { VisualizationType, extractSensorValue, getVisualizationColor } from '@/lib/visualization-utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
