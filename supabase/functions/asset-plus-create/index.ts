@@ -413,6 +413,7 @@ serve(async (req) => {
           parentBuildingFmGuid: body.parentBuildingFmGuid || undefined,
           designation: body.designation || "",
           commonName: body.commonName,
+          externalType: body.externalType,
           properties: body.properties,
           coordinates: body.coordinates,
         }];
