@@ -1057,23 +1057,93 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       if (entity) { entity.visible = true; entity.opacity = 0.3; entity.pickable = false; }
     });
 
-    // Step 3: Handle checked spaces — show room solid + x-ray context
+    // Step 3: Tandem-style room cutaway — selected room solid, everything else x-ray
     if (checkedSpaces.size > 0 && spaceOnlyEntityIds && spaceOnlyEntityIds.size > 0) {
-      if (spaceAndContextIds) {
-        const contextOnlyIds = [...spaceAndContextIds].filter(id => !spaceOnlyEntityIds!.has(id));
-        if (contextOnlyIds.length > 0) {
-          const xrayMat = scene.xrayMaterial;
-          if (xrayMat) {
-            xrayMat.fill = true;
-            xrayMat.fillAlpha = 0.15;
-            xrayMat.fillColor = [0.55, 0.55, 0.6];
-            xrayMat.edges = true;
-            xrayMat.edgeAlpha = 0.35;
-            xrayMat.edgeColor = [0.4, 0.4, 0.45];
+      // Collect room contents: traverse metaScene hierarchy to find children inside the room
+      const roomContentIds = new Set<string>();
+      const metaObjects = viewer.metaScene?.metaObjects;
+      if (metaObjects) {
+        // For each selected space, find objects that are spatial children
+        spaceOnlyEntityIds.forEach(spaceId => {
+          const spaceMo = metaObjects[spaceId];
+          if (!spaceMo) return;
+          // Collect all descendants of the IfcSpace
+          const collectDescendants = (mo: any) => {
+            if (mo.children) {
+              for (const child of mo.children) {
+                roomContentIds.add(child.id);
+                collectDescendants(child);
+              }
+            }
+          };
+          collectDescendants(spaceMo);
+        });
+
+        // Also find objects on the same level that share in_room relationship
+        // by checking if objects have the same parent storey and are spatially contained
+        const spaceParentIds = new Set<string>();
+        spaceOnlyEntityIds.forEach(spaceId => {
+          const spaceMo = metaObjects[spaceId];
+          if (spaceMo?.parent) spaceParentIds.add(spaceMo.parent.id || spaceMo.parent);
+        });
+
+        // Find objects in same storey that reference the room
+        for (const [objId, mo] of Object.entries(metaObjects) as [string, any][]) {
+          if (roomContentIds.has(objId) || spaceOnlyEntityIds.has(objId)) continue;
+          // Check if this object's parent chain leads to the same storey
+          let parent = mo.parent;
+          while (parent) {
+            if (spaceParentIds.has(parent.id || parent)) {
+              // Only include objects that are NOT IfcSpace themselves (other rooms)
+              if (mo.type !== 'IfcSpace') {
+                // Check spatial containment by bounding box overlap with room
+                const roomEntity = scene.objects?.[Array.from(spaceOnlyEntityIds)[0]];
+                const objEntity = scene.objects?.[objId];
+                if (roomEntity?.aabb && objEntity?.aabb) {
+                  const rAabb = roomEntity.aabb;
+                  const oAabb = objEntity.aabb;
+                  // Check if object center is within room AABB (expanded slightly)
+                  const oCenterX = (oAabb[0] + oAabb[3]) / 2;
+                  const oCenterY = (oAabb[1] + oAabb[4]) / 2;
+                  const oCenterZ = (oAabb[2] + oAabb[5]) / 2;
+                  const margin = 0.5; // 0.5m tolerance
+                  if (oCenterX >= rAabb[0] - margin && oCenterX <= rAabb[3] + margin &&
+                      oCenterY >= rAabb[1] - margin && oCenterY <= rAabb[4] + margin &&
+                      oCenterZ >= rAabb[2] - margin && oCenterZ <= rAabb[5] + margin) {
+                    roomContentIds.add(objId);
+                  }
+                }
+              }
+              break;
+            }
+            parent = parent.parent ? metaObjects[parent.parent.id || parent.parent] : null;
           }
-          scene.setObjectsXRayed(contextOnlyIds, true);
         }
       }
+
+      // Set x-ray material to Tandem-style light wireframe
+      const xrayMat = scene.xrayMaterial;
+      if (xrayMat) {
+        xrayMat.fill = true;
+        xrayMat.fillAlpha = 0.06;
+        xrayMat.fillColor = [0.6, 0.6, 0.65];
+        xrayMat.edges = true;
+        xrayMat.edgeAlpha = 0.18;
+        xrayMat.edgeColor = [0.45, 0.45, 0.5];
+      }
+
+      // Make everything visible but x-rayed
+      const allIds = scene.objectIds as string[];
+      scene.setObjectsVisible(allIds, true);
+      scene.setObjectsXRayed(allIds, true);
+
+      // Un-xray room + its contents
+      const solidRoomIds = [...spaceOnlyEntityIds, ...roomContentIds].filter(id => !areaSet.has(id));
+      if (solidRoomIds.length > 0) {
+        scene.setObjectsXRayed(solidRoomIds, false);
+      }
+
+      // Show room spaces with slight transparency
       spaceOnlyEntityIds.forEach(id => {
         if (areaSet.has(id)) return;
         const entity = scene.objects?.[id];
@@ -1085,6 +1155,16 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           entity.colorize = null;
         }
       });
+
+      // Auto fly-to the selected room
+      const roomIds = [...spaceOnlyEntityIds];
+      if (roomIds.length > 0 && viewer.cameraFlight) {
+        try {
+          viewer.cameraFlight.flyTo({ aabb: scene.getAABB(roomIds), duration: 1.0 });
+        } catch (e) {
+          console.warn('[FilterPanel] fly-to room failed:', e);
+        }
+      }
     }
 
     // Ensure area spaces stay hidden
