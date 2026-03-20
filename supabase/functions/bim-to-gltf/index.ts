@@ -94,18 +94,22 @@ Deno.serve(async (req) => {
       const { data: xktFiles } = await supabase.storage
         .from("xkt-models")
         .list(buildingFmGuid, { limit: 50 });
-      const xktFile = xktFiles?.find(f => f.name.toLowerCase().endsWith(".xkt"));
+      // Try all XKT files, sorted by size descending (largest likely has most geometry)
+      const xktCandidates = (xktFiles || [])
+        .filter(f => f.name.toLowerCase().endsWith(".xkt"))
+        .sort((a: any, b: any) => (b.metadata?.size || 0) - (a.metadata?.size || 0));
 
-      if (xktFile) {
+      for (const xktFile of xktCandidates) {
         const xktPath = `${buildingFmGuid}/${xktFile.name}`;
-        console.log(`[bim-to-gltf] Downloading XKT: ${xktPath}`);
+        console.log(`[bim-to-gltf] Trying XKT: ${xktPath}`);
 
         const { data: xktBlob, error: xktDlError } = await supabase.storage
           .from("xkt-models")
           .download(xktPath);
 
         if (xktDlError || !xktBlob) {
-          throw new Error(`Failed to download XKT: ${xktDlError?.message || "no data"}`);
+          console.warn(`[bim-to-gltf] Failed to download XKT ${xktFile.name}: ${xktDlError?.message}`);
+          continue;
         }
 
         const xktBuffer = await xktBlob.arrayBuffer();
@@ -114,10 +118,8 @@ Deno.serve(async (req) => {
         const xktResult = parseXktGeometry(new Uint8Array(xktBuffer));
 
         if (xktResult.vertexCount === 0) {
-          return new Response(
-            JSON.stringify({ error: "No geometry found in XKT file" }),
-            { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          console.warn(`[bim-to-gltf] No geometry from ${xktFile.name} (${xktResult.skipReason || 'empty'}), trying next...`);
+          continue;
         }
 
         console.log(`[bim-to-gltf] XKT extracted ${xktResult.vertexCount} vertices, ${xktResult.indices.length} indices`);
@@ -145,6 +147,10 @@ Deno.serve(async (req) => {
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      }
+      
+      if (xktCandidates.length > 0) {
+        console.log(`[bim-to-gltf] All ${xktCandidates.length} XKT files failed, falling through to IFC...`);
       }
 
       // 2. Try IFC source (requires web-ifc WASM — lazy import)
@@ -381,12 +387,26 @@ function buildGlb(vertices: Float32Array, indices: Uint32Array): ArrayBuffer {
 
 // ── XKT v10 parser ──
 
-function parseXktGeometry(xktData: Uint8Array): { positions: Float32Array; indices: Uint32Array; vertexCount: number } {
+function parseXktGeometry(xktData: Uint8Array): { positions: Float32Array; indices: Uint32Array; vertexCount: number; skipReason?: string } {
+  const emptyResult = (reason: string) => ({ positions: new Float32Array(0), indices: new Uint32Array(0), vertexCount: 0, skipReason: reason });
+
   const dataView = new DataView(xktData.buffer, xktData.byteOffset, xktData.byteLength);
   const version = dataView.getUint32(4, true);
   const numElements = dataView.getUint32(8, true);
 
   console.log(`[parseXkt] version=${version}, numElements=${numElements}`);
+
+  // Only support XKT v1-10; v11+ uses a completely different binary layout
+  if (version > 10) {
+    console.warn(`[parseXkt] Unsupported XKT version ${version} (only v1-10 supported for GLB conversion)`);
+    return emptyResult(`unsupported-v${version}`);
+  }
+
+  // Sanity check: v1-10 should have < 100 elements
+  if (numElements > 200) {
+    console.warn(`[parseXkt] Suspicious numElements=${numElements} for v${version}, skipping`);
+    return emptyResult('bad-element-count');
+  }
 
   const elementSizes: number[] = [];
   let offset = 12;
@@ -424,7 +444,7 @@ function parseXktGeometry(xktData: Uint8Array): { positions: Float32Array; indic
 
   if (quantizedPositions.length === 0 || rawIndices.length === 0) {
     console.log(`[parseXkt] No geometry found`);
-    return { positions: new Float32Array(0), indices: new Uint32Array(0), vertexCount: 0 };
+    return emptyResult('no-geometry');
   }
 
   const vertexCount = quantizedPositions.length / 3;
