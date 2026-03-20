@@ -94,18 +94,22 @@ Deno.serve(async (req) => {
       const { data: xktFiles } = await supabase.storage
         .from("xkt-models")
         .list(buildingFmGuid, { limit: 50 });
-      const xktFile = xktFiles?.find(f => f.name.toLowerCase().endsWith(".xkt"));
+      // Try all XKT files, sorted by size descending (largest likely has most geometry)
+      const xktCandidates = (xktFiles || [])
+        .filter(f => f.name.toLowerCase().endsWith(".xkt"))
+        .sort((a: any, b: any) => (b.metadata?.size || 0) - (a.metadata?.size || 0));
 
-      if (xktFile) {
+      for (const xktFile of xktCandidates) {
         const xktPath = `${buildingFmGuid}/${xktFile.name}`;
-        console.log(`[bim-to-gltf] Downloading XKT: ${xktPath}`);
+        console.log(`[bim-to-gltf] Trying XKT: ${xktPath}`);
 
         const { data: xktBlob, error: xktDlError } = await supabase.storage
           .from("xkt-models")
           .download(xktPath);
 
         if (xktDlError || !xktBlob) {
-          throw new Error(`Failed to download XKT: ${xktDlError?.message || "no data"}`);
+          console.warn(`[bim-to-gltf] Failed to download XKT ${xktFile.name}: ${xktDlError?.message}`);
+          continue;
         }
 
         const xktBuffer = await xktBlob.arrayBuffer();
@@ -114,10 +118,8 @@ Deno.serve(async (req) => {
         const xktResult = parseXktGeometry(new Uint8Array(xktBuffer));
 
         if (xktResult.vertexCount === 0) {
-          return new Response(
-            JSON.stringify({ error: "No geometry found in XKT file" }),
-            { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          console.warn(`[bim-to-gltf] No geometry from ${xktFile.name} (${xktResult.skipReason || 'empty'}), trying next...`);
+          continue;
         }
 
         console.log(`[bim-to-gltf] XKT extracted ${xktResult.vertexCount} vertices, ${xktResult.indices.length} indices`);
@@ -145,6 +147,10 @@ Deno.serve(async (req) => {
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      }
+      
+      if (xktCandidates.length > 0) {
+        console.log(`[bim-to-gltf] All ${xktCandidates.length} XKT files failed, falling through to IFC...`);
       }
 
       // 2. Try IFC source (requires web-ifc WASM — lazy import)
