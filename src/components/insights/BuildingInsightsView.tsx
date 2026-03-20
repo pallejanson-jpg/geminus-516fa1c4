@@ -733,13 +733,13 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                     )}
                                 </TabsTrigger>
                                 <TabsTrigger value="predictive" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
-                                    🔮 Prediktivt
+                                    🔮 Predictive
                                 </TabsTrigger>
                                 <TabsTrigger value="optimization" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
-                                    📐 Optimering
+                                    📐 Optimization
                                 </TabsTrigger>
                                 <TabsTrigger value="rag" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
-                                    🔍 RAG Sök
+                                    🔍 RAG Search
                                 </TabsTrigger>
                             </TabsList>
                         </div>
