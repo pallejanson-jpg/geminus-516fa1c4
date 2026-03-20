@@ -330,3 +330,19 @@ div[class*="dx-context-menu"],
   border-color: hsl(var(--primary) / 0.6) !important;
   font-weight: 600 !important;
 }
+
+/* Fire extinguisher annotation marker pulse animation */
+@keyframes pulse-marker {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    transform: scale(1.15);
+    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.7);
+  }
+}
+
+.local-annotation-marker[data-category="IfcFireExtinguisher"] {
+  animation: pulse-marker 2s ease-in-out infinite;
+}
