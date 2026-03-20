@@ -280,62 +280,36 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
   }, [storeyAssets, sharedFloors, buildingData, sourceNameLookup, aModelSourceGuid]);
 
-  // Sources: grouped from DB-backed levels for correct model naming
+  // Sources: derived from ALL sharedModels so every model appears in the list
   const sources: BimSource[] = useMemo(() => {
-    const grouped = new Map<string, { name: string; storeyCount: number }>();
-
-    levels.forEach(level => {
-      if (!level.sourceGuid) return;
-      const current = grouped.get(level.sourceGuid);
-      let rawName = sourceNameLookup.get(level.sourceGuid) || apSources.get(level.sourceGuid) || current?.name || '';
-
-      if (!rawName || isGuid(rawName)) {
-        for (const g of level.allGuids) {
-          const byGuid = storeyLookup.byGuid.get(g);
-          if (byGuid?.parentName && !isGuid(byGuid.parentName)) {
-            rawName = byGuid.parentName;
-            break;
-          }
-        }
+    // Count storeys per source from ALL storeyAssets (not filtered levels)
+    const storeyCountBySource = new Map<string, number>();
+    storeyAssets.forEach(storey => {
+      if (storey.sourceGuid) {
+        const norm = normalizeGuid(storey.sourceGuid);
+        storeyCountBySource.set(norm, (storeyCountBySource.get(norm) || 0) + 1);
       }
-
-      if (!rawName || isGuid(rawName)) {
-        const byName = storeyLookup.byName.get(level.name.toLowerCase().trim());
-        if (byName?.parentName && !isGuid(byName.parentName)) {
-          rawName = byName.parentName;
-        }
-      }
-
-      if (!rawName || isGuid(rawName)) {
-        const matchingModel = sharedModels.find(m => m.id === level.sourceGuid || m.id === rawName);
-        rawName = matchingModel?.name && !isGuid(matchingModel.name)
-          ? matchingModel.name
-          : (matchingModel?.shortName || level.sourceGuid);
-      }
-
-      grouped.set(level.sourceGuid, {
-        name: rawName,
-        storeyCount: (current?.storeyCount || 0) + 1,
-      });
     });
 
-    if (grouped.size === 0 && sharedModels.length > 0) {
-      sharedModels.forEach((model, index) => {
-        const rawName = model.name || '';
-        const looksLikeGuid = /^[0-9a-f]{8}[-]?[0-9a-f]{4}/i.test(rawName) || /^[0-9a-f-]{20,}$/i.test(rawName);
-        const friendlyName = (!rawName || looksLikeGuid)
-          ? (model.shortName || `Modell ${index + 1}`)
-          : rawName;
-        grouped.set(model.id, { name: friendlyName, storeyCount: 0 });
-      });
-    }
+    return sharedModels.map((model, idx) => {
+      // Try to find a friendly name
+      let name = model.name || '';
+      const looksLikeGuid = /^[0-9a-f]{8}[-]?[0-9a-f]{4}/i.test(name) || /^[0-9a-f-]{20,}$/i.test(name);
 
-    return Array.from(grouped.entries()).map(([guid, val], idx) => ({
-      guid,
-      name: (!val.name || isGuid(val.name)) ? `Modell ${idx + 1}` : val.name,
-      storeyCount: val.storeyCount,
-    })).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-  }, [levels, sourceNameLookup, apSources, sharedModels, storeyLookup]);
+      if (!name || looksLikeGuid) {
+        // Try sourceNameLookup, apSources, storeyLookup
+        name = sourceNameLookup.get(model.id) || apSources.get(model.id) || '';
+      }
+      if (!name || isGuid(name)) {
+        name = model.shortName || `Modell ${idx + 1}`;
+      }
+
+      const normId = normalizeGuid(model.id);
+      const storeyCount = storeyCountBySource.get(normId) || 0;
+
+      return { guid: model.id, name, storeyCount };
+    }).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+  }, [sharedModels, storeyAssets, sourceNameLookup, apSources]);
 
   // ── Spaces: cascading from checked levels (Source→Level→Space funnel) ───
   const spaces: SpaceItem[] = useMemo(() => {
@@ -1213,13 +1187,30 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         }
       });
 
-      // Auto fly-to the selected room
+      // Auto fly INSIDE the selected room (first-person perspective)
       const roomIds = [...spaceOnlyEntityIds];
-      if (roomIds.length > 0 && viewer.cameraFlight) {
+      if (roomIds.length > 0) {
         try {
-          viewer.cameraFlight.flyTo({ aabb: scene.getAABB(roomIds), duration: 1.0 });
+          const aabb = scene.getAABB(roomIds);
+          // Position camera at center of room, looking along longest horizontal axis
+          const cx = (aabb[0] + aabb[3]) / 2;
+          const cy = aabb[1] + ((aabb[4] - aabb[1]) * 0.55); // slightly above center (eye height)
+          const cz = (aabb[2] + aabb[5]) / 2;
+          const dx = aabb[3] - aabb[0];
+          const dz = aabb[5] - aabb[2];
+          // Look toward the longer wall direction
+          const lookX = dx > dz ? cx + dx * 0.4 : cx;
+          const lookZ = dz >= dx ? cz + dz * 0.4 : cz;
+          if (viewer.cameraFlight) {
+            viewer.cameraFlight.flyTo({
+              eye: [cx, cy, cz],
+              look: [lookX, cy, lookZ],
+              up: [0, 1, 0],
+              duration: 1.0,
+            });
+          }
         } catch (e) {
-          console.warn('[FilterPanel] fly-to room failed:', e);
+          console.warn('[FilterPanel] fly-inside room failed:', e);
         }
       }
     }
