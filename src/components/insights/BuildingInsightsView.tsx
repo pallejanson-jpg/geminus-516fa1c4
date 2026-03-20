@@ -519,6 +519,8 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         const detail = { mode: opts.mode, colorMap: opts.colorMap, nameColorMap };
 
         if (drawerMode) {
+            // Force spaces visible so coloring is visible in the 3D viewer
+            window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: true } }));
             window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail }));
         } else if (isMobile) {
             navigateToInsights3D(opts);
