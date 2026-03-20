@@ -1,88 +1,67 @@
 
 
-## Plan: Viewer Improvements — 7 ändringar
+## Plan: ElevenLabs TTS + Chattbugg-fix
 
-### 1. BuildingSelector: Visa "Fastighetsnamn - Byggnadsnamn"
+### Två problem att lösa
 
-**Fil:** `src/components/viewer/BuildingSelector.tsx`
-
-Ändra rad 277 där byggnadsnamnet visas. Lägg till `complexCommonName` framför `commonName` (samma mönster som i PortfolioView).
-
-Format: `{complexCommonName} - {commonName || name}`  
-Exempel: "DNB - Akerselva Atrium", "HUS F - Balingsnäs förskola"
-
-Om `complexCommonName` saknas visas bara byggnadsnamnet.
+1. **Mekanisk röstkvalitet** → Byt från Web Speech API till ElevenLabs TTS
+2. **Chatten stängs vid klick** → `closeAfterAction()` anropas vid viewer-actions som inte bör stänga chatten
 
 ---
 
-### 2. Rumsvisualisering: Lägg till "None"-alternativ + Spaces-hantering
+### Steg 1: Koppla ElevenLabs-connector
 
-**Fil:** `src/components/viewer/VisualizationToolbar.tsx` (RoomVisualizationList, rad 48-114)
+Koppla ElevenLabs-connectorn till projektet. Denna ger en `ELEVENLABS_API_KEY` som miljövariabel.
 
-- Lägg till `{ type: 'none', icon: X, label: 'None' }` i `VIZ_LIST_ITEMS` (eller som separat knapp högst upp i listan).
-- Uppdatera `toggle`-funktionen: vid val av typ som inte är 'none' → aktivera Spaces (`onToggleVisualization(true)`). Vid val av 'none' → stäng av Spaces.
-- Nuvarande logik i `toggle` gör redan detta delvis men behöver explicit "None"-val i listan.
+### Steg 2: Edge function `elevenlabs-tts`
 
-**Fil:** `src/components/viewer/RoomVisualizationPanel.tsx`
+**Ny fil:** `supabase/functions/elevenlabs-tts/index.ts`
 
-- Säkerställ att vid `visualizationType === 'none'` alla färger rensas OCH Spaces stängs av (dispatch `FORCE_SHOW_SPACES` med `show: false`).
+- Tar `{ text, voiceId?, lang? }` som input
+- Anropar ElevenLabs TTS API (`eleven_multilingual_v2` modell) med streaming
+- Returnerar audio/mpeg binärdata
+- Standardröst: "Daniel" (`onwK4e9ZLuTAKqWW03F9`) för svenska, "Roger" (`CwhRBWXzGAHq8TQ4Fs17`) för engelska
+- CORS-headers, `verify_jwt = false`
 
----
+### Steg 3: Uppdatera `GunnarChat.tsx` — `speakAssistant`
 
-### 3. Rumsvisualisering ihopveckbar — standard stängd
+Ersätt Web Speech API-anropet i `speakAssistant` (rad 253-283):
 
-**Fil:** `src/components/viewer/VisualizationToolbar.tsx`
+- Gör `fetch()` till `elevenlabs-tts` edge function med cleaned text
+- Skapa `Audio()` objekt från blob-responsen och spela upp
+- Behåll Web Speech API som fallback om ElevenLabs-anropet misslyckas
+- Hantera `isSpeaking`-state korrekt (onplay/onended events)
+- Stoppa pågående ljud vid nytt meddelande eller vid `cancel`
 
-Wrappa `RoomVisualizationList` i en `Collapsible` med `defaultOpen={false}`. Klickbart rubrik "Color filter" som expanderar listan.
+### Steg 4: Uppdatera `GunnarSettings.tsx` — röstval
 
----
+Lägg till ElevenLabs-röstval i inställningarna:
+- Dropdown med ElevenLabs-röster (Daniel, Roger, Sarah, Alice, Lily etc.)
+- Spara vald `elevenLabsVoiceId` i `GunnarSettingsData`
+- Behåll befintliga Web Speech-inställningar som fallback-konfiguration
 
-### 4. Flytta Room Labels under Show Spaces
+### Steg 5: Fixa chatten som stängs
 
-**Fil:** `src/components/viewer/VisualizationToolbar.tsx`
+**Fil:** `src/components/chat/GunnarChat.tsx`
 
-Flytta Room Labels-blocket (rad ~970-1003) från insidan av `<CollapsibleContent>` (Viewer Settings) till direkt under "Show spaces"-switchen (rad ~877). Visa Room Labels-select bara om `showSpaces` är aktivt.
+I `executeAction` (rad 549-684): Ta bort `closeAfterAction()`-anropet från actions som inte navigerar bort:
+- `selectInTree` (rad 561) — dispatchar event, behöver inte stänga
+- `showFloor` (rad 567) — dispatchar event
+- `highlight` (rad 572) — dispatchar event
+- `switchTo2D/3D` — dispatchar event
+- `flyTo` — dispatchar event
 
----
-
-### 5. Properties: Ny flik "Geminus Properties" + System-flik med GUIDs
-
-**Fil:** `src/components/common/UniversalPropertiesDialog.tsx`
-
-Ändra sektionsindelningen:
-- **System-fliken**: Flytta alla properties vars värde innehåller en 128-bitars GUID (regex: `/^[0-9a-f]{8}-[0-9a-f]{4}/i`) hit. Alltså `fm_guid`, `building_fm_guid`, `level_fm_guid` etc.
-- **Ny flik "Geminus Properties"**: Alla övriga properties: `common_name`, `asset_type`, koordinater, area, user-defined attributes. Visa ALLA attribut från assets-tabellen inklusive user-defined.
-
-Uppdatera `SECTION_LABELS` med `'geminus': 'Geminus Properties'`.
-Ändra section-tilldelningen i `allProperties` memon: egenskaper med GUID-värden → 'system', övriga → 'geminus'.
-
----
-
-### 6. Filtermenyn: A-modell-only Levels & Spaces + korrekt modellfiltrering
-
-**Fil:** `src/components/viewer/ViewerFilterPanel.tsx`
-
-**a) Levels — visa bara A-modellens:**
-I `levels` memon (rad ~224-258), filtrera bort levels vars `sourceGuid` INTE tillhör en A-modell. Använd `isArchitecturalModel()` mot `sourceNameLookup` eller `sharedModels` för att identifiera A-modellen.
-
-**b) Spaces — visa bara A-modellens:**
-I `spaces` memon (rad ~319-407), filtrera spaces till de som har `levelFmGuid` kopplat till en A-modell-level (identifierat ovan).
-
-**c) Modellselektering — visa bara vald modell:**
-I `applyFilterVisibility` (rad ~838-873, Source filter): nuvarande logik samlar ihop IDs men adderar allt från levels. Ändra så att vid source-selektering ALLA objekt i den valda modellens `scene.models[modelId].objects` samlas, inte bara storeybaserade IDs. Och BARA de modellerna som är valda ska vara synliga — allt annat göms.
-
-**d) Stabilitet — ta bort bakgrundsklick:**
-Rad 1506: `<div className="fixed inset-0 z-[64]" onClick={onClose} />` — ta bort denna backdrop som stänger panelen vid klick utanför. Panelen ska bara stängas via X-knappen.
+Behåll `closeAfterAction()` BARA för actions som navigerar via `navigate()` (openViewer, showFloorIn3D, showDrawing, openViewer3D, isolateModel — men bara i icke-embedded läge där `navigate()` anropas).
 
 ---
 
 ### Sammanfattning
 
-| Fil | Ändring |
-|-----|---------|
-| `BuildingSelector.tsx` | Visa "Complex - Building" i byggnadslistan |
-| `VisualizationToolbar.tsx` | None-val i viz-lista, ihopveckbar, Room Labels under Show Spaces |
-| `RoomVisualizationPanel.tsx` | None → stäng Spaces |
-| `UniversalPropertiesDialog.tsx` | System = GUIDs, ny Geminus Properties-flik |
-| `ViewerFilterPanel.tsx` | A-modell-only levels/spaces, bättre source-filter, ta bort backdrop |
+| Ändring | Fil |
+|---|---|
+| Koppla ElevenLabs connector | Connector setup |
+| Ny edge function för TTS | `supabase/functions/elevenlabs-tts/index.ts` |
+| Byt TTS-motor i chatten | `src/components/chat/GunnarChat.tsx` |
+| ElevenLabs-röstval i settings | `src/components/settings/GunnarSettings.tsx` |
+| Sluta stänga chatten vid actions | `src/components/chat/GunnarChat.tsx` |
 
