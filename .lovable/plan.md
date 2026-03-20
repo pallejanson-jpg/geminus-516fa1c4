@@ -1,30 +1,88 @@
 
 
-## Plan: Fullscreen Edge-to-Edge Mobile Viewer
+## Plan: Viewer Improvements — 7 ändringar
 
-### Problem
-On iPhone, the 3D viewer canvas doesn't extend behind the status bar (clock/battery) at the top or the home indicator at the bottom. The safe area insets create visible gaps.
+### 1. BuildingSelector: Visa "Fastighetsnamn - Byggnadsnamn"
 
-### Current State
-- `index.html` already has `viewport-fit=cover` and `apple-mobile-web-app-status-bar-style=black-translucent` — these are the prerequisites for rendering behind the safe areas.
-- `MobileViewerPage.tsx` (line 564-566) uses `fixed inset-0` with `height: 100dvh` — but `100dvh` on iOS Safari actually **excludes** the safe area insets. The `fixed inset-0` is correct on its own, but the explicit `height: 100dvh` may conflict.
+**Fil:** `src/components/viewer/BuildingSelector.tsx`
 
-### Changes
+Ändra rad 277 där byggnadsnamnet visas. Lägg till `complexCommonName` framför `commonName` (samma mönster som i PortfolioView).
 
-**1. `src/components/viewer/mobile/MobileViewerPage.tsx`**
-- Remove the explicit `height: 100dvh` from the root container style — `fixed inset-0` already provides full-screen coverage including behind safe areas.
-- Add `width: 100vw` is already there, keep it but let height come from `inset-0`.
-- Ensure the canvas container (`<div className="absolute inset-0">`) has no padding or margin restrictions.
+Format: `{complexCommonName} - {commonName || name}`  
+Exempel: "DNB - Akerselva Atrium", "HUS F - Balingsnäs förskola"
 
-**2. `src/components/viewer/NativeXeokitViewer.tsx`**
-- The canvas container and canvas element already use `w-full h-full` — no changes needed.
+Om `complexCommonName` saknas visas bara byggnadsnamnet.
 
-**3. `src/components/viewer/NativeViewerShell.tsx`**  
-- The shell uses `relative w-full h-full overflow-hidden` — no changes needed.
+---
 
-**4. `src/components/viewer/mobile/MobileViewerOverlay.tsx`**
-- The overlay already respects `env(safe-area-inset-top)` for its padding — this is correct and keeps the UI controls visible while the canvas extends behind them.
+### 2. Rumsvisualisering: Lägg till "None"-alternativ + Spaces-hantering
 
-### Summary
-The fix is minimal: remove `height: 100dvh` from MobileViewerPage's root container so that `fixed inset-0` takes full effect, which on iOS with `viewport-fit=cover` extends behind both the status bar and home indicator. The overlay controls already handle safe-area padding independently.
+**Fil:** `src/components/viewer/VisualizationToolbar.tsx` (RoomVisualizationList, rad 48-114)
+
+- Lägg till `{ type: 'none', icon: X, label: 'None' }` i `VIZ_LIST_ITEMS` (eller som separat knapp högst upp i listan).
+- Uppdatera `toggle`-funktionen: vid val av typ som inte är 'none' → aktivera Spaces (`onToggleVisualization(true)`). Vid val av 'none' → stäng av Spaces.
+- Nuvarande logik i `toggle` gör redan detta delvis men behöver explicit "None"-val i listan.
+
+**Fil:** `src/components/viewer/RoomVisualizationPanel.tsx`
+
+- Säkerställ att vid `visualizationType === 'none'` alla färger rensas OCH Spaces stängs av (dispatch `FORCE_SHOW_SPACES` med `show: false`).
+
+---
+
+### 3. Rumsvisualisering ihopveckbar — standard stängd
+
+**Fil:** `src/components/viewer/VisualizationToolbar.tsx`
+
+Wrappa `RoomVisualizationList` i en `Collapsible` med `defaultOpen={false}`. Klickbart rubrik "Color filter" som expanderar listan.
+
+---
+
+### 4. Flytta Room Labels under Show Spaces
+
+**Fil:** `src/components/viewer/VisualizationToolbar.tsx`
+
+Flytta Room Labels-blocket (rad ~970-1003) från insidan av `<CollapsibleContent>` (Viewer Settings) till direkt under "Show spaces"-switchen (rad ~877). Visa Room Labels-select bara om `showSpaces` är aktivt.
+
+---
+
+### 5. Properties: Ny flik "Geminus Properties" + System-flik med GUIDs
+
+**Fil:** `src/components/common/UniversalPropertiesDialog.tsx`
+
+Ändra sektionsindelningen:
+- **System-fliken**: Flytta alla properties vars värde innehåller en 128-bitars GUID (regex: `/^[0-9a-f]{8}-[0-9a-f]{4}/i`) hit. Alltså `fm_guid`, `building_fm_guid`, `level_fm_guid` etc.
+- **Ny flik "Geminus Properties"**: Alla övriga properties: `common_name`, `asset_type`, koordinater, area, user-defined attributes. Visa ALLA attribut från assets-tabellen inklusive user-defined.
+
+Uppdatera `SECTION_LABELS` med `'geminus': 'Geminus Properties'`.
+Ändra section-tilldelningen i `allProperties` memon: egenskaper med GUID-värden → 'system', övriga → 'geminus'.
+
+---
+
+### 6. Filtermenyn: A-modell-only Levels & Spaces + korrekt modellfiltrering
+
+**Fil:** `src/components/viewer/ViewerFilterPanel.tsx`
+
+**a) Levels — visa bara A-modellens:**
+I `levels` memon (rad ~224-258), filtrera bort levels vars `sourceGuid` INTE tillhör en A-modell. Använd `isArchitecturalModel()` mot `sourceNameLookup` eller `sharedModels` för att identifiera A-modellen.
+
+**b) Spaces — visa bara A-modellens:**
+I `spaces` memon (rad ~319-407), filtrera spaces till de som har `levelFmGuid` kopplat till en A-modell-level (identifierat ovan).
+
+**c) Modellselektering — visa bara vald modell:**
+I `applyFilterVisibility` (rad ~838-873, Source filter): nuvarande logik samlar ihop IDs men adderar allt från levels. Ändra så att vid source-selektering ALLA objekt i den valda modellens `scene.models[modelId].objects` samlas, inte bara storeybaserade IDs. Och BARA de modellerna som är valda ska vara synliga — allt annat göms.
+
+**d) Stabilitet — ta bort bakgrundsklick:**
+Rad 1506: `<div className="fixed inset-0 z-[64]" onClick={onClose} />` — ta bort denna backdrop som stänger panelen vid klick utanför. Panelen ska bara stängas via X-knappen.
+
+---
+
+### Sammanfattning
+
+| Fil | Ändring |
+|-----|---------|
+| `BuildingSelector.tsx` | Visa "Complex - Building" i byggnadslistan |
+| `VisualizationToolbar.tsx` | None-val i viz-lista, ihopveckbar, Room Labels under Show Spaces |
+| `RoomVisualizationPanel.tsx` | None → stäng Spaces |
+| `UniversalPropertiesDialog.tsx` | System = GUIDs, ny Geminus Properties-flik |
+| `ViewerFilterPanel.tsx` | A-modell-only levels/spaces, bättre source-filter, ta bort backdrop |
 
