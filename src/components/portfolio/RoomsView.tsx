@@ -385,6 +385,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
 
   const activeSensorDef = ROOM_SENSOR_METRICS.find(m => m.key === activeSensorMetric);
 
+  const handleSort = (column: string) => {
     if (sortColumn === column) {
       setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
