@@ -113,7 +113,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   // On mobile, only open 'local' by default to save space
   const [openSections, setOpenSections] = useState<Set<string>>(
-    new Set(isMobile ? ['local'] : ['system', 'local', 'area'])
+    new Set(isMobile ? ['geminus'] : ['system', 'geminus', 'area'])
   );
   
   // Resize state (desktop only)
