@@ -184,6 +184,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     // Space tab floor filter + room type filter
     const [spaceFloorFilter, setSpaceFloorFilter] = useState<string>('');
     const [selectedRoomType, setSelectedRoomType] = useState<string>('');
+    const [assetFloorFilter, setAssetFloorFilter] = useState<string>('');
     // FM grid search + level filter
     const [alarmSearch, setAlarmSearch] = useState('');
     const [alarmLevelFilter, setAlarmLevelFilter] = useState<string>('');
