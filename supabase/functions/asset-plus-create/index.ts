@@ -377,17 +377,34 @@ async function createBatchObjects(
     console.log(`AddObjectList response: ${response.status}`);
 
     if (response.ok) {
+      let createdList: any[];
+      try {
+        const parsed = JSON.parse(responseText);
+        // Response can be { bimObjectWithParents: [...] } or an array
+        if (parsed?.bimObjectWithParents) {
+          createdList = parsed.bimObjectWithParents;
+        } else if (Array.isArray(parsed)) {
+          createdList = parsed;
+        } else {
+          createdList = [parsed];
+        }
+      } catch {
+        createdList = [];
+      }
+
+      // Extract modelId from created objects and attach to room relationships
+      if (createdList.length > 0) {
+        const modelId = createdList[0]?.bimObject?.modelId || createdList[0]?.modelId || null;
+        if (modelId) {
+          for (const rel of roomRelationships) {
+            rel.modelId = modelId;
+          }
+        }
+      }
+
       // Step 2: Move created objects to rooms
       if (roomRelationships.length > 0) {
         await upsertRoomRelationships(roomRelationships, accessToken, apiUrl, apiKey);
-      }
-
-      let createdList: any[];
-      try {
-        createdList = JSON.parse(responseText);
-        if (!Array.isArray(createdList)) createdList = [createdList];
-      } catch {
-        createdList = [];
       }
 
       const results: CreateResult[] = [];
