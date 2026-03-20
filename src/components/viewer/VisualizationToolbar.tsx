@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useEffect, useContext, useRef } from "react";
 import { Layers, MessageSquare, MessageSquarePlus, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed, Settings, ChevronDown, Type, TreeDeciduous, Eye, Thermometer, Wind, Droplets, Users, Ruler } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { useFlashHighlight } from "@/hooks/useFlashHighlight";
 
 import { Button } from "@/components/ui/button";
@@ -59,6 +60,7 @@ const RoomVisualizationList: React.FC<{
   onToggleVisualization: (show: boolean) => void;
 }> = ({ showVisualization, onToggleVisualization }) => {
   const [activeViz, setActiveViz] = React.useState<VisualizationType>('none');
+  const [listOpen, setListOpen] = React.useState(false);
 
   // Stay in sync with external changes
   React.useEffect(() => {
@@ -75,42 +77,73 @@ const RoomVisualizationList: React.FC<{
     window.dispatchEvent(
       new CustomEvent(VISUALIZATION_QUICK_SELECT_EVENT, { detail: { type: next } })
     );
-    // Auto-open visualization panel when selecting a type
-    if (next !== 'none' && !showVisualization) {
-      onToggleVisualization(true);
-    } else if (next === 'none' && showVisualization) {
-      onToggleVisualization(false);
+    // Auto-enable spaces when selecting a viz, disable when selecting none
+    if (next !== 'none') {
+      if (!showVisualization) onToggleVisualization(true);
+      // Force show spaces
+      window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: true } }));
+    } else {
+      if (showVisualization) onToggleVisualization(false);
+      // Turn off spaces when None is selected
+      window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: false } }));
     }
   };
 
   return (
-    <div className="space-y-1 py-1">
-      <div className="flex items-center gap-2 sm:gap-3 py-1">
-        <div className={cn("p-1 sm:p-1.5 rounded-md", showVisualization ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
-          <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+    <Collapsible open={listOpen} onOpenChange={setListOpen}>
+      <CollapsibleTrigger asChild>
+        <button className="flex items-center justify-between w-full py-1.5 sm:py-2 hover:bg-muted/50 rounded-md transition-colors px-1">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className={cn("p-1 sm:p-1.5 rounded-md", activeViz !== 'none' ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+              <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </div>
+            <span className="text-xs sm:text-sm font-medium">Color filter</span>
+            {activeViz !== 'none' && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                {VIZ_LIST_ITEMS.find(v => v.type === activeViz)?.label || activeViz}
+              </Badge>
+            )}
+          </div>
+          <ChevronDown className={cn(
+            "h-4 w-4 text-muted-foreground transition-transform",
+            listOpen && "rotate-180"
+          )} />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="ml-7 sm:ml-9 space-y-0.5 pb-1">
+          {/* None option */}
+          <button
+            onClick={() => toggle('none' as VisualizationType)}
+            className={cn(
+              "flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-xs transition-colors",
+              "hover:bg-muted/80",
+              activeViz === 'none' ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground"
+            )}
+          >
+            <X className="h-3.5 w-3.5" />
+            <span>None</span>
+          </button>
+          {VIZ_LIST_ITEMS.map(({ type, icon: Icon, label }) => {
+            const isActive = activeViz === type;
+            return (
+              <button
+                key={type}
+                onClick={() => toggle(type)}
+                className={cn(
+                  "flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-xs transition-colors",
+                  "hover:bg-muted/80",
+                  isActive ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground"
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span>{label}</span>
+              </button>
+            );
+          })}
         </div>
-        <span className="text-xs sm:text-sm font-medium">Rumsvisualisering</span>
-      </div>
-      <div className="ml-7 sm:ml-9 space-y-0.5">
-        {VIZ_LIST_ITEMS.map(({ type, icon: Icon, label }) => {
-          const isActive = activeViz === type;
-          return (
-            <button
-              key={type}
-              onClick={() => toggle(type)}
-              className={cn(
-                "flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-xs transition-colors",
-                "hover:bg-muted/80",
-                isActive ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground"
-              )}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              <span>{label}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 };
 
@@ -321,16 +354,16 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   // Listen for force show spaces from RoomVisualizationPanel
   useEffect(() => {
     const handleForceShowSpaces = (e: CustomEvent) => {
-      if (e.detail?.show && !showSpaces) {
-        // Use callback if controlled, otherwise local state
+      const shouldShow = !!e.detail?.show;
+      if (shouldShow !== showSpaces) {
         if (onShowSpacesChange) {
-          onShowSpacesChange(true);
+          onShowSpacesChange(shouldShow);
         } else {
-          setLocalShowSpaces(true);
+          setLocalShowSpaces(shouldShow);
         }
         try {
           const assetViewer = viewerRef.current?.assetViewer;
-          assetViewer?.onShowSpacesChanged?.(true);
+          assetViewer?.onShowSpacesChanged?.(shouldShow);
         } catch (err) {
           console.debug("Force show spaces failed:", err);
         }
@@ -866,6 +899,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           )}
 
           {isToolVisible('spaces') && (
+            <>
             <div className="flex items-center justify-between py-1.5 sm:py-2">
               <div className="flex items-center gap-2 sm:gap-3">
                 <div className={cn("p-1 sm:p-1.5 rounded-md", showSpaces ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
@@ -875,6 +909,44 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               </div>
               <Switch checked={showSpaces} onCheckedChange={handleToggleSpaces} />
             </div>
+
+            {/* Room Labels — shown under Show Spaces when spaces are active */}
+            {showSpaces && (
+              <div className="ml-7 sm:ml-9 space-y-1.5 pb-1">
+                <div className="flex items-center gap-2">
+                  <div className={cn("p-1 rounded-md", showRoomLabels ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                    <Type className="h-3 w-3" />
+                  </div>
+                  <span className="text-xs">Room labels</span>
+                </div>
+                <div className="pl-6">
+                  {loadingRoomLabelConfigs ? (
+                    <div className="text-xs text-muted-foreground">Loading...</div>
+                  ) : (
+                    <Select
+                      value={showRoomLabels && activeRoomLabelConfigId ? activeRoomLabelConfigId : 'off'}
+                      onValueChange={handleRoomLabelConfigSelect}
+                    >
+                      <SelectTrigger className="h-7 text-xs">
+                        <SelectValue placeholder="Off" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="off">Off</SelectItem>
+                        {roomLabelConfigs.map((config) => (
+                          <SelectItem key={config.id} value={config.id}>
+                            {config.name}{config.is_default ? ' (default)' : ''}
+                          </SelectItem>
+                        ))}
+                        {roomLabelConfigs.length === 0 && (
+                          <SelectItem value="__none" disabled>No configurations</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+            )}
+            </>
           )}
 
           {/* X-ray Toggle */}
@@ -967,40 +1039,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             </div>
           </div>
 
-          {/* Room Labels Selector */}
-          <div className="space-y-1.5 sm:space-y-2">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className={cn("p-1 sm:p-1.5 rounded-md", showRoomLabels ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
-                <Type className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </div>
-              <span className="text-xs sm:text-sm">Room labels</span>
-            </div>
-            <div className="pl-8 sm:pl-10">
-              {loadingRoomLabelConfigs ? (
-                <div className="text-xs text-muted-foreground">Loading...</div>
-              ) : (
-                <Select
-                  value={showRoomLabels && activeRoomLabelConfigId ? activeRoomLabelConfigId : 'off'}
-                  onValueChange={handleRoomLabelConfigSelect}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Off" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="off">Off</SelectItem>
-                    {roomLabelConfigs.map((config) => (
-                      <SelectItem key={config.id} value={config.id}>
-                        {config.name}{config.is_default ? ' (default)' : ''}
-                      </SelectItem>
-                    ))}
-                    {roomLabelConfigs.length === 0 && (
-                      <SelectItem value="__none" disabled>No configurations</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-          </div>
+          {/* Room Labels moved to under Show Spaces toggle */}
 
           {/* Viewer Theme Selector */}
           <ViewerThemeSelector viewerRef={viewerRef} disabled={!isViewerReady} />

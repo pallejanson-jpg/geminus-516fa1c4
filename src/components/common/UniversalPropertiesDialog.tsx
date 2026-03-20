@@ -39,7 +39,7 @@ interface PropertyItem {
   editable: boolean;
   source: 'lovable' | 'asset-plus';
   type: 'text' | 'number' | 'boolean' | 'coordinates';
-  section: 'system' | 'local' | 'area' | 'user-defined' | 'coordinates' | 'classification';
+  section: 'system' | 'geminus' | 'local' | 'area' | 'user-defined' | 'coordinates' | 'classification';
   isDifferent?: boolean;
   differentCount?: number;
 }
@@ -63,6 +63,7 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
 
 // Section labels in English
 const SECTION_LABELS: Record<string, string> = {
+  'geminus': 'Geminus Properties',
   'system': 'System',
   'local': 'Local Settings',
   'coordinates': 'Position',
@@ -70,6 +71,9 @@ const SECTION_LABELS: Record<string, string> = {
   'classification': 'Klassificering (BIP)',
   'user-defined': 'User-Defined',
 };
+
+// GUID regex for detecting 128-bit GUIDs in values
+const GUID_VALUE_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Fields that belong to Area section
 const AREA_FIELDS = ['nta', 'bra', 'bta', 'area', 'atemp', 'volym', 'omkrets', 'rumshöjd'];
@@ -109,7 +113,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   // On mobile, only open 'local' by default to save space
   const [openSections, setOpenSections] = useState<Set<string>>(
-    new Set(isMobile ? ['local'] : ['system', 'local', 'area'])
+    new Set(isMobile ? ['geminus'] : ['system', 'geminus', 'area'])
   );
   
   // Resize state (desktop only)
@@ -485,7 +489,13 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       };
     };
     
-    // System properties
+    // Helper to determine if a value is a GUID
+    const isGuidValue = (val: any): boolean => {
+      if (typeof val !== 'string') return false;
+      return GUID_VALUE_REGEX.test(val.trim());
+    };
+    
+    // System properties — only those with GUID values go to 'system', rest to 'geminus'
     const fmGuidDiff = checkDifference('fm_guid');
     props.push({ 
       key: 'fm_guid', 
@@ -507,7 +517,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       editable: false, 
       source: 'lovable', 
       type: 'text', 
-      section: 'system',
+      section: 'geminus',
       isDifferent: categoryDiff.isDifferent,
       differentCount: categoryDiff.differentCount,
     });
@@ -521,13 +531,13 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
         editable: false, 
         source: 'lovable', 
         type: 'text', 
-        section: 'system',
+        section: 'geminus',
         isDifferent: nameDiff.isDifferent,
         differentCount: nameDiff.differentCount,
       });
     }
     
-    // Local editable properties
+    // Local editable properties → geminus
     const commonNameDiff = checkDifference('common_name');
     props.push({ 
       key: 'common_name', 
@@ -536,7 +546,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       editable: true, 
       source: 'lovable', 
       type: 'text', 
-      section: 'local',
+      section: 'geminus',
       isDifferent: commonNameDiff.isDifferent,
       differentCount: commonNameDiff.differentCount,
     });
@@ -549,15 +559,15 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       editable: true, 
       source: 'lovable', 
       type: 'text', 
-      section: 'local',
+      section: 'geminus',
       isDifferent: assetTypeDiff.isDifferent,
       differentCount: assetTypeDiff.differentCount,
     });
     
     // Building settings (only for single building)
     if (!isMultiMode && (buildingSettings || firstAsset.category === 'Building')) {
-      props.push({ key: 'ivion_site_id', label: 'Ivion Site ID', value: buildingSettings?.ivion_site_id, editable: true, source: 'lovable', type: 'text', section: 'local' });
-      props.push({ key: 'is_favorite', label: 'Favorite', value: buildingSettings?.is_favorite, editable: true, source: 'lovable', type: 'boolean', section: 'local' });
+      props.push({ key: 'ivion_site_id', label: 'Ivion Site ID', value: buildingSettings?.ivion_site_id, editable: true, source: 'lovable', type: 'text', section: 'geminus' });
+      props.push({ key: 'is_favorite', label: 'Favorite', value: buildingSettings?.is_favorite, editable: true, source: 'lovable', type: 'boolean', section: 'geminus' });
     }
     
     // Coordinates
@@ -572,7 +582,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       props.push({ key: 'coordinate_z', label: 'Z', value: zDiff.value, editable: true, source: 'lovable', type: 'number', section: 'coordinates', isDifferent: zDiff.isDifferent, differentCount: zDiff.differentCount });
     }
 
-    // Status flags
+    // Status flags — these are booleans, not GUIDs, go to geminus
     const isLocalDiff = checkDifference('is_local');
     props.push({ 
       key: 'is_local', 
@@ -581,7 +591,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       editable: false, 
       source: 'lovable', 
       type: 'boolean', 
-      section: 'system',
+      section: 'geminus',
       isDifferent: isLocalDiff.isDifferent,
       differentCount: isLocalDiff.differentCount,
     });
@@ -594,12 +604,12 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       editable: false, 
       source: 'lovable', 
       type: 'boolean', 
-      section: 'system',
+      section: 'geminus',
       isDifferent: annotationDiff.isDifferent,
       differentCount: annotationDiff.differentCount,
     });
 
-    // Hierarchy references
+    // Hierarchy references — GUIDs go to 'system'
     if (assets.some(a => a.building_fm_guid)) {
       const buildingDiff = checkDifference('building_fm_guid');
       props.push({ 
@@ -646,9 +656,10 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           displayLabel = value.name || key;
         }
         
-        // Determine section
+        // Determine section: GUID values → system, area fields → area, rest → geminus
         const keyLower = key.toLowerCase();
         const isArea = AREA_FIELDS.some(f => keyLower.includes(f));
+        const valIsGuid = isGuidValue(displayValue);
         
         props.push({
           key: `attr_${key}`,
@@ -657,7 +668,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           editable: false,
           source: 'asset-plus',
           type: typeof displayValue === 'number' ? 'number' : 'text',
-          section: isArea ? 'area' : 'user-defined',
+          section: valIsGuid ? 'system' : (isArea ? 'area' : 'geminus'),
         });
       });
     }

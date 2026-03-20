@@ -220,9 +220,31 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return map;
   }, [storeyAssets]);
 
-  // Levels: driven by DB storeys so identical floor names from different models stay separated
+  // Identify A-model (architectural model) source GUID
+  const aModelSourceGuid = useMemo(() => {
+    // Check sharedModels for architectural model
+    const aModel = sharedModels.find(m => isArchitecturalModel(m.name || ''));
+    if (aModel) return aModel.id;
+    // Fallback: check sourceNameLookup
+    for (const [guid, name] of sourceNameLookup.entries()) {
+      if (isArchitecturalModel(name)) return guid;
+    }
+    // If only one source, use it
+    if (sharedModels.length === 1) return sharedModels[0].id;
+    return null;
+  }, [sharedModels, sourceNameLookup]);
+
+  // Levels: driven by DB storeys — ONLY show levels from A-model
   const levels: LevelItem[] = useMemo(() => {
     return storeyAssets
+      .filter((storey) => {
+        // Only include levels belonging to the A-model
+        if (aModelSourceGuid && storey.sourceGuid) {
+          return normalizeGuid(storey.sourceGuid) === normalizeGuid(aModelSourceGuid);
+        }
+        // If no A-model identified, include all
+        return true;
+      })
       .map((storey) => {
         const exactSharedFloor = sharedFloors.find((floor) =>
           floor.databaseLevelFmGuids.some((g) => normalizeGuid(g) === storey.normalizedFmGuid)
@@ -256,7 +278,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         };
         return extract(a.name) - extract(b.name) || a.name.localeCompare(b.name, 'sv');
       });
-  }, [storeyAssets, sharedFloors, buildingData, sourceNameLookup]);
+  }, [storeyAssets, sharedFloors, buildingData, sourceNameLookup, aModelSourceGuid]);
 
   // Sources: grouped from DB-backed levels for correct model naming
   const sources: BimSource[] = useMemo(() => {
@@ -317,8 +339,20 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   // ── Spaces: cascading from checked levels (Source→Level→Space funnel) ───
   const spaces: SpaceItem[] = useMemo(() => {
+    // Build set of A-model level GUIDs for filtering
+    const aModelLevelGuids = new Set<string>();
+    levels.forEach(l => l.allGuids.forEach(g => aModelLevelGuids.add(g)));
+
     const allSpaces = buildingData
-      .filter((a: any) => a.category === 'Space' || a.category === 'IfcSpace');
+      .filter((a: any) => {
+        if (a.category !== 'Space' && a.category !== 'IfcSpace') return false;
+        // Only include spaces belonging to A-model levels
+        const levelGuid = normalizeGuid(a.levelFmGuid || a.level_fm_guid || '');
+        if (aModelLevelGuids.size > 0 && levelGuid) {
+          return aModelLevelGuids.has(levelGuid);
+        }
+        return true;
+      });
 
     const normalizedCheckedSourceGuids = new Set(Array.from(checkedSources).map(g => normalizeGuid(g)));
     const normalizedCheckedLevelGuids = new Set(Array.from(checkedLevels).map(g => normalizeGuid(g)));
@@ -838,35 +872,58 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     let sourceIds: Set<string> | null = null;
     if (checkedSources.size > 0) {
       sourceIds = new Set<string>();
+      
+      // Collect all objects from checked source models via scene.models
+      const sceneModels2 = viewer.scene.models || {};
+      const metaObjects = viewer.metaScene?.metaObjects;
+      
+      // Build lookup: source guid → scene model IDs
+      const checkedSourceGuidsNorm = new Set(Array.from(checkedSources).map(g => normalizeGuid(g)));
+      
+      // Direct match: try checked source GUID as scene model ID
+      checkedSources.forEach(srcGuid => {
+        const sceneModel = sceneModels2[srcGuid];
+        if (sceneModel) {
+          const objs = sceneModel.objects || {};
+          const objKeys = Array.isArray(objs) ? objs.map((e: any) => e.id).filter(Boolean) : Object.keys(objs);
+          objKeys.forEach((id: string) => sourceIds!.add(id));
+        }
+      });
+      
+      // Match via sharedModels (name or ID match)
+      const checkedSourceNames = new Set(
+        sources.filter(s => checkedSources.has(s.guid)).map(s => s.name.toLowerCase())
+      );
+      
+      sharedModels.forEach(sm => {
+        const guidMatch = checkedSourceGuidsNorm.has(normalizeGuid(sm.id));
+        const nameMatch = checkedSourceNames.has((sm.name || '').toLowerCase());
+        
+        if (guidMatch || nameMatch) {
+          const sceneModel = sceneModels2[sm.id];
+          if (sceneModel) {
+            const objs = sceneModel.objects || {};
+            const objKeys = Array.isArray(objs) ? objs.map((e: any) => e.id).filter(Boolean) : Object.keys(objs);
+            objKeys.forEach((id: string) => sourceIds!.add(id));
+            
+            // Fallback: if scene model has no objects, use metaObjects
+            if (objKeys.length === 0 && metaObjects) {
+              Object.values(metaObjects).forEach((mo: any) => {
+                if (mo.metaModel?.id === sm.id) sourceIds!.add(mo.id);
+              });
+            }
+          }
+        }
+      });
+      
+      // Also add from entityMap (level-based)
       levels.filter(l => checkedSources.has(l.sourceGuid)).forEach(l => {
         eMap.get(l.fmGuid)?.forEach(id => sourceIds!.add(id));
       });
       checkedSources.forEach(srcGuid => {
         eMap.get(`source::${srcGuid}`)?.forEach(id => sourceIds!.add(id));
       });
-      // Scene model fallback
-      const checkedSourceNames = new Set(
-        sources.filter(s => checkedSources.has(s.guid)).map(s => s.name.toLowerCase())
-      );
-      const sceneModels2 = viewer.scene.models || {};
-      const metaObjects = viewer.metaScene?.metaObjects;
-      if (metaObjects) {
-        sharedModels.forEach(sm => {
-          if (checkedSourceNames.has(sm.name.toLowerCase())) {
-            const sceneModel = sceneModels2[sm.id];
-            if (sceneModel) {
-              const objs = sceneModel.objects || {};
-              const objKeys = Array.isArray(objs) ? objs.map((e: any) => e.id).filter(Boolean) : Object.keys(objs);
-              objKeys.forEach((id: string) => sourceIds!.add(id));
-              if (objKeys.length === 0) {
-                Object.values(metaObjects).forEach((mo: any) => {
-                  if (mo.metaModel?.id === sm.id) sourceIds!.add(mo.id);
-                });
-              }
-            }
-          }
-        });
-      }
+      
       if (sourceIds.size === 0) {
         console.warn('[FilterPanel] Source filter produced 0 IDs — falling back to all objects');
         sourceIds = null;
@@ -1503,7 +1560,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   return (
     <>
     {/* Backdrop */}
-    <div className="fixed inset-0 z-[64]" onClick={onClose} />
+    {/* Backdrop removed for stability — panel closes only via X button */}
     <div
       className={cn(
         "fixed left-0 top-[44px] bottom-0 z-[65] w-[85%] max-w-[320px] sm:w-[320px]",
