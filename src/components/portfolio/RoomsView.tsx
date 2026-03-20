@@ -627,6 +627,23 @@ const RoomsView: React.FC<RoomsViewProps> = ({
         </div>
       )}
 
+      {/* Sensor metric buttons */}
+      <div className="border-b px-2 sm:px-3 md:px-4 py-1.5 flex items-center gap-1.5 shrink-0">
+        <span className="text-[10px] text-muted-foreground mr-1">Visualize:</span>
+        {ROOM_SENSOR_METRICS.map(m => (
+          <Button
+            key={m.key}
+            size="sm"
+            variant={activeSensorMetric === m.key ? 'default' : 'outline'}
+            className="h-7 px-2 text-[10px] gap-1"
+            onClick={() => setActiveSensorMetric(prev => prev === m.key ? 'none' : m.key)}
+          >
+            <m.icon className="h-3 w-3" />
+            {m.label}
+          </Button>
+        ))}
+      </div>
+
       {/* Content */}
       <div className="flex-1 overflow-auto">
         {viewMode === 'grid' ? (
