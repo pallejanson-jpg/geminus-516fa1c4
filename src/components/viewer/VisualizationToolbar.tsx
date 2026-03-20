@@ -907,6 +907,43 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               </div>
               <Switch checked={showSpaces} onCheckedChange={handleToggleSpaces} />
             </div>
+
+            {/* Room Labels — shown under Show Spaces when spaces are active */}
+            {showSpaces && (
+              <div className="ml-7 sm:ml-9 space-y-1.5 pb-1">
+                <div className="flex items-center gap-2">
+                  <div className={cn("p-1 rounded-md", showRoomLabels ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                    <Type className="h-3 w-3" />
+                  </div>
+                  <span className="text-xs">Room labels</span>
+                </div>
+                <div className="pl-6">
+                  {loadingRoomLabelConfigs ? (
+                    <div className="text-xs text-muted-foreground">Loading...</div>
+                  ) : (
+                    <Select
+                      value={showRoomLabels && activeRoomLabelConfigId ? activeRoomLabelConfigId : 'off'}
+                      onValueChange={handleRoomLabelConfigSelect}
+                    >
+                      <SelectTrigger className="h-7 text-xs">
+                        <SelectValue placeholder="Off" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="off">Off</SelectItem>
+                        {roomLabelConfigs.map((config) => (
+                          <SelectItem key={config.id} value={config.id}>
+                            {config.name}{config.is_default ? ' (default)' : ''}
+                          </SelectItem>
+                        ))}
+                        {roomLabelConfigs.length === 0 && (
+                          <SelectItem value="__none" disabled>No configurations</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+            )}
           )}
 
           {/* X-ray Toggle */}
