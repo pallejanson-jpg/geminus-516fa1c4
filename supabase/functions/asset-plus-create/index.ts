@@ -328,7 +328,7 @@ async function createBatchObjects(
 ): Promise<CreateResult[]> {
   const baseUrl = apiUrl.replace(/\/+$/, "");
 
-  const roomRelationships: Array<{ parentFmGuid: string; childFmGuid: string }> = [];
+  const roomRelationships: Array<{ parentFmGuid: string; childFmGuid: string; modelId?: string }> = [];
 
   const bimObjectsWithParents = items.map(item => {
     const fmGuid = item.fmGuid || crypto.randomUUID();
