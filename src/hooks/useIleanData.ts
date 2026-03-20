@@ -5,6 +5,8 @@ import { AppContext } from '@/context/AppContext';
 export interface IleanMessage {
   role: 'user' | 'assistant';
   content: string;
+  sources?: string[];
+  documentCount?: number;
 }
 
 export interface IleanContextEntity {
@@ -133,7 +135,9 @@ export function useIleanData() {
       if (error) throw new Error(error.message || 'Failed to reach Ilean');
 
       const answer = result?.data?.answer || result?.error || 'No response from Ilean.';
-      const assistantMsg: IleanMessage = { role: 'assistant', content: answer };
+      const sources = result?.data?.sources as string[] | undefined;
+      const documentCount = result?.data?.documentCount as number | undefined;
+      const assistantMsg: IleanMessage = { role: 'assistant', content: answer, sources, documentCount };
       setMessages(prev => [...prev, assistantMsg]);
     } catch (err: any) {
       const errorMsg: IleanMessage = {

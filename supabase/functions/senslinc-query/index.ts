@@ -884,8 +884,8 @@ serve(async (req) => {
           }
         }
 
-        // Fallback: use Lovable AI — but clearly state it's a fallback with no real document access
-        console.log('[Senslinc] No Ilean API found, falling back to Lovable AI');
+        // Fallback: RAG search in indexed documents, then use AI to answer
+        console.log('[Senslinc] No Ilean API found, trying RAG document search fallback');
         const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
         if (!LOVABLE_API_KEY) {
           return jsonResponse({
@@ -897,21 +897,81 @@ serve(async (req) => {
           });
         }
 
-        // Build context-aware prompt — Ilean should proxy real Senslinc doc Q&A, not invent answers
-        const systemPrompt = `Du är Ilean, en AI-assistent som svarar på frågor om dokument i fastighetssystemet Senslinc. Du är integrerad i Geminus digital twin-plattform.
+        // Step A: Search indexed documents via document_chunks table
+        const supabaseUrl2 = Deno.env.get('SUPABASE_URL')!;
+        const supabaseKey2 = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const sbClient2 = createClient(supabaseUrl2, supabaseKey2);
+
+        let ragChunks: Array<{ content: string; file_name: string; source_type: string }> = [];
+        let ragSources: string[] = [];
+        const resolvedBuildingGuid = buildingFmGuid || fmGuid;
+
+        try {
+          // Extract keywords from the question
+          const kwResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'google/gemini-2.5-flash-lite',
+              messages: [
+                { role: 'system', content: 'Extract 3-6 search keywords from the user query. Return ONLY a JSON array of strings. Include Swedish and English variants.' },
+                { role: 'user', content: question },
+              ],
+              max_tokens: 200, temperature: 0,
+            }),
+          });
+
+          let keywords: string[] = [question];
+          if (kwResp.ok) {
+            const kwData = await kwResp.json();
+            const kwContent = kwData.choices?.[0]?.message?.content || '';
+            try {
+              const parsed = JSON.parse(kwContent.match(/\[[\s\S]*\]/)?.[0] || '[]');
+              if (Array.isArray(parsed) && parsed.length > 0) keywords = parsed;
+            } catch { /* use original */ }
+          }
+
+          // Search document_chunks
+          let dbQuery = sbClient2.from('document_chunks')
+            .select('content, file_name, source_type, building_fm_guid');
+
+          if (resolvedBuildingGuid) {
+            dbQuery = dbQuery.or(`building_fm_guid.eq.${resolvedBuildingGuid},building_fm_guid.is.null`);
+          }
+
+          const orConditions = keywords.map(kw => `content.ilike.%${kw}%`).join(',');
+          dbQuery = dbQuery.or(orConditions);
+
+          const { data: chunks } = await dbQuery.limit(30);
+          if (chunks && chunks.length > 0) {
+            ragChunks = chunks.slice(0, 15);
+            ragSources = [...new Set(ragChunks.map(c => c.file_name).filter(Boolean))] as string[];
+            console.log(`[Ilean] RAG found ${ragChunks.length} relevant chunks from ${ragSources.length} documents`);
+          }
+        } catch (ragErr) {
+          console.warn('[Ilean] RAG search failed:', ragErr);
+        }
+
+        // Build context-aware prompt with RAG document context if available
+        const hasRagContext = ragChunks.length > 0;
+        const ragContextBlock = hasRagContext
+          ? `\n\nDOKUMENTKONTEXT (från indexerade dokument):\n${ragChunks.map((c, i) => `[${i + 1}] Källa: ${c.file_name || 'okänd'}\n${c.content.slice(0, 600)}`).join('\n\n')}\n\nAnvänd ovanstående dokumentkontext för att besvara frågan. Citera alltid källa (filnamn) när du refererar till information.`
+          : '';
+
+        const systemPrompt = `Du är Ilean, en AI-assistent som svarar på frågor om dokument i fastighetssystemet. Du är integrerad i Geminus digital twin-plattform.
 
 Aktuell kontext:
 - Entitet: ${entityName || 'Okänd'}
 - Kontextnivå: ${level === 'building' ? 'Byggnad' : level === 'floor' ? 'Våningsplan' : 'Rum/utrymme'}
-- API-typ: ${entityApiType}
-${entityPk ? `- Senslinc PK: ${entityPk}` : '- Ingen Senslinc-koppling hittad'}
+${entityPk ? `- Senslinc PK: ${entityPk}` : ''}
+${hasRagContext ? `- Antal dokumentkällor: ${ragSources.length}` : '- Inga indexerade dokument hittades'}
+${ragContextBlock}
 
-VIKTIGT: Senslinc Ilean API kunde inte nås direkt. Informera användaren att du inte kan söka i dokumenten just nu och föreslå att de:
-1. Kontrollerar att Ilean är aktiverat för denna fastighet i Senslinc
-2. Försöker igen om en stund
-3. Öppnar Senslinc direkt via "Öppna i Senslinc"-knappen
+${hasRagContext
+  ? 'Basera ditt svar på dokumentkontexten ovan. Om informationen inte räcker, säg det tydligt. Hitta INTE PÅ innehåll utöver vad dokumenten visar.'
+  : 'VIKTIGT: Inga dokument hittades. Informera användaren att inga relevanta dokument finns indexerade och föreslå att de laddar upp eller indexerar dokument via inställningarna.'}
 
-Svara ALLTID på samma språk som användaren skriver. Hitta INTE PÅ dokumentinnehåll.`;
+Svara ALLTID på samma språk som användaren skriver.`;
 
         const aiMessages = [
           { role: 'system', content: systemPrompt },
@@ -946,7 +1006,15 @@ Svara ALLTID på samma språk som användaren skriver. Hitta INTE PÅ dokumentin
 
           const aiData = await aiResp.json();
           const answer = aiData.choices?.[0]?.message?.content || 'No response generated.';
-          return jsonResponse({ success: true, data: { answer, source: 'lovable-ai-fallback' } });
+          return jsonResponse({
+            success: true,
+            data: {
+              answer,
+              source: hasRagContext ? 'rag-documents' : 'lovable-ai-fallback',
+              sources: ragSources,
+              documentCount: ragChunks.length,
+            },
+          });
         } catch (e) {
           console.error('[Ilean] AI fallback error:', e);
           return jsonResponse({
