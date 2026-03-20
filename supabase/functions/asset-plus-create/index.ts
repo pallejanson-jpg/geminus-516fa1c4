@@ -176,7 +176,7 @@ async function createSingleObject(
   const endpoint = `${baseUrl}/AddObjectList`;
 
   const fmGuid = item.fmGuid || crypto.randomUUID();
-  const { parentFmGuid, isOrphan } = resolveParent(item);
+  const { parentFmGuid, roomFmGuid } = resolveParent(item);
 
   const bimObject: Record<string, any> = {
     ObjectType: ObjectType.Instance,
@@ -198,7 +198,7 @@ async function createSingleObject(
     }],
   };
 
-  console.log(`Creating object ${item.designation} (${fmGuid}) under parent ${parentFmGuid} (orphan=${isOrphan})`);
+  console.log(`Creating object ${item.designation} (${fmGuid}) under building ${parentFmGuid}, room=${roomFmGuid || 'none'}`);
 
   try {
     const response = await fetch(endpoint, {
@@ -239,22 +239,16 @@ async function createSingleObject(
       createdAsset = { rawResponse: responseText };
     }
 
-    // Resolve building_fm_guid
-    let buildingFmGuid: string | null = isOrphan ? parentFmGuid : null;
-    if (!isOrphan && supabase) {
-      try {
-        const { data: parentSpace } = await supabase
-          .from("assets")
-          .select("building_fm_guid")
-          .eq("fm_guid", item.parentSpaceFmGuid)
-          .maybeSingle();
-        buildingFmGuid = parentSpace?.building_fm_guid || null;
-      } catch {
-        console.warn("Could not resolve building_fm_guid from parent space");
-      }
+    // Step 2: Move to room via UpsertRelationships
+    if (roomFmGuid) {
+      await upsertRoomRelationships(
+        [{ parentFmGuid: roomFmGuid, childFmGuid: fmGuid }],
+        accessToken, apiUrl, apiKey,
+      );
     }
 
     // Store locally
+    const buildingFmGuid = item.parentBuildingFmGuid || parentFmGuid;
     if (supabase) {
       try {
         await supabase
@@ -264,7 +258,7 @@ async function createSingleObject(
             name: item.designation,
             common_name: item.commonName || null,
             category: "Instance",
-            in_room_fm_guid: isOrphan ? null : item.parentSpaceFmGuid,
+            in_room_fm_guid: roomFmGuid || null,
             building_fm_guid: buildingFmGuid,
             coordinate_x: item.coordinates?.x ?? null,
             coordinate_y: item.coordinates?.y ?? null,
