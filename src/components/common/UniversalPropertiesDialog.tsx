@@ -39,7 +39,7 @@ interface PropertyItem {
   editable: boolean;
   source: 'lovable' | 'asset-plus';
   type: 'text' | 'number' | 'boolean' | 'coordinates';
-  section: 'system' | 'local' | 'area' | 'user-defined' | 'coordinates' | 'classification';
+  section: 'system' | 'geminus' | 'local' | 'area' | 'user-defined' | 'coordinates' | 'classification';
   isDifferent?: boolean;
   differentCount?: number;
 }
