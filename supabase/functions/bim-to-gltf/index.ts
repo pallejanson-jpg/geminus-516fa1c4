@@ -387,12 +387,26 @@ function buildGlb(vertices: Float32Array, indices: Uint32Array): ArrayBuffer {
 
 // ── XKT v10 parser ──
 
-function parseXktGeometry(xktData: Uint8Array): { positions: Float32Array; indices: Uint32Array; vertexCount: number } {
+function parseXktGeometry(xktData: Uint8Array): { positions: Float32Array; indices: Uint32Array; vertexCount: number; skipReason?: string } {
+  const emptyResult = (reason: string) => ({ positions: new Float32Array(0), indices: new Uint32Array(0), vertexCount: 0, skipReason: reason });
+
   const dataView = new DataView(xktData.buffer, xktData.byteOffset, xktData.byteLength);
   const version = dataView.getUint32(4, true);
   const numElements = dataView.getUint32(8, true);
 
   console.log(`[parseXkt] version=${version}, numElements=${numElements}`);
+
+  // Only support XKT v1-10; v11+ uses a completely different binary layout
+  if (version > 10) {
+    console.warn(`[parseXkt] Unsupported XKT version ${version} (only v1-10 supported for GLB conversion)`);
+    return emptyResult(`unsupported-v${version}`);
+  }
+
+  // Sanity check: v1-10 should have < 100 elements
+  if (numElements > 200) {
+    console.warn(`[parseXkt] Suspicious numElements=${numElements} for v${version}, skipping`);
+    return emptyResult('bad-element-count');
+  }
 
   const elementSizes: number[] = [];
   let offset = 12;
@@ -430,7 +444,7 @@ function parseXktGeometry(xktData: Uint8Array): { positions: Float32Array; indic
 
   if (quantizedPositions.length === 0 || rawIndices.length === 0) {
     console.log(`[parseXkt] No geometry found`);
-    return { positions: new Float32Array(0), indices: new Uint32Array(0), vertexCount: 0 };
+    return emptyResult('no-geometry');
   }
 
   const vertexCount = quantizedPositions.length / 3;
