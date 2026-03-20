@@ -76,6 +76,7 @@ interface CreateRequest {
   parentBuildingFmGuid?: string;
   designation?: string;
   commonName?: string;
+  externalType?: string;
   fmGuid?: string;
   properties?: Array<{
     name: string;
