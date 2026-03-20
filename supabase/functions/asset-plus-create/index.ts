@@ -134,15 +134,11 @@ async function upsertRoomRelationships(
 
   const payload = {
     APIKey: apiKey,
-    Relationships: relationships.map(r => {
-      const rel: Record<string, any> = {
-        FmGuid1: r.parentFmGuid,
-        FmGuid2: r.childFmGuid,
-        UsedIdentifier: 1,
-      };
-      if (r.modelId) rel.ModelId = r.modelId;
-      return rel;
-    }),
+    Relationships: relationships.map(r => ({
+      FmGuid1: r.parentFmGuid,
+      FmGuid2: r.childFmGuid,
+      UsedIdentifier: 1,
+    })),
   };
 
   console.log(`UpsertRelationships: Moving ${relationships.length} objects to rooms`);
