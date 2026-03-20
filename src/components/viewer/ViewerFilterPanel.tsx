@@ -220,9 +220,31 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return map;
   }, [storeyAssets]);
 
-  // Levels: driven by DB storeys so identical floor names from different models stay separated
+  // Identify A-model (architectural model) source GUID
+  const aModelSourceGuid = useMemo(() => {
+    // Check sharedModels for architectural model
+    const aModel = sharedModels.find(m => isArchitecturalModel(m.name || ''));
+    if (aModel) return aModel.id;
+    // Fallback: check sourceNameLookup
+    for (const [guid, name] of sourceNameLookup.entries()) {
+      if (isArchitecturalModel(name)) return guid;
+    }
+    // If only one source, use it
+    if (sharedModels.length === 1) return sharedModels[0].id;
+    return null;
+  }, [sharedModels, sourceNameLookup]);
+
+  // Levels: driven by DB storeys — ONLY show levels from A-model
   const levels: LevelItem[] = useMemo(() => {
     return storeyAssets
+      .filter((storey) => {
+        // Only include levels belonging to the A-model
+        if (aModelSourceGuid && storey.sourceGuid) {
+          return normalizeGuid(storey.sourceGuid) === normalizeGuid(aModelSourceGuid);
+        }
+        // If no A-model identified, include all
+        return true;
+      })
       .map((storey) => {
         const exactSharedFloor = sharedFloors.find((floor) =>
           floor.databaseLevelFmGuids.some((g) => normalizeGuid(g) === storey.normalizedFmGuid)
@@ -256,7 +278,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         };
         return extract(a.name) - extract(b.name) || a.name.localeCompare(b.name, 'sv');
       });
-  }, [storeyAssets, sharedFloors, buildingData, sourceNameLookup]);
+  }, [storeyAssets, sharedFloors, buildingData, sourceNameLookup, aModelSourceGuid]);
 
   // Sources: grouped from DB-backed levels for correct model naming
   const sources: BimSource[] = useMemo(() => {
