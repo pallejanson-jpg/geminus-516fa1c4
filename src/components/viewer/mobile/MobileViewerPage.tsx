@@ -563,7 +563,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
   return (
     <div
       className="fixed inset-0 z-40 flex flex-col bg-black"
-      style={{ height: '100dvh', width: '100vw', touchAction: 'none', overscrollBehavior: 'none' }}
+      style={{ touchAction: 'none', overscrollBehavior: 'none' }}
     >
       {/* ── 3D Canvas (edge-to-edge, behind overlays) ── */}
       <div className="absolute inset-0">
