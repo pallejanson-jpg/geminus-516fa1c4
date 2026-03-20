@@ -125,17 +125,21 @@ async function createSingleObject(
   const fmGuid = item.fmGuid || crypto.randomUUID();
   const { parentFmGuid, isOrphan } = resolveParent(item);
 
+  const bimObject: Record<string, any> = {
+    ObjectType: ObjectType.Instance,
+    Designation: item.designation,
+    CommonName: item.commonName || item.designation,
+    APIKey: apiKey,
+    FmGuid: fmGuid,
+    UsedIdentifier: 1,
+  };
+  if (item.externalType) {
+    bimObject.ExternalType = item.externalType;
+  }
+
   const payload = {
     BimObjectWithParents: [{
-      BimObject: {
-        ObjectType: ObjectType.Instance,
-        Designation: item.designation,
-        CommonName: item.commonName || item.designation,
-        ExternalType: item.commonName || item.designation,
-        APIKey: apiKey,
-        FmGuid: fmGuid,
-        UsedIdentifier: 1,
-      },
+      BimObject: bimObject,
       ParentFmGuid: parentFmGuid,
       UsedIdentifier: 1,
     }],
