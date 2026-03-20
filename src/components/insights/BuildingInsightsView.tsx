@@ -901,8 +901,13 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                  size="sm"
                                                  variant={spaceFloorFilter === '' ? 'default' : 'outline'}
                                                  className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
-                                                 onClick={() => { setSpaceFloorFilter(''); setSelectedRoomType(''); }}
-                                             >
+                                                  onClick={() => {
+                                                      setSpaceFloorFilter(''); setSelectedRoomType('');
+                                                      if (drawerMode) {
+                                                          window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: { floorId: null, isAllFloorsVisible: true } as FloorSelectionEventDetail }));
+                                                      }
+                                                  }}
+                                              >
                                                  All
                                              </Button>
                                          </CarouselItem>
