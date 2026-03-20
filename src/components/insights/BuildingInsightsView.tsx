@@ -917,7 +917,19 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                      size="sm"
                                                      variant={spaceFloorFilter === opt.name ? 'default' : 'outline'}
                                                      className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
-                                                     onClick={() => { setSpaceFloorFilter(opt.name); setSelectedRoomType(''); }}
+                                                      onClick={() => {
+                                                          setSpaceFloorFilter(opt.name); setSelectedRoomType('');
+                                                          if (drawerMode) {
+                                                              // Collect all storey fmGuids matching this floor name
+                                                              const matchingFmGuids = buildingStoreys
+                                                                  .filter((s: any) => (s.commonName || '').replace(/\s*-\s*\d+$/, '') === opt.name)
+                                                                  .map((s: any) => s.fmGuid)
+                                                                  .filter(Boolean);
+                                                              window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+                                                                  detail: { floorId: opt.guid, visibleFloorFmGuids: matchingFmGuids, isAllFloorsVisible: false } as FloorSelectionEventDetail
+                                                              }));
+                                                          }
+                                                      }}
                                                  >
                                                      {opt.name}
                                                  </Button>
