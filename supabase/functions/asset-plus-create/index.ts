@@ -323,10 +323,16 @@ async function createBatchObjects(
 ): Promise<CreateResult[]> {
   const baseUrl = apiUrl.replace(/\/+$/, "");
 
+  const roomRelationships: Array<{ parentFmGuid: string; childFmGuid: string }> = [];
+
   const bimObjectsWithParents = items.map(item => {
     const fmGuid = item.fmGuid || crypto.randomUUID();
     (item as any)._resolvedFmGuid = fmGuid;
-    const { parentFmGuid } = resolveParent(item);
+    const { parentFmGuid, roomFmGuid } = resolveParent(item);
+
+    if (roomFmGuid) {
+      roomRelationships.push({ parentFmGuid: roomFmGuid, childFmGuid: fmGuid });
+    }
 
     const bimObject: Record<string, any> = {
       ObjectType: ObjectType.Instance,
@@ -366,6 +372,11 @@ async function createBatchObjects(
     console.log(`AddObjectList response: ${response.status}`);
 
     if (response.ok) {
+      // Step 2: Move created objects to rooms
+      if (roomRelationships.length > 0) {
+        await upsertRoomRelationships(roomRelationships, accessToken, apiUrl, apiKey);
+      }
+
       let createdList: any[];
       try {
         createdList = JSON.parse(responseText);
@@ -379,21 +390,10 @@ async function createBatchObjects(
         const item = items[i];
         const created = createdList[i];
         const assetFmGuid = (item as any)._resolvedFmGuid || created?.fmGuid || item.fmGuid;
-        const { isOrphan } = resolveParent(item);
+        const { roomFmGuid } = resolveParent(item);
+        const buildingFmGuid = item.parentBuildingFmGuid || null;
 
         if (assetFmGuid && supabase) {
-          let buildingFmGuid: string | null = isOrphan ? (item.parentBuildingFmGuid || null) : null;
-          if (!isOrphan) {
-            try {
-              const { data: parentSpace } = await supabase
-                .from("assets")
-                .select("building_fm_guid")
-                .eq("fm_guid", item.parentSpaceFmGuid)
-                .maybeSingle();
-              buildingFmGuid = parentSpace?.building_fm_guid || null;
-            } catch { /* ignore */ }
-          }
-
           try {
             await supabase
               .from("assets")
@@ -402,7 +402,7 @@ async function createBatchObjects(
                 name: item.designation,
                 common_name: item.commonName || null,
                 category: "Instance",
-                in_room_fm_guid: isOrphan ? null : item.parentSpaceFmGuid,
+                in_room_fm_guid: roomFmGuid || null,
                 building_fm_guid: buildingFmGuid,
                 coordinate_x: item.coordinates?.x ?? null,
                 coordinate_y: item.coordinates?.y ?? null,
