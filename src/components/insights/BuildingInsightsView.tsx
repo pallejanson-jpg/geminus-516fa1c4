@@ -32,6 +32,8 @@ import { useSenslincBuildingData } from '@/hooks/useSenslincData';
 import { cn } from '@/lib/utils';
 import RoomSensorDetailSheet from '@/components/insights/RoomSensorDetailSheet';
 import { INSIGHTS_COLOR_UPDATE_EVENT, ALARM_ANNOTATIONS_SHOW_EVENT, INSIGHTS_COLOR_RESET_EVENT } from '@/lib/viewer-events';
+import { FORCE_SHOW_SPACES_EVENT } from '@/components/viewer/RoomVisualizationPanel';
+import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { toast } from 'sonner';
 
 
