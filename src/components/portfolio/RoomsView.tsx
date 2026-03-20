@@ -208,6 +208,9 @@ const RoomsView: React.FC<RoomsViewProps> = ({
   const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_VISIBLE_COLUMNS);
   const [columnOrder, setColumnOrder] = useState<string[]>(DEFAULT_VISIBLE_COLUMNS);
   
+  // Sensor metric state
+  const [activeSensorMetric, setActiveSensorMetric] = useState<VisualizationType>('none');
+
   // Multi-selection state
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   
