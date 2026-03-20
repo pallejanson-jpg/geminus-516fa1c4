@@ -975,9 +975,27 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                     fill={entry.color}
                                                                     style={{ cursor: 'pointer', opacity: selectedRoomType && selectedRoomType !== entry.fullName ? 0.3 : 1 }}
                                                                     onClick={() => {
-                                                                        // Toggle room type filter for heatmap
-                                                                        setSelectedRoomType(prev => prev === entry.fullName ? '' : entry.fullName);
-                                                                    }}
+                                                                        const newType = selectedRoomType === entry.fullName ? '' : entry.fullName;
+                                                                        setSelectedRoomType(newType);
+                                                                        // Color matching rooms in 3D
+                                                                        const roomColorMap: Record<string, [number, number, number]> = {};
+                                                                        const targetSpaces = newType
+                                                                            ? floorFilteredSpaces.filter((s: any) => (s.commonName || s.name || 'Unknown') === newType)
+                                                                            : floorFilteredSpaces;
+                                                                        const nameColorMap2: Record<string, [number, number, number]> = {};
+                                                                        if (newType) {
+                                                                            const rgb = hslStringToRgbFloat(entry.color);
+                                                                            targetSpaces.forEach((s: any) => { roomColorMap[s.fmGuid] = rgb; });
+                                                                            nameColorMap2[newType.toLowerCase().trim()] = rgb;
+                                                                        } else {
+                                                                            spaceTypePie.forEach(pie => {
+                                                                                const rgb = hslStringToRgbFloat(pie.color);
+                                                                                floorFilteredSpaces.filter((s: any) => (s.commonName || s.name || 'Unknown') === pie.fullName)
+                                                                                    .forEach((s: any) => { roomColorMap[s.fmGuid] = rgb; });
+                                                                            });
+                                                                        }
+                                                                        handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
+                                                                    }
                                                                 />
                                                             ))}
                                                         </Pie>
