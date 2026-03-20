@@ -272,18 +272,12 @@ const BuildingSelector: React.FC = () => {
                           <Building2 className="h-6 w-6 text-primary" />
                         </div>
 
-                        {/* Building Name */}
+                        {/* Building Name (Complex - Building format) */}
                         <h3 className="font-medium text-sm line-clamp-2 min-h-[2.5rem]">
-                          {building.commonName || building.name || 'Namnlös byggnad'}
+                          {building.complexCommonName
+                            ? `${building.complexCommonName} - ${building.commonName || building.name || 'Namnlös byggnad'}`
+                            : (building.commonName || building.name || 'Namnlös byggnad')}
                         </h3>
-
-                        {/* Complex Name */}
-                        {building.complexCommonName && (
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                            <MapPin className="h-3 w-3" />
-                            <span className="line-clamp-1">{building.complexCommonName}</span>
-                          </div>
-                        )}
 
                         {/* Metrics */}
                         <div className="flex flex-wrap gap-2 mt-3">
