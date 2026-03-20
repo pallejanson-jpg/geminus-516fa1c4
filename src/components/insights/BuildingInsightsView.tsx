@@ -32,6 +32,8 @@ import { useSenslincBuildingData } from '@/hooks/useSenslincData';
 import { cn } from '@/lib/utils';
 import RoomSensorDetailSheet from '@/components/insights/RoomSensorDetailSheet';
 import { INSIGHTS_COLOR_UPDATE_EVENT, ALARM_ANNOTATIONS_SHOW_EVENT, INSIGHTS_COLOR_RESET_EVENT } from '@/lib/viewer-events';
+import { FORCE_SHOW_SPACES_EVENT } from '@/components/viewer/RoomVisualizationPanel';
+import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { toast } from 'sonner';
 
 
@@ -182,6 +184,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     // Space tab floor filter + room type filter
     const [spaceFloorFilter, setSpaceFloorFilter] = useState<string>('');
     const [selectedRoomType, setSelectedRoomType] = useState<string>('');
+    const [assetFloorFilter, setAssetFloorFilter] = useState<string>('');
     // FM grid search + level filter
     const [alarmSearch, setAlarmSearch] = useState('');
     const [alarmLevelFilter, setAlarmLevelFilter] = useState<string>('');
@@ -517,6 +520,8 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         const detail = { mode: opts.mode, colorMap: opts.colorMap, nameColorMap };
 
         if (drawerMode) {
+            // Force spaces visible so coloring is visible in the 3D viewer
+            window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: true } }));
             window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail }));
         } else if (isMobile) {
             navigateToInsights3D(opts);
@@ -729,13 +734,13 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                     )}
                                 </TabsTrigger>
                                 <TabsTrigger value="predictive" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
-                                    🔮 Prediktivt
+                                    🔮 Predictive
                                 </TabsTrigger>
                                 <TabsTrigger value="optimization" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
-                                    📐 Optimering
+                                    📐 Optimization
                                 </TabsTrigger>
                                 <TabsTrigger value="rag" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
-                                    🔍 RAG Sök
+                                    🔍 RAG Search
                                 </TabsTrigger>
                             </TabsList>
                         </div>
@@ -897,8 +902,13 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                  size="sm"
                                                  variant={spaceFloorFilter === '' ? 'default' : 'outline'}
                                                  className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
-                                                 onClick={() => { setSpaceFloorFilter(''); setSelectedRoomType(''); }}
-                                             >
+                                                  onClick={() => {
+                                                      setSpaceFloorFilter(''); setSelectedRoomType('');
+                                                      if (drawerMode) {
+                                                          window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: { floorId: null, isAllFloorsVisible: true } as FloorSelectionEventDetail }));
+                                                      }
+                                                  }}
+                                              >
                                                  All
                                              </Button>
                                          </CarouselItem>
@@ -908,7 +918,19 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                      size="sm"
                                                      variant={spaceFloorFilter === opt.name ? 'default' : 'outline'}
                                                      className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
-                                                     onClick={() => { setSpaceFloorFilter(opt.name); setSelectedRoomType(''); }}
+                                                      onClick={() => {
+                                                          setSpaceFloorFilter(opt.name); setSelectedRoomType('');
+                                                          if (drawerMode) {
+                                                              // Collect all storey fmGuids matching this floor name
+                                                              const matchingFmGuids = buildingStoreys
+                                                                  .filter((s: any) => (s.commonName || '').replace(/\s*-\s*\d+$/, '') === opt.name)
+                                                                  .map((s: any) => s.fmGuid)
+                                                                  .filter(Boolean);
+                                                              window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+                                                                  detail: { floorId: opt.guid, visibleFloorFmGuids: matchingFmGuids, isAllFloorsVisible: false } as FloorSelectionEventDetail
+                                                              }));
+                                                          }
+                                                      }}
                                                  >
                                                      {opt.name}
                                                  </Button>
@@ -954,8 +976,26 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                     fill={entry.color}
                                                                     style={{ cursor: 'pointer', opacity: selectedRoomType && selectedRoomType !== entry.fullName ? 0.3 : 1 }}
                                                                     onClick={() => {
-                                                                        // Toggle room type filter for heatmap
-                                                                        setSelectedRoomType(prev => prev === entry.fullName ? '' : entry.fullName);
+                                                                        const newType = selectedRoomType === entry.fullName ? '' : entry.fullName;
+                                                                        setSelectedRoomType(newType);
+                                                                        // Color matching rooms in 3D
+                                                                        const roomColorMap: Record<string, [number, number, number]> = {};
+                                                                        const targetSpaces = newType
+                                                                            ? floorFilteredSpaces.filter((s: any) => (s.commonName || s.name || 'Unknown') === newType)
+                                                                            : floorFilteredSpaces;
+                                                                        const nameColorMap2: Record<string, [number, number, number]> = {};
+                                                                        if (newType) {
+                                                                            const rgb = hslStringToRgbFloat(entry.color);
+                                                                            targetSpaces.forEach((s: any) => { roomColorMap[s.fmGuid] = rgb; });
+                                                                            nameColorMap2[newType.toLowerCase().trim()] = rgb;
+                                                                        } else {
+                                                                            spaceTypePie.forEach(pie => {
+                                                                                const rgb = hslStringToRgbFloat(pie.color);
+                                                                                floorFilteredSpaces.filter((s: any) => (s.commonName || s.name || 'Unknown') === pie.fullName)
+                                                                                    .forEach((s: any) => { roomColorMap[s.fmGuid] = rgb; });
+                                                                            });
+                                                                        }
+                                                                        handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
                                                                     }}
                                                                 />
                                                             ))}
@@ -1138,6 +1178,51 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
 
                         {/* Asset Tab - REAL asset data */}
                         <TabsContent value="asset" className="mt-0 space-y-6">
+                             {/* Floor filter pills — same as Space tab */}
+                             {spaceFloorOptions.length > 1 && (
+                                 <Carousel opts={{ align: 'start', dragFree: true }} className="w-full">
+                                     <CarouselContent className="-ml-1">
+                                         <CarouselItem className="pl-1 basis-auto">
+                                             <Button
+                                                 size="sm"
+                                                 variant={assetFloorFilter === '' ? 'default' : 'outline'}
+                                                 className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
+                                                 onClick={() => {
+                                                     setAssetFloorFilter('');
+                                                     if (drawerMode) {
+                                                         window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: { floorId: null, isAllFloorsVisible: true } as FloorSelectionEventDetail }));
+                                                     }
+                                                 }}
+                                             >
+                                                 All
+                                             </Button>
+                                         </CarouselItem>
+                                         {spaceFloorOptions.map(opt => (
+                                             <CarouselItem key={opt.guid} className="pl-1 basis-auto">
+                                                 <Button
+                                                     size="sm"
+                                                     variant={assetFloorFilter === opt.name ? 'default' : 'outline'}
+                                                     className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
+                                                     onClick={() => {
+                                                         setAssetFloorFilter(opt.name);
+                                                         if (drawerMode) {
+                                                             const matchingFmGuids = buildingStoreys
+                                                                 .filter((s: any) => (s.commonName || '').replace(/\s*-\s*\d+$/, '') === opt.name)
+                                                                 .map((s: any) => s.fmGuid)
+                                                                 .filter(Boolean);
+                                                             window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+                                                                 detail: { floorId: opt.guid, visibleFloorFmGuids: matchingFmGuids, isAllFloorsVisible: false } as FloorSelectionEventDetail
+                                                             }));
+                                                         }
+                                                     }}
+                                                 >
+                                                     {opt.name}
+                                                 </Button>
+                                             </CarouselItem>
+                                         ))}
+                                     </CarouselContent>
+                                 </Carousel>
+                             )}
                             <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
                                 {/* Asset Category Distribution - REAL */}
                                 <Card className="border-primary/20 hover:border-primary/50 transition-colors">

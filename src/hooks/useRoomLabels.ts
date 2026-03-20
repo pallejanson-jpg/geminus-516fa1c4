@@ -328,17 +328,34 @@ export function useRoomLabels(
     const config = configRef.current;
     const viewer = getXeokitViewer();
     
-    if (config.clickAction === 'flyto' && viewer) {
+    if (viewer) {
+      // Deselect all previously selected objects
+      const scene = viewer.scene;
+      if (scene?.selectedObjectIds?.length) {
+        scene.selectedObjectIds.forEach((id: string) => {
+          const obj = scene.objects?.[id];
+          if (obj) obj.selected = false;
+        });
+      }
+      
+      // Select and highlight the room entity (same as Filter panel space click)
+      const entity = scene?.objects?.[label.entityId];
+      if (entity) {
+        entity.visible = true;
+        entity.selected = true;
+      }
+      
       // Fly camera to room
-      const entity = viewer.scene?.objects?.[label.entityId];
       if (entity?.aabb) {
         viewer.cameraFlight?.flyTo({
           aabb: entity.aabb,
           duration: 0.8,
         });
       }
-    } else if (config.clickAction === 'roomcard' && onRoomClick) {
-      // Extract room data for card
+    }
+    
+    // Also trigger room card if configured
+    if (config.clickAction === 'roomcard' && onRoomClick) {
       const roomData = {
         fmGuid: label.fmGuid,
         name: extractFieldValue(label.metaObject, 'commonName'),

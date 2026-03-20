@@ -279,11 +279,13 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       if (!attrs) return false;
       const keys = Object.keys(attrs);
       return keys.some(
-        (k) =>
-          k.toLowerCase().includes('sensortemperature') ||
-          k.toLowerCase().includes('sensorco2') ||
-          k.toLowerCase().includes('sensorhum') ||
-          k.toLowerCase().includes('sensoroccupancy')
+        (k) => {
+          const lk = k.toLowerCase().replace(/[\s_-]/g, '');
+          return lk.includes('sensortemperature') || lk.includes('temperature') ||
+            lk.includes('sensorco2') || lk.includes('co2') ||
+            lk.includes('sensorhum') || lk.includes('humidity') ||
+            lk.includes('sensoroccupancy') || lk.includes('occupancy');
+        }
       );
     });
     setHasRealData(hasReal);
