@@ -5,6 +5,8 @@ import { AppContext } from '@/context/AppContext';
 export interface IleanMessage {
   role: 'user' | 'assistant';
   content: string;
+  sources?: string[];
+  documentCount?: number;
 }
 
 export interface IleanContextEntity {
