@@ -1,63 +1,46 @@
 
 
-## Problem: sync-with-cleanup raderar IFC-extraherade storeys/spaces
+## Plan: Ilean Dokumentsökning + Tandem-stil Rumsvy
 
-### Rotorsak
+### Del 1: Ilean Assistent — Full dokumentsökning
 
-`sync-with-cleanup` i `asset-plus-sync/index.ts` (rad 1594-1601):
+**Mål**: Ge Ilean-assistenten samma kapacitet som Senslincs Ilean men med Geminus UI. Idag skickas frågor via `ilean-ask` som bara proxar till Senslincs Ilean API (eller fallback till Lovable AI utan dokument-tillgång). Vi lägger till RAG-sökning som en parallell källa.
 
-1. Hämtar alla `remoteFmGuids` från Asset+ API
-2. Hämtar alla lokala `is_local=false` structure-objekt (exkl. ACC-prefix)  
-3. Raderar lokala objekt som inte finns i Asset+ ("orphans")
+**Ändringar:**
 
-Byggnaden SV:s storeys/spaces skapas från IFC-metadata via `ifc-extract-systems` — de har `is_local=false` men existerar INTE i Asset+. Resultatet: de raderas vid varje synk.
+1. **`supabase/functions/senslinc-query/index.ts`** — I `ilean-ask`-action: efter att Senslinc Ilean-endpoints testats, och innan Lovable AI-fallback, lägg till ett steg som anropar `rag-search` edge function med frågan + `buildingFmGuid`. Om RAG returnerar relevanta chunks, injicera dem som kontext i AI-prompten istället för att bara säga "kunde inte nås". Detta ger Ilean tillgång till alla indexerade dokument.
 
-### Plan
+2. **`src/hooks/useIleanData.ts`** — Utöka `sendMessage` med en valfri `sources`-array i svaret som returneras från edge function. Lägg till `sources` i state så UI:t kan visa dem.
 
-#### 1. Skydda IFC-extraherade objekt från orphan-cleanup
+3. **`src/components/chat/IleanButton.tsx`** — Visa dokumentkällor under assistant-svar (badges med filnamn, liknande RagSearchTab). Uppdatera startfrågor med mer dokumentspecifika frågor. Lägg till en liten "Söker i X dokument..."-indikator under laddning.
 
-**Fil**: `supabase/functions/asset-plus-sync/index.ts` (rad ~1594-1601)
+### Del 2: Tandem-stil rumsvy (Cutaway)
 
-Lägg till logik som exkluderar byggnader som inte finns i Asset+ (dvs som bara har IFC-importerad data). Två alternativ:
+**Mål**: När ett rum väljs i FilterPanel ska rummet och dess innehåll visas i full 3D, medan allt annat på samma våningsplan renderas som genomskinlig 2D/wireframe (x-ray), exakt som Autodesk Tandem-bilden.
 
-**Alt A — Markera med source-kolumn**: Lägg till en `source` text-kolumn på `assets`-tabellen (default `'assetplus'`, IFC-extraherade sätts till `'ifc'`). `fetchAllLocalFmGuids` filtrerar bort `source = 'ifc'` vid orphan-check.
+**Nuvarande beteende** (rad 1060-1088 i ViewerFilterPanel): Vid rum-selektion visas redan x-ray för kontext-objekt och rummet visas solid. Men det saknar:
+- Att visa hela byggnaden i x-ray (inte bara dölja den)
+- Att behålla rumsinnehåll (möbler, installationer) som solid
+- Att flyga kameran till rummet automatiskt
 
-**Alt B — Enklare: kolla om byggnaden finns i remoteFmGuids**: Om en storey/space tillhör en `building_fm_guid` som inte finns i `remoteFmGuids`, skippa den i orphan-listan. Detta skyddar alla lokala byggnader som inte synkats från Asset+.
+**Ändringar i `src/components/viewer/ViewerFilterPanel.tsx`:**
 
-**Rekommendation**: Alt B — kräver ingen DB-migration, bara en kodändring i orphan-filtret.
+1. **Utvidga space-filter logiken** (~rad 886-910): När rum är valda, samla inte bara parent-level-context utan ALLA objekt i scenen. Sätt allt till xray UTOM:
+   - Objekt som ligger inuti det valda rummet (barn till IfcSpace i metaScene-hierarkin)
+   - Rumsobjektet självt
+   
+2. **Traversera metaScene-hierarkin** för att hitta alla entities som tillhör rummet (väggar, dörrar, möbler, installationer som har rummet som spatial container).
 
-```text
-Nuvarande logik:
-  orphans = localGuids.filter(g => !remoteFmGuids.has(g))
+3. **Automatisk kameranavigering**: Efter applicering av rum-filter, gör `viewer.cameraFlight.flyTo({ aabb: roomBoundingBox })` för att fokusera på rummet.
 
-Ny logik:
-  remoteBuildingGuids = remoteFmGuids filtered to only Building category
-  orphans = localGuids.filter(g => {
-    // Skip if this object belongs to a building not in Asset+
-    const buildingGuid = buildingLookup[g]
-    if (buildingGuid && !remoteBuildingGuids.has(buildingGuid)) return false
-    return !remoteFmGuids.has(g)
-  })
-```
+4. **X-ray material-inställningar**: Justera `xrayMaterial` till ljusgrå wireframe (liknande Tandem: `fillAlpha: 0.08`, `edgeAlpha: 0.2`) för att ge den 2D-planritnings-effekten.
 
-#### 2. Återskapa hierarkin för SV nu
-
-Kör `ifc-extract-systems` med `metadata-only` mode mot den befintliga metadata-filen för att populera storeys/spaces igen.
-
-#### 3. Fixa XKT-versionsproblemet (separat men relaterat)
-
-Konsolloggarna visar: `Unsupported .XKT file version: 12 - this XKTLoaderPlugin supports versions 1,2,3,4,5,6,7,8,9,10`
-
-Browser-konverteringen producerar XKT v12 men xeokit SDK:n i `public/lib/xeokit/xeokit-sdk.es.js` stödjer bara v1-10. Detta måste också åtgärdas (uppgradera xeokit SDK eller downgrade XKT-output) — annars laddas inget 3D-innehåll alls.
-
-### Sammanfattning av ändringar
+### Teknisk sammanfattning
 
 | Fil | Ändring |
 |-----|---------|
-| `supabase/functions/asset-plus-sync/index.ts` | Lägg till building-scope-check i orphan-filtrering |
-| Edge function call (runtime) | Kör `ifc-extract-systems` metadata-only för SV |
-
-### Teknisk detalj
-
-Ändringen i orphan-filtret kräver att vi hämtar `building_fm_guid` tillsammans med `fm_guid` i `fetchAllLocalFmGuids`, och sedan kollar om byggnaden finns bland remote-objekten. Ca 15 rader kodändring.
+| `supabase/functions/senslinc-query/index.ts` | RAG-sökning som fallback i ilean-ask, returnera sources |
+| `src/hooks/useIleanData.ts` | Hantera sources i svar, utöka state |
+| `src/components/chat/IleanButton.tsx` | Visa källdokument, bättre startfrågor, laddningsindikator |
+| `src/components/viewer/ViewerFilterPanel.tsx` | Tandem-stil cutaway: allt xray utom valt rum + dess innehåll, auto-fly-to |
 
