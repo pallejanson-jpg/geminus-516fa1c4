@@ -100,15 +100,67 @@ interface CreateResult {
 
 // ============ RESOLVE PARENT ============
 
-/** Determine the parent GUID and building GUID for an item */
-function resolveParent(item: CreateAssetItem): { parentFmGuid: string; isOrphan: boolean } {
-  if (item.parentSpaceFmGuid) {
-    return { parentFmGuid: item.parentSpaceFmGuid, isOrphan: false };
-  }
+/**
+ * Determine the parent GUID for AddObjectList.
+ * Asset+ requires building GUID as parent for Instance objects.
+ * Room relation is established via UpsertRelationships as a second step.
+ */
+function resolveParent(item: CreateAssetItem): { parentFmGuid: string; roomFmGuid: string | null } {
   if (item.parentBuildingFmGuid) {
-    return { parentFmGuid: item.parentBuildingFmGuid, isOrphan: true };
+    return { parentFmGuid: item.parentBuildingFmGuid, roomFmGuid: item.parentSpaceFmGuid || null };
+  }
+  if (item.parentSpaceFmGuid) {
+    // Caller only provided room — we still need building, but use room as fallback parent
+    // (this path should ideally not be used; callers should always provide building GUID)
+    return { parentFmGuid: item.parentSpaceFmGuid, roomFmGuid: null };
   }
   throw new Error("Either parentSpaceFmGuid or parentBuildingFmGuid is required");
+}
+
+/**
+ * After creating objects under the building, move them to their rooms
+ * using the UpsertRelationships endpoint.
+ */
+async function upsertRoomRelationships(
+  relationships: Array<{ parentFmGuid: string; childFmGuid: string }>,
+  accessToken: string,
+  apiUrl: string,
+  apiKey: string,
+): Promise<void> {
+  if (relationships.length === 0) return;
+
+  const baseUrl = apiUrl.replace(/\/+$/, "");
+  const endpoint = `${baseUrl}/UpsertRelationships`;
+
+  const payload = {
+    APIKey: apiKey,
+    Relationships: relationships.map(r => ({
+      ParentFmGuid: r.parentFmGuid,
+      ChildFmGuid: r.childFmGuid,
+    })),
+  };
+
+  console.log(`UpsertRelationships: Moving ${relationships.length} objects to rooms`);
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const responseText = await response.text();
+    if (!response.ok) {
+      console.error(`UpsertRelationships failed: ${response.status} ${responseText}`);
+    } else {
+      console.log(`UpsertRelationships success: ${relationships.length} moved`);
+    }
+  } catch (error) {
+    console.error("UpsertRelationships error:", error);
+  }
 }
 
 // ============ CORE CREATE LOGIC ============
@@ -124,7 +176,7 @@ async function createSingleObject(
   const endpoint = `${baseUrl}/AddObjectList`;
 
   const fmGuid = item.fmGuid || crypto.randomUUID();
-  const { parentFmGuid, isOrphan } = resolveParent(item);
+  const { parentFmGuid, roomFmGuid } = resolveParent(item);
 
   const bimObject: Record<string, any> = {
     ObjectType: ObjectType.Instance,
@@ -146,7 +198,7 @@ async function createSingleObject(
     }],
   };
 
-  console.log(`Creating object ${item.designation} (${fmGuid}) under parent ${parentFmGuid} (orphan=${isOrphan})`);
+  console.log(`Creating object ${item.designation} (${fmGuid}) under building ${parentFmGuid}, room=${roomFmGuid || 'none'}`);
 
   try {
     const response = await fetch(endpoint, {
@@ -187,22 +239,16 @@ async function createSingleObject(
       createdAsset = { rawResponse: responseText };
     }
 
-    // Resolve building_fm_guid
-    let buildingFmGuid: string | null = isOrphan ? parentFmGuid : null;
-    if (!isOrphan && supabase) {
-      try {
-        const { data: parentSpace } = await supabase
-          .from("assets")
-          .select("building_fm_guid")
-          .eq("fm_guid", item.parentSpaceFmGuid)
-          .maybeSingle();
-        buildingFmGuid = parentSpace?.building_fm_guid || null;
-      } catch {
-        console.warn("Could not resolve building_fm_guid from parent space");
-      }
+    // Step 2: Move to room via UpsertRelationships
+    if (roomFmGuid) {
+      await upsertRoomRelationships(
+        [{ parentFmGuid: roomFmGuid, childFmGuid: fmGuid }],
+        accessToken, apiUrl, apiKey,
+      );
     }
 
     // Store locally
+    const buildingFmGuid = item.parentBuildingFmGuid || parentFmGuid;
     if (supabase) {
       try {
         await supabase
@@ -212,7 +258,7 @@ async function createSingleObject(
             name: item.designation,
             common_name: item.commonName || null,
             category: "Instance",
-            in_room_fm_guid: isOrphan ? null : item.parentSpaceFmGuid,
+            in_room_fm_guid: roomFmGuid || null,
             building_fm_guid: buildingFmGuid,
             coordinate_x: item.coordinates?.x ?? null,
             coordinate_y: item.coordinates?.y ?? null,
@@ -277,10 +323,16 @@ async function createBatchObjects(
 ): Promise<CreateResult[]> {
   const baseUrl = apiUrl.replace(/\/+$/, "");
 
+  const roomRelationships: Array<{ parentFmGuid: string; childFmGuid: string }> = [];
+
   const bimObjectsWithParents = items.map(item => {
     const fmGuid = item.fmGuid || crypto.randomUUID();
     (item as any)._resolvedFmGuid = fmGuid;
-    const { parentFmGuid } = resolveParent(item);
+    const { parentFmGuid, roomFmGuid } = resolveParent(item);
+
+    if (roomFmGuid) {
+      roomRelationships.push({ parentFmGuid: roomFmGuid, childFmGuid: fmGuid });
+    }
 
     const bimObject: Record<string, any> = {
       ObjectType: ObjectType.Instance,
@@ -320,6 +372,11 @@ async function createBatchObjects(
     console.log(`AddObjectList response: ${response.status}`);
 
     if (response.ok) {
+      // Step 2: Move created objects to rooms
+      if (roomRelationships.length > 0) {
+        await upsertRoomRelationships(roomRelationships, accessToken, apiUrl, apiKey);
+      }
+
       let createdList: any[];
       try {
         createdList = JSON.parse(responseText);
@@ -333,21 +390,10 @@ async function createBatchObjects(
         const item = items[i];
         const created = createdList[i];
         const assetFmGuid = (item as any)._resolvedFmGuid || created?.fmGuid || item.fmGuid;
-        const { isOrphan } = resolveParent(item);
+        const { roomFmGuid } = resolveParent(item);
+        const buildingFmGuid = item.parentBuildingFmGuid || null;
 
         if (assetFmGuid && supabase) {
-          let buildingFmGuid: string | null = isOrphan ? (item.parentBuildingFmGuid || null) : null;
-          if (!isOrphan) {
-            try {
-              const { data: parentSpace } = await supabase
-                .from("assets")
-                .select("building_fm_guid")
-                .eq("fm_guid", item.parentSpaceFmGuid)
-                .maybeSingle();
-              buildingFmGuid = parentSpace?.building_fm_guid || null;
-            } catch { /* ignore */ }
-          }
-
           try {
             await supabase
               .from("assets")
@@ -356,7 +402,7 @@ async function createBatchObjects(
                 name: item.designation,
                 common_name: item.commonName || null,
                 category: "Instance",
-                in_room_fm_guid: isOrphan ? null : item.parentSpaceFmGuid,
+                in_room_fm_guid: roomFmGuid || null,
                 building_fm_guid: buildingFmGuid,
                 coordinate_x: item.coordinates?.x ?? null,
                 coordinate_y: item.coordinates?.y ?? null,

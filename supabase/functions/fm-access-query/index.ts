@@ -767,7 +767,7 @@ serve(async (req) => {
       // ── CRUD operations for FM Access objects ──────────────────────
 
       case 'create-object': {
-        const { parentGuid, name, classId, properties } = params;
+        const { parentGuid, name, classId, properties, systemGuid, targetClass, ifcType } = params;
         if (!parentGuid || !name) {
           return new Response(
             JSON.stringify({ success: false, error: 'parentGuid and name are required' }),
@@ -775,15 +775,26 @@ serve(async (req) => {
           );
         }
 
+        // Resolve target class from explicit param or IFC type
+        const resolved = targetClass
+          ? { classId: classId || null, targetClass }
+          : resolveTargetClass(ifcType);
+        const finalClassId = classId || resolved.classId;
+
         // Build object payload for HDC API
         const objectPayload: any = {
           objectName: name,
           parentGuid: parentGuid,
         };
-        if (classId) objectPayload.classId = classId;
+        if (systemGuid) objectPayload.systemGuid = systemGuid;
+        if (finalClassId) objectPayload.classId = finalClassId;
+        if (resolved.targetClass) objectPayload.targetClass = resolved.targetClass;
         if (properties && typeof properties === 'object') {
-          objectPayload.properties = properties;
+          const mapped = mapPropertiesToFmAccess(resolved.targetClass, properties);
+          objectPayload.properties = mapped;
         }
+
+        console.log('FM Access create-object payload:', JSON.stringify(objectPayload));
 
         try {
           const response = await fmAccessFetch(config, '/api/object', {
