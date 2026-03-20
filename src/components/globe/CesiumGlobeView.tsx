@@ -125,6 +125,16 @@ const CesiumGlobeView: React.FC = () => {
     cesiumViewerRef.current = viewer;
     viewer.resolutionScale = window.innerWidth > 768 ? 0.85 : 1.0;
 
+    // Minimize Cesium credits on mobile
+    if (window.innerWidth < 768) {
+      const creditContainer = viewer.cesiumWidget.creditContainer as HTMLElement;
+      if (creditContainer) {
+        creditContainer.style.transform = 'scale(0.6)';
+        creditContainer.style.transformOrigin = 'bottom right';
+        creditContainer.style.opacity = '0.5';
+      }
+    }
+
     // Start fully zoomed out to show the whole globe
     viewer.camera.setView({
       destination: Cesium.Cartesian3.fromDegrees(15.0, 20.0, 20000000),

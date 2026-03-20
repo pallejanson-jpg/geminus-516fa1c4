@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Building2, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { Building2, ChevronDown, ChevronUp, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -29,7 +29,7 @@ const BuildingSidebar: React.FC<BuildingSidebarProps> = ({
   emptyLabel = 'No buildings loaded',
   noMatchLabel = 'No matching buildings',
 }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   const filtered = useMemo(() => {
@@ -41,13 +41,28 @@ const BuildingSidebar: React.FC<BuildingSidebarProps> = ({
     );
   }, [facilities, searchQuery]);
 
+  // Collapsed state: show only an icon button
+  if (!isOpen) {
+    return (
+      <div className="absolute top-14 sm:top-4 left-3 sm:left-4 z-10">
+        <Button
+          variant="secondary"
+          size="icon"
+          onClick={() => setIsOpen(true)}
+          className="bg-card/90 backdrop-blur-sm shadow-lg border border-border/50 h-9 w-9 sm:h-10 sm:w-10"
+          title={title}
+        >
+          <Building2 size={16} className="text-primary" />
+        </Button>
+      </div>
+    );
+  }
+
+  // Expanded state: full sidebar panel
   return (
     <div className="absolute top-14 sm:top-4 left-3 sm:left-4 z-10 w-[calc(100%-1.5rem)] sm:w-72 max-h-[calc(100%-4.5rem)] sm:max-h-[calc(100%-2rem)]">
       <Card className="bg-card/95 backdrop-blur-sm shadow-xl">
-        <CardHeader
-          className="pb-2 cursor-pointer sm:cursor-default p-3 sm:p-4"
-          onClick={() => setIsExpanded(!isExpanded)}
-        >
+        <CardHeader className="pb-2 p-3 sm:p-4">
           <CardTitle className="text-xs sm:text-sm flex items-center justify-between">
             <span className="flex items-center gap-2">
               <Building2 size={14} className="sm:w-4 sm:h-4 text-primary" />
@@ -56,18 +71,14 @@ const BuildingSidebar: React.FC<BuildingSidebarProps> = ({
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6 sm:hidden"
-              onClick={e => { e.stopPropagation(); setIsExpanded(!isExpanded); }}
+              className="h-6 w-6"
+              onClick={() => setIsOpen(false)}
             >
-              {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              <X size={14} />
             </Button>
           </CardTitle>
         </CardHeader>
-        <CardContent
-          className={`overflow-y-auto space-y-2 pt-0 px-3 sm:px-4 pb-3 sm:pb-4 transition-all duration-200 ${
-            isExpanded ? 'max-h-48 sm:max-h-60' : 'max-h-0 sm:max-h-80'
-          } ${!isExpanded && 'hidden sm:block'}`}
-        >
+        <CardContent className="overflow-y-auto space-y-2 pt-0 px-3 sm:px-4 pb-3 sm:pb-4 max-h-60 sm:max-h-80">
           <div className="relative">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -85,7 +96,7 @@ const BuildingSidebar: React.FC<BuildingSidebarProps> = ({
             filtered.map(f => (
               <div
                 key={f.id}
-                onClick={() => onSelect(f.id)}
+                onClick={() => { onSelect(f.id); setIsOpen(false); }}
                 className={`p-2 rounded-md cursor-pointer transition-colors ${
                   selectedId === f.id
                     ? 'bg-primary/20 border border-primary/50'
