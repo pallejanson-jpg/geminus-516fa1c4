@@ -58,6 +58,7 @@ interface CreateAssetItem {
   parentBuildingFmGuid?: string;
   designation: string;
   commonName?: string;
+  externalType?: string;
   properties?: Array<{
     name: string;
     value: string | number | boolean;
