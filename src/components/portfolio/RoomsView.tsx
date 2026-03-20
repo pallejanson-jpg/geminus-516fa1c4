@@ -745,7 +745,9 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
+
                     {filteredRooms.length === 0 && (
                       <TableRow>
                         <TableCell
