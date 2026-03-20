@@ -102,17 +102,16 @@ interface CreateResult {
 
 /**
  * Determine the parent GUID for AddObjectList.
- * Asset+ requires building GUID as parent for Instance objects.
- * Room relation is established via UpsertRelationships as a second step.
+ * Prefer room (Space) as parent when available — this matches the sync logic.
+ * If only building is provided, use building.
+ * Returns roomFmGuid for local DB tracking.
  */
 function resolveParent(item: CreateAssetItem): { parentFmGuid: string; roomFmGuid: string | null } {
-  if (item.parentBuildingFmGuid) {
-    return { parentFmGuid: item.parentBuildingFmGuid, roomFmGuid: item.parentSpaceFmGuid || null };
-  }
   if (item.parentSpaceFmGuid) {
-    // Caller only provided room — we still need building, but use room as fallback parent
-    // (this path should ideally not be used; callers should always provide building GUID)
-    return { parentFmGuid: item.parentSpaceFmGuid, roomFmGuid: null };
+    return { parentFmGuid: item.parentSpaceFmGuid, roomFmGuid: item.parentSpaceFmGuid };
+  }
+  if (item.parentBuildingFmGuid) {
+    return { parentFmGuid: item.parentBuildingFmGuid, roomFmGuid: null };
   }
   throw new Error("Either parentSpaceFmGuid or parentBuildingFmGuid is required");
 }
