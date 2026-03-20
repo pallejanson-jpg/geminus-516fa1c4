@@ -1036,40 +1036,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             </div>
           </div>
 
-          {/* Room Labels Selector */}
-          <div className="space-y-1.5 sm:space-y-2">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className={cn("p-1 sm:p-1.5 rounded-md", showRoomLabels ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
-                <Type className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </div>
-              <span className="text-xs sm:text-sm">Room labels</span>
-            </div>
-            <div className="pl-8 sm:pl-10">
-              {loadingRoomLabelConfigs ? (
-                <div className="text-xs text-muted-foreground">Loading...</div>
-              ) : (
-                <Select
-                  value={showRoomLabels && activeRoomLabelConfigId ? activeRoomLabelConfigId : 'off'}
-                  onValueChange={handleRoomLabelConfigSelect}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Off" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="off">Off</SelectItem>
-                    {roomLabelConfigs.map((config) => (
-                      <SelectItem key={config.id} value={config.id}>
-                        {config.name}{config.is_default ? ' (default)' : ''}
-                      </SelectItem>
-                    ))}
-                    {roomLabelConfigs.length === 0 && (
-                      <SelectItem value="__none" disabled>No configurations</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-          </div>
+          {/* Room Labels moved to under Show Spaces toggle */}
 
           {/* Viewer Theme Selector */}
           <ViewerThemeSelector viewerRef={viewerRef} disabled={!isViewerReady} />

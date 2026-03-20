@@ -1503,7 +1503,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   return (
     <>
     {/* Backdrop */}
-    <div className="fixed inset-0 z-[64]" onClick={onClose} />
+    {/* Backdrop removed for stability — panel closes only via X button */}
     <div
       className={cn(
         "fixed left-0 top-[44px] bottom-0 z-[65] w-[85%] max-w-[320px] sm:w-[320px]",
