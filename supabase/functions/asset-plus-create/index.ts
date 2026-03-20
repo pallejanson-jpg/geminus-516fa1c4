@@ -100,15 +100,67 @@ interface CreateResult {
 
 // ============ RESOLVE PARENT ============
 
-/** Determine the parent GUID and building GUID for an item */
-function resolveParent(item: CreateAssetItem): { parentFmGuid: string; isOrphan: boolean } {
-  if (item.parentSpaceFmGuid) {
-    return { parentFmGuid: item.parentSpaceFmGuid, isOrphan: false };
-  }
+/**
+ * Determine the parent GUID for AddObjectList.
+ * Asset+ requires building GUID as parent for Instance objects.
+ * Room relation is established via UpsertRelationships as a second step.
+ */
+function resolveParent(item: CreateAssetItem): { parentFmGuid: string; roomFmGuid: string | null } {
   if (item.parentBuildingFmGuid) {
-    return { parentFmGuid: item.parentBuildingFmGuid, isOrphan: true };
+    return { parentFmGuid: item.parentBuildingFmGuid, roomFmGuid: item.parentSpaceFmGuid || null };
+  }
+  if (item.parentSpaceFmGuid) {
+    // Caller only provided room — we still need building, but use room as fallback parent
+    // (this path should ideally not be used; callers should always provide building GUID)
+    return { parentFmGuid: item.parentSpaceFmGuid, roomFmGuid: null };
   }
   throw new Error("Either parentSpaceFmGuid or parentBuildingFmGuid is required");
+}
+
+/**
+ * After creating objects under the building, move them to their rooms
+ * using the UpsertRelationships endpoint.
+ */
+async function upsertRoomRelationships(
+  relationships: Array<{ parentFmGuid: string; childFmGuid: string }>,
+  accessToken: string,
+  apiUrl: string,
+  apiKey: string,
+): Promise<void> {
+  if (relationships.length === 0) return;
+
+  const baseUrl = apiUrl.replace(/\/+$/, "");
+  const endpoint = `${baseUrl}/UpsertRelationships`;
+
+  const payload = {
+    APIKey: apiKey,
+    Relationships: relationships.map(r => ({
+      ParentFmGuid: r.parentFmGuid,
+      ChildFmGuid: r.childFmGuid,
+    })),
+  };
+
+  console.log(`UpsertRelationships: Moving ${relationships.length} objects to rooms`);
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const responseText = await response.text();
+    if (!response.ok) {
+      console.error(`UpsertRelationships failed: ${response.status} ${responseText}`);
+    } else {
+      console.log(`UpsertRelationships success: ${relationships.length} moved`);
+    }
+  } catch (error) {
+    console.error("UpsertRelationships error:", error);
+  }
 }
 
 // ============ CORE CREATE LOGIC ============
