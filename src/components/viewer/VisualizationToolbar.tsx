@@ -353,16 +353,16 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   // Listen for force show spaces from RoomVisualizationPanel
   useEffect(() => {
     const handleForceShowSpaces = (e: CustomEvent) => {
-      if (e.detail?.show && !showSpaces) {
-        // Use callback if controlled, otherwise local state
+      const shouldShow = !!e.detail?.show;
+      if (shouldShow !== showSpaces) {
         if (onShowSpacesChange) {
-          onShowSpacesChange(true);
+          onShowSpacesChange(shouldShow);
         } else {
-          setLocalShowSpaces(true);
+          setLocalShowSpaces(shouldShow);
         }
         try {
           const assetViewer = viewerRef.current?.assetViewer;
-          assetViewer?.onShowSpacesChanged?.(true);
+          assetViewer?.onShowSpacesChanged?.(shouldShow);
         } catch (err) {
           console.debug("Force show spaces failed:", err);
         }
