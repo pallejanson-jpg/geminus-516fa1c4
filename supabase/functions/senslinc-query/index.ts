@@ -884,8 +884,8 @@ serve(async (req) => {
           }
         }
 
-        // Fallback: use Lovable AI — but clearly state it's a fallback with no real document access
-        console.log('[Senslinc] No Ilean API found, falling back to Lovable AI');
+        // Fallback: RAG search in indexed documents, then use AI to answer
+        console.log('[Senslinc] No Ilean API found, trying RAG document search fallback');
         const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
         if (!LOVABLE_API_KEY) {
           return jsonResponse({
@@ -895,6 +895,61 @@ serve(async (req) => {
               source: 'fallback-error',
             },
           });
+        }
+
+        // Step A: Search indexed documents via document_chunks table
+        const supabaseUrl2 = Deno.env.get('SUPABASE_URL')!;
+        const supabaseKey2 = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const sbClient2 = createClient(supabaseUrl2, supabaseKey2);
+
+        let ragChunks: Array<{ content: string; file_name: string; source_type: string }> = [];
+        let ragSources: string[] = [];
+        const resolvedBuildingGuid = buildingFmGuid || fmGuid;
+
+        try {
+          // Extract keywords from the question
+          const kwResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'google/gemini-2.5-flash-lite',
+              messages: [
+                { role: 'system', content: 'Extract 3-6 search keywords from the user query. Return ONLY a JSON array of strings. Include Swedish and English variants.' },
+                { role: 'user', content: question },
+              ],
+              max_tokens: 200, temperature: 0,
+            }),
+          });
+
+          let keywords: string[] = [question];
+          if (kwResp.ok) {
+            const kwData = await kwResp.json();
+            const kwContent = kwData.choices?.[0]?.message?.content || '';
+            try {
+              const parsed = JSON.parse(kwContent.match(/\[[\s\S]*\]/)?.[0] || '[]');
+              if (Array.isArray(parsed) && parsed.length > 0) keywords = parsed;
+            } catch { /* use original */ }
+          }
+
+          // Search document_chunks
+          let dbQuery = sbClient2.from('document_chunks')
+            .select('content, file_name, source_type, building_fm_guid');
+
+          if (resolvedBuildingGuid) {
+            dbQuery = dbQuery.or(`building_fm_guid.eq.${resolvedBuildingGuid},building_fm_guid.is.null`);
+          }
+
+          const orConditions = keywords.map(kw => `content.ilike.%${kw}%`).join(',');
+          dbQuery = dbQuery.or(orConditions);
+
+          const { data: chunks } = await dbQuery.limit(30);
+          if (chunks && chunks.length > 0) {
+            ragChunks = chunks.slice(0, 15);
+            ragSources = [...new Set(ragChunks.map(c => c.file_name).filter(Boolean))] as string[];
+            console.log(`[Ilean] RAG found ${ragChunks.length} relevant chunks from ${ragSources.length} documents`);
+          }
+        } catch (ragErr) {
+          console.warn('[Ilean] RAG search failed:', ragErr);
         }
 
         // Build context-aware prompt — Ilean should proxy real Senslinc doc Q&A, not invent answers
