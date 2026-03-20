@@ -59,6 +59,7 @@ const RoomVisualizationList: React.FC<{
   onToggleVisualization: (show: boolean) => void;
 }> = ({ showVisualization, onToggleVisualization }) => {
   const [activeViz, setActiveViz] = React.useState<VisualizationType>('none');
+  const [listOpen, setListOpen] = React.useState(false);
 
   // Stay in sync with external changes
   React.useEffect(() => {
@@ -75,42 +76,73 @@ const RoomVisualizationList: React.FC<{
     window.dispatchEvent(
       new CustomEvent(VISUALIZATION_QUICK_SELECT_EVENT, { detail: { type: next } })
     );
-    // Auto-open visualization panel when selecting a type
-    if (next !== 'none' && !showVisualization) {
-      onToggleVisualization(true);
-    } else if (next === 'none' && showVisualization) {
-      onToggleVisualization(false);
+    // Auto-enable spaces when selecting a viz, disable when selecting none
+    if (next !== 'none') {
+      if (!showVisualization) onToggleVisualization(true);
+      // Force show spaces
+      window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: true } }));
+    } else {
+      if (showVisualization) onToggleVisualization(false);
+      // Turn off spaces when None is selected
+      window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: false } }));
     }
   };
 
   return (
-    <div className="space-y-1 py-1">
-      <div className="flex items-center gap-2 sm:gap-3 py-1">
-        <div className={cn("p-1 sm:p-1.5 rounded-md", showVisualization ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
-          <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+    <Collapsible open={listOpen} onOpenChange={setListOpen}>
+      <CollapsibleTrigger asChild>
+        <button className="flex items-center justify-between w-full py-1.5 sm:py-2 hover:bg-muted/50 rounded-md transition-colors px-1">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className={cn("p-1 sm:p-1.5 rounded-md", activeViz !== 'none' ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+              <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </div>
+            <span className="text-xs sm:text-sm font-medium">Color filter</span>
+            {activeViz !== 'none' && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                {VIZ_LIST_ITEMS.find(v => v.type === activeViz)?.label || activeViz}
+              </Badge>
+            )}
+          </div>
+          <ChevronDown className={cn(
+            "h-4 w-4 text-muted-foreground transition-transform",
+            listOpen && "rotate-180"
+          )} />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="ml-7 sm:ml-9 space-y-0.5 pb-1">
+          {/* None option */}
+          <button
+            onClick={() => toggle('none' as VisualizationType)}
+            className={cn(
+              "flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-xs transition-colors",
+              "hover:bg-muted/80",
+              activeViz === 'none' ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground"
+            )}
+          >
+            <X className="h-3.5 w-3.5" />
+            <span>None</span>
+          </button>
+          {VIZ_LIST_ITEMS.map(({ type, icon: Icon, label }) => {
+            const isActive = activeViz === type;
+            return (
+              <button
+                key={type}
+                onClick={() => toggle(type)}
+                className={cn(
+                  "flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-xs transition-colors",
+                  "hover:bg-muted/80",
+                  isActive ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground"
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span>{label}</span>
+              </button>
+            );
+          })}
         </div>
-        <span className="text-xs sm:text-sm font-medium">Rumsvisualisering</span>
-      </div>
-      <div className="ml-7 sm:ml-9 space-y-0.5">
-        {VIZ_LIST_ITEMS.map(({ type, icon: Icon, label }) => {
-          const isActive = activeViz === type;
-          return (
-            <button
-              key={type}
-              onClick={() => toggle(type)}
-              className={cn(
-                "flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-xs transition-colors",
-                "hover:bg-muted/80",
-                isActive ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground"
-              )}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              <span>{label}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 };
 
