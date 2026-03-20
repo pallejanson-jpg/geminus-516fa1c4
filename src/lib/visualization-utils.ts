@@ -291,42 +291,31 @@ export function extractSensorValue(
 ): number | null {
   if (!attributes || type === 'none') return null;
 
-  // Find keys that match sensor patterns
+  // Find keys that match sensor patterns (normalize by stripping spaces/underscores/dashes)
   const keys = Object.keys(attributes);
+  const normalize = (k: string) => k.toLowerCase().replace(/[\s_-]/g, '');
   
+  const findKey = (patterns: string[]) =>
+    keys.find(k => { const nk = normalize(k); return patterns.some(p => nk.includes(p)); });
+  
+  const extractVal = (key: string | undefined) => {
+    if (!key) return null;
+    const val = attributes[key];
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') { const n = parseFloat(val); return isNaN(n) ? null : n; }
+    if (typeof val?.value === 'number') return val.value;
+    return null;
+  };
+
   switch (type) {
-    case 'temperature': {
-      const tempKey = keys.find(k => k.toLowerCase().includes('sensortemperature') || k.toLowerCase().includes('temperature'));
-      if (tempKey) {
-        const val = attributes[tempKey];
-        return typeof val === 'number' ? val : (typeof val?.value === 'number' ? val.value : null);
-      }
-      return null;
-    }
-    case 'co2': {
-      const co2Key = keys.find(k => k.toLowerCase().includes('sensorco2') || k.toLowerCase().includes('co2'));
-      if (co2Key) {
-        const val = attributes[co2Key];
-        return typeof val === 'number' ? val : (typeof val?.value === 'number' ? val.value : null);
-      }
-      return null;
-    }
-    case 'humidity': {
-      const humKey = keys.find(k => k.toLowerCase().includes('sensorhum') || k.toLowerCase().includes('humidity'));
-      if (humKey) {
-        const val = attributes[humKey];
-        return typeof val === 'number' ? val : (typeof val?.value === 'number' ? val.value : null);
-      }
-      return null;
-    }
-    case 'occupancy': {
-      const occKey = keys.find(k => k.toLowerCase().includes('sensoroccupancy') || k.toLowerCase().includes('occupancy'));
-      if (occKey) {
-        const val = attributes[occKey];
-        return typeof val === 'number' ? val : (typeof val?.value === 'number' ? val.value : null);
-      }
-      return null;
-    }
+    case 'temperature':
+      return extractVal(findKey(['sensortemperature', 'temperature', 'temp']));
+    case 'co2':
+      return extractVal(findKey(['sensorco2', 'co2', 'carbondioxide']));
+    case 'humidity':
+      return extractVal(findKey(['sensorhum', 'humidity', 'rh']));
+    case 'occupancy':
+      return extractVal(findKey(['sensoroccupancy', 'occupancy', 'presence']));
     case 'area': {
       // Look for NTA or area values
       const areaKey = keys.find(k => k.toLowerCase().includes('nta') || k.toLowerCase() === 'area');

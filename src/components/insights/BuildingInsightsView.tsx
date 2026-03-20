@@ -1177,6 +1177,51 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
 
                         {/* Asset Tab - REAL asset data */}
                         <TabsContent value="asset" className="mt-0 space-y-6">
+                             {/* Floor filter pills — same as Space tab */}
+                             {spaceFloorOptions.length > 1 && (
+                                 <Carousel opts={{ align: 'start', dragFree: true }} className="w-full">
+                                     <CarouselContent className="-ml-1">
+                                         <CarouselItem className="pl-1 basis-auto">
+                                             <Button
+                                                 size="sm"
+                                                 variant={assetFloorFilter === '' ? 'default' : 'outline'}
+                                                 className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
+                                                 onClick={() => {
+                                                     setAssetFloorFilter('');
+                                                     if (drawerMode) {
+                                                         window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: { floorId: null, isAllFloorsVisible: true } as FloorSelectionEventDetail }));
+                                                     }
+                                                 }}
+                                             >
+                                                 All
+                                             </Button>
+                                         </CarouselItem>
+                                         {spaceFloorOptions.map(opt => (
+                                             <CarouselItem key={opt.guid} className="pl-1 basis-auto">
+                                                 <Button
+                                                     size="sm"
+                                                     variant={assetFloorFilter === opt.name ? 'default' : 'outline'}
+                                                     className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
+                                                     onClick={() => {
+                                                         setAssetFloorFilter(opt.name);
+                                                         if (drawerMode) {
+                                                             const matchingFmGuids = buildingStoreys
+                                                                 .filter((s: any) => (s.commonName || '').replace(/\s*-\s*\d+$/, '') === opt.name)
+                                                                 .map((s: any) => s.fmGuid)
+                                                                 .filter(Boolean);
+                                                             window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+                                                                 detail: { floorId: opt.guid, visibleFloorFmGuids: matchingFmGuids, isAllFloorsVisible: false } as FloorSelectionEventDetail
+                                                             }));
+                                                         }
+                                                     }}
+                                                 >
+                                                     {opt.name}
+                                                 </Button>
+                                             </CarouselItem>
+                                         ))}
+                                     </CarouselContent>
+                                 </Carousel>
+                             )}
                             <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
                                 {/* Asset Category Distribution - REAL */}
                                 <Card className="border-primary/20 hover:border-primary/50 transition-colors">

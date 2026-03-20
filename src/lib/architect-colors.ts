@@ -30,7 +30,7 @@ export const IFC_TYPE_COLORS: Record<string, number[]> = {
 };
 
 export const DEFAULT_COLOR = [0.933, 0.929, 0.918];
-export const SPACE_COLOR = [0.898, 0.894, 0.890];
+export const SPACE_COLOR = [0.722, 0.831, 0.890]; // Light blue #B8D4E3
 
 /**
  * Apply architect color palette to all objects in the scene.
