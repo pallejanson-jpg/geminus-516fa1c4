@@ -63,6 +63,7 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
 
 // Section labels in English
 const SECTION_LABELS: Record<string, string> = {
+  'geminus': 'Geminus Properties',
   'system': 'System',
   'local': 'Local Settings',
   'coordinates': 'Position',
@@ -70,6 +71,9 @@ const SECTION_LABELS: Record<string, string> = {
   'classification': 'Klassificering (BIP)',
   'user-defined': 'User-Defined',
 };
+
+// GUID regex for detecting 128-bit GUIDs in values
+const GUID_VALUE_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Fields that belong to Area section
 const AREA_FIELDS = ['nta', 'bra', 'bta', 'area', 'atemp', 'volym', 'omkrets', 'rumshöjd'];
