@@ -688,10 +688,20 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRooms.map((room) => (
+                    {filteredRooms.map((room) => {
+                      const rowNameColor = roomNameColorMap[String(room.commonName || '')];
+                      const rowSensorVal = roomSensorValues.get(room.fmGuid) ?? null;
+                      const rowSensorRgb = activeSensorMetric !== 'none' && rowSensorVal !== null
+                        ? getVisualizationColor(rowSensorVal, activeSensorMetric)
+                        : null;
+                      const rowSensorHex = rowSensorRgb ? rgbToHex(rowSensorRgb) : null;
+                      return (
                       <TableRow 
                         key={room.fmGuid} 
                         className={`hover:bg-muted/50 cursor-pointer ${selectedRows.has(room.fmGuid) ? 'bg-muted/50' : ''}`}
+                        style={{
+                          borderLeft: rowSensorHex ? `3px solid ${rowSensorHex}` : rowNameColor ? `3px solid ${rowNameColor}` : undefined,
+                        }}
                         onClick={() => handleSelectRoom(room)}
                       >
                         {/* Checkbox cell */}
