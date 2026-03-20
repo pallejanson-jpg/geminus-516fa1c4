@@ -952,21 +952,26 @@ serve(async (req) => {
           console.warn('[Ilean] RAG search failed:', ragErr);
         }
 
-        // Build context-aware prompt — Ilean should proxy real Senslinc doc Q&A, not invent answers
-        const systemPrompt = `Du är Ilean, en AI-assistent som svarar på frågor om dokument i fastighetssystemet Senslinc. Du är integrerad i Geminus digital twin-plattform.
+        // Build context-aware prompt with RAG document context if available
+        const hasRagContext = ragChunks.length > 0;
+        const ragContextBlock = hasRagContext
+          ? `\n\nDOKUMENTKONTEXT (från indexerade dokument):\n${ragChunks.map((c, i) => `[${i + 1}] Källa: ${c.file_name || 'okänd'}\n${c.content.slice(0, 600)}`).join('\n\n')}\n\nAnvänd ovanstående dokumentkontext för att besvara frågan. Citera alltid källa (filnamn) när du refererar till information.`
+          : '';
+
+        const systemPrompt = `Du är Ilean, en AI-assistent som svarar på frågor om dokument i fastighetssystemet. Du är integrerad i Geminus digital twin-plattform.
 
 Aktuell kontext:
 - Entitet: ${entityName || 'Okänd'}
 - Kontextnivå: ${level === 'building' ? 'Byggnad' : level === 'floor' ? 'Våningsplan' : 'Rum/utrymme'}
-- API-typ: ${entityApiType}
-${entityPk ? `- Senslinc PK: ${entityPk}` : '- Ingen Senslinc-koppling hittad'}
+${entityPk ? `- Senslinc PK: ${entityPk}` : ''}
+${hasRagContext ? `- Antal dokumentkällor: ${ragSources.length}` : '- Inga indexerade dokument hittades'}
+${ragContextBlock}
 
-VIKTIGT: Senslinc Ilean API kunde inte nås direkt. Informera användaren att du inte kan söka i dokumenten just nu och föreslå att de:
-1. Kontrollerar att Ilean är aktiverat för denna fastighet i Senslinc
-2. Försöker igen om en stund
-3. Öppnar Senslinc direkt via "Öppna i Senslinc"-knappen
+${hasRagContext
+  ? 'Basera ditt svar på dokumentkontexten ovan. Om informationen inte räcker, säg det tydligt. Hitta INTE PÅ innehåll utöver vad dokumenten visar.'
+  : 'VIKTIGT: Inga dokument hittades. Informera användaren att inga relevanta dokument finns indexerade och föreslå att de laddar upp eller indexerar dokument via inställningarna.'}
 
-Svara ALLTID på samma språk som användaren skriver. Hitta INTE PÅ dokumentinnehåll.`;
+Svara ALLTID på samma språk som användaren skriver.`;
 
         const aiMessages = [
           { role: 'system', content: systemPrompt },
