@@ -38,7 +38,7 @@ const IFC_CATEGORIES = [
   { key: 'ifcwindow', label: 'Fönster', defaultColor: '#C7C7C2' },
   { key: 'ifcslab', label: 'Golv/Tak', defaultColor: '#999B97' },
   { key: 'ifcroof', label: 'Tak', defaultColor: '#999B97' },
-  { key: 'ifcspace', label: 'Rum', defaultColor: '#E5E4E3' },
+  { key: 'ifcspace', label: 'Rum', defaultColor: '#B8D4E3' },
   { key: 'ifcstair', label: 'Trappor', defaultColor: '#999B97' },
   { key: 'ifcrailing', label: 'Räcken', defaultColor: '#BDBAAB' },
   { key: 'ifcfurnishingelement', label: 'Möbler', defaultColor: '#738B77' },
