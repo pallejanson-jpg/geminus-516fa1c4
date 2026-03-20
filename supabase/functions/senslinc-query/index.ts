@@ -1006,7 +1006,15 @@ Svara ALLTID på samma språk som användaren skriver.`;
 
           const aiData = await aiResp.json();
           const answer = aiData.choices?.[0]?.message?.content || 'No response generated.';
-          return jsonResponse({ success: true, data: { answer, source: 'lovable-ai-fallback' } });
+          return jsonResponse({
+            success: true,
+            data: {
+              answer,
+              source: hasRagContext ? 'rag-documents' : 'lovable-ai-fallback',
+              sources: ragSources,
+              documentCount: ragChunks.length,
+            },
+          });
         } catch (e) {
           console.error('[Ilean] AI fallback error:', e);
           return jsonResponse({
