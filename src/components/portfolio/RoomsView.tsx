@@ -61,6 +61,26 @@ import { CSS } from '@dnd-kit/utilities';
 import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDialog';
 import { useToast } from '@/hooks/use-toast';
 
+// Deterministic color palette for room name grouping
+const ROOM_NAME_COLORS = [
+  'hsl(210, 70%, 55%)', 'hsl(142, 60%, 45%)', 'hsl(48, 85%, 50%)',
+  'hsl(262, 65%, 55%)', 'hsl(330, 65%, 55%)', 'hsl(190, 70%, 45%)',
+  'hsl(25, 75%, 50%)', 'hsl(100, 55%, 45%)', 'hsl(280, 55%, 60%)',
+  'hsl(0, 65%, 55%)', 'hsl(170, 60%, 42%)', 'hsl(60, 70%, 48%)',
+  'hsl(220, 55%, 60%)', 'hsl(305, 50%, 55%)', 'hsl(15, 80%, 52%)',
+  'hsl(130, 50%, 50%)',
+];
+
+const ROOM_SENSOR_METRICS = [
+  { key: 'temperature' as VisualizationType, label: 'Temp', unit: '°C', icon: Thermometer },
+  { key: 'co2' as VisualizationType, label: 'CO₂', unit: 'ppm', icon: Wind },
+  { key: 'humidity' as VisualizationType, label: 'Humidity', unit: '%', icon: Droplets },
+  { key: 'occupancy' as VisualizationType, label: 'Occupancy', unit: '%', icon: Users },
+] as const;
+
+const rgbToHex = (rgb: [number, number, number]) =>
+  '#' + rgb.map(c => Math.round(c).toString(16).padStart(2, '0')).join('');
+
 interface RoomData {
   fmGuid: string;
   [key: string]: any;
