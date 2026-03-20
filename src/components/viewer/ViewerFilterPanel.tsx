@@ -339,8 +339,20 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   // ── Spaces: cascading from checked levels (Source→Level→Space funnel) ───
   const spaces: SpaceItem[] = useMemo(() => {
+    // Build set of A-model level GUIDs for filtering
+    const aModelLevelGuids = new Set<string>();
+    levels.forEach(l => l.allGuids.forEach(g => aModelLevelGuids.add(g)));
+
     const allSpaces = buildingData
-      .filter((a: any) => a.category === 'Space' || a.category === 'IfcSpace');
+      .filter((a: any) => {
+        if (a.category !== 'Space' && a.category !== 'IfcSpace') return false;
+        // Only include spaces belonging to A-model levels
+        const levelGuid = normalizeGuid(a.levelFmGuid || a.level_fm_guid || '');
+        if (aModelLevelGuids.size > 0 && levelGuid) {
+          return aModelLevelGuids.has(levelGuid);
+        }
+        return true;
+      });
 
     const normalizedCheckedSourceGuids = new Set(Array.from(checkedSources).map(g => normalizeGuid(g)));
     const normalizedCheckedLevelGuids = new Set(Array.from(checkedLevels).map(g => normalizeGuid(g)));
