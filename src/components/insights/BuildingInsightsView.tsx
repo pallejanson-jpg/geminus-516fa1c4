@@ -995,7 +995,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                             });
                                                                         }
                                                                         handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
-                                                                    }
+                                                                    }}
                                                                 />
                                                             ))}
                                                         </Pie>
