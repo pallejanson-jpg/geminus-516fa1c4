@@ -898,6 +898,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           )}
 
           {isToolVisible('spaces') && (
+            <>
             <div className="flex items-center justify-between py-1.5 sm:py-2">
               <div className="flex items-center gap-2 sm:gap-3">
                 <div className={cn("p-1 sm:p-1.5 rounded-md", showSpaces ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
@@ -944,6 +945,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                 </div>
               </div>
             )}
+            </>
           )}
 
           {/* X-ray Toggle */}
