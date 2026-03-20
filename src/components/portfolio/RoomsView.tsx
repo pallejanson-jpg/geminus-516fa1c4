@@ -755,56 +755,99 @@ const RoomsView: React.FC<RoomsViewProps> = ({
           /* Gallery View */
           <div className="p-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredRooms.map((room) => (
-                <Card
-                  key={room.fmGuid}
-                  className={`overflow-hidden group cursor-pointer hover:border-primary/50 transition-all ${
-                    selectedRows.has(room.fmGuid) ? 'ring-2 ring-primary' : ''
-                  }`}
-                  onClick={() => handleSelectRow(room.fmGuid, !selectedRows.has(room.fmGuid))}
-                >
-                  <div className="h-24 bg-gradient-to-br from-primary/20 to-accent/20 relative flex items-center justify-center">
-                    <DoorOpen className="h-10 w-10 text-primary/40" />
-                    <div className="absolute top-2 right-2 flex items-center gap-2">
-                      <Badge variant="secondary" className="text-[10px]">
-                        {room.levelCommonName}
-                      </Badge>
-                      <Checkbox
-                        checked={selectedRows.has(room.fmGuid)}
-                        onClick={(e) => e.stopPropagation()}
-                        onCheckedChange={(checked) => handleSelectRow(room.fmGuid, !!checked)}
-                      />
+              {filteredRooms.map((room) => {
+                const nameColor = roomNameColorMap[String(room.commonName || '')];
+                const sensorVal = roomSensorValues.get(room.fmGuid) ?? null;
+                const sensorRgb = activeSensorMetric !== 'none' && sensorVal !== null
+                  ? getVisualizationColor(sensorVal, activeSensorMetric)
+                  : null;
+                const sensorHex = sensorRgb ? rgbToHex(sensorRgb) : null;
+
+                // Use sensor color if metric active, else room name color
+                const cardBorderColor = sensorHex ? sensorHex + '88' : nameColor;
+                const cardBgColor = sensorHex ? sensorHex + '18' : nameColor ? nameColor.replace(')', ', 0.08)').replace('hsl(', 'hsla(') : undefined;
+                const headerBg = sensorHex
+                  ? `linear-gradient(135deg, ${sensorHex}33, ${sensorHex}11)`
+                  : nameColor
+                    ? `linear-gradient(135deg, ${nameColor.replace(')', ', 0.25)').replace('hsl(', 'hsla(')}, ${nameColor.replace(')', ', 0.08)').replace('hsl(', 'hsla(')})`
+                    : undefined;
+
+                return (
+                  <Card
+                    key={room.fmGuid}
+                    className={`overflow-hidden group cursor-pointer hover:shadow-md transition-all ${
+                      selectedRows.has(room.fmGuid) ? 'ring-2 ring-primary' : ''
+                    }`}
+                    style={{
+                      borderColor: cardBorderColor,
+                      backgroundColor: cardBgColor,
+                    }}
+                    onClick={() => handleSelectRow(room.fmGuid, !selectedRows.has(room.fmGuid))}
+                  >
+                    <div
+                      className="h-20 relative flex items-center justify-center"
+                      style={{ background: headerBg || 'linear-gradient(135deg, hsl(var(--primary) / 0.15), hsl(var(--accent) / 0.15))' }}
+                    >
+                      {activeSensorMetric !== 'none' && sensorVal !== null ? (
+                        <div className="text-center">
+                          <div className="text-2xl font-bold" style={{ color: sensorHex || 'hsl(var(--foreground))' }}>
+                            {sensorVal.toFixed(1)}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground">{activeSensorDef?.unit}</div>
+                        </div>
+                      ) : activeSensorMetric !== 'none' ? (
+                        <span className="text-xs text-muted-foreground">No data</span>
+                      ) : (
+                        <DoorOpen className="h-10 w-10" style={{ color: nameColor ? nameColor.replace(')', ', 0.5)').replace('hsl(', 'hsla(') : 'hsl(var(--primary) / 0.4)' }} />
+                      )}
+                      <div className="absolute top-2 right-2 flex items-center gap-2">
+                        <Badge variant="secondary" className="text-[10px]">
+                          {room.levelCommonName}
+                        </Badge>
+                        <Checkbox
+                          checked={selectedRows.has(room.fmGuid)}
+                          onClick={(e) => e.stopPropagation()}
+                          onCheckedChange={(checked) => handleSelectRow(room.fmGuid, !!checked)}
+                        />
+                      </div>
+                      {/* Name color dot */}
+                      {nameColor && activeSensorMetric === 'none' && (
+                        <div
+                          className="absolute top-2 left-2 h-3 w-3 rounded-full border border-background/50"
+                          style={{ backgroundColor: nameColor }}
+                        />
+                      )}
                     </div>
-                  </div>
-                  <CardContent className="p-3">
-                    <h3 className="font-semibold text-sm truncate">
-                      {room.commonName}
-                    </h3>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {room.roomNumber}
-                    </p>
-                    <div className="flex items-center justify-between mt-2">
-                      <span className="text-xs font-medium">
-                        {typeof room.nta === 'number' && room.nta > 0 
-                          ? `${Math.round(room.nta)} m²` 
-                          : '-'}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpen3D(room);
-                        }}
-                        title="Visa i 3D"
-                      >
-                        <Cuboid size={12} />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    <CardContent className="p-3">
+                      <h3 className="font-semibold text-sm truncate">
+                        {room.commonName}
+                      </h3>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {room.roomNumber}
+                      </p>
+                      <div className="flex items-center justify-between mt-2">
+                        <span className="text-xs font-medium">
+                          {typeof room.nta === 'number' && room.nta > 0 
+                            ? `${Math.round(room.nta)} m²` 
+                            : '-'}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpen3D(room);
+                          }}
+                          title="Visa i 3D"
+                        >
+                          <Cuboid size={12} />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
               {filteredRooms.length === 0 && (
                 <div className="col-span-full text-center py-12 text-muted-foreground">
                   <DoorOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
