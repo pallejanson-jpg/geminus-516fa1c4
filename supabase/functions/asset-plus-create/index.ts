@@ -135,8 +135,9 @@ async function upsertRoomRelationships(
   const payload = {
     APIKey: apiKey,
     Relationships: relationships.map(r => ({
-      ParentFmGuid: r.parentFmGuid,
-      ChildFmGuid: r.childFmGuid,
+      FmGuid1: r.parentFmGuid,
+      FmGuid2: r.childFmGuid,
+      UsedIdentifier: 1,
     })),
   };
 
