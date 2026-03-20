@@ -872,35 +872,58 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     let sourceIds: Set<string> | null = null;
     if (checkedSources.size > 0) {
       sourceIds = new Set<string>();
+      
+      // Collect all objects from checked source models via scene.models
+      const sceneModels2 = viewer.scene.models || {};
+      const metaObjects = viewer.metaScene?.metaObjects;
+      
+      // Build lookup: source guid → scene model IDs
+      const checkedSourceGuidsNorm = new Set(Array.from(checkedSources).map(g => normalizeGuid(g)));
+      
+      // Direct match: try checked source GUID as scene model ID
+      checkedSources.forEach(srcGuid => {
+        const sceneModel = sceneModels2[srcGuid];
+        if (sceneModel) {
+          const objs = sceneModel.objects || {};
+          const objKeys = Array.isArray(objs) ? objs.map((e: any) => e.id).filter(Boolean) : Object.keys(objs);
+          objKeys.forEach((id: string) => sourceIds!.add(id));
+        }
+      });
+      
+      // Match via sharedModels (name or ID match)
+      const checkedSourceNames = new Set(
+        sources.filter(s => checkedSources.has(s.guid)).map(s => s.name.toLowerCase())
+      );
+      
+      sharedModels.forEach(sm => {
+        const guidMatch = checkedSourceGuidsNorm.has(normalizeGuid(sm.id));
+        const nameMatch = checkedSourceNames.has((sm.name || '').toLowerCase());
+        
+        if (guidMatch || nameMatch) {
+          const sceneModel = sceneModels2[sm.id];
+          if (sceneModel) {
+            const objs = sceneModel.objects || {};
+            const objKeys = Array.isArray(objs) ? objs.map((e: any) => e.id).filter(Boolean) : Object.keys(objs);
+            objKeys.forEach((id: string) => sourceIds!.add(id));
+            
+            // Fallback: if scene model has no objects, use metaObjects
+            if (objKeys.length === 0 && metaObjects) {
+              Object.values(metaObjects).forEach((mo: any) => {
+                if (mo.metaModel?.id === sm.id) sourceIds!.add(mo.id);
+              });
+            }
+          }
+        }
+      });
+      
+      // Also add from entityMap (level-based)
       levels.filter(l => checkedSources.has(l.sourceGuid)).forEach(l => {
         eMap.get(l.fmGuid)?.forEach(id => sourceIds!.add(id));
       });
       checkedSources.forEach(srcGuid => {
         eMap.get(`source::${srcGuid}`)?.forEach(id => sourceIds!.add(id));
       });
-      // Scene model fallback
-      const checkedSourceNames = new Set(
-        sources.filter(s => checkedSources.has(s.guid)).map(s => s.name.toLowerCase())
-      );
-      const sceneModels2 = viewer.scene.models || {};
-      const metaObjects = viewer.metaScene?.metaObjects;
-      if (metaObjects) {
-        sharedModels.forEach(sm => {
-          if (checkedSourceNames.has(sm.name.toLowerCase())) {
-            const sceneModel = sceneModels2[sm.id];
-            if (sceneModel) {
-              const objs = sceneModel.objects || {};
-              const objKeys = Array.isArray(objs) ? objs.map((e: any) => e.id).filter(Boolean) : Object.keys(objs);
-              objKeys.forEach((id: string) => sourceIds!.add(id));
-              if (objKeys.length === 0) {
-                Object.values(metaObjects).forEach((mo: any) => {
-                  if (mo.metaModel?.id === sm.id) sourceIds!.add(mo.id);
-                });
-              }
-            }
-          }
-        });
-      }
+      
       if (sourceIds.size === 0) {
         console.warn('[FilterPanel] Source filter produced 0 IDs — falling back to all objects');
         sourceIds = null;
