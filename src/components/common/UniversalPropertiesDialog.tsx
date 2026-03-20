@@ -656,9 +656,10 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           displayLabel = value.name || key;
         }
         
-        // Determine section
+        // Determine section: GUID values → system, area fields → area, rest → geminus
         const keyLower = key.toLowerCase();
         const isArea = AREA_FIELDS.some(f => keyLower.includes(f));
+        const valIsGuid = isGuidValue(displayValue);
         
         props.push({
           key: `attr_${key}`,
@@ -667,7 +668,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           editable: false,
           source: 'asset-plus',
           type: typeof displayValue === 'number' ? 'number' : 'text',
-          section: isArea ? 'area' : 'user-defined',
+          section: valIsGuid ? 'system' : (isArea ? 'area' : 'geminus'),
         });
       });
     }
