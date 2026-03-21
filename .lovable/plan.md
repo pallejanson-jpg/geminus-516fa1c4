@@ -1,92 +1,47 @@
 
 
-## Plan: Mobile Responsiveness Fixes + Conditional Object Color Filters
+## Plan: Update Presentation Content + Generate PPTX Export
 
-### 1. CreateIssueDialog — Mobile scrollability fix
+### Part 1 — Content updates in `src/pages/Presentation.tsx`
 
-**Problem:** On mobile, the bottom-sheet form content overflows and isn't scrollable.
+**A. Add Tribia / INTERAXO to ecosystem**
 
-**Fix in `CreateIssueDialog.tsx`:**
-- Change the mobile bottom-sheet container from `max-h-[90dvh]` to `max-h-[85dvh]` with `overflow-hidden flex flex-col`
-- Make the form area `flex-1 overflow-y-auto` instead of relying on `max-h-[60vh]`
-- Ensure footer stays pinned at the bottom with `flex-shrink-0`
+- **HubSlide**: Add 6th node "Tribia / INTERAXO" with a teal/sky color (e.g. `border-sky-400/70 bg-sky-500/20`). Position it top-right in the hub diagram. Add SVG connector line from center. Update bottom text from "five" to "six".
+- **UnlocksSlide**: Add a 6th row: `{ company: "Tribia", badge: "Doc", value: "INTERAXO project documentation flows into Geminus — construction data becomes an operational asset" }`
+- **CompetitionSlide**: Add "Tribia / INTERAXO" to the "Full Addnode data stack" line in the advantage panel.
+- **Speaker notes**: Update slides 3, 4, 7 to mention Tribia/INTERAXO.
 
-### 2. Pick-position badge — Move out of center
+**B. Reframe Symetri/ACC as "handover"**
 
-**Problem:** The "Klicka för att välja position" badge sits dead center (`top-1/2 left-1/2 -translate-x/y-1/2`) and blocks the view.
+- **UnlocksSlide** row for Symetri: Change value to "ACC and Symetri solutions flow into the operational phase — a seamless handover from project to Geminus"
+- **Speaker notes** slide 4: Update accordingly.
 
-**Fix in `NativeViewerShell.tsx` (line ~936):**
-- Reposition to top-left with safe-area offset: `absolute top-3 left-3 z-50` (same pattern as `AssetRegistration.tsx`)
-- Remove the centering transforms
+**C. Change "team/we" to "I"**
 
-### 3. Context menu won't close on outside tap (mobile)
+- Scan all NOTES and slide text for "we" or "team" implying a group. Key changes:
+  - NOTES slide 5: "What we are asking for" → "What I am asking for"
+  - NOTES slide 7: "That is our moat" → "That is the moat"
+  - Slide 3 bottom: Update note about "Geminus is the missing center" (already fine, no "we")
+  - Competition advantage sub-text: "built and owned by Addnode" (fine)
 
-**Problem:** The `mousedown` capture listener doesn't fire reliably on mobile touch. The xeokit canvas consumes touch events before they reach the document.
+### Part 2 — PPTX Export (script-generated artifact)
 
-**Fix in `ViewerContextMenu.tsx`:**
-- Add `touchstart` listener alongside `mousedown` in the click-outside handler (both in capture phase)
-- Add a full-screen invisible backdrop `div` behind the menu (z-index below menu, above canvas) that closes on tap — more reliable than document-level listeners when xeokit swallows events
+Generate `/mnt/documents/geminus-presentation.pptx` using `pptxgenjs`:
 
-### 4. Color filters not working
+- **11 slides** matching the React presentation content
+- **Dark theme**: dark navy/charcoal backgrounds (`0A0E1A`), white/cyan text
+- **Each slide**: title, subtitle, key content (bullet points, stats, table for competition matrix)
+- **Speaker notes** included on each slide via `slide.addNotes()`
+- **Images**: The 4 screenshot PNGs and hero image will be embedded as base64
+- **Font**: Arial (universally supported)
+- **Slide dimensions**: 16:9 widescreen (default pptxgenjs)
 
-**Problem:** The `RoomVisualizationPanel` accesses the viewer via the old Asset+ shim path (`viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer`). If the shim isn't fully wired or the native xeokit viewer is used directly, the path returns `undefined` and no colorization happens.
+The PPTX won't be pixel-identical to the React version but will carry all content, structure, speaker notes, and a consistent dark theme that can be edited in PowerPoint.
 
-**Fix in `RoomVisualizationPanel.tsx`:**
-- Add fallback viewer resolution: try the shim path first, then try `viewerRef.current?.viewer` (the native xeokit viewer directly)
-- Extract viewer resolution into a shared helper used by entity cache builder, colorizeSpace, hover listener, and legend selection
-- Ensure `entityIdCache` rebuild uses the same fallback
-
-### 5. Conditional object color filters — New feature
-
-**New component: `ObjectColorFilterPanel.tsx`** added to the Settings section of `VisualizationToolbar`.
-
-Allows users to create rules that colorize **any** BIM object (not just spaces) based on property conditions.
-
-**Data model (localStorage-persisted):**
-```typescript
-interface ColorFilterRule {
-  id: string;
-  name: string;           // e.g. "Fire doors EI60"
-  color: string;          // hex color
-  enabled: boolean;
-  conditions: ColorFilterCondition[];
-  logic: 'AND' | 'OR';   // how conditions combine
-}
-
-interface ColorFilterCondition {
-  target: 'category' | 'property';  // IFC category or object property
-  field: string;         // e.g. "IfcDoor", "FireRating", "Width"
-  operator: 'equals' | 'contains' | 'gt' | 'lt' | 'gte' | 'lte';
-  value: string;
-}
-```
-
-**UI design:**
-- Added under "Viewer Settings" as a collapsible "Object color rules" section
-- Each rule has: name field, color picker, one or more conditions (add/remove), AND/OR toggle
-- Condition row: Category dropdown (IfcDoor, IfcWall, IfcSpace, etc.) + Property name input + Operator select + Value input
-- Enable/disable toggle per rule
-- "Apply" button that iterates metaScene objects, evaluates conditions, and sets `entity.colorize`
-
-**Execution logic:**
-- On apply, iterate all `metaScene.metaObjects`
-- For each object, check if its `type` (IFC category) and properties match the conditions
-- Properties come from the object's metadata or from `allData` attributes lookup by `originalSystemId`
-- Matching objects get `entity.colorize = [r, g, b]`; non-matching get reset
-- Persisted to localStorage so rules survive page reload
-
-**Integration in `VisualizationToolbar.tsx`:**
-- Add `ObjectColorFilterPanel` (embedded) inside the Settings collapsible, after the lighting controls
-- Pass `viewerRef` and `buildingFmGuid`
-
-### Files Modified
+### Files
 
 | File | Change |
 |---|---|
-| `src/components/viewer/CreateIssueDialog.tsx` | Fix mobile overflow: flex layout + proper scroll |
-| `src/components/viewer/NativeViewerShell.tsx` | Move pick-position badge to top-left corner |
-| `src/components/viewer/ViewerContextMenu.tsx` | Add touchstart listener + invisible backdrop for mobile close |
-| `src/components/viewer/RoomVisualizationPanel.tsx` | Add fallback viewer resolution for native xeokit path |
-| `src/components/viewer/ObjectColorFilterPanel.tsx` | **New** — conditional object color filter rules UI + logic |
-| `src/components/viewer/VisualizationToolbar.tsx` | Integrate ObjectColorFilterPanel in Settings section |
+| `src/pages/Presentation.tsx` | Add Tribia/INTERAXO, reframe Symetri handover, solo "I" language |
+| `/mnt/documents/geminus-presentation.pptx` | Generated PPTX export via pptxgenjs script |
 
