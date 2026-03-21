@@ -318,7 +318,7 @@ const HubSlide = () => {
 
         <div className="mt-4 text-center">
           <p className="text-[24px] text-white/80 font-medium">
-            All five already sit inside Addnode's <span className="text-cyan-300 font-bold">Design Management</span> business area.
+            All six already sit inside Addnode's <span className="text-cyan-300 font-bold">Design Management</span> business area.
             <span className="text-white font-bold"> Geminus is the missing center.</span>
           </p>
         </div>
