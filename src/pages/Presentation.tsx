@@ -337,7 +337,7 @@ const UnlocksSlide = () => {
       company: "Symetri",
       badge: "BIM",
       badgeColor: "bg-blue-500/20 border-blue-400/50 text-blue-300",
-      value: "Their ACC/BIM data becomes useful in Operations — FM customers stay on Autodesk for life",
+      value: "ACC and Symetri solutions flow into the operational phase — a seamless handover from project to Geminus",
       arrowColor: "text-blue-400",
     },
     {
