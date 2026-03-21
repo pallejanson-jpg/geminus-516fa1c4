@@ -306,6 +306,13 @@ const HubSlide = () => {
               <p className="text-[14px] text-white/75 mt-1">IoT real-time data</p>
             </div>
 
+            {/* Tribia — top right */}
+            <div className="absolute flex flex-col items-center justify-center rounded-2xl border-2 border-sky-400/70 bg-sky-500/20 text-center px-5 py-4"
+              style={{ width: 220, height: 100, left: 810, top: 30, zIndex: 10 }}>
+              <p className="text-[20px] font-bold text-sky-300 leading-tight">Tribia / INTERAXO</p>
+              <p className="text-[14px] text-white/75 mt-1">Project documentation</p>
+            </div>
+
           </div>
         </div>
 
