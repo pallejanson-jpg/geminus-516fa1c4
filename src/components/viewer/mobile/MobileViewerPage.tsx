@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef, useContext } from 'react';
+import ViewerFilterPanel from '@/components/viewer/ViewerFilterPanel';
 import {
   X, Menu, Orbit, Hand, Maximize, MousePointer, Ruler,
   Scissors, Square, Box, LayoutPanelLeft, View,
@@ -95,6 +96,7 @@ const DEFAULT_ENABLED = ['orbit', 'pan', 'fit', 'resetView', 'select', 'measure'
 /* ── Action Sheet menu items ── */
 const MENU_ITEMS = [
   { id: 'viewMode', Icon: Box, label: 'View Mode', hasSubmenu: true },
+  { id: 'filter', Icon: Filter, label: 'Filter', hasSubmenu: true },
   { id: 'display', Icon: Eye, label: 'Display', hasSubmenu: true },
   { id: 'colorFilter', Icon: Palette, label: 'Color filter', hasSubmenu: true },
   { id: 'actions', Icon: Camera, label: 'Actions', hasSubmenu: true },
@@ -102,7 +104,7 @@ const MENU_ITEMS = [
   { id: 'settings', Icon: Settings, label: 'Settings', hasSubmenu: true },
 ];
 
-type SubSheetId = 'viewMode' | 'toolbarConfig' | 'display' | 'colorFilter' | 'actions' | 'settings' | null;
+type SubSheetId = 'viewMode' | 'toolbarConfig' | 'display' | 'filter' | 'colorFilter' | 'actions' | 'settings' | null;
 
 const getViewer = () => (window as any).__nativeXeokitViewer;
 
@@ -153,6 +155,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
   const [isXrayActive, setIsXrayActive] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [subSheet, setSubSheet] = useState<SubSheetId>(null);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [enabledTools, setEnabledTools] = useState<string[]>(DEFAULT_ENABLED);
   const [soloFloorId, setSoloFloorId] = useState<string | null>(null);
 
@@ -541,6 +544,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
   const handleMenuItem = useCallback((id: string) => {
     switch (id) {
       case 'viewMode': setSubSheet('viewMode'); break;
+      case 'filter': setSheetOpen(false); setTimeout(() => setShowFilterPanel(true), 200); break;
       case 'display': setSubSheet('display'); break;
       case 'colorFilter': setSubSheet('colorFilter'); break;
       case 'actions': setSubSheet('actions'); break;
@@ -668,8 +672,8 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
 
       {/* ── Action Sheet (Drawer) ── */}
       <Drawer open={sheetOpen} onOpenChange={setSheetOpen}>
-        <DrawerContent className="max-h-[85dvh]">
-          <ScrollArea className="max-h-[80dvh]">
+        <DrawerContent className="max-h-[92dvh]">
+          <ScrollArea className="max-h-[88dvh]">
 
           {/* ── Main menu ── */}
           {subSheet === null && (
@@ -953,6 +957,14 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
           </ScrollArea>
         </DrawerContent>
       </Drawer>
+
+      {/* ── Filter panel (opens as fixed overlay) ── */}
+      <ViewerFilterPanel
+        viewerRef={viewerInstanceRef}
+        buildingFmGuid={buildingData.fmGuid}
+        isVisible={showFilterPanel}
+        onClose={() => setShowFilterPanel(false)}
+      />
 
       {/* ── Insights panel ── */}
       {insightsPanelOpen && (
