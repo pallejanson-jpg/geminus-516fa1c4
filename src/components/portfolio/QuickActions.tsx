@@ -66,7 +66,12 @@ const QuickActions: React.FC<QuickActionsProps> = ({
 
   // Unified navigation helper — always routes to /viewer with correct params
   const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid || facility.fmGuid;
-  const floorParam = isStorey ? `&floor=${facility.fmGuid}&floorName=${encodeURIComponent(facility.commonName || facility.name || '')}` : '';
+  // For storeys, isolate that floor; for spaces, also isolate the parent floor so the viewer clips correctly
+  const floorParam = isStorey
+    ? `&floor=${facility.fmGuid}&floorName=${encodeURIComponent(facility.commonName || facility.name || '')}`
+    : isSpace && (facility as any).levelFmGuid
+      ? `&floor=${(facility as any).levelFmGuid}`
+      : '';
   const entityParam = isSpace ? `&entity=${facility.fmGuid}` : '';
   
   const navigateToViewer = useCallback(() => {
