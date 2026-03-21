@@ -125,11 +125,25 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       if (activeJobIdRef.current) {
         e.preventDefault();
         e.returnValue = 'IFC-konvertering pågår. Är du säker på att du vill lämna?';
-        // Mark job as failed on unload (best-effort via sendBeacon)
+        // Mark job as failed on unload (best-effort via sendBeacon with auth headers)
         const jobId = activeJobIdRef.current;
+        const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
         const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/conversion_jobs?id=eq.${jobId}`;
         const body = JSON.stringify({ status: 'error', error_message: 'Browser tab closed during conversion', updated_at: new Date().toISOString() });
-        navigator.sendBeacon?.(url, new Blob([body], { type: 'application/json' }));
+        // sendBeacon doesn't support custom headers, so we use fetch with keepalive instead
+        try {
+          fetch(url, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': anonKey,
+              'Authorization': `Bearer ${anonKey}`,
+              'Prefer': 'return=minimal',
+            },
+            body,
+            keepalive: true,
+          });
+        } catch (_) { /* best-effort */ }
       }
     };
     window.addEventListener('beforeunload', handler);
