@@ -157,7 +157,7 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
           "fixed z-[71] border shadow-xl bg-card",
           "animate-in fade-in-0 duration-200",
           isMobile
-            ? "inset-x-0 bottom-0 rounded-t-2xl max-h-[90dvh] w-full slide-in-from-bottom-10"
+            ? "inset-x-0 bottom-0 rounded-t-2xl max-h-[85dvh] w-full slide-in-from-bottom-10 flex flex-col overflow-hidden"
             : cn(
                 "rounded-lg w-[480px] max-w-[calc(100vw-40px)] zoom-in-95",
                 isDragging && "cursor-grabbing"
@@ -189,12 +189,12 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
           </Button>
         </div>
 
-        <p className="text-sm text-muted-foreground px-4 pt-3">
+        <p className="text-sm text-muted-foreground px-4 pt-3 flex-shrink-0">
           Report a problem or suggestion related to the model.
         </p>
 
         {/* Form content */}
-        <form id="issue-form" onSubmit={handleSubmit} className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+        <form id="issue-form" onSubmit={handleSubmit} className="p-4 space-y-4 flex-1 overflow-y-auto">
           {/* Screenshot preview */}
           {screenshotUrl && (
             <div className="rounded-md overflow-hidden border bg-muted/50">
@@ -309,7 +309,7 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
         </form>
 
         {/* Footer buttons */}
-        <div className="flex justify-end gap-2 px-4 py-3 border-t">
+        <div className="flex justify-end gap-2 px-4 py-3 border-t flex-shrink-0">
           <Button
             type="button"
             variant="outline"

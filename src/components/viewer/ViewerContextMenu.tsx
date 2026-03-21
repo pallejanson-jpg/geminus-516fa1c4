@@ -64,14 +64,15 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
     return () => window.removeEventListener(CONTEXT_MENU_SETTINGS_CHANGED_EVENT, handler);
   }, []);
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
     };
     const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     // Use capture phase to ensure we see events even if xeokit stops propagation
     document.addEventListener('mousedown', handleClickOutside, true);
+    document.addEventListener('touchstart', handleClickOutside, true);
     document.addEventListener('keydown', handleKeyDown);
-    return () => { document.removeEventListener('mousedown', handleClickOutside, true); document.removeEventListener('keydown', handleKeyDown); };
+    return () => { document.removeEventListener('mousedown', handleClickOutside, true); document.removeEventListener('touchstart', handleClickOutside, true); document.removeEventListener('keydown', handleKeyDown); };
   }, [onClose]);
 
   const menuWidth = 220;
@@ -105,6 +106,9 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   items.push({ icon: MessageSquare, label: 'Show issues', action: onViewIssues });
 
   return (
+    <>
+    {/* Invisible backdrop to catch taps on mobile */}
+    <div className="fixed inset-0 z-[99]" onClick={onClose} onTouchStart={onClose} />
     <div
       ref={menuRef}
       className="fixed z-[100] min-w-[200px] rounded-lg border border-zinc-700 bg-zinc-900/95 backdrop-blur-md shadow-xl animate-in fade-in-0 zoom-in-95 duration-100 text-zinc-100"
@@ -133,6 +137,7 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
         ))}
       </div>
     </div>
+    </>
   );
 };
 
