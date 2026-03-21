@@ -231,7 +231,7 @@ const HubSlide = () => {
     { name: "Symetri / ACC", sub: "BIM & construction data", color: "border-blue-400/70 bg-blue-500/20", tc: "text-blue-300", pos: "top" },
     { name: "In Use", sub: "Space utilization data", color: "border-violet-400/70 bg-violet-500/20", tc: "text-violet-300", pos: "left" },
     { name: "Bimify", sub: "AI scan-to-BIM", color: "border-purple-400/70 bg-purple-500/20", tc: "text-purple-300", pos: "right" },
-    { name: "SWG / Asset+", sub: "FM operations platform", color: "border-emerald-400/70 bg-emerald-500/20", tc: "text-emerald-300", pos: "bottom-left" },
+    { name: "SWG", sub: "Asset+ & 3 CAFM systems", color: "border-emerald-400/70 bg-emerald-500/20", tc: "text-emerald-300", pos: "bottom-left" },
     { name: "Senslinc", sub: "IoT real-time data", color: "border-orange-400/70 bg-orange-500/20", tc: "text-orange-300", pos: "bottom-right" },
   ];
 
