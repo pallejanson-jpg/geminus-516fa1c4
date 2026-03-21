@@ -32,6 +32,8 @@ const FaultReport = lazy(() => import("@/pages/FaultReport"));
 const AutodeskCallback = lazy(() => import("@/pages/AutodeskCallback"));
 // Jury presentation slide deck
 const Presentation = lazy(() => import("@/pages/Presentation"));
+// Internal showcase presentation
+const Presentation2 = lazy(() => import("@/pages/Presentation2"));
 // FM Access dashboard
 const FmAccessDashboard = lazy(() => import("@/pages/FmAccessDashboard"));
 // Issue resolution page (public, accessed via token link)
@@ -222,6 +224,16 @@ const App = () => {
             element={
               <Suspense fallback={<div className="flex items-center justify-center h-screen bg-black">Loading...</div>}>
                 <Presentation />
+              </Suspense>
+            } 
+          />
+          
+          {/* Internal showcase presentation - public, no auth */}
+          <Route 
+            path="/presentation2" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen bg-black">Loading...</div>}>
+                <Presentation2 />
               </Suspense>
             } 
           />
