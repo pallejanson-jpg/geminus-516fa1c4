@@ -1191,11 +1191,11 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
         {/* Mobile: Bottom Drawer */}
         {isOpen && isMobile && (
           <Drawer open={isOpen} onOpenChange={handleSetIsOpen}>
-            <DrawerContent className="max-h-[75dvh]">
+            <DrawerContent className="max-h-[92dvh]">
               <DrawerHeader className="py-2 px-3">
                 <DrawerTitle className="text-sm">Display</DrawerTitle>
               </DrawerHeader>
-              <div className="px-3 pb-3 overflow-y-auto max-h-[60dvh]">
+              <div className="px-3 pb-3 overflow-y-auto max-h-[85dvh]">
                 {toolbarContent}
               </div>
             </DrawerContent>
