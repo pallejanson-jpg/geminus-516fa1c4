@@ -356,7 +356,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     // Fallback to viewer method if not in cache
     const viewer = viewerRef.current;
     const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
-    if (assetView) {
+    if (assetView?.getItemsByPropertyValue) {
       return assetView.getItemsByPropertyValue('fmguid', fmGuidToFind.toUpperCase()) || [];
     }
     return [];
