@@ -104,7 +104,7 @@ const MENU_ITEMS = [
   { id: 'settings', Icon: Settings, label: 'Settings', hasSubmenu: true },
 ];
 
-type SubSheetId = 'viewMode' | 'toolbarConfig' | 'display' | 'colorFilter' | 'actions' | 'settings' | null;
+type SubSheetId = 'viewMode' | 'toolbarConfig' | 'display' | 'filter' | 'colorFilter' | 'actions' | 'settings' | null;
 
 const getViewer = () => (window as any).__nativeXeokitViewer;
 
