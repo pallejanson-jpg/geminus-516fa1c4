@@ -67,6 +67,35 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
     return () => { mountedRef.current = false; };
   }, []);
 
+  // Passive cleanup: reset any stuck conversion jobs for this building on mount
+  useEffect(() => {
+    if (!buildingFmGuid) return;
+    const cleanupStuckJobs = async () => {
+      try {
+        const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const { data: stuckJobs } = await supabase
+          .from('conversion_jobs')
+          .select('id, model_name')
+          .eq('building_fm_guid', buildingFmGuid)
+          .eq('status', 'processing')
+          .lt('updated_at', fiveMinAgo);
+        if (stuckJobs && stuckJobs.length > 0) {
+          for (const job of stuckJobs) {
+            await supabase.from('conversion_jobs').update({
+              status: 'error',
+              error_message: 'Auto-reset: orphaned job detected by viewer',
+              updated_at: new Date().toISOString(),
+            }).eq('id', job.id);
+            console.warn(`[NativeViewer] Auto-reset stuck job: ${job.id} (${job.model_name})`);
+          }
+        }
+      } catch (err) {
+        console.warn('[NativeViewer] Failed to cleanup stuck jobs:', err);
+      }
+    };
+    cleanupStuckJobs();
+  }, [buildingFmGuid]);
+
   const initialize = useCallback(async () => {
     if (!canvasRef.current || !buildingFmGuid) return;
 
