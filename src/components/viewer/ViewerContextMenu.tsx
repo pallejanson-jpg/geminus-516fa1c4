@@ -106,6 +106,9 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   items.push({ icon: MessageSquare, label: 'Show issues', action: onViewIssues });
 
   return (
+    <>
+    {/* Invisible backdrop to catch taps on mobile */}
+    <div className="fixed inset-0 z-[99]" onClick={onClose} onTouchStart={onClose} />
     <div
       ref={menuRef}
       className="fixed z-[100] min-w-[200px] rounded-lg border border-zinc-700 bg-zinc-900/95 backdrop-blur-md shadow-xl animate-in fade-in-0 zoom-in-95 duration-100 text-zinc-100"
