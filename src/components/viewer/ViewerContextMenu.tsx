@@ -64,14 +64,15 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
     return () => window.removeEventListener(CONTEXT_MENU_SETTINGS_CHANGED_EVENT, handler);
   }, []);
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
     };
     const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     // Use capture phase to ensure we see events even if xeokit stops propagation
     document.addEventListener('mousedown', handleClickOutside, true);
+    document.addEventListener('touchstart', handleClickOutside, true);
     document.addEventListener('keydown', handleKeyDown);
-    return () => { document.removeEventListener('mousedown', handleClickOutside, true); document.removeEventListener('keydown', handleKeyDown); };
+    return () => { document.removeEventListener('mousedown', handleClickOutside, true); document.removeEventListener('touchstart', handleClickOutside, true); document.removeEventListener('keydown', handleKeyDown); };
   }, [onClose]);
 
   const menuWidth = 220;
