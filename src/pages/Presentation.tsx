@@ -117,7 +117,7 @@ const NOTES: string[][] = [
   // Slide 9 — Why Addnode Wins
   [
     "FM software is the fastest-growing segment of the built environment — and Addnode has zero dedicated product today.",
-    "Every Geminus user deepens dependency on SWG, Symetri, Bimify, Senslinc simultaneously — churn across the group drops.",
+    "Every Geminus user deepens dependency on SWG, Symetri, Bimify, Senslinc, Tribia simultaneously — churn across the group drops.",
     "For the first time, SWG and Symetri can approach the same customer together — the building owner who needs both phases.",
     "Geminus turns five separate Addnode companies into one coherent value proposition.",
     "The O in AECO is a blue ocean — and Addnode already has all the assets to win it.",
