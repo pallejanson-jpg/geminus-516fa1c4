@@ -831,7 +831,6 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
                   buildingFmGuid={buildingData.fmGuid}
                   isVisible={true}
                   onClose={() => setSubSheet(null)}
-                  embedded
                 />
               </div>
             </>
