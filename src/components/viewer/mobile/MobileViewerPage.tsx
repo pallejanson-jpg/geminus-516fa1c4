@@ -96,6 +96,7 @@ const DEFAULT_ENABLED = ['orbit', 'pan', 'fit', 'resetView', 'select', 'measure'
 /* ── Action Sheet menu items ── */
 const MENU_ITEMS = [
   { id: 'viewMode', Icon: Box, label: 'View Mode', hasSubmenu: true },
+  { id: 'filter', Icon: Filter, label: 'Filter', hasSubmenu: true },
   { id: 'display', Icon: Eye, label: 'Display', hasSubmenu: true },
   { id: 'colorFilter', Icon: Palette, label: 'Color filter', hasSubmenu: true },
   { id: 'actions', Icon: Camera, label: 'Actions', hasSubmenu: true },
