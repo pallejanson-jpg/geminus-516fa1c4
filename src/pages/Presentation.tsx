@@ -67,15 +67,17 @@ const NOTES: string[][] = [
     "Symetri brings BIM and construction data, SWG brings FM operations, Bimify digitizes existing buildings.",
     "In Use brings space utilization data — real occupancy, desk booking, room usage.",
     "Senslinc brings the live heartbeat of the building — IoT sensors in real time.",
-    "Geminus is the hub that makes all five more valuable than they are separately.",
+    "Tribia / INTERAXO brings the construction documentation — project data that becomes an operational asset.",
+    "Geminus is the hub that makes all six more valuable than they are separately.",
   ],
   // Slide 4 — What Geminus Unlocks
   [
     "This is not about technology — it's about making each Addnode company more competitive.",
-    "For Symetri: their customers stop using ACC only for construction — it becomes a lifelong tool.",
+    "For Symetri: ACC and Symetri solutions flow into the operational phase — a seamless handover from project to Geminus.",
     "For SWG: Asset+ becomes the AI-powered system of record — not just a database.",
     "For Bimify: every digitization project creates a lasting digital twin, not just a one-time deliverable.",
     "For Senslinc: sensor data finally has a home — visible, contextual, actionable.",
+    "For Tribia: INTERAXO project documentation flows into Geminus — construction data becomes an operational asset.",
   ],
   // Slide 5 — The Proof
   [
@@ -83,7 +85,7 @@ const NOTES: string[][] = [
     "A non-developer built this in 3 months using vibe-coding — which is itself the proof of concept for this competition.",
     "The AI scans 360-degree panorama images and registers assets directly into Asset+ automatically.",
     "Six API integrations across the Addnode ecosystem already exist in Geminus right now.",
-    "What we are asking for is the investment to turn a working prototype into a certified product.",
+    "What I am asking for is the investment to turn a working prototype into a certified product.",
   ],
   // Slide 6 — ROI
   [
@@ -100,7 +102,7 @@ const NOTES: string[][] = [
     "Digital Buildings was acquired by Newsec from Zynka — they position as Power BI for Real Estate but lack deep FM and IoT.",
     "Twinfinity spun out from Sweco in October 2022 — cloud BIM with climate data, but consulting-driven and closed ecosystem.",
     "Autodesk Tandem has a free tier and Tandem Connect/Insights modules, but US-centric with no Nordic FM integrations.",
-    "None of them have AI Assistants, AI Inventory, or the full Addnode data ecosystem. That is our moat.",
+    "None of them have AI Assistants, AI Inventory, or the full Addnode data ecosystem. That is the moat.",
   ],
   // Slide 8 — Competition Deep Dive
   [
@@ -115,9 +117,9 @@ const NOTES: string[][] = [
   // Slide 9 — Why Addnode Wins
   [
     "FM software is the fastest-growing segment of the built environment — and Addnode has zero dedicated product today.",
-    "Every Geminus user deepens dependency on SWG, Symetri, Bimify, Senslinc simultaneously — churn across the group drops.",
+    "Every Geminus user deepens dependency on SWG, Symetri, Bimify, Senslinc, Tribia simultaneously — churn across the group drops.",
     "For the first time, SWG and Symetri can approach the same customer together — the building owner who needs both phases.",
-    "Geminus turns five separate Addnode companies into one coherent value proposition.",
+    "Geminus turns six separate Addnode companies into one coherent value proposition.",
     "The O in AECO is a blue ocean — and Addnode already has all the assets to win it.",
   ],
   // Slide 10 — The Ask
@@ -257,6 +259,8 @@ const HubSlide = () => {
               <line x1="550" y1="280" x2="210" y2="470" stroke="rgba(52,211,153,0.35)" strokeWidth="2" strokeDasharray="6 4" />
               {/* Bottom-right — Senslinc */}
               <line x1="550" y1="280" x2="890" y2="470" stroke="rgba(251,146,60,0.35)" strokeWidth="2" strokeDasharray="6 4" />
+              {/* Top-right — Tribia */}
+              <line x1="550" y1="280" x2="920" y2="80" stroke="rgba(56,189,248,0.35)" strokeWidth="2" strokeDasharray="6 4" />
             </svg>
 
             {/* Center — GEMINUS */}
@@ -302,12 +306,19 @@ const HubSlide = () => {
               <p className="text-[14px] text-white/75 mt-1">IoT real-time data</p>
             </div>
 
+            {/* Tribia — top right */}
+            <div className="absolute flex flex-col items-center justify-center rounded-2xl border-2 border-sky-400/70 bg-sky-500/20 text-center px-5 py-4"
+              style={{ width: 220, height: 100, left: 810, top: 30, zIndex: 10 }}>
+              <p className="text-[20px] font-bold text-sky-300 leading-tight">Tribia / INTERAXO</p>
+              <p className="text-[14px] text-white/75 mt-1">Project documentation</p>
+            </div>
+
           </div>
         </div>
 
         <div className="mt-4 text-center">
           <p className="text-[24px] text-white/80 font-medium">
-            All five already sit inside Addnode's <span className="text-cyan-300 font-bold">Design Management</span> business area.
+            All six already sit inside Addnode's <span className="text-cyan-300 font-bold">Design Management</span> business area.
             <span className="text-white font-bold"> Geminus is the missing center.</span>
           </p>
         </div>
@@ -326,7 +337,7 @@ const UnlocksSlide = () => {
       company: "Symetri",
       badge: "BIM",
       badgeColor: "bg-blue-500/20 border-blue-400/50 text-blue-300",
-      value: "Their ACC/BIM data becomes useful in Operations — FM customers stay on Autodesk for life",
+      value: "ACC and Symetri solutions flow into the operational phase — a seamless handover from project to Geminus",
       arrowColor: "text-blue-400",
     },
     {
@@ -357,6 +368,13 @@ const UnlocksSlide = () => {
       value: "Sensor data becomes actionable — visible in context, triggering FM workflows automatically",
       arrowColor: "text-orange-400",
     },
+    {
+      company: "Tribia",
+      badge: "Doc",
+      badgeColor: "bg-sky-500/20 border-sky-400/50 text-sky-300",
+      value: "INTERAXO project documentation flows into Geminus — construction data becomes an operational asset",
+      arrowColor: "text-sky-400",
+    },
   ];
 
   return (
@@ -385,7 +403,7 @@ const UnlocksSlide = () => {
 
         <div className="mt-6 bg-cyan-500/15 rounded-2xl border border-cyan-400/50 p-5 text-center">
           <p className="text-[22px] text-white font-medium">
-            Every Geminus user simultaneously deepens value for <span className="text-cyan-300 font-bold">all five companies</span> — that is ecosystem lock-in through value, not contracts.
+            Every Geminus user simultaneously deepens value for <span className="text-cyan-300 font-bold">all six companies</span> — that is ecosystem lock-in through value, not contracts.
           </p>
         </div>
       </div>
@@ -619,7 +637,7 @@ const CompetitionSlide = () => {
               {[
                 { label: "AI Assistants (Geminus AI)", sub: "Natural language FM queries — none of them have this" },
                 { label: "AI Inventory", sub: "360° photo scanning → auto-registration in Asset+" },
-                { label: "Full Addnode data stack", sub: "SWG + Symetri + Bimify + Senslinc + In Use" },
+                { label: "Full Addnode data stack", sub: "SWG + Symetri + Bimify + Senslinc + In Use + Tribia" },
                 { label: "Addnode's own IP", sub: "Not a licensed platform — built and owned by Addnode" },
               ].map(({ label, sub }) => (
                 <div key={label} className="flex gap-4 items-start">
@@ -767,7 +785,7 @@ const WhyAddnodeSlide = () => (
             color: "border-cyan-400/50 bg-cyan-500/10",
             tc: "text-cyan-300",
             points: [
-              "Every Geminus user deepens dependency on SWG, Symetri, Bimify, Senslinc simultaneously",
+              "Every Geminus user deepens dependency on SWG, Symetri, Bimify, Senslinc, Tribia simultaneously",
               "Churn across the group drops as integrations deepen",
               "Lock-in through value, not contracts",
             ],
@@ -801,7 +819,7 @@ const WhyAddnodeSlide = () => (
 
       <div className="bg-white/10 rounded-2xl border border-white/25 p-7 text-center">
         <p className="text-[28px] text-white font-semibold italic">
-          "Geminus turns five separate Addnode companies into one coherent value proposition."
+          "Geminus turns six separate Addnode companies into one coherent value proposition."
         </p>
       </div>
     </div>
