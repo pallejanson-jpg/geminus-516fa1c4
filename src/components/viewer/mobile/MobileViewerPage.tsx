@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef, useContext } from 'react';
+import ViewerFilterPanel from '@/components/viewer/ViewerFilterPanel';
 import {
   X, Menu, Orbit, Hand, Maximize, MousePointer, Ruler,
   Scissors, Square, Box, LayoutPanelLeft, View,
