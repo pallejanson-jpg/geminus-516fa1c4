@@ -125,34 +125,48 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       if (activeJobIdRef.current) {
         e.preventDefault();
         e.returnValue = 'IFC-konvertering pågår. Är du säker på att du vill lämna?';
-        // Mark job as failed on unload (best-effort via sendBeacon)
+        // Mark job as failed on unload (best-effort via sendBeacon with auth headers)
         const jobId = activeJobIdRef.current;
+        const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
         const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/conversion_jobs?id=eq.${jobId}`;
         const body = JSON.stringify({ status: 'error', error_message: 'Browser tab closed during conversion', updated_at: new Date().toISOString() });
-        navigator.sendBeacon?.(url, new Blob([body], { type: 'application/json' }));
+        // sendBeacon doesn't support custom headers, so we use fetch with keepalive instead
+        try {
+          fetch(url, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': anonKey,
+              'Authorization': `Bearer ${anonKey}`,
+              'Prefer': 'return=minimal',
+            },
+            body,
+            keepalive: true,
+          });
+        } catch (_) { /* best-effort */ }
       }
     };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, []);
 
-  // Auto-reset own stale jobs on mount (processing > 5 min without updates)
+  // Auto-reset own stale jobs on mount (processing > 3 min without updates)
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const threeMinAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
       const { data: staleJobs } = await supabase
         .from('conversion_jobs')
         .select('id, model_name')
         .eq('created_by', user.id)
         .eq('status', 'processing')
-        .lt('updated_at', fiveMinAgo);
+        .lt('updated_at', threeMinAgo);
       if (staleJobs && staleJobs.length > 0) {
         for (const job of staleJobs) {
           await supabase.from('conversion_jobs').update({
             status: 'error',
-            error_message: 'Auto-reset: stale job detected (no progress for 5+ minutes)',
+            error_message: 'Auto-reset: stale job detected (no progress for 3+ minutes)',
             updated_at: new Date().toISOString(),
           }).eq('id', job.id);
           console.warn(`Auto-reset stale conversion job: ${job.id} (${job.model_name})`);
@@ -900,7 +914,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
   const isStuckJob = (job: any) => {
     if (job.status !== 'processing') return false;
     const updatedAt = new Date(job.updated_at).getTime();
-    return Date.now() - updatedAt > 2 * 60 * 60 * 1000; // >2h
+    return Date.now() - updatedAt > 10 * 60 * 1000; // >10min
   };
 
   return (
