@@ -1,49 +1,92 @@
 
 
-## Plan: Fix Asset+ Room Relation + FM Access GUID Handling
+## Plan: Mobile Responsiveness Fixes + Conditional Object Color Filters
 
-### Problem 1: Asset+ — Room Relation for Fire Extinguishers
+### 1. CreateIssueDialog — Mobile scrollability fix
 
-Asset+ `AddObjectList` does not accept a Space (room) GUID as `ParentFmGuid` for Instance objects — it requires the **building** GUID. To establish the room relationship afterward, the system must call `UpsertRelationships` as a second step.
+**Problem:** On mobile, the bottom-sheet form content overflows and isn't scrollable.
 
-**Current behavior:** `asset-plus-create` sets `ParentFmGuid` to either room or building, but room-parented creates fail silently or get rejected.
+**Fix in `CreateIssueDialog.tsx`:**
+- Change the mobile bottom-sheet container from `max-h-[90dvh]` to `max-h-[85dvh]` with `overflow-hidden flex flex-col`
+- Make the form area `flex-1 overflow-y-auto` instead of relying on `max-h-[60vh]`
+- Ensure footer stays pinned at the bottom with `flex-shrink-0`
 
-**Fix in `supabase/functions/asset-plus-create/index.ts`:**
-1. Always use `parentBuildingFmGuid` as the `ParentFmGuid` in `AddObjectList`
-2. After successful creation, if `parentSpaceFmGuid` is provided, call `UpsertRelationships` to move the Instance under the room:
-   ```
-   POST /UpsertRelationships
-   { Relationships: [{ ParentFmGuid: roomGuid, ChildFmGuid: assetFmGuid }] }
-   ```
-3. Update `resolveParent()` to always prefer building GUID for the initial create call, and store the room GUID separately for the relationship step
-4. Both single and batch flows get the same two-step logic
+### 2. Pick-position badge — Move out of center
 
-### Problem 2: FM Access — Use raw `fm_guid` as `systemGuid`
+**Problem:** The "Klicka för att välja position" badge sits dead center (`top-1/2 left-1/2 -translate-x/y-1/2`) and blocks the view.
 
-The `create-object` action currently uses `parentGuid` but does NOT pass `systemGuid` (the FM GUID from Geminus). The `sync-object` action already does this correctly (line 1043: `systemGuid: fmGuid`).
+**Fix in `NativeViewerShell.tsx` (line ~936):**
+- Reposition to top-left with safe-area offset: `absolute top-3 left-3 z-50` (same pattern as `AssetRegistration.tsx`)
+- Remove the centering transforms
 
-**Fix in `supabase/functions/fm-access-query/index.ts`:**
-1. Update the `create-object` action to accept and pass `systemGuid` (= the asset's `fm_guid`) in the POST payload to `/api/object`
-2. Also pass `targetClass` when provided, matching the pattern used in `ensure-hierarchy` and `sync-object`
+### 3. Context menu won't close on outside tap (mobile)
 
-**Updated `create-object` payload:**
-```json
-{
-  "objectName": "BS-01.1-001",
-  "parentGuid": "<room-guid-in-fma>",
-  "systemGuid": "<geminus-fm-guid>",
-  "classId": 107,
-  "targetClass": "fmo_component_i"
+**Problem:** The `mousedown` capture listener doesn't fire reliably on mobile touch. The xeokit canvas consumes touch events before they reach the document.
+
+**Fix in `ViewerContextMenu.tsx`:**
+- Add `touchstart` listener alongside `mousedown` in the click-outside handler (both in capture phase)
+- Add a full-screen invisible backdrop `div` behind the menu (z-index below menu, above canvas) that closes on tap — more reliable than document-level listeners when xeokit swallows events
+
+### 4. Color filters not working
+
+**Problem:** The `RoomVisualizationPanel` accesses the viewer via the old Asset+ shim path (`viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer`). If the shim isn't fully wired or the native xeokit viewer is used directly, the path returns `undefined` and no colorization happens.
+
+**Fix in `RoomVisualizationPanel.tsx`:**
+- Add fallback viewer resolution: try the shim path first, then try `viewerRef.current?.viewer` (the native xeokit viewer directly)
+- Extract viewer resolution into a shared helper used by entity cache builder, colorizeSpace, hover listener, and legend selection
+- Ensure `entityIdCache` rebuild uses the same fallback
+
+### 5. Conditional object color filters — New feature
+
+**New component: `ObjectColorFilterPanel.tsx`** added to the Settings section of `VisualizationToolbar`.
+
+Allows users to create rules that colorize **any** BIM object (not just spaces) based on property conditions.
+
+**Data model (localStorage-persisted):**
+```typescript
+interface ColorFilterRule {
+  id: string;
+  name: string;           // e.g. "Fire doors EI60"
+  color: string;          // hex color
+  enabled: boolean;
+  conditions: ColorFilterCondition[];
+  logic: 'AND' | 'OR';   // how conditions combine
+}
+
+interface ColorFilterCondition {
+  target: 'category' | 'property';  // IFC category or object property
+  field: string;         // e.g. "IfcDoor", "FireRating", "Width"
+  operator: 'equals' | 'contains' | 'gt' | 'lt' | 'gte' | 'lte';
+  value: string;
 }
 ```
 
+**UI design:**
+- Added under "Viewer Settings" as a collapsible "Object color rules" section
+- Each rule has: name field, color picker, one or more conditions (add/remove), AND/OR toggle
+- Condition row: Category dropdown (IfcDoor, IfcWall, IfcSpace, etc.) + Property name input + Operator select + Value input
+- Enable/disable toggle per rule
+- "Apply" button that iterates metaScene objects, evaluates conditions, and sets `entity.colorize`
+
+**Execution logic:**
+- On apply, iterate all `metaScene.metaObjects`
+- For each object, check if its `type` (IFC category) and properties match the conditions
+- Properties come from the object's metadata or from `allData` attributes lookup by `originalSystemId`
+- Matching objects get `entity.colorize = [r, g, b]`; non-matching get reset
+- Persisted to localStorage so rules survive page reload
+
+**Integration in `VisualizationToolbar.tsx`:**
+- Add `ObjectColorFilterPanel` (embedded) inside the Settings collapsible, after the lighting controls
+- Pass `viewerRef` and `buildingFmGuid`
+
 ### Files Modified
+
 | File | Change |
 |---|---|
-| `supabase/functions/asset-plus-create/index.ts` | Two-step create: AddObjectList with building parent → UpsertRelationships to room |
-| `supabase/functions/fm-access-query/index.ts` | Pass `systemGuid` and `targetClass` in `create-object` action |
-
-### Technical Detail
-- `UpsertRelationships` only works for `createdInModel=false` objects (which inventory objects are)
-- The `systemGuid` in FM Access (HDC) is the cross-system identifier — equivalent to `fm_guid` in Geminus and Asset+
+| `src/components/viewer/CreateIssueDialog.tsx` | Fix mobile overflow: flex layout + proper scroll |
+| `src/components/viewer/NativeViewerShell.tsx` | Move pick-position badge to top-left corner |
+| `src/components/viewer/ViewerContextMenu.tsx` | Add touchstart listener + invisible backdrop for mobile close |
+| `src/components/viewer/RoomVisualizationPanel.tsx` | Add fallback viewer resolution for native xeokit path |
+| `src/components/viewer/ObjectColorFilterPanel.tsx` | **New** — conditional object color filter rules UI + logic |
+| `src/components/viewer/VisualizationToolbar.tsx` | Integrate ObjectColorFilterPanel in Settings section |
 
