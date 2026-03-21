@@ -155,6 +155,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
   const [isXrayActive, setIsXrayActive] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [subSheet, setSubSheet] = useState<SubSheetId>(null);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [enabledTools, setEnabledTools] = useState<string[]>(DEFAULT_ENABLED);
   const [soloFloorId, setSoloFloorId] = useState<string | null>(null);
 
