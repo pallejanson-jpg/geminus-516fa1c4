@@ -317,7 +317,7 @@ const TimelineSlide = () => {
       <div className="absolute inset-0 bg-gradient-to-br from-[#0A0E1A] via-[#101830] to-[#0A0E1A]" />
       <div className="relative z-10 flex flex-col justify-center h-full text-white px-32 py-16">
         <h2 className="text-[76px] font-black mb-4 text-white">My Journey</h2>
-        <p className="text-[28px] text-white/70 mb-14">12 weeks from zero to production — here's how it happened</p>
+        <p className="text-[28px] text-white/70 mb-14">12 weeks from zero to full proof of concept — here's how it happened</p>
 
         <div className="relative">
           {/* Horizontal line */}
