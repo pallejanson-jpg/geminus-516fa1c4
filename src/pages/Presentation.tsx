@@ -73,10 +73,11 @@ const NOTES: string[][] = [
   // Slide 4 — What Geminus Unlocks
   [
     "This is not about technology — it's about making each Addnode company more competitive.",
-    "For Symetri: their customers stop using ACC only for construction — it becomes a lifelong tool.",
+    "For Symetri: ACC and Symetri solutions flow into the operational phase — a seamless handover from project to Geminus.",
     "For SWG: Asset+ becomes the AI-powered system of record — not just a database.",
     "For Bimify: every digitization project creates a lasting digital twin, not just a one-time deliverable.",
     "For Senslinc: sensor data finally has a home — visible, contextual, actionable.",
+    "For Tribia: INTERAXO project documentation flows into Geminus — construction data becomes an operational asset.",
   ],
   // Slide 5 — The Proof
   [
