@@ -102,16 +102,18 @@ interface CreateResult {
 
 /**
  * Determine the parent GUID for AddObjectList.
- * Asset+ requires building GUID as parent for Instance objects.
- * Room relation is established via UpsertRelationships as a second step.
+ * Asset+ REQUIRES a Building GUID as parent for Instance objects (ObjectType 4).
+ * Room (Space) cannot be used as parent — the API returns:
+ *   "ParentFmGuid doesn't point to Building"
+ * Room association is tracked locally in Geminus DB (in_room_fm_guid).
+ * UpsertRelationships also fails due to cross-revision constraints.
  */
 function resolveParent(item: CreateAssetItem): { parentFmGuid: string; roomFmGuid: string | null } {
   if (item.parentBuildingFmGuid) {
     return { parentFmGuid: item.parentBuildingFmGuid, roomFmGuid: item.parentSpaceFmGuid || null };
   }
   if (item.parentSpaceFmGuid) {
-    // Caller only provided room — we still need building, but use room as fallback parent
-    // (this path should ideally not be used; callers should always provide building GUID)
+    // Only room provided — cannot create in Asset+, use room as fallback
     return { parentFmGuid: item.parentSpaceFmGuid, roomFmGuid: null };
   }
   throw new Error("Either parentSpaceFmGuid or parentBuildingFmGuid is required");
@@ -122,7 +124,7 @@ function resolveParent(item: CreateAssetItem): { parentFmGuid: string; roomFmGui
  * using the UpsertRelationships endpoint.
  */
 async function upsertRoomRelationships(
-  relationships: Array<{ parentFmGuid: string; childFmGuid: string }>,
+  relationships: Array<{ parentFmGuid: string; childFmGuid: string; modelId?: string }>,
   accessToken: string,
   apiUrl: string,
   apiKey: string,
@@ -135,8 +137,9 @@ async function upsertRoomRelationships(
   const payload = {
     APIKey: apiKey,
     Relationships: relationships.map(r => ({
-      ParentFmGuid: r.parentFmGuid,
-      ChildFmGuid: r.childFmGuid,
+      FmGuid1: r.parentFmGuid,
+      FmGuid2: r.childFmGuid,
+      UsedIdentifier: 1,
     })),
   };
 
@@ -241,8 +244,9 @@ async function createSingleObject(
 
     // Step 2: Move to room via UpsertRelationships
     if (roomFmGuid) {
+      const modelId = createdAsset?.bimObjectWithParents?.[0]?.bimObject?.modelId || null;
       await upsertRoomRelationships(
-        [{ parentFmGuid: roomFmGuid, childFmGuid: fmGuid }],
+        [{ parentFmGuid: roomFmGuid, childFmGuid: fmGuid, modelId }],
         accessToken, apiUrl, apiKey,
       );
     }
@@ -323,7 +327,7 @@ async function createBatchObjects(
 ): Promise<CreateResult[]> {
   const baseUrl = apiUrl.replace(/\/+$/, "");
 
-  const roomRelationships: Array<{ parentFmGuid: string; childFmGuid: string }> = [];
+  const roomRelationships: Array<{ parentFmGuid: string; childFmGuid: string; modelId?: string }> = [];
 
   const bimObjectsWithParents = items.map(item => {
     const fmGuid = item.fmGuid || crypto.randomUUID();
@@ -372,17 +376,34 @@ async function createBatchObjects(
     console.log(`AddObjectList response: ${response.status}`);
 
     if (response.ok) {
+      let createdList: any[];
+      try {
+        const parsed = JSON.parse(responseText);
+        // Response can be { bimObjectWithParents: [...] } or an array
+        if (parsed?.bimObjectWithParents) {
+          createdList = parsed.bimObjectWithParents;
+        } else if (Array.isArray(parsed)) {
+          createdList = parsed;
+        } else {
+          createdList = [parsed];
+        }
+      } catch {
+        createdList = [];
+      }
+
+      // Extract modelId from created objects and attach to room relationships
+      if (createdList.length > 0) {
+        const modelId = createdList[0]?.bimObject?.modelId || createdList[0]?.modelId || null;
+        if (modelId) {
+          for (const rel of roomRelationships) {
+            rel.modelId = modelId;
+          }
+        }
+      }
+
       // Step 2: Move created objects to rooms
       if (roomRelationships.length > 0) {
         await upsertRoomRelationships(roomRelationships, accessToken, apiUrl, apiKey);
-      }
-
-      let createdList: any[];
-      try {
-        createdList = JSON.parse(responseText);
-        if (!Array.isArray(createdList)) createdList = [createdList];
-      } catch {
-        createdList = [];
       }
 
       const results: CreateResult[] = [];
