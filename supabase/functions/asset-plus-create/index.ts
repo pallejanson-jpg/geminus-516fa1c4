@@ -102,16 +102,19 @@ interface CreateResult {
 
 /**
  * Determine the parent GUID for AddObjectList.
- * Prefer room (Space) as parent when available — this matches the sync logic.
- * If only building is provided, use building.
- * Returns roomFmGuid for local DB tracking.
+ * Asset+ REQUIRES a Building GUID as parent for Instance objects (ObjectType 4).
+ * Room (Space) cannot be used as parent — the API returns:
+ *   "ParentFmGuid doesn't point to Building"
+ * Room association is tracked locally in Geminus DB (in_room_fm_guid).
+ * UpsertRelationships also fails due to cross-revision constraints.
  */
 function resolveParent(item: CreateAssetItem): { parentFmGuid: string; roomFmGuid: string | null } {
-  if (item.parentSpaceFmGuid) {
-    return { parentFmGuid: item.parentSpaceFmGuid, roomFmGuid: item.parentSpaceFmGuid };
-  }
   if (item.parentBuildingFmGuid) {
-    return { parentFmGuid: item.parentBuildingFmGuid, roomFmGuid: null };
+    return { parentFmGuid: item.parentBuildingFmGuid, roomFmGuid: item.parentSpaceFmGuid || null };
+  }
+  if (item.parentSpaceFmGuid) {
+    // Only room provided — cannot create in Asset+, use room as fallback
+    return { parentFmGuid: item.parentSpaceFmGuid, roomFmGuid: null };
   }
   throw new Error("Either parentSpaceFmGuid or parentBuildingFmGuid is required");
 }
