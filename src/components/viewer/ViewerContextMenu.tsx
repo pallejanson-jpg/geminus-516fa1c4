@@ -137,6 +137,7 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
         ))}
       </div>
     </div>
+    </>
   );
 };
 

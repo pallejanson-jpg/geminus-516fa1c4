@@ -309,7 +309,7 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
         </form>
 
         {/* Footer buttons */}
-        <div className="flex justify-end gap-2 px-4 py-3 border-t">
+        <div className="flex justify-end gap-2 px-4 py-3 border-t flex-shrink-0">
           <Button
             type="button"
             variant="outline"
