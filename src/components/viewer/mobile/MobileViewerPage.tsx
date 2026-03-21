@@ -958,6 +958,14 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
         </DrawerContent>
       </Drawer>
 
+      {/* ── Filter panel (opens as fixed overlay) ── */}
+      <ViewerFilterPanel
+        viewerRef={viewerInstanceRef}
+        buildingFmGuid={buildingData.fmGuid}
+        isVisible={showFilterPanel}
+        onClose={() => setShowFilterPanel(false)}
+      />
+
       {/* ── Insights panel ── */}
       {insightsPanelOpen && (
         <InsightsDrawerPanel
