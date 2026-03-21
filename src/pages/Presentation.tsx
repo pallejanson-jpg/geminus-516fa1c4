@@ -85,7 +85,7 @@ const NOTES: string[][] = [
     "A non-developer built this in 3 months using vibe-coding — which is itself the proof of concept for this competition.",
     "The AI scans 360-degree panorama images and registers assets directly into Asset+ automatically.",
     "Six API integrations across the Addnode ecosystem already exist in Geminus right now.",
-    "What we are asking for is the investment to turn a working prototype into a certified product.",
+    "What I am asking for is the investment to turn a working prototype into a certified product.",
   ],
   // Slide 6 — ROI
   [
