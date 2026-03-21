@@ -30,6 +30,11 @@ import {
   Globe,
   Thermometer,
   HelpCircle,
+  Sparkles,
+  BookOpen,
+  Wrench,
+  Mic,
+  Tag,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
