@@ -703,7 +703,7 @@ const TakeawaysSlide = () => (
 
       <div className="space-y-6 mb-16 max-w-[1200px]">
         {[
-          { text: "Vibe-coding is real — a non-developer built a production app in 3 months", color: "text-cyan-400" },
+          { text: "Vibe-coding is real — a non-developer built a full proof of concept in 3 months", color: "text-cyan-400" },
           { text: "Addnode's data ecosystem CAN be connected — Geminus proves it today", color: "text-emerald-400" },
           { text: "AI doesn't replace developers — it enables domain experts to build", color: "text-purple-400" },
           { text: "The technology is ready. The question is: what will YOU build?", color: "text-orange-400" },
