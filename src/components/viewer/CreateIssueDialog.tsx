@@ -157,7 +157,7 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
           "fixed z-[71] border shadow-xl bg-card",
           "animate-in fade-in-0 duration-200",
           isMobile
-            ? "inset-x-0 bottom-0 rounded-t-2xl max-h-[90dvh] w-full slide-in-from-bottom-10"
+            ? "inset-x-0 bottom-0 rounded-t-2xl max-h-[85dvh] w-full slide-in-from-bottom-10 flex flex-col overflow-hidden"
             : cn(
                 "rounded-lg w-[480px] max-w-[calc(100vw-40px)] zoom-in-95",
                 isDragging && "cursor-grabbing"
