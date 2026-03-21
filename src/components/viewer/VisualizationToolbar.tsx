@@ -1092,6 +1092,9 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
           {/* Lighting Controls */}
           <LightingControlsPanel viewerRef={viewerRef} isViewerReady={isViewerReady} />
+
+          {/* Object Color Filter Rules */}
+          <ObjectColorFilterPanel viewerRef={viewerRef} buildingFmGuid={buildingFmGuid} />
         </CollapsibleContent>
       </Collapsible>
 
