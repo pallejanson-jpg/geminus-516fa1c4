@@ -295,8 +295,8 @@ const HubSlide = () => {
             {/* SWG — bottom left */}
             <div className="absolute flex flex-col items-center justify-center rounded-2xl border-2 border-emerald-400/70 bg-emerald-500/20 text-center px-5 py-4"
               style={{ width: 220, height: 100, left: 100, top: 420, zIndex: 10 }}>
-              <p className="text-[20px] font-bold text-emerald-300 leading-tight">SWG / Asset+</p>
-              <p className="text-[14px] text-white/75 mt-1">FM operations platform</p>
+              <p className="text-[20px] font-bold text-emerald-300 leading-tight">SWG</p>
+              <p className="text-[14px] text-white/75 mt-1">Asset+ & 3 CAFM systems</p>
             </div>
 
             {/* Senslinc — bottom right */}
