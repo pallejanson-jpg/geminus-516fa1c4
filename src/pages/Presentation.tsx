@@ -368,6 +368,13 @@ const UnlocksSlide = () => {
       value: "Sensor data becomes actionable — visible in context, triggering FM workflows automatically",
       arrowColor: "text-orange-400",
     },
+    {
+      company: "Tribia",
+      badge: "Doc",
+      badgeColor: "bg-sky-500/20 border-sky-400/50 text-sky-300",
+      value: "INTERAXO project documentation flows into Geminus — construction data becomes an operational asset",
+      arrowColor: "text-sky-400",
+    },
   ];
 
   return (
