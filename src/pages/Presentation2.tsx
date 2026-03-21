@@ -265,7 +265,7 @@ const WhyLovableSlide = () => (
           <div className="space-y-4">
             {[
               "Solo — one person, no team",
-              "3 months to production",
+              "3 months to full POC",
               "Near-zero development cost",
               "Full-stack generated instantly",
               "Iterate at the speed of thought",
