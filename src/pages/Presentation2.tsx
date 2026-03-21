@@ -37,7 +37,7 @@ import {
 /* ------------------------------------------------------------------ */
 
 const SLIDE_TITLES = [
-  "Title — Geminus: From Idea to Production",
+  "Title — Geminus: From Idea to Proof of Concept",
   "The Problem I Saw",
   "Why Lovable — Vibe-Coding",
   "My Journey — Timeline",
@@ -72,7 +72,7 @@ const NOTES: string[][] = [
     "Lovable gave me a full React + Vite + Tailwind stack with Supabase backend — instant.",
     "I could iterate at the speed of thought — describe a feature, see it live in seconds.",
     "The comparison: what would take a 3-person dev team 12-18 months, I did solo in 3 months.",
-    "This is not a toy — it's production-grade code with real API integrations.",
+    "This is not a toy — it's a fully functional proof of concept with real API integrations.",
   ],
   // 4 — Timeline
   [
@@ -81,7 +81,7 @@ const NOTES: string[][] = [
     "Week 5-6: xeokit 3D engine integrated, IFC models loading in browser.",
     "Week 7-8: AI asset scanning — computer vision on 360° panoramas.",
     "Week 9-10: Ivion 360° integration, split-view, virtual twin overlay.",
-    "Week 11-12: IoT dashboards, AI assistants, mobile optimization, production hardening.",
+    "Week 11-12: IoT dashboards, AI assistants, mobile optimization, final polish.",
   ],
   // 5 — Stack
   [
@@ -145,7 +145,7 @@ const NOTES: string[][] = [
   ],
   // 12 — Takeaways
   [
-    "Vibe-coding is real — a non-developer built a production app in 3 months.",
+    "Vibe-coding is real — a non-developer built a full proof of concept in 3 months.",
     "The technology is ready. The question is: what will YOU build with it?",
     "Geminus proves that Addnode's data ecosystem can be connected — today.",
     "Now let's open up for questions!",
@@ -173,13 +173,13 @@ const TitleSlide = () => (
         GEMINUS
       </h1>
       <p className="text-[44px] font-light text-cyan-300 mb-10">
-        From Idea to Production in 3 Months
+        From Idea to Proof of Concept in 3 Months
       </p>
       <blockquote className="text-[28px] text-white/80 max-w-[1100px] leading-relaxed border-l-4 border-cyan-400 pl-8 italic mb-14">
-        "A non-developer used vibe-coding to build a full-stack digital twin platform — solo. This is how."
+        "A non-developer used vibe-coding to build a full-stack digital twin proof of concept — solo. This is how."
       </blockquote>
       <div className="flex gap-4 flex-wrap">
-        {["Pål Janson · SWG", "Built with Lovable", "Solo · 3 months", "6 API integrations", "Production-grade"].map((tag) => (
+        {["Pål Janson · SWG", "Built with Lovable", "Solo · 3 months", "6 API integrations", "Proof of Concept"].map((tag) => (
           <span key={tag} className="px-4 py-2 rounded-full bg-white/15 border border-white/30 text-[20px] text-white/90">
             {tag}
           </span>
@@ -265,7 +265,7 @@ const WhyLovableSlide = () => (
           <div className="space-y-4">
             {[
               "Solo — one person, no team",
-              "3 months to production",
+              "3 months to full POC",
               "Near-zero development cost",
               "Full-stack generated instantly",
               "Iterate at the speed of thought",
@@ -309,7 +309,7 @@ const TimelineSlide = () => {
     { week: "W5–6", title: "3D Engine", desc: "xeokit integrated, IFC models in browser", color: "border-purple-400 bg-purple-500/20", dot: "bg-purple-400" },
     { week: "W7–8", title: "AI Asset Scan", desc: "Computer vision on 360° panoramas", color: "border-orange-400 bg-orange-500/20", dot: "bg-orange-400" },
     { week: "W9–10", title: "360° + Split View", desc: "Ivion SDK, virtual twin overlay", color: "border-pink-400 bg-pink-500/20", dot: "bg-pink-400" },
-    { week: "W11–12", title: "Production", desc: "IoT, AI assistants, mobile, hardening", color: "border-cyan-400 bg-cyan-500/20", dot: "bg-cyan-400" },
+    { week: "W11–12", title: "Full POC", desc: "IoT, AI assistants, mobile, final polish", color: "border-cyan-400 bg-cyan-500/20", dot: "bg-cyan-400" },
   ];
 
   return (
@@ -317,7 +317,7 @@ const TimelineSlide = () => {
       <div className="absolute inset-0 bg-gradient-to-br from-[#0A0E1A] via-[#101830] to-[#0A0E1A]" />
       <div className="relative z-10 flex flex-col justify-center h-full text-white px-32 py-16">
         <h2 className="text-[76px] font-black mb-4 text-white">My Journey</h2>
-        <p className="text-[28px] text-white/70 mb-14">12 weeks from zero to production — here's how it happened</p>
+        <p className="text-[28px] text-white/70 mb-14">12 weeks from zero to full proof of concept — here's how it happened</p>
 
         <div className="relative">
           {/* Horizontal line */}
@@ -703,7 +703,7 @@ const TakeawaysSlide = () => (
 
       <div className="space-y-6 mb-16 max-w-[1200px]">
         {[
-          { text: "Vibe-coding is real — a non-developer built a production app in 3 months", color: "text-cyan-400" },
+          { text: "Vibe-coding is real — a non-developer built a full proof of concept in 3 months", color: "text-cyan-400" },
           { text: "Addnode's data ecosystem CAN be connected — Geminus proves it today", color: "text-emerald-400" },
           { text: "AI doesn't replace developers — it enables domain experts to build", color: "text-purple-400" },
           { text: "The technology is ready. The question is: what will YOU build?", color: "text-orange-400" },
