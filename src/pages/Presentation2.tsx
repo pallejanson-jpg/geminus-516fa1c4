@@ -37,7 +37,7 @@ import {
 /* ------------------------------------------------------------------ */
 
 const SLIDE_TITLES = [
-  "Title — Geminus: From Idea to Production",
+  "Title — Geminus: From Idea to Proof of Concept",
   "The Problem I Saw",
   "Why Lovable — Vibe-Coding",
   "My Journey — Timeline",
