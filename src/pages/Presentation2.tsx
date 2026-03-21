@@ -173,7 +173,7 @@ const TitleSlide = () => (
         GEMINUS
       </h1>
       <p className="text-[44px] font-light text-cyan-300 mb-10">
-        From Idea to Production in 3 Months
+        From Idea to Proof of Concept in 3 Months
       </p>
       <blockquote className="text-[28px] text-white/80 max-w-[1100px] leading-relaxed border-l-4 border-cyan-400 pl-8 italic mb-14">
         "A non-developer used vibe-coding to build a full-stack digital twin platform — solo. This is how."
