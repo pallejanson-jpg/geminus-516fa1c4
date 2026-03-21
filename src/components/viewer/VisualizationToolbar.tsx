@@ -37,6 +37,7 @@ import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useBcfViewpoints } from "@/hooks/useBcfViewpoints";
 import LightingControlsPanel from "./LightingControlsPanel";
+import ObjectColorFilterPanel from "./ObjectColorFilterPanel";
 import EdgeScrollIndicator from "@/components/common/EdgeScrollIndicator";
 import { ROOM_LABELS_TOGGLE_EVENT, ROOM_LABELS_CONFIG_EVENT, type RoomLabelsConfigDetail } from "@/hooks/useRoomLabels";
 import { useRoomLabelConfigs } from "@/hooks/useRoomLabelConfigs";
