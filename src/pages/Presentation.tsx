@@ -637,7 +637,7 @@ const CompetitionSlide = () => {
               {[
                 { label: "AI Assistants (Geminus AI)", sub: "Natural language FM queries — none of them have this" },
                 { label: "AI Inventory", sub: "360° photo scanning → auto-registration in Asset+" },
-                { label: "Full Addnode data stack", sub: "SWG + Symetri + Bimify + Senslinc + In Use" },
+                { label: "Full Addnode data stack", sub: "SWG + Symetri + Bimify + Senslinc + In Use + Tribia" },
                 { label: "Addnode's own IP", sub: "Not a licensed platform — built and owned by Addnode" },
               ].map(({ label, sub }) => (
                 <div key={label} className="flex gap-4 items-start">
