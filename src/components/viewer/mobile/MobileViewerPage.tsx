@@ -670,8 +670,8 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
 
       {/* ── Action Sheet (Drawer) ── */}
       <Drawer open={sheetOpen} onOpenChange={setSheetOpen}>
-        <DrawerContent className="max-h-[85dvh]">
-          <ScrollArea className="max-h-[80dvh]">
+        <DrawerContent className="max-h-[92dvh]">
+          <ScrollArea className="max-h-[88dvh]">
 
           {/* ── Main menu ── */}
           {subSheet === null && (
