@@ -228,6 +228,16 @@ const App = () => {
             } 
           />
           
+          {/* Internal showcase presentation - public, no auth */}
+          <Route 
+            path="/presentation2" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen bg-black">Loading...</div>}>
+                <Presentation2 />
+              </Suspense>
+            } 
+          />
+          
           {/* Public Issue Resolution page - accessed via email token */}
           <Route 
             path="/issue/:token" 
