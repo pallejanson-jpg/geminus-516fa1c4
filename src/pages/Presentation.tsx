@@ -819,7 +819,7 @@ const WhyAddnodeSlide = () => (
 
       <div className="bg-white/10 rounded-2xl border border-white/25 p-7 text-center">
         <p className="text-[28px] text-white font-semibold italic">
-          "Geminus turns five separate Addnode companies into one coherent value proposition."
+          "Geminus turns six separate Addnode companies into one coherent value proposition."
         </p>
       </div>
     </div>
