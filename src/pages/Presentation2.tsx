@@ -159,6 +159,11 @@ const NOTES: string[][] = [
     "Geminus proves that Addnode's data ecosystem can be connected — today.",
     "Now let's open up for questions!",
   ],
+  // 13 — Blank Template
+  [
+    "This is a blank slide for custom content. Use the same font (Inter) and styling.",
+    "Font: Inter · Title: 76px bold · Body: 20-22px · Colors: cyan-400 accent on dark navy background.",
+  ],
 ];
 
 /* ------------------------------------------------------------------ */
