@@ -42,6 +42,7 @@ const SLIDE_TITLES = [
   "Why Addnode Wins",
   "The Ask",
   "Geminus ESG — Sustainability Built In",
+  "Blank Template",
 ];
 
 const NOTES: string[][] = [
@@ -138,6 +139,11 @@ const NOTES: string[][] = [
     "The customer pain is real: fragmented data across 5–10 Excel files, manual reporting costing 200+ hours/year, audit risk, and ESG scores now affecting financing terms.",
     "Geminus ESG turns us from an FM vendor into an ESG-native digital twin platform — a new SaaS module, new revenue stream, and a competitive moat no point solution can match.",
   ],
+  // Slide 12 — Blank Template
+  [
+    "This is a blank slide for custom content. Use the same font (Inter) and styling.",
+    "Font: Inter · Title: 80px bold · Body: 22-26px · Colors: cyan-400 accent on dark navy background.",
+  ],
 ];
 
 /* ------------------------------------------------------------------ */
@@ -231,7 +237,7 @@ const HubSlide = () => {
     { name: "Symetri / ACC", sub: "BIM & construction data", color: "border-blue-400/70 bg-blue-500/20", tc: "text-blue-300", pos: "top" },
     { name: "In Use", sub: "Space utilization data", color: "border-violet-400/70 bg-violet-500/20", tc: "text-violet-300", pos: "left" },
     { name: "Bimify", sub: "AI scan-to-BIM", color: "border-purple-400/70 bg-purple-500/20", tc: "text-purple-300", pos: "right" },
-    { name: "SWG / Asset+", sub: "FM operations platform", color: "border-emerald-400/70 bg-emerald-500/20", tc: "text-emerald-300", pos: "bottom-left" },
+    { name: "SWG", sub: "Asset+ & 3 CAFM systems", color: "border-emerald-400/70 bg-emerald-500/20", tc: "text-emerald-300", pos: "bottom-left" },
     { name: "Senslinc", sub: "IoT real-time data", color: "border-orange-400/70 bg-orange-500/20", tc: "text-orange-300", pos: "bottom-right" },
   ];
 
@@ -295,8 +301,8 @@ const HubSlide = () => {
             {/* SWG — bottom left */}
             <div className="absolute flex flex-col items-center justify-center rounded-2xl border-2 border-emerald-400/70 bg-emerald-500/20 text-center px-5 py-4"
               style={{ width: 220, height: 100, left: 100, top: 420, zIndex: 10 }}>
-              <p className="text-[20px] font-bold text-emerald-300 leading-tight">SWG / Asset+</p>
-              <p className="text-[14px] text-white/75 mt-1">FM operations platform</p>
+              <p className="text-[20px] font-bold text-emerald-300 leading-tight">SWG</p>
+              <p className="text-[14px] text-white/75 mt-1">Asset+ & 3 CAFM systems</p>
             </div>
 
             {/* Senslinc — bottom right */}
@@ -967,6 +973,21 @@ const EsgSlide = () => (
 );
 
 /* ------------------------------------------------------------------ */
+/*  Slide 12 — Blank Template                                          */
+/* ------------------------------------------------------------------ */
+
+const BlankTemplateSlide = () => (
+  <div className="relative w-full h-full overflow-hidden">
+    <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
+    <div className="absolute inset-0 bg-gradient-to-br from-black/95 via-black/85 to-cyan-950/80" />
+    <div className="relative z-10 flex flex-col justify-center h-full text-white px-32 py-20">
+      {/* Subtle watermark */}
+      <p className="absolute bottom-10 right-12 text-[24px] font-black text-white/10 tracking-widest">GEMINUS</p>
+    </div>
+  </div>
+);
+
+/* ------------------------------------------------------------------ */
 /*  Slide registry                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -982,6 +1003,7 @@ const slides = [
   WhyAddnodeSlide,
   AskSlide,
   EsgSlide,
+  BlankTemplateSlide,
 ];
 
 /* ------------------------------------------------------------------ */

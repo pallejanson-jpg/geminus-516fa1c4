@@ -30,6 +30,11 @@ import {
   Globe,
   Thermometer,
   HelpCircle,
+  Sparkles,
+  BookOpen,
+  Wrench,
+  Mic,
+  Tag,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -44,11 +49,12 @@ const SLIDE_TITLES = [
   "The Stack",
   "Feature: Digital Twin",
   "Feature: AI Assistants",
-  "Feature: AI Asset Scan",
+  "AI Capabilities in Geminus",
   "Feature: Integrations Hub",
   "Feature: IoT & Insights",
   "Do's and Don'ts",
   "Key Takeaways + Q&A",
+  "Blank Template",
 ];
 
 const NOTES: string[][] = [
@@ -108,18 +114,21 @@ const NOTES: string[][] = [
     "RAG search: documents indexed and searchable — maintenance manuals, floor plans, reports.",
     "Voice commands: speak to navigate, search, or ask questions hands-free.",
   ],
-  // 8 — AI Asset Scan
+  // 8 — AI Capabilities
   [
-    "This is probably the most 'wow' feature — AI-powered asset detection from 360° images.",
-    "The system scans NavVis panorama images and detects fire extinguishers, exit signs, etc.",
-    "Each detection gets a confidence score, bounding box, and suggested Asset+ category.",
-    "Approved detections are automatically registered in Asset+ with coordinates.",
-    "This saves weeks of manual inventory work per building.",
+    "This slide consolidates ALL AI-powered features inside Geminus.",
+    "AI Asset Scan: scans 360° panoramas and detects assets automatically — fire extinguishers, exit signs, sensors.",
+    "AI Auto-Classification: automatic classification against Nordic standards like BIP, BSAB-E, AFF using image recognition during inventory.",
+    "RAG Document Search: semantic search across indexed building documents — maintenance manuals, floor plans, reports.",
+    "AI Assistants: Gunnar (operations) and Ilean (contextual) — covered in detail on the previous slide.",
+    "Predictive Maintenance: AI analyzes asset and sensor patterns to predict failures before they happen.",
+    "Voice Commands: speak naturally to navigate, search, or control the building — hands-free.",
+    "This is a key differentiator — no competitor has this breadth of AI capability.",
   ],
   // 9 — Integrations
   [
     "Six Addnode companies connected through one platform — that's the moat.",
-    "Symetri/ACC: BIM data flows in. SWG/Asset+: FM operations platform.",
+    "Symetri/ACC: BIM data flows in. SWG: Asset+ and 3 CAFM systems (QFM, Concept Evolution).",
     "Bimify: scan-to-BIM digitization. In Use: space utilization data.",
     "Senslinc: IoT sensors — temperature, humidity, CO₂, occupancy.",
     "Tribia/INTERAXO: construction documentation becomes operational data.",
@@ -149,6 +158,11 @@ const NOTES: string[][] = [
     "The technology is ready. The question is: what will YOU build with it?",
     "Geminus proves that Addnode's data ecosystem can be connected — today.",
     "Now let's open up for questions!",
+  ],
+  // 13 — Blank Template
+  [
+    "This is a blank slide for custom content. Use the same font (Inter) and styling.",
+    "Font: Inter · Title: 76px bold · Body: 20-22px · Colors: cyan-400 accent on dark navy background.",
   ],
 ];
 
@@ -488,48 +502,43 @@ const AiAssistantsSlide = () => (
 );
 
 /* ------------------------------------------------------------------ */
-/*  Slide 8 — Feature: AI Asset Scan                                   */
+/*  Slide 8 — AI Capabilities                                          */
 /* ------------------------------------------------------------------ */
 
-const AiScanSlide = () => (
+const AiCapabilitiesSlide = () => (
   <div className="relative w-full h-full overflow-hidden">
     <div className="absolute inset-0 bg-gradient-to-br from-[#0A0E1A] via-[#1A1005] to-[#0A0E1A]" />
     <div className="relative z-10 flex h-full text-white">
       {/* Left — content */}
-      <div className="w-[45%] flex flex-col justify-center px-20 py-16">
-        <div className="px-4 py-2 rounded-full bg-orange-500/30 border border-orange-400/40 text-orange-300 text-[18px] font-medium w-fit mb-6">
-          DEMO: AI Asset Scan
+      <div className="w-[50%] flex flex-col justify-center px-20 py-14">
+        <div className="px-4 py-2 rounded-full bg-orange-500/30 border border-orange-400/40 text-orange-300 text-[18px] font-medium w-fit mb-5">
+          AI-Powered Platform
         </div>
-        <h2 className="text-[60px] font-black mb-6 text-white leading-tight">AI Inventory from 360°</h2>
+        <h2 className="text-[56px] font-black mb-8 text-white leading-tight">AI Capabilities</h2>
 
-        {/* Process flow */}
-        <div className="space-y-4 mb-8">
+        <div className="space-y-5">
           {[
-            { step: "1", text: "360° panorama images from NavVis scan", color: "text-blue-400" },
-            { step: "2", text: "AI vision detects objects (fire ext, signs, sensors)", color: "text-orange-400" },
-            { step: "3", text: "Confidence score + category + bounding box", color: "text-yellow-400" },
-            { step: "4", text: "Review queue — approve / reject / edit", color: "text-purple-400" },
-            { step: "5", text: "Auto-register in Asset+ with 3D coordinates", color: "text-emerald-400" },
-          ].map(({ step, text, color }) => (
-            <div key={step} className="flex items-center gap-4">
-              <div className={`w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[20px] font-bold ${color}`}>
-                {step}
+            { icon: Scan, title: "AI Asset Scan", desc: "360° panoramas → automatic detection & inventory registration in Asset+", color: "text-orange-400" },
+            { icon: Tag, title: "AI Auto-Classification", desc: "Image recognition classifies assets against Nordic standards (BIP, BSAB-E, AFF)", color: "text-yellow-400" },
+            { icon: BookOpen, title: "RAG Document Search", desc: "Semantic search across indexed building documents — manuals, plans, reports", color: "text-blue-400" },
+            { icon: Sparkles, title: "AI Assistants", desc: "Gunnar (operations) + Ilean (contextual) — natural language building intelligence", color: "text-purple-400" },
+            { icon: Wrench, title: "Predictive Maintenance", desc: "AI analyzes asset & sensor patterns — warns before equipment fails", color: "text-emerald-400" },
+            { icon: Mic, title: "Voice Commands", desc: "Speak to navigate, search, or control the building — hands-free", color: "text-cyan-400" },
+          ].map(({ icon: Icon, title, desc, color }) => (
+            <div key={title} className="flex items-start gap-4">
+              <Icon className={`w-6 h-6 ${color} shrink-0 mt-1`} />
+              <div>
+                <p className="text-[20px] font-bold text-white">{title}</p>
+                <p className="text-[16px] text-white/65 leading-snug">{desc}</p>
               </div>
-              <p className="text-[20px] text-white/80">{text}</p>
             </div>
           ))}
         </div>
-
-        <div className="bg-orange-500/15 rounded-2xl p-5 border border-orange-400/30">
-          <p className="text-[20px] text-white/80 text-center">
-            Saves <span className="text-orange-300 font-bold">weeks of manual work</span> per building
-          </p>
-        </div>
       </div>
       {/* Right — screenshot */}
-      <div className="w-[55%] flex items-center justify-center p-10">
+      <div className="w-[50%] flex items-center justify-center p-10">
         <div className="rounded-2xl overflow-hidden border-2 border-white/15 shadow-2xl shadow-orange-500/20">
-          <img src={screenshotAiScan} alt="AI Asset Scan" className="w-full h-auto" />
+          <img src={screenshotAiScan} alt="AI Capabilities" className="w-full h-auto" />
         </div>
       </div>
     </div>
@@ -553,7 +562,7 @@ const IntegrationsSlide = () => (
       <div className="grid grid-cols-3 gap-6 mb-10">
         {[
           { name: "Symetri / ACC", desc: "BIM & construction data", color: "border-blue-400/70 bg-blue-500/20", tc: "text-blue-300" },
-          { name: "SWG / Asset+", desc: "FM operations platform", color: "border-emerald-400/70 bg-emerald-500/20", tc: "text-emerald-300" },
+          { name: "SWG", desc: "Asset+ & 3 CAFM systems", color: "border-emerald-400/70 bg-emerald-500/20", tc: "text-emerald-300" },
           { name: "Bimify", desc: "AI scan-to-BIM", color: "border-purple-400/70 bg-purple-500/20", tc: "text-purple-300" },
           { name: "In Use", desc: "Space utilization data", color: "border-violet-400/70 bg-violet-500/20", tc: "text-violet-300" },
           { name: "Senslinc", desc: "IoT real-time sensors", color: "border-orange-400/70 bg-orange-500/20", tc: "text-orange-300" },
@@ -728,6 +737,25 @@ const TakeawaysSlide = () => (
 /*  Slide registry                                                     */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/*  Slide 13 — Blank Template                                          */
+/* ------------------------------------------------------------------ */
+
+const BlankTemplateSlide = () => (
+  <div className="relative w-full h-full overflow-hidden">
+    <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
+    <div className="absolute inset-0 bg-gradient-to-br from-black/95 via-black/85 to-cyan-950/80" />
+    <div className="relative z-10 flex flex-col justify-center h-full text-white px-32 py-20">
+      {/* Subtle watermark */}
+      <p className="absolute bottom-10 right-12 text-[24px] font-black text-white/10 tracking-widest">GEMINUS</p>
+    </div>
+  </div>
+);
+
+/* ------------------------------------------------------------------ */
+/*  Slide registry                                                     */
+/* ------------------------------------------------------------------ */
+
 const slides = [
   TitleSlide,
   ProblemSlide,
@@ -736,11 +764,12 @@ const slides = [
   StackSlide,
   DigitalTwinSlide,
   AiAssistantsSlide,
-  AiScanSlide,
+  AiCapabilitiesSlide,
   IntegrationsSlide,
   IoTSlide,
   DosAndDontsSlide,
   TakeawaysSlide,
+  BlankTemplateSlide,
 ];
 
 /* ------------------------------------------------------------------ */
