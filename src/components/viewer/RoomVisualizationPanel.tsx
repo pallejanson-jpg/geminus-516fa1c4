@@ -591,8 +591,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       const { rangeMin, rangeMax, type } = e.detail;
       if (type !== visualizationType) return;
 
-      const viewer = viewerRef.current;
-      const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      const xeokitViewer = resolveXeokitViewer(viewerRef);
       if (!xeokitViewer?.scene) return;
 
       const scene = xeokitViewer.scene;
