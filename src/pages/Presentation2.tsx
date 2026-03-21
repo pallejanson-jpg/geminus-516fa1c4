@@ -49,11 +49,12 @@ const SLIDE_TITLES = [
   "The Stack",
   "Feature: Digital Twin",
   "Feature: AI Assistants",
-  "Feature: AI Asset Scan",
+  "AI Capabilities in Geminus",
   "Feature: Integrations Hub",
   "Feature: IoT & Insights",
   "Do's and Don'ts",
   "Key Takeaways + Q&A",
+  "Blank Template",
 ];
 
 const NOTES: string[][] = [
