@@ -666,8 +666,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       return;
     }
 
-    const viewer = viewerRef.current;
-    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    const xeokitViewer = resolveXeokitViewer(viewerRef);
     if (!xeokitViewer?.cameraControl) return;
 
     // Helper to find room by entity ID
