@@ -311,8 +311,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
   // Build entity ID cache from metaScene (rebuild when cacheKey changes)
   useEffect(() => {
-    const viewer = viewerRef.current;
-    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    const xeokitViewer = resolveXeokitViewer(viewerRef);
     if (!xeokitViewer?.metaScene?.metaObjects) {
       // Retry after a delay if viewer isn't ready yet
       const retryTimer = setTimeout(() => {
