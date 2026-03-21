@@ -52,6 +52,19 @@ import { VISUALIZATION_QUICK_SELECT_EVENT } from './VisualizationQuickBar';
 
 // LocalStorage key for persisting visualization settings
 const STORAGE_KEY = 'roomVisualizationSettings';
+
+/** Resolve the xeokit viewer instance from the ref — tries Asset+ shim path first, then native */
+export const resolveXeokitViewer = (viewerRef: React.MutableRefObject<any>): any | null => {
+  const v = viewerRef.current;
+  // Asset+ shim path
+  const shim = v?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+  if (shim?.scene) return shim;
+  // Native xeokit viewer path
+  if (v?.viewer?.scene) return v.viewer;
+  // Direct ref
+  if (v?.scene) return v;
+  return null;
+};
 /**
  * Floating, draggable panel for visualizing rooms with color-coding based on sensor data.
  * OPTIMIZED: Uses in-memory allData instead of DB queries for performance.
