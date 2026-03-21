@@ -179,7 +179,7 @@ const TitleSlide = () => (
         "A non-developer used vibe-coding to build a full-stack digital twin proof of concept — solo. This is how."
       </blockquote>
       <div className="flex gap-4 flex-wrap">
-        {["Pål Janson · SWG", "Built with Lovable", "Solo · 3 months", "6 API integrations", "Production-grade"].map((tag) => (
+        {["Pål Janson · SWG", "Built with Lovable", "Solo · 3 months", "6 API integrations", "Proof of Concept"].map((tag) => (
           <span key={tag} className="px-4 py-2 rounded-full bg-white/15 border border-white/30 text-[20px] text-white/90">
             {tag}
           </span>
