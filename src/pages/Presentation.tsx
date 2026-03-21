@@ -102,7 +102,7 @@ const NOTES: string[][] = [
     "Digital Buildings was acquired by Newsec from Zynka — they position as Power BI for Real Estate but lack deep FM and IoT.",
     "Twinfinity spun out from Sweco in October 2022 — cloud BIM with climate data, but consulting-driven and closed ecosystem.",
     "Autodesk Tandem has a free tier and Tandem Connect/Insights modules, but US-centric with no Nordic FM integrations.",
-    "None of them have AI Assistants, AI Inventory, or the full Addnode data ecosystem. That is our moat.",
+    "None of them have AI Assistants, AI Inventory, or the full Addnode data ecosystem. That is the moat.",
   ],
   // Slide 8 — Competition Deep Dive
   [
