@@ -302,10 +302,17 @@ const PortfolioView: React.FC = () => {
     if (!allData) return [];
     const isBuilding = facility.category === 'Building';
     const isStorey = facility.category === 'Building Storey';
+    const isSpace = facility.category === 'Space';
     
     const filtered = allData.filter((item: any) => 
       item.category === 'Instance' &&
-      (isBuilding ? item.buildingFmGuid === facility.fmGuid : isStorey ? item.levelFmGuid === facility.fmGuid : false)
+      (isBuilding
+        ? item.buildingFmGuid === facility.fmGuid
+        : isStorey
+          ? item.levelFmGuid === facility.fmGuid
+          : isSpace
+            ? item.inRoomFmGuid === facility.fmGuid
+            : false)
     );
     
     // Deduplicate by fmGuid to prevent duplicate entries
