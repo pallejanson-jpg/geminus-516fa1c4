@@ -1,47 +1,47 @@
 
 
-## Plan: Update Presentation Content + Generate PPTX Export
+## Plan: Create Presentation 2 — Internal Showcase for Addnode Innovations
 
-### Part 1 — Content updates in `src/pages/Presentation.tsx`
+### Context
+A new presentation for an internal audience (colleagues working with Lovable and Geminus in the Addnode Innovations competition). Format: 35 min total, but your part covers:
+- **5 min** — Your vibe-coding journey (why it's revolutionary, time comparison)
+- **15 min** — Demo support slides (cool features)
+- **5 min** — Do's and don'ts / best tips
 
-**A. Add Tribia / INTERAXO to ecosystem**
+The 2 min Addnode intro and 10 min Q&A don't need slides from you.
 
-- **HubSlide**: Add 6th node "Tribia / INTERAXO" with a teal/sky color (e.g. `border-sky-400/70 bg-sky-500/20`). Position it top-right in the hub diagram. Add SVG connector line from center. Update bottom text from "five" to "six".
-- **UnlocksSlide**: Add a 6th row: `{ company: "Tribia", badge: "Doc", value: "INTERAXO project documentation flows into Geminus — construction data becomes an operational asset" }`
-- **CompetitionSlide**: Add "Tribia / INTERAXO" to the "Full Addnode data stack" line in the advantage panel.
-- **Speaker notes**: Update slides 3, 4, 7 to mention Tribia/INTERAXO.
+### New file: `src/pages/Presentation2.tsx`
 
-**B. Reframe Symetri/ACC as "handover"**
+Reuse the same presentation shell (1920x1080 scaled, keyboard nav, speaker notes, fullscreen, timer) from `Presentation.tsx`, but with entirely new slide content.
 
-- **UnlocksSlide** row for Symetri: Change value to "ACC and Symetri solutions flow into the operational phase — a seamless handover from project to Geminus"
-- **Speaker notes** slide 4: Update accordingly.
+**Slide deck (~12 slides):**
 
-**C. Change "team/we" to "I"**
+| # | Title | Content | Time |
+|---|-------|---------|------|
+| 1 | **Title** | "Geminus — From Idea to Production in 3 Months" / Pål Janson, SWG | — |
+| 2 | **The Problem I Saw** | The AECO gap, fragmented data across Addnode companies — brief version of the pitch deck's gap slide | 1 min |
+| 3 | **Why Lovable** | What is vibe-coding, why I chose Lovable, comparison: "3 months solo vs ~12-18 months with a dev team" | 2 min |
+| 4 | **My Journey — Timeline** | Visual timeline: Week 1-2 first prototype → Week 4 first API integration → Week 8 AI scan → Week 12 production. Key milestones. | 2 min |
+| 5 | **The Stack** | Architecture overview: React + Vite + Tailwind + Supabase Edge Functions + xeokit 3D + Ivion 360° + Asset+ API + Senslinc IoT | — |
+| 6 | **Feature: Digital Twin** | Screenshot placeholder + description: 3D viewer, floor switching, room visualization, split 3D/360° view | Demo |
+| 7 | **Feature: AI Assistants** | Gunnar (operations AI) + Ilean (contextual AI), RAG search, voice commands | Demo |
+| 8 | **Feature: AI Asset Scan** | 360° panorama → AI detection → automatic Asset+ registration | Demo |
+| 9 | **Feature: Integrations** | Hub diagram showing 6 Addnode companies + external APIs (Mapbox, Cesium, etc.) | Demo |
+| 10 | **Feature: IoT & Insights** | Heatmaps, sensor dashboards, predictive maintenance, alarms | Demo |
+| 11 | **Do's and Don'ts** | Two-column layout: Do's (start small, iterate, use speaker notes, test on real data) vs Don'ts (don't over-architect, don't fight the AI, don't skip mobile) | 5 min |
+| 12 | **Key Takeaways + Q&A** | 3-4 bold statements + "Questions?" | — |
 
-- Scan all NOTES and slide text for "we" or "team" implying a group. Key changes:
-  - NOTES slide 5: "What we are asking for" → "What I am asking for"
-  - NOTES slide 7: "That is our moat" → "That is the moat"
-  - Slide 3 bottom: Update note about "Geminus is the missing center" (already fine, no "we")
-  - Competition advantage sub-text: "built and owned by Addnode" (fine)
+### Route: `/presentation2`
 
-### Part 2 — PPTX Export (script-generated artifact)
+Add lazy import + public route in `App.tsx` (same pattern as `/presentation`).
 
-Generate `/mnt/documents/geminus-presentation.pptx` using `pptxgenjs`:
-
-- **11 slides** matching the React presentation content
-- **Dark theme**: dark navy/charcoal backgrounds (`0A0E1A`), white/cyan text
-- **Each slide**: title, subtitle, key content (bullet points, stats, table for competition matrix)
-- **Speaker notes** included on each slide via `slide.addNotes()`
-- **Images**: The 4 screenshot PNGs and hero image will be embedded as base64
-- **Font**: Arial (universally supported)
-- **Slide dimensions**: 16:9 widescreen (default pptxgenjs)
-
-The PPTX won't be pixel-identical to the React version but will carry all content, structure, speaker notes, and a consistent dark theme that can be edited in PowerPoint.
+### Design
+Same dark theme as Presentation 1 (dark navy/charcoal with cyan accents), reuse the same hero image and screenshot assets. Same presentation shell with keyboard navigation, speaker notes, timer, and fullscreen support.
 
 ### Files
 
 | File | Change |
 |---|---|
-| `src/pages/Presentation.tsx` | Add Tribia/INTERAXO, reframe Symetri handover, solo "I" language |
-| `/mnt/documents/geminus-presentation.pptx` | Generated PPTX export via pptxgenjs script |
+| `src/pages/Presentation2.tsx` | New file — full presentation with ~12 slides |
+| `src/App.tsx` | Add lazy import + `/presentation2` route |
 
