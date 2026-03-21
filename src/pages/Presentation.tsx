@@ -973,6 +973,21 @@ const EsgSlide = () => (
 );
 
 /* ------------------------------------------------------------------ */
+/*  Slide 12 — Blank Template                                          */
+/* ------------------------------------------------------------------ */
+
+const BlankTemplateSlide = () => (
+  <div className="relative w-full h-full overflow-hidden">
+    <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
+    <div className="absolute inset-0 bg-gradient-to-br from-black/95 via-black/85 to-cyan-950/80" />
+    <div className="relative z-10 flex flex-col justify-center h-full text-white px-32 py-20">
+      {/* Subtle watermark */}
+      <p className="absolute bottom-10 right-12 text-[24px] font-black text-white/10 tracking-widest">GEMINUS</p>
+    </div>
+  </div>
+);
+
+/* ------------------------------------------------------------------ */
 /*  Slide registry                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -988,6 +1003,7 @@ const slides = [
   WhyAddnodeSlide,
   AskSlide,
   EsgSlide,
+  BlankTemplateSlide,
 ];
 
 /* ------------------------------------------------------------------ */
