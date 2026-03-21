@@ -139,6 +139,11 @@ const NOTES: string[][] = [
     "The customer pain is real: fragmented data across 5–10 Excel files, manual reporting costing 200+ hours/year, audit risk, and ESG scores now affecting financing terms.",
     "Geminus ESG turns us from an FM vendor into an ESG-native digital twin platform — a new SaaS module, new revenue stream, and a competitive moat no point solution can match.",
   ],
+  // Slide 12 — Blank Template
+  [
+    "This is a blank slide for custom content. Use the same font (Inter) and styling.",
+    "Font: Inter · Title: 80px bold · Body: 22-26px · Colors: cyan-400 accent on dark navy background.",
+  ],
 ];
 
 /* ------------------------------------------------------------------ */
