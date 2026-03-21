@@ -819,6 +819,24 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
             </>
           )}
 
+          {/* ── Filter sub-sheet (ViewerFilterPanel) ── */}
+          {subSheet === 'filter' && (
+            <>
+              <DrawerHeader className="pb-2">
+                <div className="flex items-center gap-2"><BackButton /><DrawerTitle className="text-base">Filter</DrawerTitle></div>
+              </DrawerHeader>
+              <div className="px-2 pb-6">
+                <ViewerFilterPanel
+                  viewerRef={viewerInstanceRef}
+                  buildingFmGuid={buildingData.fmGuid}
+                  isVisible={true}
+                  onClose={() => setSubSheet(null)}
+                  embedded
+                />
+              </div>
+            </>
+          )}
+
           {/* ── Color filter sub-sheet ── */}
           {subSheet === 'colorFilter' && (
             <>
