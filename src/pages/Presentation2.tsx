@@ -114,18 +114,21 @@ const NOTES: string[][] = [
     "RAG search: documents indexed and searchable — maintenance manuals, floor plans, reports.",
     "Voice commands: speak to navigate, search, or ask questions hands-free.",
   ],
-  // 8 — AI Asset Scan
+  // 8 — AI Capabilities
   [
-    "This is probably the most 'wow' feature — AI-powered asset detection from 360° images.",
-    "The system scans NavVis panorama images and detects fire extinguishers, exit signs, etc.",
-    "Each detection gets a confidence score, bounding box, and suggested Asset+ category.",
-    "Approved detections are automatically registered in Asset+ with coordinates.",
-    "This saves weeks of manual inventory work per building.",
+    "This slide consolidates ALL AI-powered features inside Geminus.",
+    "AI Asset Scan: scans 360° panoramas and detects assets automatically — fire extinguishers, exit signs, sensors.",
+    "AI Auto-Classification: automatic classification against Nordic standards like BIP, BSAB-E, AFF using image recognition during inventory.",
+    "RAG Document Search: semantic search across indexed building documents — maintenance manuals, floor plans, reports.",
+    "AI Assistants: Gunnar (operations) and Ilean (contextual) — covered in detail on the previous slide.",
+    "Predictive Maintenance: AI analyzes asset and sensor patterns to predict failures before they happen.",
+    "Voice Commands: speak naturally to navigate, search, or control the building — hands-free.",
+    "This is a key differentiator — no competitor has this breadth of AI capability.",
   ],
   // 9 — Integrations
   [
     "Six Addnode companies connected through one platform — that's the moat.",
-    "Symetri/ACC: BIM data flows in. SWG/Asset+: FM operations platform.",
+    "Symetri/ACC: BIM data flows in. SWG: Asset+ and 3 CAFM systems (QFM, Concept Evolution).",
     "Bimify: scan-to-BIM digitization. In Use: space utilization data.",
     "Senslinc: IoT sensors — temperature, humidity, CO₂, occupancy.",
     "Tribia/INTERAXO: construction documentation becomes operational data.",
