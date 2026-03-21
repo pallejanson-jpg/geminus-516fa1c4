@@ -150,23 +150,23 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
     return () => window.removeEventListener('beforeunload', handler);
   }, []);
 
-  // Auto-reset own stale jobs on mount (processing > 5 min without updates)
+  // Auto-reset own stale jobs on mount (processing > 3 min without updates)
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const threeMinAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
       const { data: staleJobs } = await supabase
         .from('conversion_jobs')
         .select('id, model_name')
         .eq('created_by', user.id)
         .eq('status', 'processing')
-        .lt('updated_at', fiveMinAgo);
+        .lt('updated_at', threeMinAgo);
       if (staleJobs && staleJobs.length > 0) {
         for (const job of staleJobs) {
           await supabase.from('conversion_jobs').update({
             status: 'error',
-            error_message: 'Auto-reset: stale job detected (no progress for 5+ minutes)',
+            error_message: 'Auto-reset: stale job detected (no progress for 3+ minutes)',
             updated_at: new Date().toISOString(),
           }).eq('id', job.id);
           console.warn(`Auto-reset stale conversion job: ${job.id} (${job.model_name})`);
