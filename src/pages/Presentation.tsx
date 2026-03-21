@@ -67,7 +67,8 @@ const NOTES: string[][] = [
     "Symetri brings BIM and construction data, SWG brings FM operations, Bimify digitizes existing buildings.",
     "In Use brings space utilization data — real occupancy, desk booking, room usage.",
     "Senslinc brings the live heartbeat of the building — IoT sensors in real time.",
-    "Geminus is the hub that makes all five more valuable than they are separately.",
+    "Tribia / INTERAXO brings the construction documentation — project data that becomes an operational asset.",
+    "Geminus is the hub that makes all six more valuable than they are separately.",
   ],
   // Slide 4 — What Geminus Unlocks
   [
