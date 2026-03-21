@@ -81,7 +81,7 @@ const NOTES: string[][] = [
     "Week 5-6: xeokit 3D engine integrated, IFC models loading in browser.",
     "Week 7-8: AI asset scanning — computer vision on 360° panoramas.",
     "Week 9-10: Ivion 360° integration, split-view, virtual twin overlay.",
-    "Week 11-12: IoT dashboards, AI assistants, mobile optimization, production hardening.",
+    "Week 11-12: IoT dashboards, AI assistants, mobile optimization, final polish.",
   ],
   // 5 — Stack
   [
