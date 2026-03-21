@@ -309,7 +309,7 @@ const TimelineSlide = () => {
     { week: "W5–6", title: "3D Engine", desc: "xeokit integrated, IFC models in browser", color: "border-purple-400 bg-purple-500/20", dot: "bg-purple-400" },
     { week: "W7–8", title: "AI Asset Scan", desc: "Computer vision on 360° panoramas", color: "border-orange-400 bg-orange-500/20", dot: "bg-orange-400" },
     { week: "W9–10", title: "360° + Split View", desc: "Ivion SDK, virtual twin overlay", color: "border-pink-400 bg-pink-500/20", dot: "bg-pink-400" },
-    { week: "W11–12", title: "Production", desc: "IoT, AI assistants, mobile, hardening", color: "border-cyan-400 bg-cyan-500/20", dot: "bg-cyan-400" },
+    { week: "W11–12", title: "Full POC", desc: "IoT, AI assistants, mobile, final polish", color: "border-cyan-400 bg-cyan-500/20", dot: "bg-cyan-400" },
   ];
 
   return (
