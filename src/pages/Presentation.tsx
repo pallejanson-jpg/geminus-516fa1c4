@@ -42,6 +42,7 @@ const SLIDE_TITLES = [
   "Why Addnode Wins",
   "The Ask",
   "Geminus ESG — Sustainability Built In",
+  "Blank Template",
 ];
 
 const NOTES: string[][] = [
