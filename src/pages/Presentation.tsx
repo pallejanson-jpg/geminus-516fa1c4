@@ -259,6 +259,8 @@ const HubSlide = () => {
               <line x1="550" y1="280" x2="210" y2="470" stroke="rgba(52,211,153,0.35)" strokeWidth="2" strokeDasharray="6 4" />
               {/* Bottom-right — Senslinc */}
               <line x1="550" y1="280" x2="890" y2="470" stroke="rgba(251,146,60,0.35)" strokeWidth="2" strokeDasharray="6 4" />
+              {/* Top-right — Tribia */}
+              <line x1="550" y1="280" x2="920" y2="80" stroke="rgba(56,189,248,0.35)" strokeWidth="2" strokeDasharray="6 4" />
             </svg>
 
             {/* Center — GEMINUS */}
