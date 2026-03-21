@@ -176,7 +176,7 @@ const TitleSlide = () => (
         From Idea to Proof of Concept in 3 Months
       </p>
       <blockquote className="text-[28px] text-white/80 max-w-[1100px] leading-relaxed border-l-4 border-cyan-400 pl-8 italic mb-14">
-        "A non-developer used vibe-coding to build a full-stack digital twin platform — solo. This is how."
+        "A non-developer used vibe-coding to build a full-stack digital twin proof of concept — solo. This is how."
       </blockquote>
       <div className="flex gap-4 flex-wrap">
         {["Pål Janson · SWG", "Built with Lovable", "Solo · 3 months", "6 API integrations", "Production-grade"].map((tag) => (
