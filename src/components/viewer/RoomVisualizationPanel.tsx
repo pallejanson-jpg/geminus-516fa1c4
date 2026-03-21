@@ -377,8 +377,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   // Colorize a single space in the viewer
   const colorizeSpace = useCallback(
     (fmGuid: string, color: [number, number, number] | null) => {
-      const viewer = viewerRef.current;
-      const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      const xeokitViewer = resolveXeokitViewer(viewerRef);
       if (!xeokitViewer?.scene) return false;
 
       const itemIds = getItemIdsByFmGuid(fmGuid);
