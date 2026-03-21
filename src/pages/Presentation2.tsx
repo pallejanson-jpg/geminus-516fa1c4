@@ -562,7 +562,7 @@ const IntegrationsSlide = () => (
       <div className="grid grid-cols-3 gap-6 mb-10">
         {[
           { name: "Symetri / ACC", desc: "BIM & construction data", color: "border-blue-400/70 bg-blue-500/20", tc: "text-blue-300" },
-          { name: "SWG / Asset+", desc: "FM operations platform", color: "border-emerald-400/70 bg-emerald-500/20", tc: "text-emerald-300" },
+          { name: "SWG", desc: "Asset+ & 3 CAFM systems", color: "border-emerald-400/70 bg-emerald-500/20", tc: "text-emerald-300" },
           { name: "Bimify", desc: "AI scan-to-BIM", color: "border-purple-400/70 bg-purple-500/20", tc: "text-purple-300" },
           { name: "In Use", desc: "Space utilization data", color: "border-violet-400/70 bg-violet-500/20", tc: "text-violet-300" },
           { name: "Senslinc", desc: "IoT real-time sensors", color: "border-orange-400/70 bg-orange-500/20", tc: "text-orange-300" },
