@@ -502,48 +502,43 @@ const AiAssistantsSlide = () => (
 );
 
 /* ------------------------------------------------------------------ */
-/*  Slide 8 — Feature: AI Asset Scan                                   */
+/*  Slide 8 — AI Capabilities                                          */
 /* ------------------------------------------------------------------ */
 
-const AiScanSlide = () => (
+const AiCapabilitiesSlide = () => (
   <div className="relative w-full h-full overflow-hidden">
     <div className="absolute inset-0 bg-gradient-to-br from-[#0A0E1A] via-[#1A1005] to-[#0A0E1A]" />
     <div className="relative z-10 flex h-full text-white">
       {/* Left — content */}
-      <div className="w-[45%] flex flex-col justify-center px-20 py-16">
-        <div className="px-4 py-2 rounded-full bg-orange-500/30 border border-orange-400/40 text-orange-300 text-[18px] font-medium w-fit mb-6">
-          DEMO: AI Asset Scan
+      <div className="w-[50%] flex flex-col justify-center px-20 py-14">
+        <div className="px-4 py-2 rounded-full bg-orange-500/30 border border-orange-400/40 text-orange-300 text-[18px] font-medium w-fit mb-5">
+          AI-Powered Platform
         </div>
-        <h2 className="text-[60px] font-black mb-6 text-white leading-tight">AI Inventory from 360°</h2>
+        <h2 className="text-[56px] font-black mb-8 text-white leading-tight">AI Capabilities</h2>
 
-        {/* Process flow */}
-        <div className="space-y-4 mb-8">
+        <div className="space-y-5">
           {[
-            { step: "1", text: "360° panorama images from NavVis scan", color: "text-blue-400" },
-            { step: "2", text: "AI vision detects objects (fire ext, signs, sensors)", color: "text-orange-400" },
-            { step: "3", text: "Confidence score + category + bounding box", color: "text-yellow-400" },
-            { step: "4", text: "Review queue — approve / reject / edit", color: "text-purple-400" },
-            { step: "5", text: "Auto-register in Asset+ with 3D coordinates", color: "text-emerald-400" },
-          ].map(({ step, text, color }) => (
-            <div key={step} className="flex items-center gap-4">
-              <div className={`w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[20px] font-bold ${color}`}>
-                {step}
+            { icon: Scan, title: "AI Asset Scan", desc: "360° panoramas → automatic detection & inventory registration in Asset+", color: "text-orange-400" },
+            { icon: Tag, title: "AI Auto-Classification", desc: "Image recognition classifies assets against Nordic standards (BIP, BSAB-E, AFF)", color: "text-yellow-400" },
+            { icon: BookOpen, title: "RAG Document Search", desc: "Semantic search across indexed building documents — manuals, plans, reports", color: "text-blue-400" },
+            { icon: Sparkles, title: "AI Assistants", desc: "Gunnar (operations) + Ilean (contextual) — natural language building intelligence", color: "text-purple-400" },
+            { icon: Wrench, title: "Predictive Maintenance", desc: "AI analyzes asset & sensor patterns — warns before equipment fails", color: "text-emerald-400" },
+            { icon: Mic, title: "Voice Commands", desc: "Speak to navigate, search, or control the building — hands-free", color: "text-cyan-400" },
+          ].map(({ icon: Icon, title, desc, color }) => (
+            <div key={title} className="flex items-start gap-4">
+              <Icon className={`w-6 h-6 ${color} shrink-0 mt-1`} />
+              <div>
+                <p className="text-[20px] font-bold text-white">{title}</p>
+                <p className="text-[16px] text-white/65 leading-snug">{desc}</p>
               </div>
-              <p className="text-[20px] text-white/80">{text}</p>
             </div>
           ))}
         </div>
-
-        <div className="bg-orange-500/15 rounded-2xl p-5 border border-orange-400/30">
-          <p className="text-[20px] text-white/80 text-center">
-            Saves <span className="text-orange-300 font-bold">weeks of manual work</span> per building
-          </p>
-        </div>
       </div>
       {/* Right — screenshot */}
-      <div className="w-[55%] flex items-center justify-center p-10">
+      <div className="w-[50%] flex items-center justify-center p-10">
         <div className="rounded-2xl overflow-hidden border-2 border-white/15 shadow-2xl shadow-orange-500/20">
-          <img src={screenshotAiScan} alt="AI Asset Scan" className="w-full h-auto" />
+          <img src={screenshotAiScan} alt="AI Capabilities" className="w-full h-auto" />
         </div>
       </div>
     </div>
