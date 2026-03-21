@@ -145,7 +145,7 @@ const NOTES: string[][] = [
   ],
   // 12 — Takeaways
   [
-    "Vibe-coding is real — a non-developer built a production app in 3 months.",
+    "Vibe-coding is real — a non-developer built a full proof of concept in 3 months.",
     "The technology is ready. The question is: what will YOU build with it?",
     "Geminus proves that Addnode's data ecosystem can be connected — today.",
     "Now let's open up for questions!",
