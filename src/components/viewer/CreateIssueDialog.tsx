@@ -189,12 +189,12 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
           </Button>
         </div>
 
-        <p className="text-sm text-muted-foreground px-4 pt-3">
+        <p className="text-sm text-muted-foreground px-4 pt-3 flex-shrink-0">
           Report a problem or suggestion related to the model.
         </p>
 
         {/* Form content */}
-        <form id="issue-form" onSubmit={handleSubmit} className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+        <form id="issue-form" onSubmit={handleSubmit} className="p-4 space-y-4 flex-1 overflow-y-auto">
           {/* Screenshot preview */}
           {screenshotUrl && (
             <div className="rounded-md overflow-hidden border bg-muted/50">
