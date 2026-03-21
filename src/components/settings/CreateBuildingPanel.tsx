@@ -914,7 +914,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
   const isStuckJob = (job: any) => {
     if (job.status !== 'processing') return false;
     const updatedAt = new Date(job.updated_at).getTime();
-    return Date.now() - updatedAt > 2 * 60 * 60 * 1000; // >2h
+    return Date.now() - updatedAt > 10 * 60 * 1000; // >10min
   };
 
   return (
