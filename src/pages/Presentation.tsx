@@ -403,7 +403,7 @@ const UnlocksSlide = () => {
 
         <div className="mt-6 bg-cyan-500/15 rounded-2xl border border-cyan-400/50 p-5 text-center">
           <p className="text-[22px] text-white font-medium">
-            Every Geminus user simultaneously deepens value for <span className="text-cyan-300 font-bold">all five companies</span> — that is ecosystem lock-in through value, not contracts.
+            Every Geminus user simultaneously deepens value for <span className="text-cyan-300 font-bold">all six companies</span> — that is ecosystem lock-in through value, not contracts.
           </p>
         </div>
       </div>
