@@ -543,6 +543,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
   const handleMenuItem = useCallback((id: string) => {
     switch (id) {
       case 'viewMode': setSubSheet('viewMode'); break;
+      case 'filter': setSubSheet('filter'); break;
       case 'display': setSubSheet('display'); break;
       case 'colorFilter': setSubSheet('colorFilter'); break;
       case 'actions': setSubSheet('actions'); break;
