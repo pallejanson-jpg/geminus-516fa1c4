@@ -72,7 +72,7 @@ const NOTES: string[][] = [
     "Lovable gave me a full React + Vite + Tailwind stack with Supabase backend — instant.",
     "I could iterate at the speed of thought — describe a feature, see it live in seconds.",
     "The comparison: what would take a 3-person dev team 12-18 months, I did solo in 3 months.",
-    "This is not a toy — it's production-grade code with real API integrations.",
+    "This is not a toy — it's a fully functional proof of concept with real API integrations.",
   ],
   // 4 — Timeline
   [
