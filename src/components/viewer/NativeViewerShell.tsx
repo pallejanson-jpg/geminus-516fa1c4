@@ -933,7 +933,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
       {/* Pick-position mode indicator */}
       {isPickingPosition && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none">
+        <div className="absolute top-3 left-3 z-50 pointer-events-none">
           <div className="bg-card/90 backdrop-blur-sm border rounded-lg px-4 py-2 shadow-lg text-sm font-medium text-foreground">
             Klicka för att välja position
           </div>

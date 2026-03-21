@@ -52,6 +52,19 @@ import { VISUALIZATION_QUICK_SELECT_EVENT } from './VisualizationQuickBar';
 
 // LocalStorage key for persisting visualization settings
 const STORAGE_KEY = 'roomVisualizationSettings';
+
+/** Resolve the xeokit viewer instance from the ref — tries Asset+ shim path first, then native */
+export const resolveXeokitViewer = (viewerRef: React.MutableRefObject<any>): any | null => {
+  const v = viewerRef.current;
+  // Asset+ shim path
+  const shim = v?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+  if (shim?.scene) return shim;
+  // Native xeokit viewer path
+  if (v?.viewer?.scene) return v.viewer;
+  // Direct ref
+  if (v?.scene) return v;
+  return null;
+};
 /**
  * Floating, draggable panel for visualizing rooms with color-coding based on sensor data.
  * OPTIMIZED: Uses in-memory allData instead of DB queries for performance.
@@ -298,8 +311,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
   // Build entity ID cache from metaScene (rebuild when cacheKey changes)
   useEffect(() => {
-    const viewer = viewerRef.current;
-    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    const xeokitViewer = resolveXeokitViewer(viewerRef);
     if (!xeokitViewer?.metaScene?.metaObjects) {
       // Retry after a delay if viewer isn't ready yet
       const retryTimer = setTimeout(() => {
@@ -365,8 +377,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   // Colorize a single space in the viewer
   const colorizeSpace = useCallback(
     (fmGuid: string, color: [number, number, number] | null) => {
-      const viewer = viewerRef.current;
-      const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      const xeokitViewer = resolveXeokitViewer(viewerRef);
       if (!xeokitViewer?.scene) return false;
 
       const itemIds = getItemIdsByFmGuid(fmGuid);
@@ -580,8 +591,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       const { rangeMin, rangeMax, type } = e.detail;
       if (type !== visualizationType) return;
 
-      const viewer = viewerRef.current;
-      const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      const xeokitViewer = resolveXeokitViewer(viewerRef);
       if (!xeokitViewer?.scene) return;
 
       const scene = xeokitViewer.scene;
@@ -656,8 +666,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       return;
     }
 
-    const viewer = viewerRef.current;
-    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    const xeokitViewer = resolveXeokitViewer(viewerRef);
     if (!xeokitViewer?.cameraControl) return;
 
     // Helper to find room by entity ID
