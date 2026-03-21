@@ -785,7 +785,7 @@ const WhyAddnodeSlide = () => (
             color: "border-cyan-400/50 bg-cyan-500/10",
             tc: "text-cyan-300",
             points: [
-              "Every Geminus user deepens dependency on SWG, Symetri, Bimify, Senslinc simultaneously",
+              "Every Geminus user deepens dependency on SWG, Symetri, Bimify, Senslinc, Tribia simultaneously",
               "Churn across the group drops as integrations deepen",
               "Lock-in through value, not contracts",
             ],
