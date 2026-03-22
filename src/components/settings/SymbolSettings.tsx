@@ -207,8 +207,8 @@ const SymbolSettings: React.FC = () => {
       if (error) throw error;
 
       toast({
-        title: 'Symbol borttagen',
-        description: `${symbol.name} har tagits bort`,
+        title: 'Symbol deleted',
+        description: `${symbol.name} has been removed`,
       });
       fetchSymbols();
     } catch (error: any) {
