@@ -89,20 +89,20 @@ interface ColumnDef {
 
 // System property definitions
 const SYSTEM_COLUMNS: ColumnDef[] = [
-  { key: 'designation', label: 'Beteckning', category: 'system' },
-  { key: 'commonName', label: 'Namn', category: 'system' },
-  { key: 'assetType', label: 'Typ', category: 'system' },
-  { key: 'category', label: 'Kategori', category: 'system' },
-  { key: 'levelCommonName', label: 'Våning', category: 'system' },
-  { key: 'roomName', label: 'Rum', category: 'system' },
+  { key: 'designation', label: 'Designation', category: 'system' },
+  { key: 'commonName', label: 'Name', category: 'system' },
+  { key: 'assetType', label: 'Type', category: 'system' },
+  { key: 'category', label: 'Category', category: 'system' },
+  { key: 'levelCommonName', label: 'Floor', category: 'system' },
+  { key: 'roomName', label: 'Room', category: 'system' },
   { key: 'fmGuid', label: 'FMGUID', category: 'system' },
 ];
 
 // Status columns
 const STATUS_COLUMNS: ColumnDef[] = [
-  { key: 'createdInModel', label: 'I modell', category: 'status' },
+  { key: 'createdInModel', label: 'In Model', category: 'status' },
   { key: 'annotationPlaced', label: 'Annotation', category: 'status' },
-  { key: 'isLocal', label: 'Synkad', category: 'status' },
+  { key: 'isLocal', label: 'Synced', category: 'status' },
 ];
 
 // Default visible columns
