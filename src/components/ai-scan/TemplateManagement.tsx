@@ -205,8 +205,8 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
         if (error) throw error;
 
         toast({
-          title: 'Mall skapad',
-          description: `"${formData.name}" har lagts till.`,
+          title: 'Template created',
+          description: `"${formData.name}" has been added.`,
         });
       }
 
