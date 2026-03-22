@@ -977,10 +977,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             console.warn('[BIM Sync] No items with versionUrn. All items:', allItems.length, 'BIM without URN:', bimWithoutUrn.length, bimWithoutUrn.map((i: any) => i.name));
             toast({ 
                 variant: 'destructive', 
-                title: 'Inga BIM-filer', 
+                title: 'No BIM files', 
                 description: bimWithoutUrn.length > 0
-                    ? `Hittade ${bimWithoutUrn.length} BIM-fil(er) men utan version-URN. Filerna kan vara Cloud Models som kräver direkt API-åtkomst.`
-                    : 'Denna mapp innehåller inga BIM-filer.'
+                    ? `Found ${bimWithoutUrn.length} BIM file(s) but without version URN. These may be Cloud Models requiring direct API access.`
+                    : 'This folder contains no BIM files.'
             });
             return;
         }
