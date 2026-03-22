@@ -305,7 +305,7 @@ export default function GeminusView() {
 
               {filteredBuildings.length === 0 && filteredViews.length === 0 && (
                 <div className="text-center text-sm text-muted-foreground py-8">
-                  Inga resultat hittades
+                  No results found
                 </div>
               )}
             </div>
