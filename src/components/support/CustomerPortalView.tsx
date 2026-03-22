@@ -20,11 +20,11 @@ const CustomerPortalView: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Support</h1>
-          <p className="text-sm text-muted-foreground">Ärenden, feedback och kontakt med SWG</p>
+          <p className="text-sm text-muted-foreground">Cases, feedback and contact with SWG</p>
         </div>
         <Button onClick={() => setShowCreate(true)} size="sm">
           <Plus className="h-4 w-4 mr-1" />
-          Nytt ärende
+          New case
         </Button>
       </div>
 
