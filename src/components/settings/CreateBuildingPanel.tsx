@@ -1294,7 +1294,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                   ))
                 )}
                 <Button variant="ghost" size="sm" className="w-full text-xs gap-1.5" onClick={fetchConversionJobs}>
-                  <RefreshCw className="h-3 w-3" /> Uppdatera
+                  <RefreshCw className="h-3 w-3" /> Refresh
                 </Button>
               </AccordionContent>
             </AccordionItem>
