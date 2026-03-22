@@ -329,7 +329,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
                   <span>{selectedSymbol.name}</span>
                 </div>
               ) : (
-                <span className="text-muted-foreground">Välj symbol...</span>
+                <span className="text-muted-foreground">Select symbol...</span>
               )}
             </SelectTrigger>
             <SelectContent className="bg-popover z-50 max-h-64">
