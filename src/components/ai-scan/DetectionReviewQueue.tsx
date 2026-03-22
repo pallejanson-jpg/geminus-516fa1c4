@@ -654,7 +654,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                       disabled={isProcessing}
                     >
                       <XCircle className="h-4 w-4 mr-1" />
-                      Avvisa valda
+                      Reject Selected
                     </Button>
                   </>
                 )}
