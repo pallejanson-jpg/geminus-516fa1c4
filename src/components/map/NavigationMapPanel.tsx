@@ -146,7 +146,7 @@ const StepTimeline: React.FC<{
     } else if (indoorDistance > 0) {
       result.push({
         icon: 'indoor',
-        label: 'Gå inomhus',
+        label: 'Walk indoors',
         detail: `~${formatDistance(indoorDistance)}`,
       });
     }
