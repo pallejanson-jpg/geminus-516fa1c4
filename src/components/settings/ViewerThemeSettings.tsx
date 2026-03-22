@@ -416,7 +416,7 @@ const ViewerThemeSettings: React.FC = () => {
 
                   {/* Space opacity */}
                   <div className="space-y-2">
-                    <Label className="text-xs">Rum-transparens</Label>
+                    <Label className="text-xs">Space Opacity</Label>
                     <div className="flex items-center gap-3">
                       <Slider
                         value={[editingTheme.space_opacity * 100]}
