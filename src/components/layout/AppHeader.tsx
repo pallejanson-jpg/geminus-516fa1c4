@@ -182,7 +182,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                     className="w-full flex items-center gap-2 h-9 sm:h-10 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground hover:bg-accent/50 transition-colors"
                 >
                     <Search className="h-4 w-4 shrink-0" />
-                    <span className="flex-1 text-left truncate">Sök byggnader, rum, rum...</span>
+                    <span className="flex-1 text-left truncate">Search buildings, rooms, objects...</span>
                     <kbd className="hidden sm:inline-flex h-5 items-center gap-0.5 rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
                         ⌘K
                     </kbd>

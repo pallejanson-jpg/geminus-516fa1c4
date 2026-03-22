@@ -151,7 +151,7 @@ export const DataConsistencyBanner: React.FC = () => {
               variant="ghost"
               onClick={dismiss}
             >
-              Ignorera
+              Dismiss
             </Button>
           </div>
         </div>
