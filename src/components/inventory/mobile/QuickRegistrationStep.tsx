@@ -371,7 +371,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
             <Textarea
               value={formData.description}
               onChange={(e) => updateFormData({ description: e.target.value })}
-              placeholder="Valfri beskrivning..."
+              placeholder="Optional description..."
               className="min-h-24"
             />
           </CollapsibleContent>
