@@ -322,7 +322,7 @@ const ApprovalDialog: React.FC<{
               onValueChange={val => setForm(prev => ({ ...prev, levelFmGuid: val === 'none' ? null : val, roomFmGuid: null }))}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Välj våning" />
+                <SelectValue placeholder="Select floor" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Ingen våning</SelectItem>
