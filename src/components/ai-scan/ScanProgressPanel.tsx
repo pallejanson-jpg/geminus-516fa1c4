@@ -200,7 +200,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
       onScanCancelled();
     } catch (error: any) {
       toast({
-        title: 'Fel vid avbrytning',
+        title: 'Cancellation error',
         description: error.message,
         variant: 'destructive',
       });
