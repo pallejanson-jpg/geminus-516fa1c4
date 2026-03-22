@@ -301,7 +301,7 @@ export default function SensorsTab() {
             <metricDef.icon className="h-4 w-4" style={{ color: metricDef.color }} />
             Trend Chart – {metricDef.label}
           </CardTitle>
-          <CardDescription>Dagligt snitt, senaste 7 dagar</CardDescription>
+          <CardDescription>Daily average, last 7 days</CardDescription>
         </CardHeader>
         <CardContent>
           <BuildingTrendChart
