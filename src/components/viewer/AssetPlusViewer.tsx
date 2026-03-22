@@ -2861,7 +2861,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     if (!xeokitViewer?.scene) {
       console.warn('Pick mode: viewer or scene not ready');
-      toast.error('Viewer ej redo. Försök igen.');
+      toast.error('Viewer not ready. Please try again.');
       return false;
     }
 
