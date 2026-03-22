@@ -34,11 +34,11 @@ const CATEGORY_CONFIG: Record<string, { label: string; icon: React.ElementType; 
 };
 
 const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  open: { label: 'Öppen', variant: 'outline' },
-  planned: { label: 'Planerad', variant: 'secondary' },
-  in_progress: { label: 'Pågår', variant: 'default' },
-  done: { label: 'Klar', variant: 'default' },
-  declined: { label: 'Avböjd', variant: 'destructive' },
+  open: { label: 'Open', variant: 'outline' },
+  planned: { label: 'Planned', variant: 'secondary' },
+  in_progress: { label: 'In progress', variant: 'default' },
+  done: { label: 'Done', variant: 'default' },
+  declined: { label: 'Declined', variant: 'destructive' },
 };
 
 const FeedbackView: React.FC = () => {
