@@ -279,8 +279,8 @@ const IvionInventory: React.FC = () => {
     setDetectedPoi(null);
     // Check if there's a pending POI to load
     if (pendingPoi) {
-      toast.info('Det finns en väntande POI', {
-        description: 'Klicka på "Ladda ny POI" för att registrera den',
+      toast.info('There is a pending POI', {
+        description: 'Click "Load new POI" to register it',
       });
     }
   };
