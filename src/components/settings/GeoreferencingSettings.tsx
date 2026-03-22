@@ -119,8 +119,8 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
             window.dispatchEvent(new Event('building-settings-changed'));
 
             toast({
-                title: "Koordinater sparade",
-                description: "Byggnadens georeferering har uppdaterats.",
+                title: "Coordinates saved",
+                description: "Building georeferencing has been updated.",
             });
         } catch (error: any) {
             console.error('Failed to save georeferencing settings:', error);
