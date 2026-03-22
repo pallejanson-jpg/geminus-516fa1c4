@@ -1018,11 +1018,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     totalInstances += data.instances || 0;
                 } else if (data?.state === 'PROCESSING') {
                     toast({
-                        title: 'Indexering pågår',
-                        description: `${item.name}: Modellen indexeras. Prova igen om en stund.`,
+                        title: 'Indexing in progress',
+                        description: `${item.name}: Model is being indexed. Try again shortly.`,
                     });
                 } else {
-                    failures.push(`${item.name}: ${data?.error || 'Okänt fel'}`);
+                    failures.push(`${item.name}: ${data?.error || 'Unknown error'}`);
                 }
             } catch (err: any) {
                 console.error(`[BIM Sync] Error syncing ${item.name}:`, err);
