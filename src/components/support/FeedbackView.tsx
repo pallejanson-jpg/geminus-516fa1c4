@@ -191,7 +191,7 @@ const FeedbackView: React.FC = () => {
                       <Badge variant={status.variant} className="text-[10px] px-1.5 py-0">
                         {status.label}
                       </Badge>
-                      <span>{thread.profile?.display_name || 'Okänd'}</span>
+                      <span>{thread.profile?.display_name || 'Unknown'}</span>
                       <span>·</span>
                       <span>{formatDistanceToNow(new Date(thread.created_at), { addSuffix: true })}</span>
                       {(thread.comment_count || 0) > 0 && (
