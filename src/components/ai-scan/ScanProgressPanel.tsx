@@ -402,9 +402,9 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
         <Card>
           <CardContent className="py-8 md:py-12 text-center">
             <RefreshCw className="h-10 w-10 md:h-12 md:w-12 mx-auto mb-3 md:mb-4 text-muted-foreground/50" />
-            <h3 className="text-base md:text-lg font-medium mb-2">Ingen aktiv skanning</h3>
+            <h3 className="text-base md:text-lg font-medium mb-2">No active scan</h3>
             <p className="text-xs md:text-sm text-muted-foreground">
-              Gå till "Konfigurera" för att starta en ny AI-skanning
+              Go to "Configure" to start a new AI scan
             </p>
           </CardContent>
         </Card>
