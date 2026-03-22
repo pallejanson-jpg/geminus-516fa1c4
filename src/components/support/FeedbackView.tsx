@@ -149,10 +149,10 @@ const FeedbackView: React.FC = () => {
       </div>
 
       {loading ? (
-        <div className="text-center py-8 text-muted-foreground text-sm">Laddar…</div>
+        <div className="text-center py-8 text-muted-foreground text-sm">Loading…</div>
       ) : threads.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground text-sm">
-          Inga förslag ännu. Var först med att lämna feedback!
+          No suggestions yet. Be the first to leave feedback!
         </div>
       ) : (
         <div className="space-y-2">
