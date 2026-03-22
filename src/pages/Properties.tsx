@@ -116,7 +116,7 @@ export default function Properties() {
           </Button>
           <Button onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
-            Lägg till fastighet
+            Add Property
           </Button>
         </div>
       </div>
