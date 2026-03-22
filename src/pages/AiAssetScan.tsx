@@ -69,7 +69,7 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid }) =>
   const handleBack = () => {
     if (browserScanConfig) {
       // Confirm leaving active scan
-      if (confirm('Avbryta pågående skanning?')) {
+      if (confirm('Cancel ongoing scan?')) {
         setBrowserScanConfig(null);
       }
       return;
