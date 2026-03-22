@@ -399,8 +399,8 @@ const ImdfExportPanel: React.FC<{ allBuildings: any[] }> = ({ allBuildings }) =>
             a.click();
             URL.revokeObjectURL(url);
             const buildingName = allBuildings.find(b => b.fm_guid === selectedBuilding)?.common_name || selectedBuilding;
-            setExportResult(`Export klar — ${buildingName}`);
-            toast({ title: 'IMDF Export klar', description: `ZIP-fil nedladdad för ${buildingName}` });
+            setExportResult(`Export complete — ${buildingName}`);
+            toast({ title: 'IMDF Export complete', description: `ZIP file downloaded for ${buildingName}` });
         } catch (err: any) {
             setExportResult(`Fel: ${err.message}`);
             toast({ title: 'IMDF Export misslyckades', description: err.message, variant: 'destructive' });
