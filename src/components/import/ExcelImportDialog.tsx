@@ -67,7 +67,7 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
       const jsonData = XLSX.utils.sheet_to_json<Record<string, string>>(ws);
 
       if (jsonData.length === 0) {
-        toast({ variant: 'destructive', title: 'Tomt ark', description: 'Excel-filen innehåller inga rader.' });
+        toast({ variant: 'destructive', title: 'Empty sheet', description: 'The Excel file contains no rows.' });
         return;
       }
 
