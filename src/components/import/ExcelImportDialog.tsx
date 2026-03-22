@@ -116,7 +116,7 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
         if (room) {
           resolvedRoomFmGuid = roomMap.get(room.toLowerCase().trim());
           if (!resolvedRoomFmGuid) {
-            errors.push(`Rum "${room}" hittades inte`);
+            errors.push(`Room "${room}" not found`);
           }
         }
 
