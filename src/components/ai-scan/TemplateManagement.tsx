@@ -400,7 +400,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                         className={isMobile ? 'h-8 px-2' : ''}
                       >
                         <Pencil className="h-4 w-4" />
-                        {isMobile && <span className="ml-1 text-xs">Ändra</span>}
+                        {isMobile && <span className="ml-1 text-xs">Edit</span>}
                       </Button>
                       <Button 
                         variant="outline" 
