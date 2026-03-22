@@ -133,7 +133,7 @@ const FeedbackView: React.FC = () => {
       <div className="flex items-center justify-between gap-2">
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
           <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Alla kategorier" />
+            <SelectValue placeholder="All categories" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Alla</SelectItem>
