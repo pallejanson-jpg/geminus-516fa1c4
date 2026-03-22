@@ -303,7 +303,7 @@ export default function NavigatorView() {
               size="icon"
               className="h-8 w-8 sm:h-9 sm:w-9"
               onClick={() => setViewModeLocal('tree')}
-              title="Trädvy"
+              title="Tree view"
             >
               <Network className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </Button>
