@@ -508,7 +508,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
         <Label className="text-base">Symbol *</Label>
         <Select value={symbolId} onValueChange={setSymbolId}>
           <SelectTrigger className="h-12">
-            <SelectValue placeholder="Välj symbol..." />
+            <SelectValue placeholder="Select symbol..." />
           </SelectTrigger>
           <SelectContent className="bg-popover z-50 max-h-60">
             {Object.entries(groupedSymbols).map(([cat, syms]) => (
