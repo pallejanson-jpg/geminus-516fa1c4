@@ -75,7 +75,7 @@ const FaultReport: React.FC = () => {
       });
     } catch (err: any) {
       console.error('Config fetch error:', err);
-      setConfigError('Kunde inte ansluta till servern. Försök igen.');
+      setConfigError('Could not connect to the server. Please try again.');
     } finally {
       setIsLoadingConfig(false);
     }
