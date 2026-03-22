@@ -333,7 +333,7 @@ export default function CreatePropertyDialog({
           <Accordion type="multiple" className="w-full">
             <AccordionItem value="assetplus">
               <AccordionTrigger className="text-sm font-semibold">
-                Asset+ — Egna credentials
+                Asset+ — Custom Credentials
               </AccordionTrigger>
               <AccordionContent className="space-y-3 pt-2">
                 <p className="text-xs text-muted-foreground">
