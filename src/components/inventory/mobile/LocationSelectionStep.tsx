@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AppContext } from '@/context/AppContext';
 import type { WizardFormData } from './MobileInventoryWizard';
 
-// Konstant för "inget rum valt" - Radix UI kräver icke-tom sträng
+// Constant for "no room selected" - Radix UI requires non-empty string
 const NONE_ROOM_VALUE = '__none__';
 
 interface LocationSelectionStepProps {
