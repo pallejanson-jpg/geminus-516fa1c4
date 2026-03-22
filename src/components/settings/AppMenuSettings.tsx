@@ -187,7 +187,7 @@ const AppMenuSettings: React.FC<AppMenuSettingsProps> = ({ isOpen, onClose }) =>
 
   const handleReset = () => {
     setItems(DEFAULT_SIDEBAR_ORDER);
-    toast.info('Appordning återställd till standard');
+    toast.info('App order reset to default');
   };
 
   return (
