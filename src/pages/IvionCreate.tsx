@@ -346,7 +346,7 @@ const IvionCreate: React.FC = () => {
             <Label>Symbol *</Label>
             <Select value={symbolId} onValueChange={setSymbolId}>
               <SelectTrigger className="h-12">
-                <SelectValue placeholder="Välj symbol..." />
+                <SelectValue placeholder="Select symbol..." />
               </SelectTrigger>
               <SelectContent className="bg-popover z-50 max-h-60">
                 {Object.entries(groupedSymbols).map(([cat, syms]) => (
