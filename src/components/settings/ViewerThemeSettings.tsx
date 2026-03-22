@@ -327,7 +327,7 @@ const ViewerThemeSettings: React.FC = () => {
               ) : (
                 <Check className="h-3.5 w-3.5 mr-1.5" />
               )}
-              Spara tema
+              Save Theme
             </Button>
           </div>
         </div>
