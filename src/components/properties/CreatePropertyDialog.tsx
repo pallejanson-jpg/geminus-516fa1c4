@@ -376,7 +376,7 @@ export default function CreatePropertyDialog({
                   disabled={testingSl || !form.fm_guid}
                 >
                   {testingSl ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <TestTube className="mr-2 h-3 w-3" />}
-                  Testa anslutning
+                  Test Connection
                 </Button>
               </AccordionContent>
             </AccordionItem>
