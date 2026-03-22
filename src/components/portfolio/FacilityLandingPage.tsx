@@ -280,7 +280,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      toast.error('Bilden får max vara 5 MB');
+      toast.error('Image must be 5 MB or smaller');
       return;
     }
 
