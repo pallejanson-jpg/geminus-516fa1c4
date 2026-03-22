@@ -212,7 +212,7 @@ const FeedbackThreadDetail: React.FC<FeedbackThreadDetailProps> = ({
           <Textarea
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Skriv en kommentar…"
+            placeholder="Write a comment…"
             rows={2}
             className="text-sm"
           />
