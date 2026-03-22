@@ -396,7 +396,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
               )}
               {formData.aiProperties.condition && (
                 <Badge variant="outline" className="text-xs">
-                  Skick: {{ good: 'Bra', fair: 'Acceptabelt', poor: 'Dåligt' }[formData.aiProperties.condition] || formData.aiProperties.condition}
+                  Condition: {{ good: 'Good', fair: 'Fair', poor: 'Poor' }[formData.aiProperties.condition] || formData.aiProperties.condition}
                 </Badge>
               )}
               {formData.aiProperties.material && (
