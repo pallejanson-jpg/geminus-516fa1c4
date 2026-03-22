@@ -332,7 +332,7 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
 
               {aiResult.suggestedSymbolId && (
                 <p className="text-xs text-primary">
-                  ✓ Symbol automatiskt vald
+                  ✓ Symbol automatically selected
                 </p>
               )}
 
