@@ -20,6 +20,7 @@ const DISMISS_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 function isDismissedInStorage(): boolean {
   try {
+    if (localStorage.getItem(DEMO_MODE_KEY) === 'true') return true;
     const raw = localStorage.getItem(DISMISS_KEY);
     if (!raw) return false;
     const { dismissedAt } = JSON.parse(raw);
