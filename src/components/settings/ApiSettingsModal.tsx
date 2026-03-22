@@ -421,7 +421,7 @@ const ImdfExportPanel: React.FC<{ allBuildings: any[] }> = ({ allBuildings }) =>
                     onChange={(e) => setSelectedBuilding(e.target.value)}
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
-                    <option value="">Välj byggnad...</option>
+                    <option value="">Select building...</option>
                     {allBuildings.map((b) => (
                         <option key={b.fm_guid} value={b.fm_guid}>
                             {b.common_name || b.name || b.fm_guid}
