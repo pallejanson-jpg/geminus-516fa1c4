@@ -243,7 +243,7 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
                 {isSubmitting && (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 )}
-                Skicka felanmälan
+                Submit fault report
               </Button>
             </div>
           </form>
