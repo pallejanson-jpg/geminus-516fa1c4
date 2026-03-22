@@ -117,7 +117,7 @@ const FaultReport: React.FC = () => {
       } else {
         const externalId = `FR-${Date.now()}`;
         const workOrder = {
-          title: `Felanmälan: ${data.description.slice(0, 50)}`,
+          title: `Fault Report: ${data.description.slice(0, 50)}`,
           description: data.description,
           category: null,
           priority: 'medium' as const,
