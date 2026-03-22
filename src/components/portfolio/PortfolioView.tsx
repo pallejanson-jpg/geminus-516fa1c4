@@ -265,8 +265,8 @@ const PortfolioView: React.FC = () => {
       // No dashboard URL found - show info
       console.log('No IoT dashboard URL found for:', facility.commonName || facility.name);
       const { toast } = await import('sonner');
-      toast.info('Ingen IoT-dashboard', {
-        description: 'Detta objekt har ingen kopplad sensor-dashboard i Asset+ eller Senslinc.'
+      toast.info('No IoT dashboard', {
+        description: 'This object has no linked sensor dashboard in Asset+ or Senslinc.'
       });
     }
   };

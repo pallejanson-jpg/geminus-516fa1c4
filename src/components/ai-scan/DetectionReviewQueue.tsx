@@ -203,15 +203,15 @@ const ApprovalDialog: React.FC<{
       if (!data.success) throw new Error(data.message);
 
       toast({
-        title: 'Godkänd',
+        title: 'Approved',
         description: data.poiId
-          ? `Tillgång skapad med POI #${data.poiId}`
-          : 'Tillgång skapad från detektion',
+          ? `Asset created with POI #${data.poiId}`
+          : 'Asset created from detection',
       });
       onClose();
       onApproved();
     } catch (error: any) {
-      toast({ title: 'Fel vid godkännande', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error approving', description: error.message, variant: 'destructive' });
     } finally {
       setIsSubmitting(false);
     }
@@ -668,7 +668,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
       {isLoading ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <p className="text-muted-foreground">Laddar detektioner...</p>
+            <p className="text-muted-foreground">Loading detections...</p>
           </CardContent>
         </Card>
       ) : detections.length === 0 ? (
@@ -676,8 +676,8 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
           <CardContent className="py-12 text-center">
             <p className="text-muted-foreground">
               {statusFilter === 'pending' 
-                ? 'Inga väntande detektioner. Starta en skanning för att hitta objekt.'
-                : 'Inga detektioner hittades med valt filter.'
+                ? 'No pending detections. Start a scan to find objects.'
+                : 'No detections found with the selected filter.'
               }
             </p>
           </CardContent>
@@ -889,8 +889,8 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                 )}
 
                 <div>
-                  <span className="text-muted-foreground">AI-beskrivning:</span>
-                  <p className="mt-1">{detailDialog.ai_description || 'Ingen beskrivning'}</p>
+                  <span className="text-muted-foreground">AI Description:</span>
+                  <p className="mt-1">{detailDialog.ai_description || 'No description'}</p>
                 </div>
               </div>
             </div>

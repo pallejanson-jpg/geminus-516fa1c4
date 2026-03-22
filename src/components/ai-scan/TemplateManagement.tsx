@@ -154,8 +154,8 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
   const handleSave = async () => {
     if (!formData.name.trim() || !formData.object_type.trim() || !formData.ai_prompt.trim()) {
       toast({
-        title: 'Fyll i obligatoriska fält',
-        description: 'Namn, objekttyp och AI-prompt krävs.',
+        title: 'Fill in required fields',
+        description: 'Name, object type and AI prompt are required.',
         variant: 'destructive',
       });
       return;
@@ -183,8 +183,8 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
         if (error) throw error;
 
         toast({
-          title: 'Mall uppdaterad',
-          description: `"${formData.name}" har sparats.`,
+          title: 'Template updated',
+          description: `"${formData.name}" has been saved.`,
         });
       } else {
         // Create new template via edge function
@@ -205,8 +205,8 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
         if (error) throw error;
 
         toast({
-          title: 'Mall skapad',
-          description: `"${formData.name}" har lagts till.`,
+          title: 'Template created',
+          description: `"${formData.name}" has been added.`,
         });
       }
 
@@ -215,7 +215,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
       onTemplatesChanged?.();
     } catch (error: any) {
       toast({
-        title: 'Fel vid sparning',
+        title: 'Error saving',
         description: error.message,
         variant: 'destructive',
       });
@@ -233,15 +233,15 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
       if (error) throw error;
 
       toast({
-        title: 'Mall borttagen',
-        description: 'Mallen har tagits bort.',
+        title: 'Template deleted',
+        description: 'The template has been removed.',
       });
 
       loadData();
       onTemplatesChanged?.();
     } catch (error: any) {
       toast({
-        title: 'Fel vid borttagning',
+        title: 'Error deleting',
         description: error.message,
         variant: 'destructive',
       });
@@ -267,14 +267,14 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
       ));
 
       toast({
-        title: template.is_active ? 'Mall inaktiverad' : 'Mall aktiverad',
-        description: `"${template.name}" är nu ${template.is_active ? 'inaktiv' : 'aktiv'}.`,
+        title: template.is_active ? 'Template deactivated' : 'Template activated',
+        description: `"${template.name}" is now ${template.is_active ? 'inactive' : 'active'}.`,
       });
 
       onTemplatesChanged?.();
     } catch (error: any) {
       toast({
-        title: 'Fel vid uppdatering',
+        title: 'Error updating',
         description: error.message,
         variant: 'destructive',
       });
@@ -302,17 +302,17 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2">
                 <Settings2 className="h-5 w-5" />
-                Detektionsmallar
+                Detection Templates
               </CardTitle>
               <CardDescription>
-                Konfigurera vilka objekt AI:n ska leta efter och hur
+                Configure which objects the AI should look for and how
               </CardDescription>
             </div>
             <Button onClick={openNewTemplateDialog}>
               <Plus className="h-4 w-4 mr-2" />
-              Ny mall
+              New Template
             </Button>
           </div>
         </CardHeader>
@@ -320,9 +320,9 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
           <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg flex items-start gap-2">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <p>
-              Mallarna styr vad AI:n letar efter i 360°-bilderna. En bra AI-prompt beskriver 
-              tydligt vad objektet ser ut som, var det brukar finnas och vad som skiljer det 
-              från liknande objekt.
+              Templates control what the AI looks for in 360° images. A good AI prompt clearly 
+              describes what the object looks like, where it's typically found and what distinguishes 
+              it from similar objects.
             </p>
           </div>
         </CardContent>
@@ -334,13 +334,13 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
           <Card>
             <CardContent className="py-12 text-center">
               <Settings2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-              <h3 className="text-lg font-medium mb-2">Inga mallar</h3>
+              <h3 className="text-lg font-medium mb-2">No templates</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Skapa din första detektionsmall för att börja skanna
+                Create your first detection template to start scanning
               </p>
               <Button onClick={openNewTemplateDialog}>
                 <Plus className="h-4 w-4 mr-2" />
-                Skapa mall
+                Create Template
               </Button>
             </CardContent>
           </Card>
@@ -353,7 +353,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <h3 className="font-medium">{template.name}</h3>
                       <Badge variant={template.is_active ? 'default' : 'secondary'}>
-                        {template.is_active ? 'Aktiv' : 'Inaktiv'}
+                        {template.is_active ? 'Active' : 'Inactive'}
                       </Badge>
                     </div>
                     {template.description && (
@@ -362,9 +362,9 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                       </p>
                     )}
                     <div className="flex flex-wrap items-center gap-2 md:gap-3 text-xs text-muted-foreground">
-                      <span>Typ: <code className="bg-muted px-1 rounded">{template.object_type}</code></span>
+                      <span>Type: <code className="bg-muted px-1 rounded">{template.object_type}</code></span>
                       {template.default_category && (
-                        <span>Kategori: <code className="bg-muted px-1 rounded">{template.default_category}</code></span>
+                        <span>Category: <code className="bg-muted px-1 rounded">{template.default_category}</code></span>
                       )}
                       {getSymbolName(template.default_symbol_id) && (
                         <span>Symbol: <code className="bg-muted px-1 rounded">{getSymbolName(template.default_symbol_id)}</code></span>
@@ -372,7 +372,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                       {template.example_images && template.example_images.length > 0 && (
                         <span className="flex items-center gap-1">
                           <ImageIcon className="h-3 w-3" />
-                          {template.example_images.length} exempelbilder
+                          {template.example_images.length} example images
                         </span>
                       )}
                     </div>
@@ -390,7 +390,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                         checked={template.is_active}
                         onCheckedChange={() => toggleActive(template)}
                       />
-                      {isMobile && <span className="text-xs text-muted-foreground">{template.is_active ? 'På' : 'Av'}</span>}
+                      {isMobile && <span className="text-xs text-muted-foreground">{template.is_active ? 'On' : 'Off'}</span>}
                     </div>
                     <div className="flex items-center gap-1 ml-auto">
                       <Button 
@@ -400,7 +400,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                         className={isMobile ? 'h-8 px-2' : ''}
                       >
                         <Pencil className="h-4 w-4" />
-                        {isMobile && <span className="ml-1 text-xs">Ändra</span>}
+                        {isMobile && <span className="ml-1 text-xs">Edit</span>}
                       </Button>
                       <Button 
                         variant="outline" 
@@ -409,7 +409,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                         className={isMobile ? 'h-8 px-2' : ''}
                       >
                         <Trash2 className="h-4 w-4" />
-                        {isMobile && <span className="ml-1 text-xs">Ta bort</span>}
+                        {isMobile && <span className="ml-1 text-xs">Delete</span>}
                       </Button>
                     </div>
                   </div>
@@ -425,28 +425,28 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto text-foreground">
           <DialogHeader>
             <DialogTitle>
-              {editingTemplate ? 'Redigera mall' : 'Ny detektionsmall'}
+              {editingTemplate ? 'Edit Template' : 'New Detection Template'}
             </DialogTitle>
             <DialogDescription>
               {editingTemplate 
-                ? 'Uppdatera inställningarna för denna detektionsmall.'
-                : 'Skapa en ny mall för att lära AI:n att hitta en ny typ av objekt.'}
+                ? 'Update the settings for this detection template.'
+                : 'Create a new template to teach the AI to find a new type of object.'}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="name" className="text-foreground">Namn *</Label>
+                <Label htmlFor="name" className="text-foreground">Name *</Label>
                 <Input
                   id="name"
                   value={formData.name}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Brandsläckare"
+                  placeholder="Fire Extinguisher"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="object_type" className="text-foreground">Objekttyp *</Label>
+                <Label htmlFor="object_type" className="text-foreground">Object Type *</Label>
                 <Input
                   id="object_type"
                   value={formData.object_type}
@@ -457,23 +457,23 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description" className="text-foreground">Beskrivning</Label>
+              <Label htmlFor="description" className="text-foreground">Description</Label>
               <Input
                 id="description"
                 value={formData.description}
                 onChange={e => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Röda brandsläckare monterade på väggar"
+                placeholder="Red fire extinguishers mounted on walls"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="default_category" className="text-foreground">Standardkategori</Label>
+                <Label htmlFor="default_category" className="text-foreground">Default Category</Label>
                 <Input
                   id="default_category"
                   value={formData.default_category}
                   onChange={e => setFormData({ ...formData, default_category: e.target.value })}
-                  placeholder="Brandredskap"
+                  placeholder="Fire Safety"
                 />
               </div>
               <div className="space-y-2">
@@ -483,11 +483,11 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                   onValueChange={value => setFormData({ ...formData, default_symbol_id: value === '_none' ? '' : value })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Välj symbol..." />
+                    <SelectValue placeholder="Select symbol..." />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="_none">
-                      <span className="text-muted-foreground">Ingen symbol</span>
+                      <span className="text-muted-foreground">No symbol</span>
                     </SelectItem>
                     {symbols.map(symbol => (
                       <SelectItem key={symbol.id} value={symbol.id}>
@@ -523,8 +523,8 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                 rows={5}
               />
               <p className="text-xs text-muted-foreground">
-                Beskriv på engelska hur objektet ser ut, var det brukar finnas och vad som 
-                skiljer det från liknande objekt.
+                Describe in English what the object looks like, where it's typically found and what 
+                distinguishes it from similar objects.
               </p>
             </div>
 
@@ -542,25 +542,25 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                 checked={formData.is_active}
                 onCheckedChange={checked => setFormData({ ...formData, is_active: checked })}
               />
-              <Label htmlFor="is_active" className="text-foreground">Aktiv (inkluderas i skanningar)</Label>
+              <Label htmlFor="is_active" className="text-foreground">Active (included in scans)</Label>
             </div>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               <X className="h-4 w-4 mr-2" />
-              Avbryt
+              Cancel
             </Button>
             <Button onClick={handleSave} disabled={isSaving}>
               {isSaving ? (
                 <>
                   <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Sparar...
+                  Saving...
                 </>
               ) : (
                 <>
                   <Save className="h-4 w-4 mr-2" />
-                  Spara
+                  Save
                 </>
               )}
             </Button>
@@ -572,15 +572,15 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
       <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Ta bort mall?</AlertDialogTitle>
+            <AlertDialogTitle>Delete template?</AlertDialogTitle>
             <AlertDialogDescription>
-              Denna åtgärd kan inte ångras. Mallen kommer att tas bort permanent.
+              This action cannot be undone. The template will be permanently removed.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => deleteConfirmId && handleDelete(deleteConfirmId)}>
-              Ta bort
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

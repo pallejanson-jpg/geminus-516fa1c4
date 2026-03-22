@@ -99,29 +99,29 @@ export default function GeminusView() {
     const log = (msg: string) => setConversionLog(prev => [...prev, msg]);
 
     try {
-      log(`Läser ${file.name} (${sizeMB.toFixed(1)} MB)...`);
+      log(`Reading ${file.name} (${sizeMB.toFixed(1)} MB)...`);
       const buffer = await file.arrayBuffer();
       setConversionProgress(15);
-      log('Laddar konverterare...');
+      log('Loading converter...');
 
       const converterModule = await import('@/services/acc-xkt-converter');
       setConversionProgress(25);
-      log('Startar IFC-parsning...');
+      log('Starting IFC parsing...');
 
       const result = await converterModule.convertToXktWithMetadata(buffer, (msg: string) => log(msg));
       setConversionProgress(90);
       log(`XKT genererad: ${(result.xktData.byteLength / 1024 / 1024).toFixed(2)} MB`);
-      log(`Hierarki: ${result.levels?.length || 0} våningar, ${result.spaces?.length || 0} rum`);
+      log(`Hierarchy: ${result.levels?.length || 0} floors, ${result.spaces?.length || 0} rooms`);
 
       setXktData(result.xktData);
       setMetaModelJson(result.metaModelJson || null);
       setConversionProgress(100);
-      log('✅ Konvertering klar — öppnar viewer...');
+      log('✅ Conversion complete — opening viewer...');
 
       // Small delay then switch to viewer
       setTimeout(() => setMode('ifc-viewer'), 600);
     } catch (err: any) {
-      setConversionError(err.message || 'Konverteringsfel');
+      setConversionError(err.message || 'Conversion error');
       log(`❌ ${err.message}`);
     } finally {
       setConverting(false);
@@ -165,7 +165,7 @@ export default function GeminusView() {
         });
       } catch (err: any) {
         console.error('Failed to init xeokit viewer:', err);
-        setConversionError('Kunde inte starta 3D-viewern: ' + err.message);
+        setConversionError('Could not start 3D viewer: ' + err.message);
       }
     })();
 

@@ -78,7 +78,7 @@ const PhotoCapture: React.FC<PhotoCaptureProps> = ({
 
         if (uploadError) {
           console.error('Upload error:', uploadError);
-          toast.error('Kunde inte ladda upp bild');
+          toast.error('Could not upload image');
           continue;
         }
 

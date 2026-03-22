@@ -56,14 +56,14 @@ const ProfileSettings: React.FC = () => {
       localStorage.setItem('userProfile', JSON.stringify(profileData));
       
       toast({
-        title: 'Profil sparad',
-        description: 'Dina profilinställningar har sparats.',
+        title: 'Profile saved',
+        description: 'Your profile settings have been saved.',
       });
     } catch (error: any) {
       toast({
         variant: 'destructive',
-        title: 'Kunde inte spara',
-        description: error.message || 'Ett fel uppstod vid sparning.',
+        title: 'Could not save',
+        description: error.message || 'An error occurred while saving.',
       });
     } finally {
       setIsSaving(false);
@@ -115,32 +115,32 @@ const ProfileSettings: React.FC = () => {
             />
           </label>
         </div>
-        <p className="text-sm text-muted-foreground">Klicka på kameran för att ladda upp foto</p>
+        <p className="text-sm text-muted-foreground">Click the camera to upload a photo</p>
       </div>
 
       {/* Name & Email */}
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="displayName">Namn</Label>
+          <Label htmlFor="displayName">Name</Label>
           <Input
             id="displayName"
             value={profile.displayName}
             onChange={(e) => setProfile(prev => ({ ...prev, displayName: e.target.value }))}
-            placeholder="Ditt namn"
+            placeholder="Your name"
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="email">E-post</Label>
+          <Label htmlFor="email">Email</Label>
           <Input
             id="email"
             type="email"
             value={profile.email}
             onChange={(e) => setProfile(prev => ({ ...prev, email: e.target.value }))}
-            placeholder="din@email.se"
+            placeholder="you@email.com"
           />
           <p className="text-xs text-muted-foreground">
-            E-postadressen används för identifiering (autentisering kommer snart)
+            Email is used for identification (authentication coming soon)
           </p>
         </div>
       </div>
@@ -149,7 +149,7 @@ const ProfileSettings: React.FC = () => {
       <div className="space-y-4 pt-4 border-t">
         <div className="flex items-center gap-2">
           <Palette size={18} />
-          <Label className="text-base font-medium">Tema</Label>
+          <Label className="text-base font-medium">Theme</Label>
         </div>
         
         <div className="grid grid-cols-3 gap-3">
@@ -183,7 +183,7 @@ const ProfileSettings: React.FC = () => {
       {/* Save Button */}
       <div className="pt-4 border-t">
         <Button onClick={handleSaveProfile} disabled={isSaving} className="w-full">
-          {isSaving ? 'Sparar...' : 'Spara profil'}
+          {isSaving ? 'Saving...' : 'Save Profile'}
         </Button>
       </div>
     </div>

@@ -46,7 +46,7 @@ const FaultReport: React.FC = () => {
       // Check if the edge function returned a 404-like error
       if (data?.error) {
         console.error('[FaultReport] API error:', data.error);
-        setConfigError('Kunde inte hitta installationen. Kontrollera att QR-koden är giltig.');
+        setConfigError('Could not find the installation. Please verify the QR code is valid.');
         return;
       }
 
@@ -75,7 +75,7 @@ const FaultReport: React.FC = () => {
       });
     } catch (err: any) {
       console.error('Config fetch error:', err);
-      setConfigError('Kunde inte ansluta till servern. Försök igen.');
+      setConfigError('Could not connect to the server. Please try again.');
     } finally {
       setIsLoadingConfig(false);
     }
@@ -113,11 +113,11 @@ const FaultReport: React.FC = () => {
 
         const refId = responseData?.referenceNumber || responseData?.id || responseData?.externalId || `FR-${Date.now()}`;
         setSubmittedId(String(refId));
-        toast.success('Felanmälan skickad!');
+        toast.success('Fault report submitted!');
       } else {
         const externalId = `FR-${Date.now()}`;
         const workOrder = {
-          title: `Felanmälan: ${data.description.slice(0, 50)}`,
+          title: `Fault Report: ${data.description.slice(0, 50)}`,
           description: data.description,
           category: null,
           priority: 'medium' as const,
@@ -138,11 +138,11 @@ const FaultReport: React.FC = () => {
         if (error) throw error;
 
         setSubmittedId(externalId);
-        toast.success('Felanmälan skickad!');
+        toast.success('Fault report submitted!');
       }
     } catch (err: any) {
       console.error('Submit error:', err);
-      toast.error('Kunde inte skicka felanmälan', {
+      toast.error('Could not submit fault report', {
         description: err.message,
       });
     } finally {
@@ -160,7 +160,7 @@ const FaultReport: React.FC = () => {
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Hämtar konfiguration...</p>
+          <p className="text-sm text-muted-foreground">Loading configuration...</p>
         </div>
       </div>
     );
@@ -172,11 +172,11 @@ const FaultReport: React.FC = () => {
       <div className="flex items-center justify-center min-h-screen bg-background p-4">
         <div className="flex flex-col items-center gap-4 text-center max-w-sm">
           <AlertTriangle className="h-10 w-10 text-destructive" />
-          <h2 className="text-lg font-semibold">Något gick fel</h2>
+          <h2 className="text-lg font-semibold">Something went wrong</h2>
           <p className="text-sm text-muted-foreground">{configError}</p>
           <Button onClick={fetchConfig} variant="outline" className="gap-2">
             <RefreshCw className="h-4 w-4" />
-            Försök igen
+            Try again
           </Button>
         </div>
       </div>

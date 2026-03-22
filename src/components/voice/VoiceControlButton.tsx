@@ -208,11 +208,11 @@ export default function VoiceControlButton({
 
   const categoryLabels: Record<string, string> = {
     navigation: 'Navigation',
-    search: 'Sök',
-    '3d': '3D-visare',
-    viewer: 'Visare',
-    assistant: 'Assistent',
-    help: 'Hjälp',
+    search: 'Search',
+    '3d': '3D Viewer',
+    viewer: 'Viewer',
+    assistant: 'Assistant',
+    help: 'Help',
   };
 
   const triggerStyle = triggerPosition ? {
