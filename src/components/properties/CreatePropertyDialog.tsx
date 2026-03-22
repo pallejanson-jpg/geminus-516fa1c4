@@ -344,8 +344,8 @@ export default function CreatePropertyDialog({
                 <SecretInput label="Keycloak URL" field="assetplus_keycloak_url" placeholder="https://..." />
                 <SecretInput label="Client ID" field="assetplus_client_id" />
                 <SecretInput label="Client Secret" field="assetplus_client_secret" />
-                <SecretInput label="Användarnamn" field="assetplus_username" />
-                <SecretInput label="Lösenord" field="assetplus_password" />
+                <SecretInput label="Username" field="assetplus_username" />
+                <SecretInput label="Password" field="assetplus_password" />
                 <Button
                   variant="outline"
                   size="sm"
