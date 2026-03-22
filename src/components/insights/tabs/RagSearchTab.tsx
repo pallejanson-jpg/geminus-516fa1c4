@@ -124,8 +124,8 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
                         <span className="text-xs font-medium text-foreground truncate">
                           {result.fileName}
                         </span>
-                        <Badge variant="outline" className="text-[9px] shrink-0">
-                          {result.sourceType === 'help_doc' ? 'Hjälpdok' : 'Dokument'}
+                         <Badge variant="outline" className="text-[9px] shrink-0">
+                           {result.sourceType === 'help_doc' ? 'Help doc' : 'Document'}
                         </Badge>
                       </div>
                       <p className="text-[11px] text-muted-foreground line-clamp-3">
