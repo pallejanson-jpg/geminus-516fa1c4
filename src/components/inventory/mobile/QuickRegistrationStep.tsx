@@ -108,7 +108,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
       toast.success('Image uploaded!');
     } catch (err: any) {
       console.error('Upload error:', err);
-      toast.error('Kunde inte ladda upp bild', { description: err.message });
+      toast.error('Could not upload image', { description: err.message });
     } finally {
       setIsUploading(false);
     }
