@@ -783,7 +783,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         <div className="flex items-center justify-between">
           <Label className="text-xs flex items-center gap-1">
             <AlertCircle className="h-3 w-3 text-amber-500" />
-            Simulerad data
+            Simulated data
           </Label>
           <Switch checked={useMockData} onCheckedChange={setUseMockData} />
         </div>
