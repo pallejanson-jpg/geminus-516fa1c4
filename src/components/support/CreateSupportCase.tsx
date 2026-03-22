@@ -208,7 +208,7 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
             <Label>Building</Label>
             {buildings.length > 0 ? (
               <Select value={buildingGuid} onValueChange={handleBuildingChange}>
-                <SelectTrigger><SelectValue placeholder="Välj byggnad..." /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select building..." /></SelectTrigger>
                 <SelectContent>
                   {buildings.map(b => (
                     <SelectItem key={b.fm_guid} value={b.fm_guid}>{b.name}</SelectItem>
