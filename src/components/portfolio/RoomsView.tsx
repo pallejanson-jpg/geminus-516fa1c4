@@ -512,7 +512,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
           <div className="min-w-0">
             <h1 className="text-sm sm:text-base md:text-lg font-bold truncate">{title}</h1>
             <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
-              {filteredRooms.length} rum · {Math.round(totalArea).toLocaleString('sv-SE')} m²
+              {filteredRooms.length} rooms · {Math.round(totalArea).toLocaleString('en-US')} m²
             </p>
           </div>
         </div>
