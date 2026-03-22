@@ -565,7 +565,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
             // Spaces without building are truly orphaned and excluded
         });
 
-        // Create synthetic "Okänd våning" storey for orphan spaces per building
+        // Create synthetic "Unknown Floor" storey for orphan spaces per building
         orphanSpacesByBuilding.forEach((orphanSpaces, buildingGuid) => {
             const building = buildingMap.get(buildingGuid);
             if (building && orphanSpaces.length > 0) {
