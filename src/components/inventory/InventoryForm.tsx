@@ -426,7 +426,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
       }
     } catch (error: any) {
       console.error('Save error:', error);
-      toast.error('Kunde inte spara', {
+      toast.error('Could not save', {
         description: error.message,
       });
     } finally {
