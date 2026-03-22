@@ -415,7 +415,7 @@ const ImdfExportPanel: React.FC<{ allBuildings: any[] }> = ({ allBuildings }) =>
                 Export building data as IMDF (Indoor Mapping Data Format) for indoor mapping systems like Apple Maps Indoor.
             </p>
             <div className="space-y-2">
-                <Label className="text-xs">Byggnad</Label>
+                <Label className="text-xs">Building</Label>
                 <select
                     value={selectedBuilding}
                     onChange={(e) => setSelectedBuilding(e.target.value)}
