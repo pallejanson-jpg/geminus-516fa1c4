@@ -140,7 +140,7 @@ const Ivion360PositionPicker: React.FC<Ivion360PositionPickerProps> = ({
       });
 
       if (error || !data?.id) {
-        throw new Error(error?.message || data?.error || 'Kunde inte skapa POI');
+        throw new Error(error?.message || data?.error || 'Could not create POI');
       }
 
       toast.success('Position sparad i 360°');
