@@ -62,7 +62,7 @@ const MobileBuildingSelector: React.FC<MobileBuildingSelectorProps> = ({ onSelec
           {buildings.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Building2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p>Inga byggnader tillgängliga</p>
+              <p>No buildings available</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
