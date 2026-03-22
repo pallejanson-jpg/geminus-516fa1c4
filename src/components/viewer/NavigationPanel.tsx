@@ -250,7 +250,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
             className="text-xs"
           >
             <Route className="h-3.5 w-3.5 mr-1" />
-            Hitta väg
+            Find route
           </Button>
 
           {graph.nodes.size === 0 && (
