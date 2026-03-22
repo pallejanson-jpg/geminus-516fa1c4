@@ -472,11 +472,11 @@ const IvionCreate: React.FC = () => {
 
           {/* Description */}
           <div className="space-y-2">
-            <Label>Beskrivning (valfritt)</Label>
+            <Label>Description (optional)</Label>
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Fritext beskrivning..."
+              placeholder="Free-text description..."
               className="min-h-[80px]"
               maxLength={1000}
             />
