@@ -498,7 +498,7 @@ const ViewerThemeSettings: React.FC = () => {
                         onClick={() => setDeleteConfirmId(theme.id)}
                       >
                         <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                        Ta bort
+                        Delete
                       </Button>
                     )}
                   </div>
