@@ -973,7 +973,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       setOpenSections(prev => new Set([...prev, 'classification']));
       
       if ((data.suggestions || []).length === 0) {
-        toast.info('Inga BIP-matchningar hittades');
+        toast.info('No BIP matches found');
       }
     } catch (error: any) {
       console.error('BIP classify error:', error);
