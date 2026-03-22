@@ -82,8 +82,8 @@ export default function RoomOptimizationTab({ facility }: { facility?: Facility 
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-foreground">Rumsoptimering</h3>
-          <p className="text-xs text-muted-foreground">AI-driven analys av ytanvändning</p>
+           <h3 className="text-sm font-semibold text-foreground">Room Optimization</h3>
+           <p className="text-xs text-muted-foreground">AI-driven analysis of space utilization</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => analyze()} disabled={isLoading}>
           <RefreshCw className={cn('h-3.5 w-3.5 mr-1.5', isLoading && 'animate-spin')} />
