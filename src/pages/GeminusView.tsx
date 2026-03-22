@@ -121,7 +121,7 @@ export default function GeminusView() {
       // Small delay then switch to viewer
       setTimeout(() => setMode('ifc-viewer'), 600);
     } catch (err: any) {
-      setConversionError(err.message || 'Konverteringsfel');
+      setConversionError(err.message || 'Conversion error');
       log(`❌ ${err.message}`);
     } finally {
       setConverting(false);
