@@ -207,10 +207,10 @@ const BuildingSelector: React.FC = () => {
       <div className="mb-6">
         <h2 className="text-xl font-semibold flex items-center gap-2">
           <Box className="h-5 w-5 text-primary" />
-          3D-visning
+          3D Viewer
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Välj en byggnad eller en sparad vy
+          Select a building or a saved view
         </p>
       </div>
 
