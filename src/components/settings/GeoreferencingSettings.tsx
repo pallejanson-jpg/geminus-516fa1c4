@@ -153,7 +153,7 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
             
             <CollapsibleContent className="pt-4 space-y-4">
                 <p className="text-xs text-muted-foreground">
-                    Koordinater krävs för synkronisering mellan 3D-vy och 360°-vy i Split View.
+                    Coordinates are required for synchronization between 3D view and 360° view in Split View.
                 </p>
 
                 {isLoading ? (
