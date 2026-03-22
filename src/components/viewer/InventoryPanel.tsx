@@ -74,11 +74,11 @@ const OBJECT_TYPE_4_CATEGORIES = new Set([
 ]);
 
 const CORE_COLUMNS: ColumnDef[] = [
-  { key: 'name', label: 'Namn', group: 'core' },
-  { key: 'assetType', label: 'Typ', group: 'core' },
-  { key: 'category', label: 'Kategori', group: 'core' },
-  { key: 'levelName', label: 'Våning', group: 'core' },
-  { key: 'roomName', label: 'Rum', group: 'core' },
+  { key: 'name', label: 'Name', group: 'core' },
+  { key: 'assetType', label: 'Type', group: 'core' },
+  { key: 'category', label: 'Category', group: 'core' },
+  { key: 'levelName', label: 'Floor', group: 'core' },
+  { key: 'roomName', label: 'Room', group: 'core' },
   { key: 'systemNames', label: 'System', group: 'core' },
   { key: 'fmGuid', label: 'FMGUID', group: 'core' },
 ];
