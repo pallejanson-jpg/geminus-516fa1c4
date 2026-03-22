@@ -357,7 +357,7 @@ const IvionInventory: React.FC = () => {
               {connectionError && <p className="text-xs text-muted-foreground mt-1">{connectionError}</p>}
               {lastPollTime && connectionStatus === 'connected' && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Senaste poll: {lastPollTime.toLocaleTimeString('sv-SE')}
+                  Last poll: {lastPollTime.toLocaleTimeString('en-US')}
                 </p>
               )}
             </div>
