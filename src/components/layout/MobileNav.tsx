@@ -1,15 +1,14 @@
-import React, { useContext, useState, useEffect, useCallback } from 'react';
+import React, { useContext, useCallback } from 'react';
 import {
   Home, LayoutGrid, Globe, Network, Menu, X, Cuboid
 } from 'lucide-react';
 import { Drawer, DrawerContent } from '@/components/ui/drawer';
 import { AppContext } from '@/context/AppContext';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { SIDEBAR_ORDER_STORAGE_KEY, SIDEBAR_SETTINGS_CHANGED_EVENT, IVION_DEFAULT_BASE_URL } from '@/lib/constants';
-import type { SidebarItem } from '@/lib/constants';
-import { getSidebarOrder } from '@/components/settings/AppMenuSettings';
+import { IVION_DEFAULT_BASE_URL } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { SIDEBAR_ITEM_META, getCurrentContext } from '@/lib/sidebar-config';
+import { useSidebarOrder } from '@/hooks/useSidebarOrder';
 
 // Core navigation items
 const CORE_NAV = [
