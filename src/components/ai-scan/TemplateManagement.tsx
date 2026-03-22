@@ -215,7 +215,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
       onTemplatesChanged?.();
     } catch (error: any) {
       toast({
-        title: 'Fel vid sparning',
+        title: 'Error saving',
         description: error.message,
         variant: 'destructive',
       });
