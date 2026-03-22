@@ -178,7 +178,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
 
             {supportCase.description && (
               <div>
-                <h4 className="text-sm font-medium mb-1">Beskrivning</h4>
+                <h4 className="text-sm font-medium mb-1">Description</h4>
                 <p className="text-sm text-muted-foreground whitespace-pre-wrap">{supportCase.description}</p>
               </div>
             )}
