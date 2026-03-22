@@ -114,7 +114,7 @@ const FeedbackCreateForm: React.FC<FeedbackCreateFormProps> = ({ open, onClose, 
         console.warn('Failed to send notification:', notifyErr);
       }
 
-      toast({ title: 'Tack för din feedback!', description: 'Ditt förslag har skickats.' });
+      toast({ title: 'Thanks for your feedback!', description: 'Your suggestion has been submitted.' });
       onCreated();
     } catch (err) {
       console.error('Failed to create feedback:', err);
