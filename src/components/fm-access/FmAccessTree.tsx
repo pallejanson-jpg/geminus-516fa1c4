@@ -81,7 +81,7 @@ const FmAccessTree: React.FC<FmAccessTreeProps> = ({ rootNode, loading, selected
     return (
       <div className="flex items-center justify-center p-8 text-muted-foreground">
         <Loader2 size={20} className="animate-spin mr-2" />
-        <span className="text-sm">Laddar hierarki...</span>
+        <span className="text-sm">Loading hierarchy…</span>
       </div>
     );
   }
