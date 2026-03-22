@@ -172,19 +172,19 @@ const FmAccessObjectPanel: React.FC<FmAccessObjectPanelProps> = ({ selectedNode,
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button size="sm" variant="destructive">
-                    <Trash2 size={14} className="mr-1" /> Radera
+                    <Trash2 size={14} className="mr-1" /> Delete
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Radera objekt?</AlertDialogTitle>
+                    <AlertDialogTitle>Delete object?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Objektet "{name}" raderas permanent från FM Access. Denna åtgärd kan inte ångras.
+                      The object "{name}" will be permanently deleted from FM Access. This action cannot be undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>Avbryt</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDelete}>Radera</AlertDialogAction>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
