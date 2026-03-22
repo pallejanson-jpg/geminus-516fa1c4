@@ -84,8 +84,8 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
         if (lat !== null && (isNaN(lat) || lat < -90 || lat > 90)) {
             toast({
                 variant: "destructive",
-                title: "Ogiltig latitud",
-                description: "Latitud måste vara mellan -90 och 90.",
+                title: "Invalid latitude",
+                description: "Latitude must be between -90 and 90.",
             });
             return;
         }
