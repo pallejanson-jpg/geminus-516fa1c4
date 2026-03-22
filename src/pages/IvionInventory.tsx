@@ -232,8 +232,8 @@ const IvionInventory: React.FC = () => {
               if (formOpen) {
                 // Form is open - queue the POI and notify user
                 setPendingPoi(data);
-                toast.info('Ny POI upptäckt!', {
-                  description: 'Klicka på "Ladda ny POI" för att använda den',
+                toast.info('New POI detected!', {
+                  description: 'Click "Load new POI" to use it',
                   duration: 5000,
                 });
               } else {
