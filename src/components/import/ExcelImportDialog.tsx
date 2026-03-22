@@ -240,8 +240,8 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
                       <TableHead className="w-8">#</TableHead>
                       <TableHead>Designation</TableHead>
                       <TableHead>CommonName</TableHead>
-                      <TableHead>Våning</TableHead>
-                      <TableHead>Rum</TableHead>
+                      <TableHead>Floor</TableHead>
+                      <TableHead>Room</TableHead>
                       <TableHead className="w-12">Status</TableHead>
                     </TableRow>
                   </TableHeader>
