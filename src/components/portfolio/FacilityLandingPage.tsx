@@ -565,7 +565,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                         disabled={isSaving || (!latitudeInput && !longitudeInput)}
                         className="h-7 text-xs shrink-0"
                       >
-                        {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Spara'}
+                        {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
                       </Button>
                     </div>
                   </div>
