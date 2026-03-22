@@ -310,11 +310,11 @@ const IvionCreate: React.FC = () => {
 
           {/* Name input */}
           <div className="space-y-2">
-            <Label>Namn / Beteckning *</Label>
+            <Label>Name / Designation *</Label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="t.ex. Brandsläckare BS-001"
+              placeholder="e.g. Fire Extinguisher FE-001"
               className="h-12"
               autoFocus
               maxLength={100}
