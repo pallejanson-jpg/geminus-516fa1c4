@@ -144,7 +144,7 @@ export const DataConsistencyBanner: React.FC = () => {
               className="gap-1.5"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              {isSyncing ? 'Synkar...' : 'Synka med Asset+'}
+              {isSyncing ? 'Syncing...' : 'Sync with Asset+'}
             </Button>
             <Button
               size="sm"
