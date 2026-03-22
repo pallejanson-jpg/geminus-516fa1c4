@@ -450,8 +450,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                     const count = (namelessCounterByBuilding.get(storey.buildingFmGuid) || 0) + 1;
                     namelessCounterByBuilding.set(storey.buildingFmGuid, count);
                     displayName = parentName
-                        ? `${parentName} (våning ${count})`
-                        : `Namnlös våning ${count}`;
+                        ? `${parentName} (floor ${count})`
+                        : `Unnamed floor ${count}`;
                 }
                 storeyMap.set(storey.fmGuid, { ...storey, commonName: displayName, children: [] });
             }
