@@ -362,9 +362,9 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                       </p>
                     )}
                     <div className="flex flex-wrap items-center gap-2 md:gap-3 text-xs text-muted-foreground">
-                      <span>Typ: <code className="bg-muted px-1 rounded">{template.object_type}</code></span>
+                      <span>Type: <code className="bg-muted px-1 rounded">{template.object_type}</code></span>
                       {template.default_category && (
-                        <span>Kategori: <code className="bg-muted px-1 rounded">{template.default_category}</code></span>
+                        <span>Category: <code className="bg-muted px-1 rounded">{template.default_category}</code></span>
                       )}
                       {getSymbolName(template.default_symbol_id) && (
                         <span>Symbol: <code className="bg-muted px-1 rounded">{getSymbolName(template.default_symbol_id)}</code></span>
