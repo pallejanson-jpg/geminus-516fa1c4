@@ -177,12 +177,12 @@ const FeedbackCreateForm: React.FC<FeedbackCreateFormProps> = ({ open, onClose, 
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="fb-desc">Beskrivning</Label>
+            <Label htmlFor="fb-desc">Description</Label>
             <Textarea
               id="fb-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Beskriv i detalj vad du önskar…"
+              placeholder="Describe in detail what you wish…"
               rows={4}
             />
           </div>
