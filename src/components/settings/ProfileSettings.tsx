@@ -56,14 +56,14 @@ const ProfileSettings: React.FC = () => {
       localStorage.setItem('userProfile', JSON.stringify(profileData));
       
       toast({
-        title: 'Profil sparad',
-        description: 'Dina profilinställningar har sparats.',
+        title: 'Profile saved',
+        description: 'Your profile settings have been saved.',
       });
     } catch (error: any) {
       toast({
         variant: 'destructive',
-        title: 'Kunde inte spara',
-        description: error.message || 'Ett fel uppstod vid sparning.',
+        title: 'Could not save',
+        description: error.message || 'An error occurred while saving.',
       });
     } finally {
       setIsSaving(false);
