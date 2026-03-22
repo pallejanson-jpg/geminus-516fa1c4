@@ -205,10 +205,10 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
 
           {/* From room */}
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Från rum</Label>
+            <Label className="text-xs text-muted-foreground">From room</Label>
             <Select value={fromRoom} onValueChange={setFromRoom}>
               <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Välj startrum" />
+                <SelectValue placeholder="Select start room" />
               </SelectTrigger>
               <SelectContent>
                 {rooms.map((room: any) => (
