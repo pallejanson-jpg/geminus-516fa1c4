@@ -1052,7 +1052,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         if (failures.length > 0) {
             toast({
                 variant: 'destructive',
-                title: `${failures.length} fil(er) misslyckades`,
+                title: `${failures.length} file(s) failed`,
                 description: failures[0],
             });
         }
