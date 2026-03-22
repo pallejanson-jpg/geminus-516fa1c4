@@ -31,11 +31,11 @@ interface FeedbackThreadDetailProps {
 }
 
 const STATUS_OPTIONS = [
-  { value: 'open', label: 'Öppen' },
-  { value: 'planned', label: 'Planerad' },
-  { value: 'in_progress', label: 'Pågår' },
-  { value: 'done', label: 'Klar' },
-  { value: 'declined', label: 'Avböjd' },
+  { value: 'open', label: 'Open' },
+  { value: 'planned', label: 'Planned' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'done', label: 'Done' },
+  { value: 'declined', label: 'Declined' },
 ];
 
 const FeedbackThreadDetail: React.FC<FeedbackThreadDetailProps> = ({
@@ -141,7 +141,7 @@ const FeedbackThreadDetail: React.FC<FeedbackThreadDetailProps> = ({
         <SheetHeader className="p-4 pb-3 border-b">
           <SheetTitle className="text-base text-foreground pr-6">{thread.title}</SheetTitle>
           <SheetDescription className="text-xs text-muted-foreground">
-            {thread.profile?.display_name || 'Okänd'} · {formatDistanceToNow(new Date(thread.created_at), { addSuffix: true })}
+            {thread.profile?.display_name || 'Unknown'} · {formatDistanceToNow(new Date(thread.created_at), { addSuffix: true })}
           </SheetDescription>
           <div className="flex items-center gap-2 pt-1">
             <Button
@@ -184,18 +184,18 @@ const FeedbackThreadDetail: React.FC<FeedbackThreadDetailProps> = ({
             {/* Comments */}
             <div className="space-y-3">
               <h4 className="text-sm font-medium text-foreground">
-                Kommentarer ({comments.length})
+                Comments ({comments.length})
               </h4>
               {isLoading ? (
-                <div className="text-xs text-muted-foreground">Laddar…</div>
+                <div className="text-xs text-muted-foreground">Loading…</div>
               ) : comments.length === 0 ? (
-                <div className="text-xs text-muted-foreground">Inga kommentarer ännu</div>
+                <div className="text-xs text-muted-foreground">No comments yet</div>
               ) : (
                 comments.map(c => (
                   <div key={c.id} className="rounded-md border bg-muted/30 p-2.5 space-y-1">
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span className="font-medium text-foreground">
-                        {c.profile?.display_name || 'Okänd'}
+                        {c.profile?.display_name || 'Unknown'}
                       </span>
                       <span>{formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}</span>
                     </div>
@@ -212,7 +212,7 @@ const FeedbackThreadDetail: React.FC<FeedbackThreadDetailProps> = ({
           <Textarea
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Skriv en kommentar…"
+            placeholder="Write a comment…"
             rows={2}
             className="text-sm"
           />

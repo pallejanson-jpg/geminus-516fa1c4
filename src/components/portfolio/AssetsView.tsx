@@ -286,7 +286,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           setLocalAssets(mapped);
           
           toast({
-            title: 'Assets synkade',
+            title: 'Assets synced',
             description: `Fetched ${result.count} assets for this building`,
           });
         } else if (!result.synced) {
@@ -527,8 +527,8 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       onPlaceAnnotation(asset.raw);
     } else {
       toast({
-        title: 'Placera annotation',
-        description: `Öppnar 3D-viewern för att placera annotation för ${asset.designation}`,
+        title: 'Place annotation',
+        description: `Opening 3D viewer to place annotation for ${asset.designation}`,
       });
     }
   };
@@ -537,8 +537,8 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   const handleSyncToAssetPlus = useCallback(async (asset: AssetData) => {
     if (!asset.roomFmGuid) {
       toast({
-        title: 'Kan inte synka',
-        description: 'Asset måste vara kopplad till ett rum för att synkas till Asset+',
+        title: 'Cannot sync',
+        description: 'Asset must be associated with a room to sync to Asset+',
         variant: 'destructive',
       });
       return;
@@ -670,13 +670,13 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       const result = await batchSyncAssetsToAssetPlus(fmGuids);
       
       toast({
-        title: 'Synk klar',
-        description: `Synkade ${result.synced} av ${result.total}`,
+        title: 'Sync complete',
+        description: `Synced ${result.synced} of ${result.total}`,
         variant: result.failed > 0 ? 'destructive' : 'default',
       });
     } catch (error: any) {
       toast({
-        title: 'Synk misslyckades',
+        title: 'Sync failed',
         description: error.message,
         variant: 'destructive',
       });
