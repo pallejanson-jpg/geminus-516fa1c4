@@ -134,7 +134,7 @@ export const DataConsistencyBanner: React.FC = () => {
             <p className="mt-1">{deltaResult.message}</p>
           </div>
           
-          <p className="mt-1 text-xs text-muted-foreground/70 italic">ACC-data hanteras via Asset+ och FM Access.</p>
+          <p className="mt-1 text-xs text-muted-foreground/70 italic">ACC data is managed via Asset+ and FM Access.</p>
           
           <div className="mt-2 flex gap-2">
             <Button
