@@ -961,17 +961,17 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                   <AlertDialogHeader>
                     <AlertDialogTitle className="flex items-center gap-2">
                       <AlertTriangle className="h-5 w-5 text-destructive" />
-                      Radera byggnad?
+                      Delete building?
                     </AlertDialogTitle>
                     <AlertDialogDescription>
-                      <strong>{selectedBuilding?.commonName}</strong> och alla tillhörande objekt (våningsplan, rum, inventarier) raderas permanent.
-                      Synkade objekt expireras i Asset+. Denna åtgärd kan inte ångras.
+                      <strong>{selectedBuilding?.commonName}</strong> and all associated objects (floors, rooms, inventory) will be permanently deleted.
+                      Synced objects will be expired in Asset+. This action cannot be undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>Avbryt</AlertDialogCancel>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction onClick={handleDeleteBuilding} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                      Radera allt
+                      Delete All
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
