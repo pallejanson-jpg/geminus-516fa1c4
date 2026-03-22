@@ -183,7 +183,7 @@ const ProfileSettings: React.FC = () => {
       {/* Save Button */}
       <div className="pt-4 border-t">
         <Button onClick={handleSaveProfile} disabled={isSaving} className="w-full">
-          {isSaving ? 'Sparar...' : 'Spara profil'}
+          {isSaving ? 'Saving...' : 'Save Profile'}
         </Button>
       </div>
     </div>

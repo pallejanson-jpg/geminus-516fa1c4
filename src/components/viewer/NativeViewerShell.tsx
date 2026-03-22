@@ -935,7 +935,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       {isPickingPosition && (
         <div className="absolute top-3 left-3 z-50 pointer-events-none">
           <div className="bg-card/90 backdrop-blur-sm border rounded-lg px-4 py-2 shadow-lg text-sm font-medium text-foreground">
-            Klicka för att välja position
+            Click to select position
           </div>
         </div>
       )}
