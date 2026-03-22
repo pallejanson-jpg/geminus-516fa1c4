@@ -645,7 +645,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                           ) : (
                             <>
                               <Upload className="h-5 w-5" />
-                              <span className="text-xs">Ladda upp bild</span>
+                              <span className="text-xs">Upload image</span>
                             </>
                           )}
                         </Button>
