@@ -195,7 +195,7 @@ const FeedbackThreadDetail: React.FC<FeedbackThreadDetailProps> = ({
                   <div key={c.id} className="rounded-md border bg-muted/30 p-2.5 space-y-1">
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span className="font-medium text-foreground">
-                        {c.profile?.display_name || 'Okänd'}
+                        {c.profile?.display_name || 'Unknown'}
                       </span>
                       <span>{formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}</span>
                     </div>
