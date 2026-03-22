@@ -759,21 +759,21 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
       {/* Visualization type selector */}
       <div className="space-y-2">
-        <Label className="text-xs text-muted-foreground">Visualiseringstyp</Label>
+        <Label className="text-xs text-muted-foreground">Visualization type</Label>
         <Select
           value={visualizationType}
           onValueChange={(v) => setVisualizationType(v as VisualizationType)}
         >
           <SelectTrigger className="h-9">
-            <SelectValue placeholder="Välj typ..." />
+            <SelectValue placeholder="Select type…" />
           </SelectTrigger>
           <SelectContent className="bg-card border shadow-lg z-[60]">
-            <SelectItem value="none">Ingen</SelectItem>
-            <SelectItem value="temperature">🌡️ Temperatur</SelectItem>
+            <SelectItem value="none">None</SelectItem>
+            <SelectItem value="temperature">🌡️ Temperature</SelectItem>
             <SelectItem value="co2">💨 CO₂</SelectItem>
-            <SelectItem value="humidity">💧 Luftfuktighet</SelectItem>
-            <SelectItem value="occupancy">👥 Beläggning</SelectItem>
-            <SelectItem value="area">📐 Yta (NTA)</SelectItem>
+            <SelectItem value="humidity">💧 Humidity</SelectItem>
+            <SelectItem value="occupancy">👥 Occupancy</SelectItem>
+            <SelectItem value="area">📐 Area (NTA)</SelectItem>
           </SelectContent>
         </Select>
       </div>
