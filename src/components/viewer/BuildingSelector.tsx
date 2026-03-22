@@ -321,7 +321,7 @@ const BuildingSelector: React.FC = () => {
             <div className="h-full flex items-center justify-center">
               <div className="text-center text-muted-foreground">
                 <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-3" />
-                <p className="text-sm">Laddar sparade vyer...</p>
+                <p className="text-sm">Loading saved views...</p>
               </div>
             </div>
           ) : savedViews.length === 0 ? (
