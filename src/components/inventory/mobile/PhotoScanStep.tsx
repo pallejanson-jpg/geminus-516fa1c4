@@ -249,7 +249,7 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
               {isAnalyzing && (
                 <div className="absolute inset-0 bg-background/70 flex flex-col items-center justify-center gap-2">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  <span className="text-sm font-medium">Identifierar objekt...</span>
+                  <span className="text-sm font-medium">Identifying object...</span>
                 </div>
               )}
               <div className="absolute bottom-2 right-2 flex gap-1.5">
