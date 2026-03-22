@@ -98,16 +98,16 @@ const FmAccessNativeView: React.FC = () => {
           <CardContent className="p-6 space-y-4">
             <div className="flex items-center gap-2 mb-2">
               <Building2 size={20} className="text-primary" />
-              <h2 className="text-base font-semibold">Välj byggnad</h2>
+              <h2 className="text-base font-semibold">Select Building</h2>
               <Badge variant="outline" className="text-[10px] ml-auto">FMA 2.0</Badge>
             </div>
             <p className="text-sm text-muted-foreground">
-              Välj en byggnad för att ladda FM Access-hierarkin.
+              Select a building to load the FM Access hierarchy.
             </p>
             <div className="relative">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Sök byggnad..."
+                placeholder="Search building..."
                 value={buildingSearch}
                 onChange={(e) => setBuildingSearch(e.target.value)}
                 className="h-9 pl-8 text-sm"
@@ -115,7 +115,7 @@ const FmAccessNativeView: React.FC = () => {
             </div>
             <div className="max-h-64 overflow-y-auto space-y-1">
               {filteredBuildings.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-4">Inga byggnader hittades</p>
+                <p className="text-xs text-muted-foreground text-center py-4">No buildings found</p>
               ) : (
                 filteredBuildings.map(b => (
                   <button
