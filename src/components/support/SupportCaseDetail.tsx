@@ -289,7 +289,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
         {/* Comment input */}
         <div className="flex-shrink-0 pt-4 border-t space-y-2">
           <Textarea
-            placeholder="Skriv en kommentar..."
+            placeholder="Write a comment..."
             value={newComment}
             onChange={e => setNewComment(e.target.value)}
             rows={2}
