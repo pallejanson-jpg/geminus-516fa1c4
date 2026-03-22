@@ -219,7 +219,7 @@ const BuildingSelector: React.FC = () => {
         <TabsList className="grid w-full grid-cols-2 mb-4">
           <TabsTrigger value="buildings" className="flex items-center gap-2">
             <Building2 className="h-4 w-4" />
-            Byggnader
+            Buildings
             <Badge variant="secondary" className="text-xs ml-1">
               {buildings.length}
             </Badge>
