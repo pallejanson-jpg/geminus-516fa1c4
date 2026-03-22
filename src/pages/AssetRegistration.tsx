@@ -162,7 +162,7 @@ function AssetRegistrationForm({
                 disabled={isLoading}
               >
                 <MapPin className="h-4 w-4" />
-                {isPickingCoordinates ? 'Väntar på klick...' : coordinates ? 'Ändra position' : 'Välj position'}
+                {isPickingCoordinates ? 'Waiting for click...' : coordinates ? 'Change position' : 'Select position'}
               </Button>
               {coordinates && (
                 <div className="flex items-center gap-1 px-3 bg-muted rounded-md text-sm">
