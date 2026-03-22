@@ -152,7 +152,7 @@ function AssetRegistrationForm({
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Coordinate picker */}
           <div className="space-y-2">
-            <Label>Position i 3D-vy *</Label>
+            <Label>Position in 3D view *</Label>
             <div className="flex gap-2">
               <Button
                 type="button"
