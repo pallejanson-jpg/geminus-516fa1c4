@@ -1238,7 +1238,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
               </AccordionTrigger>
               <AccordionContent className="px-3 pb-3 pt-1 space-y-2">
                 {conversionJobs.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Inga konverteringsjobb för denna byggnad.</p>
+                  <p className="text-xs text-muted-foreground">No conversion jobs for this building.</p>
                 ) : (
                   conversionJobs.map(job => (
                     <div key={job.id} className="border rounded-md p-2.5 space-y-1.5 bg-muted/20">
