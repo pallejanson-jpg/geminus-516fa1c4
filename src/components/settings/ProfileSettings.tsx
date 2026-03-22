@@ -149,7 +149,7 @@ const ProfileSettings: React.FC = () => {
       <div className="space-y-4 pt-4 border-t">
         <div className="flex items-center gap-2">
           <Palette size={18} />
-          <Label className="text-base font-medium">Tema</Label>
+          <Label className="text-base font-medium">Theme</Label>
         </div>
         
         <div className="grid grid-cols-3 gap-3">
