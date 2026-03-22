@@ -136,7 +136,7 @@ const FeedbackView: React.FC = () => {
             <SelectValue placeholder="All categories" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Alla</SelectItem>
+            <SelectItem value="all">All</SelectItem>
             {Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => (
               <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
             ))}
