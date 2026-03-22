@@ -86,7 +86,7 @@ export default function GeminusView() {
   const handleFileSelect = useCallback(async (file: File) => {
     const sizeMB = file.size / (1024 * 1024);
     if (sizeMB > MAX_FILE_SIZE_MB) {
-      setConversionError(`Filen är ${sizeMB.toFixed(0)} MB — maxgräns är ${MAX_FILE_SIZE_MB} MB för webbläsarkonvertering.`);
+      setConversionError(`File is ${sizeMB.toFixed(0)} MB — max limit is ${MAX_FILE_SIZE_MB} MB for browser conversion.`);
       return;
     }
     setIfcFile(file);
