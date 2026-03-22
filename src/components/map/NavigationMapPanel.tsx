@@ -392,7 +392,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
                 className="h-8 w-8 shrink-0"
                 onClick={handleLocate}
                 disabled={isLocating}
-                title="Min position (GPS)"
+                title="My location (GPS)"
               >
                 <LocateFixed size={14} className={isLocating ? 'animate-pulse' : ''} />
               </Button>
