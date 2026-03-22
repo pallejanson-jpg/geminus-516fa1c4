@@ -310,7 +310,7 @@ const ApprovalDialog: React.FC<{
 
           {/* Building (read-only) */}
           <div className="space-y-1">
-            <Label>Byggnad</Label>
+            <Label>Building</Label>
             <Input value={buildingName} readOnly className="bg-muted" />
           </div>
 
