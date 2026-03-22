@@ -2918,7 +2918,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         </div>
                                                         
                                                         {accFolders.length === 0 && accTopLevelItems.length === 0 && (
-                                                            <p className="text-xs text-muted-foreground italic">Inga mappar eller filer hittades.</p>
+                                                            <p className="text-xs text-muted-foreground italic">No folders or files found.</p>
                                                         )}
 
                                                         <div className="space-y-1 max-h-[50vh] sm:max-h-96 overflow-y-auto overflow-x-hidden">
