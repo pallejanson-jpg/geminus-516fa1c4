@@ -289,7 +289,7 @@ const BuildingSelector: React.FC = () => {
                           )}
                           {metrics.rooms > 0 && (
                             <Badge variant="outline" className="text-xs">
-                              {metrics.rooms} rum
+                              {metrics.rooms} rooms
                             </Badge>
                           )}
                           {metrics.area > 0 && (
