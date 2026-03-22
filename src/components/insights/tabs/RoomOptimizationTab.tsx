@@ -111,7 +111,7 @@ export default function RoomOptimizationTab({ facility }: { facility?: Facility 
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-muted-foreground">Utnyttjandegrad</span>
+                <span className="text-xs font-medium text-muted-foreground">Utilization Rate</span>
                 <span className={cn(
                   'text-lg font-bold',
                   data.utilizationScore > 70 ? 'text-emerald-500' :
