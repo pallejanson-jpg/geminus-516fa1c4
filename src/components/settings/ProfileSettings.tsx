@@ -137,10 +137,10 @@ const ProfileSettings: React.FC = () => {
             type="email"
             value={profile.email}
             onChange={(e) => setProfile(prev => ({ ...prev, email: e.target.value }))}
-            placeholder="din@email.se"
+            placeholder="you@email.com"
           />
           <p className="text-xs text-muted-foreground">
-            E-postadressen används för identifiering (autentisering kommer snart)
+            Email is used for identification (authentication coming soon)
           </p>
         </div>
       </div>
