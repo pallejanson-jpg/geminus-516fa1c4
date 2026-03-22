@@ -217,7 +217,7 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
                                 className="h-9 font-mono text-xs"
                             />
                             <p className="text-[10px] text-muted-foreground">
-                                GUID för byggnaden i FM Access (krävs för 2D-ritningar)
+                                GUID for the building in FM Access (required for 2D drawings)
                             </p>
                         </div>
                             <Slider
