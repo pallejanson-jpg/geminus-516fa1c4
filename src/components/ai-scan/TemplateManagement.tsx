@@ -390,7 +390,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                         checked={template.is_active}
                         onCheckedChange={() => toggleActive(template)}
                       />
-                      {isMobile && <span className="text-xs text-muted-foreground">{template.is_active ? 'På' : 'Av'}</span>}
+                      {isMobile && <span className="text-xs text-muted-foreground">{template.is_active ? 'On' : 'Off'}</span>}
                     </div>
                     <div className="flex items-center gap-1 ml-auto">
                       <Button 
