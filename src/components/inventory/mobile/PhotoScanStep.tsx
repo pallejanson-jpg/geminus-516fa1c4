@@ -36,20 +36,20 @@ interface AiResult {
 }
 
 const OBJECT_TYPE_LABELS: Record<string, string> = {
-  fire_extinguisher: 'Brandsläckare',
-  fire_alarm_button: 'Larmknapp',
-  smoke_detector: 'Rökdetektor',
-  fire_hose: 'Brandslang',
-  electrical_panel: 'Eltavla',
-  door: 'Dörr',
-  elevator: 'Hiss',
-  staircase: 'Trappa',
+  fire_extinguisher: 'Fire Extinguisher',
+  fire_alarm_button: 'Fire Alarm Button',
+  smoke_detector: 'Smoke Detector',
+  fire_hose: 'Fire Hose',
+  electrical_panel: 'Electrical Panel',
+  door: 'Door',
+  elevator: 'Elevator',
+  staircase: 'Staircase',
   ventilation: 'Ventilation',
-  hvac_unit: 'Värmepump/AC',
+  hvac_unit: 'HVAC Unit',
   sprinkler: 'Sprinkler',
-  emergency_light: 'Nödbelysning',
-  access_control: 'Passersystem',
-  other: 'Övrigt',
+  emergency_light: 'Emergency Light',
+  access_control: 'Access Control',
+  other: 'Other',
 };
 
 const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
