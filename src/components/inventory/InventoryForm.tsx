@@ -712,10 +712,10 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
           className="flex-1 h-12"
           disabled={isLoading}
         >
-          {isEditing ? 'Avbryt' : 'Rensa'}
+          {isEditing ? 'Cancel' : 'Clear'}
         </Button>
         <Button type="submit" className="flex-1 h-12" disabled={isLoading}>
-          {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : (isEditing ? 'Uppdatera' : 'Spara')}
+          {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : (isEditing ? 'Update' : 'Save')}
         </Button>
       </div>
 
