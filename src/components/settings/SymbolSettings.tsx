@@ -196,7 +196,7 @@ const SymbolSettings: React.FC = () => {
   };
 
   const handleDelete = async (symbol: AnnotationSymbol) => {
-    if (!confirm(`Ta bort "${symbol.name}"?`)) return;
+    if (!confirm(`Delete "${symbol.name}"?`)) return;
 
     try {
       const { error } = await supabase
