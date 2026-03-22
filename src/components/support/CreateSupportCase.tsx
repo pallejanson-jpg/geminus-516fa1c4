@@ -148,11 +148,11 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
         if (error) console.warn('Local backup save failed:', error);
       });
 
-      toast({ title: 'Ärende skapat' });
+      toast({ title: 'Case created' });
       onCreated();
     } catch (err) {
       console.error('Failed to create support case:', err);
-      toast({ title: 'Kunde inte skapa ärende', variant: 'destructive' });
+      toast({ title: 'Could not create case', variant: 'destructive' });
     } finally {
       setSubmitting(false);
     }
