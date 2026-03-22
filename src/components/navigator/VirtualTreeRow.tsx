@@ -221,7 +221,7 @@ export const VirtualTreeRow = memo(function VirtualTreeRow({
                 <Plus className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">Lägg till</TooltipContent>
+            <TooltipContent side="top">Add</TooltipContent>
           </Tooltip>
         )}
         
