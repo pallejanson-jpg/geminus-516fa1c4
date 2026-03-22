@@ -224,12 +224,12 @@ function AssetRegistrationForm({
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="description">Beskrivning (valfritt)</Label>
+            <Label htmlFor="description">Description (optional)</Label>
             <Input
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Fritext beskrivning..."
+              placeholder="Free-text description..."
               disabled={isLoading}
             />
           </div>
