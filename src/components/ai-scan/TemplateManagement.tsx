@@ -154,8 +154,8 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
   const handleSave = async () => {
     if (!formData.name.trim() || !formData.object_type.trim() || !formData.ai_prompt.trim()) {
       toast({
-        title: 'Fyll i obligatoriska fält',
-        description: 'Namn, objekttyp och AI-prompt krävs.',
+        title: 'Fill in required fields',
+        description: 'Name, object type and AI prompt are required.',
         variant: 'destructive',
       });
       return;
