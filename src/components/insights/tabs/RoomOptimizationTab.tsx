@@ -87,7 +87,7 @@ export default function RoomOptimizationTab({ facility }: { facility?: Facility 
         </div>
         <Button variant="outline" size="sm" onClick={() => analyze()} disabled={isLoading}>
           <RefreshCw className={cn('h-3.5 w-3.5 mr-1.5', isLoading && 'animate-spin')} />
-          {isLoading ? 'Analyserar...' : 'Analysera'}
+          {isLoading ? 'Analyzing...' : 'Analyze'}
         </Button>
       </div>
 
