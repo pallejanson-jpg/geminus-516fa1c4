@@ -50,7 +50,7 @@ const InventoryFormSheet: React.FC<InventoryFormSheetProps> = ({
         }}
       >
         <SheetHeader className="px-6 pt-6">
-          <SheetTitle>Registrera tillgång</SheetTitle>
+          <SheetTitle>Register Asset</SheetTitle>
         </SheetHeader>
         <div className="px-6 pb-6">
           <InventoryForm

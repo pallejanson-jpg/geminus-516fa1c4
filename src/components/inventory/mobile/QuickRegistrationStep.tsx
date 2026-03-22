@@ -434,7 +434,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
             className="w-full h-10"
           >
             <Save className="h-4 w-4 mr-2" />
-            Spara & avsluta
+            Save & finish
           </Button>
         </div>
       </div>

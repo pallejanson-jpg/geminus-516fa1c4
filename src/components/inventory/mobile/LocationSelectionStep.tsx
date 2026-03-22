@@ -258,7 +258,7 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
           disabled={!canContinue}
           className="w-full h-14 text-lg mt-4"
         >
-          Fortsätt →
+          Continue →
         </Button>
       </div>
     </ScrollArea>
