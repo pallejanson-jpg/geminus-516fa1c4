@@ -111,7 +111,7 @@ export default function GeminusView() {
       const result = await converterModule.convertToXktWithMetadata(buffer, (msg: string) => log(msg));
       setConversionProgress(90);
       log(`XKT genererad: ${(result.xktData.byteLength / 1024 / 1024).toFixed(2)} MB`);
-      log(`Hierarki: ${result.levels?.length || 0} våningar, ${result.spaces?.length || 0} rum`);
+      log(`Hierarchy: ${result.levels?.length || 0} floors, ${result.spaces?.length || 0} rooms`);
 
       setXktData(result.xktData);
       setMetaModelJson(result.metaModelJson || null);
