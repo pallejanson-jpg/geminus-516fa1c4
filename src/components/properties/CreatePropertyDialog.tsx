@@ -386,10 +386,10 @@ export default function CreatePropertyDialog({
           <div className="flex gap-3 pt-2">
             <Button onClick={handleSave} disabled={saving} className="flex-1">
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              Spara
+              Save
             </Button>
             <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Avbryt
+              Cancel
             </Button>
           </div>
         </div>

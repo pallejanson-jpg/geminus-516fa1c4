@@ -298,7 +298,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
           <div className="flex justify-end">
             <Button size="sm" onClick={handleSubmitComment} disabled={!newComment.trim() || submitting}>
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : (
-                <><Send className="h-4 w-4 mr-1" />Skicka</>
+                <><Send className="h-4 w-4 mr-1" />Send</>
               )}
             </Button>
           </div>
