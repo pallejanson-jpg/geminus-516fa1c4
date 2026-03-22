@@ -159,7 +159,7 @@ const BuildingSelector: React.FC = () => {
   const handleDeleteView = async (viewId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     
-    if (!confirm('Är du säker på att du vill ta bort denna sparade vy?')) return;
+    if (!confirm('Are you sure you want to delete this saved view?')) return;
     
     try {
       // Delete from database
