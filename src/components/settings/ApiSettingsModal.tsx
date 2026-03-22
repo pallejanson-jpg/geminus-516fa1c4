@@ -355,7 +355,7 @@ const FmAccessDocSyncPanel: React.FC = () => {
                 </Button>
                 <Button size="sm" className="gap-1 h-7 text-[10px]" disabled={isSyncing} onClick={() => handleSync('sync-all')}>
                     {isSyncing && syncAction === 'sync-all' ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                    Synka allt
+                    Sync All
                 </Button>
             </div>
         </div>
