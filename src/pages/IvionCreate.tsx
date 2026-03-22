@@ -398,7 +398,7 @@ const IvionCreate: React.FC = () => {
               }}
             >
               <SelectTrigger className="h-12">
-                <SelectValue placeholder="Välj byggnad..." />
+                <SelectValue placeholder="Select building..." />
               </SelectTrigger>
               <SelectContent className="bg-popover z-50">
                 {buildings.map((b) => (
