@@ -153,7 +153,7 @@ const BuildingSelector: React.FC = () => {
       console.log('Dispatched LOAD_SAVED_VIEW_EVENT:', eventDetail);
     }, 100);
     
-    toast({ title: "Laddar vy", description: `Öppnar "${view.name}"` });
+    toast({ title: "Loading view", description: `Opening "${view.name}"` });
   };
 
   const handleDeleteView = async (viewId: string, e: React.MouseEvent) => {
