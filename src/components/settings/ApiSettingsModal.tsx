@@ -301,10 +301,10 @@ const FmAccessDocSyncPanel: React.FC = () => {
             });
             if (error) throw error;
             toast({
-                title: 'FM Access-synk klar',
+                title: 'FM Access sync complete',
                 description: action === 'sync-all'
-                    ? `Ritningar: ${data?.results?.['sync-drawings']?.synced || 0}, Dokument: ${data?.results?.['sync-documents']?.synced || 0}, DoU: ${data?.results?.['sync-dou']?.synced || 0}`
-                    : `${data?.synced || 0} objekt synkade.`,
+                    ? `Drawings: ${data?.results?.['sync-drawings']?.synced || 0}, Documents: ${data?.results?.['sync-documents']?.synced || 0}, DoU: ${data?.results?.['sync-dou']?.synced || 0}`
+                    : `${data?.synced || 0} items synced.`,
             });
             fetchStatus();
         } catch (err: any) {
