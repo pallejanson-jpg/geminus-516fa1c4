@@ -355,16 +355,16 @@ const SymbolSettings: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="symbol-category">Kategori</Label>
+              <Label htmlFor="symbol-category">Category</Label>
               <Input
                 id="symbol-category"
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                placeholder="t.ex. Fire, Sensor, Sprinkler"
+                placeholder="e.g. Fire, Sensor, Sprinkler"
                 className="h-11"
               />
               <p className="text-xs text-muted-foreground">
-                Används för att matcha assets baserat på kategori eller namn
+                Used to match assets based on category or name
               </p>
             </div>
 
