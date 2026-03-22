@@ -15,13 +15,13 @@ import type { FaultReportFormData } from './FaultReportForm';
 import chicagoHero from '@/assets/chicago-skyline-hero.jpg';
 
 const faultReportSchema = z.object({
-  description: z.string().trim().min(1, 'Beskrivning krävs').max(2000, 'Max 2000 tecken'),
+  description: z.string().trim().min(1, 'Description is required').max(2000, 'Max 2000 characters'),
   errorCode: z.any().optional(),
   email: z.string().trim().max(255).optional().or(z.literal('')).refine(
     (val) => !val || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val),
-    { message: 'Ogiltig e-postadress' }
+    { message: 'Invalid email address' }
   ),
-  phone: z.string().trim().max(20, 'Max 20 tecken').optional().or(z.literal('')),
+  phone: z.string().trim().max(20, 'Max 20 characters').optional().or(z.literal('')),
 });
 
 interface MobileFaultReportProps {
