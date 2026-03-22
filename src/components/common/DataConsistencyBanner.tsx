@@ -95,8 +95,8 @@ export const DataConsistencyBanner: React.FC = () => {
     } catch (error) {
       console.error('Sync failed:', error);
       toast({
-        title: 'Synkronisering misslyckades',
-        description: error instanceof Error ? error.message : 'Okänt fel',
+        title: 'Sync failed',
+        description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
     } finally {
