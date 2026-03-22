@@ -177,7 +177,7 @@ const BuildingSelector: React.FC = () => {
 
       // Update local state
       setSavedViews(prev => prev.filter(v => v.id !== viewId));
-      toast({ title: "Vy borttagen" });
+      toast({ title: "View deleted" });
     } catch (err) {
       console.error('Failed to delete view:', err);
       toast({ title: "Fel", description: "Kunde inte ta bort vyn", variant: "destructive" });
