@@ -301,7 +301,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
 
         {/* Name input */}
         <div className="space-y-1.5">
-          <Label className="text-sm font-medium">Namn / Beteckning *</Label>
+          <Label className="text-sm font-medium">Name / Designation *</Label>
           <Input
             value={formData.name}
             onChange={(e) => updateFormData({ name: e.target.value })}
