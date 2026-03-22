@@ -409,7 +409,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                         className={isMobile ? 'h-8 px-2' : ''}
                       >
                         <Trash2 className="h-4 w-4" />
-                        {isMobile && <span className="ml-1 text-xs">Ta bort</span>}
+                        {isMobile && <span className="ml-1 text-xs">Delete</span>}
                       </Button>
                     </div>
                   </div>
