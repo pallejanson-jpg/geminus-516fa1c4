@@ -183,8 +183,8 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
         if (error) throw error;
 
         toast({
-          title: 'Mall uppdaterad',
-          description: `"${formData.name}" har sparats.`,
+          title: 'Template updated',
+          description: `"${formData.name}" has been saved.`,
         });
       } else {
         // Create new template via edge function
