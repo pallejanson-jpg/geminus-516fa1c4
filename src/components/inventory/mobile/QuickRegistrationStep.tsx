@@ -210,7 +210,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
       onComplete(registerAnother);
     } catch (error: any) {
       console.error('Save error:', error);
-      toast.error('Kunde inte spara', { description: error.message });
+      toast.error('Could not save', { description: error.message });
     } finally {
       setIsLoading(false);
     }
