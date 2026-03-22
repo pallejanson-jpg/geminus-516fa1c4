@@ -211,10 +211,10 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
           <div className="text-center space-y-1">
             <div className="flex items-center justify-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              <h2 className="text-base font-semibold">AI-identifiering</h2>
+              <h2 className="text-base font-semibold">AI Identification</h2>
             </div>
             <p className="text-sm text-muted-foreground">
-              Fotografera objektet — AI identifierar typ och fyller i uppgifter automatiskt
+              Take a photo of the object — AI identifies the type and fills in details automatically
             </p>
           </div>
 
