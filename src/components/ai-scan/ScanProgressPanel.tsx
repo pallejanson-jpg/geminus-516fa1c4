@@ -473,7 +473,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isCancelling}>Fortsätt skanna</AlertDialogCancel>
+            <AlertDialogCancel disabled={isCancelling}>Keep scanning</AlertDialogCancel>
             <AlertDialogAction 
               onClick={async () => {
                 setCancelDialogOpen(false);
