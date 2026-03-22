@@ -413,7 +413,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
       {/* Recent Jobs */}
       <Card>
         <CardHeader className="pb-2 md:pb-4">
-          <CardTitle className="text-sm md:text-base">Tidigare skanningar</CardTitle>
+          <CardTitle className="text-sm md:text-base">Previous scans</CardTitle>
         </CardHeader>
         <CardContent>
           {recentJobs.length === 0 ? (
