@@ -884,7 +884,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         fetchBuildings();
       }
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Radering misslyckades', description: err.message });
+      toast({ variant: 'destructive', title: 'Deletion failed', description: err.message });
     } finally {
       setIsDeleting(false);
     }
