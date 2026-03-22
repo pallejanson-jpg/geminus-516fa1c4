@@ -194,12 +194,12 @@ function AssetRegistrationForm({
 
           {/* Designation */}
           <div className="space-y-2">
-            <Label htmlFor="designation">Benämning / Nummer *</Label>
+            <Label htmlFor="designation">Designation / Number *</Label>
             <Input
               id="designation"
               value={designation}
               onChange={(e) => setDesignation(e.target.value)}
-              placeholder="t.ex. BS-001, Stol-A1"
+              placeholder="e.g. FE-001, Chair-A1"
               required
               disabled={isLoading}
             />
