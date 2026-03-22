@@ -337,7 +337,7 @@ const FmAccessDocSyncPanel: React.FC = () => {
             )}
             {lastSync && (
                 <p className="text-xs text-muted-foreground">
-                    Senaste synk: {new Date(lastSync).toLocaleString('sv-SE')}
+                    Last sync: {new Date(lastSync).toLocaleString('en-US')}
                 </p>
             )}
             <div className="flex flex-wrap gap-2">
