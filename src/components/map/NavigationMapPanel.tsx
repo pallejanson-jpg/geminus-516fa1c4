@@ -538,7 +538,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
                   onClick={onShowIndoor}
                 >
                   <Building2 size={12} />
-                  Visa i byggnaden
+                  Show in building
                   <ArrowRight size={12} />
                 </Button>
               )}

@@ -77,7 +77,7 @@ export function VirtualTree({
   if (flatNodes.length === 0) {
     return (
       <div className="p-2 sm:p-3 text-xs sm:text-sm text-muted-foreground">
-        Inga objekt att visa.
+        No items to display.
       </div>
     );
   }
