@@ -129,7 +129,7 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
                       />
                       <FormControl>
                         <Textarea
-                          placeholder="Beskriv felet så tydligt du kan..."
+                          placeholder="Describe the fault as clearly as possible..."
                           rows={4}
                           className="rounded-xl bg-muted/50 border-0 focus-visible:ring-1 text-base"
                           {...field}
