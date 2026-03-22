@@ -2737,7 +2737,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             className="h-7 text-xs gap-1"
                                                         >
                                                             {isLoadingHubs ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                                                            {accHubs.length === 0 ? 'Hämta konton' : 'Uppdatera'}
+                                                            {accHubs.length === 0 ? 'Fetch accounts' : 'Refresh'}
                                                         </Button>
                                                     </div>
                                                     {accHubs.length > 0 ? (
