@@ -213,9 +213,9 @@ const RoomLabelSettings: React.FC = () => {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="none">Ingen</SelectItem>
-                          <SelectItem value="flyto">Flytta kamera till rum</SelectItem>
-                          <SelectItem value="roomcard">Visa rumskort</SelectItem>
+                          <SelectItem value="none">None</SelectItem>
+                          <SelectItem value="flyto">Fly camera to room</SelectItem>
+                          <SelectItem value="roomcard">Show room card</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
