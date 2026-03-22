@@ -347,7 +347,7 @@ const FmAccessDocSyncPanel: React.FC = () => {
                 </Button>
                 <Button size="sm" variant="outline" className="gap-1 h-7 text-[10px]" disabled={isSyncing} onClick={() => handleSync('sync-documents')}>
                     {isSyncing && syncAction === 'sync-documents' ? <Loader2 className="h-3 w-3 animate-spin" /> : <File className="h-3 w-3" />}
-                    Dokument
+                    Documents
                 </Button>
                 <Button size="sm" variant="outline" className="gap-1 h-7 text-[10px]" disabled={isSyncing} onClick={() => handleSync('sync-dou')}>
                     {isSyncing && syncAction === 'sync-dou' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wrench className="h-3 w-3" />}
