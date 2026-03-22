@@ -357,6 +357,7 @@ const ViewCard = React.forwardRef<HTMLButtonElement, { view: SavedView; onClick:
           <img
             src={view.screenshot_url}
             alt={view.name}
+            loading="lazy"
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
         ) : (

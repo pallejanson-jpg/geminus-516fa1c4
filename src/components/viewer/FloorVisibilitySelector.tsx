@@ -251,8 +251,8 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         <div className={cn("space-y-2", className)} ref={ref}>
           <div className="flex items-center gap-1.5">
             <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-            <Label className="text-xs text-muted-foreground uppercase tracking-wider">Våningsplan</Label>
-            <span className="text-xs text-muted-foreground/70 ml-1 italic">(Laddar...)</span>
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">Floors</Label>
+            <span className="text-xs text-muted-foreground/70 ml-1 italic">(Loading…)</span>
           </div>
         </div>
       );

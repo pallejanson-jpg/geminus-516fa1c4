@@ -498,7 +498,7 @@ const CesiumGlobeView: React.FC = () => {
       {bimLoading && (
         <div className="absolute top-14 right-3 z-20 bg-card/90 backdrop-blur-sm rounded-lg px-3 py-2 shadow border border-border/50 flex items-center gap-2">
           <Loader2 size={14} className="animate-spin text-primary" />
-          <span className="text-[11px] text-muted-foreground">Laddar BIM...</span>
+          <span className="text-[11px] text-muted-foreground">Loading BIM…</span>
         </div>
       )}
 

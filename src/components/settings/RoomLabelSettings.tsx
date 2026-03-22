@@ -85,7 +85,7 @@ const RoomLabelSettings: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <div className="text-muted-foreground">Laddar...</div>
+        <div className="text-muted-foreground">Loading…</div>
       </div>
     );
   }

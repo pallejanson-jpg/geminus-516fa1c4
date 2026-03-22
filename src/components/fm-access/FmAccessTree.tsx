@@ -89,7 +89,7 @@ const FmAccessTree: React.FC<FmAccessTreeProps> = ({ rootNode, loading, selected
   if (!rootNode) {
     return (
       <div className="p-4 text-sm text-muted-foreground text-center">
-        Välj en byggnad för att visa hierarkin.
+        Select a building to view the hierarchy.
       </div>
     );
   }

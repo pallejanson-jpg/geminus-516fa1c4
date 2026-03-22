@@ -101,7 +101,7 @@ const FacilityCard: React.FC<FacilityCardProps> = ({ facility, onClick, showSpli
           </div>
           <div className="flex gap-2">
             <Button size="sm" variant="secondary" className="h-7 text-xs gap-1.5" onClick={(e) => { e.stopPropagation(); onClick(facility); }}>
-              <Info size={12} /> Detaljer
+              <Info size={12} /> Details
             </Button>
             {(facility.category === 'Building' || facility.category === 'IfcBuilding') && (
               <Button size="sm" variant="secondary" className="h-7 text-xs gap-1.5" onClick={handleSplitViewClick}>
