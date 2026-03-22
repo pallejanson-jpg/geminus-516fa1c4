@@ -193,8 +193,8 @@ export default function NavigatorView() {
     // Store a flag to indicate 2D mode should be activated
     setViewer3dFmGuid(node.fmGuid);
     setActiveApp('native_viewer');
-    toast.info(`Öppnar 2D-vy för "${node.commonName || node.name}"`, {
-      description: 'Växla till 2D-läge i verktygsfältet',
+    toast.info(`Opening 2D view for "${node.commonName || node.name}"`, {
+      description: 'Switch to 2D mode in the toolbar',
     });
   }, [setViewer3dFmGuid, setActiveApp]);
 
