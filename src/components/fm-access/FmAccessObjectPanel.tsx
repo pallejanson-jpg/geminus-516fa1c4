@@ -150,10 +150,10 @@ const FmAccessObjectPanel: React.FC<FmAccessObjectPanelProps> = ({ selectedNode,
           {editing ? (
             <>
               <Button size="sm" onClick={handleSave} disabled={loading}>
-                <Save size={14} className="mr-1" /> Spara
+                <Save size={14} className="mr-1" /> Save
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
-                <X size={14} className="mr-1" /> Avbryt
+                <X size={14} className="mr-1" /> Cancel
               </Button>
             </>
           ) : (
