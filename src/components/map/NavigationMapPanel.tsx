@@ -430,10 +430,10 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
           {/* Destination room */}
           {rooms.length > 0 && (
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Till rum (valfritt)</label>
+             <label className="text-xs text-muted-foreground">To room (optional)</label>
               <Select value={selectedRoomGuid} onValueChange={setSelectedRoomGuid}>
                 <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Valfri entré" />
+                  <SelectValue placeholder="Optional entrance" />
                 </SelectTrigger>
                 <SelectContent className="max-h-48">
                   {rooms.map(r => (
