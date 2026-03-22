@@ -374,12 +374,12 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
                     {isProcessing ? (
                       <>
                         <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                        Bearbetar batch...
+                        Processing batch…
                       </>
                     ) : (
                       <>
                         <Play className="h-4 w-4 mr-2" />
-                        Bearbeta nästa batch (25 bilder)
+                        Process next batch (25 images)
                       </>
                     )}
                   </Button>
