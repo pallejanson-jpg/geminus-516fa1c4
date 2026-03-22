@@ -360,7 +360,7 @@ export default function CreatePropertyDialog({
 
             <AccordionItem value="senslinc">
               <AccordionTrigger className="text-sm font-semibold">
-                Senslinc — Egna credentials
+                Senslinc — Custom Credentials
               </AccordionTrigger>
               <AccordionContent className="space-y-3 pt-2">
                 <p className="text-xs text-muted-foreground">
