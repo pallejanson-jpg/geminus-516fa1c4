@@ -165,7 +165,7 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1.5">
                                 <Label htmlFor="latitude" className="text-xs">
-                                    Latitud
+                                    Latitude
                                 </Label>
                                 <Input
                                     id="latitude"
