@@ -2774,7 +2774,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                                                 {accProjects.length > 0 && (
                                                     <div className="space-y-2">
-                                                        <Label className="text-sm font-medium">Välj ACC-projekt</Label>
+                                                        <Label className="text-sm font-medium">Select ACC project</Label>
                                                         <select
                                                             className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
                                                             value={selectedAccProjectId}
