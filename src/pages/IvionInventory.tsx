@@ -329,10 +329,10 @@ const IvionInventory: React.FC = () => {
 
     const getStatusText = () => {
       switch (connectionStatus) {
-        case 'connected': return 'Ansluten';
-        case 'error': return 'Anslutningsfel';
-        case 'expired': return 'Token utgått';
-        default: return 'Ansluter...';
+        case 'connected': return 'Connected';
+        case 'error': return 'Connection error';
+        case 'expired': return 'Token expired';
+        default: return 'Connecting...';
       }
     };
 
