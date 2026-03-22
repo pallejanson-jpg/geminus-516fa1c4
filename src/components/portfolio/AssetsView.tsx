@@ -537,8 +537,8 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   const handleSyncToAssetPlus = useCallback(async (asset: AssetData) => {
     if (!asset.roomFmGuid) {
       toast({
-        title: 'Kan inte synka',
-        description: 'Asset måste vara kopplad till ett rum för att synkas till Asset+',
+        title: 'Cannot sync',
+        description: 'Asset must be associated with a room to sync to Asset+',
         variant: 'destructive',
       });
       return;
