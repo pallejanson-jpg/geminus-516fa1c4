@@ -921,7 +921,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                   disabled={isProcessing}
                 >
                   <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Godkänn
+                  Approve
                 </Button>
               </>
             )}

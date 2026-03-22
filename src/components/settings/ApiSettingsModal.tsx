@@ -440,7 +440,7 @@ const ImdfExportPanel: React.FC<{ allBuildings: any[] }> = ({ allBuildings }) =>
                     Export IMDF
                 </Button>
                 {exportResult && (
-                    <span className={`text-xs ${exportResult.startsWith('Fel') ? 'text-destructive' : 'text-green-600'}`}>
+                    <span className={`text-xs ${exportResult.startsWith('Error') ? 'text-destructive' : 'text-green-600'}`}>
                         {exportResult}
                     </span>
                 )}
