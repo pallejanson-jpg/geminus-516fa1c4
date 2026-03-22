@@ -457,12 +457,12 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description" className="text-foreground">Beskrivning</Label>
+              <Label htmlFor="description" className="text-foreground">Description</Label>
               <Input
                 id="description"
                 value={formData.description}
                 onChange={e => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Röda brandsläckare monterade på väggar"
+                placeholder="Red fire extinguishers mounted on walls"
               />
             </div>
 
