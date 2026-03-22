@@ -96,13 +96,13 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           setIvionPoint(surfacePt);
           setStep('picking3D');
           setCaptureError(null);
-          toast.success(`360° punkt fångad: (${surfacePt.x.toFixed(1)}, ${surfacePt.y.toFixed(1)}, ${surfacePt.z.toFixed(1)})`);
+          toast.success(`360° point captured: (${surfacePt.x.toFixed(1)}, ${surfacePt.y.toFixed(1)}, ${surfacePt.z.toFixed(1)})`);
           console.log('[AlignmentPicker] 360° surface estimate:', surfacePt, 'tripod:', tp, 'dir:', vd, 'dist:', rayDistance);
         } else {
-          setCaptureError('Ingen panoramaposition tillgänglig. Navigera till en bild först.');
+          setCaptureError('No panorama position available. Navigate to an image first.');
         }
       } catch (e: any) {
-        setCaptureError(`Fel: ${e.message}`);
+        setCaptureError(`Error: ${e.message}`);
       }
     };
 
