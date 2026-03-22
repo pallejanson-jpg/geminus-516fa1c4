@@ -1370,7 +1370,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                   <AlertDialogTrigger asChild>
                     <Button variant="destructive" size="sm" disabled={isDeleting}>
                       <Trash2 className="h-4 w-4 mr-1" />
-                      Radera
+                      Delete
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
