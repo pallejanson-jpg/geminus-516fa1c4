@@ -118,7 +118,7 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid }) =>
       }
     } catch (error: any) {
       toast({
-        title: 'Fel vid laddning',
+        title: 'Loading error',
         description: error.message,
         variant: 'destructive',
       });
