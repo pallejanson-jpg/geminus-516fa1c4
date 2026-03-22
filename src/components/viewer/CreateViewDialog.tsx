@@ -111,12 +111,12 @@ const CreateViewDialog: React.FC<CreateViewDialogProps> = ({
 
           {/* Name input */}
           <div className="space-y-2">
-            <Label htmlFor="view-name">Namn *</Label>
+            <Label htmlFor="view-name">Name *</Label>
             <Input
               id="view-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="T.ex. Plan 3 - Brandskydd"
+              placeholder="E.g. Floor 3 - Fire safety"
               disabled={isSaving}
             />
           </div>
