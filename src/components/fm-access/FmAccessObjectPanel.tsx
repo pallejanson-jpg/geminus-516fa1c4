@@ -162,7 +162,7 @@ const FmAccessObjectPanel: React.FC<FmAccessObjectPanelProps> = ({ selectedNode,
                 <Pencil size={14} className="mr-1" /> Edit
               </Button>
               <Button size="sm" variant="outline" onClick={() => onRefresh()}>
-                <RefreshCw size={14} className="mr-1" /> Uppdatera
+                <RefreshCw size={14} className="mr-1" /> Refresh
               </Button>
               {onCreateChild && nodeGuid && (
                 <Button size="sm" variant="outline" onClick={() => onCreateChild(nodeGuid)}>
