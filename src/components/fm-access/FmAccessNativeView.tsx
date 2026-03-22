@@ -182,7 +182,7 @@ const FmAccessNativeView: React.FC = () => {
         <Badge variant="outline" className="text-[10px]">FMA 2.0</Badge>
         <div className="flex-1" />
         <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setManualFmGuid(null); setRootNode(null); setSelectedNode(null); }}>
-          Byt byggnad
+          Change building
         </Button>
         {loading && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
       </div>
