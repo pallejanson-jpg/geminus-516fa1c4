@@ -131,7 +131,7 @@ const BuildingTrendChart: React.FC<BuildingTrendChartProps> = ({ rooms, liveMach
               borderRadius: '8px',
               fontSize: 12,
             }}
-            formatter={(v: number) => [`${v} ${config.unit}`, `Snitt ${config.label}`]}
+            formatter={(v: number) => [`${v} ${config.unit}`, `Avg ${config.label}`]}
           />
           <Line
             type="monotone"
