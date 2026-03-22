@@ -203,8 +203,8 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
 
       if (error) throw error;
 
-      toast.success(isEditing ? 'Tillgång uppdaterad!' : 'Tillgång sparad!', {
-        description: `${formData.name} ${isEditing ? 'uppdaterad' : 'registrerad'}${formData.levelName ? ` på ${formData.levelName}` : ''}`,
+      toast.success(isEditing ? 'Asset updated!' : 'Asset saved!', {
+        description: `${formData.name} ${isEditing ? 'updated' : 'registered'}${formData.levelName ? ` on ${formData.levelName}` : ''}`,
       });
 
       onComplete(registerAnother);
