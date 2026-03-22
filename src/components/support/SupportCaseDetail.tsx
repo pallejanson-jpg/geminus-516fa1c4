@@ -219,7 +219,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
               )}
               {supportCase.contact_email && (
                 <div>
-                  <span className="text-muted-foreground">E-post</span>
+                  <span className="text-muted-foreground">Email</span>
                   <p className="font-medium text-foreground">{supportCase.contact_email}</p>
                 </div>
               )}
