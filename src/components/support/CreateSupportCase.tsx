@@ -226,8 +226,8 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
               <Input id="location" value={locationDescription} onChange={e => setLocationDescription(e.target.value)} placeholder="E.g. Floor 3, room 301" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="installation">Installationsnummer</Label>
-              <Input id="installation" value={installationNumber} onChange={e => setInstallationNumber(e.target.value)} placeholder="T.ex. VVS-001" />
+              <Label htmlFor="installation">Installation number</Label>
+              <Input id="installation" value={installationNumber} onChange={e => setInstallationNumber(e.target.value)} placeholder="E.g. HVAC-001" />
             </div>
           </div>
 
