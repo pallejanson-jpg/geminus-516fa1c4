@@ -316,7 +316,7 @@ export default function CreatePropertyDialog({
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Longitud</Label>
+                <Label className="text-xs text-muted-foreground">Longitude</Label>
                 <Input
                   type="number"
                   step="any"
