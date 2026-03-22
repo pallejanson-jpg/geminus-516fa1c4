@@ -120,9 +120,9 @@ const FmAccessObjectPanel: React.FC<FmAccessObjectPanelProps> = ({ selectedNode,
 
         {/* Properties */}
         <div>
-          <h4 className="text-xs font-bold text-muted-foreground uppercase mb-2">Egenskaper</h4>
+          <h4 className="text-xs font-bold text-muted-foreground uppercase mb-2">Properties</h4>
           {propEntries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Inga egenskaper.</p>
+            <p className="text-sm text-muted-foreground">No properties.</p>
           ) : (
             <div className="space-y-1.5">
               {propEntries.map(([key, value]) => (
