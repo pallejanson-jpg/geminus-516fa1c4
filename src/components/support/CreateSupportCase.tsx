@@ -259,8 +259,8 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Kontakt e-post</Label>
-              <Input id="email" type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} placeholder="din@epost.se" />
+              <Label htmlFor="email">Contact email</Label>
+              <Input id="email" type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} placeholder="your@email.com" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">Kontakt telefon</Label>
