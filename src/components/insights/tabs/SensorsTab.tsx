@@ -323,7 +323,7 @@ export default function SensorsTab() {
         </CardHeader>
         <CardContent>
           {rooms.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">Inga rum hittades</p>
+            <p className="text-sm text-muted-foreground text-center py-8">No rooms found</p>
           ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8 gap-1.5">
               {roomValues.map(room => (
