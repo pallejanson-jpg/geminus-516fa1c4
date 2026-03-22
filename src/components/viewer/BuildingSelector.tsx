@@ -275,8 +275,8 @@ const BuildingSelector: React.FC = () => {
                         {/* Building Name (Complex - Building format) */}
                         <h3 className="font-medium text-sm line-clamp-2 min-h-[2.5rem]">
                           {building.complexCommonName
-                            ? `${building.complexCommonName} - ${building.commonName || building.name || 'Namnlös byggnad'}`
-                            : (building.commonName || building.name || 'Namnlös byggnad')}
+                            ? `${building.complexCommonName} - ${building.commonName || building.name || 'Unnamed building'}`
+                            : (building.commonName || building.name || 'Unnamed building')}
                         </h3>
 
                         {/* Metrics */}
