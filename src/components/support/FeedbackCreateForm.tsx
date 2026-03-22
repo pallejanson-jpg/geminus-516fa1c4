@@ -168,7 +168,7 @@ const FeedbackCreateForm: React.FC<FeedbackCreateFormProps> = ({ open, onClose, 
                       <p className="text-muted-foreground line-clamp-1">{r.description}</p>
                     )}
                     <Badge variant="outline" className="text-[9px] mt-0.5">
-                      {r.type === 'thread' ? 'Befintligt ärende' : 'Befintlig funktion'}
+                      {r.type === 'thread' ? 'Existing case' : 'Existing feature'}
                     </Badge>
                   </div>
                 </div>
