@@ -1402,7 +1402,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
             className="px-4 py-2 rounded bg-primary text-primary-foreground text-sm hover:opacity-90"
             onClick={() => { setPhase('init'); initialize(); }}
           >
-            Försök igen
+            Try Again
           </button>
         </div>
       )}

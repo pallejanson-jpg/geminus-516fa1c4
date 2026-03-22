@@ -4070,7 +4070,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           return {
             ...prev,
             isLoading: false,
-            error: `Initiering tog för lång tid (${INIT_TIMEOUT_MS / 1000}s). Kontrollera nätverksanslutningen och försök igen.`,
+            error: `Initialization timed out (${INIT_TIMEOUT_MS / 1000}s). Check your network connection and try again.`,
           };
         }
         return prev;

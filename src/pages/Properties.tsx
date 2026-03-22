@@ -145,8 +145,8 @@ export default function Properties() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           {properties.length === 0
-            ? 'Inga fastigheter konfigurerade. Klicka "Lägg till fastighet" för att börja.'
-            : 'Inga resultat matchar din sökning.'}
+            ? 'No properties configured. Click "Add Property" to get started.'
+            : 'No results match your search.'}
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

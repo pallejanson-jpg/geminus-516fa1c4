@@ -322,7 +322,7 @@ const SymbolSettings: React.FC = () => {
                         onClick={() => handleDelete(symbol)}
                       >
                         <Trash2 className="h-4 w-4 mr-1" />
-                        Ta bort
+                        Delete
                       </Button>
                     </div>
                   </div>

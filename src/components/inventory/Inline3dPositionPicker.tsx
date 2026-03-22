@@ -129,7 +129,7 @@ const Inline3dPositionPicker: React.FC<Inline3dPositionPickerProps> = ({
         {!pendingCoords && (
           <div className="absolute top-3 left-3 z-20 bg-primary/90 text-primary-foreground text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5 shadow-md">
             <Crosshair className="h-3.5 w-3.5" />
-            <span>Klicka för att markera position</span>
+            <span>Click to mark position</span>
           </div>
         )}
 

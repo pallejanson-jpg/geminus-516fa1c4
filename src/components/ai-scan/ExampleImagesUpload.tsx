@@ -136,7 +136,7 @@ const ExampleImagesUpload: React.FC<ExampleImagesUploadProps> = ({
             ) : (
               <>
                 <Upload className="h-5 w-5" />
-                <span className="text-[10px]">Lägg till</span>
+                <span className="text-[10px]">Add</span>
               </>
             )}
           </Button>
