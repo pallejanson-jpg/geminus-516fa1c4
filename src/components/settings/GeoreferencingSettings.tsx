@@ -239,12 +239,12 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
                             {isSaving ? (
                                 <>
                                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                    Sparar...
+                                    Saving...
                                 </>
                             ) : (
                                 <>
                                     <Save className="h-4 w-4 mr-2" />
-                                    Spara koordinater
+                                    Save coordinates
                                 </>
                             )}
                         </Button>
