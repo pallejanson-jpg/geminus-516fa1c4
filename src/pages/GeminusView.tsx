@@ -259,7 +259,7 @@ export default function GeminusView() {
             <div className="flex-1 overflow-y-auto space-y-4">
               {filteredBuildings.length > 0 && (
                 <div>
-                  <h3 className="text-xs font-medium text-muted-foreground uppercase mb-2">Byggnader</h3>
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase mb-2">Buildings</h3>
                   <div className="space-y-1">
                     {filteredBuildings.map(b => (
                       <button
