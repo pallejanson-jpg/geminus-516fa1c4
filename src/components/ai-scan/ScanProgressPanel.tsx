@@ -240,17 +240,17 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'queued':
-        return <Badge variant="secondary"><Clock className="h-3 w-3 mr-1" />Köad</Badge>;
+        return <Badge variant="secondary"><Clock className="h-3 w-3 mr-1" />Queued</Badge>;
       case 'running':
-        return <Badge variant="default"><RefreshCw className="h-3 w-3 mr-1 animate-spin" />Pågår</Badge>;
+        return <Badge variant="default"><RefreshCw className="h-3 w-3 mr-1 animate-spin" />Running</Badge>;
       case 'paused':
-        return <Badge variant="outline"><Pause className="h-3 w-3 mr-1" />Pausad</Badge>;
+        return <Badge variant="outline"><Pause className="h-3 w-3 mr-1" />Paused</Badge>;
       case 'completed':
-        return <Badge variant="default" className="bg-green-600"><CheckCircle2 className="h-3 w-3 mr-1" />Klar</Badge>;
+        return <Badge variant="default" className="bg-green-600"><CheckCircle2 className="h-3 w-3 mr-1" />Done</Badge>;
       case 'cancelled':
-        return <Badge variant="outline"><StopCircle className="h-3 w-3 mr-1" />Avbruten</Badge>;
+        return <Badge variant="outline"><StopCircle className="h-3 w-3 mr-1" />Cancelled</Badge>;
       case 'failed':
-        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />Misslyckades</Badge>;
+        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />Failed</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
