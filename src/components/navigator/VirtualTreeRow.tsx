@@ -96,7 +96,7 @@ export const VirtualTreeRow = memo(function VirtualTreeRow({
               <TooltipTrigger asChild>
                 <AlertCircle className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-amber-500 shrink-0" />
               </TooltipTrigger>
-              <TooltipContent side="top">Ej i modell</TooltipContent>
+              <TooltipContent side="top">Not in model</TooltipContent>
             </Tooltip>
           )}
           
