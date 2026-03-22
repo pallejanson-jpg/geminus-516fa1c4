@@ -18,14 +18,14 @@ export interface ToolConfig {
 
 // Navigation tools list — all always visible, no overflow
 export const NAVIGATION_TOOLS: ToolConfig[] = [
-  { id: 'orbit',       label: 'Orbit (rotera)',    visible: true, inOverflow: false },
-  { id: 'firstPerson', label: 'Första person',     visible: true, inOverflow: false },
-  { id: 'zoomIn',      label: 'Zooma in',          visible: true, inOverflow: false },
-  { id: 'zoomOut',     label: 'Zooma ut',          visible: true, inOverflow: false },
-  { id: 'viewFit',     label: 'Anpassa vy',        visible: true, inOverflow: false },
-  { id: 'select',      label: 'Välj objekt',       visible: true, inOverflow: false },
-  { id: 'measure',     label: 'Mätverktyg',        visible: true, inOverflow: false },
-  { id: 'slicer',      label: 'Snittplan',         visible: true, inOverflow: false },
+  { id: 'orbit',       label: 'Orbit (rotate)',     visible: true, inOverflow: false },
+  { id: 'firstPerson', label: 'First Person',       visible: true, inOverflow: false },
+  { id: 'zoomIn',      label: 'Zoom In',            visible: true, inOverflow: false },
+  { id: 'zoomOut',     label: 'Zoom Out',           visible: true, inOverflow: false },
+  { id: 'viewFit',     label: 'Fit View',           visible: true, inOverflow: false },
+  { id: 'select',      label: 'Select Object',      visible: true, inOverflow: false },
+  { id: 'measure',     label: 'Measure Tool',       visible: true, inOverflow: false },
+  { id: 'slicer',      label: 'Section Plane',      visible: true, inOverflow: false },
 ];
 
 // Visualization tools — used by VisualizationToolbar
