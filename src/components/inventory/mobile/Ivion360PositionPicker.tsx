@@ -153,7 +153,7 @@ const Ivion360PositionPicker: React.FC<Ivion360PositionPickerProps> = ({
       onOpenChange(false);
     } catch (err: any) {
       console.error('[Ivion360Picker] Create POI error:', err);
-      toast.error('Kunde inte spara position', { description: err.message });
+      toast.error('Could not save position', { description: err.message });
     } finally {
       setIsCreatingPoi(false);
     }
