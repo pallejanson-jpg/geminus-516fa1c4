@@ -317,7 +317,7 @@ export default function GeminusView() {
       {mode === 'ifc-upload' && (
         <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6">
           <Box className="h-10 w-10 text-primary" />
-          <h2 className="text-lg font-semibold">Konverterar IFC</h2>
+          <h2 className="text-lg font-semibold">Converting IFC</h2>
           {ifcFile && <p className="text-sm text-muted-foreground">{ifcFile.name}</p>}
 
           <div className="w-full max-w-md">
