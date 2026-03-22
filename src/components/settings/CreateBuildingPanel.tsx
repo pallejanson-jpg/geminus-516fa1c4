@@ -875,7 +875,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
     try {
       const result = await deleteBuilding(selectedBuildingFmGuid);
       if (result.success) {
-        toast({ title: 'Byggnad raderad', description: `${result.summary.assetsDeleted} objekt raderade, ${result.summary.expiredInAssetPlus} expirerade i Asset+.` });
+        toast({ title: 'Building deleted', description: `${result.summary.assetsDeleted} objects deleted, ${result.summary.expiredInAssetPlus} expired in Asset+.` });
         setSelectedBuildingFmGuid('');
         setCreatedBuilding(null);
         fetchBuildings();
