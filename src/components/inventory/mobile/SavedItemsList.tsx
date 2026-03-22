@@ -86,7 +86,7 @@ const SavedItemsList: React.FC<SavedItemsListProps> = ({
             {/* Details */}
             <div className="flex-1 min-w-0">
               <div className="font-medium truncate">
-                {item.name || item.common_name || 'Namnlös tillgång'}
+                {item.name || item.common_name || 'Unnamed asset'}
               </div>
               <div className="text-sm text-muted-foreground flex items-center gap-2">
                 {item.asset_type && (
