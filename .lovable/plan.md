@@ -1,67 +1,138 @@
 
 
-## Plan: Reset Stuck ARK Job + Prevent Future Stuck Jobs
+## Plan: Full English Standardization + QA Fixes for Thursday Demo
 
-### Problem Analysis
+### Summary
+Comprehensive pass across the entire Geminus application to:
+1. Translate all Swedish UI strings to English (50+ files)
+2. Fix the search placeholder typo
+3. Suppress the Data Consistency Banner for demo
+4. Standardize button sizes, icon scales, and card border radii
+5. Extract duplicated sidebar sync logic into a shared hook
+6. Add lazy-loading to fallback images
 
-**Current state for building SV (Smedvig)**:
-- **Stuck job**: `c1f5e5fa` — ARK model, status `processing`, progress 20%, no heartbeat updates since creation (11:23 today)
-- **XKT models exist**: Both ARK (from March 19) and RIV (from today) are in `xkt_models` and should load in the viewer
-- **Viewer loads from `xkt_models`** — the stuck conversion job should NOT block model display
+This is a large batch of changes. The plan groups files by area for clarity.
 
-**Root cause of stuck jobs**:
-1. `sendBeacon` on tab close doesn't include auth headers → Supabase rejects the update → job stays `processing` forever
-2. Auto-reset only triggers when opening Settings panel, and only for the current user's jobs
-3. `isStuckJob` in the UI requires 2 hours before showing the reset button — too long
-4. No global/automatic mechanism catches orphaned jobs
+---
 
-### Implementation
+### 1. Layout & Navigation (5 files)
 
-**Step 1 — Reset the stuck job (database migration)**
-
-SQL migration to reset the specific stuck job:
-```sql
-UPDATE conversion_jobs 
-SET status = 'error', 
-    error_message = 'Auto-reset: browser conversion crashed or tab was closed',
-    updated_at = now()
-WHERE id = 'c1f5e5fa-2ad8-4122-a3f6-e30aa610d0df' 
-  AND status = 'processing';
-```
-
-**Step 2 — Fix `sendBeacon` (CreateBuildingPanel.tsx)**
-
-The `sendBeacon` call on `beforeunload` sends raw JSON without auth headers, so Supabase ignores it. Fix by:
-- Using the Supabase REST URL with the anon key as a query parameter
-- Or switching to `navigator.sendBeacon` with proper PATCH method workaround
-- Best approach: Use `supabase.from().update()` in the `beforeunload` handler (synchronous best-effort)
-
-**Step 3 — Reduce stuck detection threshold (CreateBuildingPanel.tsx)**
-
-- Change auto-reset threshold from 5 minutes to **3 minutes** (browser conversion heartbeats every 30s, so 3 min = 6 missed heartbeats)
-- Change `isStuckJob` UI threshold from 2 hours to **10 minutes**
-
-**Step 4 — Add global stuck-job cleanup on viewer mount (NativeXeokitViewer.tsx)**
-
-Add a lightweight check at viewer initialization: if any `conversion_jobs` for the current building are stuck in `processing` with `updated_at` older than 5 minutes, reset them to `error`. This ensures the viewer page itself cleans up orphans without waiting for the user to visit Settings.
-
-**Step 5 — Add viewer-side auto-reset for the current building**
-
-In `NativeXeokitViewer.tsx`, after fetching models, also query `conversion_jobs` for the building and auto-reset any stuck ones. This is a "passive cleanup" that runs whenever anyone views the building.
-
-### Files Modified
-
-| File | Change |
+| File | Changes |
 |---|---|
-| Migration SQL | Reset stuck job `c1f5e5fa` |
-| `src/components/settings/CreateBuildingPanel.tsx` | Fix `sendBeacon` auth, reduce thresholds (5min→3min auto-reset, 2h→10min UI) |
-| `src/components/viewer/NativeXeokitViewer.tsx` | Add passive stuck-job cleanup on mount for the current building |
+| `src/components/layout/AppHeader.tsx` | Fix "Sök byggnader, rum, rum..." → "Search buildings, rooms, objects..." |
+| `src/components/layout/MobileNav.tsx` | "Hem" → "Home", "Karta" → "Map" |
+| `src/components/layout/LeftSidebar.tsx` | Extract sidebar sync `useEffect` into shared hook |
+| `src/components/layout/MainContent.tsx` | Any remaining Swedish labels |
+| `src/components/common/DataConsistencyBanner.tsx` | Translate all strings + add `DEMO_MODE` env/localStorage flag to auto-suppress |
 
-### Technical Details
+### 2. Support Portal (5 files)
 
-- **Font**: Inter (for reference from previous conversation)
-- **Heartbeat interval**: 30 seconds (unchanged)
-- **New auto-reset threshold**: 3 minutes without heartbeat update
-- **New UI "stuck" indicator**: 10 minutes
-- **Viewer cleanup**: runs once on mount, best-effort, non-blocking
+| File | Changes |
+|---|---|
+| `CustomerPortalView.tsx` | "Ärenden" → "Cases", "Kontakt" → "Contact", "Nytt ärende" → "New Case", "Öppettider" → "Office hours", "Vardagar" → "Weekdays" |
+| `CreateSupportCase.tsx` | "Nytt supportärende" → "New Support Case", "Avbryt" → "Cancel", "Skapa ärende" → "Submit Case", all labels + placeholders |
+| `SupportCaseList.tsx` | Any remaining Swedish filter labels / empty states |
+| `FeedbackCreateForm.tsx` | "Beskriv din idé..." → "Describe your idea...", "Avbryt" → "Cancel" |
+| `FeedbackView.tsx` | "Inga förslag ännu..." → "No suggestions yet..." |
 
+### 3. Viewer Components (8 files)
+
+| File | Changes |
+|---|---|
+| `CreateViewDialog.tsx` | "Skapa sparad vy" → "Create Saved View", "Avbryt" → "Cancel", "Spara vy" → "Save View", "Beskrivning" → "Description" |
+| `NavigationPanel.tsx` | "Redigera graf" → "Edit Graph", "Navigera" → "Navigate", all instruction text, "Spara graf" → "Save Graph", "Välj startrum/målrum" → "Select start/target room" |
+| `InventoryPanel.tsx` | "Visar 500 av..." → "Showing 500 of...", "Inga matchande assets" → "No matching assets" |
+| `FloatingFloorSwitcher.tsx` | "Alla våningar" → "All floors" |
+| `PositionPickerDialog.tsx` | "Välj position i 3D-modellen" → "Select position in 3D model", "Klicka" → "Click" |
+| `ViewerThemeSettings.tsx` | "Avbryt" → "Cancel", "Spara tema" → "Save Theme", "Ta bort" → "Delete", "Färgmappningar" → "Color Mappings" |
+| `FmAccessIssueOverlay.tsx` | Any Swedish strings |
+| `CreateIssueDialog.tsx` | Any Swedish strings |
+
+### 4. Settings (3 files)
+
+| File | Changes |
+|---|---|
+| `GeoreferencingSettings.tsx` | "Koordinater sparade" → "Coordinates saved", "Spara koordinater" → "Save Coordinates" |
+| `CreateBuildingPanel.tsx` | Any remaining Swedish toast/label text |
+| `ProfileSettings.tsx` | Any Swedish labels |
+
+### 5. Inventory & Asset Registration (6 files)
+
+| File | Changes |
+|---|---|
+| `InventoryForm.tsx` | All Swedish toasts and validation messages → English |
+| `InventoryList.tsx` | "Inga registrerade tillgångar" → "No registered assets" |
+| `mobile/QuickRegistrationStep.tsx` | "Välj en symbol" → "Select a symbol", "Tillgång sparad!" → "Asset saved!", "Spara & registrera nästa" → "Save & register next" |
+| `mobile/LocationSelectionStep.tsx` | "Ingen data hittades" → "No data found", "Välj byggnad/rum" → "Select building/room" |
+| `mobile/Ivion360PositionPicker.tsx` | "Position sparad i 360°" → "Position saved in 360°", "Välj position" → "Select position" |
+| `ExcelImportDialog.tsx` | "Välj en ifylld Excel-fil" → "Select a completed Excel file", "Avbryt" → "Cancel" |
+
+### 6. AI Scan (2 files)
+
+| File | Changes |
+|---|---|
+| `ScanConfigPanel.tsx` | "Välj byggnad" → "Select Building", "Laddar byggnader..." → "Loading buildings...", all instruction text |
+| `BrowserScanRunner.tsx` | "Förbereder visare..." → "Preparing viewer...", "Skannar..." → "Scanning...", all status strings |
+
+### 7. Fault Report (3 files)
+
+| File | Changes |
+|---|---|
+| `FaultReportForm.tsx` | "Beskrivning krävs" → "Description required", placeholder text |
+| `MobileFaultReport.tsx` | Same as above |
+| `FaultReportSuccess.tsx` | "Spara referensnumret" → "Save the reference number" |
+| `ErrorCodeCombobox.tsx` | "Sök eller skriv felkod..." → "Search or enter error code..." |
+
+### 8. Map (2 files)
+
+| File | Changes |
+|---|---|
+| `NavigationMapPanel.tsx` | "Klicka i kartan..." → "Click on the map...", "Skriv adress" → "Enter address", "Välj byggnad" → "Select building" |
+| `BuildingMapPicker.tsx` | "Klicka för att sätta position" → "Click to set position" |
+
+### 9. Navigator (4 files)
+
+| File | Changes |
+|---|---|
+| `NavigatorView.tsx` | "Laddar data..." → "Loading data...", "Inga resultat" → "No results" |
+| `VirtualTree.tsx` | "Inga objekt att visa" → "No items to display" |
+| `TreeNode.tsx` | "Lägg till" → "Add" |
+| `VirtualTreeRow.tsx` | "Lägg till" → "Add" |
+
+### 10. Insights (3 files)
+
+| File | Changes |
+|---|---|
+| `SensorsTab.tsx` | "Laddar..." → "Loading...", "Inga rum hittades" → "No rooms found", "klicka på ett rum" → "click a room" |
+| `RagSearchTab.tsx` | "Inga resultat hittades" → "No results found" |
+| `RoomOptimizationTab.tsx` | "Välj en byggnad" → "Select a building" |
+
+### 11. Shared Hook Extraction (new file + 2 edits)
+
+| File | Changes |
+|---|---|
+| `src/hooks/useSidebarOrder.ts` (NEW) | Extract the duplicated sidebar order sync logic from LeftSidebar and MobileNav |
+| `LeftSidebar.tsx` | Use `useSidebarOrder()` |
+| `MobileNav.tsx` | Use `useSidebarOrder()` |
+
+### 12. Data Consistency Banner Demo Mode
+
+Add a `localStorage` key `geminus-demo-mode` that, when set to `true`, auto-suppresses the Data Consistency Banner. This can be toggled from the Settings menu or browser console.
+
+### 13. UI Consistency Pass
+
+- Standardize icon sizes: `size={18}` for header/toolbar icons, `size={16}` for compact contexts
+- Standardize button sizes: `h-9` mobile, `h-10` desktop for toolbar-level buttons
+- Card border radii: `rounded-xl` for content cards consistently
+
+---
+
+### Estimated Scope
+- ~50 files modified
+- ~1 new file (`useSidebarOrder.ts`)
+- No database changes
+- No backend/edge function changes
+
+### Risk Assessment
+- All changes are string replacements and minor refactoring — low risk
+- The
