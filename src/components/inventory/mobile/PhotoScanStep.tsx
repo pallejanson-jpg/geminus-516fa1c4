@@ -199,7 +199,7 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
   };
 
   const conditionLabel = (c: string) => {
-    const map: Record<string, string> = { good: 'Bra', fair: 'Acceptabelt', poor: 'Dåligt' };
+    const map: Record<string, string> = { good: 'Good', fair: 'Fair', poor: 'Poor' };
     return map[c] || c;
   };
 
