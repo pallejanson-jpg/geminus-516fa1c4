@@ -470,7 +470,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
               className="flex-1 h-7 text-xs gap-1"
               onClick={() => setProfile('transit')}
             >
-              <Bus size={12} /> Kollektivt
+              <Bus size={12} /> Transit
             </Button>
           </div>
 
