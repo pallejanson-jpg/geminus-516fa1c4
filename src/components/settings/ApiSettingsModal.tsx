@@ -2762,7 +2762,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         </select>
                                                     ) : (
                                                         <p className="text-xs text-muted-foreground">
-                                                            Klicka "Hämta konton" för att auto-upptäcka dina Autodesk-konton och regioner. Region sätts automatiskt.
+                                                            Click "Fetch accounts" to auto-discover your Autodesk accounts and regions. Region is set automatically.
                                                         </p>
                                                     )}
                                                     {selectedHubId && (
