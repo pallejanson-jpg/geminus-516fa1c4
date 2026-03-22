@@ -233,8 +233,8 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
       if (error) throw error;
 
       toast({
-        title: 'Mall borttagen',
-        description: 'Mallen har tagits bort.',
+        title: 'Template deleted',
+        description: 'The template has been removed.',
       });
 
       loadData();
