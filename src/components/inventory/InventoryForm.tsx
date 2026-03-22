@@ -54,17 +54,17 @@ export interface InventoryCategory {
 }
 
 export const INVENTORY_CATEGORIES: InventoryCategory[] = [
-  { value: 'fire_extinguisher', label: 'Brandsläckare', Icon: Flame, color: 'text-red-500' },
-  { value: 'fire_blanket', label: 'Brandfilt', Icon: ShieldAlert, color: 'text-orange-500' },
-  { value: 'fire_hose', label: 'Brandslang', Icon: Droplets, color: 'text-red-600' },
-  { value: 'emergency_exit', label: 'Nödutgång', Icon: DoorOpen, color: 'text-green-500' },
+  { value: 'fire_extinguisher', label: 'Fire Extinguisher', Icon: Flame, color: 'text-red-500' },
+  { value: 'fire_blanket', label: 'Fire Blanket', Icon: ShieldAlert, color: 'text-orange-500' },
+  { value: 'fire_hose', label: 'Fire Hose', Icon: Droplets, color: 'text-red-600' },
+  { value: 'emergency_exit', label: 'Emergency Exit', Icon: DoorOpen, color: 'text-green-500' },
   { value: 'sensor', label: 'Sensor', Icon: Radio, color: 'text-blue-500' },
   { value: 'sprinkler', label: 'Sprinkler', Icon: Droplets, color: 'text-cyan-500' },
-  { value: 'hvac_unit', label: 'Luftbehandling', Icon: Fan, color: 'text-slate-500' },
-  { value: 'lamp', label: 'Lampa', Icon: Lightbulb, color: 'text-yellow-500' },
-  { value: 'furniture', label: 'Möbel', Icon: Armchair, color: 'text-amber-600' },
-  { value: 'it_equipment', label: 'IT-utrustning', Icon: Monitor, color: 'text-purple-500' },
-  { value: 'other', label: 'Övrigt', Icon: Package, color: 'text-muted-foreground' },
+  { value: 'hvac_unit', label: 'HVAC Unit', Icon: Fan, color: 'text-slate-500' },
+  { value: 'lamp', label: 'Lamp', Icon: Lightbulb, color: 'text-yellow-500' },
+  { value: 'furniture', label: 'Furniture', Icon: Armchair, color: 'text-amber-600' },
+  { value: 'it_equipment', label: 'IT Equipment', Icon: Monitor, color: 'text-purple-500' },
+  { value: 'other', label: 'Other', Icon: Package, color: 'text-muted-foreground' },
 ];
 
 const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefill, editItem, onClearEdit, onOpen360, onOpen3d, pendingPosition, onPendingPositionConsumed }) => {
