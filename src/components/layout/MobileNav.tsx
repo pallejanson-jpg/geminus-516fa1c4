@@ -99,10 +99,10 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
         onClick={() => setIsMobileMenuOpen(true)}
         className="fixed z-40 flex items-center gap-1 bg-card/80 backdrop-blur-md border border-border rounded-full px-2.5 py-1 shadow-md left-1/2 -translate-x-1/2"
         style={{ bottom: 'calc(0.25rem + env(safe-area-inset-bottom, 0px))' }}
-        aria-label="Öppna meny"
+        aria-label="Open menu"
       >
         <Menu className="h-3.5 w-3.5 text-foreground" />
-        <span className="text-xs font-medium text-foreground hidden xs:inline">Meny</span>
+        <span className="text-xs font-medium text-foreground hidden xs:inline">Menu</span>
       </button>
 
       {/* App Drawer — opens from bottom */}
