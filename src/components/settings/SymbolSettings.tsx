@@ -138,8 +138,8 @@ const SymbolSettings: React.FC = () => {
     if (!formData.name || !formData.category) {
       toast({
         variant: 'destructive',
-        title: 'Validering',
-        description: 'Namn och kategori krävs',
+        title: 'Validation',
+        description: 'Name and category are required',
       });
       return;
     }
