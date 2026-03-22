@@ -94,14 +94,14 @@ const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading, onEdit,
             const timeAgo = item.created_at
               ? formatDistanceToNow(new Date(item.created_at), {
                   addSuffix: true,
-                  locale: sv,
+                  locale: enUS,
                 })
               : item.attributes?.inventoryDate
               ? formatDistanceToNow(new Date(item.attributes.inventoryDate), {
                   addSuffix: true,
-                  locale: sv,
+                  locale: enUS,
                 })
-              : 'Just nu';
+              : 'Just now';
 
             const isSelected = selectedFmGuid === item.fm_guid;
 
