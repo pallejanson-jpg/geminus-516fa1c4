@@ -402,7 +402,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
                   size="icon"
                   className="h-8 w-8 shrink-0"
                   onClick={onRequestMapClick}
-                  title="Välj position i kartan"
+                  title="Select position on map"
                 >
                   <MapPinned size={14} />
                 </Button>
