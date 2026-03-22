@@ -41,8 +41,8 @@ const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
 
         // Warn if picking in 2D/ortho mode
         if (viewer.camera.projection === 'ortho') {
-          toast.info('Position vald i 2D — höjden kanske inte stämmer', {
-            description: 'Byt till 3D för exakt höjd.',
+          toast.info('Position selected in 2D — height may not be accurate', {
+            description: 'Switch to 3D for exact height.',
           });
         }
       }
