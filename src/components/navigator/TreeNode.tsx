@@ -101,7 +101,7 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
                 <TooltipTrigger asChild>
                   <AlertCircle className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-amber-500 shrink-0" />
                 </TooltipTrigger>
-                <TooltipContent side="top">Ej i modell</TooltipContent>
+                <TooltipContent side="top">Not in model</TooltipContent>
               </Tooltip>
             )}
             {isSelected && (
@@ -131,12 +131,12 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
                     onInventory(node);
                   }}
                   className="h-6 w-6 sm:h-6 sm:w-6"
-                  aria-label="Inventera"
+                  aria-label="Inventory"
                 >
                   <ClipboardList className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-orange-500" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Inventera</TooltipContent>
+              <TooltipContent side="top">Inventory</TooltipContent>
             </Tooltip>
           )}
           {canOpen2D && onOpen2D && (
@@ -198,7 +198,7 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
                     <Eye className="h-3.5 w-3.5 text-muted-foreground" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="top">Detaljer</TooltipContent>
+                <TooltipContent side="top">Details</TooltipContent>
               </Tooltip>
             )}
           </span>
@@ -219,7 +219,7 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
                   <Plus className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Lägg till</TooltipContent>
+              <TooltipContent side="top">Add</TooltipContent>
             </Tooltip>
           )}
           {canSyncToAssetPlus && onSyncToAssetPlus && (
@@ -234,12 +234,12 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
                     onSyncToAssetPlus(node);
                   }}
                   className="h-6 w-6"
-                  aria-label="Synka till Asset+"
+                  aria-label="Sync to Asset+"
                 >
                   <RefreshCw className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-blue-500" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Synka till Asset+</TooltipContent>
+              <TooltipContent side="top">Sync to Asset+</TooltipContent>
             </Tooltip>
           )}
         </div>

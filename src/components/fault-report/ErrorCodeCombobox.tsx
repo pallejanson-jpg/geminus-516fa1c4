@@ -81,7 +81,7 @@ const ErrorCodeCombobox: React.FC<ErrorCodeComboboxProps> = ({ value, onChange, 
           className="w-full justify-between font-normal h-10"
         >
           <span className={cn('truncate', !value && 'text-muted-foreground')}>
-            {selectedLabel || 'Ange en matchande felkod'}
+            {selectedLabel || 'Enter a matching error code'}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -89,7 +89,7 @@ const ErrorCodeCombobox: React.FC<ErrorCodeComboboxProps> = ({ value, onChange, 
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
         <Command shouldFilter={true}>
           <CommandInput
-            placeholder="Sök eller skriv felkod..."
+            placeholder="Search or enter error code..."
             value={searchQuery}
             onValueChange={setSearchQuery}
             onKeyDown={(e) => {
@@ -107,10 +107,10 @@ const ErrorCodeCombobox: React.FC<ErrorCodeComboboxProps> = ({ value, onChange, 
                   className="w-full px-2 py-1.5 text-sm text-left hover:bg-accent rounded-sm"
                   onClick={handleFreeText}
                 >
-                  Använd "{searchQuery.trim()}"
+                  Use "{searchQuery.trim()}"
                 </button>
               ) : (
-                <span className="text-sm text-muted-foreground">Inga matchningar</span>
+                <span className="text-sm text-muted-foreground">No matches</span>
               )}
             </CommandEmpty>
             <CommandGroup>

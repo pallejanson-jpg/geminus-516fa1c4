@@ -24,8 +24,8 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-foreground">Smart dokumentsökning</h3>
-        <p className="text-xs text-muted-foreground">AI-driven semantisk sökning i byggnads&shy;dokumentation</p>
+         <h3 className="text-sm font-semibold text-foreground">Smart Document Search</h3>
+         <p className="text-xs text-muted-foreground">AI-powered semantic search in building documentation</p>
       </div>
 
       {/* Search input */}
@@ -33,7 +33,7 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Sök t.ex. 'brandskyddsdokumentation plan 3'..."
+            placeholder="Search e.g. 'fire safety documentation floor 3'..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -41,8 +41,8 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
           />
         </div>
         <Button onClick={handleSearch} disabled={isLoading || !query.trim()} size="sm">
-          <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-          Sök
+           <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+           Search
         </Button>
       </div>
 
@@ -72,13 +72,13 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
                 <div className="flex items-start gap-2 mb-2">
                   <Sparkles className="h-4 w-4 text-primary mt-0.5 shrink-0" />
                   <div>
-                    <h4 className="text-sm font-medium text-foreground mb-1">AI-svar</h4>
+                    <h4 className="text-sm font-medium text-foreground mb-1">AI Answer</h4>
                     <p className="text-xs text-muted-foreground whitespace-pre-wrap">{data.answer}</p>
                   </div>
                 </div>
                 {data.sources?.length > 0 && (
                   <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                    <span className="text-[10px] text-muted-foreground">Källor:</span>
+                    <span className="text-[10px] text-muted-foreground">Sources:</span>
                     {data.sources.map((s, i) => (
                       <Badge key={i} variant="secondary" className="text-[10px]">
                         <FileText className="h-3 w-3 mr-1" />
@@ -89,7 +89,7 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
                 )}
                 {data.confidence > 0 && (
                   <span className="text-[10px] text-muted-foreground mt-1 block">
-                    Konfidens: {Math.round(data.confidence * 100)}%
+                    Confidence: {Math.round(data.confidence * 100)}%
                   </span>
                 )}
               </CardContent>
@@ -99,7 +99,7 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
           {/* Keywords */}
           {data.keywords?.length > 0 && (
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[10px] text-muted-foreground">Sökord:</span>
+              <span className="text-[10px] text-muted-foreground">Keywords:</span>
               {data.keywords.map((kw, i) => (
                 <Badge key={i} variant="outline" className="text-[10px]">{kw}</Badge>
               ))}
@@ -124,8 +124,8 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
                         <span className="text-xs font-medium text-foreground truncate">
                           {result.fileName}
                         </span>
-                        <Badge variant="outline" className="text-[9px] shrink-0">
-                          {result.sourceType === 'help_doc' ? 'Hjälpdok' : 'Dokument'}
+                         <Badge variant="outline" className="text-[9px] shrink-0">
+                           {result.sourceType === 'help_doc' ? 'Help doc' : 'Document'}
                         </Badge>
                       </div>
                       <p className="text-[11px] text-muted-foreground line-clamp-3">
@@ -141,8 +141,8 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
           {data.results.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
               <Search className="h-10 w-10 mx-auto mb-2 opacity-40" />
-              <p className="text-sm">Inga resultat hittades</p>
-              <p className="text-xs">Prova andra söktermer</p>
+               <p className="text-sm">No results found</p>
+               <p className="text-xs">Try different search terms</p>
             </div>
           )}
         </>
@@ -151,8 +151,8 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
       {!data && !isLoading && (
         <div className="text-center py-8 text-muted-foreground">
           <BookOpen className="h-10 w-10 mx-auto mb-2 opacity-40" />
-          <p className="text-sm">Sök i byggnads- och hjälpdokumentation</p>
-          <p className="text-xs">AI analyserar och rankar relevanta dokument</p>
+           <p className="text-sm">Search building and help documentation</p>
+           <p className="text-xs">AI analyzes and ranks relevant documents</p>
         </div>
       )}
     </div>

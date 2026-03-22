@@ -114,7 +114,7 @@ const StepTimeline: React.FC<{
         result.push({
           icon: 'TRANSIT',
           label: `${step.transit.lineName || step.transit.vehicleType}`,
-          detail: `${step.transit.departureStop} → ${step.transit.arrivalStop}${step.transit.numStops > 0 ? ` (${step.transit.numStops} hållplatser)` : ''}`,
+          detail: `${step.transit.departureStop} → ${step.transit.arrivalStop}${step.transit.numStops > 0 ? ` (${step.transit.numStops} stops)` : ''}`,
           coordinates: step.transit.departureLocation || undefined,
         });
       } else if (step.instruction) {
@@ -146,7 +146,7 @@ const StepTimeline: React.FC<{
     } else if (indoorDistance > 0) {
       result.push({
         icon: 'indoor',
-        label: 'Gå inomhus',
+        label: 'Walk indoors',
         detail: `~${formatDistance(indoorDistance)}`,
       });
     }
@@ -349,13 +349,13 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
           {/* Picking origin banner */}
           {pickingOrigin && (
             <div className="bg-primary/10 border border-primary/30 rounded-md px-2 py-1.5 text-xs text-primary font-medium text-center animate-pulse">
-              Klicka i kartan för att välja startpunkt
+              Click on the map to select start point
             </div>
           )}
 
           {/* Origin */}
           <div className="space-y-1 relative">
-            <label className="text-xs text-muted-foreground">Från</label>
+            <label className="text-xs text-muted-foreground">From</label>
             <div className="flex gap-1.5">
               <div className="relative flex-1">
                 <Input
@@ -366,7 +366,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
                   }}
                   onFocus={() => { if (geocodingResults.length > 0) setShowGeoResults(true); }}
                   onBlur={() => setTimeout(() => setShowGeoResults(false), 200)}
-                  placeholder="Skriv adress eller välj i kartan"
+                  placeholder="Enter address or select on map"
                   className="h-8 text-xs"
                 />
                 {/* Geocoding dropdown */}
@@ -392,7 +392,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
                 className="h-8 w-8 shrink-0"
                 onClick={handleLocate}
                 disabled={isLocating}
-                title="Min position (GPS)"
+                title="My location (GPS)"
               >
                 <LocateFixed size={14} className={isLocating ? 'animate-pulse' : ''} />
               </Button>
@@ -402,7 +402,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
                   size="icon"
                   className="h-8 w-8 shrink-0"
                   onClick={onRequestMapClick}
-                  title="Välj position i kartan"
+                  title="Select position on map"
                 >
                   <MapPinned size={14} />
                 </Button>
@@ -412,10 +412,10 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
 
           {/* Destination building */}
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Till byggnad</label>
+            <label className="text-xs text-muted-foreground">To building</label>
             <Select value={selectedBuildingGuid} onValueChange={v => { setSelectedBuildingGuid(v); setSelectedRoomGuid(''); }}>
               <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Välj byggnad" />
+                <SelectValue placeholder="Select building" />
               </SelectTrigger>
               <SelectContent>
                 {facilities.filter(f => f.lat && f.lng).map(f => (
@@ -430,10 +430,10 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
           {/* Destination room */}
           {rooms.length > 0 && (
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Till rum (valfritt)</label>
+             <label className="text-xs text-muted-foreground">To room (optional)</label>
               <Select value={selectedRoomGuid} onValueChange={setSelectedRoomGuid}>
                 <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Valfri entré" />
+                  <SelectValue placeholder="Optional entrance" />
                 </SelectTrigger>
                 <SelectContent className="max-h-48">
                   {rooms.map(r => (
@@ -454,7 +454,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
               className="flex-1 h-7 text-xs gap-1"
               onClick={() => setProfile('walking')}
             >
-              <Footprints size={12} /> Gå
+              <Footprints size={12} /> Walk
             </Button>
             <Button
               variant={profile === 'driving' ? 'default' : 'outline'}
@@ -462,7 +462,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
               className="flex-1 h-7 text-xs gap-1"
               onClick={() => setProfile('driving')}
             >
-              <Car size={12} /> Kör
+              <Car size={12} /> Drive
             </Button>
             <Button
               variant={profile === 'transit' ? 'default' : 'outline'}
@@ -470,7 +470,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
               className="flex-1 h-7 text-xs gap-1"
               onClick={() => setProfile('transit')}
             >
-              <Bus size={12} /> Kollektivt
+              <Bus size={12} /> Transit
             </Button>
           </div>
 
@@ -480,7 +480,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
             disabled={!userLocation || !selectedBuildingGuid}
             onClick={handleNavigate}
           >
-            <Navigation size={14} className="mr-1" /> Hitta väg
+            <Navigation size={14} className="mr-1" /> Get Directions
           </Button>
 
           {/* Route summary with steps */}
@@ -515,14 +515,14 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
               {allSteps.length === 0 && (
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 text-xs">
-                    <Badge variant="secondary" className="text-[10px]">Utomhus</Badge>
+                    <Badge variant="secondary" className="text-[10px]">Outdoor</Badge>
                     <span>{formatDistance(routeSummary.outdoorDistance)}</span>
                     <span className="text-muted-foreground">·</span>
                     <span>{formatDuration(routeSummary.outdoorDuration)}</span>
                   </div>
                   {routeSummary.indoorDistance > 0 && (
                     <div className="flex items-center gap-2 text-xs">
-                      <Badge variant="outline" className="text-[10px]">Inomhus</Badge>
+                      <Badge variant="outline" className="text-[10px]">Indoor</Badge>
                       <span>~{formatDistance(routeSummary.indoorDistance)}</span>
                     </div>
                   )}
@@ -538,7 +538,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
                   onClick={onShowIndoor}
                 >
                   <Building2 size={12} />
-                  Visa i byggnaden
+                  Show in building
                   <ArrowRight size={12} />
                 </Button>
               )}

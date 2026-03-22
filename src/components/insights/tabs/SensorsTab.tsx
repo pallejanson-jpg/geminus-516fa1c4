@@ -18,17 +18,17 @@ import RoomSensorDetailSheet from '@/components/insights/RoomSensorDetailSheet';
 
 // ── Sensor metric types shown in this tab ──
 const METRICS = [
-  { key: 'temperature' as VisualizationType, label: 'Temperatur', unit: '°C', icon: Thermometer, color: '#22c55e' },
-  { key: 'co2'         as VisualizationType, label: 'CO₂',        unit: 'ppm', icon: Wind,        color: '#60a5fa' },
-  { key: 'humidity'    as VisualizationType, label: 'Luftfukt',   unit: '%',   icon: Droplets,    color: '#a78bfa' },
-  { key: 'occupancy'   as VisualizationType, label: 'Beläggning', unit: '%',   icon: Users,       color: '#f97316' },
+  { key: 'temperature' as VisualizationType, label: 'Temperature', unit: '°C', icon: Thermometer, color: '#22c55e' },
+  { key: 'co2'         as VisualizationType, label: 'CO₂',         unit: 'ppm', icon: Wind,        color: '#60a5fa' },
+  { key: 'humidity'    as VisualizationType, label: 'Humidity',    unit: '%',   icon: Droplets,    color: '#a78bfa' },
+  { key: 'occupancy'   as VisualizationType, label: 'Occupancy',  unit: '%',   icon: Users,       color: '#f97316' },
 ] as const;
 
 // ── Status badge ──
 const LiveBadge = ({ isLive, isLoading }: { isLive: boolean; isLoading: boolean }) => {
   if (isLoading) return (
     <Badge variant="outline" className="text-[9px] gap-1 border-muted-foreground/40 text-muted-foreground">
-      <Loader2 className="h-2.5 w-2.5 animate-spin" /> Laddar…
+      <Loader2 className="h-2.5 w-2.5 animate-spin" /> Loading…
     </Badge>
   );
   if (isLive) return (
@@ -131,7 +131,7 @@ const BuildingTrendChart: React.FC<BuildingTrendChartProps> = ({ rooms, liveMach
               borderRadius: '8px',
               fontSize: 12,
             }}
-            formatter={(v: number) => [`${v} ${config.unit}`, `Snitt ${config.label}`]}
+            formatter={(v: number) => [`${v} ${config.unit}`, `Avg ${config.label}`]}
           />
           <Line
             type="monotone"
@@ -141,7 +141,7 @@ const BuildingTrendChart: React.FC<BuildingTrendChartProps> = ({ rooms, liveMach
             strokeDasharray={isLive ? '0' : '4 2'}
             dot={false}
             connectNulls
-            name={`Snitt ${config.label}`}
+            name={`Avg ${config.label}`}
           />
         </LineChart>
       </ResponsiveContainer>
@@ -247,7 +247,7 @@ export default function SensorsTab() {
               </SelectContent>
             </Select>
           ) : (
-            <h3 className="text-sm font-medium truncate">{building?.commonName || building?.name || 'Sensorer'}</h3>
+            <h3 className="text-sm font-medium truncate">{building?.commonName || building?.name || 'Sensors'}</h3>
           )}
           <LiveBadge isLive={isLive} isLoading={isLoading} />
         </div>
@@ -288,8 +288,8 @@ export default function SensorsTab() {
             <span className="text-2xl font-bold" style={{ color: avgHex }}>{buildingAvg}</span>
             <span className="text-sm text-muted-foreground ml-1">{metricDef.unit}</span>
           </div>
-          <div className="text-xs text-muted-foreground">
-            Snitt {metricDef.label} · {roomValues.length} rum
+           <div className="text-xs text-muted-foreground">
+             Avg {metricDef.label} · {roomValues.length} rooms
           </div>
         </div>
       )}
@@ -299,9 +299,9 @@ export default function SensorsTab() {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
             <metricDef.icon className="h-4 w-4" style={{ color: metricDef.color }} />
-            Trendgraf – {metricDef.label}
+            Trend Chart – {metricDef.label}
           </CardTitle>
-          <CardDescription>Dagligt snitt, senaste 7 dagar</CardDescription>
+          <CardDescription>Daily average, last 7 days</CardDescription>
         </CardHeader>
         <CardContent>
           <BuildingTrendChart
@@ -316,14 +316,14 @@ export default function SensorsTab() {
       {/* Room heatmap grid — klickbara rum */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Rumsheatmap – {metricDef.label}</CardTitle>
-          <CardDescription>
-            {rooms.length} rum · klicka på ett rum för sensordetaljer
-          </CardDescription>
+           <CardTitle className="text-sm">Room Heatmap – {metricDef.label}</CardTitle>
+           <CardDescription>
+             {rooms.length} rooms · click a room for sensor details
+           </CardDescription>
         </CardHeader>
         <CardContent>
           {rooms.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">Inga rum hittades</p>
+            <p className="text-sm text-muted-foreground text-center py-8">No rooms found</p>
           ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8 gap-1.5">
               {roomValues.map(room => (
@@ -345,7 +345,7 @@ export default function SensorsTab() {
       {!isLoading && error && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border border-border px-3 py-2 bg-muted/30">
           <WifiOff className="h-3.5 w-3.5 shrink-0 text-destructive" />
-          <span>Ingen live-koppling till Senslinc för denna byggnad.</span>
+          <span>No live connection to Senslinc for this building.</span>
         </div>
       )}
       {!isLoading && isLive && buildingData && (

@@ -112,7 +112,7 @@ const BuildingMapPicker: React.FC<BuildingMapPickerProps> = ({
       {/* Click instruction overlay */}
       <div className="absolute top-2 left-2 z-10 bg-card/90 backdrop-blur-sm rounded-md px-2 py-1 flex items-center gap-1.5">
         <MousePointer className="h-3 w-3 text-primary" />
-        <span className="text-[10px] text-muted-foreground">Klicka för att sätta position</span>
+        <span className="text-[10px] text-muted-foreground">Click to set position</span>
       </div>
 
       <Map
@@ -150,7 +150,7 @@ const BuildingMapPicker: React.FC<BuildingMapPickerProps> = ({
               {pendingPosition && (
                 <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap">
                   <span className="text-[9px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded">
-                    Ny position
+                    New position
                   </span>
                 </div>
               )}

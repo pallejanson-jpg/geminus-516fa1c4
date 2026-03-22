@@ -27,32 +27,32 @@ const FaultReportSuccess: React.FC<FaultReportSuccessProps> = ({
           </div>
 
           <div className="space-y-2">
-            <h2 className="text-xl font-bold">Felanmälan skickad!</h2>
+            <h2 className="text-xl font-bold">Fault report submitted!</h2>
             <p className="text-sm text-muted-foreground">
-              Din felanmälan har registrerats
-              {installationInfo ? ` för ${installationInfo}` : buildingName ? ` för ${buildingName}` : ''}.
+              Your fault report has been registered
+              {installationInfo ? ` for ${installationInfo}` : buildingName ? ` for ${buildingName}` : ''}.
             </p>
           </div>
 
           <div className="bg-muted/50 rounded-md p-3">
-            <p className="text-xs text-muted-foreground">Referensnummer</p>
+            <p className="text-xs text-muted-foreground">Reference number</p>
             <p className="font-mono font-semibold text-sm">{externalId}</p>
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Spara referensnumret om du behöver följa upp ärendet.
+            Save the reference number if you need to follow up on the case.
           </p>
 
           <div className="flex gap-2 pt-2">
             {onNewReport && (
               <Button variant="outline" onClick={onNewReport} className="flex-1">
-                Ny felanmälan
+                New report
               </Button>
             )}
             {onClose && (
               <Button onClick={onClose} className="flex-1">
                 <ArrowLeft className="h-4 w-4 mr-1" />
-                Tillbaka
+                Back
               </Button>
             )}
           </div>
