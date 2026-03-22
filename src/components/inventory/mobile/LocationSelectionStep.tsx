@@ -127,29 +127,29 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
 
   const canContinue = formData.buildingFmGuid && formData.levelFmGuid;
 
-  // Visa loading om data fortfarande laddas
+  // Show loading if data is still loading
   if (isLoadingData) {
     return (
       <div className="p-4 space-y-4">
         <Skeleton className="h-14 w-full" />
         <Skeleton className="h-14 w-full" />
         <Skeleton className="h-14 w-full" />
-        <p className="text-center text-muted-foreground">Laddar byggnader...</p>
+        <p className="text-center text-muted-foreground">Loading buildings...</p>
       </div>
     );
   }
 
-  // Visa meddelande om data är tom efter laddning
+  // Show message if data is empty after loading
   if (!isLoadingData && navigatorTreeData.length === 0) {
     return (
       <div className="p-4 space-y-4 flex flex-col items-center justify-center h-full">
         <Building2 className="h-12 w-12 text-muted-foreground" />
         <p className="text-muted-foreground text-center">
-          Ingen data hittades. Kontrollera att synkronisering har genomförts i Inställningar.
+          No data found. Check that synchronization has been completed in Settings.
         </p>
         <Button variant="outline" onClick={() => refreshInitialData()}>
           <RefreshCw className="h-4 w-4 mr-2" />
-          Försök igen
+          Try again
         </Button>
       </div>
     );
