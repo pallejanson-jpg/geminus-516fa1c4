@@ -522,7 +522,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
                   </div>
                   {routeSummary.indoorDistance > 0 && (
                     <div className="flex items-center gap-2 text-xs">
-                      <Badge variant="outline" className="text-[10px]">Inomhus</Badge>
+                      <Badge variant="outline" className="text-[10px]">Indoor</Badge>
                       <span>~{formatDistance(routeSummary.indoorDistance)}</span>
                     </div>
                   )}
