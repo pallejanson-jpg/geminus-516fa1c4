@@ -99,10 +99,10 @@ export default function GeminusView() {
     const log = (msg: string) => setConversionLog(prev => [...prev, msg]);
 
     try {
-      log(`Läser ${file.name} (${sizeMB.toFixed(1)} MB)...`);
+      log(`Reading ${file.name} (${sizeMB.toFixed(1)} MB)...`);
       const buffer = await file.arrayBuffer();
       setConversionProgress(15);
-      log('Laddar konverterare...');
+      log('Loading converter...');
 
       const converterModule = await import('@/services/acc-xkt-converter');
       setConversionProgress(25);
