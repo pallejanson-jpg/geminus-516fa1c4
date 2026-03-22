@@ -462,7 +462,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
               className="flex-1 h-7 text-xs gap-1"
               onClick={() => setProfile('driving')}
             >
-              <Car size={12} /> Kör
+              <Car size={12} /> Drive
             </Button>
             <Button
               variant={profile === 'transit' ? 'default' : 'outline'}
