@@ -227,7 +227,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
       onRefresh();
     } catch (error: any) {
       toast({
-        title: 'Fel vid borttagning',
+        title: 'Deletion error',
         description: error.message,
         variant: 'destructive',
       });
