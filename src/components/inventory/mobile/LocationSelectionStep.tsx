@@ -225,7 +225,7 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
               onValueChange={handleRoomChange}
             >
               <SelectTrigger className="h-14 text-base">
-                <SelectValue placeholder="Välj rum..." />
+                <SelectValue placeholder="Select room..." />
               </SelectTrigger>
               <SelectContent className="bg-popover z-50 max-h-64">
                 <SelectItem value={NONE_ROOM_VALUE} className="py-3">
