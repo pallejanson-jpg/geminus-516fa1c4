@@ -313,7 +313,7 @@ const SymbolSettings: React.FC = () => {
                         onClick={() => handleOpenEdit(symbol)}
                       >
                         <Pencil className="h-4 w-4 mr-1" />
-                        Redigera
+                        Edit
                       </Button>
                       <Button
                         variant="ghost"
