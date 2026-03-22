@@ -446,7 +446,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="object_type" className="text-foreground">Objekttyp *</Label>
+                <Label htmlFor="object_type" className="text-foreground">Object Type *</Label>
                 <Input
                   id="object_type"
                   value={formData.object_type}
