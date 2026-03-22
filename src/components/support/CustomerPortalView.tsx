@@ -30,9 +30,9 @@ const CustomerPortalView: React.FC = () => {
 
       <Tabs defaultValue="cases">
         <TabsList>
-          <TabsTrigger value="cases">Ärenden</TabsTrigger>
+          <TabsTrigger value="cases">Cases</TabsTrigger>
           <TabsTrigger value="feedback">Feedback</TabsTrigger>
-          <TabsTrigger value="contact">Kontakt</TabsTrigger>
+          <TabsTrigger value="contact">Contact</TabsTrigger>
         </TabsList>
 
         <TabsContent value="cases">
