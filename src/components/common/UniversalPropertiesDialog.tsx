@@ -977,7 +977,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       }
     } catch (error: any) {
       console.error('BIP classify error:', error);
-      toast.error('Klassificering misslyckades: ' + (error.message || 'Okänt fel'));
+      toast.error('Classification failed: ' + (error.message || 'Unknown error'));
     } finally {
       setIsClassifying(false);
     }
