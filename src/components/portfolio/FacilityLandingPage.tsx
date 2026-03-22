@@ -364,7 +364,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     <div className="absolute inset-0 z-40 bg-background flex flex-col animate-in fade-in duration-300 overflow-hidden w-full max-w-full">
       {/* Background Image */}
       <div className="absolute inset-0 h-full">
-        <img src={heroImage} className="w-full h-full object-cover" alt="Object hero" />
+        <img src={heroImage} className="w-full h-full object-cover" alt="Object hero" loading="lazy" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-black/20" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background" />
       </div>

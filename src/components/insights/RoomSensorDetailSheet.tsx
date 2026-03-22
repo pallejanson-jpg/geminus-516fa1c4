@@ -91,7 +91,7 @@ function getComfortExplanation(current: { temperature: number | null; co2: numbe
 const StatusBadge = ({ isLive, isLoading }: { isLive: boolean; isLoading: boolean }) => {
   if (isLoading) return (
     <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1 border-muted-foreground/40 text-muted-foreground">
-      <Loader2 className="h-2.5 w-2.5 animate-spin" /> Laddar…
+      <Loader2 className="h-2.5 w-2.5 animate-spin" /> Loading…
     </Badge>
   );
   if (isLive) return (
