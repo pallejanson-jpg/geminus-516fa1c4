@@ -437,12 +437,12 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="name" className="text-foreground">Namn *</Label>
+                <Label htmlFor="name" className="text-foreground">Name *</Label>
                 <Input
                   id="name"
                   value={formData.name}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Brandsläckare"
+                  placeholder="Fire Extinguisher"
                 />
               </div>
               <div className="space-y-2">
