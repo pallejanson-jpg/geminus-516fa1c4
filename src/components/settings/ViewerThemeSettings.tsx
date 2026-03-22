@@ -370,7 +370,7 @@ const ViewerThemeSettings: React.FC = () => {
                     <Input
                       value={editingTheme.name}
                       onChange={(e) => setEditingTheme({ ...editingTheme, name: e.target.value })}
-                      placeholder="Temanamn"
+                      placeholder="Theme name"
                       className="h-8 text-sm"
                     />
                   </div>
