@@ -465,7 +465,7 @@ const IvionCreate: React.FC = () => {
                 className="w-full h-12"
               >
                 <Crosshair className="h-4 w-4 mr-2" />
-                Välj position i 3D
+                Select position in 3D
               </Button>
             </div>
           )}
