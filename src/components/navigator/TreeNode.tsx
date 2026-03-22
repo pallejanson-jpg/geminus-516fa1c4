@@ -131,12 +131,12 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
                     onInventory(node);
                   }}
                   className="h-6 w-6 sm:h-6 sm:w-6"
-                  aria-label="Inventera"
+                  aria-label="Inventory"
                 >
                   <ClipboardList className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-orange-500" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Inventera</TooltipContent>
+              <TooltipContent side="top">Inventory</TooltipContent>
             </Tooltip>
           )}
           {canOpen2D && onOpen2D && (
