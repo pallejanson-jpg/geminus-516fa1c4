@@ -438,10 +438,10 @@ const IvionCreate: React.FC = () => {
           {/* Room dropdown - only show when floor is selected and has rooms */}
           {levelFmGuid && rooms.length > 0 && (
             <div className="space-y-2">
-              <Label>Rum</Label>
+              <Label>Room</Label>
               <Select value={roomFmGuid} onValueChange={setRoomFmGuid}>
                 <SelectTrigger className="h-12">
-                  <SelectValue placeholder="Välj rum..." />
+                  <SelectValue placeholder="Select room..." />
                 </SelectTrigger>
                 <SelectContent className="bg-popover z-50 max-h-60">
                   {rooms.map((r) => (
