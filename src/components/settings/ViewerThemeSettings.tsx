@@ -214,9 +214,9 @@ const ViewerThemeSettings: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium">Viewer-teman</h3>
+          <h3 className="text-sm font-medium">Viewer Themes</h3>
           <p className="text-xs text-muted-foreground">
-            Konfigurera färgteman för 3D-viewern
+            Configure color themes for the 3D viewer
           </p>
         </div>
         <Button size="sm" onClick={handleNewTheme} disabled={isCreatingNew}>
