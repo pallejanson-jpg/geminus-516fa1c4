@@ -294,7 +294,7 @@ export default function NavigatorView() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Sök..."
+            placeholder="Search..."
             className="flex-1 h-8 sm:h-9 text-sm"
           />
           <div className="flex gap-0.5 sm:gap-1 shrink-0">
