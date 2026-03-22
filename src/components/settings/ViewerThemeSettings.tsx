@@ -512,9 +512,9 @@ const ViewerThemeSettings: React.FC = () => {
       {themes.length === 0 && (
         <div className="text-center py-8 text-muted-foreground border rounded-lg bg-muted/30">
           <Palette className="h-8 w-8 mx-auto mb-2 opacity-50" />
-          <p>Inga teman konfigurerade</p>
+          <p>No themes configured</p>
           <Button onClick={handleNewTheme} variant="outline" size="sm" className="mt-2">
-            Skapa ditt första tema
+            Create your first theme
           </Button>
         </div>
       )}
