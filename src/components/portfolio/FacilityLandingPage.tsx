@@ -301,11 +301,11 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
         .getPublicUrl(fileName);
 
       await updateHeroImage(urlData.publicUrl);
-      toast.success('Hero-bild uppladdad!');
+      toast.success('Hero image uploaded!');
       onSettingsChanged?.();
     } catch (error: any) {
       console.error('Upload error:', error);
-      toast.error('Kunde inte ladda upp bild', {
+      toast.error('Could not upload image', {
         description: error.message,
       });
     } finally {
