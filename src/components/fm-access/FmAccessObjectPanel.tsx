@@ -106,7 +106,7 @@ const FmAccessObjectPanel: React.FC<FmAccessObjectPanelProps> = ({ selectedNode,
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {classLabel && <Badge variant="secondary">{classLabel}</Badge>}
-            {displayNode.classId && <Badge variant="outline">Klass {displayNode.classId}</Badge>}
+            {displayNode.classId && <Badge variant="outline">Class {displayNode.classId}</Badge>}
             {displayNode.objectId && <Badge variant="outline">ID {displayNode.objectId}</Badge>}
           </div>
           {nodeGuid && (
