@@ -168,8 +168,8 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="title">Titel *</Label>
-            <Input id="title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Kort beskrivning av ärendet" />
+            <Label htmlFor="title">Title *</Label>
+            <Input id="title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Brief description of the case" />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
