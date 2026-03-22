@@ -186,7 +186,7 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Layers className="h-5 w-5 text-primary" />
-              <Label className="text-base font-medium">Våning *</Label>
+              <Label className="text-base font-medium">Floor *</Label>
             </div>
             {floors.length > 0 ? (
               <div className="grid grid-cols-2 gap-3">
