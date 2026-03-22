@@ -493,7 +493,7 @@ const SymbolSettings: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="marker-html">Anpassad HTML (valfritt)</Label>
+              <Label htmlFor="marker-html">Custom HTML (optional)</Label>
               <textarea
                 id="marker-html"
                 value={formData.marker_html}
@@ -502,7 +502,7 @@ const SymbolSettings: React.FC = () => {
                 className="w-full h-20 px-3 py-2 text-sm border rounded-md resize-none"
               />
               <p className="text-xs text-muted-foreground">
-                Egen HTML för avancerade markörer
+                Custom HTML for advanced markers
               </p>
             </div>
 
