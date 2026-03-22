@@ -167,7 +167,7 @@ const Ivion360PositionPicker: React.FC<Ivion360PositionPickerProps> = ({
           <div className="flex items-center justify-between px-3 py-2 bg-background/90 backdrop-blur border-b z-10">
             <div className="flex items-center gap-2 min-w-0">
               <MapPin className="h-4 w-4 text-primary shrink-0" />
-              <span className="text-sm font-medium truncate">Välj position i 360°</span>
+              <span className="text-sm font-medium truncate">Select position in 360°</span>
             </div>
             <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onOpenChange(false)}>
               <X className="h-4 w-4" />
