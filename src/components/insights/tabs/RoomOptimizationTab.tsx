@@ -19,11 +19,11 @@ import {
 import { cn } from '@/lib/utils';
 
 const TYPE_CONFIG: Record<string, { icon: React.ReactNode; label: string }> = {
-  underutilized: { icon: <Minimize2 className="h-4 w-4" />, label: 'Underutnyttjad' },
-  overcrowded: { icon: <Maximize2 className="h-4 w-4" />, label: 'Överbelastad' },
-  merge: { icon: <Merge className="h-4 w-4" />, label: 'Slå samman' },
-  convert: { icon: <ArrowDownUp className="h-4 w-4" />, label: 'Konvertera' },
-  rezone: { icon: <Layers className="h-4 w-4" />, label: 'Omzona' },
+  underutilized: { icon: <Minimize2 className="h-4 w-4" />, label: 'Underutilized' },
+  overcrowded: { icon: <Maximize2 className="h-4 w-4" />, label: 'Overcrowded' },
+  merge: { icon: <Merge className="h-4 w-4" />, label: 'Merge' },
+  convert: { icon: <ArrowDownUp className="h-4 w-4" />, label: 'Convert' },
+  rezone: { icon: <Layers className="h-4 w-4" />, label: 'Rezone' },
 };
 
 const PRIORITY_COLORS = {
