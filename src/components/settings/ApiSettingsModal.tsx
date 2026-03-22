@@ -875,7 +875,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             if (accHubs.length === 0 && accAuthStatus === 'authenticated') {
                 handleFetchHubs();
             }
-            // Folders are NOT auto-fetched — user must click "Hämta mappar" to avoid 403 errors
+            // Folders are NOT auto-fetched — user must click "Fetch folders" to avoid 403 errors
         }
     }, [isOpen, accAuthStatus, hasLoadedAccSettings]);
 
