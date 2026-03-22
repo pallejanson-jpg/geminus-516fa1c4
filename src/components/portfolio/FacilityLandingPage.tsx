@@ -594,7 +594,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                       
                       <div className="flex items-center justify-between gap-2 bg-muted/30 rounded-md p-2 min-w-0">
                         <p className="text-[11px] sm:text-xs text-muted-foreground truncate min-w-0">
-                          Byggnadens orientering relativt norr
+                          Building orientation relative to north
                         </p>
                         <Button 
                           size="sm" 
