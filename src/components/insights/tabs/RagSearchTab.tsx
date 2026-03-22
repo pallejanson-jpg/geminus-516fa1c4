@@ -72,7 +72,7 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
                 <div className="flex items-start gap-2 mb-2">
                   <Sparkles className="h-4 w-4 text-primary mt-0.5 shrink-0" />
                   <div>
-                    <h4 className="text-sm font-medium text-foreground mb-1">AI-svar</h4>
+                    <h4 className="text-sm font-medium text-foreground mb-1">AI Answer</h4>
                     <p className="text-xs text-muted-foreground whitespace-pre-wrap">{data.answer}</p>
                   </div>
                 </div>
