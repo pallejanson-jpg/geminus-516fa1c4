@@ -186,7 +186,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
             <div className="grid grid-cols-2 gap-3 text-sm">
               {supportCase.building_name && (
                 <div>
-                  <span className="text-muted-foreground">Byggnad / Område</span>
+                  <span className="text-muted-foreground">Building / Area</span>
                   <p className="font-medium text-foreground">{supportCase.building_name}</p>
                 </div>
               )}
