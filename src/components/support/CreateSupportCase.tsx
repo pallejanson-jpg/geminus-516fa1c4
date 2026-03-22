@@ -199,8 +199,8 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Beskrivning</Label>
-            <Textarea id="description" value={description} onChange={e => setDescription(e.target.value)} placeholder="Detaljerad beskrivning..." rows={4} />
+            <Label htmlFor="description">Description</Label>
+            <Textarea id="description" value={description} onChange={e => setDescription(e.target.value)} placeholder="Detailed description..." rows={4} />
           </div>
 
           {/* Building selector */}
