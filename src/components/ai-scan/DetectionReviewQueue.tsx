@@ -295,7 +295,7 @@ const ApprovalDialog: React.FC<{
                 <SelectValue placeholder="Select symbol" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Ingen symbol</SelectItem>
+                <SelectItem value="none">No symbol</SelectItem>
                 {symbols.map(s => (
                   <SelectItem key={s.id} value={s.id}>
                     <span className="flex items-center gap-2">
