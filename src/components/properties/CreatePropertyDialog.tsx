@@ -129,7 +129,7 @@ export default function CreatePropertyDialog({
 
   async function handleSave() {
     if (!form.fm_guid.trim()) {
-      toast({ title: 'FM GUID krävs', variant: 'destructive' });
+      toast({ title: 'FM GUID is required', variant: 'destructive' });
       return;
     }
 
