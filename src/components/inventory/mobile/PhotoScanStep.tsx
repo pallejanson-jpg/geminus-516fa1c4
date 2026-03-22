@@ -181,9 +181,9 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
   };
 
   const confidenceLabel = (c: number) => {
-    if (c >= 0.7) return 'Hög säkerhet';
-    if (c >= 0.4) return 'Medel säkerhet';
-    return 'Låg säkerhet';
+    if (c >= 0.7) return 'High confidence';
+    if (c >= 0.4) return 'Medium confidence';
+    return 'Low confidence';
   };
 
   const PROPERTY_LABELS: Record<string, string> = {
