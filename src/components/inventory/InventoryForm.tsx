@@ -233,8 +233,8 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
       onOpen360(fullUrl);
     } else {
       window.open(fullUrl, '_blank');
-      toast.info('Ivion öppnat i ny flik', {
-        description: 'Long-press för att skapa en POI, sedan synka tillbaka',
+      toast.info('Ivion opened in new tab', {
+        description: 'Long-press to create a POI, then sync back',
       });
     }
   };
