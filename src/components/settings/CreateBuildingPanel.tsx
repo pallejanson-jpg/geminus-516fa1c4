@@ -832,11 +832,11 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
 
       const result = await resp.json();
       toast({
-        title: 'Byggnader köade',
-        description: `${result.enqueued} jobb köade, ${result.skipped} hoppades över (av ${result.total_buildings} byggnader).`,
+        title: 'Buildings enqueued',
+        description: `${result.enqueued} jobs enqueued, ${result.skipped} skipped (of ${result.total_buildings} buildings).`,
       });
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Batch-enqueue misslyckades', description: err.message });
+      toast({ variant: 'destructive', title: 'Batch enqueue failed', description: err.message });
     } finally {
       setIsBatchEnqueuing(false);
     }
