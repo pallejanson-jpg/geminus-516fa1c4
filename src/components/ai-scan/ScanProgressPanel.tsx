@@ -284,10 +284,10 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
               <div className="min-w-0">
                 <CardTitle className="flex items-center gap-2 text-base md:text-lg">
                   <RefreshCw className={`h-4 w-4 md:h-5 md:w-5 shrink-0 ${currentJob.status === 'running' ? 'animate-spin' : ''}`} />
-                  <span className="truncate">Aktiv skanning</span>
+                  <span className="truncate">Active scan</span>
                 </CardTitle>
                 <CardDescription className="text-xs md:text-sm mt-1 line-clamp-2">
-                  Söker efter: {currentJob.templates.join(', ')}
+                  Searching for: {currentJob.templates.join(', ')}
                 </CardDescription>
               </div>
               {getStatusBadge(currentJob.status)}
