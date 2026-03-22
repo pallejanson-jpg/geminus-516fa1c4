@@ -386,7 +386,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
                     <span className={cn("text-xs sm:text-sm truncate", isVisible ? "text-foreground" : "text-muted-foreground")}>{floor.name}</span>
                   </div>
                   {!isSolo && (
-                    <Button variant="ghost" size="sm" className="h-4 sm:h-5 px-1 sm:px-1.5 text-[9px] sm:text-[10px] text-muted-foreground hover:text-primary flex-shrink-0" onClick={() => handleShowOnlyFloor(floor.id)} title="Visa endast detta våningsplan">Solo</Button>
+                    <Button variant="ghost" size="sm" className="h-4 sm:h-5 px-1 sm:px-1.5 text-[9px] sm:text-[10px] text-muted-foreground hover:text-primary flex-shrink-0" onClick={() => handleShowOnlyFloor(floor.id)} title="Show only this floor">Solo</Button>
                   )}
                 </div>
               );
