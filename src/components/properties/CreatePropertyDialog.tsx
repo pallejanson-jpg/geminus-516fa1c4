@@ -204,12 +204,12 @@ export default function CreatePropertyDialog({
       });
       if (error) throw error;
       if (data?.accessToken) {
-        toast({ title: 'Asset+ anslutning OK ✓' });
+        toast({ title: 'Asset+ connection OK ✓' });
       } else {
-        toast({ title: 'Asset+ auth misslyckades', variant: 'destructive' });
+        toast({ title: 'Asset+ auth failed', variant: 'destructive' });
       }
     } catch (err: any) {
-      toast({ title: 'Asset+ test misslyckades', description: err.message, variant: 'destructive' });
+      toast({ title: 'Asset+ test failed', description: err.message, variant: 'destructive' });
     } finally {
       setTestingAp(false);
     }
