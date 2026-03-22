@@ -572,15 +572,15 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
       <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Ta bort mall?</AlertDialogTitle>
+            <AlertDialogTitle>Delete template?</AlertDialogTitle>
             <AlertDialogDescription>
-              Denna åtgärd kan inte ångras. Mallen kommer att tas bort permanent.
+              This action cannot be undone. The template will be permanently removed.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => deleteConfirmId && handleDelete(deleteConfirmId)}>
-              Ta bort
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
