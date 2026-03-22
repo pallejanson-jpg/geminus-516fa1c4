@@ -334,13 +334,13 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
           <Card>
             <CardContent className="py-12 text-center">
               <Settings2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-              <h3 className="text-lg font-medium mb-2">Inga mallar</h3>
+              <h3 className="text-lg font-medium mb-2">No templates</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Skapa din första detektionsmall för att börja skanna
+                Create your first detection template to start scanning
               </p>
               <Button onClick={openNewTemplateDialog}>
                 <Plus className="h-4 w-4 mr-2" />
-                Skapa mall
+                Create Template
               </Button>
             </CardContent>
           </Card>
