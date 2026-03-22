@@ -130,11 +130,11 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
     } catch (err: any) {
       console.error('[PhotoScanStep] Analysis failed:', err);
       if (err.message?.includes('429') || err.message?.includes('Rate limit')) {
-        setError('AI-tjänsten är tillfälligt överbelastad. Försök igen om en stund.');
+        setError('The AI service is temporarily overloaded. Please try again in a moment.');
       } else if (err.message?.includes('402')) {
-        setError('AI-krediter saknas. Kontakta administratören.');
+        setError('AI credits missing. Contact the administrator.');
       } else {
-        setError('Kunde inte analysera bilden. Försök igen eller hoppa över.');
+        setError('Could not analyze the image. Try again or skip.');
       }
     } finally {
       setIsAnalyzing(false);
