@@ -367,8 +367,8 @@ export default function CreatePropertyDialog({
                   Leave empty to use global settings.
                 </p>
                 <SecretInput label="API URL" field="senslinc_api_url" placeholder="https://..." />
-                <SecretInput label="E-post" field="senslinc_email" />
-                <SecretInput label="Lösenord" field="senslinc_password" />
+                <SecretInput label="Email" field="senslinc_email" />
+                <SecretInput label="Password" field="senslinc_password" />
                 <Button
                   variant="outline"
                   size="sm"
