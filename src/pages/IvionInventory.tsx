@@ -428,7 +428,7 @@ const IvionInventory: React.FC = () => {
           <div className="flex items-center gap-3">
             {savedCount > 0 && (
               <div className="text-sm text-muted-foreground bg-primary/10 px-2 py-1 rounded">
-                {savedCount} sparade
+                {savedCount} saved
               </div>
             )}
             
