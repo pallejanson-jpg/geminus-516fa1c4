@@ -226,7 +226,7 @@ const BuildingSelector: React.FC = () => {
           </TabsTrigger>
           <TabsTrigger value="views" className="flex items-center gap-2">
             <Camera className="h-4 w-4" />
-            Sparade vyer
+            Saved Views
             <Badge variant="secondary" className="text-xs ml-1">
               {savedViews.length}
             </Badge>
