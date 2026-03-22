@@ -613,7 +613,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
           >
             <Crosshair className="h-4 w-4 mr-2" />
             <span className="text-xs sm:text-sm">
-              {coordinates ? 'Ändra 3D-position' : 'Välj 3D-position'}
+              {coordinates ? 'Change 3D position' : 'Select 3D position'}
             </span>
           </Button>
 
