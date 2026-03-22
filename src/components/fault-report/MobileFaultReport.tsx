@@ -218,7 +218,7 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
 
                 {/* Photos */}
                 <div className="space-y-2">
-                  <Label>Bifoga bilder</Label>
+                  <Label>Attach images</Label>
                   <PhotoCapture
                     photos={photos}
                     onPhotosChange={setPhotos}
