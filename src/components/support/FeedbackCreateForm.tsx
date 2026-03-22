@@ -65,7 +65,7 @@ const FeedbackCreateForm: React.FC<FeedbackCreateFormProps> = ({ open, onClose, 
         ...(threads || []).map(t => ({
           type: 'thread' as const,
           title: t.title,
-          description: t.status === 'done' ? 'Redan genomfört' : `Status: ${t.status}`,
+          description: t.status === 'done' ? 'Already implemented' : `Status: ${t.status}`,
           id: t.id,
         })),
         ...(docs || []).map(d => ({
