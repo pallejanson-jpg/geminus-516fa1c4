@@ -214,7 +214,7 @@ const SymbolSettings: React.FC = () => {
     } catch (error: any) {
       toast({
         variant: 'destructive',
-        title: 'Fel',
+        title: 'Error',
         description: error.message,
       });
     }
