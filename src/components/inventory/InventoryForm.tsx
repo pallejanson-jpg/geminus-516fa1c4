@@ -663,7 +663,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
                     ) : (
                       <RefreshCw className="h-4 w-4 mr-1.5" />
                     )}
-                    <span className="text-xs">Synka</span>
+                    <span className="text-xs">Sync</span>
                   </Button>
                 </div>
               </>
