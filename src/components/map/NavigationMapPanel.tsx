@@ -454,7 +454,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
               className="flex-1 h-7 text-xs gap-1"
               onClick={() => setProfile('walking')}
             >
-              <Footprints size={12} /> Gå
+              <Footprints size={12} /> Walk
             </Button>
             <Button
               variant={profile === 'driving' ? 'default' : 'outline'}
