@@ -305,7 +305,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
           <Input
             value={formData.name}
             onChange={(e) => updateFormData({ name: e.target.value })}
-            placeholder={`t.ex. ${categoryInfo?.label || 'Tillgång'}-001`}
+            placeholder={`e.g. ${categoryInfo?.label || 'Asset'}-001`}
             className="h-12 text-base"
             maxLength={100}
           />
