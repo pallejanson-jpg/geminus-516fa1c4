@@ -83,10 +83,10 @@ const CreateViewDialog: React.FC<CreateViewDialogProps> = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Camera className="h-5 w-5 text-primary" />
-            Skapa sparad vy
+            Create Saved View
           </DialogTitle>
           <DialogDescription>
-            Spara den aktuella vyn med alla inställningar för snabb åtkomst senare.
+            Save the current view with all settings for quick access later.
           </DialogDescription>
         </DialogHeader>
 
