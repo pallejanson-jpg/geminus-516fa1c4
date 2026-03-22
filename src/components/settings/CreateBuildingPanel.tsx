@@ -880,7 +880,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         setCreatedBuilding(null);
         fetchBuildings();
       } else {
-        toast({ variant: 'destructive', title: 'Delvis misslyckad', description: `${result.summary.expireErrors} objekt kunde inte expireras i Asset+.` });
+        toast({ variant: 'destructive', title: 'Partially failed', description: `${result.summary.expireErrors} objects could not be expired in Asset+.` });
         fetchBuildings();
       }
     } catch (err: any) {
