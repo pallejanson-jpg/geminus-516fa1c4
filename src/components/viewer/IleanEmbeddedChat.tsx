@@ -50,7 +50,7 @@ export default function IleanEmbeddedChat({ buildingFmGuid, buildingName }: Ilea
           <div className="text-center space-y-3 pt-4">
             <FileText className="h-8 w-8 mx-auto text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">
-              Ställ frågor om dokument för {buildingName || 'denna byggnad'}.
+              Ask questions about documents for {buildingName || 'this building'}.
             </p>
             <div className="space-y-1.5">
               {STARTER_QUESTIONS.map((q) => (
