@@ -138,7 +138,7 @@ const FaultReport: React.FC = () => {
         if (error) throw error;
 
         setSubmittedId(externalId);
-        toast.success('Felanmälan skickad!');
+        toast.success('Fault report submitted!');
       }
     } catch (err: any) {
       console.error('Submit error:', err);
