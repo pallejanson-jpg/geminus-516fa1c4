@@ -480,7 +480,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
             disabled={!userLocation || !selectedBuildingGuid}
             onClick={handleNavigate}
           >
-            <Navigation size={14} className="mr-1" /> Hitta väg
+            <Navigation size={14} className="mr-1" /> Get Directions
           </Button>
 
           {/* Route summary with steps */}
