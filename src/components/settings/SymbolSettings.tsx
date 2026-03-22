@@ -232,11 +232,11 @@ const SymbolSettings: React.FC = () => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Konfigurera hur olika typer av assets visas som annotationer i 3D-viewern.
+          Configure how different asset types are displayed as annotations in the 3D viewer.
         </p>
         <Button onClick={handleOpenCreate} size="sm" className="gap-2">
           <Plus className="h-4 w-4" />
-          Ny symbol
+          New Symbol
         </Button>
       </div>
 
