@@ -333,7 +333,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
           {currentMode === 'multi' && !allVisible && (
             <div className="pt-1 border-t border-border/30">
               <Button variant="ghost" size="sm" className="w-full h-6 text-[10px] sm:text-xs" onClick={handleShowAll}>
-                Visa alla våningsplan
+                Show all floors
               </Button>
             </div>
           )}
