@@ -105,7 +105,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
         .getPublicUrl(filePath);
 
       updateFormData({ imageUrl: publicUrlData.publicUrl });
-      toast.success('Bild uppladdad!');
+      toast.success('Image uploaded!');
     } catch (err: any) {
       console.error('Upload error:', err);
       toast.error('Kunde inte ladda upp bild', { description: err.message });
