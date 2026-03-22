@@ -338,18 +338,18 @@ const SymbolSettings: React.FC = () => {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {editingSymbol ? 'Redigera symbol' : 'Ny annotationssymbol'}
+              {editingSymbol ? 'Edit Symbol' : 'New Annotation Symbol'}
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="symbol-name">Namn</Label>
+              <Label htmlFor="symbol-name">Name</Label>
               <Input
                 id="symbol-name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="t.ex. Brandsymboler"
+                placeholder="e.g. Fire Symbols"
                 className="h-11"
               />
             </div>
