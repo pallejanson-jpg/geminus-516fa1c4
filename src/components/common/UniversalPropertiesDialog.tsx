@@ -1375,7 +1375,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Radera {isMultiMode ? `${fmGuids.length} objekt` : 'objekt'}?</AlertDialogTitle>
+                      <AlertDialogTitle>Delete {isMultiMode ? `${fmGuids.length} objects` : 'object'}?</AlertDialogTitle>
                       <AlertDialogDescription>
                         {syncStatus.allLocal 
                           ? 'Detta raderar objektet/objekten permanent från den lokala databasen.'
