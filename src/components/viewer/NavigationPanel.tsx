@@ -185,11 +185,11 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
 
       {isEditMode && (
         <div className="text-[10px] text-muted-foreground bg-muted/50 rounded p-2">
-          <p><strong>📍 Nod:</strong> Klicka för att placera waypoints</p>
-          <p><strong>🔗 Kant:</strong> Klicka två noder för att koppla</p>
-          <p><strong>🏠 Rum:</strong> Länka nod till närmaste rum</p>
-          <p><strong>🗑️ Radera:</strong> Klicka för att ta bort</p>
-          <p className="mt-1">Noder: {graph.nodes.size} | Kanter: {graph.edges.length}</p>
+          <p><strong>📍 Node:</strong> Click to place waypoints</p>
+          <p><strong>🔗 Edge:</strong> Click two nodes to connect</p>
+          <p><strong>🏠 Room:</strong> Link node to nearest room</p>
+          <p><strong>🗑️ Delete:</strong> Click to remove</p>
+          <p className="mt-1">Nodes: {graph.nodes.size} | Edges: {graph.edges.length}</p>
         </div>
       )}
 
