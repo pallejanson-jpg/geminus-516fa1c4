@@ -407,7 +407,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
 
         if (error) throw error;
 
-        toast.success('Tillgång sparad!');
+        toast.success('Asset saved!');
         onSaved({
           fm_guid: newAsset.fm_guid,
           name: newAsset.name,
