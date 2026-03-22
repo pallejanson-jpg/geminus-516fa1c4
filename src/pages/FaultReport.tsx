@@ -46,7 +46,7 @@ const FaultReport: React.FC = () => {
       // Check if the edge function returned a 404-like error
       if (data?.error) {
         console.error('[FaultReport] API error:', data.error);
-        setConfigError('Kunde inte hitta installationen. Kontrollera att QR-koden är giltig.');
+        setConfigError('Could not find the installation. Please verify the QR code is valid.');
         return;
       }
 
