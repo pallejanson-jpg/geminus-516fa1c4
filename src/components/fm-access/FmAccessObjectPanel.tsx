@@ -166,7 +166,7 @@ const FmAccessObjectPanel: React.FC<FmAccessObjectPanelProps> = ({ selectedNode,
               </Button>
               {onCreateChild && nodeGuid && (
                 <Button size="sm" variant="outline" onClick={() => onCreateChild(nodeGuid)}>
-                  <Plus size={14} className="mr-1" /> Skapa underobj.
+                  <Plus size={14} className="mr-1" /> Create child
                 </Button>
               )}
               <AlertDialog>
