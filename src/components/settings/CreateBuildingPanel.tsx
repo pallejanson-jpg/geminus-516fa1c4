@@ -1286,7 +1286,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                         )}
                         {(job.status === 'done' || job.status === 'error') && (
                           <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 gap-1 text-destructive" onClick={() => handleDeleteJob(job.id)}>
-                            <X className="h-3 w-3" /> Radera
+                            <X className="h-3 w-3" /> Delete
                           </Button>
                         )}
                       </div>
