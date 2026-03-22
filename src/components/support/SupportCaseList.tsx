@@ -36,15 +36,15 @@ export interface SupportCase {
 }
 
 const STATUS_FILTERS = [
-  { value: 'all', label: 'Alla' },
-  { value: 'New', label: 'Nytt' },
-  { value: 'UnderReview', label: 'Granskas' },
-  { value: 'AwaitingResponse', label: 'Väntar svar' },
-  { value: 'InProgress', label: 'Pågående' },
-  { value: 'Planned', label: 'Planerat' },
-  { value: 'Done', label: 'Klart' },
-  { value: 'Completed', label: 'Avslutat' },
-  { value: 'Closed', label: 'Stängt' },
+  { value: 'all', label: 'All' },
+  { value: 'New', label: 'New' },
+  { value: 'UnderReview', label: 'Under review' },
+  { value: 'AwaitingResponse', label: 'Awaiting response' },
+  { value: 'InProgress', label: 'In progress' },
+  { value: 'Planned', label: 'Planned' },
+  { value: 'Done', label: 'Done' },
+  { value: 'Completed', label: 'Completed' },
+  { value: 'Closed', label: 'Closed' },
 ];
 
 const STATUS_CONFIG: Record<string, { icon: React.ElementType; color: string; label: string }> = {
