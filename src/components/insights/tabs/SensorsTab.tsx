@@ -18,10 +18,10 @@ import RoomSensorDetailSheet from '@/components/insights/RoomSensorDetailSheet';
 
 // ── Sensor metric types shown in this tab ──
 const METRICS = [
-  { key: 'temperature' as VisualizationType, label: 'Temperatur', unit: '°C', icon: Thermometer, color: '#22c55e' },
-  { key: 'co2'         as VisualizationType, label: 'CO₂',        unit: 'ppm', icon: Wind,        color: '#60a5fa' },
-  { key: 'humidity'    as VisualizationType, label: 'Luftfukt',   unit: '%',   icon: Droplets,    color: '#a78bfa' },
-  { key: 'occupancy'   as VisualizationType, label: 'Beläggning', unit: '%',   icon: Users,       color: '#f97316' },
+  { key: 'temperature' as VisualizationType, label: 'Temperature', unit: '°C', icon: Thermometer, color: '#22c55e' },
+  { key: 'co2'         as VisualizationType, label: 'CO₂',         unit: 'ppm', icon: Wind,        color: '#60a5fa' },
+  { key: 'humidity'    as VisualizationType, label: 'Humidity',    unit: '%',   icon: Droplets,    color: '#a78bfa' },
+  { key: 'occupancy'   as VisualizationType, label: 'Occupancy',  unit: '%',   icon: Users,       color: '#f97316' },
 ] as const;
 
 // ── Status badge ──
