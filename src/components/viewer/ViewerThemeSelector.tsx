@@ -80,7 +80,7 @@ const ViewerThemeSelector: React.FC<ViewerThemeSelectorProps> = ({
         <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
           <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
         </div>
-        <Label className="text-xs sm:text-sm">Viewer-tema</Label>
+        <Label className="text-xs sm:text-sm">Viewer Theme</Label>
       </div>
       
       <Select
