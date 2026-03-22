@@ -126,7 +126,7 @@ const ProfileSettings: React.FC = () => {
             id="displayName"
             value={profile.displayName}
             onChange={(e) => setProfile(prev => ({ ...prev, displayName: e.target.value }))}
-            placeholder="Ditt namn"
+            placeholder="Your name"
           />
         </div>
 
