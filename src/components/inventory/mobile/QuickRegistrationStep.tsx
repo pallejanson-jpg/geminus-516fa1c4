@@ -392,7 +392,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
                 <Badge variant="outline" className="text-xs">Model: {formData.aiProperties.model}</Badge>
               )}
               {formData.aiProperties.size && (
-                <Badge variant="outline" className="text-xs">Storlek: {formData.aiProperties.size}</Badge>
+                <Badge variant="outline" className="text-xs">Size: {formData.aiProperties.size}</Badge>
               )}
               {formData.aiProperties.condition && (
                 <Badge variant="outline" className="text-xs">
