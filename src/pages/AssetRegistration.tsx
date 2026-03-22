@@ -243,7 +243,7 @@ function AssetRegistrationForm({
               disabled={isLoading}
               className="flex-1"
             >
-              Avbryt
+              Cancel
             </Button>
             <Button 
               type="submit" 
@@ -253,10 +253,10 @@ function AssetRegistrationForm({
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Registrerar...
+                  Registering...
                 </>
               ) : (
-                'Registrera'
+                'Register'
               )}
             </Button>
           </div>
