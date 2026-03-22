@@ -225,7 +225,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
               )}
               {supportCase.contact_phone && (
                 <div>
-                  <span className="text-muted-foreground">Telefon</span>
+                  <span className="text-muted-foreground">Phone</span>
                   <p className="font-medium text-foreground">{supportCase.contact_phone}</p>
                 </div>
               )}
