@@ -413,7 +413,7 @@ const IvionCreate: React.FC = () => {
           {/* Floor dropdown - only show when building is selected and has floors */}
           {buildingFmGuid && floors.length > 0 && (
             <div className="space-y-2">
-              <Label>Våningsplan</Label>
+              <Label>Floor</Label>
               <Select 
                 value={levelFmGuid} 
                 onValueChange={(v) => {
