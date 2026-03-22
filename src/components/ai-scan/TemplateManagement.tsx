@@ -302,17 +302,17 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2">
                 <Settings2 className="h-5 w-5" />
-                Detektionsmallar
+                Detection Templates
               </CardTitle>
               <CardDescription>
-                Konfigurera vilka objekt AI:n ska leta efter och hur
+                Configure which objects the AI should look for and how
               </CardDescription>
             </div>
             <Button onClick={openNewTemplateDialog}>
               <Plus className="h-4 w-4 mr-2" />
-              Ny mall
+              New Template
             </Button>
           </div>
         </CardHeader>
