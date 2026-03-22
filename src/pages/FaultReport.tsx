@@ -113,7 +113,7 @@ const FaultReport: React.FC = () => {
 
         const refId = responseData?.referenceNumber || responseData?.id || responseData?.externalId || `FR-${Date.now()}`;
         setSubmittedId(String(refId));
-        toast.success('Felanmälan skickad!');
+        toast.success('Fault report submitted!');
       } else {
         const externalId = `FR-${Date.now()}`;
         const workOrder = {
