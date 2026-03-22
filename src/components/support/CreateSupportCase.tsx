@@ -174,7 +174,7 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Typ av ärende</Label>
+              <Label>Case type</Label>
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
