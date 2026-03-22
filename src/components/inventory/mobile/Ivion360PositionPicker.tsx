@@ -191,8 +191,8 @@ const Ivion360PositionPicker: React.FC<Ivion360PositionPickerProps> = ({
           {sdkStatus === 'failed' && (
             <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-20">
               <div className="flex flex-col items-center gap-3 p-6 text-center">
-                <span className="text-sm text-destructive">{errorMessage || 'Kunde inte ladda 360°-vyn'}</span>
-                <Button variant="outline" size="sm" onClick={retry}>Försök igen</Button>
+                <span className="text-sm text-destructive">{errorMessage || 'Could not load 360° view'}</span>
+                <Button variant="outline" size="sm" onClick={retry}>Try again</Button>
               </div>
             </div>
           )}
