@@ -224,12 +224,12 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
           {step === 'preview' && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="default">{validRows.length} giltiga</Badge>
+                <Badge variant="default">{validRows.length} valid</Badge>
                 {invalidRows.length > 0 && (
-                  <Badge variant="destructive">{invalidRows.length} med fel</Badge>
+                  <Badge variant="destructive">{invalidRows.length} with errors</Badge>
                 )}
                 <span className="text-xs text-muted-foreground ml-auto">
-                  Totalt {rows.length} rader
+                  Total {rows.length} rows
                 </span>
               </div>
 
