@@ -163,7 +163,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         e.preventDefault();
         console.error('[NativeViewer] ⚠️ WebGL context lost');
         if (mountedRef.current) {
-          setErrorMsg('GPU-minnet tog slut. Försök ladda om sidan.');
+          setErrorMsg('GPU memory exhausted. Try reloading the page.');
           setPhase('error');
         }
       });
