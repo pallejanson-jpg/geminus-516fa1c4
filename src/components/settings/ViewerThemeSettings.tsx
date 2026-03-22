@@ -534,7 +534,7 @@ const ViewerThemeSettings: React.FC = () => {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => deleteConfirmId && handleDeleteTheme(deleteConfirmId)}
             >
-              Ta bort
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

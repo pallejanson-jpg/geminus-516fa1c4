@@ -454,7 +454,7 @@ const IvionInventory: React.FC = () => {
                 className="gap-2"
               >
                 <Layers className="h-4 w-4" />
-                <span className="hidden md:inline">Skapa POI från Geminus</span>
+                <span className="hidden md:inline">Create POI from Geminus</span>
                 <span className="md:hidden">POI</span>
               </Button>
             )}
