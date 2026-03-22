@@ -353,12 +353,12 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
                   {autoProcess ? (
                     <>
                       <Pause className="h-4 w-4 mr-2" />
-                      Pausa automatisk körning
+                      Pause auto-processing
                     </>
                   ) : (
                     <>
                       <Play className="h-4 w-4 mr-2" />
-                      Kör automatiskt
+                      Run automatically
                     </>
                   )}
                 </Button>
