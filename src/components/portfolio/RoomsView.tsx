@@ -323,7 +323,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
       if (roomNum) result.roomNumber = roomNum;
 
       // Override commonName
-      result.commonName = room.commonName || room.name || attrs.commonName || 'Okänt';
+      result.commonName = room.commonName || room.name || attrs.commonName || 'Unknown';
 
       // Override levelCommonName
       result.levelCommonName = attrs.levelCommonName || attrs.levelDesignation || '-';
