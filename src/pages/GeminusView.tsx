@@ -116,7 +116,7 @@ export default function GeminusView() {
       setXktData(result.xktData);
       setMetaModelJson(result.metaModelJson || null);
       setConversionProgress(100);
-      log('✅ Konvertering klar — öppnar viewer...');
+      log('✅ Conversion complete — opening viewer...');
 
       // Small delay then switch to viewer
       setTimeout(() => setMode('ifc-viewer'), 600);
