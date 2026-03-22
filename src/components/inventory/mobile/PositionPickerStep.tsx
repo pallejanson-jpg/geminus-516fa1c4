@@ -139,7 +139,7 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
               onClick={() => setShowPositionPicker(true)}
             >
               <Box className="h-8 w-8 text-primary" />
-              <span className="text-base font-medium">Välj i 3D-modell</span>
+              <span className="text-base font-medium">Select in 3D model</span>
             </Button>
           </div>
 
