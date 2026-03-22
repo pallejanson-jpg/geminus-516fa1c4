@@ -1276,7 +1276,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                             })}
                           >
                             <Eye className="h-3 w-3" />
-                            {expandedJobLogs.has(job.id) ? 'Dölj loggar' : 'Visa loggar'}
+                            {expandedJobLogs.has(job.id) ? 'Hide logs' : 'Show logs'}
                           </Button>
                         )}
                         {isStuckJob(job) && (
