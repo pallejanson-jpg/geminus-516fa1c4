@@ -247,7 +247,7 @@ export default function SensorsTab() {
               </SelectContent>
             </Select>
           ) : (
-            <h3 className="text-sm font-medium truncate">{building?.commonName || building?.name || 'Sensorer'}</h3>
+            <h3 className="text-sm font-medium truncate">{building?.commonName || building?.name || 'Sensors'}</h3>
           )}
           <LiveBadge isLive={isLive} isLoading={isLoading} />
         </div>
