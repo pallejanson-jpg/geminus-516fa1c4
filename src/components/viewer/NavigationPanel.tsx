@@ -255,7 +255,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
 
           {graph.nodes.size === 0 && (
             <p className="text-[10px] text-muted-foreground text-center">
-              Ingen navigeringsgraf finns. Aktivera redigeringsläge för att skapa en.
+              No navigation graph exists. Enable edit mode to create one.
             </p>
           )}
 
