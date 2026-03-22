@@ -207,7 +207,7 @@ function AssetRegistrationForm({
 
           {/* Object category dropdown */}
           <div className="space-y-2">
-            <Label htmlFor="objectCategory">Objektkategori (IFC)</Label>
+            <Label htmlFor="objectCategory">Object Category (IFC)</Label>
             <Select value={objectCategory} onValueChange={setObjectCategory} disabled={isLoading}>
               <SelectTrigger>
                 <SelectValue />
