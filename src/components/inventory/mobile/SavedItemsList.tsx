@@ -101,7 +101,7 @@ const SavedItemsList: React.FC<SavedItemsListProps> = ({
               <div className="text-xs text-muted-foreground/70 mt-0.5">
                 {formatDistanceToNow(new Date(item.created_at), { 
                   addSuffix: true, 
-                  locale: sv 
+                  locale: enUS 
                 })}
               </div>
             </div>
