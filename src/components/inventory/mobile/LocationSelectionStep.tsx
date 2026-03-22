@@ -166,7 +166,7 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
           </div>
           <Select value={formData.buildingFmGuid} onValueChange={handleBuildingChange}>
             <SelectTrigger className="h-14 text-base">
-              <SelectValue placeholder="Välj byggnad..." />
+              <SelectValue placeholder="Select building..." />
             </SelectTrigger>
             <SelectContent className="bg-popover z-50">
               {buildings.map((b) => (
