@@ -127,7 +127,7 @@ export default function Properties() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Sök fastigheter..."
+            placeholder="Search properties..."
             className="pl-9"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
