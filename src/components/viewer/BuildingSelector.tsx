@@ -294,7 +294,7 @@ const BuildingSelector: React.FC = () => {
                           )}
                           {metrics.area > 0 && (
                             <Badge variant="outline" className="text-xs">
-                              {metrics.area.toLocaleString('sv-SE')} m²
+                              {metrics.area.toLocaleString('en-US')} m²
                             </Badge>
                           )}
                         </div>
