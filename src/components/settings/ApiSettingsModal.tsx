@@ -904,10 +904,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     setAccRegion(firstHub.region === 'EMEA' ? 'EMEA' : 'US');
                 }
             } else {
-                toast({ variant: 'destructive', title: 'Kunde inte hämta hubbar', description: data?.error });
+                toast({ variant: 'destructive', title: 'Could not fetch hubs', description: data?.error });
             }
         } catch (err: any) {
-            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+            toast({ variant: 'destructive', title: 'Error', description: err.message });
         } finally {
             setIsLoadingHubs(false);
         }
