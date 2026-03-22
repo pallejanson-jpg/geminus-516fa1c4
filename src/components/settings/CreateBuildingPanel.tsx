@@ -1044,13 +1044,13 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           disabled={isBatchEnqueuing}
         >
           {isBatchEnqueuing ? (
-            <><Loader2 className="h-4 w-4 animate-spin" />Köar byggnader...</>
+            <><Loader2 className="h-4 w-4 animate-spin" />Enqueuing buildings...</>
           ) : (
-            <><PlayCircle className="h-4 w-4" />Köa alla byggnader</>
+            <><PlayCircle className="h-4 w-4" />Enqueue all buildings</>
           )}
         </Button>
         <p className="text-[11px] text-muted-foreground mt-1.5">
-          Skapar konverteringsjobb för alla byggnader med IFC- eller XKT-filer.
+          Creates conversion jobs for all buildings with IFC or XKT files.
         </p>
       </div>
 
