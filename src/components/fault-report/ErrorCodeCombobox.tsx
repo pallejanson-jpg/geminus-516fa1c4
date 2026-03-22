@@ -107,7 +107,7 @@ const ErrorCodeCombobox: React.FC<ErrorCodeComboboxProps> = ({ value, onChange, 
                   className="w-full px-2 py-1.5 text-sm text-left hover:bg-accent rounded-sm"
                   onClick={handleFreeText}
                 >
-                  Använd "{searchQuery.trim()}"
+                  Use "{searchQuery.trim()}"
                 </button>
               ) : (
                 <span className="text-sm text-muted-foreground">Inga matchningar</span>
