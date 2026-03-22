@@ -114,7 +114,7 @@ const StepTimeline: React.FC<{
         result.push({
           icon: 'TRANSIT',
           label: `${step.transit.lineName || step.transit.vehicleType}`,
-          detail: `${step.transit.departureStop} → ${step.transit.arrivalStop}${step.transit.numStops > 0 ? ` (${step.transit.numStops} hållplatser)` : ''}`,
+          detail: `${step.transit.departureStop} → ${step.transit.arrivalStop}${step.transit.numStops > 0 ? ` (${step.transit.numStops} stops)` : ''}`,
           coordinates: step.transit.departureLocation || undefined,
         });
       } else if (step.instruction) {
