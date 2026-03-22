@@ -162,7 +162,7 @@ const SupportCaseList: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to fetch support cases:', err);
-      setError('Kunde inte hämta ärenden från SWG');
+      setError('Could not fetch cases from SWG');
       setCases([]);
     } finally {
       setLoading(false);
