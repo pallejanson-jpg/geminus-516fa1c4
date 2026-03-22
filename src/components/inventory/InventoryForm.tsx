@@ -259,21 +259,21 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
       if (error) throw error;
 
       if (data?.imported > 0) {
-        toast.success(`Synkade ${data.imported} nya POIs från Ivion`, {
-          description: `${data.skipped} redan importerade`,
+        toast.success(`Synced ${data.imported} new POIs from Ivion`, {
+          description: `${data.skipped} already imported`,
         });
       } else if (data?.skipped > 0) {
-        toast.info('Inga nya POIs', {
-          description: `${data.skipped} POIs redan importerade`,
+        toast.info('No new POIs', {
+          description: `${data.skipped} POIs already imported`,
         });
       } else {
-        toast.info('Inga POIs hittades', {
-          description: 'Skapa en POI i Ivion först (long-press i panoramat)',
+        toast.info('No POIs found', {
+          description: 'Create a POI in Ivion first (long-press in the panorama)',
         });
       }
     } catch (err: any) {
       console.error('Sync 360+ error:', err);
-      toast.error('Kunde inte synka från Ivion', {
+      toast.error('Could not sync from Ivion', {
         description: err.message,
       });
     } finally {
