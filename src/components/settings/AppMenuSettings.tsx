@@ -133,7 +133,7 @@ const SortableSidebarItem: React.FC<{
       {item.hasDividerAfter && (
         <div className="flex items-center gap-2 py-1 px-4">
           <div className="flex-1 h-px bg-border" />
-          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">avdelare</span>
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">divider</span>
           <div className="flex-1 h-px bg-border" />
         </div>
       )}
