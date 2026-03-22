@@ -133,7 +133,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading, onEdit,
                           className="text-amber-500 border-amber-500 text-[10px] px-1.5 py-0 shrink-0"
                         >
                           <AlertCircle className="h-3 w-3 mr-0.5" />
-                          Ej i modell
+                          Not in model
                         </Badge>
                       )}
                     </div>
