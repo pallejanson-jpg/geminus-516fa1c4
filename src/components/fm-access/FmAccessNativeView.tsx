@@ -146,9 +146,9 @@ const FmAccessNativeView: React.FC = () => {
 
         <Tabs value={leftTab} onValueChange={setLeftTab} className="flex-1 flex flex-col">
           <TabsList className="mx-3 mt-2">
-            <TabsTrigger value="tree" className="text-xs flex-1"><TreePine size={12} className="mr-1" />Träd</TabsTrigger>
-            <TabsTrigger value="search" className="text-xs flex-1"><Search size={12} className="mr-1" />Sök</TabsTrigger>
-            <TabsTrigger value="docs" className="text-xs flex-1"><FileText size={12} className="mr-1" />Dok</TabsTrigger>
+            <TabsTrigger value="tree" className="text-xs flex-1"><TreePine size={12} className="mr-1" />Tree</TabsTrigger>
+            <TabsTrigger value="search" className="text-xs flex-1"><Search size={12} className="mr-1" />Search</TabsTrigger>
+            <TabsTrigger value="docs" className="text-xs flex-1"><FileText size={12} className="mr-1" />Docs</TabsTrigger>
           </TabsList>
 
           <TabsContent value="tree" className="flex-1 mt-0">
