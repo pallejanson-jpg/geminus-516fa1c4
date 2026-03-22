@@ -56,18 +56,17 @@ const CreateViewDialog: React.FC<CreateViewDialogProps> = ({
 
   const handleSave = async () => {
     if (!name.trim()) {
-      setError('Namn krävs');
+      setError('Name is required');
       return;
     }
     
     setError(null);
     try {
       await onSave(name.trim(), description.trim());
-      // Reset form on success
       setName('');
       setDescription('');
     } catch (e) {
-      setError('Kunde inte spara vyn');
+      setError('Could not save the view');
     }
   };
 
