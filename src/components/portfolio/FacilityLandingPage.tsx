@@ -275,7 +275,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     if (!file || !facility.fmGuid) return;
     
     if (!file.type.startsWith('image/')) {
-      toast.error('Endast bilder tillåtna');
+      toast.error('Only images are allowed');
       return;
     }
 
