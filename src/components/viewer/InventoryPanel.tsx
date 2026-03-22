@@ -477,7 +477,7 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Sök assets…"
+                placeholder="Search assets…"
                 className="h-6 pl-6 w-40 text-[11px]"
               />
             </div>
@@ -535,14 +535,14 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
                 {filteredAssets.length > 500 && (
                   <TableRow>
                     <TableCell colSpan={orderedColumns.length} className="text-center text-[10px] text-muted-foreground py-1.5">
-                      Visar 500 av {filteredAssets.length} assets. Använd sök för att filtrera.
+                      Showing 500 of {filteredAssets.length} assets. Use search to filter.
                     </TableCell>
                   </TableRow>
                 )}
                 {filteredAssets.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={orderedColumns.length} className="text-center text-[10px] text-muted-foreground py-6">
-                      {search ? 'Inga matchande assets.' : 'Inga assets i denna byggnad.'}
+                      {search ? 'No matching assets.' : 'No assets in this building.'}
                     </TableCell>
                   </TableRow>
                 )}

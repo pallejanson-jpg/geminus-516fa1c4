@@ -68,7 +68,7 @@ const SECTION_LABELS: Record<string, string> = {
   'local': 'Local Settings',
   'coordinates': 'Position',
   'area': 'Area & Dimensions',
-  'classification': 'Klassificering (BIP)',
+  'classification': 'Classification (BIP)',
   'user-defined': 'User-Defined',
 };
 
@@ -973,11 +973,11 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       setOpenSections(prev => new Set([...prev, 'classification']));
       
       if ((data.suggestions || []).length === 0) {
-        toast.info('Inga BIP-matchningar hittades');
+        toast.info('No BIP matches found');
       }
     } catch (error: any) {
       console.error('BIP classify error:', error);
-      toast.error('Klassificering misslyckades: ' + (error.message || 'Okänt fel'));
+      toast.error('Classification failed: ' + (error.message || 'Unknown error'));
     } finally {
       setIsClassifying(false);
     }
@@ -1010,7 +1010,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       toast.success(`BIP-kod ${suggestion.code} tillämpad`);
       onUpdate?.();
     } catch (error: any) {
-      toast.error('Kunde inte spara BIP-kod: ' + error.message);
+      toast.error('Could not save BIP code: ' + error.message);
     }
   };
 
@@ -1244,7 +1244,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                       disabled={bipApplied === s.code}
                     >
                       {bipApplied === s.code ? <Check className="h-3 w-3 mr-1" /> : <Tag className="h-3 w-3 mr-1" />}
-                      {bipApplied === s.code ? 'Vald' : 'Välj'}
+                      {bipApplied === s.code ? 'Selected' : 'Select'}
                     </Button>
                   </div>
                   <div className="flex flex-wrap gap-1.5 text-xs">
@@ -1370,12 +1370,12 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                   <AlertDialogTrigger asChild>
                     <Button variant="destructive" size="sm" disabled={isDeleting}>
                       <Trash2 className="h-4 w-4 mr-1" />
-                      Radera
+                      Delete
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Radera {isMultiMode ? `${fmGuids.length} objekt` : 'objekt'}?</AlertDialogTitle>
+                      <AlertDialogTitle>Delete {isMultiMode ? `${fmGuids.length} objects` : 'object'}?</AlertDialogTitle>
                       <AlertDialogDescription>
                         {syncStatus.allLocal 
                           ? 'Detta raderar objektet/objekten permanent från den lokala databasen.'

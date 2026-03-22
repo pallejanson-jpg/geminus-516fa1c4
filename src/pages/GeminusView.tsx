@@ -86,7 +86,7 @@ export default function GeminusView() {
   const handleFileSelect = useCallback(async (file: File) => {
     const sizeMB = file.size / (1024 * 1024);
     if (sizeMB > MAX_FILE_SIZE_MB) {
-      setConversionError(`Filen är ${sizeMB.toFixed(0)} MB — maxgräns är ${MAX_FILE_SIZE_MB} MB för webbläsarkonvertering.`);
+      setConversionError(`File is ${sizeMB.toFixed(0)} MB — max limit is ${MAX_FILE_SIZE_MB} MB for browser conversion.`);
       return;
     }
     setIfcFile(file);
@@ -110,7 +110,7 @@ export default function GeminusView() {
 
       const result = await converterModule.convertToXktWithMetadata(buffer, (msg: string) => log(msg));
       setConversionProgress(90);
-      log(`XKT genererad: ${(result.xktData.byteLength / 1024 / 1024).toFixed(2)} MB`);
+      log(`XKT generated: ${(result.xktData.byteLength / 1024 / 1024).toFixed(2)} MB`);
       log(`Hierarchy: ${result.levels?.length || 0} floors, ${result.spaces?.length || 0} rooms`);
 
       setXktData(result.xktData);
@@ -205,7 +205,7 @@ export default function GeminusView() {
         <div className="flex-1 flex flex-col items-center justify-center gap-6 p-6">
           <h1 className="text-xl font-bold text-foreground">Geminus View</h1>
           <p className="text-sm text-muted-foreground text-center max-w-md">
-            Öppna en befintlig byggnad i 3D-viewern eller ladda upp en IFC-fil för snabbvisning.
+            Open an existing building in the 3D viewer or upload an IFC file for quick preview.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 w-full max-w-sm">
             <Button
@@ -214,7 +214,7 @@ export default function GeminusView() {
               onClick={() => setMode('buildings')}
             >
               <Building2 className="h-6 w-6 text-primary" />
-              <span className="text-sm">Välj byggnad</span>
+              <span className="text-sm">Select Building</span>
             </Button>
             <label className="flex-1">
               <input
@@ -231,7 +231,7 @@ export default function GeminusView() {
                 "hover:bg-accent transition-colors text-sm"
               )}>
                 <Upload className="h-6 w-6 text-primary" />
-                <span>Ladda upp IFC</span>
+                <span>Upload IFC</span>
               </div>
             </label>
           </div>
@@ -244,7 +244,7 @@ export default function GeminusView() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Sök byggnad eller vy..."
+              placeholder="Search building or view..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="pl-9"
@@ -259,7 +259,7 @@ export default function GeminusView() {
             <div className="flex-1 overflow-y-auto space-y-4">
               {filteredBuildings.length > 0 && (
                 <div>
-                  <h3 className="text-xs font-medium text-muted-foreground uppercase mb-2">Byggnader</h3>
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase mb-2">Buildings</h3>
                   <div className="space-y-1">
                     {filteredBuildings.map(b => (
                       <button
@@ -282,7 +282,7 @@ export default function GeminusView() {
 
               {filteredViews.length > 0 && (
                 <div>
-                  <h3 className="text-xs font-medium text-muted-foreground uppercase mb-2">Sparade vyer</h3>
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase mb-2">Saved Views</h3>
                   <div className="space-y-1">
                     {filteredViews.map(v => (
                       <button
@@ -305,7 +305,7 @@ export default function GeminusView() {
 
               {filteredBuildings.length === 0 && filteredViews.length === 0 && (
                 <div className="text-center text-sm text-muted-foreground py-8">
-                  Inga resultat hittades
+                  No results found
                 </div>
               )}
             </div>
@@ -317,7 +317,7 @@ export default function GeminusView() {
       {mode === 'ifc-upload' && (
         <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6">
           <Box className="h-10 w-10 text-primary" />
-          <h2 className="text-lg font-semibold">Konverterar IFC</h2>
+          <h2 className="text-lg font-semibold">Converting IFC</h2>
           {ifcFile && <p className="text-sm text-muted-foreground">{ifcFile.name}</p>}
 
           <div className="w-full max-w-md">
@@ -340,7 +340,7 @@ export default function GeminusView() {
 
           {conversionError && (
             <Button variant="outline" onClick={() => setMode('menu')}>
-              Tillbaka
+              Back
             </Button>
           )}
         </div>

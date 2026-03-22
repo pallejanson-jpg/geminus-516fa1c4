@@ -153,13 +153,13 @@ const BuildingSelector: React.FC = () => {
       console.log('Dispatched LOAD_SAVED_VIEW_EVENT:', eventDetail);
     }, 100);
     
-    toast({ title: "Laddar vy", description: `Öppnar "${view.name}"` });
+    toast({ title: "Loading view", description: `Opening "${view.name}"` });
   };
 
   const handleDeleteView = async (viewId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     
-    if (!confirm('Är du säker på att du vill ta bort denna sparade vy?')) return;
+    if (!confirm('Are you sure you want to delete this saved view?')) return;
     
     try {
       // Delete from database
@@ -415,7 +415,7 @@ const BuildingSelector: React.FC = () => {
               {filteredViews.length === 0 && searchQuery && (
                 <div className="text-center py-8 text-muted-foreground">
                   <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">Inga vyer matchade "{searchQuery}"</p>
+                  <p className="text-sm">No views matched "{searchQuery}"</p>
                 </div>
               )}
             </ScrollArea>

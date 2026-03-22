@@ -38,8 +38,8 @@ import {
 
 // Map sidebar item IDs to their display config
 const SIDEBAR_ITEM_META: Record<string, { label: string; icon: React.ElementType; color: string }> = {
-  inventory: { label: 'Inventering', icon: ClipboardList, color: 'text-orange-500' },
-  fault_report: { label: 'Felanmälan', icon: AlertTriangle, color: 'text-red-500' },
+  inventory: { label: 'Inventory', icon: ClipboardList, color: 'text-orange-500' },
+  fault_report: { label: 'Fault Report', icon: AlertTriangle, color: 'text-red-500' },
   insights: { label: 'Insights', icon: BarChart2, color: 'text-green-500' },
   fma_plus: { label: DEFAULT_APP_CONFIGS.fma_plus.label, icon: Building2, color: 'text-blue-500' },
   asset_plus: { label: DEFAULT_APP_CONFIGS.asset_plus.label, icon: Box, color: 'text-purple-500' },
@@ -126,14 +126,14 @@ const SortableSidebarItem: React.FC<{
             onCheckedChange={() => onToggleDivider(item.id)}
           />
           <Label htmlFor={`divider-${item.id}`} className="text-xs text-muted-foreground whitespace-nowrap">
-            Avdelare
+            Divider
           </Label>
         </div>
       </div>
       {item.hasDividerAfter && (
         <div className="flex items-center gap-2 py-1 px-4">
           <div className="flex-1 h-px bg-border" />
-          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">avdelare</span>
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">divider</span>
           <div className="flex-1 h-px bg-border" />
         </div>
       )}
@@ -187,18 +187,18 @@ const AppMenuSettings: React.FC<AppMenuSettingsProps> = ({ isOpen, onClose }) =>
 
   const handleReset = () => {
     setItems(DEFAULT_SIDEBAR_ORDER);
-    toast.info('Appordning återställd till standard');
+    toast.info('App order reset to default');
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="w-[calc(100vw-1rem)] sm:max-w-md max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
         <DialogHeader>
-          <DialogTitle>Anpassa appmeny</DialogTitle>
+          <DialogTitle>Customize App Menu</DialogTitle>
         </DialogHeader>
 
         <p className="text-sm text-muted-foreground">
-          Dra för att ändra ordning. Aktivera avdelare för att skapa visuella grupper.
+          Drag to reorder. Enable dividers to create visual groups.
         </p>
 
         <div className="flex-1 min-h-0 overflow-y-auto pr-1" style={{ maxHeight: 'calc(100dvh - 14rem)' }}>
@@ -224,11 +224,11 @@ const AppMenuSettings: React.FC<AppMenuSettingsProps> = ({ isOpen, onClose }) =>
         <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
           <Button variant="outline" onClick={handleReset} className="w-full sm:w-auto">
             <RotateCcw className="h-4 w-4 mr-2" />
-            Återställ
+            Reset
           </Button>
           <Button onClick={handleSave} className="w-full sm:w-auto">
             <Save className="h-4 w-4 mr-2" />
-            Spara
+            Save
           </Button>
         </DialogFooter>
       </DialogContent>

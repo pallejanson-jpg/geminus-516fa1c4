@@ -275,12 +275,12 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     if (!file || !facility.fmGuid) return;
     
     if (!file.type.startsWith('image/')) {
-      toast.error('Endast bilder tillåtna');
+      toast.error('Only images are allowed');
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      toast.error('Bilden får max vara 5 MB');
+      toast.error('Image must be 5 MB or smaller');
       return;
     }
 
@@ -301,11 +301,11 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
         .getPublicUrl(fileName);
 
       await updateHeroImage(urlData.publicUrl);
-      toast.success('Hero-bild uppladdad!');
+      toast.success('Hero image uploaded!');
       onSettingsChanged?.();
     } catch (error: any) {
       console.error('Upload error:', error);
-      toast.error('Kunde inte ladda upp bild', {
+      toast.error('Could not upload image', {
         description: error.message,
       });
     } finally {
@@ -376,7 +376,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
           variant="ghost" 
           size="icon"
           className="h-9 w-9 sm:h-10 sm:w-10 bg-black/30 hover:bg-black/60 backdrop-blur-sm rounded-full text-white"
-          aria-label="Tillbaka"
+          aria-label="Back"
         >
           <ArrowLeft size={18} className="sm:hidden" />
           <ArrowLeft size={20} className="hidden sm:block" />
@@ -390,7 +390,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
           variant="ghost" 
           size="icon"
           className="h-9 w-9 bg-black/30 hover:bg-black/60 backdrop-blur-sm rounded-full text-white"
-          title={settings?.isFavorite ? "Ta bort favorit" : "Lägg till favorit"}
+          title={settings?.isFavorite ? "Remove favorite" : "Add to favorites"}
           disabled={isSaving}
         >
           <Star size={16} className={settings?.isFavorite ? 'fill-current text-accent' : ''} />
@@ -400,7 +400,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
           variant="ghost" 
           size="icon"
           className="h-9 w-9 bg-black/30 hover:bg-black/60 backdrop-blur-sm rounded-full text-white"
-          title="Inställningar"
+          title="Settings"
         >
           <Settings2 size={16} className={showSettings ? 'text-primary' : ''} />
         </Button>
@@ -556,7 +556,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                             {parseFloat(latitudeInput).toFixed(4)}, {parseFloat(longitudeInput).toFixed(4)}
                           </span>
                         ) : (
-                          <span className="italic">Ingen position satt</span>
+                          <span className="italic">No position set</span>
                         )}
                       </div>
                       <Button 
@@ -565,7 +565,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                         disabled={isSaving || (!latitudeInput && !longitudeInput)}
                         className="h-7 text-xs shrink-0"
                       >
-                        {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Spara'}
+                        {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
                       </Button>
                     </div>
                   </div>
@@ -574,7 +574,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                   <div className="border-t pt-4 min-w-0 overflow-hidden">
                     <Label className="text-xs flex items-center gap-2 mb-3">
                       <RotateCcw size={12} />
-                      Rotation (för 3D/360° synk)
+                      Rotation (for 3D/360° sync)
                     </Label>
                     
                     <div className="space-y-3 min-w-0">
@@ -594,7 +594,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                       
                       <div className="flex items-center justify-between gap-2 bg-muted/30 rounded-md p-2 min-w-0">
                         <p className="text-[11px] sm:text-xs text-muted-foreground truncate min-w-0">
-                          Byggnadens orientering relativt norr
+                          Building orientation relative to north
                         </p>
                         <Button 
                           size="sm" 
@@ -602,7 +602,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                           disabled={isSaving || rotationInput === (settings?.rotation ?? 0)}
                           className="h-7 text-xs shrink-0"
                         >
-                          {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Spara'}
+                          {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
                         </Button>
                       </div>
                     </div>
@@ -645,7 +645,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                           ) : (
                             <>
                               <Upload className="h-5 w-5" />
-                              <span className="text-xs">Ladda upp bild</span>
+                              <span className="text-xs">Upload image</span>
                             </>
                           )}
                         </Button>
@@ -653,7 +653,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                     )}
                     
                     <p className="text-[11px] sm:text-xs text-muted-foreground">
-                      Visas som bakgrundsbild på byggnadens landningssida
+                      Shown as background image on the building landing page
                     </p>
                     
                     <input

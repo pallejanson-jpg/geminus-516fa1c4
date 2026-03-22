@@ -129,7 +129,7 @@ export default function CreatePropertyDialog({
 
   async function handleSave() {
     if (!form.fm_guid.trim()) {
-      toast({ title: 'FM GUID krävs', variant: 'destructive' });
+      toast({ title: 'FM GUID is required', variant: 'destructive' });
       return;
     }
 
@@ -185,12 +185,12 @@ export default function CreatePropertyDialog({
         );
       }
 
-      toast({ title: 'Fastighet sparad' });
+      toast({ title: 'Property saved' });
       window.dispatchEvent(new Event('building-settings-changed'));
       onSaved();
       onOpenChange(false);
     } catch (err: any) {
-      toast({ title: 'Fel vid sparning', description: err.message, variant: 'destructive' });
+      toast({ title: 'Error saving', description: err.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -204,12 +204,12 @@ export default function CreatePropertyDialog({
       });
       if (error) throw error;
       if (data?.accessToken) {
-        toast({ title: 'Asset+ anslutning OK ✓' });
+        toast({ title: 'Asset+ connection OK ✓' });
       } else {
-        toast({ title: 'Asset+ auth misslyckades', variant: 'destructive' });
+        toast({ title: 'Asset+ auth failed', variant: 'destructive' });
       }
     } catch (err: any) {
-      toast({ title: 'Asset+ test misslyckades', description: err.message, variant: 'destructive' });
+      toast({ title: 'Asset+ test failed', description: err.message, variant: 'destructive' });
     } finally {
       setTestingAp(false);
     }
@@ -223,12 +223,12 @@ export default function CreatePropertyDialog({
       });
       if (error) throw error;
       if (data?.success) {
-        toast({ title: 'Senslinc anslutning OK ✓' });
+        toast({ title: 'Senslinc connection OK ✓' });
       } else {
-        toast({ title: 'Senslinc misslyckades', description: data?.error, variant: 'destructive' });
+        toast({ title: 'Senslinc failed', description: data?.error, variant: 'destructive' });
       }
     } catch (err: any) {
-      toast({ title: 'Senslinc test misslyckades', description: err.message, variant: 'destructive' });
+      toast({ title: 'Senslinc test failed', description: err.message, variant: 'destructive' });
     } finally {
       setTestingSl(false);
     }
@@ -274,16 +274,16 @@ export default function CreatePropertyDialog({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>{editFmGuid ? 'Redigera fastighet' : 'Lägg till fastighet'}</SheetTitle>
+          <SheetTitle>{editFmGuid ? 'Edit Property' : 'Add Property'}</SheetTitle>
           <SheetDescription>
-            Ange FM GUID och valfria API-credentials för att hämta data från andra instanser.
+            Enter FM GUID and optional API credentials to fetch data from other instances.
           </SheetDescription>
         </SheetHeader>
 
         <div className="space-y-6 mt-6">
           {/* Section 1: Building Identity */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-foreground">Byggnadsidentitet</h3>
+            <h3 className="text-sm font-semibold text-foreground">Building Identity</h3>
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">FM GUID *</Label>
               <Input
@@ -295,7 +295,7 @@ export default function CreatePropertyDialog({
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Namn</Label>
+              <Label className="text-xs text-muted-foreground">Name</Label>
               <Input
                 value={form.name}
                 onChange={(e) => set('name', e.target.value)}
@@ -305,7 +305,7 @@ export default function CreatePropertyDialog({
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Latitud</Label>
+                <Label className="text-xs text-muted-foreground">Latitude</Label>
                 <Input
                   type="number"
                   step="any"
@@ -316,7 +316,7 @@ export default function CreatePropertyDialog({
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Longitud</Label>
+                <Label className="text-xs text-muted-foreground">Longitude</Label>
                 <Input
                   type="number"
                   step="any"
@@ -333,19 +333,19 @@ export default function CreatePropertyDialog({
           <Accordion type="multiple" className="w-full">
             <AccordionItem value="assetplus">
               <AccordionTrigger className="text-sm font-semibold">
-                Asset+ — Egna credentials
+                Asset+ — Custom Credentials
               </AccordionTrigger>
               <AccordionContent className="space-y-3 pt-2">
                 <p className="text-xs text-muted-foreground">
-                  Lämna tomt för att använda globala inställningar.
+                  Leave empty to use global settings.
                 </p>
                 <SecretInput label="API URL" field="assetplus_api_url" placeholder="https://..." />
                 <SecretInput label="API Key" field="assetplus_api_key" />
                 <SecretInput label="Keycloak URL" field="assetplus_keycloak_url" placeholder="https://..." />
                 <SecretInput label="Client ID" field="assetplus_client_id" />
                 <SecretInput label="Client Secret" field="assetplus_client_secret" />
-                <SecretInput label="Användarnamn" field="assetplus_username" />
-                <SecretInput label="Lösenord" field="assetplus_password" />
+                <SecretInput label="Username" field="assetplus_username" />
+                <SecretInput label="Password" field="assetplus_password" />
                 <Button
                   variant="outline"
                   size="sm"
@@ -353,22 +353,22 @@ export default function CreatePropertyDialog({
                   disabled={testingAp || !form.fm_guid}
                 >
                   {testingAp ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <TestTube className="mr-2 h-3 w-3" />}
-                  Testa anslutning
+                  Test Connection
                 </Button>
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="senslinc">
               <AccordionTrigger className="text-sm font-semibold">
-                Senslinc — Egna credentials
+                Senslinc — Custom Credentials
               </AccordionTrigger>
               <AccordionContent className="space-y-3 pt-2">
                 <p className="text-xs text-muted-foreground">
-                  Lämna tomt för att använda globala inställningar.
+                  Leave empty to use global settings.
                 </p>
                 <SecretInput label="API URL" field="senslinc_api_url" placeholder="https://..." />
-                <SecretInput label="E-post" field="senslinc_email" />
-                <SecretInput label="Lösenord" field="senslinc_password" />
+                <SecretInput label="Email" field="senslinc_email" />
+                <SecretInput label="Password" field="senslinc_password" />
                 <Button
                   variant="outline"
                   size="sm"
@@ -376,7 +376,7 @@ export default function CreatePropertyDialog({
                   disabled={testingSl || !form.fm_guid}
                 >
                   {testingSl ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <TestTube className="mr-2 h-3 w-3" />}
-                  Testa anslutning
+                  Test Connection
                 </Button>
               </AccordionContent>
             </AccordionItem>
@@ -386,10 +386,10 @@ export default function CreatePropertyDialog({
           <div className="flex gap-3 pt-2">
             <Button onClick={handleSave} disabled={saving} className="flex-1">
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              Spara
+              Save
             </Button>
             <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Avbryt
+              Cancel
             </Button>
           </div>
         </div>

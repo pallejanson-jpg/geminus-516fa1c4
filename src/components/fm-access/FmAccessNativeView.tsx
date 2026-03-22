@@ -28,7 +28,7 @@ const FmAccessNativeView: React.FC = () => {
   const [buildingSearch, setBuildingSearch] = useState('');
 
   const buildingFmGuid = manualFmGuid || selectedFacility?.fm_guid || selectedFacility?.fm_access_building_guid;
-  const buildingName = buildingFmGuid ? (selectedFacility?.name || 'Byggnad') : 'FM Access 2.0';
+  const buildingName = buildingFmGuid ? (selectedFacility?.name || 'Building') : 'FM Access 2.0';
 
   // Building list for empty state selector
   const buildings = useMemo(() => {
@@ -98,16 +98,16 @@ const FmAccessNativeView: React.FC = () => {
           <CardContent className="p-6 space-y-4">
             <div className="flex items-center gap-2 mb-2">
               <Building2 size={20} className="text-primary" />
-              <h2 className="text-base font-semibold">Välj byggnad</h2>
+              <h2 className="text-base font-semibold">Select Building</h2>
               <Badge variant="outline" className="text-[10px] ml-auto">FMA 2.0</Badge>
             </div>
             <p className="text-sm text-muted-foreground">
-              Välj en byggnad för att ladda FM Access-hierarkin.
+              Select a building to load the FM Access hierarchy.
             </p>
             <div className="relative">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Sök byggnad..."
+                placeholder="Search building..."
                 value={buildingSearch}
                 onChange={(e) => setBuildingSearch(e.target.value)}
                 className="h-9 pl-8 text-sm"
@@ -115,7 +115,7 @@ const FmAccessNativeView: React.FC = () => {
             </div>
             <div className="max-h-64 overflow-y-auto space-y-1">
               {filteredBuildings.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-4">Inga byggnader hittades</p>
+                <p className="text-xs text-muted-foreground text-center py-4">No buildings found</p>
               ) : (
                 filteredBuildings.map(b => (
                   <button
@@ -146,16 +146,16 @@ const FmAccessNativeView: React.FC = () => {
 
         <Tabs value={leftTab} onValueChange={setLeftTab} className="flex-1 flex flex-col">
           <TabsList className="mx-3 mt-2">
-            <TabsTrigger value="tree" className="text-xs flex-1"><TreePine size={12} className="mr-1" />Träd</TabsTrigger>
-            <TabsTrigger value="search" className="text-xs flex-1"><Search size={12} className="mr-1" />Sök</TabsTrigger>
-            <TabsTrigger value="docs" className="text-xs flex-1"><FileText size={12} className="mr-1" />Dok</TabsTrigger>
+            <TabsTrigger value="tree" className="text-xs flex-1"><TreePine size={12} className="mr-1" />Tree</TabsTrigger>
+            <TabsTrigger value="search" className="text-xs flex-1"><Search size={12} className="mr-1" />Search</TabsTrigger>
+            <TabsTrigger value="docs" className="text-xs flex-1"><FileText size={12} className="mr-1" />Docs</TabsTrigger>
           </TabsList>
 
           <TabsContent value="tree" className="flex-1 mt-0">
             {selectedNode ? (
               <div className="flex flex-col h-full">
                 <Button variant="ghost" size="sm" className="m-2 self-start text-xs" onClick={() => setSelectedNode(null)}>
-                  ← Tillbaka till träd
+                  ← Back to tree
                 </Button>
                 <FmAccessObjectPanel selectedNode={selectedNode} onRefresh={handleRefresh} onCreateChild={handleCreateChild} />
               </div>
@@ -182,7 +182,7 @@ const FmAccessNativeView: React.FC = () => {
         <Badge variant="outline" className="text-[10px]">FMA 2.0</Badge>
         <div className="flex-1" />
         <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setManualFmGuid(null); setRootNode(null); setSelectedNode(null); }}>
-          Byt byggnad
+          Change building
         </Button>
         {loading && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
       </div>
@@ -191,9 +191,9 @@ const FmAccessNativeView: React.FC = () => {
         <ResizablePanel defaultSize={30} minSize={20} maxSize={45}>
           <Tabs value={leftTab} onValueChange={setLeftTab} className="h-full flex flex-col">
             <TabsList className="mx-2 mt-2 mb-0">
-              <TabsTrigger value="tree" className="text-xs flex-1"><TreePine size={12} className="mr-1" />Hierarki</TabsTrigger>
-              <TabsTrigger value="search" className="text-xs flex-1"><Search size={12} className="mr-1" />Sök</TabsTrigger>
-              <TabsTrigger value="docs" className="text-xs flex-1"><FileText size={12} className="mr-1" />Ritningar</TabsTrigger>
+              <TabsTrigger value="tree" className="text-xs flex-1"><TreePine size={12} className="mr-1" />Hierarchy</TabsTrigger>
+              <TabsTrigger value="search" className="text-xs flex-1"><Search size={12} className="mr-1" />Search</TabsTrigger>
+              <TabsTrigger value="docs" className="text-xs flex-1"><FileText size={12} className="mr-1" />Drawings</TabsTrigger>
             </TabsList>
 
             <TabsContent value="tree" className="flex-1 mt-0 overflow-hidden">

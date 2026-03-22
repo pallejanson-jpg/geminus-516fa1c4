@@ -115,21 +115,21 @@ const extractPropertyName = (key: string): string => {
 
 // System property definitions (always available)
 const SYSTEM_COLUMNS: ColumnDef[] = [
-  { key: 'commonName', label: 'Rumsnamn', category: 'system' },
-  { key: 'roomNumber', label: 'Rumsnummer', category: 'system' },
-  { key: 'designation', label: 'Beteckning', category: 'system' },
-  { key: 'levelCommonName', label: 'Våning', category: 'system' },
-  { key: 'buildingCommonName', label: 'Byggnad', category: 'system' },
-  { key: 'complexCommonName', label: 'Komplex', category: 'system' },
-  { key: 'category', label: 'Kategori', category: 'system' },
-  { key: 'objectTypeValue', label: 'Objekttyp', category: 'system' },
+  { key: 'commonName', label: 'Room Name', category: 'system' },
+  { key: 'roomNumber', label: 'Room Number', category: 'system' },
+  { key: 'designation', label: 'Designation', category: 'system' },
+  { key: 'levelCommonName', label: 'Floor', category: 'system' },
+  { key: 'buildingCommonName', label: 'Building', category: 'system' },
+  { key: 'complexCommonName', label: 'Complex', category: 'system' },
+  { key: 'category', label: 'Category', category: 'system' },
+  { key: 'objectTypeValue', label: 'Object Type', category: 'system' },
   { key: 'fmGuid', label: 'FMGUID', category: 'system' },
 ];
 
 // Calculated columns
 const CALCULATED_COLUMNS: ColumnDef[] = [
   { key: 'nta', label: 'NTA (m²)', category: 'calculated', dataType: 3 },
-  { key: 'omkrets', label: 'Omkrets (m)', category: 'calculated', dataType: 3 },
+  { key: 'omkrets', label: 'Perimeter (m)', category: 'calculated', dataType: 3 },
 ];
 
 // Default visible columns
@@ -323,7 +323,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
       if (roomNum) result.roomNumber = roomNum;
 
       // Override commonName
-      result.commonName = room.commonName || room.name || attrs.commonName || 'Okänt';
+      result.commonName = room.commonName || room.name || attrs.commonName || 'Unknown';
 
       // Override levelCommonName
       result.levelCommonName = attrs.levelCommonName || attrs.levelDesignation || '-';
@@ -495,8 +495,8 @@ const RoomsView: React.FC<RoomsViewProps> = ({
 
   const title =
     facility.category === 'Building'
-      ? `Rum i ${facility.commonName || facility.name}`
-      : `Rum på ${facility.commonName || facility.name}`;
+      ? `Rooms in ${facility.commonName || facility.name}`
+      : `Rooms at ${facility.commonName || facility.name}`;
 
   // Group columns by category for dropdown
   const systemCols = allColumns.filter(c => c.category === 'system');
@@ -512,7 +512,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
           <div className="min-w-0">
             <h1 className="text-sm sm:text-base md:text-lg font-bold truncate">{title}</h1>
             <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
-              {filteredRooms.length} rum · {Math.round(totalArea).toLocaleString('sv-SE')} m²
+              {filteredRooms.length} rooms · {Math.round(totalArea).toLocaleString('en-US')} m²
             </p>
           </div>
         </div>
@@ -527,7 +527,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
           <Input
-            placeholder="Sök rum..."
+            placeholder="Search rooms..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-7 sm:pl-9 h-8 sm:h-9 text-xs sm:text-sm"
@@ -539,12 +539,12 @@ const RoomsView: React.FC<RoomsViewProps> = ({
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="h-8 sm:h-9 gap-2">
               <Settings2 size={14} />
-              <span className="hidden sm:inline">Kolumner</span>
+              <span className="hidden sm:inline">Columns</span>
               <Badge variant="secondary" className="text-xs ml-1">{visibleColumns.length}</Badge>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 max-h-80 overflow-y-auto bg-popover">
-            <DropdownMenuLabel>Systemegenskaper</DropdownMenuLabel>
+            <DropdownMenuLabel>System Properties</DropdownMenuLabel>
             {systemCols.map(col => (
               <DropdownMenuCheckboxItem
                 key={col.key}
@@ -557,7 +557,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
             {calculatedCols.length > 0 && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuLabel>Beräknade</DropdownMenuLabel>
+                <DropdownMenuLabel>Calculated</DropdownMenuLabel>
                 {calculatedCols.map(col => (
                   <DropdownMenuCheckboxItem
                     key={col.key}

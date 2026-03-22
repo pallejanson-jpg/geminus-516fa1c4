@@ -50,13 +50,13 @@ const FmAccessObjectPanel: React.FC<FmAccessObjectPanelProps> = ({ selectedNode,
   if (!displayNode) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground text-sm p-8">
-        Välj ett objekt i trädet för att se detaljer.
+        Select an object in the tree to view details.
       </div>
     );
   }
 
   const nodeGuid = displayNode.guid || displayNode.systemGuid || '';
-  const name = displayNode.objectName || displayNode.name || 'Namnlöst';
+  const name = displayNode.objectName || displayNode.name || 'Unnamed';
   const classLabel = displayNode.classId ? CLASS_LABELS[displayNode.classId] || displayNode.className : displayNode.className;
   const props = displayNode.properties || {};
   const propEntries = Object.entries(props).filter(([k]) => !k.startsWith('_'));
@@ -88,7 +88,7 @@ const FmAccessObjectPanel: React.FC<FmAccessObjectPanelProps> = ({ selectedNode,
 
   const copyGuid = () => {
     navigator.clipboard.writeText(nodeGuid);
-    toast({ title: 'GUID kopierat' });
+    toast({ title: 'GUID copied' });
   };
 
   return (
@@ -106,7 +106,7 @@ const FmAccessObjectPanel: React.FC<FmAccessObjectPanelProps> = ({ selectedNode,
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {classLabel && <Badge variant="secondary">{classLabel}</Badge>}
-            {displayNode.classId && <Badge variant="outline">Klass {displayNode.classId}</Badge>}
+            {displayNode.classId && <Badge variant="outline">Class {displayNode.classId}</Badge>}
             {displayNode.objectId && <Badge variant="outline">ID {displayNode.objectId}</Badge>}
           </div>
           {nodeGuid && (
@@ -120,9 +120,9 @@ const FmAccessObjectPanel: React.FC<FmAccessObjectPanelProps> = ({ selectedNode,
 
         {/* Properties */}
         <div>
-          <h4 className="text-xs font-bold text-muted-foreground uppercase mb-2">Egenskaper</h4>
+          <h4 className="text-xs font-bold text-muted-foreground uppercase mb-2">Properties</h4>
           {propEntries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Inga egenskaper.</p>
+            <p className="text-sm text-muted-foreground">No properties.</p>
           ) : (
             <div className="space-y-1.5">
               {propEntries.map(([key, value]) => (
@@ -150,41 +150,41 @@ const FmAccessObjectPanel: React.FC<FmAccessObjectPanelProps> = ({ selectedNode,
           {editing ? (
             <>
               <Button size="sm" onClick={handleSave} disabled={loading}>
-                <Save size={14} className="mr-1" /> Spara
+                <Save size={14} className="mr-1" /> Save
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
-                <X size={14} className="mr-1" /> Avbryt
+                <X size={14} className="mr-1" /> Cancel
               </Button>
             </>
           ) : (
             <>
               <Button size="sm" variant="outline" onClick={handleEdit}>
-                <Pencil size={14} className="mr-1" /> Redigera
+                <Pencil size={14} className="mr-1" /> Edit
               </Button>
               <Button size="sm" variant="outline" onClick={() => onRefresh()}>
-                <RefreshCw size={14} className="mr-1" /> Uppdatera
+                <RefreshCw size={14} className="mr-1" /> Refresh
               </Button>
               {onCreateChild && nodeGuid && (
                 <Button size="sm" variant="outline" onClick={() => onCreateChild(nodeGuid)}>
-                  <Plus size={14} className="mr-1" /> Skapa underobj.
+                  <Plus size={14} className="mr-1" /> Create child
                 </Button>
               )}
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button size="sm" variant="destructive">
-                    <Trash2 size={14} className="mr-1" /> Radera
+                    <Trash2 size={14} className="mr-1" /> Delete
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Radera objekt?</AlertDialogTitle>
+                    <AlertDialogTitle>Delete object?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Objektet "{name}" raderas permanent från FM Access. Denna åtgärd kan inte ångras.
+                      The object "{name}" will be permanently deleted from FM Access. This action cannot be undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>Avbryt</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDelete}>Radera</AlertDialogAction>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
@@ -198,12 +198,12 @@ const FmAccessObjectPanel: React.FC<FmAccessObjectPanelProps> = ({ selectedNode,
             <Separator />
             <div>
               <h4 className="text-xs font-bold text-muted-foreground uppercase mb-1">
-                Underordnade ({displayNode.children.length})
+                Children ({displayNode.children.length})
               </h4>
               <div className="text-sm text-muted-foreground">
                 {Object.entries(
                   displayNode.children.reduce((acc, c) => {
-                    const label = c.classId ? CLASS_LABELS[c.classId] || `Klass ${c.classId}` : 'Okänd';
+                    const label = c.classId ? CLASS_LABELS[c.classId] || `Class ${c.classId}` : 'Unknown';
                     acc[label] = (acc[label] || 0) + 1;
                     return acc;
                   }, {} as Record<string, number>)

@@ -178,7 +178,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
 
             {supportCase.description && (
               <div>
-                <h4 className="text-sm font-medium mb-1">Beskrivning</h4>
+                <h4 className="text-sm font-medium mb-1">Description</h4>
                 <p className="text-sm text-muted-foreground whitespace-pre-wrap">{supportCase.description}</p>
               </div>
             )}
@@ -186,7 +186,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
             <div className="grid grid-cols-2 gap-3 text-sm">
               {supportCase.building_name && (
                 <div>
-                  <span className="text-muted-foreground">Byggnad / Område</span>
+                  <span className="text-muted-foreground">Building / Area</span>
                   <p className="font-medium text-foreground">{supportCase.building_name}</p>
                 </div>
               )}
@@ -194,7 +194,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
                 <div className="flex items-start gap-1.5">
                   <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                   <div>
-                    <span className="text-muted-foreground">Plats</span>
+                    <span className="text-muted-foreground">Location</span>
                     <p className="font-medium text-foreground">{supportCase.location_description}</p>
                   </div>
                 </div>
@@ -203,7 +203,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
                 <div className="flex items-start gap-1.5">
                   <Wrench className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                   <div>
-                    <span className="text-muted-foreground">Installationsnr</span>
+                    <span className="text-muted-foreground">Installation No.</span>
                     <p className="font-medium text-foreground">{supportCase.installation_number}</p>
                   </div>
                 </div>
@@ -212,26 +212,26 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
                 <div className="flex items-start gap-1.5">
                   <CalendarDays className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                   <div>
-                    <span className="text-muted-foreground">Önskat datum</span>
+                    <span className="text-muted-foreground">Desired Date</span>
                     <p className="font-medium text-foreground">{format(new Date(supportCase.desired_date), 'PPP')}</p>
                   </div>
                 </div>
               )}
               {supportCase.contact_email && (
                 <div>
-                  <span className="text-muted-foreground">E-post</span>
+                  <span className="text-muted-foreground">Email</span>
                   <p className="font-medium text-foreground">{supportCase.contact_email}</p>
                 </div>
               )}
               {supportCase.contact_phone && (
                 <div>
-                  <span className="text-muted-foreground">Telefon</span>
+                  <span className="text-muted-foreground">Phone</span>
                   <p className="font-medium text-foreground">{supportCase.contact_phone}</p>
                 </div>
               )}
               {supportCase.external_reference && (
                 <div>
-                  <span className="text-muted-foreground">Referensnummer</span>
+                  <span className="text-muted-foreground">Reference Number</span>
                   <p className="font-medium text-foreground">{supportCase.external_reference}</p>
                 </div>
               )}
@@ -240,7 +240,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
             {supportCase.bcf_issue_id && (
               <div className="flex items-center gap-2 text-sm">
                 <Link2 className="h-4 w-4 text-primary" />
-                <span className="text-muted-foreground">Länkad till BCF-issue</span>
+                <span className="text-muted-foreground">Linked to BCF issue</span>
               </div>
             )}
 
@@ -249,7 +249,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
             {/* Comments */}
             <div>
               <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
-                Kommentarer
+                Comments
                 {comments.length > 0 && <Badge variant="secondary" className="text-xs">{comments.length}</Badge>}
               </h4>
               {loadingComments ? (
@@ -257,7 +257,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
               ) : comments.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">Inga kommentarer ännu</p>
+                <p className="text-sm text-muted-foreground text-center py-4">No comments yet</p>
               ) : (
                 <div className="space-y-3">
                   {comments.map(c => (
@@ -271,7 +271,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline gap-2">
-                          <span className="text-sm font-medium">{c.profile?.display_name || 'Användare'}</span>
+                          <span className="text-sm font-medium">{c.profile?.display_name || 'User'}</span>
                           <span className="text-xs text-muted-foreground">
                             {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
                           </span>
@@ -289,7 +289,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
         {/* Comment input */}
         <div className="flex-shrink-0 pt-4 border-t space-y-2">
           <Textarea
-            placeholder="Skriv en kommentar..."
+            placeholder="Write a comment..."
             value={newComment}
             onChange={e => setNewComment(e.target.value)}
             rows={2}
@@ -298,7 +298,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
           <div className="flex justify-end">
             <Button size="sm" onClick={handleSubmitComment} disabled={!newComment.trim() || submitting}>
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : (
-                <><Send className="h-4 w-4 mr-1" />Skicka</>
+                <><Send className="h-4 w-4 mr-1" />Send</>
               )}
             </Button>
           </div>
