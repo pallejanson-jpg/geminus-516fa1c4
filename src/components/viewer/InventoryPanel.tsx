@@ -477,7 +477,7 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Sök assets…"
+                placeholder="Search assets…"
                 className="h-6 pl-6 w-40 text-[11px]"
               />
             </div>
