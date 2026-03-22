@@ -241,7 +241,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
       onTemplatesChanged?.();
     } catch (error: any) {
       toast({
-        title: 'Fel vid borttagning',
+        title: 'Error deleting',
         description: error.message,
         variant: 'destructive',
       });
