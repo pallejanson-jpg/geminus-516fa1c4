@@ -403,7 +403,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
                 <Badge variant="outline" className="text-xs">Material: {formData.aiProperties.material}</Badge>
               )}
               {formData.aiProperties.installation_type && (
-                <Badge variant="outline" className="text-xs">Montering: {formData.aiProperties.installation_type}</Badge>
+                <Badge variant="outline" className="text-xs">Mounting: {formData.aiProperties.installation_type}</Badge>
               )}
               {formData.aiProperties.text_visible && (
                 <Badge variant="outline" className="text-xs">Text: {formData.aiProperties.text_visible}</Badge>
