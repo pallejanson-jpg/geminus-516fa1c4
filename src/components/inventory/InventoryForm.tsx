@@ -686,7 +686,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
 
       {/* Description - expandable */}
       <div className="space-y-2">
-        <Label className="text-base">Beskrivning (valfritt)</Label>
+        <Label className="text-base">Description (optional)</Label>
         <Textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
