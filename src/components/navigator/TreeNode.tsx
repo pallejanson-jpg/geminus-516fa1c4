@@ -198,7 +198,7 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
                     <Eye className="h-3.5 w-3.5 text-muted-foreground" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="top">Detaljer</TooltipContent>
+                <TooltipContent side="top">Details</TooltipContent>
               </Tooltip>
             )}
           </span>
