@@ -468,13 +468,13 @@ const SymbolSettings: React.FC = () => {
                         
                         setFormData({ ...formData, icon_url: publicUrl });
                         toast({
-                          title: 'Ikon uppladdad',
-                          description: 'Bilden har laddats upp',
+                          title: 'Icon uploaded',
+                          description: 'The image has been uploaded',
                         });
                       } catch (error: any) {
                         toast({
                           variant: 'destructive',
-                          title: 'Uppladdning misslyckades',
+                          title: 'Upload failed',
                           description: error.message,
                         });
                       }
