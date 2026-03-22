@@ -316,10 +316,10 @@ export default function SensorsTab() {
       {/* Room heatmap grid — klickbara rum */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Rumsheatmap – {metricDef.label}</CardTitle>
-          <CardDescription>
-            {rooms.length} rum · klicka på ett rum för sensordetaljer
-          </CardDescription>
+           <CardTitle className="text-sm">Room Heatmap – {metricDef.label}</CardTitle>
+           <CardDescription>
+             {rooms.length} rooms · click a room for sensor details
+           </CardDescription>
         </CardHeader>
         <CardContent>
           {rooms.length === 0 ? (
