@@ -305,7 +305,7 @@ export default function CreatePropertyDialog({
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Latitud</Label>
+                <Label className="text-xs text-muted-foreground">Latitude</Label>
                 <Input
                   type="number"
                   step="any"
