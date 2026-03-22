@@ -412,7 +412,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
 
           {/* Destination building */}
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Till byggnad</label>
+            <label className="text-xs text-muted-foreground">To building</label>
             <Select value={selectedBuildingGuid} onValueChange={v => { setSelectedBuildingGuid(v); setSelectedRoomGuid(''); }}>
               <SelectTrigger className="h-8 text-xs">
                 <SelectValue placeholder="Välj byggnad" />
