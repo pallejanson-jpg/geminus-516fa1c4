@@ -468,12 +468,12 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="default_category" className="text-foreground">Standardkategori</Label>
+                <Label htmlFor="default_category" className="text-foreground">Default Category</Label>
                 <Input
                   id="default_category"
                   value={formData.default_category}
                   onChange={e => setFormData({ ...formData, default_category: e.target.value })}
-                  placeholder="Brandredskap"
+                  placeholder="Fire Safety"
                 />
               </div>
               <div className="space-y-2">
