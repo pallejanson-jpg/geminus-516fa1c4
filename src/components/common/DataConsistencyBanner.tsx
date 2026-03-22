@@ -120,7 +120,7 @@ export const DataConsistencyBanner: React.FC = () => {
         
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium text-warning">
-            <span>Datadiskrepans upptäckt</span>
+            <span>Data discrepancy detected</span>
           </div>
           
           <div className="mt-1 text-sm text-muted-foreground">
