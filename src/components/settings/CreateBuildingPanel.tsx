@@ -902,10 +902,10 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
 
   const getStatusBadge = (status: string) => {
     const map: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string }> = {
-      pending: { variant: 'secondary', label: 'Köad' },
-      processing: { variant: 'default', label: 'Bearbetar' },
-      done: { variant: 'outline', label: 'Klar' },
-      error: { variant: 'destructive', label: 'Fel' },
+      pending: { variant: 'secondary', label: 'Queued' },
+      processing: { variant: 'default', label: 'Processing' },
+      done: { variant: 'outline', label: 'Done' },
+      error: { variant: 'destructive', label: 'Error' },
     };
     const s = map[status] || { variant: 'secondary' as const, label: status };
     return <Badge variant={s.variant} className="text-[9px]">{s.label}</Badge>;
