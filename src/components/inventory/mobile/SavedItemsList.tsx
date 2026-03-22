@@ -52,9 +52,9 @@ const SavedItemsList: React.FC<SavedItemsListProps> = ({
     return (
       <div className="h-full flex flex-col items-center justify-center text-center p-8">
         <Package className="h-12 w-12 text-muted-foreground/50 mb-4" />
-        <p className="text-lg font-medium text-muted-foreground">Inga sparade objekt</p>
+        <p className="text-lg font-medium text-muted-foreground">No saved items</p>
         <p className="text-sm text-muted-foreground/70 mt-1">
-          Registrera din första tillgång för att se den här
+          Register your first asset to see it here
         </p>
       </div>
     );
