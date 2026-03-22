@@ -105,9 +105,9 @@ export default function Properties() {
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Fastigheter</h1>
+          <h1 className="text-2xl font-semibold text-foreground">Properties</h1>
           <p className="text-muted-foreground">
-            Hantera din fastighetsportfölj och API-anslutningar
+            Manage your property portfolio and API connections
           </p>
         </div>
         <div className="flex gap-2">
