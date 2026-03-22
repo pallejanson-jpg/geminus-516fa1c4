@@ -515,10 +515,10 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
               {isDeleting ? (
                 <>
                   <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Tar bort...
+                  Deleting…
                 </>
               ) : (
-                'Ta bort'
+                'Delete'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
