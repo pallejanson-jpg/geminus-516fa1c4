@@ -150,19 +150,19 @@ const IvionCreate: React.FC = () => {
   const handleSubmit = async () => {
     // Validation
     if (!name.trim()) {
-      toast.error('Namn är obligatoriskt');
+      toast.error('Name is required');
       return;
     }
     if (!category) {
-      toast.error('Välj en kategori');
+      toast.error('Select a category');
       return;
     }
     if (!symbolId) {
-      toast.error('Välj en symbol');
+      toast.error('Select a symbol');
       return;
     }
     if (!buildingFmGuid) {
-      toast.error('Välj en byggnad');
+      toast.error('Select a building');
       return;
     }
 
