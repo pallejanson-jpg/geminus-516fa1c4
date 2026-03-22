@@ -33,7 +33,7 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Sök t.ex. 'brandskyddsdokumentation plan 3'..."
+            placeholder="Search e.g. 'fire safety documentation floor 3'..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
