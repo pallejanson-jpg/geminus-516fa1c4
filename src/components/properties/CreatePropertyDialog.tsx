@@ -274,9 +274,9 @@ export default function CreatePropertyDialog({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>{editFmGuid ? 'Redigera fastighet' : 'Lägg till fastighet'}</SheetTitle>
+          <SheetTitle>{editFmGuid ? 'Edit Property' : 'Add Property'}</SheetTitle>
           <SheetDescription>
-            Ange FM GUID och valfria API-credentials för att hämta data från andra instanser.
+            Enter FM GUID and optional API credentials to fetch data from other instances.
           </SheetDescription>
         </SheetHeader>
 
