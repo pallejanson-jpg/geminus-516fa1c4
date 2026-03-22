@@ -1281,7 +1281,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                         )}
                         {isStuckJob(job) && (
                           <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 gap-1" onClick={() => handleResetJob(job.id)}>
-                            <RotateCcw className="h-3 w-3" /> Återställ
+                            <RotateCcw className="h-3 w-3" /> Reset
                           </Button>
                         )}
                         {(job.status === 'done' || job.status === 'error') && (
