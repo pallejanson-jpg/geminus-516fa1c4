@@ -402,8 +402,8 @@ const ImdfExportPanel: React.FC<{ allBuildings: any[] }> = ({ allBuildings }) =>
             setExportResult(`Export complete — ${buildingName}`);
             toast({ title: 'IMDF Export complete', description: `ZIP file downloaded for ${buildingName}` });
         } catch (err: any) {
-            setExportResult(`Fel: ${err.message}`);
-            toast({ title: 'IMDF Export misslyckades', description: err.message, variant: 'destructive' });
+            setExportResult(`Error: ${err.message}`);
+            toast({ title: 'IMDF Export failed', description: err.message, variant: 'destructive' });
         } finally {
             setIsExporting(false);
         }
