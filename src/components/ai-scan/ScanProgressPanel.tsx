@@ -418,7 +418,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
         <CardContent>
           {recentJobs.length === 0 ? (
             <p className="text-xs md:text-sm text-muted-foreground text-center py-4">
-              Inga tidigare skanningar
+              No previous scans
             </p>
           ) : (
             <div className="space-y-3">
