@@ -796,7 +796,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       {/* Legend */}
       {visualizationType !== 'none' && config && (
         <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Färgskala ({config.unit})</Label>
+          <Label className="text-xs text-muted-foreground">Color scale ({config.unit})</Label>
           <div className="h-4 rounded-sm" style={{ background: legendGradient }} />
           <div className="flex justify-between text-[10px] text-muted-foreground">
             <span>{config.min} {config.unit}</span>
