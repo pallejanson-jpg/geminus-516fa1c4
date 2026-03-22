@@ -491,7 +491,7 @@ const IvionCreate: React.FC = () => {
               className="flex-1 h-12"
               disabled={isLoading}
             >
-              Avbryt
+              Cancel
             </Button>
             <Button
               onClick={handleSubmit}
@@ -501,7 +501,7 @@ const IvionCreate: React.FC = () => {
               {isLoading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
-                'Spara'
+                'Save'
               )}
             </Button>
           </div>
