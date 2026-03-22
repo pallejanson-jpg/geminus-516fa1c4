@@ -268,7 +268,7 @@ const ViewerThemeSettings: React.FC = () => {
                           className="w-7 h-7 rounded border border-border cursor-pointer"
                         />
                         <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-muted-foreground">Kant</span>
+                          <span className="text-[10px] text-muted-foreground">Edge</span>
                           <Switch
                             checked={mapping?.edges ?? false}
                             onCheckedChange={(checked) => updateEdges(cat.key, checked)}
