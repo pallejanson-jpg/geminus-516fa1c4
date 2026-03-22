@@ -50,7 +50,7 @@ const FmAccessObjectPanel: React.FC<FmAccessObjectPanelProps> = ({ selectedNode,
   if (!displayNode) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground text-sm p-8">
-        Välj ett objekt i trädet för att se detaljer.
+        Select an object in the tree to view details.
       </div>
     );
   }
