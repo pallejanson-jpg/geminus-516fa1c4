@@ -96,7 +96,7 @@ const CreateViewDialog: React.FC<CreateViewDialogProps> = ({
             <div className="rounded-lg overflow-hidden border bg-muted">
               <img
                 src={viewState.screenshotDataUrl}
-                alt="Vy förhandsvisning"
+                alt="View preview"
                 className="w-full h-40 object-cover"
               />
             </div>
