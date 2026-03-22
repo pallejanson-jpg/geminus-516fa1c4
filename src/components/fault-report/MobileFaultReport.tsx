@@ -169,8 +169,8 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
                   render={({ field }) => (
                     <FormItem>
                       <FormFieldWithHelp
-                        label="Återkoppling via e-post"
-                        helpText="Fyll i din e-postadress om du vill ha återkoppling om ärendet."
+                        label="Email for follow-up"
+                        helpText="Enter your email if you want to receive updates on the case."
                       />
                       <FormControl>
                         <ClearableInput
