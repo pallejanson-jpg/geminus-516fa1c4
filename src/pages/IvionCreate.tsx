@@ -256,12 +256,12 @@ const IvionCreate: React.FC = () => {
         <Card className="w-full max-w-md">
           <CardContent className="pt-6 text-center">
             <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Tillgång skapad!</h2>
+            <h2 className="text-xl font-semibold mb-2">Asset Created!</h2>
             <p className="text-muted-foreground mb-6">
-              {name} har sparats och kan nu ses i Geminus.
+              {name} has been saved and can now be viewed in Geminus.
             </p>
             <Button onClick={handleClose} className="w-full">
-              Stäng
+              Close
             </Button>
           </CardContent>
         </Card>
