@@ -212,7 +212,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
                 <div className="flex items-start gap-1.5">
                   <CalendarDays className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                   <div>
-                    <span className="text-muted-foreground">Önskat datum</span>
+                    <span className="text-muted-foreground">Desired Date</span>
                     <p className="font-medium text-foreground">{format(new Date(supportCase.desired_date), 'PPP')}</p>
                   </div>
                 </div>
