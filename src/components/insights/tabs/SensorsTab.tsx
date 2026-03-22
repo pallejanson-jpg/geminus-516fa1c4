@@ -345,7 +345,7 @@ export default function SensorsTab() {
       {!isLoading && error && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border border-border px-3 py-2 bg-muted/30">
           <WifiOff className="h-3.5 w-3.5 shrink-0 text-destructive" />
-          <span>Ingen live-koppling till Senslinc för denna byggnad.</span>
+          <span>No live connection to Senslinc for this building.</span>
         </div>
       )}
       {!isLoading && isLive && buildingData && (

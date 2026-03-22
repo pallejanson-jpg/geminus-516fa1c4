@@ -133,11 +133,11 @@ export default function RoomOptimizationTab({ facility }: { facility?: Facility 
                     <span className="block font-semibold">{data.statistics.avgOccupancy}%</span>
                   </div>
                   <div className="bg-amber-500/10 rounded p-2">
-                    <span className="text-muted-foreground">Underutnyttjade</span>
-                    <span className="block font-semibold text-amber-500">{data.statistics.underutilizedRooms}</span>
-                  </div>
-                  <div className="bg-destructive/10 rounded p-2">
-                    <span className="text-muted-foreground">Överbelastade</span>
+                     <span className="text-muted-foreground">Underutilized</span>
+                     <span className="block font-semibold text-amber-500">{data.statistics.underutilizedRooms}</span>
+                   </div>
+                   <div className="bg-destructive/10 rounded p-2">
+                     <span className="text-muted-foreground">Overcrowded</span>
                     <span className="block font-semibold text-destructive">{data.statistics.overcrowdedRooms}</span>
                   </div>
                 </div>
