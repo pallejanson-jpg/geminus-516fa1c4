@@ -208,7 +208,7 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
                 })}
               </div>
             ) : (
-              <p className="text-muted-foreground text-sm">Inga våningar hittades för denna byggnad</p>
+              <p className="text-muted-foreground text-sm">No floors found for this building</p>
             )}
           </div>
         )}
