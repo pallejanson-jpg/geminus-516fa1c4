@@ -41,8 +41,8 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
           />
         </div>
         <Button onClick={handleSearch} disabled={isLoading || !query.trim()} size="sm">
-          <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-          Sök
+           <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+           Search
         </Button>
       </div>
 
