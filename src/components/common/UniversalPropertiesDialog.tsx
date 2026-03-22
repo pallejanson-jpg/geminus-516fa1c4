@@ -1010,7 +1010,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       toast.success(`BIP-kod ${suggestion.code} tillämpad`);
       onUpdate?.();
     } catch (error: any) {
-      toast.error('Kunde inte spara BIP-kod: ' + error.message);
+      toast.error('Could not save BIP code: ' + error.message);
     }
   };
 
