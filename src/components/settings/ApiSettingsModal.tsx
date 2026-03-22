@@ -327,7 +327,7 @@ const FmAccessDocSyncPanel: React.FC = () => {
                     </div>
                     <div className="rounded border p-2 text-center">
                         <div className="font-medium text-lg">{status.counts.documents}</div>
-                        <div className="text-muted-foreground">Dokument</div>
+                        <div className="text-muted-foreground">Documents</div>
                     </div>
                     <div className="rounded border p-2 text-center">
                         <div className="font-medium text-lg">{status.counts.dou}</div>
