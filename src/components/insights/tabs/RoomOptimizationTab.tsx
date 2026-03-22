@@ -125,11 +125,11 @@ export default function RoomOptimizationTab({ facility }: { facility?: Facility 
               {data.statistics && (
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="bg-muted/50 rounded p-2">
-                    <span className="text-muted-foreground">Total yta</span>
-                    <span className="block font-semibold">{data.statistics.totalArea?.toLocaleString()} m²</span>
-                  </div>
-                  <div className="bg-muted/50 rounded p-2">
-                    <span className="text-muted-foreground">Snittbeläggning</span>
+                     <span className="text-muted-foreground">Total Area</span>
+                     <span className="block font-semibold">{data.statistics.totalArea?.toLocaleString()} m²</span>
+                   </div>
+                   <div className="bg-muted/50 rounded p-2">
+                     <span className="text-muted-foreground">Avg Occupancy</span>
                     <span className="block font-semibold">{data.statistics.avgOccupancy}%</span>
                   </div>
                   <div className="bg-amber-500/10 rounded p-2">
