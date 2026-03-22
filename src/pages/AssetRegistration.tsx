@@ -80,7 +80,7 @@ function AssetRegistrationForm({
     e.preventDefault();
     
     if (!designation.trim()) {
-      toast.error('Benämning/nummer är obligatoriskt');
+      toast.error('Designation/number is required');
       return;
     }
 
