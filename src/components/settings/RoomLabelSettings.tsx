@@ -76,9 +76,9 @@ const RoomLabelSettings: React.FC = () => {
   // Get click action label
   const getClickActionLabel = (action: string) => {
     switch (action) {
-      case 'flyto': return 'Flytta kamera';
-      case 'roomcard': return 'Visa rumskort';
-      default: return 'Ingen';
+      case 'flyto': return 'Fly to room';
+      case 'roomcard': return 'Show room card';
+      default: return 'None';
     }
   };
 
