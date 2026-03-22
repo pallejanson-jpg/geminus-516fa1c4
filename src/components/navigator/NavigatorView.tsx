@@ -327,7 +327,7 @@ export default function NavigatorView() {
             <SearchResultsList
               results={searchResults}
               onSelect={handleSearchResultSelect}
-              emptyMessage="Inga resultat för din sökning"
+              emptyMessage="No results for your search"
             />
           ) : (
             <div className="h-[calc(100vh-200px)]">

@@ -234,12 +234,12 @@ export const VirtualTreeRow = memo(function VirtualTreeRow({
                 size="icon"
                 onClick={(e) => { e.stopPropagation(); onSyncToAssetPlus(node); }}
                 className="h-6 w-6"
-                aria-label="Synka till Asset+"
+                aria-label="Sync to Asset+"
               >
                 <RefreshCw className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-blue-500" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">Synka till Asset+</TooltipContent>
+            <TooltipContent side="top">Sync to Asset+</TooltipContent>
           </Tooltip>
         )}
       </div>

@@ -150,7 +150,7 @@ const BuildingMapPicker: React.FC<BuildingMapPickerProps> = ({
               {pendingPosition && (
                 <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap">
                   <span className="text-[9px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded">
-                    Ny position
+                    New position
                   </span>
                 </div>
               )}
