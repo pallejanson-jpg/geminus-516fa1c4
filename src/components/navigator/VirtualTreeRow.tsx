@@ -202,7 +202,7 @@ export const VirtualTreeRow = memo(function VirtualTreeRow({
                   <Eye className="h-3.5 w-3.5 text-muted-foreground" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Detaljer</TooltipContent>
+              <TooltipContent side="top">Details</TooltipContent>
             </Tooltip>
           )}
         </span>
