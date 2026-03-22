@@ -364,7 +364,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
           <CollapsibleTrigger asChild>
             <Button type="button" variant="ghost" className="w-full justify-start gap-2 h-12">
               <FileText className="h-4 w-4" />
-              {showDescription ? 'Dölj beskrivning' : 'Lägg till beskrivning'}
+              {showDescription ? 'Hide description' : 'Add description'}
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-2">
