@@ -80,7 +80,7 @@ const CategorySelectionStep: React.FC<CategorySelectionStepProps> = ({
     <ScrollArea className="h-full">
       <div className="p-4 space-y-4">
         <div className="text-center mb-2">
-          <h2 className="text-lg font-semibold">Välj kategori</h2>
+          <h2 className="text-lg font-semibold">Select category</h2>
           <p className="text-sm text-muted-foreground">
             {formData.buildingName}
             {formData.levelName && ` → ${formData.levelName}`}
