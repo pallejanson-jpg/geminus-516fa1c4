@@ -102,7 +102,7 @@ export function useWebSpeechRecognition(
 
   const start = useCallback(() => {
     if (!isSupported) {
-      const errorMsg = 'Röststyrning stöds inte i denna webbläsare';
+      const errorMsg = 'Voice control is not supported in this browser';
       setError(errorMsg);
       onError?.(errorMsg);
       return;
