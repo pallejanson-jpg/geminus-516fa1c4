@@ -95,7 +95,7 @@ const Ivion360PositionPicker: React.FC<Ivion360PositionPickerProps> = ({
     setIsCreatingPoi(true);
     try {
       const fmGuid = crypto.randomUUID();
-      const displayName = formData.name || formData.categoryLabel || 'Ny tillgång';
+      const displayName = formData.name || formData.categoryLabel || 'New asset';
 
       // Build custom data with all AI info
       const customData: Record<string, any> = {
