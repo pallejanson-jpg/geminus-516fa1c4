@@ -85,7 +85,7 @@ function AssetRegistrationForm({
     }
 
     if (!coordinates) {
-      toast.error('Välj en position i 3D-vyn först');
+      toast.error('Select a position in the 3D view first');
       return;
     }
 
