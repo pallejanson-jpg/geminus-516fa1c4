@@ -194,10 +194,10 @@ const FeedbackCreateForm: React.FC<FeedbackCreateFormProps> = ({ open, onClose, 
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="suggestion">Förslag</SelectItem>
-                <SelectItem value="ux_issue">UX-problem</SelectItem>
-                <SelectItem value="bug">Bugg</SelectItem>
-                <SelectItem value="question">Fråga</SelectItem>
+                <SelectItem value="suggestion">Suggestion</SelectItem>
+                <SelectItem value="ux_issue">UX issue</SelectItem>
+                <SelectItem value="bug">Bug</SelectItem>
+                <SelectItem value="question">Question</SelectItem>
               </SelectContent>
             </Select>
           </div>
