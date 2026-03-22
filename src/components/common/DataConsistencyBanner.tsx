@@ -79,7 +79,7 @@ export const DataConsistencyBanner: React.FC = () => {
       
       if (data?.success) {
         toast({
-          title: 'Synkronisering klar',
+          title: 'Sync complete',
           description: data.message,
         });
         setDeltaResult(null);
