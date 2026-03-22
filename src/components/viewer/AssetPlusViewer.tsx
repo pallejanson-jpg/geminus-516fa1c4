@@ -3658,7 +3658,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         extractedFloors.push({
           id: metaObject.id,
           fmGuid: metaObject.id,
-          name: metaObject.name || 'Okänd våning',
+          name: metaObject.name || 'Unknown Floor',
           visible: true, // All visible by default
         });
       }
