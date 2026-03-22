@@ -184,12 +184,12 @@ const FeedbackThreadDetail: React.FC<FeedbackThreadDetailProps> = ({
             {/* Comments */}
             <div className="space-y-3">
               <h4 className="text-sm font-medium text-foreground">
-                Kommentarer ({comments.length})
+                Comments ({comments.length})
               </h4>
               {isLoading ? (
-                <div className="text-xs text-muted-foreground">Laddar…</div>
+                <div className="text-xs text-muted-foreground">Loading…</div>
               ) : comments.length === 0 ? (
-                <div className="text-xs text-muted-foreground">Inga kommentarer ännu</div>
+                <div className="text-xs text-muted-foreground">No comments yet</div>
               ) : (
                 comments.map(c => (
                   <div key={c.id} className="rounded-md border bg-muted/30 p-2.5 space-y-1">
