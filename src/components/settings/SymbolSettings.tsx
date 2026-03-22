@@ -515,7 +515,7 @@ const SymbolSettings: React.FC = () => {
                 className="rounded"
               />
               <Label htmlFor="is-default" className="text-sm font-normal">
-                Använd som standard om ingen kategori matchar
+                Use as default if no category matches
               </Label>
             </div>
           </div>
