@@ -205,8 +205,8 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
             <div className="flex flex-col items-center justify-center gap-4 py-8">
               <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center w-full">
                 <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground mb-3">
-                  Välj en ifylld Excel-fil (.xlsx)
+                 <p className="text-sm text-muted-foreground mb-3">
+                  Select a completed Excel file (.xlsx)
                 </p>
                 <Input
                   type="file"
@@ -216,7 +216,7 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Ladda ner mallen först om du inte redan har den.
+                Download the template first if you don't already have it.
               </p>
             </div>
           )}
