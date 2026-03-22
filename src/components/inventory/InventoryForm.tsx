@@ -199,7 +199,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
   // Handler for 3D position picking
   const handlePositionPicked = (coords: { x: number; y: number; z: number }) => {
     setCoordinates(coords);
-    toast.success('Position vald!', {
+    toast.success('Position selected!', {
       description: `X: ${coords.x.toFixed(2)}, Y: ${coords.y.toFixed(2)}, Z: ${coords.z.toFixed(2)}`,
     });
   };
