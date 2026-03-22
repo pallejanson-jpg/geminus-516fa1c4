@@ -261,7 +261,7 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
                     onClick={handleReanalyze}
                   >
                     <RefreshCw className="h-3.5 w-3.5 mr-1" />
-                    Analysera igen
+                    Re-analyze
                   </Button>
                 )}
                 <Button
