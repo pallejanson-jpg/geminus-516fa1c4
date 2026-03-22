@@ -169,20 +169,20 @@ export function useWebSpeechRecognition(
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      let errorMessage = 'Ett fel uppstod vid röstinspelning';
+      let errorMessage = 'An error occurred during voice recording';
       
       switch (event.error) {
         case 'not-allowed':
-          errorMessage = 'Mikrofonåtkomst nekad. Tillåt mikrofonåtkomst i webbläsaren.';
+          errorMessage = 'Microphone access denied. Allow microphone access in your browser.';
           break;
         case 'no-speech':
-          errorMessage = 'Inget tal detekterat. Försök igen.';
+          errorMessage = 'No speech detected. Please try again.';
           break;
         case 'audio-capture':
-          errorMessage = 'Ingen mikrofon hittades.';
+          errorMessage = 'No microphone found.';
           break;
         case 'network':
-          errorMessage = 'Nätverksfel. Kontrollera din internetanslutning.';
+          errorMessage = 'Network error. Check your internet connection.';
           break;
         case 'aborted':
           // User aborted, not an error
