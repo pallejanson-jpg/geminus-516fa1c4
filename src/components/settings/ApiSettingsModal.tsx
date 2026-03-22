@@ -323,7 +323,7 @@ const FmAccessDocSyncPanel: React.FC = () => {
                 <div className="grid grid-cols-3 gap-2 text-xs">
                     <div className="rounded border p-2 text-center">
                         <div className="font-medium text-lg">{status.counts.drawings}</div>
-                        <div className="text-muted-foreground">Ritningar</div>
+                        <div className="text-muted-foreground">Drawings</div>
                     </div>
                     <div className="rounded border p-2 text-center">
                         <div className="font-medium text-lg">{status.counts.documents}</div>
