@@ -392,7 +392,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
                   className="w-full"
                 >
                   <StopCircle className="h-4 w-4 mr-2" />
-                  Avbryt skanning
+                  Cancel scan
                 </Button>
               </div>
             )}
