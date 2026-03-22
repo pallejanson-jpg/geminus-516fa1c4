@@ -549,20 +549,20 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       const result = await syncAssetToAssetPlus(asset.fmGuid);
       if (result.success) {
         toast({
-          title: 'Synkad!',
-          description: `${asset.designation} har synkats till Asset+`,
+          title: 'Synced!',
+          description: `${asset.designation} has been synced to Asset+`,
         });
       } else {
         toast({
-          title: 'Kunde inte synka',
-          description: result.error || 'Okänt fel',
+          title: 'Could not sync',
+          description: result.error || 'Unknown error',
           variant: 'destructive',
         });
       }
     } catch (error: any) {
       toast({
-        title: 'Synkfel',
-        description: error.message || 'Kunde inte synka asset',
+        title: 'Sync error',
+        description: error.message || 'Could not sync asset',
         variant: 'destructive',
       });
     } finally {
@@ -579,8 +579,8 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     const unsyncedAssets = assetData.filter((a) => a.isLocal && a.roomFmGuid);
     if (unsyncedAssets.length === 0) {
       toast({
-        title: 'Inga att synka',
-        description: 'Alla assets är redan synkade eller saknar rum-koppling',
+        title: 'Nothing to sync',
+        description: 'All assets are already synced or missing room association',
       });
       return;
     }
@@ -591,14 +591,14 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       const result = await batchSyncAssetsToAssetPlus(fmGuids);
       
       toast({
-        title: 'Batch-synk klar',
-        description: `Synkade ${result.synced} av ${result.total}. ${result.failed} misslyckades.`,
+        title: 'Batch sync complete',
+        description: `Synced ${result.synced} of ${result.total}. ${result.failed} failed.`,
         variant: result.failed > 0 ? 'destructive' : 'default',
       });
     } catch (error: any) {
       toast({
-        title: 'Batch-synk misslyckades',
-        description: error.message || 'Kunde inte synka assets',
+        title: 'Batch sync failed',
+        description: error.message || 'Could not sync assets',
         variant: 'destructive',
       });
     } finally {
