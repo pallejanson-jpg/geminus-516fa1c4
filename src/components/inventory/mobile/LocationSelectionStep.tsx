@@ -162,7 +162,7 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <Building2 className="h-5 w-5 text-primary" />
-            <Label className="text-base font-medium">Byggnad *</Label>
+            <Label className="text-base font-medium">Building *</Label>
           </div>
           <Select value={formData.buildingFmGuid} onValueChange={handleBuildingChange}>
             <SelectTrigger className="h-14 text-base">
