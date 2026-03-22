@@ -123,12 +123,12 @@ const CreateViewDialog: React.FC<CreateViewDialogProps> = ({
 
           {/* Description input */}
           <div className="space-y-2">
-            <Label htmlFor="view-description">Beskrivning (valfritt)</Label>
+            <Label htmlFor="view-description">Description (optional)</Label>
             <Textarea
               id="view-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Beskriv vyn..."
+              placeholder="Describe the view..."
               rows={2}
               disabled={isSaving}
             />
