@@ -310,7 +310,7 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
           )}
           {step === 'done' && (
             <Button onClick={() => { resetState(); onOpenChange(false); }}>
-              Stäng
+              Close
             </Button>
           )}
         </DialogFooter>

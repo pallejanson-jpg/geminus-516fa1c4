@@ -100,7 +100,7 @@ export default function IleanEmbeddedChat({ buildingFmGuid, buildingName }: Ilea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-          placeholder="Ställ en fråga om dokument..."
+          placeholder="Ask a question about documents..."
           className="h-8 text-sm"
           disabled={isSending}
         />
