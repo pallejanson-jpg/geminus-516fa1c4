@@ -485,10 +485,10 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
               {isCancelling ? (
                 <>
                   <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Avbryter...
+                  Cancelling…
                 </>
               ) : (
-                'Avbryt skanning'
+                'Cancel scan'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
