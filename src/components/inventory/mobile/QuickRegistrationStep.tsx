@@ -382,7 +382,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
           <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
             <div className="flex items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5 text-primary" />
-              <span className="text-xs font-semibold text-primary">AI-identifierade egenskaper</span>
+              <span className="text-xs font-semibold text-primary">AI-detected properties</span>
             </div>
             <div className="flex flex-wrap gap-1">
               {formData.aiProperties.manufacturer && (
