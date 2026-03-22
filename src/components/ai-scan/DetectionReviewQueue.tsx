@@ -394,7 +394,7 @@ const ApprovalDialog: React.FC<{
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Avbryt</Button>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={handleSubmit} disabled={isSubmitting || !form.name}>
             <CheckCircle2 className="h-4 w-4 mr-2" />
             Godkänn & skapa
