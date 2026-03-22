@@ -221,7 +221,7 @@ const Ivion360PositionPicker: React.FC<Ivion360PositionPickerProps> = ({
                       ) : (
                         <Check className="h-4 w-4" />
                       )}
-                      Bekräfta
+                      Confirm
                     </Button>
                   </div>
                 </div>

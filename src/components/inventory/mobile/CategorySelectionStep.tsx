@@ -163,7 +163,7 @@ const CategorySelectionStep: React.FC<CategorySelectionStepProps> = ({
           disabled={noneSelected}
           onClick={handleContinue}
         >
-          Fortsätt
+          Continue
         </Button>
       </div>
     </ScrollArea>

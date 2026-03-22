@@ -150,7 +150,7 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
             onClick={onSkip}
           >
             <SkipForward className="h-4 w-4 mr-2" />
-            Hoppa över - lägg till position senare
+            Skip — add position later
           </Button>
         </div>
       </ScrollArea>

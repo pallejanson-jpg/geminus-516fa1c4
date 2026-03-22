@@ -377,7 +377,7 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
           onClick={onSkip}
           disabled={isAnalyzing}
         >
-          Hoppa över →
+          Skip →
         </Button>
       </div>
     </div>
