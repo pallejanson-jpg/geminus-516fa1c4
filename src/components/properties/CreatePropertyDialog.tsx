@@ -228,7 +228,7 @@ export default function CreatePropertyDialog({
         toast({ title: 'Senslinc failed', description: data?.error, variant: 'destructive' });
       }
     } catch (err: any) {
-      toast({ title: 'Senslinc test misslyckades', description: err.message, variant: 'destructive' });
+      toast({ title: 'Senslinc test failed', description: err.message, variant: 'destructive' });
     } finally {
       setTestingSl(false);
     }
