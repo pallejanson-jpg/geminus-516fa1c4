@@ -193,8 +193,8 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
       
       stopPolling();
       toast({
-        title: 'Skanning avbruten',
-        description: 'Skanningen har avbrutits. Hittade objekt finns kvar för granskning.',
+        title: 'Scan cancelled',
+        description: 'The scan has been cancelled. Detected objects are still available for review.',
       });
       
       onScanCancelled();
