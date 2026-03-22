@@ -260,7 +260,7 @@ const AccFolderNode: React.FC<{
 
                     {/* Empty folder message */}
                     {(!folder.items || folder.items.length === 0) && !hasChildren && (
-                        <p className="px-2.5 pl-8 text-xs text-muted-foreground italic">Inga filer i denna mapp.</p>
+                        <p className="px-2.5 pl-8 text-xs text-muted-foreground italic">No files in this folder.</p>
                     )}
 
                     {folder.truncated && (
