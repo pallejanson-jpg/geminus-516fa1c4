@@ -376,7 +376,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
           variant="ghost" 
           size="icon"
           className="h-9 w-9 sm:h-10 sm:w-10 bg-black/30 hover:bg-black/60 backdrop-blur-sm rounded-full text-white"
-          aria-label="Tillbaka"
+          aria-label="Back"
         >
           <ArrowLeft size={18} className="sm:hidden" />
           <ArrowLeft size={20} className="hidden sm:block" />
