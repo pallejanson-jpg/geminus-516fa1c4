@@ -202,7 +202,7 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
                       <FormControl>
                         <ClearableInput
                           type="tel"
-                          placeholder="Fyll i telefonnummer"
+                          placeholder="Enter phone number"
                           className="h-12 rounded-xl bg-muted/50 border-0 focus-visible:ring-1 text-base"
                           value={field.value || ''}
                           onChange={field.onChange}
