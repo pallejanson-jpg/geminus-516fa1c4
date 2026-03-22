@@ -349,7 +349,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
           {/* Picking origin banner */}
           {pickingOrigin && (
             <div className="bg-primary/10 border border-primary/30 rounded-md px-2 py-1.5 text-xs text-primary font-medium text-center animate-pulse">
-              Klicka i kartan för att välja startpunkt
+              Click on the map to select start point
             </div>
           )}
 
