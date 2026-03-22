@@ -13,9 +13,9 @@ interface IleanEmbeddedChatProps {
 }
 
 const STARTER_QUESTIONS = [
-  'Vilka dokument finns för denna byggnad?',
-  'Finns det driftkort för ventilationen?',
-  'Vad säger brandskyddsdokumentationen?',
+  'What documents are available for this building?',
+  'Are there operation cards for the ventilation?',
+  'What does the fire safety documentation say?',
 ];
 
 export default function IleanEmbeddedChat({ buildingFmGuid, buildingName }: IleanEmbeddedChatProps) {
