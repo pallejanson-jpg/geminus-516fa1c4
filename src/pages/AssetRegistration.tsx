@@ -117,17 +117,17 @@ function AssetRegistrationForm({
       });
 
       if (error) throw new Error(error.message);
-      if (!data?.success) throw new Error(data?.error || 'Okänt fel vid skapande');
+      if (!data?.success) throw new Error(data?.error || 'Unknown error during creation');
 
-      toast.success('Tillgång registrerad!', {
-        description: `${designation} har lagts till i ${registrationContext.parentNode.commonName || registrationContext.parentNode.name}`,
+      toast.success('Asset registered!', {
+        description: `${designation} has been added to ${registrationContext.parentNode.commonName || registrationContext.parentNode.name}`,
       });
 
       onComplete();
     } catch (error) {
       console.error('Failed to create asset:', error);
-      toast.error('Kunde inte registrera tillgång', {
-        description: error instanceof Error ? error.message : 'Ett oväntat fel inträffade',
+      toast.error('Could not register asset', {
+        description: error instanceof Error ? error.message : 'An unexpected error occurred',
       });
     } finally {
       setIsLoading(false);
