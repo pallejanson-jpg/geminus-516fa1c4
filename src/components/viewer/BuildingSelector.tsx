@@ -180,7 +180,7 @@ const BuildingSelector: React.FC = () => {
       toast({ title: "View deleted" });
     } catch (err) {
       console.error('Failed to delete view:', err);
-      toast({ title: "Fel", description: "Kunde inte ta bort vyn", variant: "destructive" });
+      toast({ title: "Error", description: "Could not delete the view", variant: "destructive" });
     }
   };
 
