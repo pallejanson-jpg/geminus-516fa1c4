@@ -177,7 +177,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
               {/* Dynamic apps */}
               {sidebarOrder.length > 0 && (
                 <div>
-                  <p className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Integrationer</p>
+                  <p className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Integrations</p>
                   <div className="flex flex-wrap gap-3">
                     {sidebarOrder.map((item) => {
                       const meta = SIDEBAR_ITEM_META[item.id];

@@ -31,7 +31,7 @@ const FILL_APPS = ['portfolio', 'navigation', 'fma_plus', 'fma_native', 'entity_
 
 const LazyFallback = () => (
     <div className="flex-1 flex items-center justify-center">
-        <Spinner size="lg" label="Laddar..." />
+        <Spinner size="lg" label="Loading..." />
     </div>
 );
 
