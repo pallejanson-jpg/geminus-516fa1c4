@@ -556,7 +556,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                             {parseFloat(latitudeInput).toFixed(4)}, {parseFloat(longitudeInput).toFixed(4)}
                           </span>
                         ) : (
-                          <span className="italic">Ingen position satt</span>
+                          <span className="italic">No position set</span>
                         )}
                       </div>
                       <Button 
