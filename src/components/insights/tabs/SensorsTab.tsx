@@ -141,7 +141,7 @@ const BuildingTrendChart: React.FC<BuildingTrendChartProps> = ({ rooms, liveMach
             strokeDasharray={isLive ? '0' : '4 2'}
             dot={false}
             connectNulls
-            name={`Snitt ${config.label}`}
+            name={`Avg ${config.label}`}
           />
         </LineChart>
       </ResponsiveContainer>
