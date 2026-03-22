@@ -131,7 +131,7 @@ const ProfileSettings: React.FC = () => {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="email">E-post</Label>
+          <Label htmlFor="email">Email</Label>
           <Input
             id="email"
             type="email"
