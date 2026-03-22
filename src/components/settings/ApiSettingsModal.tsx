@@ -761,7 +761,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const handleSyncAccAssets = async () => {
         const effectiveProjectId = manualAccProjectId.trim() || selectedAccProjectId;
         if (!effectiveProjectId) {
-            toast({ variant: 'destructive', title: 'Välj projekt', description: 'Välj ett ACC-projekt eller ange ett projekt-ID manuellt.' });
+            toast({ variant: 'destructive', title: 'Select project', description: 'Select an ACC project or enter a project ID manually.' });
             return;
         }
         setIsSyncingAccAssets(true);
