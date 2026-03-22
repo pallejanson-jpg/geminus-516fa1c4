@@ -123,7 +123,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
   useEffect(() => {
     if (pendingPosition) {
       setCoordinates(pendingPosition);
-      toast.success('Position vald!', {
+      toast.success('Position selected!', {
         description: `X: ${pendingPosition.x.toFixed(2)}, Y: ${pendingPosition.y.toFixed(2)}, Z: ${pendingPosition.z.toFixed(2)}`,
       });
       if (onPendingPositionConsumed) {
