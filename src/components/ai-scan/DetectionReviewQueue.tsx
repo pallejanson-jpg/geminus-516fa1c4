@@ -316,7 +316,7 @@ const ApprovalDialog: React.FC<{
 
           {/* Floor */}
           <div className="space-y-1">
-            <Label>Våning</Label>
+            <Label>Floor</Label>
             <Select
               value={form.levelFmGuid || 'none'}
               onValueChange={val => setForm(prev => ({ ...prev, levelFmGuid: val === 'none' ? null : val, roomFmGuid: null }))}
