@@ -175,7 +175,7 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
                       <FormControl>
                         <ClearableInput
                           type="email"
-                          placeholder="Fyll i e-post om du vill ha återkoppling"
+                          placeholder="Enter email for follow-up"
                           className="h-12 rounded-xl bg-muted/50 border-0 focus-visible:ring-1 text-base"
                           value={field.value || ''}
                           onChange={field.onChange}
