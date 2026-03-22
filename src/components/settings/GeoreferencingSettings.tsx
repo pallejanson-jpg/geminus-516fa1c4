@@ -126,7 +126,7 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
             console.error('Failed to save georeferencing settings:', error);
             toast({
                 variant: "destructive",
-                title: "Kunde inte spara",
+                title: "Could not save",
                 description: error.message,
             });
         } finally {
