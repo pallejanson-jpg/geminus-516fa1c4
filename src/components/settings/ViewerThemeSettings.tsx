@@ -488,7 +488,7 @@ const ViewerThemeSettings: React.FC = () => {
                       onClick={() => handleEditTheme(theme)}
                     >
                       <Edit2 className="h-3.5 w-3.5 mr-1.5" />
-                      Redigera
+                      Edit
                     </Button>
                     {!theme.is_system && (
                       <Button
