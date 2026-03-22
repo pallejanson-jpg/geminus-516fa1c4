@@ -159,7 +159,7 @@ const FmAccessObjectPanel: React.FC<FmAccessObjectPanelProps> = ({ selectedNode,
           ) : (
             <>
               <Button size="sm" variant="outline" onClick={handleEdit}>
-                <Pencil size={14} className="mr-1" /> Redigera
+                <Pencil size={14} className="mr-1" /> Edit
               </Button>
               <Button size="sm" variant="outline" onClick={() => onRefresh()}>
                 <RefreshCw size={14} className="mr-1" /> Uppdatera
