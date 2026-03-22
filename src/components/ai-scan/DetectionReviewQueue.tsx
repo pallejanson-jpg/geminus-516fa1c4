@@ -632,7 +632,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
             {statusFilter === 'pending' && pendingCount > 0 && (
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={selectAll}>
-                  Välj alla
+                  Select All
                 </Button>
                 {selectedIds.size > 0 && (
                   <>
