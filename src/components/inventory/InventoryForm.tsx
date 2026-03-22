@@ -670,7 +670,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
             ) : (
               <div className="text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-md flex items-center gap-2">
                 <Info className="h-3.5 w-3.5 shrink-0" />
-                <span>360+ kräver att Ivion Site ID är konfigurerat i byggnadsinställningarna.</span>
+                <span>360+ requires an Ivion Site ID to be configured in building settings.</span>
               </div>
             )}
           </div>
