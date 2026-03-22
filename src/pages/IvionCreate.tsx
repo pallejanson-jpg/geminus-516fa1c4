@@ -240,7 +240,7 @@ const IvionCreate: React.FC = () => {
 
   const handlePositionPicked = (coords: { x: number; y: number; z: number }) => {
     setCoordinates(coords);
-    toast.success('Position vald');
+    toast.success('Position selected');
   };
 
   // Group symbols by category
