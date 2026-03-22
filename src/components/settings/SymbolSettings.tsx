@@ -244,8 +244,8 @@ const SymbolSettings: React.FC = () => {
         {symbols.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <Circle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Inga symboler konfigurerade</p>
-            <p className="text-xs mt-1">Klicka "Ny symbol" för att skapa en</p>
+            <p>No symbols configured</p>
+            <p className="text-xs mt-1">Click "New Symbol" to create one</p>
           </div>
         ) : (
           <Accordion type="single" collapsible className="space-y-2">
