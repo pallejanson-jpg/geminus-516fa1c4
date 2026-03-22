@@ -227,10 +227,10 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
 
           {/* To room */}
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Till rum</Label>
+            <Label className="text-xs text-muted-foreground">To room</Label>
             <Select value={toRoom} onValueChange={setToRoom}>
               <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Välj målrum" />
+                <SelectValue placeholder="Select target room" />
               </SelectTrigger>
               <SelectContent>
                 {rooms.map((room: any) => (
