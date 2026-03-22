@@ -231,7 +231,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
               )}
               {supportCase.external_reference && (
                 <div>
-                  <span className="text-muted-foreground">Referensnummer</span>
+                  <span className="text-muted-foreground">Reference Number</span>
                   <p className="font-medium text-foreground">{supportCase.external_reference}</p>
                 </div>
               )}
