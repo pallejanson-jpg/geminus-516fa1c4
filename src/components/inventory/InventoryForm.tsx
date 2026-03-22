@@ -242,7 +242,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
   // Handler for syncing POIs from Ivion 360+
   const handleSync360 = async () => {
     if (!buildingSettings?.ivion_site_id || !buildingFmGuid) {
-      toast.error('Ivion ej konfigurerat för denna byggnad');
+      toast.error('Ivion not configured for this building');
       return;
     }
 
