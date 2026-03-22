@@ -379,7 +379,7 @@ const ViewerThemeSettings: React.FC = () => {
 
                   {/* Color mappings */}
                   <div className="space-y-2">
-                    <Label className="text-xs">Färgmappningar</Label>
+                    <Label className="text-xs">Color Mappings</Label>
                     <ScrollArea className="h-[200px] pr-3">
                       <div className="space-y-2">
                         {IFC_CATEGORIES.map((cat) => {
