@@ -84,7 +84,7 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
             </button>
           )}
           <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-semibold text-white drop-shadow-md">Anmäl fel</h1>
+            <h1 className="text-lg font-semibold text-white drop-shadow-md">Report Fault</h1>
             {buildingName && (
               <p className="text-sm text-white/80 drop-shadow-sm truncate">{buildingName}{spaceName ? ` · ${spaceName}` : ''}</p>
             )}
