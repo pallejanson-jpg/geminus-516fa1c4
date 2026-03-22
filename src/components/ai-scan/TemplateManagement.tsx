@@ -425,12 +425,12 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto text-foreground">
           <DialogHeader>
             <DialogTitle>
-              {editingTemplate ? 'Redigera mall' : 'Ny detektionsmall'}
+              {editingTemplate ? 'Edit Template' : 'New Detection Template'}
             </DialogTitle>
             <DialogDescription>
               {editingTemplate 
-                ? 'Uppdatera inställningarna för denna detektionsmall.'
-                : 'Skapa en ny mall för att lära AI:n att hitta en ny typ av objekt.'}
+                ? 'Update the settings for this detection template.'
+                : 'Create a new template to teach the AI to find a new type of object.'}
             </DialogDescription>
           </DialogHeader>
 
