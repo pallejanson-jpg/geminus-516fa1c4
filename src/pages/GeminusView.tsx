@@ -106,7 +106,7 @@ export default function GeminusView() {
 
       const converterModule = await import('@/services/acc-xkt-converter');
       setConversionProgress(25);
-      log('Startar IFC-parsning...');
+      log('Starting IFC parsing...');
 
       const result = await converterModule.convertToXktWithMetadata(buffer, (msg: string) => log(msg));
       setConversionProgress(90);
