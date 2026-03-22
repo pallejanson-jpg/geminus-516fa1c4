@@ -241,7 +241,7 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
                   className={cn("w-full justify-start text-left font-normal", !desiredDate && "text-muted-foreground")}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {desiredDate ? format(desiredDate, 'PPP') : 'Välj datum...'}
+                  {desiredDate ? format(desiredDate, 'PPP') : 'Select date...'}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
