@@ -138,7 +138,7 @@ function AssetRegistrationForm({
     <Card className="border-t rounded-t-none">
       <CardHeader className="py-3 px-4">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Registrera tillgång</CardTitle>
+          <CardTitle className="text-base">Register Asset</CardTitle>
           <Button variant="ghost" size="icon" onClick={onCancel} className="h-8 w-8">
             <X className="h-4 w-4" />
           </Button>
