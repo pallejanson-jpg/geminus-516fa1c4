@@ -320,11 +320,11 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
 
       if (!resp.ok) {
           const errorData = await resp.json().catch(() => ({}));
-          if (resp.status === 429) throw { status: 429, message: "För många förfrågningar. Vänta en stund och försök igen." };
-          if (resp.status === 402) throw { status: 402, message: "AI-kredit förbrukad. Kontakta din administratör." };
-          if (resp.status === 401) throw { status: 401, message: "Du är inte inloggad. Logga in och försök igen." };
-          if (resp.status === 503) throw { status: 503, message: "AI-tjänsten är tillfälligt otillgänglig. Försök igen om en stund." };
-          throw new Error(errorData.error || `Förfrågan misslyckades (${resp.status})`);
+          if (resp.status === 429) throw { status: 429, message: "Too many requests. Please wait and try again." };
+          if (resp.status === 402) throw { status: 402, message: "AI credits used up. Contact your administrator." };
+          if (resp.status === 401) throw { status: 401, message: "You are not logged in. Please log in and try again." };
+          if (resp.status === 503) throw { status: 503, message: "AI service temporarily unavailable. Try again shortly." };
+          throw new Error(errorData.error || `Request failed (${resp.status})`);
         }
         if (!resp.body) throw new Error("No response");
 
