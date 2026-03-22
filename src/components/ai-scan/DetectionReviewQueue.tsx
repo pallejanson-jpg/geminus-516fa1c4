@@ -232,7 +232,7 @@ const ApprovalDialog: React.FC<{
     <Dialog open={open} onOpenChange={() => onClose()}>
       <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Godkänn detektion</DialogTitle>
+          <DialogTitle>Approve Detection</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
