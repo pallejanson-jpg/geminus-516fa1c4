@@ -807,7 +807,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
       {/* Stats */}
       <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
-        <span>{isProcessing ? 'Bearbetar...' : `${rooms.length} rum hittade`}</span>
+        <span>{isProcessing ? 'Processing…' : `${rooms.length} rooms found`}</span>
         {colorizedCount > 0 && <span className="text-primary">{colorizedCount} färglagda</span>}
       </div>
 

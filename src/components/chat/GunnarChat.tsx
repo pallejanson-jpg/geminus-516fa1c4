@@ -762,10 +762,10 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
           const langPrefix = currentSettings.speechLang.split('-')[0];
           const filtered = allVoices.filter(v => v.lang.startsWith(langPrefix));
           if (filtered.length === 0) {
-            setMessages(prev => [...prev, { role: "assistant", content: "Inga röster tillgängliga för det valda språket i denna webbläsare." }]);
+            setMessages(prev => [...prev, { role: "assistant", content: "No voices available for the selected language in this browser." }]);
           } else {
             const buttons = filtered.map(v => `[🔊 ${v.name}](action:selectVoice:${encodeURIComponent(v.name)})`).join('\n');
-            setMessages(prev => [...prev, { role: "assistant", content: `Välj en röst:\n\n${buttons}` }]);
+            setMessages(prev => [...prev, { role: "assistant", content: `Choose a voice:\n\n${buttons}` }]);
           }
         }
         break;
