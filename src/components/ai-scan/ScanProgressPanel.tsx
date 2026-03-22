@@ -499,10 +499,10 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
       <AlertDialog open={!!deleteJobId} onOpenChange={() => setDeleteJobId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Ta bort skanning?</AlertDialogTitle>
+            <AlertDialogTitle>Delete scan?</AlertDialogTitle>
             <AlertDialogDescription>
-              Denna åtgärd tar bort skanningsjobbet och alla relaterade detektioner som 
-              ännu inte har granskats. Godkända objekt påverkas inte.
+              This will remove the scan job and all related detections that have not yet been reviewed. 
+              Approved objects will not be affected.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
