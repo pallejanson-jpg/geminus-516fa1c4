@@ -290,7 +290,7 @@ const SymbolSettings: React.FC = () => {
                 <AccordionContent className="px-4 pb-4 pt-2">
                   <div className="space-y-3">
                     <div className="text-xs text-muted-foreground">
-                      <span className="font-medium">Kategori:</span> {symbol.category}
+                      <span className="font-medium">Category:</span> {symbol.category}
                     </div>
                     
                     {symbol.icon_url && (
