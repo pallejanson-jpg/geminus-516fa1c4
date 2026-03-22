@@ -67,8 +67,8 @@ export const DataConsistencyBanner: React.FC = () => {
     setIsSyncing(true);
     try {
       toast({
-        title: 'Synkroniserar...',
-        description: 'Tvåvägs-synk: hämtar från och pushar till Asset+',
+        title: 'Syncing...',
+        description: 'Two-way sync: pulling from and pushing to Asset+',
       });
 
       const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
