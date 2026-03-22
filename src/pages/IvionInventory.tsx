@@ -441,7 +441,7 @@ const IvionInventory: React.FC = () => {
                 className="gap-2 border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
               >
                 <RefreshCw className="h-4 w-4" />
-                <span className="hidden md:inline">Ladda ny POI</span>
+                <span className="hidden md:inline">Load New POI</span>
                 <Badge variant="secondary" className="ml-1 bg-amber-100 text-amber-700">1</Badge>
               </Button>
             )}
