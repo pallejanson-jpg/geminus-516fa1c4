@@ -127,8 +127,8 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
                 onClick={() => setShow360Picker(true)}
               >
                 <Camera className="h-8 w-8" />
-                <span className="text-base font-medium">Välj i 360°-vy</span>
-                <span className="text-xs opacity-80">Navigera → Bekräfta position</span>
+                <span className="text-base font-medium">Select in 360° view</span>
+                <span className="text-xs opacity-80">Navigate → Confirm position</span>
               </Button>
             )}
 
