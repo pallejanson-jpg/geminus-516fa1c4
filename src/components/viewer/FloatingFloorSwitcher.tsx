@@ -226,7 +226,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                 visibleFloorIds.size === floors.length && 'bg-primary/15 text-primary font-medium',
               )}
             >
-              Alla våningar
+              All floors
             </button>
           </div>
         </PopoverContent>

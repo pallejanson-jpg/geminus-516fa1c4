@@ -56,18 +56,17 @@ const CreateViewDialog: React.FC<CreateViewDialogProps> = ({
 
   const handleSave = async () => {
     if (!name.trim()) {
-      setError('Namn krävs');
+      setError('Name is required');
       return;
     }
     
     setError(null);
     try {
       await onSave(name.trim(), description.trim());
-      // Reset form on success
       setName('');
       setDescription('');
     } catch (e) {
-      setError('Kunde inte spara vyn');
+      setError('Could not save the view');
     }
   };
 
@@ -84,10 +83,10 @@ const CreateViewDialog: React.FC<CreateViewDialogProps> = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Camera className="h-5 w-5 text-primary" />
-            Skapa sparad vy
+            Create Saved View
           </DialogTitle>
           <DialogDescription>
-            Spara den aktuella vyn med alla inställningar för snabb åtkomst senare.
+            Save the current view with all settings for quick access later.
           </DialogDescription>
         </DialogHeader>
 
@@ -97,7 +96,7 @@ const CreateViewDialog: React.FC<CreateViewDialogProps> = ({
             <div className="rounded-lg overflow-hidden border bg-muted">
               <img
                 src={viewState.screenshotDataUrl}
-                alt="Vy förhandsvisning"
+                alt="View preview"
                 className="w-full h-40 object-cover"
               />
             </div>
@@ -106,30 +105,30 @@ const CreateViewDialog: React.FC<CreateViewDialogProps> = ({
           {/* Building info */}
           {viewState?.buildingName && (
             <p className="text-sm text-muted-foreground">
-              Byggnad: <span className="font-medium text-foreground">{viewState.buildingName}</span>
+              Building: <span className="font-medium text-foreground">{viewState.buildingName}</span>
             </p>
           )}
 
           {/* Name input */}
           <div className="space-y-2">
-            <Label htmlFor="view-name">Namn *</Label>
+            <Label htmlFor="view-name">Name *</Label>
             <Input
               id="view-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="T.ex. Plan 3 - Brandskydd"
+              placeholder="E.g. Floor 3 - Fire safety"
               disabled={isSaving}
             />
           </div>
 
           {/* Description input */}
           <div className="space-y-2">
-            <Label htmlFor="view-description">Beskrivning (valfritt)</Label>
+            <Label htmlFor="view-description">Description (optional)</Label>
             <Textarea
               id="view-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Beskriv vyn..."
+              placeholder="Describe the view..."
               rows={2}
               disabled={isSaving}
             />
@@ -143,16 +142,16 @@ const CreateViewDialog: React.FC<CreateViewDialogProps> = ({
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose} disabled={isSaving}>
-            Avbryt
+            Cancel
           </Button>
           <Button onClick={handleSave} disabled={isSaving || !name.trim()}>
             {isSaving ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Sparar...
+                Saving...
               </>
             ) : (
-              'Spara vy'
+              'Save view'
             )}
           </Button>
         </DialogFooter>

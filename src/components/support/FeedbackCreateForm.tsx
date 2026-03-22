@@ -65,12 +65,12 @@ const FeedbackCreateForm: React.FC<FeedbackCreateFormProps> = ({ open, onClose, 
         ...(threads || []).map(t => ({
           type: 'thread' as const,
           title: t.title,
-          description: t.status === 'done' ? 'Redan genomfört' : `Status: ${t.status}`,
+          description: t.status === 'done' ? 'Already implemented' : `Status: ${t.status}`,
           id: t.id,
         })),
         ...(docs || []).map(d => ({
           type: 'doc' as const,
-          title: d.file_name || 'Hjälpdokumentation',
+          title: d.file_name || 'Help documentation',
           description: d.content?.substring(0, 100) + '…',
           id: d.id,
         })),
@@ -114,7 +114,7 @@ const FeedbackCreateForm: React.FC<FeedbackCreateFormProps> = ({ open, onClose, 
         console.warn('Failed to send notification:', notifyErr);
       }
 
-      toast({ title: 'Tack för din feedback!', description: 'Ditt förslag har skickats.' });
+      toast({ title: 'Thanks for your feedback!', description: 'Your suggestion has been submitted.' });
       onCreated();
     } catch (err) {
       console.error('Failed to create feedback:', err);
@@ -128,20 +128,20 @@ const FeedbackCreateForm: React.FC<FeedbackCreateFormProps> = ({ open, onClose, 
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Ny idé / feedback</DialogTitle>
+          <DialogTitle>New idea / feedback</DialogTitle>
           <DialogDescription>
-            Dela dina tankar om hur Geminus kan förbättras
+            Share your thoughts on how Geminus can be improved
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="fb-title">Titel</Label>
+            <Label htmlFor="fb-title">Title</Label>
             <Input
               id="fb-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Beskriv din idé kortfattat…"
+              placeholder="Describe your idea briefly…"
             />
           </div>
 
@@ -150,9 +150,9 @@ const FeedbackCreateForm: React.FC<FeedbackCreateFormProps> = ({ open, onClose, 
             <div className="rounded-md border bg-muted/50 p-3 space-y-2">
               <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
                 {isSearching ? (
-                  <><Loader2 className="h-3 w-3 animate-spin" /> Söker liknande…</>
+                  <><Loader2 className="h-3 w-3 animate-spin" /> Searching similar…</>
                 ) : (
-                  <><Search className="h-3 w-3" /> Liknande ärenden hittade</>
+                  <><Search className="h-3 w-3" /> Similar items found</>
                 )}
               </div>
               {similarResults.map((r, i) => (
@@ -168,7 +168,7 @@ const FeedbackCreateForm: React.FC<FeedbackCreateFormProps> = ({ open, onClose, 
                       <p className="text-muted-foreground line-clamp-1">{r.description}</p>
                     )}
                     <Badge variant="outline" className="text-[9px] mt-0.5">
-                      {r.type === 'thread' ? 'Befintligt ärende' : 'Befintlig funktion'}
+                      {r.type === 'thread' ? 'Existing case' : 'Existing feature'}
                     </Badge>
                   </div>
                 </div>
@@ -177,36 +177,36 @@ const FeedbackCreateForm: React.FC<FeedbackCreateFormProps> = ({ open, onClose, 
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="fb-desc">Beskrivning</Label>
+            <Label htmlFor="fb-desc">Description</Label>
             <Textarea
               id="fb-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Beskriv i detalj vad du önskar…"
+              placeholder="Describe in detail what you wish…"
               rows={4}
             />
           </div>
 
           <div className="space-y-2">
-            <Label>Kategori</Label>
+            <Label>Category</Label>
             <Select value={category} onValueChange={setCategory}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="suggestion">Förslag</SelectItem>
-                <SelectItem value="ux_issue">UX-problem</SelectItem>
-                <SelectItem value="bug">Bugg</SelectItem>
-                <SelectItem value="question">Fråga</SelectItem>
+                <SelectItem value="suggestion">Suggestion</SelectItem>
+                <SelectItem value="ux_issue">UX issue</SelectItem>
+                <SelectItem value="bug">Bug</SelectItem>
+                <SelectItem value="question">Question</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={onClose}>Avbryt</Button>
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
             <Button onClick={handleSubmit} disabled={!title.trim() || isSubmitting}>
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-              Skicka
+              Submit
             </Button>
           </div>
         </div>

@@ -148,11 +148,11 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
         if (error) console.warn('Local backup save failed:', error);
       });
 
-      toast({ title: 'Ärende skapat' });
+      toast({ title: 'Case created' });
       onCreated();
     } catch (err) {
       console.error('Failed to create support case:', err);
-      toast({ title: 'Kunde inte skapa ärende', variant: 'destructive' });
+      toast({ title: 'Could not create case', variant: 'destructive' });
     } finally {
       setSubmitting(false);
     }
@@ -162,19 +162,19 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
     <Sheet open={open} onOpenChange={o => !o && onClose()}>
       <SheetContent className="sm:max-w-lg w-full overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>Nytt supportärende</SheetTitle>
-          <SheetDescription>Beskriv ditt ärende så kontaktar vi dig</SheetDescription>
+          <SheetTitle>New support case</SheetTitle>
+          <SheetDescription>Describe your case and we will get back to you</SheetDescription>
         </SheetHeader>
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="title">Titel *</Label>
-            <Input id="title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Kort beskrivning av ärendet" />
+            <Label htmlFor="title">Title *</Label>
+            <Input id="title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Brief description of the case" />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Typ av ärende</Label>
+              <Label>Case type</Label>
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -185,30 +185,30 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Prioritet</Label>
+              <Label>Priority</Label>
               <Select value={priority} onValueChange={setPriority}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="low">Låg</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
                   <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">Hög</SelectItem>
-                  <SelectItem value="critical">Kritisk</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="critical">Critical</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Beskrivning</Label>
-            <Textarea id="description" value={description} onChange={e => setDescription(e.target.value)} placeholder="Detaljerad beskrivning..." rows={4} />
+            <Label htmlFor="description">Description</Label>
+            <Textarea id="description" value={description} onChange={e => setDescription(e.target.value)} placeholder="Detailed description..." rows={4} />
           </div>
 
           {/* Building selector */}
           <div className="space-y-2">
-            <Label>Byggnad</Label>
+            <Label>Building</Label>
             {buildings.length > 0 ? (
               <Select value={buildingGuid} onValueChange={handleBuildingChange}>
-                <SelectTrigger><SelectValue placeholder="Välj byggnad..." /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select building..." /></SelectTrigger>
                 <SelectContent>
                   {buildings.map(b => (
                     <SelectItem key={b.fm_guid} value={b.fm_guid}>{b.name}</SelectItem>
@@ -216,24 +216,24 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
                 </SelectContent>
               </Select>
             ) : (
-              <Input value={buildingName} onChange={e => setBuildingName(e.target.value)} placeholder="Byggnadsnamn" />
+              <Input value={buildingName} onChange={e => setBuildingName(e.target.value)} placeholder="Building name" />
             )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="location">Plats / Utrymme</Label>
-              <Input id="location" value={locationDescription} onChange={e => setLocationDescription(e.target.value)} placeholder="T.ex. Plan 3, rum 301" />
+              <Label htmlFor="location">Location / Space</Label>
+              <Input id="location" value={locationDescription} onChange={e => setLocationDescription(e.target.value)} placeholder="E.g. Floor 3, room 301" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="installation">Installationsnummer</Label>
-              <Input id="installation" value={installationNumber} onChange={e => setInstallationNumber(e.target.value)} placeholder="T.ex. VVS-001" />
+              <Label htmlFor="installation">Installation number</Label>
+              <Input id="installation" value={installationNumber} onChange={e => setInstallationNumber(e.target.value)} placeholder="E.g. HVAC-001" />
             </div>
           </div>
 
           {/* Desired date */}
           <div className="space-y-2">
-            <Label>Önskat åtgärdsdatum</Label>
+            <Label>Desired resolution date</Label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -241,7 +241,7 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
                   className={cn("w-full justify-start text-left font-normal", !desiredDate && "text-muted-foreground")}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {desiredDate ? format(desiredDate, 'PPP') : 'Välj datum...'}
+                  {desiredDate ? format(desiredDate, 'PPP') : 'Select date...'}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
@@ -259,19 +259,19 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Kontakt e-post</Label>
-              <Input id="email" type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} placeholder="din@epost.se" />
+              <Label htmlFor="email">Contact email</Label>
+              <Input id="email" type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} placeholder="your@email.com" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="phone">Kontakt telefon</Label>
+              <Label htmlFor="phone">Contact phone</Label>
               <Input id="phone" type="tel" value={contactPhone} onChange={e => setContactPhone(e.target.value)} placeholder="+46..." />
             </div>
           </div>
 
           <div className="flex gap-2 pt-2">
-            <Button variant="outline" className="flex-1" onClick={onClose}>Avbryt</Button>
+            <Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
             <Button className="flex-1" onClick={handleSubmit} disabled={!title.trim() || submitting}>
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Skapa ärende'}
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Submit case'}
             </Button>
           </div>
         </div>

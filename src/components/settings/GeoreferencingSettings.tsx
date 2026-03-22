@@ -84,8 +84,8 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
         if (lat !== null && (isNaN(lat) || lat < -90 || lat > 90)) {
             toast({
                 variant: "destructive",
-                title: "Ogiltig latitud",
-                description: "Latitud måste vara mellan -90 och 90.",
+                title: "Invalid latitude",
+                description: "Latitude must be between -90 and 90.",
             });
             return;
         }
@@ -93,8 +93,8 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
         if (lng !== null && (isNaN(lng) || lng < -180 || lng > 180)) {
             toast({
                 variant: "destructive",
-                title: "Ogiltig longitud",
-                description: "Longitud måste vara mellan -180 och 180.",
+                title: "Invalid longitude",
+                description: "Longitude must be between -180 and 180.",
             });
             return;
         }
@@ -119,14 +119,14 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
             window.dispatchEvent(new Event('building-settings-changed'));
 
             toast({
-                title: "Koordinater sparade",
-                description: "Byggnadens georeferering har uppdaterats.",
+                title: "Coordinates saved",
+                description: "Building georeferencing has been updated.",
             });
         } catch (error: any) {
             console.error('Failed to save georeferencing settings:', error);
             toast({
                 variant: "destructive",
-                title: "Kunde inte spara",
+                title: "Could not save",
                 description: error.message,
             });
         } finally {
@@ -141,7 +141,7 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
             <CollapsibleTrigger className="flex items-center justify-between w-full text-left">
                 <div className="flex items-center gap-2">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium text-sm">Georeferering</span>
+                    <span className="font-medium text-sm">Georeferencing</span>
                     {hasCoordinates && (
                         <span className="text-xs text-muted-foreground">
                             ({settings.latitude?.toFixed(4)}, {settings.longitude?.toFixed(4)})
@@ -153,7 +153,7 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
             
             <CollapsibleContent className="pt-4 space-y-4">
                 <p className="text-xs text-muted-foreground">
-                    Koordinater krävs för synkronisering mellan 3D-vy och 360°-vy i Split View.
+                    Coordinates are required for synchronization between 3D view and 360° view in Split View.
                 </p>
 
                 {isLoading ? (
@@ -165,7 +165,7 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1.5">
                                 <Label htmlFor="latitude" className="text-xs">
-                                    Latitud
+                                    Latitude
                                 </Label>
                                 <Input
                                     id="latitude"
@@ -179,7 +179,7 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
                             </div>
                             <div className="space-y-1.5">
                                 <Label htmlFor="longitude" className="text-xs">
-                                    Longitud
+                                    Longitude
                                 </Label>
                                 <Input
                                     id="longitude"
@@ -197,7 +197,7 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
                             <div className="flex items-center justify-between">
                                 <Label className="text-xs flex items-center gap-1.5">
                                     <RotateCw className="h-3 w-3" />
-                                    Rotation (grader relativt norr)
+                                    Rotation (degrees relative to north)
                                 </Label>
                                 <span className="text-xs font-mono text-muted-foreground">
                                     {rotationValue}°
@@ -217,7 +217,7 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
                                 className="h-9 font-mono text-xs"
                             />
                             <p className="text-[10px] text-muted-foreground">
-                                GUID för byggnaden i FM Access (krävs för 2D-ritningar)
+                                GUID for the building in FM Access (required for 2D drawings)
                             </p>
                         </div>
                             <Slider
@@ -239,12 +239,12 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
                             {isSaving ? (
                                 <>
                                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                    Sparar...
+                                    Saving...
                                 </>
                             ) : (
                                 <>
                                     <Save className="h-4 w-4 mr-2" />
-                                    Spara koordinater
+                                    Save coordinates
                                 </>
                             )}
                         </Button>

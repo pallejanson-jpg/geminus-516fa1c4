@@ -36,32 +36,32 @@ export interface SupportCase {
 }
 
 const STATUS_FILTERS = [
-  { value: 'all', label: 'Alla' },
-  { value: 'New', label: 'Nytt' },
-  { value: 'UnderReview', label: 'Granskas' },
-  { value: 'AwaitingResponse', label: 'Väntar svar' },
-  { value: 'InProgress', label: 'Pågående' },
-  { value: 'Planned', label: 'Planerat' },
-  { value: 'Done', label: 'Klart' },
-  { value: 'Completed', label: 'Avslutat' },
-  { value: 'Closed', label: 'Stängt' },
+  { value: 'all', label: 'All' },
+  { value: 'New', label: 'New' },
+  { value: 'UnderReview', label: 'Under review' },
+  { value: 'AwaitingResponse', label: 'Awaiting response' },
+  { value: 'InProgress', label: 'In progress' },
+  { value: 'Planned', label: 'Planned' },
+  { value: 'Done', label: 'Done' },
+  { value: 'Completed', label: 'Completed' },
+  { value: 'Closed', label: 'Closed' },
 ];
 
 const STATUS_CONFIG: Record<string, { icon: React.ElementType; color: string; label: string }> = {
-  New: { icon: AlertCircle, color: 'text-blue-500', label: 'Nytt' },
-  UnderReview: { icon: Eye, color: 'text-purple-500', label: 'Granskas' },
-  AwaitingResponse: { icon: MessageSquare, color: 'text-amber-500', label: 'Väntar svar' },
-  AwaitingOrder: { icon: Package, color: 'text-orange-500', label: 'Väntar order' },
-  Planned: { icon: FileText, color: 'text-indigo-500', label: 'Planerat' },
-  InProgress: { icon: PlayCircle, color: 'text-cyan-500', label: 'Pågående' },
-  Done: { icon: CheckCircle, color: 'text-green-500', label: 'Klart' },
-  Completed: { icon: CheckCircle, color: 'text-emerald-600', label: 'Avslutat' },
-  Closed: { icon: XCircle, color: 'text-muted-foreground', label: 'Stängt' },
+  New: { icon: AlertCircle, color: 'text-blue-500', label: 'New' },
+  UnderReview: { icon: Eye, color: 'text-purple-500', label: 'Under review' },
+  AwaitingResponse: { icon: MessageSquare, color: 'text-amber-500', label: 'Awaiting response' },
+  AwaitingOrder: { icon: Package, color: 'text-orange-500', label: 'Awaiting order' },
+  Planned: { icon: FileText, color: 'text-indigo-500', label: 'Planned' },
+  InProgress: { icon: PlayCircle, color: 'text-cyan-500', label: 'In progress' },
+  Done: { icon: CheckCircle, color: 'text-green-500', label: 'Done' },
+  Completed: { icon: CheckCircle, color: 'text-emerald-600', label: 'Completed' },
+  Closed: { icon: XCircle, color: 'text-muted-foreground', label: 'Closed' },
   // Fallbacks for local cases
-  new: { icon: AlertCircle, color: 'text-blue-500', label: 'Nytt' },
-  in_progress: { icon: Clock, color: 'text-amber-500', label: 'Pågående' },
-  resolved: { icon: CheckCircle, color: 'text-green-500', label: 'Löst' },
-  closed: { icon: XCircle, color: 'text-muted-foreground', label: 'Stängt' },
+  new: { icon: AlertCircle, color: 'text-blue-500', label: 'New' },
+  in_progress: { icon: Clock, color: 'text-amber-500', label: 'In progress' },
+  resolved: { icon: CheckCircle, color: 'text-green-500', label: 'Resolved' },
+  closed: { icon: XCircle, color: 'text-muted-foreground', label: 'Closed' },
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -162,7 +162,7 @@ const SupportCaseList: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to fetch support cases:', err);
-      setError('Kunde inte hämta ärenden från SWG');
+      setError('Could not fetch cases from SWG');
       setCases([]);
     } finally {
       setLoading(false);
@@ -225,7 +225,7 @@ const SupportCaseList: React.FC = () => {
       {/* Case list */}
       {filteredCases.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground text-sm">
-          {searchQuery ? 'Inga ärenden matchar sökningen' : 'Inga ärenden att visa'}
+          {searchQuery ? 'No cases match your search' : 'No cases to display'}
         </div>
       ) : (
         <div className="space-y-2">
