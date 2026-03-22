@@ -400,7 +400,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
           variant="ghost" 
           size="icon"
           className="h-9 w-9 bg-black/30 hover:bg-black/60 backdrop-blur-sm rounded-full text-white"
-          title="Inställningar"
+          title="Settings"
         >
           <Settings2 size={16} className={showSettings ? 'text-primary' : ''} />
         </Button>
