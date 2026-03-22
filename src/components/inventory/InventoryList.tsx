@@ -63,8 +63,8 @@ const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading, onEdit,
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground py-12">
         <Package className="h-12 w-12 mb-3 opacity-50" />
-        <p className="text-sm">Inga registrerade tillgångar ännu</p>
-        <p className="text-xs mt-1">Tryck "Ny tillgång" för att börja</p>
+        <p className="text-sm">No registered assets yet</p>
+        <p className="text-xs mt-1">Press "New asset" to get started</p>
       </div>
     );
   }
