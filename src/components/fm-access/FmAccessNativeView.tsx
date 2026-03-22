@@ -155,7 +155,7 @@ const FmAccessNativeView: React.FC = () => {
             {selectedNode ? (
               <div className="flex flex-col h-full">
                 <Button variant="ghost" size="sm" className="m-2 self-start text-xs" onClick={() => setSelectedNode(null)}>
-                  ← Tillbaka till träd
+                  ← Back to tree
                 </Button>
                 <FmAccessObjectPanel selectedNode={selectedNode} onRefresh={handleRefresh} onCreateChild={handleCreateChild} />
               </div>
