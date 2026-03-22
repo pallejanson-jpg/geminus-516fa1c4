@@ -205,7 +205,7 @@ export default function GeminusView() {
         <div className="flex-1 flex flex-col items-center justify-center gap-6 p-6">
           <h1 className="text-xl font-bold text-foreground">Geminus View</h1>
           <p className="text-sm text-muted-foreground text-center max-w-md">
-            Öppna en befintlig byggnad i 3D-viewern eller ladda upp en IFC-fil för snabbvisning.
+            Open an existing building in the 3D viewer or upload an IFC file for quick preview.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 w-full max-w-sm">
             <Button
@@ -214,7 +214,7 @@ export default function GeminusView() {
               onClick={() => setMode('buildings')}
             >
               <Building2 className="h-6 w-6 text-primary" />
-              <span className="text-sm">Välj byggnad</span>
+              <span className="text-sm">Select Building</span>
             </Button>
             <label className="flex-1">
               <input
@@ -231,7 +231,7 @@ export default function GeminusView() {
                 "hover:bg-accent transition-colors text-sm"
               )}>
                 <Upload className="h-6 w-6 text-primary" />
-                <span>Ladda upp IFC</span>
+                <span>Upload IFC</span>
               </div>
             </label>
           </div>
