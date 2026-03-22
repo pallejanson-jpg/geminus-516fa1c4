@@ -340,7 +340,7 @@ export default function GeminusView() {
 
           {conversionError && (
             <Button variant="outline" onClick={() => setMode('menu')}>
-              Tillbaka
+              Back
             </Button>
           )}
         </div>
