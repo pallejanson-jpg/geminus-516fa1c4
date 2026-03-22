@@ -150,9 +150,9 @@ const FeedbackCreateForm: React.FC<FeedbackCreateFormProps> = ({ open, onClose, 
             <div className="rounded-md border bg-muted/50 p-3 space-y-2">
               <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
                 {isSearching ? (
-                  <><Loader2 className="h-3 w-3 animate-spin" /> Söker liknande…</>
+                  <><Loader2 className="h-3 w-3 animate-spin" /> Searching similar…</>
                 ) : (
-                  <><Search className="h-3 w-3" /> Liknande ärenden hittade</>
+                  <><Search className="h-3 w-3" /> Similar items found</>
                 )}
               </div>
               {similarResults.map((r, i) => (
