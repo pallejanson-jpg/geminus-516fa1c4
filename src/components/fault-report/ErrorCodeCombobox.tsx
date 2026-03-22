@@ -110,7 +110,7 @@ const ErrorCodeCombobox: React.FC<ErrorCodeComboboxProps> = ({ value, onChange, 
                   Use "{searchQuery.trim()}"
                 </button>
               ) : (
-                <span className="text-sm text-muted-foreground">Inga matchningar</span>
+                <span className="text-sm text-muted-foreground">No matches</span>
               )}
             </CommandEmpty>
             <CommandGroup>

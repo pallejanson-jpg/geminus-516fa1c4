@@ -14,13 +14,13 @@ import ClearableInput from './ClearableInput';
 import ErrorCodeCombobox, { type ErrorCode } from './ErrorCodeCombobox';
 
 const faultReportSchema = z.object({
-  description: z.string().trim().min(1, 'Beskrivning krävs').max(2000, 'Max 2000 tecken'),
+  description: z.string().trim().min(1, 'Description is required').max(2000, 'Max 2000 characters'),
   errorCode: z.any().optional(),
   email: z.string().trim().max(255).optional().or(z.literal('')).refine(
     (val) => !val || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val),
-    { message: 'Ogiltig e-postadress' }
+    { message: 'Invalid email address' }
   ),
-  phone: z.string().trim().max(20, 'Max 20 tecken').optional().or(z.literal('')),
+  phone: z.string().trim().max(20, 'Max 20 characters').optional().or(z.literal('')),
 });
 
 export type FaultReportFormData = z.infer<typeof faultReportSchema>;
@@ -65,10 +65,9 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
   return (
     <Card className="max-w-lg w-full mx-auto">
       <CardHeader className="pb-4">
-        <CardTitle className="text-lg">Anmäl fel</CardTitle>
+        <CardTitle className="text-lg">Report Fault</CardTitle>
       </CardHeader>
       <CardContent>
-        {/* Installation info */}
         {(installationNumber || assetName) && (
           <div className="rounded-md bg-muted/40 border border-border px-3 py-2 mb-5">
             <p className="text-sm">
@@ -84,20 +83,19 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            {/* Description */}
             <FormField
               control={form.control}
               name="description"
               render={({ field }) => (
                 <FormItem>
                   <FormFieldWithHelp
-                    label="Beskrivning"
+                    label="Description"
                     required
-                    helpText="Beskriv felet så tydligt du kan för att underlätta processen för alla involverade personer."
+                    helpText="Describe the fault as clearly as possible to help all involved parties."
                   />
                   <FormControl>
                     <Textarea
-                      placeholder="Beskriv felet så tydligt du kan för att underlätta processen för alla involverade personer"
+                      placeholder="Describe the fault as clearly as possible..."
                       rows={4}
                       {...field}
                     />
@@ -107,15 +105,14 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
               )}
             />
 
-            {/* Error code */}
             <FormField
               control={form.control}
               name="errorCode"
               render={({ field }) => (
                 <FormItem>
                   <FormFieldWithHelp
-                    label="Felkod"
-                    helpText="Ange en matchande felkod om en sådan finns angiven på installationen."
+                    label="Error Code"
+                    helpText="Enter a matching error code if one is specified on the installation."
                   />
                   <FormControl>
                     <ErrorCodeCombobox
@@ -129,20 +126,19 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
               )}
             />
 
-            {/* Email */}
             <FormField
               control={form.control}
               name="email"
               render={({ field }) => (
                 <FormItem>
                   <FormFieldWithHelp
-                    label="Återkoppling via e-post"
-                    helpText="Fyll i din e-postadress om du vill ha återkoppling om ärendet."
+                    label="Email for follow-up"
+                    helpText="Enter your email if you want to receive updates on the case."
                   />
                   <FormControl>
                     <ClearableInput
                       type="email"
-                      placeholder="Fyll i e-post om du vill ha återkoppling"
+                      placeholder="Enter email for follow-up"
                       value={field.value || ''}
                       onChange={field.onChange}
                       onBlur={field.onBlur}
@@ -155,20 +151,19 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
               )}
             />
 
-            {/* Phone */}
             <FormField
               control={form.control}
               name="phone"
               render={({ field }) => (
                 <FormItem>
                   <FormFieldWithHelp
-                    label="Kontakt, telefonnummer"
-                    helpText="Fyll i ditt telefonnummer om du vill bli kontaktad."
+                    label="Contact phone number"
+                    helpText="Enter your phone number if you want to be contacted."
                   />
                   <FormControl>
                     <ClearableInput
                       type="tel"
-                      placeholder="Fyll i telefonnummer om du vill bli kontaktad"
+                      placeholder="Enter phone number for contact"
                       value={field.value || ''}
                       onChange={field.onChange}
                       onBlur={field.onBlur}
@@ -181,9 +176,8 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
               )}
             />
 
-            {/* Photos */}
             <div className="space-y-2">
-              <Label>Bifoga bilder</Label>
+              <Label>Attach images</Label>
               <PhotoCapture
                 photos={photos}
                 onPhotosChange={setPhotos}
@@ -201,7 +195,7 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
               {isSubmitting && (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               )}
-              Skicka
+              Submit
             </Button>
           </form>
         </Form>
