@@ -1034,8 +1034,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         // Summary
         if (totalLevels > 0 || totalRooms > 0 || totalInstances > 0) {
             toast({
-                title: 'BIM-synk klar',
-                description: `${totalLevels} våningsplan, ${totalRooms} rum, ${totalInstances} instanser från ${bimItems.length - failures.length}/${bimItems.length} fil(er)`,
+                title: 'BIM sync complete',
+                description: `${totalLevels} floors, ${totalRooms} rooms, ${totalInstances} instances from ${bimItems.length - failures.length}/${bimItems.length} file(s)`,
             });
             handleCheckAccStatus();
             // Auto-extract technical systems from synced BIM data
@@ -1044,8 +1044,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             // All files processed but no levels/rooms found
             toast({
                 variant: 'destructive',
-                title: 'Inga rum/våningar hittades',
-                description: 'BIM-modellerna kunde indexeras men innehöll inga Revit Levels eller Rooms.',
+                title: 'No rooms/floors found',
+                description: 'BIM models were indexed but contained no Revit Levels or Rooms.',
             });
         }
         
