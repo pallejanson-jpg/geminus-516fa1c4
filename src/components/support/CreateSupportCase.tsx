@@ -269,9 +269,9 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
           </div>
 
           <div className="flex gap-2 pt-2">
-            <Button variant="outline" className="flex-1" onClick={onClose}>Avbryt</Button>
+            <Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
             <Button className="flex-1" onClick={handleSubmit} disabled={!title.trim() || submitting}>
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Skapa ärende'}
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Submit case'}
             </Button>
           </div>
         </div>
