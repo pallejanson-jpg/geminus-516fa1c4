@@ -251,7 +251,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
 
         {/* Camera / Image capture - Large touch target */}
         <div className="space-y-2">
-          <Label className="text-base font-medium">Foto</Label>
+          <Label className="text-base font-medium">Photo</Label>
           <input
             ref={fileInputRef}
             type="file"
