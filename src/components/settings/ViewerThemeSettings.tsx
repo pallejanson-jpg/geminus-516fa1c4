@@ -221,7 +221,7 @@ const ViewerThemeSettings: React.FC = () => {
         </div>
         <Button size="sm" onClick={handleNewTheme} disabled={isCreatingNew}>
           <Plus className="h-3.5 w-3.5 mr-1.5" />
-          Nytt tema
+          New Theme
         </Button>
       </div>
 
