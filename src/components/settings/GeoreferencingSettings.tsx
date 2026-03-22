@@ -141,7 +141,7 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
             <CollapsibleTrigger className="flex items-center justify-between w-full text-left">
                 <div className="flex items-center gap-2">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium text-sm">Georeferering</span>
+                    <span className="font-medium text-sm">Georeferencing</span>
                     {hasCoordinates && (
                         <span className="text-xs text-muted-foreground">
                             ({settings.latitude?.toFixed(4)}, {settings.longitude?.toFixed(4)})
