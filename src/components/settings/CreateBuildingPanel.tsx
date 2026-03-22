@@ -280,9 +280,9 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       setSelectedBuildingFmGuid(created.buildingFmGuid);
       setShowCreateForm(false);
 
-      toast({ title: 'Byggnad skapad!', description: data.message });
+      toast({ title: 'Building created!', description: data.message });
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Fel vid skapande', description: err.message });
+      toast({ variant: 'destructive', title: 'Error creating building', description: err.message });
     } finally {
       setIsCreating(false);
     }
