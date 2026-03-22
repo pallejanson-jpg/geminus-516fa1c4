@@ -300,11 +300,11 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
           {step === 'preview' && (
             <div className="flex gap-2 w-full justify-end">
               <Button variant="outline" onClick={resetState}>
-                <X className="h-4 w-4 mr-1" /> Avbryt
+                <X className="h-4 w-4 mr-1" /> Cancel
               </Button>
               <Button onClick={handleImport} disabled={validRows.length === 0} className="gap-1.5">
                 <Upload className="h-4 w-4" />
-                Importera {validRows.length} objekt
+                Import {validRows.length} objects
               </Button>
             </div>
           )}
