@@ -73,7 +73,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading, onEdit,
     <div className={cn("flex-1 flex flex-col min-h-0", compact && "")}>
       {!compact && (
         <h2 className="text-sm font-medium text-muted-foreground mb-2">
-          Senast registrerade {onEdit && <span className="text-xs">(klicka för att redigera)</span>}
+          Recently registered {onEdit && <span className="text-xs">(click to edit)</span>}
         </h2>
       )}
       <ScrollArea className="flex-1">
