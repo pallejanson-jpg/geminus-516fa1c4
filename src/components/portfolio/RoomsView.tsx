@@ -115,21 +115,21 @@ const extractPropertyName = (key: string): string => {
 
 // System property definitions (always available)
 const SYSTEM_COLUMNS: ColumnDef[] = [
-  { key: 'commonName', label: 'Rumsnamn', category: 'system' },
-  { key: 'roomNumber', label: 'Rumsnummer', category: 'system' },
-  { key: 'designation', label: 'Beteckning', category: 'system' },
-  { key: 'levelCommonName', label: 'Våning', category: 'system' },
-  { key: 'buildingCommonName', label: 'Byggnad', category: 'system' },
-  { key: 'complexCommonName', label: 'Komplex', category: 'system' },
-  { key: 'category', label: 'Kategori', category: 'system' },
-  { key: 'objectTypeValue', label: 'Objekttyp', category: 'system' },
+  { key: 'commonName', label: 'Room Name', category: 'system' },
+  { key: 'roomNumber', label: 'Room Number', category: 'system' },
+  { key: 'designation', label: 'Designation', category: 'system' },
+  { key: 'levelCommonName', label: 'Floor', category: 'system' },
+  { key: 'buildingCommonName', label: 'Building', category: 'system' },
+  { key: 'complexCommonName', label: 'Complex', category: 'system' },
+  { key: 'category', label: 'Category', category: 'system' },
+  { key: 'objectTypeValue', label: 'Object Type', category: 'system' },
   { key: 'fmGuid', label: 'FMGUID', category: 'system' },
 ];
 
 // Calculated columns
 const CALCULATED_COLUMNS: ColumnDef[] = [
   { key: 'nta', label: 'NTA (m²)', category: 'calculated', dataType: 3 },
-  { key: 'omkrets', label: 'Omkrets (m)', category: 'calculated', dataType: 3 },
+  { key: 'omkrets', label: 'Perimeter (m)', category: 'calculated', dataType: 3 },
 ];
 
 // Default visible columns
