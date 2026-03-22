@@ -262,16 +262,16 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
           {/* Route result */}
           {route && (
             <div className="bg-muted/50 rounded p-2 space-y-1">
-              <p className="text-xs font-medium text-foreground">Rutt hittad!</p>
+              <p className="text-xs font-medium text-foreground">Route found!</p>
               <p className="text-[10px] text-muted-foreground">
-                Avstånd: {route.totalDistance.toFixed(1)} enheter
+                Distance: {route.totalDistance.toFixed(1)} units
               </p>
               <p className="text-[10px] text-muted-foreground">
                 Waypoints: {route.path.length}
               </p>
               {route.floorTransitions.length > 0 && (
                 <p className="text-[10px] text-muted-foreground">
-                  Våningsbyten: {route.floorTransitions.length}
+                  Floor transitions: {route.floorTransitions.length}
                 </p>
               )}
               <Button size="sm" variant="outline" onClick={handleClearRoute} className="text-xs w-full mt-1">
