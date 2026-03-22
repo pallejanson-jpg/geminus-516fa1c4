@@ -641,8 +641,8 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     
     if (selectedAssets.length === 0) {
       toast({
-        title: 'Inga att placera',
-        description: 'Valda assets finns redan i modell eller har redan annotation',
+        title: 'Nothing to place',
+        description: 'Selected assets are already in the model or have an annotation',
       });
       return;
     }
@@ -658,8 +658,8 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     
     if (selectedAssets.length === 0) {
       toast({
-        title: 'Inga att synka',
-        description: 'Valda assets är redan synkade eller saknar rum-koppling',
+        title: 'Nothing to sync',
+        description: 'Selected assets are already synced or missing room association',
       });
       return;
     }

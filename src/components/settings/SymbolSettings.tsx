@@ -527,7 +527,7 @@ const SymbolSettings: React.FC = () => {
               disabled={isSaving}
             >
               <X className="h-4 w-4 mr-2" />
-              Avbryt
+              Cancel
             </Button>
             <Button onClick={handleSave} disabled={isSaving}>
               {isSaving ? (
@@ -535,7 +535,7 @@ const SymbolSettings: React.FC = () => {
               ) : (
                 <Save className="h-4 w-4 mr-2" />
               )}
-              {editingSymbol ? 'Uppdatera' : 'Skapa'}
+              {editingSymbol ? 'Update' : 'Create'}
             </Button>
           </DialogFooter>
         </DialogContent>
