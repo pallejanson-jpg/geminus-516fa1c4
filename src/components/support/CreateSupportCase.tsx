@@ -233,7 +233,7 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
 
           {/* Desired date */}
           <div className="space-y-2">
-            <Label>Önskat åtgärdsdatum</Label>
+            <Label>Desired resolution date</Label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
