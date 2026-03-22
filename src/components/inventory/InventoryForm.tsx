@@ -465,7 +465,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
               resetForm();
             }}
           >
-            Avbryt redigering
+            Cancel editing
           </Button>
         </div>
       )}
