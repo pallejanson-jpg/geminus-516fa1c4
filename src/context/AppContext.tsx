@@ -450,8 +450,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                     const count = (namelessCounterByBuilding.get(storey.buildingFmGuid) || 0) + 1;
                     namelessCounterByBuilding.set(storey.buildingFmGuid, count);
                     displayName = parentName
-                        ? `${parentName} (våning ${count})`
-                        : `Namnlös våning ${count}`;
+                        ? `${parentName} (floor ${count})`
+                        : `Unnamed floor ${count}`;
                 }
                 storeyMap.set(storey.fmGuid, { ...storey, commonName: displayName, children: [] });
             }
@@ -565,7 +565,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
             // Spaces without building are truly orphaned and excluded
         });
 
-        // Create synthetic "Okänd våning" storey for orphan spaces per building
+        // Create synthetic "Unknown Floor" storey for orphan spaces per building
         orphanSpacesByBuilding.forEach((orphanSpaces, buildingGuid) => {
             const building = buildingMap.get(buildingGuid);
             if (building && orphanSpaces.length > 0) {
@@ -584,7 +584,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                     const syntheticStorey: NavigatorNode = {
                         fmGuid: `synthetic-unknown-${buildingGuid}`,
                         category: 'Building Storey',
-                        commonName: 'Okänd våning',
+                        commonName: 'Unknown Floor',
                         name: 'Unknown Floor',
                         isSynthetic: true,
                         buildingFmGuid: buildingGuid,

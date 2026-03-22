@@ -232,7 +232,7 @@ const ApprovalDialog: React.FC<{
     <Dialog open={open} onOpenChange={() => onClose()}>
       <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Godkänn detektion</DialogTitle>
+          <DialogTitle>Approve Detection</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -292,10 +292,10 @@ const ApprovalDialog: React.FC<{
               onValueChange={val => setForm(prev => ({ ...prev, symbolId: val === 'none' ? null : val }))}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Välj symbol" />
+                <SelectValue placeholder="Select symbol" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Ingen symbol</SelectItem>
+                <SelectItem value="none">No symbol</SelectItem>
                 {symbols.map(s => (
                   <SelectItem key={s.id} value={s.id}>
                     <span className="flex items-center gap-2">
@@ -310,22 +310,22 @@ const ApprovalDialog: React.FC<{
 
           {/* Building (read-only) */}
           <div className="space-y-1">
-            <Label>Byggnad</Label>
+            <Label>Building</Label>
             <Input value={buildingName} readOnly className="bg-muted" />
           </div>
 
           {/* Floor */}
           <div className="space-y-1">
-            <Label>Våning</Label>
+            <Label>Floor</Label>
             <Select
               value={form.levelFmGuid || 'none'}
               onValueChange={val => setForm(prev => ({ ...prev, levelFmGuid: val === 'none' ? null : val, roomFmGuid: null }))}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Välj våning" />
+                <SelectValue placeholder="Select floor" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Ingen våning</SelectItem>
+                <SelectItem value="none">No floor</SelectItem>
                 {floors.map(f => (
                   <SelectItem key={f.fm_guid} value={f.fm_guid}>
                     {f.name || f.common_name || f.fm_guid}
@@ -343,16 +343,16 @@ const ApprovalDialog: React.FC<{
           {/* Room */}
           {form.levelFmGuid && (
             <div className="space-y-1">
-              <Label>Rum</Label>
+              <Label>Room</Label>
               <Select
                 value={form.roomFmGuid || 'none'}
                 onValueChange={val => setForm(prev => ({ ...prev, roomFmGuid: val === 'none' ? null : val }))}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Välj rum" />
+                  <SelectValue placeholder="Select room" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Inget rum</SelectItem>
+                  <SelectItem value="none">No room</SelectItem>
                   {rooms.map(r => (
                     <SelectItem key={r.fm_guid} value={r.fm_guid}>
                       {r.name || r.common_name || r.fm_guid}
@@ -366,7 +366,7 @@ const ApprovalDialog: React.FC<{
           {/* Coordinates (read-only) */}
           {(detection.coordinate_x != null) && (
             <div className="space-y-1">
-              <Label>Koordinater (3D)</Label>
+              <Label>Coordinates (3D)</Label>
               <div className="text-xs font-mono bg-muted p-2 rounded">
                 X: {detection.coordinate_x?.toFixed(2)} &nbsp;
                 Y: {detection.coordinate_y?.toFixed(2)} &nbsp;
@@ -378,7 +378,7 @@ const ApprovalDialog: React.FC<{
           {/* Extracted props summary */}
           {props && Object.keys(props).length > 0 && (
             <div className="border rounded-lg p-3 bg-muted/30">
-              <p className="text-xs font-medium mb-1">Extraherade egenskaper</p>
+              <p className="text-xs font-medium mb-1">Extracted Properties</p>
               <div className="flex flex-wrap gap-1">
                 {props.type && <Badge variant="outline" className="text-xs">{props.type}</Badge>}
                 {props.color && <Badge variant="outline" className="text-xs">{props.color}</Badge>}
@@ -394,10 +394,10 @@ const ApprovalDialog: React.FC<{
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Avbryt</Button>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={handleSubmit} disabled={isSubmitting || !form.name}>
             <CheckCircle2 className="h-4 w-4 mr-2" />
-            Godkänn & skapa
+            Approve & Create
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -632,12 +632,12 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
             {statusFilter === 'pending' && pendingCount > 0 && (
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={selectAll}>
-                  Välj alla
+                  Select All
                 </Button>
                 {selectedIds.size > 0 && (
                   <>
                     <Button variant="outline" size="sm" onClick={clearSelection}>
-                      Avmarkera ({selectedIds.size})
+                      Deselect ({selectedIds.size})
                     </Button>
                     <Button
                       size="sm"
@@ -645,7 +645,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                       disabled={isProcessing}
                     >
                       <CheckCircle2 className="h-4 w-4 mr-1" />
-                      Godkänn valda
+                      Approve Selected
                     </Button>
                     <Button
                       variant="destructive"
@@ -654,7 +654,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                       disabled={isProcessing}
                     >
                       <XCircle className="h-4 w-4 mr-1" />
-                      Avvisa valda
+                      Reject Selected
                     </Button>
                   </>
                 )}
@@ -898,7 +898,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setDetailDialog(null)}>
-              Stäng
+              Close
             </Button>
             {detailDialog?.status === 'pending' && (
               <>
@@ -911,7 +911,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                   disabled={isProcessing}
                 >
                   <XCircle className="h-4 w-4 mr-2" />
-                  Avvisa
+                   Reject
                 </Button>
                 <Button
                   onClick={() => {
@@ -921,7 +921,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                   disabled={isProcessing}
                 >
                   <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Godkänn
+                  Approve
                 </Button>
               </>
             )}

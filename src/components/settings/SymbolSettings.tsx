@@ -138,8 +138,8 @@ const SymbolSettings: React.FC = () => {
     if (!formData.name || !formData.category) {
       toast({
         variant: 'destructive',
-        title: 'Validering',
-        description: 'Namn och kategori krävs',
+        title: 'Validation',
+        description: 'Name and category are required',
       });
       return;
     }
@@ -165,8 +165,8 @@ const SymbolSettings: React.FC = () => {
         if (error) throw error;
 
         toast({
-          title: 'Symbol uppdaterad',
-          description: `${formData.name} har uppdaterats`,
+          title: 'Symbol updated',
+          description: `${formData.name} has been updated`,
         });
       } else {
         // Create new
@@ -177,8 +177,8 @@ const SymbolSettings: React.FC = () => {
         if (error) throw error;
 
         toast({
-          title: 'Symbol skapad',
-          description: `${formData.name} har lagts till`,
+          title: 'Symbol created',
+          description: `${formData.name} has been added`,
         });
       }
 
@@ -187,7 +187,7 @@ const SymbolSettings: React.FC = () => {
     } catch (error: any) {
       toast({
         variant: 'destructive',
-        title: 'Fel',
+        title: 'Error',
         description: error.message,
       });
     } finally {
@@ -196,7 +196,7 @@ const SymbolSettings: React.FC = () => {
   };
 
   const handleDelete = async (symbol: AnnotationSymbol) => {
-    if (!confirm(`Ta bort "${symbol.name}"?`)) return;
+    if (!confirm(`Delete "${symbol.name}"?`)) return;
 
     try {
       const { error } = await supabase
@@ -207,14 +207,14 @@ const SymbolSettings: React.FC = () => {
       if (error) throw error;
 
       toast({
-        title: 'Symbol borttagen',
-        description: `${symbol.name} har tagits bort`,
+        title: 'Symbol deleted',
+        description: `${symbol.name} has been removed`,
       });
       fetchSymbols();
     } catch (error: any) {
       toast({
         variant: 'destructive',
-        title: 'Fel',
+        title: 'Error',
         description: error.message,
       });
     }
@@ -232,11 +232,11 @@ const SymbolSettings: React.FC = () => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Konfigurera hur olika typer av assets visas som annotationer i 3D-viewern.
+          Configure how different asset types are displayed as annotations in the 3D viewer.
         </p>
         <Button onClick={handleOpenCreate} size="sm" className="gap-2">
           <Plus className="h-4 w-4" />
-          Ny symbol
+          New Symbol
         </Button>
       </div>
 
@@ -244,8 +244,8 @@ const SymbolSettings: React.FC = () => {
         {symbols.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <Circle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Inga symboler konfigurerade</p>
-            <p className="text-xs mt-1">Klicka "Ny symbol" för att skapa en</p>
+            <p>No symbols configured</p>
+            <p className="text-xs mt-1">Click "New Symbol" to create one</p>
           </div>
         ) : (
           <Accordion type="single" collapsible className="space-y-2">
@@ -290,7 +290,7 @@ const SymbolSettings: React.FC = () => {
                 <AccordionContent className="px-4 pb-4 pt-2">
                   <div className="space-y-3">
                     <div className="text-xs text-muted-foreground">
-                      <span className="font-medium">Kategori:</span> {symbol.category}
+                      <span className="font-medium">Category:</span> {symbol.category}
                     </div>
                     
                     {symbol.icon_url && (
@@ -313,7 +313,7 @@ const SymbolSettings: React.FC = () => {
                         onClick={() => handleOpenEdit(symbol)}
                       >
                         <Pencil className="h-4 w-4 mr-1" />
-                        Redigera
+                        Edit
                       </Button>
                       <Button
                         variant="ghost"
@@ -322,7 +322,7 @@ const SymbolSettings: React.FC = () => {
                         onClick={() => handleDelete(symbol)}
                       >
                         <Trash2 className="h-4 w-4 mr-1" />
-                        Ta bort
+                        Delete
                       </Button>
                     </div>
                   </div>

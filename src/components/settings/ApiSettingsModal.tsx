@@ -260,11 +260,11 @@ const AccFolderNode: React.FC<{
 
                     {/* Empty folder message */}
                     {(!folder.items || folder.items.length === 0) && !hasChildren && (
-                        <p className="px-2.5 pl-8 text-xs text-muted-foreground italic">Inga filer i denna mapp.</p>
+                        <p className="px-2.5 pl-8 text-xs text-muted-foreground italic">No files in this folder.</p>
                     )}
 
                     {folder.truncated && (
-                        <p className="px-2.5 pl-8 text-xs text-muted-foreground italic">Undermappar ej laddade (max djup nått).</p>
+                        <p className="px-2.5 pl-8 text-xs text-muted-foreground italic">Subfolders not loaded (max depth reached).</p>
                     )}
                 </div>
             )}
@@ -301,14 +301,14 @@ const FmAccessDocSyncPanel: React.FC = () => {
             });
             if (error) throw error;
             toast({
-                title: 'FM Access-synk klar',
+                title: 'FM Access sync complete',
                 description: action === 'sync-all'
-                    ? `Ritningar: ${data?.results?.['sync-drawings']?.synced || 0}, Dokument: ${data?.results?.['sync-documents']?.synced || 0}, DoU: ${data?.results?.['sync-dou']?.synced || 0}`
-                    : `${data?.synced || 0} objekt synkade.`,
+                    ? `Drawings: ${data?.results?.['sync-drawings']?.synced || 0}, Documents: ${data?.results?.['sync-documents']?.synced || 0}, DoU: ${data?.results?.['sync-dou']?.synced || 0}`
+                    : `${data?.synced || 0} items synced.`,
             });
             fetchStatus();
         } catch (err: any) {
-            toast({ variant: 'destructive', title: 'Synkfel', description: err.message });
+            toast({ variant: 'destructive', title: 'Sync error', description: err.message });
         } finally {
             setIsSyncing(false);
             setSyncAction(null);
@@ -323,11 +323,11 @@ const FmAccessDocSyncPanel: React.FC = () => {
                 <div className="grid grid-cols-3 gap-2 text-xs">
                     <div className="rounded border p-2 text-center">
                         <div className="font-medium text-lg">{status.counts.drawings}</div>
-                        <div className="text-muted-foreground">Ritningar</div>
+                        <div className="text-muted-foreground">Drawings</div>
                     </div>
                     <div className="rounded border p-2 text-center">
                         <div className="font-medium text-lg">{status.counts.documents}</div>
-                        <div className="text-muted-foreground">Dokument</div>
+                        <div className="text-muted-foreground">Documents</div>
                     </div>
                     <div className="rounded border p-2 text-center">
                         <div className="font-medium text-lg">{status.counts.dou}</div>
@@ -337,17 +337,17 @@ const FmAccessDocSyncPanel: React.FC = () => {
             )}
             {lastSync && (
                 <p className="text-xs text-muted-foreground">
-                    Senaste synk: {new Date(lastSync).toLocaleString('sv-SE')}
+                    Last sync: {new Date(lastSync).toLocaleString('en-US')}
                 </p>
             )}
             <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" className="gap-1 h-7 text-[10px]" disabled={isSyncing} onClick={() => handleSync('sync-drawings')}>
                     {isSyncing && syncAction === 'sync-drawings' ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
-                    Ritningar
+                    Drawings
                 </Button>
                 <Button size="sm" variant="outline" className="gap-1 h-7 text-[10px]" disabled={isSyncing} onClick={() => handleSync('sync-documents')}>
                     {isSyncing && syncAction === 'sync-documents' ? <Loader2 className="h-3 w-3 animate-spin" /> : <File className="h-3 w-3" />}
-                    Dokument
+                    Documents
                 </Button>
                 <Button size="sm" variant="outline" className="gap-1 h-7 text-[10px]" disabled={isSyncing} onClick={() => handleSync('sync-dou')}>
                     {isSyncing && syncAction === 'sync-dou' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wrench className="h-3 w-3" />}
@@ -355,7 +355,7 @@ const FmAccessDocSyncPanel: React.FC = () => {
                 </Button>
                 <Button size="sm" className="gap-1 h-7 text-[10px]" disabled={isSyncing} onClick={() => handleSync('sync-all')}>
                     {isSyncing && syncAction === 'sync-all' ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                    Synka allt
+                    Sync All
                 </Button>
             </div>
         </div>
@@ -399,11 +399,11 @@ const ImdfExportPanel: React.FC<{ allBuildings: any[] }> = ({ allBuildings }) =>
             a.click();
             URL.revokeObjectURL(url);
             const buildingName = allBuildings.find(b => b.fm_guid === selectedBuilding)?.common_name || selectedBuilding;
-            setExportResult(`Export klar — ${buildingName}`);
-            toast({ title: 'IMDF Export klar', description: `ZIP-fil nedladdad för ${buildingName}` });
+            setExportResult(`Export complete — ${buildingName}`);
+            toast({ title: 'IMDF Export complete', description: `ZIP file downloaded for ${buildingName}` });
         } catch (err: any) {
-            setExportResult(`Fel: ${err.message}`);
-            toast({ title: 'IMDF Export misslyckades', description: err.message, variant: 'destructive' });
+            setExportResult(`Error: ${err.message}`);
+            toast({ title: 'IMDF Export failed', description: err.message, variant: 'destructive' });
         } finally {
             setIsExporting(false);
         }
@@ -415,13 +415,13 @@ const ImdfExportPanel: React.FC<{ allBuildings: any[] }> = ({ allBuildings }) =>
                 Export building data as IMDF (Indoor Mapping Data Format) for indoor mapping systems like Apple Maps Indoor.
             </p>
             <div className="space-y-2">
-                <Label className="text-xs">Byggnad</Label>
+                <Label className="text-xs">Building</Label>
                 <select
                     value={selectedBuilding}
                     onChange={(e) => setSelectedBuilding(e.target.value)}
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
-                    <option value="">Välj byggnad...</option>
+                    <option value="">Select building...</option>
                     {allBuildings.map((b) => (
                         <option key={b.fm_guid} value={b.fm_guid}>
                             {b.common_name || b.name || b.fm_guid}
@@ -440,7 +440,7 @@ const ImdfExportPanel: React.FC<{ allBuildings: any[] }> = ({ allBuildings }) =>
                     Export IMDF
                 </Button>
                 {exportResult && (
-                    <span className={`text-xs ${exportResult.startsWith('Fel') ? 'text-destructive' : 'text-green-600'}`}>
+                    <span className={`text-xs ${exportResult.startsWith('Error') ? 'text-destructive' : 'text-green-600'}`}>
                         {exportResult}
                     </span>
                 )}

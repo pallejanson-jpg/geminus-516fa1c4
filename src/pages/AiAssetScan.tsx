@@ -69,7 +69,7 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid }) =>
   const handleBack = () => {
     if (browserScanConfig) {
       // Confirm leaving active scan
-      if (confirm('Avbryta pågående skanning?')) {
+      if (confirm('Cancel ongoing scan?')) {
         setBrowserScanConfig(null);
       }
       return;
@@ -118,7 +118,7 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid }) =>
       }
     } catch (error: any) {
       toast({
-        title: 'Fel vid laddning',
+        title: 'Loading error',
         description: error.message,
         variant: 'destructive',
       });
@@ -164,7 +164,7 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid }) =>
       <div className="h-full flex items-center justify-center">
         <div className="text-center">
           <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-          <p className="text-muted-foreground">Laddar...</p>
+          <p className="text-muted-foreground">Loading...</p>
         </div>
       </div>
     );
