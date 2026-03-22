@@ -574,7 +574,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                   <div className="border-t pt-4 min-w-0 overflow-hidden">
                     <Label className="text-xs flex items-center gap-2 mb-3">
                       <RotateCcw size={12} />
-                      Rotation (för 3D/360° synk)
+                      Rotation (for 3D/360° sync)
                     </Label>
                     
                     <div className="space-y-3 min-w-0">
