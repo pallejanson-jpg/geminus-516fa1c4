@@ -1583,13 +1583,13 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             if (error) throw error;
 
             toast({
-                title: "URL sparad",
-                description: "Congeria-länken har sparats.",
+                title: "URL saved",
+                description: "The Congeria link has been saved.",
             });
         } catch (error: any) {
             toast({
                 variant: "destructive",
-                title: "Fel",
+                title: "Error",
                 description: error.message,
             });
         }
