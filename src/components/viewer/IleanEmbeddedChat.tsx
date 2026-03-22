@@ -38,10 +38,10 @@ export default function IleanEmbeddedChat({ buildingFmGuid, buildingName }: Ilea
       {/* Context indicator */}
       <div className="px-3 py-1.5 text-xs text-muted-foreground border-b border-border/50 bg-muted/30 shrink-0">
         {contextEntity.entityName
-          ? `Kontext: ${contextEntity.entityName} (${contextEntity.entityType})`
+          ? `Context: ${contextEntity.entityName} (${contextEntity.entityType})`
           : buildingName
-            ? `Kontext: ${buildingName}`
-            : 'Ingen byggnadskontext'}
+            ? `Context: ${buildingName}`
+            : 'No building context'}
       </div>
 
       {/* Messages */}
