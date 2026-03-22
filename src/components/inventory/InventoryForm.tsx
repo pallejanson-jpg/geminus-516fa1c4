@@ -476,7 +476,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="t.ex. Brandsläckare BS-001"
+          placeholder="e.g. Fire Extinguisher BS-001"
           className="h-12 text-base"
           autoFocus
           maxLength={100}
