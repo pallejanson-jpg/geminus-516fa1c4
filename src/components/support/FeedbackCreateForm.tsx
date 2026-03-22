@@ -203,10 +203,10 @@ const FeedbackCreateForm: React.FC<FeedbackCreateFormProps> = ({ open, onClose, 
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={onClose}>Avbryt</Button>
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
             <Button onClick={handleSubmit} disabled={!title.trim() || isSubmitting}>
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-              Skicka
+              Submit
             </Button>
           </div>
         </div>

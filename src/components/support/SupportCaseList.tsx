@@ -225,7 +225,7 @@ const SupportCaseList: React.FC = () => {
       {/* Case list */}
       {filteredCases.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground text-sm">
-          {searchQuery ? 'Inga ärenden matchar sökningen' : 'Inga ärenden att visa'}
+          {searchQuery ? 'No cases match your search' : 'No cases to display'}
         </div>
       ) : (
         <div className="space-y-2">
