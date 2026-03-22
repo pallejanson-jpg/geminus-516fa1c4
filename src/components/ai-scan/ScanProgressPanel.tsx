@@ -328,7 +328,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
             {autoProcess && (
               <div className="flex items-center gap-2 p-2 bg-primary/10 text-primary rounded-lg">
                 <RefreshCw className="h-4 w-4 animate-spin" />
-                <span className="text-sm font-medium">Automatisk bearbetning pågår...</span>
+                <span className="text-sm font-medium">Automatic processing in progress…</span>
               </div>
             )}
 
