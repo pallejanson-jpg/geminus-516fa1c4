@@ -203,15 +203,15 @@ const ApprovalDialog: React.FC<{
       if (!data.success) throw new Error(data.message);
 
       toast({
-        title: 'Godkänd',
+        title: 'Approved',
         description: data.poiId
-          ? `Tillgång skapad med POI #${data.poiId}`
-          : 'Tillgång skapad från detektion',
+          ? `Asset created with POI #${data.poiId}`
+          : 'Asset created from detection',
       });
       onClose();
       onApproved();
     } catch (error: any) {
-      toast({ title: 'Fel vid godkännande', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error approving', description: error.message, variant: 'destructive' });
     } finally {
       setIsSubmitting(false);
     }
