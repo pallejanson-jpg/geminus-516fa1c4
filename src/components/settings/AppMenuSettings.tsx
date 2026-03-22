@@ -181,7 +181,7 @@ const AppMenuSettings: React.FC<AppMenuSettingsProps> = ({ isOpen, onClose }) =>
 
   const handleSave = () => {
     saveSidebarOrder(items);
-    toast.success('Appordning sparad');
+    toast.success('App order saved');
     onClose();
   };
 
