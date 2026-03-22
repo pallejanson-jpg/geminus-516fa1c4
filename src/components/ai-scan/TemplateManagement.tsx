@@ -483,11 +483,11 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                   onValueChange={value => setFormData({ ...formData, default_symbol_id: value === '_none' ? '' : value })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Välj symbol..." />
+                    <SelectValue placeholder="Select symbol..." />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="_none">
-                      <span className="text-muted-foreground">Ingen symbol</span>
+                      <span className="text-muted-foreground">No symbol</span>
                     </SelectItem>
                     {symbols.map(symbol => (
                       <SelectItem key={symbol.id} value={symbol.id}>
