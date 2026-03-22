@@ -282,7 +282,7 @@ export default function GeminusView() {
 
               {filteredViews.length > 0 && (
                 <div>
-                  <h3 className="text-xs font-medium text-muted-foreground uppercase mb-2">Sparade vyer</h3>
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase mb-2">Saved Views</h3>
                   <div className="space-y-1">
                     {filteredViews.map(v => (
                       <button
