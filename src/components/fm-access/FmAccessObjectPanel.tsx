@@ -88,7 +88,7 @@ const FmAccessObjectPanel: React.FC<FmAccessObjectPanelProps> = ({ selectedNode,
 
   const copyGuid = () => {
     navigator.clipboard.writeText(nodeGuid);
-    toast({ title: 'GUID kopierat' });
+    toast({ title: 'GUID copied' });
   };
 
   return (
