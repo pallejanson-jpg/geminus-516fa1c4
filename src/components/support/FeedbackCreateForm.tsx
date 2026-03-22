@@ -128,9 +128,9 @@ const FeedbackCreateForm: React.FC<FeedbackCreateFormProps> = ({ open, onClose, 
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Ny idé / feedback</DialogTitle>
+          <DialogTitle>New idea / feedback</DialogTitle>
           <DialogDescription>
-            Dela dina tankar om hur Geminus kan förbättras
+            Share your thoughts on how Geminus can be improved
           </DialogDescription>
         </DialogHeader>
 
