@@ -151,8 +151,8 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
       {!data && !isLoading && (
         <div className="text-center py-8 text-muted-foreground">
           <BookOpen className="h-10 w-10 mx-auto mb-2 opacity-40" />
-          <p className="text-sm">Sök i byggnads- och hjälpdokumentation</p>
-          <p className="text-xs">AI analyserar och rankar relevanta dokument</p>
+           <p className="text-sm">Search building and help documentation</p>
+           <p className="text-xs">AI analyzes and ranks relevant documents</p>
         </div>
       )}
     </div>
