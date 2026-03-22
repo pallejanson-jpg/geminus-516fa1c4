@@ -889,8 +889,8 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                 )}
 
                 <div>
-                  <span className="text-muted-foreground">AI-beskrivning:</span>
-                  <p className="mt-1">{detailDialog.ai_description || 'Ingen beskrivning'}</p>
+                  <span className="text-muted-foreground">AI Description:</span>
+                  <p className="mt-1">{detailDialog.ai_description || 'No description'}</p>
                 </div>
               </div>
             </div>

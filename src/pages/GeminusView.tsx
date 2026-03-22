@@ -165,7 +165,7 @@ export default function GeminusView() {
         });
       } catch (err: any) {
         console.error('Failed to init xeokit viewer:', err);
-        setConversionError('Kunde inte starta 3D-viewern: ' + err.message);
+        setConversionError('Could not start 3D viewer: ' + err.message);
       }
     })();
 
