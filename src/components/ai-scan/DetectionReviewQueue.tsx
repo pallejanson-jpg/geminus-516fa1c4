@@ -668,7 +668,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
       {isLoading ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <p className="text-muted-foreground">Laddar detektioner...</p>
+            <p className="text-muted-foreground">Loading detections...</p>
           </CardContent>
         </Card>
       ) : detections.length === 0 ? (
@@ -676,8 +676,8 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
           <CardContent className="py-12 text-center">
             <p className="text-muted-foreground">
               {statusFilter === 'pending' 
-                ? 'Inga väntande detektioner. Starta en skanning för att hitta objekt.'
-                : 'Inga detektioner hittades med valt filter.'
+                ? 'No pending detections. Start a scan to find objects.'
+                : 'No detections found with the selected filter.'
               }
             </p>
           </CardContent>
