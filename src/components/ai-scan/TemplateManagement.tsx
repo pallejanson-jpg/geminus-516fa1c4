@@ -372,7 +372,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                       {template.example_images && template.example_images.length > 0 && (
                         <span className="flex items-center gap-1">
                           <ImageIcon className="h-3 w-3" />
-                          {template.example_images.length} exempelbilder
+                          {template.example_images.length} example images
                         </span>
                       )}
                     </div>
