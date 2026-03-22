@@ -124,7 +124,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
     const handler = (e: BeforeUnloadEvent) => {
       if (activeJobIdRef.current) {
         e.preventDefault();
-        e.returnValue = 'IFC-konvertering pågår. Är du säker på att du vill lämna?';
+        e.returnValue = 'IFC conversion in progress. Are you sure you want to leave?';
         // Mark job as failed on unload (best-effort via sendBeacon with auth headers)
         const jobId = activeJobIdRef.current;
         const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
