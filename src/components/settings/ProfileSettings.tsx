@@ -115,7 +115,7 @@ const ProfileSettings: React.FC = () => {
             />
           </label>
         </div>
-        <p className="text-sm text-muted-foreground">Klicka på kameran för att ladda upp foto</p>
+        <p className="text-sm text-muted-foreground">Click the camera to upload a photo</p>
       </div>
 
       {/* Name & Email */}
