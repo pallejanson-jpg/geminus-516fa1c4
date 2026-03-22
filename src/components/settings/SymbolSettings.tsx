@@ -442,7 +442,7 @@ const SymbolSettings: React.FC = () => {
                   id="symbol-icon"
                   value={formData.icon_url}
                   onChange={(e) => setFormData({ ...formData, icon_url: e.target.value })}
-                  placeholder="URL eller ladda upp..."
+                  placeholder="URL or upload..."
                   className="h-11 flex-1"
                 />
                 <label className="cursor-pointer">
