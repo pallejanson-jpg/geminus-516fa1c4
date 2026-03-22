@@ -453,7 +453,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
                       onClick={() => setDeleteJobId(job.id)}
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
-                      Ta bort skanning
+                      Delete scan
                     </Button>
                   )}
                 </div>
