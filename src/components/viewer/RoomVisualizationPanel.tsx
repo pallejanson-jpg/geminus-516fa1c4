@@ -790,7 +790,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       )}
 
       {hasRealData && visualizationType !== 'none' && (
-        <p className="text-xs text-green-600">✓ Riktig sensordata tillgänglig</p>
+        <p className="text-xs text-green-600">✓ Real sensor data available</p>
       )}
 
       {/* Legend */}
