@@ -2910,8 +2910,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         }
         
         // Don't proceed to dialog yet - wait for user confirmation
-        toast.success(`Position markerad: (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`, {
-          description: 'Bekräfta eller välj ny position',
+        toast.success(`Position marked: (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`, {
+          description: 'Confirm or select a new position',
           duration: 4000,
         });
         return; // Stop here - user needs to confirm
