@@ -1,22 +1,21 @@
-import React, { useContext, useState, useEffect, useCallback } from 'react';
+import React, { useContext, useCallback } from 'react';
 import {
   Home, LayoutGrid, Globe, Network, Menu, X, Cuboid
 } from 'lucide-react';
 import { Drawer, DrawerContent } from '@/components/ui/drawer';
 import { AppContext } from '@/context/AppContext';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { SIDEBAR_ORDER_STORAGE_KEY, SIDEBAR_SETTINGS_CHANGED_EVENT, IVION_DEFAULT_BASE_URL } from '@/lib/constants';
-import type { SidebarItem } from '@/lib/constants';
-import { getSidebarOrder } from '@/components/settings/AppMenuSettings';
+import { IVION_DEFAULT_BASE_URL } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { SIDEBAR_ITEM_META, getCurrentContext } from '@/lib/sidebar-config';
+import { useSidebarOrder } from '@/hooks/useSidebarOrder';
 
 // Core navigation items
 const CORE_NAV = [
-  { key: 'home',       icon: Home,       label: 'Hem' },
+  { key: 'home',       icon: Home,       label: 'Home' },
   { key: 'portfolio',  icon: LayoutGrid, label: 'Portfolio' },
   { key: 'navigation', icon: Network,    label: 'Navigator' },
-  { key: 'map',        icon: Globe,      label: 'Karta' },
+  { key: 'map',        icon: Globe,      label: 'Map' },
 ] as const;
 
 interface MobileNavProps {
@@ -28,24 +27,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
   const { activeApp, setActiveApp, appConfigs, selectedFacility, open360WithContext } = useContext(AppContext);
   const isMobile = useIsMobile();
   const currentContext = getCurrentContext(activeApp, selectedFacility);
-
-  const [sidebarOrder, setSidebarOrder] = useState<SidebarItem[]>(getSidebarOrder);
-
-  useEffect(() => {
-    const handleSettingsChange = (e: Event) => {
-      const customEvent = e as CustomEvent<SidebarItem[]>;
-      if (customEvent.detail) setSidebarOrder(customEvent.detail);
-    };
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === SIDEBAR_ORDER_STORAGE_KEY) setSidebarOrder(getSidebarOrder());
-    };
-    window.addEventListener(SIDEBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
-    window.addEventListener('storage', handleStorageChange);
-    return () => {
-      window.removeEventListener(SIDEBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, []);
+  const sidebarOrder = useSidebarOrder();
 
   const handleCoreClick = useCallback((key: string) => {
     setActiveApp(key);
@@ -99,10 +81,10 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
         onClick={() => setIsMobileMenuOpen(true)}
         className="fixed z-40 flex items-center gap-1 bg-card/80 backdrop-blur-md border border-border rounded-full px-2.5 py-1 shadow-md left-1/2 -translate-x-1/2"
         style={{ bottom: 'calc(0.25rem + env(safe-area-inset-bottom, 0px))' }}
-        aria-label="Öppna meny"
+        aria-label="Open menu"
       >
         <Menu className="h-3.5 w-3.5 text-foreground" />
-        <span className="text-xs font-medium text-foreground hidden xs:inline">Meny</span>
+        <span className="text-xs font-medium text-foreground hidden xs:inline">Menu</span>
       </button>
 
       {/* App Drawer — opens from bottom */}
@@ -114,7 +96,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b">
-              <span className="font-semibold text-sm text-foreground">Navigering</span>
+              <span className="font-semibold text-sm text-foreground">Navigation</span>
               <button
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors"
@@ -177,7 +159,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
               {/* Dynamic apps */}
               {sidebarOrder.length > 0 && (
                 <div>
-                  <p className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Integrationer</p>
+                  <p className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Integrations</p>
                   <div className="flex flex-wrap gap-3">
                     {sidebarOrder.map((item) => {
                       const meta = SIDEBAR_ITEM_META[item.id];

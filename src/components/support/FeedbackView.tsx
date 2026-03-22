@@ -27,18 +27,18 @@ export interface FeedbackThread {
 }
 
 const CATEGORY_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string }> = {
-  suggestion: { label: 'Förslag', icon: Lightbulb, color: 'text-amber-500' },
-  ux_issue: { label: 'UX-problem', icon: Bug, color: 'text-destructive' },
-  bug: { label: 'Bugg', icon: Bug, color: 'text-destructive' },
-  question: { label: 'Fråga', icon: HelpCircle, color: 'text-primary' },
+  suggestion: { label: 'Suggestion', icon: Lightbulb, color: 'text-amber-500' },
+  ux_issue: { label: 'UX issue', icon: Bug, color: 'text-destructive' },
+  bug: { label: 'Bug', icon: Bug, color: 'text-destructive' },
+  question: { label: 'Question', icon: HelpCircle, color: 'text-primary' },
 };
 
 const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  open: { label: 'Öppen', variant: 'outline' },
-  planned: { label: 'Planerad', variant: 'secondary' },
-  in_progress: { label: 'Pågår', variant: 'default' },
-  done: { label: 'Klar', variant: 'default' },
-  declined: { label: 'Avböjd', variant: 'destructive' },
+  open: { label: 'Open', variant: 'outline' },
+  planned: { label: 'Planned', variant: 'secondary' },
+  in_progress: { label: 'In progress', variant: 'default' },
+  done: { label: 'Done', variant: 'default' },
+  declined: { label: 'Declined', variant: 'destructive' },
 };
 
 const FeedbackView: React.FC = () => {
@@ -133,10 +133,10 @@ const FeedbackView: React.FC = () => {
       <div className="flex items-center justify-between gap-2">
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
           <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Alla kategorier" />
+            <SelectValue placeholder="All categories" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Alla</SelectItem>
+            <SelectItem value="all">All</SelectItem>
             {Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => (
               <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
             ))}
@@ -144,15 +144,15 @@ const FeedbackView: React.FC = () => {
         </Select>
         <Button onClick={() => setShowCreate(true)} size="sm">
           <Plus className="h-4 w-4 mr-1" />
-          Ny idé
+          New idea
         </Button>
       </div>
 
       {loading ? (
-        <div className="text-center py-8 text-muted-foreground text-sm">Laddar…</div>
+        <div className="text-center py-8 text-muted-foreground text-sm">Loading…</div>
       ) : threads.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground text-sm">
-          Inga förslag ännu. Var först med att lämna feedback!
+          No suggestions yet. Be the first to leave feedback!
         </div>
       ) : (
         <div className="space-y-2">
@@ -191,7 +191,7 @@ const FeedbackView: React.FC = () => {
                       <Badge variant={status.variant} className="text-[10px] px-1.5 py-0">
                         {status.label}
                       </Badge>
-                      <span>{thread.profile?.display_name || 'Okänd'}</span>
+                      <span>{thread.profile?.display_name || 'Unknown'}</span>
                       <span>·</span>
                       <span>{formatDistanceToNow(new Date(thread.created_at), { addSuffix: true })}</span>
                       {(thread.comment_count || 0) > 0 && (

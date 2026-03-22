@@ -41,8 +41,8 @@ const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
 
         // Warn if picking in 2D/ortho mode
         if (viewer.camera.projection === 'ortho') {
-          toast.info('Position vald i 2D — höjden kanske inte stämmer', {
-            description: 'Byt till 3D för exakt höjd.',
+          toast.info('Position selected in 2D — height may not be accurate', {
+            description: 'Switch to 3D for exact height.',
           });
         }
       }
@@ -124,9 +124,9 @@ const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[95vw] w-[95vw] h-[85vh] p-0 overflow-hidden flex flex-col">
         <DialogHeader className="p-4 pb-2 flex-shrink-0">
-          <DialogTitle>Välj position i 3D-modellen</DialogTitle>
+          <DialogTitle>Select position in 3D model</DialogTitle>
           <p className="text-sm text-muted-foreground">
-            Klicka i modellen för att välja position
+            Click in the model to select a position
           </p>
         </DialogHeader>
         <div className="flex-1 min-h-0 relative">
@@ -139,7 +139,7 @@ const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
           {!pendingCoords && (
             <div className="absolute top-3 left-3 z-20 bg-primary/90 text-primary-foreground text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5 shadow-md">
               <Crosshair className="h-3.5 w-3.5" />
-              <span>Klicka för att välja position</span>
+              <span>Click to select position</span>
             </div>
           )}
 
@@ -150,11 +150,11 @@ const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
               </p>
               <Button size="sm" variant="outline" onClick={() => setPendingCoords(null)} className="gap-1">
                 <RotateCcw className="h-3.5 w-3.5" />
-                Välj om
+                Reselect
               </Button>
               <Button size="sm" onClick={handleConfirm} className="gap-1">
                 <Check className="h-3.5 w-3.5" />
-                Bekräfta
+                Confirm
               </Button>
             </div>
           )}

@@ -1,10 +1,9 @@
-import React, { useContext, useState, useEffect, useCallback } from 'react';
+import React, { useContext, useCallback } from 'react';
 import { Menu as MenuIcon, Home } from 'lucide-react';
 import { AppButton } from '@/components/common/AppButton';
-import { THEMES, SIDEBAR_ORDER_STORAGE_KEY, SIDEBAR_SETTINGS_CHANGED_EVENT } from '@/lib/constants';
-import type { SidebarItem } from '@/lib/constants';
+import { THEMES } from '@/lib/constants';
 import { AppContext } from '@/context/AppContext';
-import { getSidebarOrder } from '@/components/settings/AppMenuSettings';
+import { useSidebarOrder } from '@/hooks/useSidebarOrder';
 import { supabase } from '@/integrations/supabase/client';
 import { SIDEBAR_ITEM_META, getCurrentContext } from '@/lib/sidebar-config';
 
@@ -23,29 +22,8 @@ const LeftSidebar: React.FC = () => {
     } = useContext(AppContext);
     
     const t = THEMES[theme];
-    const [sidebarOrder, setSidebarOrder] = useState<SidebarItem[]>(getSidebarOrder);
+    const sidebarOrder = useSidebarOrder();
     const currentContext = getCurrentContext(activeApp, selectedFacility);
-
-    // Listen for changes from AppMenuSettings
-    useEffect(() => {
-        const handleSettingsChange = (e: Event) => {
-            const customEvent = e as CustomEvent<SidebarItem[]>;
-            if (customEvent.detail) {
-                setSidebarOrder(customEvent.detail);
-            }
-        };
-        const handleStorageChange = (e: StorageEvent) => {
-            if (e.key === SIDEBAR_ORDER_STORAGE_KEY) {
-                setSidebarOrder(getSidebarOrder());
-            }
-        };
-        window.addEventListener(SIDEBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
-        window.addEventListener('storage', handleStorageChange);
-        return () => {
-            window.removeEventListener(SIDEBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
-            window.removeEventListener('storage', handleStorageChange);
-        };
-    }, []);
 
     const getIconColor = (key: string) => {
         if (activeApp === key) return '';

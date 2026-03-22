@@ -74,11 +74,11 @@ const OBJECT_TYPE_4_CATEGORIES = new Set([
 ]);
 
 const CORE_COLUMNS: ColumnDef[] = [
-  { key: 'name', label: 'Namn', group: 'core' },
-  { key: 'assetType', label: 'Typ', group: 'core' },
-  { key: 'category', label: 'Kategori', group: 'core' },
-  { key: 'levelName', label: 'Våning', group: 'core' },
-  { key: 'roomName', label: 'Rum', group: 'core' },
+  { key: 'name', label: 'Name', group: 'core' },
+  { key: 'assetType', label: 'Type', group: 'core' },
+  { key: 'category', label: 'Category', group: 'core' },
+  { key: 'levelName', label: 'Floor', group: 'core' },
+  { key: 'roomName', label: 'Room', group: 'core' },
   { key: 'systemNames', label: 'System', group: 'core' },
   { key: 'fmGuid', label: 'FMGUID', group: 'core' },
 ];
@@ -435,11 +435,11 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="h-6 gap-1 text-[10px] text-muted-foreground px-1.5">
                   <Settings2 className="h-3 w-3" />
-                  Kolumner
+                  Columns
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56 max-h-80 overflow-y-auto">
-                <DropdownMenuLabel className="text-[10px]">Standardkolumner</DropdownMenuLabel>
+                <DropdownMenuLabel className="text-[10px]">Standard columns</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {CORE_COLUMNS.map(col => (
                   <DropdownMenuCheckboxItem

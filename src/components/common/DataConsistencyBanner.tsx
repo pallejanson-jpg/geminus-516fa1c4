@@ -15,10 +15,12 @@ interface DeltaResult {
 }
 
 const DISMISS_KEY = 'data-consistency-dismissed';
+const DEMO_MODE_KEY = 'geminus-demo-mode';
 const DISMISS_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 function isDismissedInStorage(): boolean {
   try {
+    if (localStorage.getItem(DEMO_MODE_KEY) === 'true') return true;
     const raw = localStorage.getItem(DISMISS_KEY);
     if (!raw) return false;
     const { dismissedAt } = JSON.parse(raw);
@@ -65,8 +67,8 @@ export const DataConsistencyBanner: React.FC = () => {
     setIsSyncing(true);
     try {
       toast({
-        title: 'Synkroniserar...',
-        description: 'Tvåvägs-synk: hämtar från och pushar till Asset+',
+        title: 'Syncing...',
+        description: 'Two-way sync: pulling from and pushing to Asset+',
       });
 
       const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
@@ -77,7 +79,7 @@ export const DataConsistencyBanner: React.FC = () => {
       
       if (data?.success) {
         toast({
-          title: 'Synkronisering klar',
+          title: 'Sync complete',
           description: data.message,
         });
         setDeltaResult(null);
@@ -93,8 +95,8 @@ export const DataConsistencyBanner: React.FC = () => {
     } catch (error) {
       console.error('Sync failed:', error);
       toast({
-        title: 'Synkronisering misslyckades',
-        description: error instanceof Error ? error.message : 'Okänt fel',
+        title: 'Sync failed',
+        description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
     } finally {
@@ -118,21 +120,21 @@ export const DataConsistencyBanner: React.FC = () => {
         
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium text-warning">
-            <span>Datadiskrepans upptäckt</span>
+            <span>Data discrepancy detected</span>
           </div>
           
           <div className="mt-1 text-sm text-muted-foreground">
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1">
                 <Database className="h-3.5 w-3.5" />
-                Lokalt: {deltaResult.localCount.toLocaleString()}
+                Local: {deltaResult.localCount.toLocaleString()}
               </span>
               <span>Asset+: {deltaResult.remoteCount.toLocaleString()}</span>
             </div>
             <p className="mt-1">{deltaResult.message}</p>
           </div>
           
-          <p className="mt-1 text-xs text-muted-foreground/70 italic">ACC-data hanteras via Asset+ och FM Access.</p>
+          <p className="mt-1 text-xs text-muted-foreground/70 italic">ACC data is managed via Asset+ and FM Access.</p>
           
           <div className="mt-2 flex gap-2">
             <Button
@@ -142,14 +144,14 @@ export const DataConsistencyBanner: React.FC = () => {
               className="gap-1.5"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              {isSyncing ? 'Synkar...' : 'Synka med Asset+'}
+              {isSyncing ? 'Syncing...' : 'Sync with Asset+'}
             </Button>
             <Button
               size="sm"
               variant="ghost"
               onClick={dismiss}
             >
-              Ignorera
+              Dismiss
             </Button>
           </div>
         </div>

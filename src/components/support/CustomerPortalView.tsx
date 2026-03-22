@@ -20,19 +20,19 @@ const CustomerPortalView: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Support</h1>
-          <p className="text-sm text-muted-foreground">Ärenden, feedback och kontakt med SWG</p>
+          <p className="text-sm text-muted-foreground">Cases, feedback and contact with SWG</p>
         </div>
         <Button onClick={() => setShowCreate(true)} size="sm">
           <Plus className="h-4 w-4 mr-1" />
-          Nytt ärende
+          New case
         </Button>
       </div>
 
       <Tabs defaultValue="cases">
         <TabsList>
-          <TabsTrigger value="cases">Ärenden</TabsTrigger>
+          <TabsTrigger value="cases">Cases</TabsTrigger>
           <TabsTrigger value="feedback">Feedback</TabsTrigger>
-          <TabsTrigger value="contact">Kontakt</TabsTrigger>
+          <TabsTrigger value="contact">Contact</TabsTrigger>
         </TabsList>
 
         <TabsContent value="cases">
@@ -45,24 +45,24 @@ const CustomerPortalView: React.FC = () => {
 
         <TabsContent value="contact">
           <div className="rounded-lg border bg-card p-6 space-y-4">
-            <h3 className="text-lg font-semibold text-foreground">Kontakta SWG</h3>
+            <h3 className="text-lg font-semibold text-foreground">Contact SWG</h3>
             <div className="grid gap-3 text-sm text-muted-foreground">
               <div>
-                <span className="font-medium text-foreground">E-post:</span>{' '}
+                <span className="font-medium text-foreground">Email:</span>{' '}
                 <a href="mailto:support@swg.se" className="text-primary hover:underline">support@swg.se</a>
               </div>
               <div>
-                <span className="font-medium text-foreground">Telefon:</span>{' '}
+                <span className="font-medium text-foreground">Phone:</span>{' '}
                 <a href="tel:+4686909600" className="text-primary hover:underline">08-690 96 00</a>
               </div>
               <div>
-                <span className="font-medium text-foreground">Öppettider:</span>{' '}
-                Vardagar 08:00–17:00
+                <span className="font-medium text-foreground">Office hours:</span>{' '}
+                Weekdays 08:00–17:00
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              Du kan också skapa ett ärende direkt via knappen "Nytt ärende" ovan, 
-              eller skicka ett ärende från 3D-viewern via "Skicka till Support".
+              You can also create a case directly via the "New case" button above, 
+              or submit a case from the 3D viewer via "Send to Support".
             </p>
           </div>
         </TabsContent>

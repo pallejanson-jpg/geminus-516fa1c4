@@ -178,24 +178,24 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {isEditMode ? <Pencil className="h-3.5 w-3.5 text-muted-foreground" /> : <Route className="h-3.5 w-3.5 text-muted-foreground" />}
-          <Label className="text-xs">{isEditMode ? 'Redigera graf' : 'Navigera'}</Label>
+          <Label className="text-xs">{isEditMode ? 'Edit graph' : 'Navigate'}</Label>
         </div>
         <Switch checked={isEditMode} onCheckedChange={handleEditToggle} />
       </div>
 
       {isEditMode && (
         <div className="text-[10px] text-muted-foreground bg-muted/50 rounded p-2">
-          <p><strong>📍 Nod:</strong> Klicka för att placera waypoints</p>
-          <p><strong>🔗 Kant:</strong> Klicka två noder för att koppla</p>
-          <p><strong>🏠 Rum:</strong> Länka nod till närmaste rum</p>
-          <p><strong>🗑️ Radera:</strong> Klicka för att ta bort</p>
-          <p className="mt-1">Noder: {graph.nodes.size} | Kanter: {graph.edges.length}</p>
+          <p><strong>📍 Node:</strong> Click to place waypoints</p>
+          <p><strong>🔗 Edge:</strong> Click two nodes to connect</p>
+          <p><strong>🏠 Room:</strong> Link node to nearest room</p>
+          <p><strong>🗑️ Delete:</strong> Click to remove</p>
+          <p className="mt-1">Nodes: {graph.nodes.size} | Edges: {graph.edges.length}</p>
         </div>
       )}
 
       {isEditMode && (
         <Button size="sm" variant="outline" onClick={handleSave} disabled={isSaving} className="text-xs">
-          {isSaving ? 'Sparar…' : 'Spara graf'}
+          {isSaving ? 'Saving…' : 'Save graph'}
         </Button>
       )}
 
@@ -205,10 +205,10 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
 
           {/* From room */}
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Från rum</Label>
+            <Label className="text-xs text-muted-foreground">From room</Label>
             <Select value={fromRoom} onValueChange={setFromRoom}>
               <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Välj startrum" />
+                <SelectValue placeholder="Select start room" />
               </SelectTrigger>
               <SelectContent>
                 {rooms.map((room: any) => (
@@ -227,10 +227,10 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
 
           {/* To room */}
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Till rum</Label>
+            <Label className="text-xs text-muted-foreground">To room</Label>
             <Select value={toRoom} onValueChange={setToRoom}>
               <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Välj målrum" />
+                <SelectValue placeholder="Select target room" />
               </SelectTrigger>
               <SelectContent>
                 {rooms.map((room: any) => (
@@ -250,32 +250,32 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
             className="text-xs"
           >
             <Route className="h-3.5 w-3.5 mr-1" />
-            Hitta väg
+            Find route
           </Button>
 
           {graph.nodes.size === 0 && (
             <p className="text-[10px] text-muted-foreground text-center">
-              Ingen navigeringsgraf finns. Aktivera redigeringsläge för att skapa en.
+              No navigation graph exists. Enable edit mode to create one.
             </p>
           )}
 
           {/* Route result */}
           {route && (
             <div className="bg-muted/50 rounded p-2 space-y-1">
-              <p className="text-xs font-medium text-foreground">Rutt hittad!</p>
+              <p className="text-xs font-medium text-foreground">Route found!</p>
               <p className="text-[10px] text-muted-foreground">
-                Avstånd: {route.totalDistance.toFixed(1)} enheter
+                Distance: {route.totalDistance.toFixed(1)} units
               </p>
               <p className="text-[10px] text-muted-foreground">
                 Waypoints: {route.path.length}
               </p>
               {route.floorTransitions.length > 0 && (
                 <p className="text-[10px] text-muted-foreground">
-                  Våningsbyten: {route.floorTransitions.length}
+                  Floor transitions: {route.floorTransitions.length}
                 </p>
               )}
               <Button size="sm" variant="outline" onClick={handleClearRoute} className="text-xs w-full mt-1">
-                Rensa rutt
+                Clear route
               </Button>
             </div>
           )}
