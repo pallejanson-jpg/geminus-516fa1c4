@@ -99,7 +99,7 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
           {/* Keywords */}
           {data.keywords?.length > 0 && (
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[10px] text-muted-foreground">Sökord:</span>
+              <span className="text-[10px] text-muted-foreground">Keywords:</span>
               {data.keywords.map((kw, i) => (
                 <Badge key={i} variant="outline" className="text-[10px]">{kw}</Badge>
               ))}
