@@ -117,11 +117,11 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
   const handleSubmit = async (registerAnother: boolean) => {
     // Validation
     if (!formData.name.trim()) {
-      toast.error('Namn är obligatoriskt');
+      toast.error('Name is required');
       return;
     }
     if (!formData.symbolId) {
-      toast.error('Välj en symbol');
+      toast.error('Select a symbol');
       return;
     }
 
