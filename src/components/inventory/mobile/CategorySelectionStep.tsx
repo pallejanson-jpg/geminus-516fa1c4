@@ -153,7 +153,7 @@ const CategorySelectionStep: React.FC<CategorySelectionStepProps> = ({
 
         {/* Selected count */}
         <div className="text-center text-sm text-muted-foreground">
-          {selectedCategories.size} av {INVENTORY_CATEGORIES.length} kategorier valda
+          {selectedCategories.size} of {INVENTORY_CATEGORIES.length} categories selected
         </div>
 
         {/* Continue button */}
