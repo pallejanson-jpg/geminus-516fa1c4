@@ -544,7 +544,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 max-h-80 overflow-y-auto bg-popover">
-            <DropdownMenuLabel>Systemegenskaper</DropdownMenuLabel>
+            <DropdownMenuLabel>System Properties</DropdownMenuLabel>
             {systemCols.map(col => (
               <DropdownMenuCheckboxItem
                 key={col.key}
