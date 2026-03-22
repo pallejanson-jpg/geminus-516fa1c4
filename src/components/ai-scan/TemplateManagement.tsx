@@ -320,9 +320,9 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
           <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg flex items-start gap-2">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <p>
-              Mallarna styr vad AI:n letar efter i 360°-bilderna. En bra AI-prompt beskriver 
-              tydligt vad objektet ser ut som, var det brukar finnas och vad som skiljer det 
-              från liknande objekt.
+              Templates control what the AI looks for in 360° images. A good AI prompt clearly 
+              describes what the object looks like, where it's typically found and what distinguishes 
+              it from similar objects.
             </p>
           </div>
         </CardContent>
