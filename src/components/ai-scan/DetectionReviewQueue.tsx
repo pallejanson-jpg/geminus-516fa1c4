@@ -366,7 +366,7 @@ const ApprovalDialog: React.FC<{
           {/* Coordinates (read-only) */}
           {(detection.coordinate_x != null) && (
             <div className="space-y-1">
-              <Label>Koordinater (3D)</Label>
+              <Label>Coordinates (3D)</Label>
               <div className="text-xs font-mono bg-muted p-2 rounded">
                 X: {detection.coordinate_x?.toFixed(2)} &nbsp;
                 Y: {detection.coordinate_y?.toFixed(2)} &nbsp;
