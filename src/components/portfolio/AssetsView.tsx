@@ -286,7 +286,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           setLocalAssets(mapped);
           
           toast({
-            title: 'Assets synkade',
+            title: 'Assets synced',
             description: `Fetched ${result.count} assets for this building`,
           });
         } else if (!result.synced) {
