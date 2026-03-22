@@ -649,7 +649,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
                     className="h-10"
                   >
                     <Eye className="h-4 w-4 mr-1.5" />
-                    <span className="text-xs">Öppna 360+</span>
+                    <span className="text-xs">Open 360+</span>
                   </Button>
                   <Button
                     type="button"
