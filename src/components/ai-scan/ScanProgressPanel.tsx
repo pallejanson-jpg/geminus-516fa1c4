@@ -467,9 +467,9 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Avbryt skanning?</AlertDialogTitle>
+            <AlertDialogTitle>Cancel scan?</AlertDialogTitle>
             <AlertDialogDescription>
-              Vill du avbryta den pågående skanningen? Hittade objekt som ännu inte granskats finns kvar.
+              Do you want to cancel the ongoing scan? Detected objects not yet reviewed will remain.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
