@@ -390,7 +390,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
           variant="ghost" 
           size="icon"
           className="h-9 w-9 bg-black/30 hover:bg-black/60 backdrop-blur-sm rounded-full text-white"
-          title={settings?.isFavorite ? "Ta bort favorit" : "Lägg till favorit"}
+          title={settings?.isFavorite ? "Remove favorite" : "Add to favorites"}
           disabled={isSaving}
         >
           <Star size={16} className={settings?.isFavorite ? 'fill-current text-accent' : ''} />
