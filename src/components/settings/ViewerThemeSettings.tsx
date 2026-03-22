@@ -366,7 +366,7 @@ const ViewerThemeSettings: React.FC = () => {
                 <div className="space-y-4">
                   {/* Theme name */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Namn</Label>
+                    <Label className="text-xs">Name</Label>
                     <Input
                       value={editingTheme.name}
                       onChange={(e) => setEditingTheme({ ...editingTheme, name: e.target.value })}
