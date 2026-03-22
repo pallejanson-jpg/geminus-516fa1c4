@@ -110,10 +110,10 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
 
           {/* Instructions */}
           <div className="space-y-2">
-            <h2 className="text-lg font-semibold">Välj position (valfritt)</h2>
+            <h2 className="text-lg font-semibold">Select position (optional)</h2>
             <p className="text-sm text-muted-foreground">
-              Markera var tillgången finns i 3D-modellen eller 360°-vyn. 
-              Du kan hoppa över detta steg och lägga till position senare.
+              Mark where the asset is located in the 3D model or 360° view. 
+              You can skip this step and add a position later.
             </p>
           </div>
 
