@@ -89,7 +89,7 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
                 )}
                 {data.confidence > 0 && (
                   <span className="text-[10px] text-muted-foreground mt-1 block">
-                    Konfidens: {Math.round(data.confidence * 100)}%
+                    Confidence: {Math.round(data.confidence * 100)}%
                   </span>
                 )}
               </CardContent>
