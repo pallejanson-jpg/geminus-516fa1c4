@@ -295,7 +295,7 @@ export default function CreatePropertyDialog({
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Namn</Label>
+              <Label className="text-xs text-muted-foreground">Name</Label>
               <Input
                 value={form.name}
                 onChange={(e) => set('name', e.target.value)}
