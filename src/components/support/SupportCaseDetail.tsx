@@ -194,7 +194,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
                 <div className="flex items-start gap-1.5">
                   <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                   <div>
-                    <span className="text-muted-foreground">Plats</span>
+                    <span className="text-muted-foreground">Location</span>
                     <p className="font-medium text-foreground">{supportCase.location_description}</p>
                   </div>
                 </div>
