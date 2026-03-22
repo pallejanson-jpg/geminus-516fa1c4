@@ -276,7 +276,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
               >
-                {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Byt bild'}
+                {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Change image'}
               </Button>
             </div>
           ) : (
