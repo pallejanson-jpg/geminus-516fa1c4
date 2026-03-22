@@ -141,7 +141,7 @@ const FeedbackThreadDetail: React.FC<FeedbackThreadDetailProps> = ({
         <SheetHeader className="p-4 pb-3 border-b">
           <SheetTitle className="text-base text-foreground pr-6">{thread.title}</SheetTitle>
           <SheetDescription className="text-xs text-muted-foreground">
-            {thread.profile?.display_name || 'Okänd'} · {formatDistanceToNow(new Date(thread.created_at), { addSuffix: true })}
+            {thread.profile?.display_name || 'Unknown'} · {formatDistanceToNow(new Date(thread.created_at), { addSuffix: true })}
           </SheetDescription>
           <div className="flex items-center gap-2 pt-1">
             <Button
