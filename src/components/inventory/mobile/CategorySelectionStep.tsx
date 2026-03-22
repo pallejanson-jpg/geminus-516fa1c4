@@ -99,7 +99,7 @@ const CategorySelectionStep: React.FC<CategorySelectionStepProps> = ({
             className="gap-1.5"
           >
             <CheckSquare className="h-4 w-4" />
-            Välj alla
+            Select all
           </Button>
           <Button
             type="button"
