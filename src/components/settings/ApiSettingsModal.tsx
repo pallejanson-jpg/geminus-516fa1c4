@@ -996,7 +996,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         // Process files one at a time to avoid memory limits
         for (let i = 0; i < bimItems.length; i++) {
             const item = bimItems[i];
-            setBimSyncProgress(`Fil ${i + 1}/${bimItems.length}: ${item.name}`);
+            setBimSyncProgress(`File ${i + 1}/${bimItems.length}: ${item.name}`);
 
             try {
                 const { data, error } = await supabase.functions.invoke('acc-sync', {
