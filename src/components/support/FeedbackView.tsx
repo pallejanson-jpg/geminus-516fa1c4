@@ -144,7 +144,7 @@ const FeedbackView: React.FC = () => {
         </Select>
         <Button onClick={() => setShowCreate(true)} size="sm">
           <Plus className="h-4 w-4 mr-1" />
-          Ny idé
+          New idea
         </Button>
       </div>
 
