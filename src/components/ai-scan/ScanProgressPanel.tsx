@@ -316,7 +316,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
               </div>
               <div className="p-2 md:p-3 bg-muted rounded-lg">
                 <div className="text-lg md:text-2xl font-bold text-primary">{currentJob.detections_found}</div>
-                <div className="text-[10px] md:text-xs text-muted-foreground">Hittade</div>
+                <div className="text-[10px] md:text-xs text-muted-foreground">Found</div>
               </div>
               <div className="p-2 md:p-3 bg-muted rounded-lg">
                 <div className="text-lg md:text-2xl font-bold">{formatDuration(currentJob.started_at, currentJob.completed_at)}</div>
