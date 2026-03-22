@@ -3076,7 +3076,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         console.log('Pick result:', pickResult);
         handlePick(pickResult);
       } else {
-        toast.warning('Ingen yta hittades. Försök klicka på ett synligt objekt.', {
+        toast.warning('No surface found. Try clicking on a visible object.', {
           duration: 3000,
         });
         // Don't remove listener - let user try again
