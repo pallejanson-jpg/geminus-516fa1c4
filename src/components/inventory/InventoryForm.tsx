@@ -634,7 +634,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
                   className="w-full h-14 text-base gap-3"
                 >
                   <Camera className="h-5 w-5" />
-                  Starta inventering i 360°
+                  Start inventory in 360°
                 </Button>
 
                 <div className="text-xs text-muted-foreground text-center pt-1">
