@@ -109,7 +109,7 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
 
         const errors: string[] = [];
 
-        if (!designation) errors.push('Designation saknas');
+        if (!designation) errors.push('Designation missing');
 
         // Resolve room
         let resolvedRoomFmGuid: string | undefined;
