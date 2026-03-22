@@ -193,10 +193,10 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5 text-primary" />
-            Importera från Excel
+            Import from Excel
           </DialogTitle>
           <DialogDescription>
-            Importera objekt till {buildingName} från en Excel-fil
+            Import objects to {buildingName} from an Excel file
           </DialogDescription>
         </DialogHeader>
 
