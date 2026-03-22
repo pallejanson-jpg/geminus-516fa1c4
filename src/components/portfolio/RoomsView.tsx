@@ -557,7 +557,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
             {calculatedCols.length > 0 && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuLabel>Beräknade</DropdownMenuLabel>
+                <DropdownMenuLabel>Calculated</DropdownMenuLabel>
                 {calculatedCols.map(col => (
                   <DropdownMenuCheckboxItem
                     key={col.key}

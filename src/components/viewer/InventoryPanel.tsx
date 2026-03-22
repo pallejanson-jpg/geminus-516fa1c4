@@ -542,7 +542,7 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
                 {filteredAssets.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={orderedColumns.length} className="text-center text-[10px] text-muted-foreground py-6">
-                      {search ? 'Inga matchande assets.' : 'Inga assets i denna byggnad.'}
+                      {search ? 'No matching assets.' : 'No assets in this building.'}
                     </TableCell>
                   </TableRow>
                 )}

@@ -213,7 +213,7 @@ export function useWebSpeechRecognition(
     try {
       recognition.start();
     } catch (e) {
-      const errorMsg = 'Kunde inte starta röstinspelning';
+      const errorMsg = 'Could not start voice recording';
       setError(errorMsg);
       onError?.(errorMsg);
     }
