@@ -933,12 +933,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 setAccFolders(data.folders || []);
                 setAccTopLevelItems(data.topLevelItems || []);
                 setAccRootFolderName(data.rootFolder || '');
-                toast({ title: 'Mappar hämtade', description: `Hittade ${(data.folders || []).length} mappar i "${data.rootFolder}".` });
+                toast({ title: 'Folders fetched', description: `Found ${(data.folders || []).length} folders in "${data.rootFolder}".` });
             } else {
-                toast({ variant: 'destructive', title: 'Fel', description: data?.error || 'Kunde inte hämta mappar' });
+                toast({ variant: 'destructive', title: 'Error', description: data?.error || 'Could not fetch folders' });
             }
         } catch (err: any) {
-            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+            toast({ variant: 'destructive', title: 'Error', description: err.message });
         } finally {
             setIsLoadingAccFolders(false);
         }
