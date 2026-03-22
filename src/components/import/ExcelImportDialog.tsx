@@ -285,11 +285,11 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
           {step === 'done' && (
             <div className="flex flex-col items-center gap-4 py-8">
               <CheckCircle2 className="h-10 w-10 text-green-500" />
-              <p className="text-sm font-medium">Import klar!</p>
+              <p className="text-sm font-medium">Import complete!</p>
               <div className="flex gap-4 text-sm">
-                <span className="text-green-600">{importResults.created} skapade</span>
+                <span className="text-green-600">{importResults.created} created</span>
                 {importResults.failed > 0 && (
-                  <span className="text-destructive">{importResults.failed} misslyckades</span>
+                  <span className="text-destructive">{importResults.failed} failed</span>
                 )}
               </div>
             </div>
