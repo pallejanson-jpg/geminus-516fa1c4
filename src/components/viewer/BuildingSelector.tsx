@@ -196,7 +196,7 @@ const BuildingSelector: React.FC = () => {
   if (isLoadingData) {
     return (
       <div className="h-full flex items-center justify-center">
-        <Spinner size="lg" label="Laddar byggnader..." />
+        <Spinner size="lg" label="Loading buildings..." />
       </div>
     );
   }
