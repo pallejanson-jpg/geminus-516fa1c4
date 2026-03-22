@@ -44,10 +44,10 @@ class ViewerErrorBoundary extends Component<ViewerErrorBoundaryProps, ViewerErro
           <div className="text-center max-w-md space-y-4">
             <AlertCircle className="h-12 w-12 text-destructive mx-auto" />
             <h2 className="text-lg font-semibold text-foreground">
-              3D-visaren kraschade
+              3D Viewer Crashed
             </h2>
             <p className="text-sm text-muted-foreground">
-              Ett oväntat fel uppstod i 3D-motorn. Detta kan bero på begränsat grafikminne på enheten.
+              An unexpected error occurred in the 3D engine. This may be due to limited GPU memory on your device.
             </p>
             {this.state.error?.message && (
               <p className="text-xs text-muted-foreground/70 font-mono bg-muted rounded p-2 break-all">
