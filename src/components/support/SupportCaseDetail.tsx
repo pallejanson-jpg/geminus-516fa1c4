@@ -240,7 +240,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
             {supportCase.bcf_issue_id && (
               <div className="flex items-center gap-2 text-sm">
                 <Link2 className="h-4 w-4 text-primary" />
-                <span className="text-muted-foreground">Länkad till BCF-issue</span>
+                <span className="text-muted-foreground">Linked to BCF issue</span>
               </div>
             )}
 
