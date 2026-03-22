@@ -264,7 +264,7 @@ const AccFolderNode: React.FC<{
                     )}
 
                     {folder.truncated && (
-                        <p className="px-2.5 pl-8 text-xs text-muted-foreground italic">Undermappar ej laddade (max djup nått).</p>
+                        <p className="px-2.5 pl-8 text-xs text-muted-foreground italic">Subfolders not loaded (max depth reached).</p>
                     )}
                 </div>
             )}
