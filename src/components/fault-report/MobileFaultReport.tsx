@@ -196,8 +196,8 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
                   render={({ field }) => (
                     <FormItem>
                       <FormFieldWithHelp
-                        label="Kontakt, telefonnummer"
-                        helpText="Fyll i ditt telefonnummer om du vill bli kontaktad."
+                        label="Contact phone number"
+                        helpText="Enter your phone number if you want to be contacted."
                       />
                       <FormControl>
                         <ClearableInput
