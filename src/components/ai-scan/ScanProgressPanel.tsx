@@ -264,10 +264,10 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
     const diffMs = end.getTime() - start.getTime();
     const diffSec = Math.floor(diffMs / 1000);
     
-    if (diffSec < 60) return `${diffSec} sek`;
+    if (diffSec < 60) return `${diffSec}s`;
     const minutes = Math.floor(diffSec / 60);
     const seconds = diffSec % 60;
-    return `${minutes} min ${seconds} sek`;
+    return `${minutes}m ${seconds}s`;
   };
 
   const canDeleteJob = (status: string) => {
