@@ -308,7 +308,7 @@ const FmAccessDocSyncPanel: React.FC = () => {
             });
             fetchStatus();
         } catch (err: any) {
-            toast({ variant: 'destructive', title: 'Synkfel', description: err.message });
+            toast({ variant: 'destructive', title: 'Sync error', description: err.message });
         } finally {
             setIsSyncing(false);
             setSyncAction(null);
