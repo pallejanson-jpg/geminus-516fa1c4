@@ -220,8 +220,8 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
       if (error) throw error;
       
       toast({
-        title: 'Skanning borttagen',
-        description: 'Skanningsjobbet och relaterade detektioner har tagits bort.',
+        title: 'Scan deleted',
+        description: 'The scan job and related detections have been removed.',
       });
       
       onRefresh();
