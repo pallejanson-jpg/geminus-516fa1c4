@@ -249,7 +249,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
             {/* Comments */}
             <div>
               <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
-                Kommentarer
+                Comments
                 {comments.length > 0 && <Badge variant="secondary" className="text-xs">{comments.length}</Badge>}
               </h4>
               {loadingComments ? (
@@ -257,7 +257,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
               ) : comments.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">Inga kommentarer ännu</p>
+                <p className="text-sm text-muted-foreground text-center py-4">No comments yet</p>
               ) : (
                 <div className="space-y-3">
                   {comments.map(c => (
