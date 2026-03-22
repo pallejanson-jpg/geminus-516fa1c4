@@ -355,7 +355,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
 
           {/* Origin */}
           <div className="space-y-1 relative">
-            <label className="text-xs text-muted-foreground">Från</label>
+            <label className="text-xs text-muted-foreground">From</label>
             <div className="flex gap-1.5">
               <div className="relative flex-1">
                 <Input
