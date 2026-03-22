@@ -72,8 +72,8 @@ export default function RoomOptimizationTab({ facility }: { facility?: Facility 
   if (!effectiveFacility) {
     return (
       <div className="text-center py-12 text-muted-foreground">
-        <LayoutGrid className="h-12 w-12 mx-auto mb-3 opacity-40" />
-        <p>Välj en byggnad för att analysera rumsoptimering</p>
+         <LayoutGrid className="h-12 w-12 mx-auto mb-3 opacity-40" />
+         <p>Select a building to analyze room optimization</p>
       </div>
     );
   }
