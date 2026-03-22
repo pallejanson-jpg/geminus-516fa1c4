@@ -717,12 +717,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 if (data.projects.length > 0 && !selectedAccProjectId) {
                     setSelectedAccProjectId(data.projects[0].id);
                 }
-                toast({ title: 'Projekt hämtade', description: `Hittade ${data.projects.length} projekt i ACC.` });
+                toast({ title: 'Projects fetched', description: `Found ${data.projects.length} projects in ACC.` });
             } else {
-                toast({ variant: 'destructive', title: 'Fel', description: data?.error || 'Kunde inte hämta projekt' });
+                toast({ variant: 'destructive', title: 'Error', description: data?.error || 'Could not fetch projects' });
             }
         } catch (err: any) {
-            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+            toast({ variant: 'destructive', title: 'Error', description: err.message });
         } finally {
             setIsLoadingAccProjects(false);
         }
