@@ -386,7 +386,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
             </div>
             <div className="flex flex-wrap gap-1">
               {formData.aiProperties.manufacturer && (
-                <Badge variant="outline" className="text-xs">Tillverkare: {formData.aiProperties.manufacturer}</Badge>
+                <Badge variant="outline" className="text-xs">Manufacturer: {formData.aiProperties.manufacturer}</Badge>
               )}
               {formData.aiProperties.model && (
                 <Badge variant="outline" className="text-xs">Modell: {formData.aiProperties.model}</Badge>
