@@ -195,7 +195,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
 
       {isEditMode && (
         <Button size="sm" variant="outline" onClick={handleSave} disabled={isSaving} className="text-xs">
-          {isSaving ? 'Sparar…' : 'Spara graf'}
+          {isSaving ? 'Saving…' : 'Save graph'}
         </Button>
       )}
 
