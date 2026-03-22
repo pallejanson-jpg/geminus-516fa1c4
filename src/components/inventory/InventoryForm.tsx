@@ -472,7 +472,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
 
       {/* Name - large input */}
       <div className="space-y-2">
-        <Label className="text-base">Namn / Beteckning *</Label>
+        <Label className="text-base">Name / Designation *</Label>
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
