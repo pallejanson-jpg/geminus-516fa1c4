@@ -263,7 +263,7 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
               <Input id="email" type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} placeholder="your@email.com" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="phone">Kontakt telefon</Label>
+              <Label htmlFor="phone">Contact phone</Label>
               <Input id="phone" type="tel" value={contactPhone} onChange={e => setContactPhone(e.target.value)} placeholder="+46..." />
             </div>
           </div>
