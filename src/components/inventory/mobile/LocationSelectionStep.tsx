@@ -218,7 +218,7 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <DoorOpen className="h-5 w-5 text-primary" />
-              <Label className="text-base font-medium">Rum (valfritt)</Label>
+              <Label className="text-base font-medium">Room (optional)</Label>
             </div>
             <Select 
               value={formData.roomFmGuid || NONE_ROOM_VALUE} 
