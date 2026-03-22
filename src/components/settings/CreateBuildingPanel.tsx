@@ -248,7 +248,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
   // ── Create building handler ──
   const handleCreate = async () => {
     if (!complexDesignation || !complexName || !buildingDesignation || !buildingName) {
-      toast({ variant: 'destructive', title: 'Fyll i alla obligatoriska fält' });
+      toast({ variant: 'destructive', title: 'Fill in all required fields' });
       return;
     }
 
