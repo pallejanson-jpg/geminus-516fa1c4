@@ -284,7 +284,7 @@ const BuildingSelector: React.FC = () => {
                           {metrics.floors > 0 && (
                             <Badge variant="secondary" className="text-xs">
                               <Layers className="h-3 w-3 mr-1" />
-                              {metrics.floors} vån
+                              {metrics.floors} fl.
                             </Badge>
                           )}
                           {metrics.rooms > 0 && (
