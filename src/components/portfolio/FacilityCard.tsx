@@ -78,7 +78,7 @@ const FacilityCard: React.FC<FacilityCardProps> = ({ facility, onClick, showSpli
               </Button>
             </TooltipTrigger>
             <TooltipContent side="left">
-              <p>Öppna 3D + 360°</p>
+              <p>Open 3D + 360°</p>
             </TooltipContent>
           </Tooltip>
         )}
