@@ -223,9 +223,9 @@ export default function CreatePropertyDialog({
       });
       if (error) throw error;
       if (data?.success) {
-        toast({ title: 'Senslinc anslutning OK ✓' });
+        toast({ title: 'Senslinc connection OK ✓' });
       } else {
-        toast({ title: 'Senslinc misslyckades', description: data?.error, variant: 'destructive' });
+        toast({ title: 'Senslinc failed', description: data?.error, variant: 'destructive' });
       }
     } catch (err: any) {
       toast({ title: 'Senslinc test misslyckades', description: err.message, variant: 'destructive' });
