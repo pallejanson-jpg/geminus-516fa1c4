@@ -515,7 +515,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
               {allSteps.length === 0 && (
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 text-xs">
-                    <Badge variant="secondary" className="text-[10px]">Utomhus</Badge>
+                    <Badge variant="secondary" className="text-[10px]">Outdoor</Badge>
                     <span>{formatDistance(routeSummary.outdoorDistance)}</span>
                     <span className="text-muted-foreground">·</span>
                     <span>{formatDuration(routeSummary.outdoorDuration)}</span>
