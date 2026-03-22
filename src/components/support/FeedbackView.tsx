@@ -27,10 +27,10 @@ export interface FeedbackThread {
 }
 
 const CATEGORY_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string }> = {
-  suggestion: { label: 'Förslag', icon: Lightbulb, color: 'text-amber-500' },
-  ux_issue: { label: 'UX-problem', icon: Bug, color: 'text-destructive' },
-  bug: { label: 'Bugg', icon: Bug, color: 'text-destructive' },
-  question: { label: 'Fråga', icon: HelpCircle, color: 'text-primary' },
+  suggestion: { label: 'Suggestion', icon: Lightbulb, color: 'text-amber-500' },
+  ux_issue: { label: 'UX issue', icon: Bug, color: 'text-destructive' },
+  bug: { label: 'Bug', icon: Bug, color: 'text-destructive' },
+  question: { label: 'Question', icon: HelpCircle, color: 'text-primary' },
 };
 
 const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
