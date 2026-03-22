@@ -389,7 +389,7 @@ const IvionInventory: React.FC = () => {
           </p>
           <Button onClick={handleClose}>
             <ChevronLeft className="h-4 w-4 mr-2" />
-            Tillbaka
+            Back
           </Button>
         </div>
       </div>
