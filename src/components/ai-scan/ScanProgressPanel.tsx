@@ -312,7 +312,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
             <div className="grid grid-cols-3 gap-2 md:gap-4 text-center">
               <div className="p-2 md:p-3 bg-muted rounded-lg">
                 <div className="text-lg md:text-2xl font-bold">{currentJob.processed_images}</div>
-                <div className="text-[10px] md:text-xs text-muted-foreground">Bilder</div>
+                <div className="text-[10px] md:text-xs text-muted-foreground">Images</div>
               </div>
               <div className="p-2 md:p-3 bg-muted rounded-lg">
                 <div className="text-lg md:text-2xl font-bold text-primary">{currentJob.detections_found}</div>
