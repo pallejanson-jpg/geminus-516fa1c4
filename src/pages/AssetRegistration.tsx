@@ -177,10 +177,10 @@ function AssetRegistrationForm({
 
           {/* Asset type dropdown */}
           <div className="space-y-2">
-            <Label htmlFor="assetType">Typ av tillgång</Label>
+            <Label htmlFor="assetType">Asset Type</Label>
             <Select value={assetType} onValueChange={setAssetType} disabled={isLoading}>
               <SelectTrigger>
-                <SelectValue placeholder="Välj typ..." />
+                <SelectValue placeholder="Select type..." />
               </SelectTrigger>
               <SelectContent>
                 {ASSET_TYPES.map((type) => (
