@@ -288,8 +288,8 @@ export default function SensorsTab() {
             <span className="text-2xl font-bold" style={{ color: avgHex }}>{buildingAvg}</span>
             <span className="text-sm text-muted-foreground ml-1">{metricDef.unit}</span>
           </div>
-          <div className="text-xs text-muted-foreground">
-            Snitt {metricDef.label} · {roomValues.length} rum
+           <div className="text-xs text-muted-foreground">
+             Avg {metricDef.label} · {roomValues.length} rooms
           </div>
         </div>
       )}
