@@ -369,7 +369,7 @@ const SymbolSettings: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <Label>Färg</Label>
+              <Label>Color</Label>
               <div className="flex flex-wrap gap-2">
                 {COLOR_PALETTE.map((color) => (
                   <button
