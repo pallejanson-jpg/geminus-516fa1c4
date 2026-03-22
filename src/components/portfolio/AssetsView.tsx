@@ -527,8 +527,8 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       onPlaceAnnotation(asset.raw);
     } else {
       toast({
-        title: 'Placera annotation',
-        description: `Öppnar 3D-viewern för att placera annotation för ${asset.designation}`,
+        title: 'Place annotation',
+        description: `Opening 3D viewer to place annotation for ${asset.designation}`,
       });
     }
   };
