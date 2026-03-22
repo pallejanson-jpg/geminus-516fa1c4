@@ -211,7 +211,7 @@ const IvionCreate: React.FC = () => {
       if (error) throw error;
 
       setIsSaved(true);
-      toast.success('Tillgång skapad!');
+      toast.success('Asset created!');
       
       // Notify parent window if embedded in iframe
       if (window.parent !== window) {
@@ -222,7 +222,7 @@ const IvionCreate: React.FC = () => {
         }, '*');
       }
     } catch (error: any) {
-      toast.error('Kunde inte spara', {
+      toast.error('Could not save', {
         description: error.message,
       });
     } finally {
