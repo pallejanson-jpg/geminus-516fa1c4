@@ -523,8 +523,8 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                 rows={5}
               />
               <p className="text-xs text-muted-foreground">
-                Beskriv på engelska hur objektet ser ut, var det brukar finnas och vad som 
-                skiljer det från liknande objekt.
+                Describe in English what the object looks like, where it's typically found and what 
+                distinguishes it from similar objects.
               </p>
             </div>
 
