@@ -637,7 +637,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                 {selectedIds.size > 0 && (
                   <>
                     <Button variant="outline" size="sm" onClick={clearSelection}>
-                      Avmarkera ({selectedIds.size})
+                      Deselect ({selectedIds.size})
                     </Button>
                     <Button
                       size="sm"
