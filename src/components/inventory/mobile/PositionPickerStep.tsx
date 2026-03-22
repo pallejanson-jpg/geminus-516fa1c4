@@ -100,7 +100,7 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
             <div className="flex items-center gap-2 p-3 bg-primary/10 border border-primary/20 rounded-lg">
               <MapPin className="h-5 w-5 text-primary" />
               <div className="text-sm">
-                <span className="font-medium">Position vald</span>
+                <span className="font-medium">Position selected</span>
                 <span className="text-muted-foreground ml-2">
                   ({formData.coordinates.x.toFixed(2)}, {formData.coordinates.y.toFixed(2)}, {formData.coordinates.z.toFixed(2)})
                 </span>
@@ -110,10 +110,10 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
 
           {/* Instructions */}
           <div className="space-y-2">
-            <h2 className="text-lg font-semibold">Välj position (valfritt)</h2>
+            <h2 className="text-lg font-semibold">Select position (optional)</h2>
             <p className="text-sm text-muted-foreground">
-              Markera var tillgången finns i 3D-modellen eller 360°-vyn. 
-              Du kan hoppa över detta steg och lägga till position senare.
+              Mark where the asset is located in the 3D model or 360° view. 
+              You can skip this step and add a position later.
             </p>
           </div>
 
@@ -127,8 +127,8 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
                 onClick={() => setShow360Picker(true)}
               >
                 <Camera className="h-8 w-8" />
-                <span className="text-base font-medium">Välj i 360°-vy</span>
-                <span className="text-xs opacity-80">Navigera → Bekräfta position</span>
+                <span className="text-base font-medium">Select in 360° view</span>
+                <span className="text-xs opacity-80">Navigate → Confirm position</span>
               </Button>
             )}
 
@@ -139,7 +139,7 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
               onClick={() => setShowPositionPicker(true)}
             >
               <Box className="h-8 w-8 text-primary" />
-              <span className="text-base font-medium">Välj i 3D-modell</span>
+              <span className="text-base font-medium">Select in 3D model</span>
             </Button>
           </div>
 
@@ -150,7 +150,7 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
             onClick={onSkip}
           >
             <SkipForward className="h-4 w-4 mr-2" />
-            Hoppa över - lägg till position senare
+            Skip — add position later
           </Button>
         </div>
       </ScrollArea>

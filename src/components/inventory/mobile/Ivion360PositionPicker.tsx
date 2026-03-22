@@ -95,7 +95,7 @@ const Ivion360PositionPicker: React.FC<Ivion360PositionPickerProps> = ({
     setIsCreatingPoi(true);
     try {
       const fmGuid = crypto.randomUUID();
-      const displayName = formData.name || formData.categoryLabel || 'Ny tillgång';
+      const displayName = formData.name || formData.categoryLabel || 'New asset';
 
       // Build custom data with all AI info
       const customData: Record<string, any> = {
@@ -140,10 +140,10 @@ const Ivion360PositionPicker: React.FC<Ivion360PositionPickerProps> = ({
       });
 
       if (error || !data?.id) {
-        throw new Error(error?.message || data?.error || 'Kunde inte skapa POI');
+        throw new Error(error?.message || data?.error || 'Could not create POI');
       }
 
-      toast.success('Position sparad i 360°');
+      toast.success('Position saved in 360°');
       onPositionPicked({
         coordinates: pendingPosition.coords,
         ivionPoiId: data.id,
@@ -153,7 +153,7 @@ const Ivion360PositionPicker: React.FC<Ivion360PositionPickerProps> = ({
       onOpenChange(false);
     } catch (err: any) {
       console.error('[Ivion360Picker] Create POI error:', err);
-      toast.error('Kunde inte spara position', { description: err.message });
+      toast.error('Could not save position', { description: err.message });
     } finally {
       setIsCreatingPoi(false);
     }
@@ -167,7 +167,7 @@ const Ivion360PositionPicker: React.FC<Ivion360PositionPickerProps> = ({
           <div className="flex items-center justify-between px-3 py-2 bg-background/90 backdrop-blur border-b z-10">
             <div className="flex items-center gap-2 min-w-0">
               <MapPin className="h-4 w-4 text-primary shrink-0" />
-              <span className="text-sm font-medium truncate">Välj position i 360°</span>
+              <span className="text-sm font-medium truncate">Select position in 360°</span>
             </div>
             <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onOpenChange(false)}>
               <X className="h-4 w-4" />
@@ -182,7 +182,7 @@ const Ivion360PositionPicker: React.FC<Ivion360PositionPickerProps> = ({
             <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-20">
               <div className="flex flex-col items-center gap-3">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <span className="text-sm text-muted-foreground">Laddar 360°-vy...</span>
+                <span className="text-sm text-muted-foreground">Loading 360° view...</span>
               </div>
             </div>
           )}
@@ -191,8 +191,8 @@ const Ivion360PositionPicker: React.FC<Ivion360PositionPickerProps> = ({
           {sdkStatus === 'failed' && (
             <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-20">
               <div className="flex flex-col items-center gap-3 p-6 text-center">
-                <span className="text-sm text-destructive">{errorMessage || 'Kunde inte ladda 360°-vyn'}</span>
-                <Button variant="outline" size="sm" onClick={retry}>Försök igen</Button>
+                <span className="text-sm text-destructive">{errorMessage || 'Could not load 360° view'}</span>
+                <Button variant="outline" size="sm" onClick={retry}>Try again</Button>
               </div>
             </div>
           )}
@@ -202,12 +202,12 @@ const Ivion360PositionPicker: React.FC<Ivion360PositionPickerProps> = ({
             <div className="absolute bottom-0 left-0 right-0 z-10">
               {!pendingPosition ? (
                 <div className="bg-background/90 backdrop-blur px-4 py-3 text-center">
-                  <span className="text-sm text-muted-foreground">Navigera till rätt plats...</span>
+                  <span className="text-sm text-muted-foreground">Navigate to the right location...</span>
                 </div>
               ) : (
                 <div className="bg-background/95 backdrop-blur border-t px-4 py-3 flex items-center justify-between gap-3">
                   <div className="text-xs text-muted-foreground truncate">
-                    Bild #{pendingPosition.imageId} — ({pendingPosition.coords.x.toFixed(1)}, {pendingPosition.coords.y.toFixed(1)}, {pendingPosition.coords.z.toFixed(1)})
+                    Image #{pendingPosition.imageId} — ({pendingPosition.coords.x.toFixed(1)}, {pendingPosition.coords.y.toFixed(1)}, {pendingPosition.coords.z.toFixed(1)})
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <Button
@@ -221,7 +221,7 @@ const Ivion360PositionPicker: React.FC<Ivion360PositionPickerProps> = ({
                       ) : (
                         <Check className="h-4 w-4" />
                       )}
-                      Bekräfta
+                      Confirm
                     </Button>
                   </div>
                 </div>

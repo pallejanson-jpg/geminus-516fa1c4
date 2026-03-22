@@ -80,7 +80,7 @@ const CategorySelectionStep: React.FC<CategorySelectionStepProps> = ({
     <ScrollArea className="h-full">
       <div className="p-4 space-y-4">
         <div className="text-center mb-2">
-          <h2 className="text-lg font-semibold">Välj kategori</h2>
+          <h2 className="text-lg font-semibold">Select category</h2>
           <p className="text-sm text-muted-foreground">
             {formData.buildingName}
             {formData.levelName && ` → ${formData.levelName}`}
@@ -99,7 +99,7 @@ const CategorySelectionStep: React.FC<CategorySelectionStepProps> = ({
             className="gap-1.5"
           >
             <CheckSquare className="h-4 w-4" />
-            Välj alla
+            Select all
           </Button>
           <Button
             type="button"
@@ -110,7 +110,7 @@ const CategorySelectionStep: React.FC<CategorySelectionStepProps> = ({
             className="gap-1.5"
           >
             <Square className="h-4 w-4" />
-            Avmarkera alla
+            Deselect all
           </Button>
         </div>
 
@@ -153,7 +153,7 @@ const CategorySelectionStep: React.FC<CategorySelectionStepProps> = ({
 
         {/* Selected count */}
         <div className="text-center text-sm text-muted-foreground">
-          {selectedCategories.size} av {INVENTORY_CATEGORIES.length} kategorier valda
+          {selectedCategories.size} of {INVENTORY_CATEGORIES.length} categories selected
         </div>
 
         {/* Continue button */}
@@ -163,7 +163,7 @@ const CategorySelectionStep: React.FC<CategorySelectionStepProps> = ({
           disabled={noneSelected}
           onClick={handleContinue}
         >
-          Fortsätt
+          Continue
         </Button>
       </div>
     </ScrollArea>
