@@ -382,10 +382,10 @@ const IvionCreate: React.FC = () => {
           {/* Building dropdown */}
           <div className="space-y-2">
             <Label>
-              Byggnad *
+              Building *
               {matchedBuilding && (
                 <span className="text-muted-foreground text-xs ml-2">
-                  (matchad från Ivion site)
+                  (matched from Ivion site)
                 </span>
               )}
             </Label>
