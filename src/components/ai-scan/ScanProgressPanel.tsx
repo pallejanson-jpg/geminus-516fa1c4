@@ -193,14 +193,14 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
       
       stopPolling();
       toast({
-        title: 'Skanning avbruten',
-        description: 'Skanningen har avbrutits. Hittade objekt finns kvar för granskning.',
+        title: 'Scan cancelled',
+        description: 'The scan has been cancelled. Detected objects are still available for review.',
       });
       
       onScanCancelled();
     } catch (error: any) {
       toast({
-        title: 'Fel vid avbrytning',
+        title: 'Cancellation error',
         description: error.message,
         variant: 'destructive',
       });
@@ -220,14 +220,14 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
       if (error) throw error;
       
       toast({
-        title: 'Skanning borttagen',
-        description: 'Skanningsjobbet och relaterade detektioner har tagits bort.',
+        title: 'Scan deleted',
+        description: 'The scan job and related detections have been removed.',
       });
       
       onRefresh();
     } catch (error: any) {
       toast({
-        title: 'Fel vid borttagning',
+        title: 'Deletion error',
         description: error.message,
         variant: 'destructive',
       });
@@ -240,17 +240,17 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'queued':
-        return <Badge variant="secondary"><Clock className="h-3 w-3 mr-1" />Köad</Badge>;
+        return <Badge variant="secondary"><Clock className="h-3 w-3 mr-1" />Queued</Badge>;
       case 'running':
-        return <Badge variant="default"><RefreshCw className="h-3 w-3 mr-1 animate-spin" />Pågår</Badge>;
+        return <Badge variant="default"><RefreshCw className="h-3 w-3 mr-1 animate-spin" />Running</Badge>;
       case 'paused':
-        return <Badge variant="outline"><Pause className="h-3 w-3 mr-1" />Pausad</Badge>;
+        return <Badge variant="outline"><Pause className="h-3 w-3 mr-1" />Paused</Badge>;
       case 'completed':
-        return <Badge variant="default" className="bg-green-600"><CheckCircle2 className="h-3 w-3 mr-1" />Klar</Badge>;
+        return <Badge variant="default" className="bg-green-600"><CheckCircle2 className="h-3 w-3 mr-1" />Done</Badge>;
       case 'cancelled':
-        return <Badge variant="outline"><StopCircle className="h-3 w-3 mr-1" />Avbruten</Badge>;
+        return <Badge variant="outline"><StopCircle className="h-3 w-3 mr-1" />Cancelled</Badge>;
       case 'failed':
-        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />Misslyckades</Badge>;
+        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />Failed</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -264,10 +264,10 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
     const diffMs = end.getTime() - start.getTime();
     const diffSec = Math.floor(diffMs / 1000);
     
-    if (diffSec < 60) return `${diffSec} sek`;
+    if (diffSec < 60) return `${diffSec}s`;
     const minutes = Math.floor(diffSec / 60);
     const seconds = diffSec % 60;
-    return `${minutes} min ${seconds} sek`;
+    return `${minutes}m ${seconds}s`;
   };
 
   const canDeleteJob = (status: string) => {
@@ -284,10 +284,10 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
               <div className="min-w-0">
                 <CardTitle className="flex items-center gap-2 text-base md:text-lg">
                   <RefreshCw className={`h-4 w-4 md:h-5 md:w-5 shrink-0 ${currentJob.status === 'running' ? 'animate-spin' : ''}`} />
-                  <span className="truncate">Aktiv skanning</span>
+                  <span className="truncate">Active scan</span>
                 </CardTitle>
                 <CardDescription className="text-xs md:text-sm mt-1 line-clamp-2">
-                  Söker efter: {currentJob.templates.join(', ')}
+                  Searching for: {currentJob.templates.join(', ')}
                 </CardDescription>
               </div>
               {getStatusBadge(currentJob.status)}
@@ -297,7 +297,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
             {/* Progress bar */}
             <div className="space-y-2">
               <div className="flex justify-between text-xs md:text-sm">
-                <span>Bearbetade bilder</span>
+                <span>Processed images</span>
                 <span>{currentJob.processed_images} / {currentJob.total_images || '?'}</span>
               </div>
               <Progress 
@@ -312,15 +312,15 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
             <div className="grid grid-cols-3 gap-2 md:gap-4 text-center">
               <div className="p-2 md:p-3 bg-muted rounded-lg">
                 <div className="text-lg md:text-2xl font-bold">{currentJob.processed_images}</div>
-                <div className="text-[10px] md:text-xs text-muted-foreground">Bilder</div>
+                <div className="text-[10px] md:text-xs text-muted-foreground">Images</div>
               </div>
               <div className="p-2 md:p-3 bg-muted rounded-lg">
                 <div className="text-lg md:text-2xl font-bold text-primary">{currentJob.detections_found}</div>
-                <div className="text-[10px] md:text-xs text-muted-foreground">Hittade</div>
+                <div className="text-[10px] md:text-xs text-muted-foreground">Found</div>
               </div>
               <div className="p-2 md:p-3 bg-muted rounded-lg">
                 <div className="text-lg md:text-2xl font-bold">{formatDuration(currentJob.started_at, currentJob.completed_at)}</div>
-                <div className="text-[10px] md:text-xs text-muted-foreground">Tid</div>
+                <div className="text-[10px] md:text-xs text-muted-foreground">Time</div>
               </div>
             </div>
 
@@ -328,7 +328,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
             {autoProcess && (
               <div className="flex items-center gap-2 p-2 bg-primary/10 text-primary rounded-lg">
                 <RefreshCw className="h-4 w-4 animate-spin" />
-                <span className="text-sm font-medium">Automatisk bearbetning pågår...</span>
+                <span className="text-sm font-medium">Automatic processing in progress…</span>
               </div>
             )}
 
@@ -353,12 +353,12 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
                   {autoProcess ? (
                     <>
                       <Pause className="h-4 w-4 mr-2" />
-                      Pausa automatisk körning
+                      Pause auto-processing
                     </>
                   ) : (
                     <>
                       <Play className="h-4 w-4 mr-2" />
-                      Kör automatiskt
+                      Run automatically
                     </>
                   )}
                 </Button>
@@ -374,12 +374,12 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
                     {isProcessing ? (
                       <>
                         <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                        Bearbetar batch...
+                        Processing batch…
                       </>
                     ) : (
                       <>
                         <Play className="h-4 w-4 mr-2" />
-                        Bearbeta nästa batch (25 bilder)
+                        Process next batch (25 images)
                       </>
                     )}
                   </Button>
@@ -392,7 +392,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
                   className="w-full"
                 >
                   <StopCircle className="h-4 w-4 mr-2" />
-                  Avbryt skanning
+                  Cancel scan
                 </Button>
               </div>
             )}
@@ -402,9 +402,9 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
         <Card>
           <CardContent className="py-8 md:py-12 text-center">
             <RefreshCw className="h-10 w-10 md:h-12 md:w-12 mx-auto mb-3 md:mb-4 text-muted-foreground/50" />
-            <h3 className="text-base md:text-lg font-medium mb-2">Ingen aktiv skanning</h3>
+            <h3 className="text-base md:text-lg font-medium mb-2">No active scan</h3>
             <p className="text-xs md:text-sm text-muted-foreground">
-              Gå till "Konfigurera" för att starta en ny AI-skanning
+              Go to "Configure" to start a new AI scan
             </p>
           </CardContent>
         </Card>
@@ -413,12 +413,12 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
       {/* Recent Jobs */}
       <Card>
         <CardHeader className="pb-2 md:pb-4">
-          <CardTitle className="text-sm md:text-base">Tidigare skanningar</CardTitle>
+          <CardTitle className="text-sm md:text-base">Previous scans</CardTitle>
         </CardHeader>
         <CardContent>
           {recentJobs.length === 0 ? (
             <p className="text-xs md:text-sm text-muted-foreground text-center py-4">
-              Inga tidigare skanningar
+              No previous scans
             </p>
           ) : (
             <div className="space-y-3">
@@ -437,11 +437,11 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
                   
                   {/* Row 2: Date + stats */}
                   <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-                    <span>{new Date(job.created_at).toLocaleDateString('sv-SE')}</span>
+                    <span>{new Date(job.created_at).toLocaleDateString('en-US')}</span>
                     <span>•</span>
-                    <span className="text-foreground font-medium">{job.detections_found} hittade</span>
+                    <span className="text-foreground font-medium">{job.detections_found} found</span>
                     <span>•</span>
-                    <span>{job.processed_images}/{job.total_images || '?'} bilder</span>
+                    <span>{job.processed_images}/{job.total_images || '?'} images</span>
                   </div>
                   
                   {/* Row 3: Delete button - full width on mobile */}
@@ -453,7 +453,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
                       onClick={() => setDeleteJobId(job.id)}
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
-                      Ta bort skanning
+                      Delete scan
                     </Button>
                   )}
                 </div>
@@ -467,13 +467,13 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Avbryt skanning?</AlertDialogTitle>
+            <AlertDialogTitle>Cancel scan?</AlertDialogTitle>
             <AlertDialogDescription>
-              Vill du avbryta den pågående skanningen? Hittade objekt som ännu inte granskats finns kvar.
+              Do you want to cancel the ongoing scan? Detected objects not yet reviewed will remain.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isCancelling}>Fortsätt skanna</AlertDialogCancel>
+            <AlertDialogCancel disabled={isCancelling}>Keep scanning</AlertDialogCancel>
             <AlertDialogAction 
               onClick={async () => {
                 setCancelDialogOpen(false);
@@ -485,10 +485,10 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
               {isCancelling ? (
                 <>
                   <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Avbryter...
+                  Cancelling…
                 </>
               ) : (
-                'Avbryt skanning'
+                'Cancel scan'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -499,14 +499,14 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
       <AlertDialog open={!!deleteJobId} onOpenChange={() => setDeleteJobId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Ta bort skanning?</AlertDialogTitle>
+            <AlertDialogTitle>Delete scan?</AlertDialogTitle>
             <AlertDialogDescription>
-              Denna åtgärd tar bort skanningsjobbet och alla relaterade detektioner som 
-              ännu inte har granskats. Godkända objekt påverkas inte.
+              This will remove the scan job and all related detections that have not yet been reviewed. 
+              Approved objects will not be affected.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Avbryt</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction 
               onClick={() => deleteJobId && deleteScanJob(deleteJobId)}
               disabled={isDeleting}
@@ -515,10 +515,10 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
               {isDeleting ? (
                 <>
                   <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Tar bort...
+                  Deleting…
                 </>
               ) : (
-                'Ta bort'
+                'Delete'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

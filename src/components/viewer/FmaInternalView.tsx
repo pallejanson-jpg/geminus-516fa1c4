@@ -45,7 +45,7 @@ const FmaInternalView: React.FC<FmaInternalViewProps> = ({
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
           <div className="text-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">Laddar FMA+...</p>
+            <p className="text-sm text-muted-foreground">Loading FMA+…</p>
           </div>
         </div>
       )}

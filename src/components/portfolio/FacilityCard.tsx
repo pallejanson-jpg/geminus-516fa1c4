@@ -49,6 +49,7 @@ const FacilityCard: React.FC<FacilityCardProps> = ({ facility, onClick, showSpli
         <img 
           src={heroImage} 
           alt={title}
+          loading="lazy"
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
@@ -77,7 +78,7 @@ const FacilityCard: React.FC<FacilityCardProps> = ({ facility, onClick, showSpli
               </Button>
             </TooltipTrigger>
             <TooltipContent side="left">
-              <p>Öppna 3D + 360°</p>
+              <p>Open 3D + 360°</p>
             </TooltipContent>
           </Tooltip>
         )}
@@ -87,11 +88,11 @@ const FacilityCard: React.FC<FacilityCardProps> = ({ facility, onClick, showSpli
           <div className="grid grid-cols-3 gap-3 text-center text-white mb-2">
             <div>
               <p className="text-lg font-bold">{facility.numberOfLevels || '-'}</p>
-              <p className="text-[10px] text-white/60 uppercase">Våningar</p>
+              <p className="text-[10px] text-white/60 uppercase">Floors</p>
             </div>
             <div>
               <p className="text-lg font-bold">{facility.numberOfSpaces || '-'}</p>
-              <p className="text-[10px] text-white/60 uppercase">Rum</p>
+              <p className="text-[10px] text-white/60 uppercase">Rooms</p>
             </div>
             <div>
               <p className="text-lg font-bold">{facility.area ? `${facility.area}` : '-'}</p>
@@ -100,7 +101,7 @@ const FacilityCard: React.FC<FacilityCardProps> = ({ facility, onClick, showSpli
           </div>
           <div className="flex gap-2">
             <Button size="sm" variant="secondary" className="h-7 text-xs gap-1.5" onClick={(e) => { e.stopPropagation(); onClick(facility); }}>
-              <Info size={12} /> Detaljer
+              <Info size={12} /> Details
             </Button>
             {(facility.category === 'Building' || facility.category === 'IfcBuilding') && (
               <Button size="sm" variant="secondary" className="h-7 text-xs gap-1.5" onClick={handleSplitViewClick}>
