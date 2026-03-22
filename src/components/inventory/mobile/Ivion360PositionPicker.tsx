@@ -202,7 +202,7 @@ const Ivion360PositionPicker: React.FC<Ivion360PositionPickerProps> = ({
             <div className="absolute bottom-0 left-0 right-0 z-10">
               {!pendingPosition ? (
                 <div className="bg-background/90 backdrop-blur px-4 py-3 text-center">
-                  <span className="text-sm text-muted-foreground">Navigera till rätt plats...</span>
+                  <span className="text-sm text-muted-foreground">Navigate to the right location...</span>
                 </div>
               ) : (
                 <div className="bg-background/95 backdrop-blur border-t px-4 py-3 flex items-center justify-between gap-3">
