@@ -110,7 +110,7 @@ const CategorySelectionStep: React.FC<CategorySelectionStepProps> = ({
             className="gap-1.5"
           >
             <Square className="h-4 w-4" />
-            Avmarkera alla
+            Deselect all
           </Button>
         </div>
 
