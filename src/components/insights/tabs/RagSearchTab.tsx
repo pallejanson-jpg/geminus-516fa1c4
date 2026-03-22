@@ -141,8 +141,8 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
           {data.results.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
               <Search className="h-10 w-10 mx-auto mb-2 opacity-40" />
-              <p className="text-sm">Inga resultat hittades</p>
-              <p className="text-xs">Prova andra söktermer</p>
+               <p className="text-sm">No results found</p>
+               <p className="text-xs">Try different search terms</p>
             </div>
           )}
         </>
