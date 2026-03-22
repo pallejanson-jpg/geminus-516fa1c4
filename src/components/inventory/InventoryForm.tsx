@@ -488,7 +488,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
         <Label className="text-base">Category *</Label>
         <Select value={category} onValueChange={setCategory}>
           <SelectTrigger className="h-12">
-            <SelectValue placeholder="Välj kategori..." />
+            <SelectValue placeholder="Select category..." />
           </SelectTrigger>
           <SelectContent className="bg-popover z-50">
             {INVENTORY_CATEGORIES.map((cat) => (
