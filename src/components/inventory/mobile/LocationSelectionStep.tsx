@@ -244,9 +244,9 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
         {/* Quick loop toggle */}
         <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
           <div className="space-y-1">
-            <Label className="text-base">Snabb-registrering</Label>
+            <Label className="text-base">Quick registration</Label>
             <p className="text-sm text-muted-foreground">
-              Behåll plats och kategori för nästa tillgång
+              Keep location and category for next asset
             </p>
           </div>
           <Switch checked={quickLoopEnabled} onCheckedChange={setQuickLoopEnabled} />
