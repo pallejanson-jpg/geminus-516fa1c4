@@ -229,7 +229,7 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
               </SelectTrigger>
               <SelectContent className="bg-popover z-50 max-h-64">
                 <SelectItem value={NONE_ROOM_VALUE} className="py-3">
-                  Inget specifikt rum
+                  No specific room
                 </SelectItem>
                 {rooms.map((room) => (
                   <SelectItem key={room.fmGuid} value={room.fmGuid} className="py-3">
