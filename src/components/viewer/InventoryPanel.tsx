@@ -535,7 +535,7 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
                 {filteredAssets.length > 500 && (
                   <TableRow>
                     <TableCell colSpan={orderedColumns.length} className="text-center text-[10px] text-muted-foreground py-1.5">
-                      Visar 500 av {filteredAssets.length} assets. Använd sök för att filtrera.
+                      Showing 500 of {filteredAssets.length} assets. Use search to filter.
                     </TableCell>
                   </TableRow>
                 )}
