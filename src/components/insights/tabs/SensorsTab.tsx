@@ -28,7 +28,7 @@ const METRICS = [
 const LiveBadge = ({ isLive, isLoading }: { isLive: boolean; isLoading: boolean }) => {
   if (isLoading) return (
     <Badge variant="outline" className="text-[9px] gap-1 border-muted-foreground/40 text-muted-foreground">
-      <Loader2 className="h-2.5 w-2.5 animate-spin" /> Laddar…
+      <Loader2 className="h-2.5 w-2.5 animate-spin" /> Loading…
     </Badge>
   );
   if (isLive) return (
