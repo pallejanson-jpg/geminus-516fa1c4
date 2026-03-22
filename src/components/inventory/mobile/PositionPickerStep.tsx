@@ -100,7 +100,7 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
             <div className="flex items-center gap-2 p-3 bg-primary/10 border border-primary/20 rounded-lg">
               <MapPin className="h-5 w-5 text-primary" />
               <div className="text-sm">
-                <span className="font-medium">Position vald</span>
+                <span className="font-medium">Position selected</span>
                 <span className="text-muted-foreground ml-2">
                   ({formData.coordinates.x.toFixed(2)}, {formData.coordinates.y.toFixed(2)}, {formData.coordinates.z.toFixed(2)})
                 </span>
