@@ -2861,7 +2861,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     if (!xeokitViewer?.scene) {
       console.warn('Pick mode: viewer or scene not ready');
-      toast.error('Viewer ej redo. Försök igen.');
+      toast.error('Viewer not ready. Please try again.');
       return false;
     }
 
@@ -2910,8 +2910,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         }
         
         // Don't proceed to dialog yet - wait for user confirmation
-        toast.success(`Position markerad: (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`, {
-          description: 'Bekräfta eller välj ny position',
+        toast.success(`Position marked: (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`, {
+          description: 'Confirm or select a new position',
           duration: 4000,
         });
         return; // Stop here - user needs to confirm
@@ -3076,7 +3076,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         console.log('Pick result:', pickResult);
         handlePick(pickResult);
       } else {
-        toast.warning('Ingen yta hittades. Försök klicka på ett synligt objekt.', {
+        toast.warning('No surface found. Try clicking on a visible object.', {
           duration: 3000,
         });
         // Don't remove listener - let user try again
@@ -3658,7 +3658,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         extractedFloors.push({
           id: metaObject.id,
           fmGuid: metaObject.id,
-          name: metaObject.name || 'Okänd våning',
+          name: metaObject.name || 'Unknown Floor',
           visible: true, // All visible by default
         });
       }
@@ -4070,7 +4070,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           return {
             ...prev,
             isLoading: false,
-            error: `Initiering tog för lång tid (${INIT_TIMEOUT_MS / 1000}s). Kontrollera nätverksanslutningen och försök igen.`,
+            error: `Initialization timed out (${INIT_TIMEOUT_MS / 1000}s). Check your network connection and try again.`,
           };
         }
         return prev;

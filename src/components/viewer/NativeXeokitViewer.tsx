@@ -163,7 +163,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         e.preventDefault();
         console.error('[NativeViewer] ⚠️ WebGL context lost');
         if (mountedRef.current) {
-          setErrorMsg('GPU-minnet tog slut. Försök ladda om sidan.');
+          setErrorMsg('GPU memory exhausted. Try reloading the page.');
           setPhase('error');
         }
       });
@@ -1402,7 +1402,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
             className="px-4 py-2 rounded bg-primary text-primary-foreground text-sm hover:opacity-90"
             onClick={() => { setPhase('init'); initialize(); }}
           >
-            Försök igen
+            Try Again
           </button>
         </div>
       )}

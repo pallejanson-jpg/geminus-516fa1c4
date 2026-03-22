@@ -214,14 +214,14 @@ const ViewerThemeSettings: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium">Viewer-teman</h3>
+          <h3 className="text-sm font-medium">Viewer Themes</h3>
           <p className="text-xs text-muted-foreground">
-            Konfigurera färgteman för 3D-viewern
+            Configure color themes for the 3D viewer
           </p>
         </div>
         <Button size="sm" onClick={handleNewTheme} disabled={isCreatingNew}>
           <Plus className="h-3.5 w-3.5 mr-1.5" />
-          Nytt tema
+          New Theme
         </Button>
       </div>
 
@@ -231,17 +231,17 @@ const ViewerThemeSettings: React.FC = () => {
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-medium flex items-center gap-2">
               <Palette className="h-4 w-4" />
-              Skapa nytt tema
+              Create New Theme
             </h4>
           </div>
           
           {/* Theme name */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Namn</Label>
+            <Label className="text-xs">Name</Label>
             <Input
               value={editingTheme.name}
               onChange={(e) => setEditingTheme({ ...editingTheme, name: e.target.value })}
-              placeholder="Temanamn"
+              placeholder="Theme name"
               className="h-8 text-sm"
             />
           </div>
@@ -250,7 +250,7 @@ const ViewerThemeSettings: React.FC = () => {
 
           {/* Color mappings */}
           <div className="space-y-2">
-            <Label className="text-xs">Färgmappningar</Label>
+            <Label className="text-xs">Color Mappings</Label>
             <ScrollArea className="h-[200px] pr-3">
               <div className="space-y-2">
                 {IFC_CATEGORIES.map((cat) => {
@@ -268,7 +268,7 @@ const ViewerThemeSettings: React.FC = () => {
                           className="w-7 h-7 rounded border border-border cursor-pointer"
                         />
                         <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-muted-foreground">Kant</span>
+                          <span className="text-[10px] text-muted-foreground">Edge</span>
                           <Switch
                             checked={mapping?.edges ?? false}
                             onCheckedChange={(checked) => updateEdges(cat.key, checked)}
@@ -287,7 +287,7 @@ const ViewerThemeSettings: React.FC = () => {
 
           {/* Space opacity */}
           <div className="space-y-2">
-            <Label className="text-xs">Rum-transparens</Label>
+            <Label className="text-xs">Space Opacity</Label>
             <div className="flex items-center gap-3">
               <Slider
                 value={[editingTheme.space_opacity * 100]}
@@ -315,7 +315,7 @@ const ViewerThemeSettings: React.FC = () => {
               disabled={isSaving}
             >
               <X className="h-3.5 w-3.5 mr-1.5" />
-              Avbryt
+               Cancel
             </Button>
             <Button
               size="sm"
@@ -327,7 +327,7 @@ const ViewerThemeSettings: React.FC = () => {
               ) : (
                 <Check className="h-3.5 w-3.5 mr-1.5" />
               )}
-              Spara tema
+              Save Theme
             </Button>
           </div>
         </div>
@@ -366,11 +366,11 @@ const ViewerThemeSettings: React.FC = () => {
                 <div className="space-y-4">
                   {/* Theme name */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Namn</Label>
+                    <Label className="text-xs">Name</Label>
                     <Input
                       value={editingTheme.name}
                       onChange={(e) => setEditingTheme({ ...editingTheme, name: e.target.value })}
-                      placeholder="Temanamn"
+                      placeholder="Theme name"
                       className="h-8 text-sm"
                     />
                   </div>
@@ -379,7 +379,7 @@ const ViewerThemeSettings: React.FC = () => {
 
                   {/* Color mappings */}
                   <div className="space-y-2">
-                    <Label className="text-xs">Färgmappningar</Label>
+                    <Label className="text-xs">Color Mappings</Label>
                     <ScrollArea className="h-[200px] pr-3">
                       <div className="space-y-2">
                         {IFC_CATEGORIES.map((cat) => {
@@ -397,7 +397,7 @@ const ViewerThemeSettings: React.FC = () => {
                                   className="w-7 h-7 rounded border border-border cursor-pointer"
                                 />
                                 <div className="flex items-center gap-1">
-                                  <span className="text-[10px] text-muted-foreground">Kant</span>
+                                  <span className="text-[10px] text-muted-foreground">Edge</span>
                                   <Switch
                                     checked={mapping?.edges ?? false}
                                     onCheckedChange={(checked) => updateEdges(cat.key, checked)}
@@ -416,7 +416,7 @@ const ViewerThemeSettings: React.FC = () => {
 
                   {/* Space opacity */}
                   <div className="space-y-2">
-                    <Label className="text-xs">Rum-transparens</Label>
+                    <Label className="text-xs">Space Opacity</Label>
                     <div className="flex items-center gap-3">
                       <Slider
                         value={[editingTheme.space_opacity * 100]}
@@ -444,7 +444,7 @@ const ViewerThemeSettings: React.FC = () => {
                       disabled={isSaving}
                     >
                       <X className="h-3.5 w-3.5 mr-1.5" />
-                      Avbryt
+                      Cancel
                     </Button>
                     <Button
                       size="sm"
@@ -456,7 +456,7 @@ const ViewerThemeSettings: React.FC = () => {
                       ) : (
                         <Check className="h-3.5 w-3.5 mr-1.5" />
                       )}
-                      Spara
+                      Save
                     </Button>
                   </div>
                 </div>
@@ -464,8 +464,8 @@ const ViewerThemeSettings: React.FC = () => {
                 // View mode
                 <div className="space-y-3">
                   <p className="text-xs text-muted-foreground">
-                    {Object.keys(theme.color_mappings || {}).length} färgmappningar • 
-                    Rum-transparens: {Math.round((theme.space_opacity ?? 0.25) * 100)}%
+                    {Object.keys(theme.color_mappings || {}).length} color mappings • 
+                    Space opacity: {Math.round((theme.space_opacity ?? 0.25) * 100)}%
                   </p>
                   
                   {/* All color swatches */}
@@ -488,7 +488,7 @@ const ViewerThemeSettings: React.FC = () => {
                       onClick={() => handleEditTheme(theme)}
                     >
                       <Edit2 className="h-3.5 w-3.5 mr-1.5" />
-                      Redigera
+                      Edit
                     </Button>
                     {!theme.is_system && (
                       <Button
@@ -498,7 +498,7 @@ const ViewerThemeSettings: React.FC = () => {
                         onClick={() => setDeleteConfirmId(theme.id)}
                       >
                         <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                        Ta bort
+                        Delete
                       </Button>
                     )}
                   </div>
@@ -512,9 +512,9 @@ const ViewerThemeSettings: React.FC = () => {
       {themes.length === 0 && (
         <div className="text-center py-8 text-muted-foreground border rounded-lg bg-muted/30">
           <Palette className="h-8 w-8 mx-auto mb-2 opacity-50" />
-          <p>Inga teman konfigurerade</p>
+          <p>No themes configured</p>
           <Button onClick={handleNewTheme} variant="outline" size="sm" className="mt-2">
-            Skapa ditt första tema
+            Create your first theme
           </Button>
         </div>
       )}
@@ -523,18 +523,18 @@ const ViewerThemeSettings: React.FC = () => {
       <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Ta bort tema?</AlertDialogTitle>
+            <AlertDialogTitle>Delete Theme?</AlertDialogTitle>
             <AlertDialogDescription>
-              Är du säker på att du vill ta bort detta tema? Åtgärden kan inte ångras.
+              Are you sure you want to delete this theme? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => deleteConfirmId && handleDeleteTheme(deleteConfirmId)}
             >
-              Ta bort
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

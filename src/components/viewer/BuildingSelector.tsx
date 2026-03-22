@@ -177,16 +177,16 @@ const BuildingSelector: React.FC = () => {
 
       // Update local state
       setSavedViews(prev => prev.filter(v => v.id !== viewId));
-      toast({ title: "Vy borttagen" });
+      toast({ title: "View deleted" });
     } catch (err) {
       console.error('Failed to delete view:', err);
-      toast({ title: "Fel", description: "Kunde inte ta bort vyn", variant: "destructive" });
+      toast({ title: "Error", description: "Could not delete the view", variant: "destructive" });
     }
   };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('sv-SE', { 
+    return date.toLocaleDateString('en-US', { 
       year: 'numeric', 
       month: 'short', 
       day: 'numeric' 
@@ -196,7 +196,7 @@ const BuildingSelector: React.FC = () => {
   if (isLoadingData) {
     return (
       <div className="h-full flex items-center justify-center">
-        <Spinner size="lg" label="Laddar byggnader..." />
+        <Spinner size="lg" label="Loading buildings..." />
       </div>
     );
   }
@@ -207,10 +207,10 @@ const BuildingSelector: React.FC = () => {
       <div className="mb-6">
         <h2 className="text-xl font-semibold flex items-center gap-2">
           <Box className="h-5 w-5 text-primary" />
-          3D-visning
+          3D Viewer
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Välj en byggnad eller en sparad vy
+          Select a building or a saved view
         </p>
       </div>
 
@@ -219,14 +219,14 @@ const BuildingSelector: React.FC = () => {
         <TabsList className="grid w-full grid-cols-2 mb-4">
           <TabsTrigger value="buildings" className="flex items-center gap-2">
             <Building2 className="h-4 w-4" />
-            Byggnader
+            Buildings
             <Badge variant="secondary" className="text-xs ml-1">
               {buildings.length}
             </Badge>
           </TabsTrigger>
           <TabsTrigger value="views" className="flex items-center gap-2">
             <Camera className="h-4 w-4" />
-            Sparade vyer
+            Saved Views
             <Badge variant="secondary" className="text-xs ml-1">
               {savedViews.length}
             </Badge>
@@ -237,7 +237,7 @@ const BuildingSelector: React.FC = () => {
         <div className="relative mb-4">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder={activeTab === 'buildings' ? 'Sök byggnad...' : 'Sök sparade vyer...'}
+            placeholder={activeTab === 'buildings' ? 'Search buildings...' : 'Search saved views...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -250,8 +250,8 @@ const BuildingSelector: React.FC = () => {
             <div className="h-full flex items-center justify-center">
               <div className="text-center text-muted-foreground">
                 <Building2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p className="text-sm">Inga byggnader tillgängliga</p>
-                <p className="text-xs mt-1">Synkronisera data från Asset+ för att komma igång</p>
+                <p className="text-sm">No buildings available</p>
+                <p className="text-xs mt-1">Sync data from Asset+ to get started</p>
               </div>
             </div>
           ) : (
@@ -275,8 +275,8 @@ const BuildingSelector: React.FC = () => {
                         {/* Building Name (Complex - Building format) */}
                         <h3 className="font-medium text-sm line-clamp-2 min-h-[2.5rem]">
                           {building.complexCommonName
-                            ? `${building.complexCommonName} - ${building.commonName || building.name || 'Namnlös byggnad'}`
-                            : (building.commonName || building.name || 'Namnlös byggnad')}
+                            ? `${building.complexCommonName} - ${building.commonName || building.name || 'Unnamed building'}`
+                            : (building.commonName || building.name || 'Unnamed building')}
                         </h3>
 
                         {/* Metrics */}
@@ -284,17 +284,17 @@ const BuildingSelector: React.FC = () => {
                           {metrics.floors > 0 && (
                             <Badge variant="secondary" className="text-xs">
                               <Layers className="h-3 w-3 mr-1" />
-                              {metrics.floors} vån
+                              {metrics.floors} fl.
                             </Badge>
                           )}
                           {metrics.rooms > 0 && (
                             <Badge variant="outline" className="text-xs">
-                              {metrics.rooms} rum
+                              {metrics.rooms} rooms
                             </Badge>
                           )}
                           {metrics.area > 0 && (
                             <Badge variant="outline" className="text-xs">
-                              {metrics.area.toLocaleString('sv-SE')} m²
+                              {metrics.area.toLocaleString('en-US')} m²
                             </Badge>
                           )}
                         </div>
@@ -308,7 +308,7 @@ const BuildingSelector: React.FC = () => {
               {filteredBuildings.length === 0 && searchQuery && (
                 <div className="text-center py-8 text-muted-foreground">
                   <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">Inga byggnader matchade "{searchQuery}"</p>
+                  <p className="text-sm">No buildings matched "{searchQuery}"</p>
                 </div>
               )}
             </ScrollArea>
@@ -321,15 +321,15 @@ const BuildingSelector: React.FC = () => {
             <div className="h-full flex items-center justify-center">
               <div className="text-center text-muted-foreground">
                 <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-3" />
-                <p className="text-sm">Laddar sparade vyer...</p>
+                <p className="text-sm">Loading saved views...</p>
               </div>
             </div>
           ) : savedViews.length === 0 ? (
             <div className="h-full flex items-center justify-center">
               <div className="text-center text-muted-foreground">
                 <Camera className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p className="text-sm">Inga sparade vyer</p>
-                <p className="text-xs mt-1">Öppna en byggnad och klicka på "Skapa vy" i Visningsmenyn</p>
+                <p className="text-sm">No saved views</p>
+                <p className="text-xs mt-1">Open a building and click "Create View" in the View menu</p>
               </div>
             </div>
           ) : (

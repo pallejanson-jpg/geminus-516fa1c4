@@ -142,7 +142,7 @@ const RouteDisplayOverlay: React.FC<RouteDisplayOverlayProps> = ({ route, classN
           {route.totalDistance.toFixed(1)} m
           {route.floorTransitions.length > 0 && (
             <span className="text-muted-foreground ml-2">
-              ({route.floorTransitions.length} våningsbyte)
+              ({route.floorTransitions.length} floor change{route.floorTransitions.length > 1 ? 's' : ''})
             </span>
           )}
         </span>

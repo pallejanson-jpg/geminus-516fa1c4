@@ -232,8 +232,8 @@ const IvionInventory: React.FC = () => {
               if (formOpen) {
                 // Form is open - queue the POI and notify user
                 setPendingPoi(data);
-                toast.info('Ny POI upptäckt!', {
-                  description: 'Klicka på "Ladda ny POI" för att använda den',
+                toast.info('New POI detected!', {
+                  description: 'Click "Load new POI" to use it',
                   duration: 5000,
                 });
               } else {
@@ -279,8 +279,8 @@ const IvionInventory: React.FC = () => {
     setDetectedPoi(null);
     // Check if there's a pending POI to load
     if (pendingPoi) {
-      toast.info('Det finns en väntande POI', {
-        description: 'Klicka på "Ladda ny POI" för att registrera den',
+      toast.info('There is a pending POI', {
+        description: 'Click "Load new POI" to register it',
       });
     }
   };
@@ -329,10 +329,10 @@ const IvionInventory: React.FC = () => {
 
     const getStatusText = () => {
       switch (connectionStatus) {
-        case 'connected': return 'Ansluten';
-        case 'error': return 'Anslutningsfel';
-        case 'expired': return 'Token utgått';
-        default: return 'Ansluter...';
+        case 'connected': return 'Connected';
+        case 'error': return 'Connection error';
+        case 'expired': return 'Token expired';
+        default: return 'Connecting...';
       }
     };
 
@@ -357,7 +357,7 @@ const IvionInventory: React.FC = () => {
               {connectionError && <p className="text-xs text-muted-foreground mt-1">{connectionError}</p>}
               {lastPollTime && connectionStatus === 'connected' && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Senaste poll: {lastPollTime.toLocaleTimeString('sv-SE')}
+                  Last poll: {lastPollTime.toLocaleTimeString('en-US')}
                 </p>
               )}
             </div>
@@ -372,7 +372,7 @@ const IvionInventory: React.FC = () => {
       <div className="h-screen w-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Laddar 360°-inventering...</p>
+          <p className="text-muted-foreground">Loading 360° inventory...</p>
         </div>
       </div>
     );
@@ -383,13 +383,13 @@ const IvionInventory: React.FC = () => {
       <div className="h-screen w-screen flex items-center justify-center bg-background p-4">
         <div className="max-w-md text-center space-y-4">
           <Building2 className="h-12 w-12 text-muted-foreground mx-auto" />
-          <h2 className="text-xl font-semibold">Ingen Ivion 360° konfigurerad</h2>
+          <h2 className="text-xl font-semibold">No Ivion 360° configured</h2>
           <p className="text-muted-foreground">
-            För att använda 360°-inventering måste minst en byggnad ha ett Ivion Site ID konfigurerat.
+            To use 360° inventory, at least one building must have an Ivion Site ID configured.
           </p>
           <Button onClick={handleClose}>
             <ChevronLeft className="h-4 w-4 mr-2" />
-            Tillbaka
+            Back
           </Button>
         </div>
       </div>
@@ -409,7 +409,7 @@ const IvionInventory: React.FC = () => {
               <Building2 className="h-5 w-5 text-muted-foreground" />
               <Select value={selectedBuildingFmGuid} onValueChange={setSelectedBuildingFmGuid}>
                 <SelectTrigger className="w-[200px] md:w-[300px]">
-                  <SelectValue placeholder="Välj byggnad..." />
+                  <SelectValue placeholder="Select building..." />
                 </SelectTrigger>
                 <SelectContent>
                   {buildings.map(b => (
@@ -428,7 +428,7 @@ const IvionInventory: React.FC = () => {
           <div className="flex items-center gap-3">
             {savedCount > 0 && (
               <div className="text-sm text-muted-foreground bg-primary/10 px-2 py-1 rounded">
-                {savedCount} sparade
+                {savedCount} saved
               </div>
             )}
             
@@ -441,7 +441,7 @@ const IvionInventory: React.FC = () => {
                 className="gap-2 border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
               >
                 <RefreshCw className="h-4 w-4" />
-                <span className="hidden md:inline">Ladda ny POI</span>
+                <span className="hidden md:inline">Load New POI</span>
                 <Badge variant="secondary" className="ml-1 bg-amber-100 text-amber-700">1</Badge>
               </Button>
             )}
@@ -454,7 +454,7 @@ const IvionInventory: React.FC = () => {
                 className="gap-2"
               >
                 <Layers className="h-4 w-4" />
-                <span className="hidden md:inline">Skapa POI från Geminus</span>
+                <span className="hidden md:inline">Create POI from Geminus</span>
                 <span className="md:hidden">POI</span>
               </Button>
             )}
