@@ -331,7 +331,7 @@ export default function AssetRegistration() {
   if (!assetRegistrationContext) {
     return (
       <div className="h-full flex items-center justify-center">
-        <p className="text-muted-foreground">Ingen registreringskontext aktiv</p>
+        <p className="text-muted-foreground">No registration context active</p>
       </div>
     );
   }
