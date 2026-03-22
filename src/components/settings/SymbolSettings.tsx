@@ -165,8 +165,8 @@ const SymbolSettings: React.FC = () => {
         if (error) throw error;
 
         toast({
-          title: 'Symbol uppdaterad',
-          description: `${formData.name} har uppdaterats`,
+          title: 'Symbol updated',
+          description: `${formData.name} has been updated`,
         });
       } else {
         // Create new
