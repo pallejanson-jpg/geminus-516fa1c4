@@ -523,9 +523,9 @@ const ViewerThemeSettings: React.FC = () => {
       <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Ta bort tema?</AlertDialogTitle>
+            <AlertDialogTitle>Delete Theme?</AlertDialogTitle>
             <AlertDialogDescription>
-              Är du säker på att du vill ta bort detta tema? Åtgärden kan inte ångras.
+              Are you sure you want to delete this theme? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
