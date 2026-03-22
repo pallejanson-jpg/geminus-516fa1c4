@@ -207,7 +207,7 @@ const Ivion360PositionPicker: React.FC<Ivion360PositionPickerProps> = ({
               ) : (
                 <div className="bg-background/95 backdrop-blur border-t px-4 py-3 flex items-center justify-between gap-3">
                   <div className="text-xs text-muted-foreground truncate">
-                    Bild #{pendingPosition.imageId} — ({pendingPosition.coords.x.toFixed(1)}, {pendingPosition.coords.y.toFixed(1)}, {pendingPosition.coords.z.toFixed(1)})
+                    Image #{pendingPosition.imageId} — ({pendingPosition.coords.x.toFixed(1)}, {pendingPosition.coords.y.toFixed(1)}, {pendingPosition.coords.z.toFixed(1)})
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <Button
