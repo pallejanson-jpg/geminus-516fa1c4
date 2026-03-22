@@ -437,11 +437,11 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
                   
                   {/* Row 2: Date + stats */}
                   <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-                    <span>{new Date(job.created_at).toLocaleDateString('sv-SE')}</span>
+                    <span>{new Date(job.created_at).toLocaleDateString('en-US')}</span>
                     <span>•</span>
-                    <span className="text-foreground font-medium">{job.detections_found} hittade</span>
+                    <span className="text-foreground font-medium">{job.detections_found} found</span>
                     <span>•</span>
-                    <span>{job.processed_images}/{job.total_images || '?'} bilder</span>
+                    <span>{job.processed_images}/{job.total_images || '?'} images</span>
                   </div>
                   
                   {/* Row 3: Delete button - full width on mobile */}
