@@ -185,12 +185,12 @@ export default function CreatePropertyDialog({
         );
       }
 
-      toast({ title: 'Fastighet sparad' });
+      toast({ title: 'Property saved' });
       window.dispatchEvent(new Event('building-settings-changed'));
       onSaved();
       onOpenChange(false);
     } catch (err: any) {
-      toast({ title: 'Fel vid sparning', description: err.message, variant: 'destructive' });
+      toast({ title: 'Error saving', description: err.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
