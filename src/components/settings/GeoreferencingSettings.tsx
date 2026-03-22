@@ -93,8 +93,8 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
         if (lng !== null && (isNaN(lng) || lng < -180 || lng > 180)) {
             toast({
                 variant: "destructive",
-                title: "Ogiltig longitud",
-                description: "Longitud måste vara mellan -180 och 180.",
+                title: "Invalid longitude",
+                description: "Longitude must be between -180 and 180.",
             });
             return;
         }
