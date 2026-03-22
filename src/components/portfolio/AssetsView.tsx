@@ -670,13 +670,13 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       const result = await batchSyncAssetsToAssetPlus(fmGuids);
       
       toast({
-        title: 'Synk klar',
-        description: `Synkade ${result.synced} av ${result.total}`,
+        title: 'Sync complete',
+        description: `Synced ${result.synced} of ${result.total}`,
         variant: result.failed > 0 ? 'destructive' : 'default',
       });
     } catch (error: any) {
       toast({
-        title: 'Synk misslyckades',
+        title: 'Sync failed',
         description: error.message,
         variant: 'destructive',
       });

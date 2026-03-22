@@ -198,12 +198,12 @@ const FmAccessObjectPanel: React.FC<FmAccessObjectPanelProps> = ({ selectedNode,
             <Separator />
             <div>
               <h4 className="text-xs font-bold text-muted-foreground uppercase mb-1">
-                Underordnade ({displayNode.children.length})
+                Children ({displayNode.children.length})
               </h4>
               <div className="text-sm text-muted-foreground">
                 {Object.entries(
                   displayNode.children.reduce((acc, c) => {
-                    const label = c.classId ? CLASS_LABELS[c.classId] || `Klass ${c.classId}` : 'Okänd';
+                    const label = c.classId ? CLASS_LABELS[c.classId] || `Class ${c.classId}` : 'Unknown';
                     acc[label] = (acc[label] || 0) + 1;
                     return acc;
                   }, {} as Record<string, number>)

@@ -191,9 +191,9 @@ const FmAccessNativeView: React.FC = () => {
         <ResizablePanel defaultSize={30} minSize={20} maxSize={45}>
           <Tabs value={leftTab} onValueChange={setLeftTab} className="h-full flex flex-col">
             <TabsList className="mx-2 mt-2 mb-0">
-              <TabsTrigger value="tree" className="text-xs flex-1"><TreePine size={12} className="mr-1" />Hierarki</TabsTrigger>
-              <TabsTrigger value="search" className="text-xs flex-1"><Search size={12} className="mr-1" />Sök</TabsTrigger>
-              <TabsTrigger value="docs" className="text-xs flex-1"><FileText size={12} className="mr-1" />Ritningar</TabsTrigger>
+              <TabsTrigger value="tree" className="text-xs flex-1"><TreePine size={12} className="mr-1" />Hierarchy</TabsTrigger>
+              <TabsTrigger value="search" className="text-xs flex-1"><Search size={12} className="mr-1" />Search</TabsTrigger>
+              <TabsTrigger value="docs" className="text-xs flex-1"><FileText size={12} className="mr-1" />Drawings</TabsTrigger>
             </TabsList>
 
             <TabsContent value="tree" className="flex-1 mt-0 overflow-hidden">
