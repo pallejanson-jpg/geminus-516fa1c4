@@ -292,7 +292,7 @@ const ApprovalDialog: React.FC<{
               onValueChange={val => setForm(prev => ({ ...prev, symbolId: val === 'none' ? null : val }))}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Välj symbol" />
+                <SelectValue placeholder="Select symbol" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Ingen symbol</SelectItem>
