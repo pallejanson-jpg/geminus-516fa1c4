@@ -287,7 +287,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           
           toast({
             title: 'Assets synkade',
-            description: `Hämtade ${result.count} assets för denna byggnad`,
+            description: `Fetched ${result.count} assets for this building`,
           });
         } else if (!result.synced) {
           console.log('AssetsView: Sync not triggered (already in sync or error)');
@@ -295,7 +295,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       } catch (error: any) {
         console.error('AssetsView: Failed to sync assets:', error);
         toast({
-          title: 'Kunde inte synka assets',
+          title: 'Could not sync assets',
           description: error.message,
           variant: 'destructive',
         });
