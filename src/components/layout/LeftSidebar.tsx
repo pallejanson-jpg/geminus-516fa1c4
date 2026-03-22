@@ -1,10 +1,9 @@
-import React, { useContext, useState, useEffect, useCallback } from 'react';
+import React, { useContext, useCallback } from 'react';
 import { Menu as MenuIcon, Home } from 'lucide-react';
 import { AppButton } from '@/components/common/AppButton';
-import { THEMES, SIDEBAR_ORDER_STORAGE_KEY, SIDEBAR_SETTINGS_CHANGED_EVENT } from '@/lib/constants';
-import type { SidebarItem } from '@/lib/constants';
+import { THEMES } from '@/lib/constants';
 import { AppContext } from '@/context/AppContext';
-import { getSidebarOrder } from '@/components/settings/AppMenuSettings';
+import { useSidebarOrder } from '@/hooks/useSidebarOrder';
 import { supabase } from '@/integrations/supabase/client';
 import { SIDEBAR_ITEM_META, getCurrentContext } from '@/lib/sidebar-config';
 
