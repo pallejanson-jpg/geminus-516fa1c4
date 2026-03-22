@@ -303,7 +303,7 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
 
               {aiResult.suggestedName && (
                 <p className="text-sm text-foreground">
-                  <span className="text-muted-foreground">Namn: </span>
+                  <span className="text-muted-foreground">Name: </span>
                   <span className="font-medium">{aiResult.suggestedName}</span>
                 </p>
               )}
