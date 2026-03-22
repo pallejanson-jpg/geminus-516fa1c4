@@ -717,12 +717,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 if (data.projects.length > 0 && !selectedAccProjectId) {
                     setSelectedAccProjectId(data.projects[0].id);
                 }
-                toast({ title: 'Projekt hämtade', description: `Hittade ${data.projects.length} projekt i ACC.` });
+                toast({ title: 'Projects fetched', description: `Found ${data.projects.length} projects in ACC.` });
             } else {
-                toast({ variant: 'destructive', title: 'Fel', description: data?.error || 'Kunde inte hämta projekt' });
+                toast({ variant: 'destructive', title: 'Error', description: data?.error || 'Could not fetch projects' });
             }
         } catch (err: any) {
-            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+            toast({ variant: 'destructive', title: 'Error', description: err.message });
         } finally {
             setIsLoadingAccProjects(false);
         }
@@ -731,7 +731,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const handleSyncAccLocations = async () => {
         const effectiveProjectId = manualAccProjectId.trim() || selectedAccProjectId;
         if (!effectiveProjectId) {
-            toast({ variant: 'destructive', title: 'Välj projekt', description: 'Välj ett ACC-projekt eller ange ett projekt-ID manuellt.' });
+            toast({ variant: 'destructive', title: 'Select project', description: 'Select an ACC project or enter a project ID manually.' });
             return;
         }
         setIsSyncingAccLocations(true);
@@ -761,7 +761,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const handleSyncAccAssets = async () => {
         const effectiveProjectId = manualAccProjectId.trim() || selectedAccProjectId;
         if (!effectiveProjectId) {
-            toast({ variant: 'destructive', title: 'Välj projekt', description: 'Välj ett ACC-projekt eller ange ett projekt-ID manuellt.' });
+            toast({ variant: 'destructive', title: 'Select project', description: 'Select an ACC project or enter a project ID manually.' });
             return;
         }
         setIsSyncingAccAssets(true);
@@ -875,7 +875,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             if (accHubs.length === 0 && accAuthStatus === 'authenticated') {
                 handleFetchHubs();
             }
-            // Folders are NOT auto-fetched — user must click "Hämta mappar" to avoid 403 errors
+            // Folders are NOT auto-fetched — user must click "Fetch folders" to avoid 403 errors
         }
     }, [isOpen, accAuthStatus, hasLoadedAccSettings]);
 
@@ -904,10 +904,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     setAccRegion(firstHub.region === 'EMEA' ? 'EMEA' : 'US');
                 }
             } else {
-                toast({ variant: 'destructive', title: 'Kunde inte hämta hubbar', description: data?.error });
+                toast({ variant: 'destructive', title: 'Could not fetch hubs', description: data?.error });
             }
         } catch (err: any) {
-            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+            toast({ variant: 'destructive', title: 'Error', description: err.message });
         } finally {
             setIsLoadingHubs(false);
         }
@@ -918,7 +918,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         if (accAuthStatus !== 'authenticated') return; // Guard: only fetch if authenticated
         const effectiveProjectId = manualAccProjectId.trim() || selectedAccProjectId;
         if (!effectiveProjectId) {
-            toast({ variant: 'destructive', title: 'Projekt-ID saknas', description: 'Ange ett ACC-projekt-ID först.' });
+            toast({ variant: 'destructive', title: 'Project ID missing', description: 'Enter an ACC project ID first.' });
             return;
         }
         setIsLoadingAccFolders(true);
@@ -933,12 +933,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 setAccFolders(data.folders || []);
                 setAccTopLevelItems(data.topLevelItems || []);
                 setAccRootFolderName(data.rootFolder || '');
-                toast({ title: 'Mappar hämtade', description: `Hittade ${(data.folders || []).length} mappar i "${data.rootFolder}".` });
+                toast({ title: 'Folders fetched', description: `Found ${(data.folders || []).length} folders in "${data.rootFolder}".` });
             } else {
-                toast({ variant: 'destructive', title: 'Fel', description: data?.error || 'Kunde inte hämta mappar' });
+                toast({ variant: 'destructive', title: 'Error', description: data?.error || 'Could not fetch folders' });
             }
         } catch (err: any) {
-            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+            toast({ variant: 'destructive', title: 'Error', description: err.message });
         } finally {
             setIsLoadingAccFolders(false);
         }
@@ -977,10 +977,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             console.warn('[BIM Sync] No items with versionUrn. All items:', allItems.length, 'BIM without URN:', bimWithoutUrn.length, bimWithoutUrn.map((i: any) => i.name));
             toast({ 
                 variant: 'destructive', 
-                title: 'Inga BIM-filer', 
+                title: 'No BIM files', 
                 description: bimWithoutUrn.length > 0
-                    ? `Hittade ${bimWithoutUrn.length} BIM-fil(er) men utan version-URN. Filerna kan vara Cloud Models som kräver direkt API-åtkomst.`
-                    : 'Denna mapp innehåller inga BIM-filer.'
+                    ? `Found ${bimWithoutUrn.length} BIM file(s) but without version URN. These may be Cloud Models requiring direct API access.`
+                    : 'This folder contains no BIM files.'
             });
             return;
         }
@@ -996,7 +996,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         // Process files one at a time to avoid memory limits
         for (let i = 0; i < bimItems.length; i++) {
             const item = bimItems[i];
-            setBimSyncProgress(`Fil ${i + 1}/${bimItems.length}: ${item.name}`);
+            setBimSyncProgress(`File ${i + 1}/${bimItems.length}: ${item.name}`);
 
             try {
                 const { data, error } = await supabase.functions.invoke('acc-sync', {
@@ -1018,11 +1018,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     totalInstances += data.instances || 0;
                 } else if (data?.state === 'PROCESSING') {
                     toast({
-                        title: 'Indexering pågår',
-                        description: `${item.name}: Modellen indexeras. Prova igen om en stund.`,
+                        title: 'Indexing in progress',
+                        description: `${item.name}: Model is being indexed. Try again shortly.`,
                     });
                 } else {
-                    failures.push(`${item.name}: ${data?.error || 'Okänt fel'}`);
+                    failures.push(`${item.name}: ${data?.error || 'Unknown error'}`);
                 }
             } catch (err: any) {
                 console.error(`[BIM Sync] Error syncing ${item.name}:`, err);
@@ -1034,8 +1034,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         // Summary
         if (totalLevels > 0 || totalRooms > 0 || totalInstances > 0) {
             toast({
-                title: 'BIM-synk klar',
-                description: `${totalLevels} våningsplan, ${totalRooms} rum, ${totalInstances} instanser från ${bimItems.length - failures.length}/${bimItems.length} fil(er)`,
+                title: 'BIM sync complete',
+                description: `${totalLevels} floors, ${totalRooms} rooms, ${totalInstances} instances from ${bimItems.length - failures.length}/${bimItems.length} file(s)`,
             });
             handleCheckAccStatus();
             // Auto-extract technical systems from synced BIM data
@@ -1044,15 +1044,15 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             // All files processed but no levels/rooms found
             toast({
                 variant: 'destructive',
-                title: 'Inga rum/våningar hittades',
-                description: 'BIM-modellerna kunde indexeras men innehöll inga Revit Levels eller Rooms.',
+                title: 'No rooms/floors found',
+                description: 'BIM models were indexed but contained no Revit Levels or Rooms.',
             });
         }
         
         if (failures.length > 0) {
             toast({
                 variant: 'destructive',
-                title: `${failures.length} fil(er) misslyckades`,
+                title: `${failures.length} file(s) failed`,
                 description: failures[0],
             });
         }
@@ -1583,13 +1583,13 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             if (error) throw error;
 
             toast({
-                title: "URL sparad",
-                description: "Congeria-länken har sparats.",
+                title: "URL saved",
+                description: "The Congeria link has been saved.",
             });
         } catch (error: any) {
             toast({
                 variant: "destructive",
-                title: "Fel",
+                title: "Error",
                 description: error.message,
             });
         }
@@ -2651,7 +2651,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             }
                                                         }}
                                                     >
-                                                        <Database className="h-3.5 w-3.5 mr-1.5" /> Hämta data nu
+                                                        <Database className="h-3.5 w-3.5 mr-1.5" /> Fetch data now
                                                     </Button>
                                                 </div>
                                             </div>
@@ -2737,7 +2737,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             className="h-7 text-xs gap-1"
                                                         >
                                                             {isLoadingHubs ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                                                            {accHubs.length === 0 ? 'Hämta konton' : 'Uppdatera'}
+                                                            {accHubs.length === 0 ? 'Fetch accounts' : 'Refresh'}
                                                         </Button>
                                                     </div>
                                                     {accHubs.length > 0 ? (
@@ -2762,7 +2762,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         </select>
                                                     ) : (
                                                         <p className="text-xs text-muted-foreground">
-                                                            Klicka "Hämta konton" för att auto-upptäcka dina Autodesk-konton och regioner. Region sätts automatiskt.
+                                                            Click "Fetch accounts" to auto-discover your Autodesk accounts and regions. Region is set automatically.
                                                         </p>
                                                     )}
                                                     {selectedHubId && (
@@ -2774,7 +2774,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                                                 {accProjects.length > 0 && (
                                                     <div className="space-y-2">
-                                                        <Label className="text-sm font-medium">Välj ACC-projekt</Label>
+                                                        <Label className="text-sm font-medium">Select ACC project</Label>
                                                         <select
                                                             className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
                                                             value={selectedAccProjectId}
@@ -2810,7 +2810,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         </Button>
                                                     </div>
                                                     <p className="text-xs text-muted-foreground">
-                                                        Välj ett projekt från dropdown eller ange ID manuellt.
+                                                        Select a project from the dropdown or enter an ID manually.
                                                     </p>
                                                 </div>
 
@@ -2918,7 +2918,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         </div>
                                                         
                                                         {accFolders.length === 0 && accTopLevelItems.length === 0 && (
-                                                            <p className="text-xs text-muted-foreground italic">Inga mappar eller filer hittades.</p>
+                                                            <p className="text-xs text-muted-foreground italic">No folders or files found.</p>
                                                         )}
 
                                                         <div className="space-y-1 max-h-[50vh] sm:max-h-96 overflow-y-auto overflow-x-hidden">

@@ -759,21 +759,21 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
       {/* Visualization type selector */}
       <div className="space-y-2">
-        <Label className="text-xs text-muted-foreground">Visualiseringstyp</Label>
+        <Label className="text-xs text-muted-foreground">Visualization type</Label>
         <Select
           value={visualizationType}
           onValueChange={(v) => setVisualizationType(v as VisualizationType)}
         >
           <SelectTrigger className="h-9">
-            <SelectValue placeholder="Välj typ..." />
+            <SelectValue placeholder="Select type…" />
           </SelectTrigger>
           <SelectContent className="bg-card border shadow-lg z-[60]">
-            <SelectItem value="none">Ingen</SelectItem>
-            <SelectItem value="temperature">🌡️ Temperatur</SelectItem>
+            <SelectItem value="none">None</SelectItem>
+            <SelectItem value="temperature">🌡️ Temperature</SelectItem>
             <SelectItem value="co2">💨 CO₂</SelectItem>
-            <SelectItem value="humidity">💧 Luftfuktighet</SelectItem>
-            <SelectItem value="occupancy">👥 Beläggning</SelectItem>
-            <SelectItem value="area">📐 Yta (NTA)</SelectItem>
+            <SelectItem value="humidity">💧 Humidity</SelectItem>
+            <SelectItem value="occupancy">👥 Occupancy</SelectItem>
+            <SelectItem value="area">📐 Area (NTA)</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -783,20 +783,20 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         <div className="flex items-center justify-between">
           <Label className="text-xs flex items-center gap-1">
             <AlertCircle className="h-3 w-3 text-amber-500" />
-            Simulerad data
+            Simulated data
           </Label>
           <Switch checked={useMockData} onCheckedChange={setUseMockData} />
         </div>
       )}
 
       {hasRealData && visualizationType !== 'none' && (
-        <p className="text-xs text-green-600">✓ Riktig sensordata tillgänglig</p>
+        <p className="text-xs text-green-600">✓ Real sensor data available</p>
       )}
 
       {/* Legend */}
       {visualizationType !== 'none' && config && (
         <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Färgskala ({config.unit})</Label>
+          <Label className="text-xs text-muted-foreground">Color scale ({config.unit})</Label>
           <div className="h-4 rounded-sm" style={{ background: legendGradient }} />
           <div className="flex justify-between text-[10px] text-muted-foreground">
             <span>{config.min} {config.unit}</span>
@@ -807,7 +807,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
       {/* Stats */}
       <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
-        <span>{isProcessing ? 'Bearbetar...' : `${rooms.length} rum hittade`}</span>
+        <span>{isProcessing ? 'Processing…' : `${rooms.length} rooms found`}</span>
         {colorizedCount > 0 && <span className="text-primary">{colorizedCount} färglagda</span>}
       </div>
 

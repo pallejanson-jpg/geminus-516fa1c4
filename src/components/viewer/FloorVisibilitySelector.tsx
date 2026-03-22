@@ -251,8 +251,8 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         <div className={cn("space-y-2", className)} ref={ref}>
           <div className="flex items-center gap-1.5">
             <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-            <Label className="text-xs text-muted-foreground uppercase tracking-wider">Våningsplan</Label>
-            <span className="text-xs text-muted-foreground/70 ml-1 italic">(Laddar...)</span>
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">Floors</Label>
+            <span className="text-xs text-muted-foreground/70 ml-1 italic">(Loading…)</span>
           </div>
         </div>
       );
@@ -333,7 +333,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
           {currentMode === 'multi' && !allVisible && (
             <div className="pt-1 border-t border-border/30">
               <Button variant="ghost" size="sm" className="w-full h-6 text-[10px] sm:text-xs" onClick={handleShowAll}>
-                Visa alla våningsplan
+                Show all floors
               </Button>
             </div>
           )}
@@ -347,7 +347,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
           <CollapsibleTrigger asChild>
             <Button variant="ghost" size="sm" className="h-auto p-0 hover:bg-transparent justify-start gap-1 sm:gap-1.5 min-w-0 flex-1">
               <Layers className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground flex-shrink-0" />
-              <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider cursor-pointer truncate">Våningsplan</Label>
+              <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider cursor-pointer truncate">Floors</Label>
               <span className="text-[10px] sm:text-xs text-muted-foreground flex-shrink-0">({visibleCount}/{totalCount})</span>
               <ChevronDown className={cn("h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground transition-transform flex-shrink-0", isExpanded && "rotate-180")} />
             </Button>
@@ -386,7 +386,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
                     <span className={cn("text-xs sm:text-sm truncate", isVisible ? "text-foreground" : "text-muted-foreground")}>{floor.name}</span>
                   </div>
                   {!isSolo && (
-                    <Button variant="ghost" size="sm" className="h-4 sm:h-5 px-1 sm:px-1.5 text-[9px] sm:text-[10px] text-muted-foreground hover:text-primary flex-shrink-0" onClick={() => handleShowOnlyFloor(floor.id)} title="Visa endast detta våningsplan">Solo</Button>
+                    <Button variant="ghost" size="sm" className="h-4 sm:h-5 px-1 sm:px-1.5 text-[9px] sm:text-[10px] text-muted-foreground hover:text-primary flex-shrink-0" onClick={() => handleShowOnlyFloor(floor.id)} title="Show only this floor">Solo</Button>
                   )}
                 </div>
               );

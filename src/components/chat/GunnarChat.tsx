@@ -320,11 +320,11 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
 
       if (!resp.ok) {
           const errorData = await resp.json().catch(() => ({}));
-          if (resp.status === 429) throw { status: 429, message: "För många förfrågningar. Vänta en stund och försök igen." };
-          if (resp.status === 402) throw { status: 402, message: "AI-kredit förbrukad. Kontakta din administratör." };
-          if (resp.status === 401) throw { status: 401, message: "Du är inte inloggad. Logga in och försök igen." };
-          if (resp.status === 503) throw { status: 503, message: "AI-tjänsten är tillfälligt otillgänglig. Försök igen om en stund." };
-          throw new Error(errorData.error || `Förfrågan misslyckades (${resp.status})`);
+          if (resp.status === 429) throw { status: 429, message: "Too many requests. Please wait and try again." };
+          if (resp.status === 402) throw { status: 402, message: "AI credits used up. Contact your administrator." };
+          if (resp.status === 401) throw { status: 401, message: "You are not logged in. Please log in and try again." };
+          if (resp.status === 503) throw { status: 503, message: "AI service temporarily unavailable. Try again shortly." };
+          throw new Error(errorData.error || `Request failed (${resp.status})`);
         }
         if (!resp.body) throw new Error("No response");
 
@@ -422,12 +422,12 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       const isAbort = error instanceof DOMException && error.name === "AbortError";
       const errStatus = (error as any)?.status;
       const errMsg = isAbort
-        ? "Förfrågan tog för lång tid. Försök igen."
-        : (error as any)?.message || (error instanceof Error ? error.message : "Kunde inte hämta svar");
+        ? "Request timed out. Please try again."
+        : (error as any)?.message || (error instanceof Error ? error.message : "Could not fetch response");
       
       toastHook({
         variant: "destructive",
-        title: errStatus === 429 ? "Rate limit" : errStatus === 402 ? "Kredit" : errStatus === 503 ? "Tjänstfel" : "Fel",
+        title: errStatus === 429 ? "Rate limit" : errStatus === 402 ? "Credits" : errStatus === 503 ? "Service error" : "Error",
         description: errMsg,
       });
       setMessages(messages);
@@ -762,10 +762,10 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
           const langPrefix = currentSettings.speechLang.split('-')[0];
           const filtered = allVoices.filter(v => v.lang.startsWith(langPrefix));
           if (filtered.length === 0) {
-            setMessages(prev => [...prev, { role: "assistant", content: "Inga röster tillgängliga för det valda språket i denna webbläsare." }]);
+            setMessages(prev => [...prev, { role: "assistant", content: "No voices available for the selected language in this browser." }]);
           } else {
             const buttons = filtered.map(v => `[🔊 ${v.name}](action:selectVoice:${encodeURIComponent(v.name)})`).join('\n');
-            setMessages(prev => [...prev, { role: "assistant", content: `Välj en röst:\n\n${buttons}` }]);
+            setMessages(prev => [...prev, { role: "assistant", content: `Choose a voice:\n\n${buttons}` }]);
           }
         }
         break;

@@ -76,16 +76,16 @@ const RoomLabelSettings: React.FC = () => {
   // Get click action label
   const getClickActionLabel = (action: string) => {
     switch (action) {
-      case 'flyto': return 'Flytta kamera';
-      case 'roomcard': return 'Visa rumskort';
-      default: return 'Ingen';
+      case 'flyto': return 'Fly to room';
+      case 'roomcard': return 'Show room card';
+      default: return 'None';
     }
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <div className="text-muted-foreground">Laddar...</div>
+        <div className="text-muted-foreground">Loading…</div>
       </div>
     );
   }
@@ -213,9 +213,9 @@ const RoomLabelSettings: React.FC = () => {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="none">Ingen</SelectItem>
-                          <SelectItem value="flyto">Flytta kamera till rum</SelectItem>
-                          <SelectItem value="roomcard">Visa rumskort</SelectItem>
+                          <SelectItem value="none">None</SelectItem>
+                          <SelectItem value="flyto">Fly camera to room</SelectItem>
+                          <SelectItem value="roomcard">Show room card</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -360,9 +360,9 @@ const RoomLabelSettings: React.FC = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Ingen</SelectItem>
-                  <SelectItem value="flyto">Flytta kamera till rum</SelectItem>
-                  <SelectItem value="roomcard">Visa rumskort</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="flyto">Fly camera to room</SelectItem>
+                  <SelectItem value="roomcard">Show room card</SelectItem>
                 </SelectContent>
               </Select>
             </div>
