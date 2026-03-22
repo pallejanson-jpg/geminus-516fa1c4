@@ -542,7 +542,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                 checked={formData.is_active}
                 onCheckedChange={checked => setFormData({ ...formData, is_active: checked })}
               />
-              <Label htmlFor="is_active" className="text-foreground">Aktiv (inkluderas i skanningar)</Label>
+              <Label htmlFor="is_active" className="text-foreground">Active (included in scans)</Label>
             </div>
           </div>
 
