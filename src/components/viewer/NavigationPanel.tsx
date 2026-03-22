@@ -178,7 +178,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {isEditMode ? <Pencil className="h-3.5 w-3.5 text-muted-foreground" /> : <Route className="h-3.5 w-3.5 text-muted-foreground" />}
-          <Label className="text-xs">{isEditMode ? 'Redigera graf' : 'Navigera'}</Label>
+          <Label className="text-xs">{isEditMode ? 'Edit graph' : 'Navigate'}</Label>
         </div>
         <Switch checked={isEditMode} onCheckedChange={handleEditToggle} />
       </div>
