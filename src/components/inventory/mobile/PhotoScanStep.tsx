@@ -243,7 +243,7 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
             <div className="relative rounded-lg overflow-hidden border flex-shrink-0">
               <img
                 src={imagePreview}
-                alt="Fotad bild"
+                alt="Captured image"
                 className="w-full h-48 object-cover"
               />
               {isAnalyzing && (
