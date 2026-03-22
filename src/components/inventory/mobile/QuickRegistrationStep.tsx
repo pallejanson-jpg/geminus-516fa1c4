@@ -265,7 +265,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
             <div className="relative">
               <img
                 src={formData.imageUrl}
-                alt="Uppladdad bild"
+               alt="Uploaded image"
                 className="w-full h-40 object-cover rounded-lg border"
               />
               <Button
