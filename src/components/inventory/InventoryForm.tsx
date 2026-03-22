@@ -638,7 +638,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
                 </Button>
 
                 <div className="text-xs text-muted-foreground text-center pt-1">
-                  eller använd manuell synk:
+                  or use manual sync:
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
