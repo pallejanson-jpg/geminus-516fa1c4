@@ -435,11 +435,11 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="h-6 gap-1 text-[10px] text-muted-foreground px-1.5">
                   <Settings2 className="h-3 w-3" />
-                  Kolumner
+                  Columns
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56 max-h-80 overflow-y-auto">
-                <DropdownMenuLabel className="text-[10px]">Standardkolumner</DropdownMenuLabel>
+                <DropdownMenuLabel className="text-[10px]">Standard columns</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {CORE_COLUMNS.map(col => (
                   <DropdownMenuCheckboxItem
