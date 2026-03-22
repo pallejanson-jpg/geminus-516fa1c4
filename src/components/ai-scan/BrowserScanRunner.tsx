@@ -20,9 +20,9 @@ interface BrowserScanRunnerProps {
 
 type ScanState = 'initializing' | 'scanning' | 'paused' | 'completing' | 'done' | 'error';
 
-const ROTATIONS_PER_POSITION = 3;   // Reduced from 6 → 8x speedup via batch
-const ROTATION_DELAY_MS = 600;       // Reduced from 1500ms
-const CAPTURE_DELAY_MS = 300;        // Reduced from 500ms
+const ROTATIONS_PER_POSITION = 3;
+const ROTATION_DELAY_MS = 600;
+const CAPTURE_DELAY_MS = 300;
 const MAX_IMAGES_PER_SCAN = 200;
 const MAX_CONSECUTIVE_NAV_FAILURES = 10;
 
@@ -106,14 +106,11 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
       }
     `;
 
-    // 1. Try to inject into shadow roots of <ivion> and its children
     const ivionEls = document.querySelectorAll('ivion');
     ivionEls.forEach((ivionEl) => {
-      // Shadow root of <ivion> itself
       const roots: ShadowRoot[] = [];
       if (ivionEl.shadowRoot) roots.push(ivionEl.shadowRoot);
 
-      // Also walk children looking for shadow roots (Angular elements)
       const walker = document.createTreeWalker(ivionEl, NodeFilter.SHOW_ELEMENT);
       let node: Node | null = walker.nextNode();
       while (node) {
@@ -131,7 +128,6 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         }
       });
 
-      // 2. Directly hide Angular Material elements inside <ivion>
       const hideSelectors = [
         'mat-sidenav', 'mat-toolbar', 'mat-sidenav-container',
         'nv-floor-changer', 'nv-minimap', 'nv-sidebar', 'nv-controls',
@@ -151,7 +147,6 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
       });
     });
 
-    // 3. Fallback: inject global CSS that tries ::slotted and :host selectors too
     if (!document.getElementById('ivion-scan-minimal-ui')) {
       const globalStyle = document.createElement('style');
       globalStyle.id = 'ivion-scan-minimal-ui';
@@ -178,14 +173,11 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
   useEffect(() => {
     if (sdkStatus !== 'ready') return;
 
-    // Inject CSS immediately
     injectMinimalUiCss();
 
-    // Also retry after a short delay to catch late-rendered Angular components
     const retryTimer = setTimeout(injectMinimalUiCss, 1500);
     const retryTimer2 = setTimeout(injectMinimalUiCss, 4000);
 
-    // Hide via SDK API
     try {
       const api = ivApiRef.current as any;
       api?.ui?.sidebarMenu?.hide?.();
@@ -205,13 +197,12 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     };
   }, [sdkStatus, injectMinimalUiCss]);
 
-  // Start scanning when SDK is ready — only depend on sdkStatus, guard with isScanningRef
   useEffect(() => {
     if (sdkStatus === 'ready' && !isScanningRef.current) {
       startScan();
     }
     if (sdkStatus === 'failed' && !isScanningRef.current) {
-      setErrorMessage(sdkErrorMessage || '360°-visaren kunde inte laddas. Kontrollera Ivion-anslutningen.');
+      setErrorMessage(sdkErrorMessage || 'The 360° viewer could not load. Check the Ivion connection.');
       setScanState('error');
     }
   }, [sdkStatus]);
@@ -224,19 +215,11 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     }
   };
 
-  /**
-   * Capture screenshot using Ivion SDK's synchronous getScreenshot().
-   * Returns ScreenshotDataInterface { data: string (data-URI), width, height }.
-   */
   const captureScreenshot = async (): Promise<string | null> => {
     const api = ivApiRef.current;
     if (!api) return null;
 
     try {
-      // Try multiple paths to find mainView with getScreenshot:
-      // 1. api.view.mainView (ViewApiInterface)
-      // 2. api.getMainView() (IvionApiInterface)
-      // 3. api.mainView (direct, legacy)
       const candidates = [
         (api as any).view?.mainView,
         typeof api.getMainView === 'function' ? api.getMainView() : null,
@@ -268,7 +251,6 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
 
       console.warn('[BrowserScan] getScreenshot not found on any view path');
 
-      // Fallback: try canvas element
       const ivionEl = containerRef.current?.querySelector('ivion');
       if (ivionEl) {
         const canvas = ivionEl.querySelector('canvas');
@@ -310,9 +292,6 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     return { x: 0, y: 0, z: 0 };
   };
 
-  /**
-   * Rotate camera by lonDeg degrees. SDK requires both lon and lat in ViewOrientationInterface.
-   */
   const rotateView = async (lonDeg: number) => {
     try {
       const mainView = getMainView();
@@ -358,10 +337,6 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     }
   };
 
-  /**
-   * Batch-analyze multiple screenshots in a single Gemini API call.
-   * Sends all rotation screenshots together → 8x faster than sequential calls.
-   */
   const analyzeScreenshotBatch = async (
     screenshots: string[],
     imageId: number | null,
@@ -393,9 +368,6 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     }
   };
 
-  /**
-   * Get image list using Ivion SDK's image.repository.findAll().
-   */
   const getImageList = async (): Promise<Array<{ id: number; datasetName?: string }>> => {
     const api = ivApiRef.current as any;
     if (!api) {
@@ -420,7 +392,6 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         console.warn('[BrowserScan] api.image.repository.findAll not available');
       }
 
-      // Fallback: dataset repository
       const datasetApi = api.dataset;
       if (datasetApi?.repository?.findAll) {
         console.log('[BrowserScan] Trying dataset-based fallback...');
@@ -440,7 +411,6 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         }
       }
 
-      // Last resort: explore from current position
       console.log('[BrowserScan] Fallback: exploring from current position...');
       const mainView = api.mainView ?? api.getMainView?.();
       const currentImage = mainView?.getImage?.();
@@ -474,17 +444,16 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
   };
 
   const startScan = async () => {
-    // Guard against multiple invocations
     if (isScanningRef.current) {
       console.warn('[BrowserScan] startScan() called but already scanning, ignoring');
       return;
     }
     isScanningRef.current = true;
-    cancelledRef.current = false; // Explicit reset
+    cancelledRef.current = false;
 
     const api = ivApiRef.current;
     if (!api) {
-      setErrorMessage('SDK ej redo');
+      setErrorMessage('SDK not ready');
       setScanState('error');
       isScanningRef.current = false;
       return;
@@ -503,12 +472,11 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
 
       if (allImages.length === 0) {
         toast({
-          title: 'Kunde inte lista bilder',
-          description: 'Skannar den aktuella positionen istället.',
+          title: 'Could not list images',
+          description: 'Scanning the current position instead.',
         });
       }
 
-      // Sample images if list is too large
       let images = allImages;
       if (allImages.length > MAX_IMAGES_PER_SCAN) {
         const step = Math.max(1, Math.floor(allImages.length / MAX_IMAGES_PER_SCAN));
@@ -545,23 +513,22 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         }
 
         const img = images[i];
-        setCurrentImageInfo(`Bild ${i + 1} / ${scanCount}${img?.datasetName ? ` (${img.datasetName})` : ''}`);
+        setCurrentImageInfo(`Image ${i + 1} / ${scanCount}${img?.datasetName ? ` (${img.datasetName})` : ''}`);
         console.log(`[BrowserScan] --- Image ${i + 1}/${scanCount}, id=${img?.id ?? 'current'} (${new Date().toISOString()}) ---`);
 
-        // Navigate to image
         if (img) {
           try {
             await (api as any).legacyApi.moveToImageId(img.id, undefined, undefined);
             console.log(`[BrowserScan] ✅ Navigated to image ${img.id}`);
             consecutiveNavFailures = 0;
-            await sleep(800); // Reduced from 2000ms — SDK renders faster
+            await sleep(800);
           } catch (e) {
             consecutiveNavFailures++;
             console.warn(`[BrowserScan] ❌ Navigation failed for image ${img.id} (consecutive failures: ${consecutiveNavFailures}):`, e);
             
             if (consecutiveNavFailures > MAX_CONSECUTIVE_NAV_FAILURES) {
               console.error(`[BrowserScan] Too many consecutive navigation failures (${consecutiveNavFailures}), aborting scan`);
-              setErrorMessage(`Navigering misslyckades ${consecutiveNavFailures} gånger i rad. Kontrollera att site-ID är korrekt.`);
+              setErrorMessage(`Navigation failed ${consecutiveNavFailures} times in a row. Check that the site ID is correct.`);
               setScanState('error');
               await supabase.from('scan_jobs').update({
                 status: 'error',
@@ -579,7 +546,6 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
           }
         }
 
-        // Capture all rotation screenshots first, then analyze as one batch
         const screenshots: string[] = [];
         for (let rot = 0; rot < ROTATIONS_PER_POSITION; rot++) {
           if (cancelledRef.current) break;
@@ -600,7 +566,6 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
           }
         }
 
-        // Single batch AI call for all rotations — much faster than N sequential calls
         if (screenshots.length > 0 && !cancelledRef.current) {
           const position = getImagePosition();
           console.log(`[BrowserScan] Batch analyzing ${screenshots.length} screenshots, pos=(${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`);
@@ -612,7 +577,6 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         processed++;
         setProcessedImages(processed);
 
-        // Update progress in DB
         await supabase.from('scan_jobs').update({
           processed_images: processed,
           current_image_index: i,
@@ -628,10 +592,9 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
       console.log(`[BrowserScan] === Loop finished: processed=${processed}, detections=${totalDetections}, elapsed=${elapsed}s, cancelled=${cancelledRef.current} ===`);
 
       if (!cancelledRef.current) {
-        // Validate that we actually processed images
         if (processed === 0) {
           console.error('[BrowserScan] No images were processed — marking as error');
-          setErrorMessage('Inga bilder kunde bearbetas. Kontrollera Ivion-anslutningen.');
+          setErrorMessage('No images could be processed. Check the Ivion connection.');
           setScanState('error');
           await supabase.from('scan_jobs').update({
             status: 'error',
@@ -648,8 +611,8 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
 
           setScanState('done');
           toast({
-            title: 'Skanning klar!',
-            description: `Hittade ${totalDetections} potentiella objekt i ${processed} bilder.`,
+            title: 'Scan complete!',
+            description: `Found ${totalDetections} potential objects in ${processed} images.`,
           });
 
           const { data: finalJob } = await supabase.functions.invoke('ai-asset-detection', {
@@ -660,7 +623,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
       }
     } catch (e: any) {
       console.error('[BrowserScan] Scan error:', e);
-      setErrorMessage(e.message || 'Okänt fel');
+      setErrorMessage(e.message || 'Unknown error');
       setScanState('error');
     } finally {
       isScanningRef.current = false;
@@ -700,24 +663,24 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
             {scanState === 'initializing' && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
             {scanState === 'error' && <AlertCircle className="h-4 w-4 text-destructive" />}
             <span className="text-sm font-medium">
-              {scanState === 'initializing' && !sdkEnabled && 'Förbereder visare...'}
-              {scanState === 'initializing' && sdkEnabled && sdkStatus === 'loading' && 'Laddar SDK och autentiserar...'}
-              {scanState === 'initializing' && sdkEnabled && sdkStatus === 'idle' && 'Ansluter till site...'}
-              {scanState === 'scanning' && 'Skannar...'}
-              {scanState === 'paused' && 'Pausad'}
-              {scanState === 'completing' && 'Sparar resultat...'}
-              {scanState === 'done' && 'Klar!'}
-              {scanState === 'error' && 'Fel'}
+              {scanState === 'initializing' && !sdkEnabled && 'Preparing viewer...'}
+              {scanState === 'initializing' && sdkEnabled && sdkStatus === 'loading' && 'Loading SDK and authenticating...'}
+              {scanState === 'initializing' && sdkEnabled && sdkStatus === 'idle' && 'Connecting to site...'}
+              {scanState === 'scanning' && 'Scanning...'}
+              {scanState === 'paused' && 'Paused'}
+              {scanState === 'completing' && 'Saving results...'}
+              {scanState === 'done' && 'Done!'}
+              {scanState === 'error' && 'Error'}
             </span>
           </div>
-          <Badge variant="secondary">{detectionsFound} hittade</Badge>
+          <Badge variant="secondary">{detectionsFound} found</Badge>
         </div>
 
         <Progress value={progressPercent} />
 
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>{currentImageInfo}</span>
-          <span>{processedImages} / {totalImages} bilder</span>
+          <span>{processedImages} / {totalImages} images</span>
         </div>
 
         {errorMessage && (
@@ -730,8 +693,8 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         <Alert>
           <Eye className="h-4 w-4" />
           <AlertDescription>
-            Skanningen körs i webbläsaren — håll fliken öppen. 360°-visaren navigerar automatiskt genom panoramabilderna.
-            {totalImages > 0 && totalImages < (processedImages || Infinity) && ` (samplade ${totalImages} av totalt antal bilder)`}
+            The scan runs in the browser — keep this tab open. The 360° viewer navigates automatically through the panorama images.
+            {totalImages > 0 && totalImages < (processedImages || Infinity) && ` (sampled ${totalImages} of total images)`}
           </AlertDescription>
         </Alert>
 
@@ -745,11 +708,11 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
                 onClick={handlePause}
               >
                 {scanState === 'paused' ? <Play className="h-4 w-4 mr-1" /> : <Pause className="h-4 w-4 mr-1" />}
-                {scanState === 'paused' ? 'Fortsätt' : 'Pausa'}
+                {scanState === 'paused' ? 'Resume' : 'Pause'}
               </Button>
               <Button variant="destructive" size="sm" onClick={handleCancel}>
                 <StopCircle className="h-4 w-4 mr-1" />
-                Avbryt
+                Cancel
               </Button>
             </>
           )}
@@ -762,7 +725,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
               setErrorMessage(''); 
             }}>
               <RefreshCw className="h-4 w-4 mr-1" />
-              Försök igen
+              Retry
             </Button>
           )}
         </div>

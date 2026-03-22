@@ -15,13 +15,13 @@ import type { FaultReportFormData } from './FaultReportForm';
 import chicagoHero from '@/assets/chicago-skyline-hero.jpg';
 
 const faultReportSchema = z.object({
-  description: z.string().trim().min(1, 'Beskrivning krävs').max(2000, 'Max 2000 tecken'),
+  description: z.string().trim().min(1, 'Description is required').max(2000, 'Max 2000 characters'),
   errorCode: z.any().optional(),
   email: z.string().trim().max(255).optional().or(z.literal('')).refine(
     (val) => !val || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val),
-    { message: 'Ogiltig e-postadress' }
+    { message: 'Invalid email address' }
   ),
-  phone: z.string().trim().max(20, 'Max 20 tecken').optional().or(z.literal('')),
+  phone: z.string().trim().max(20, 'Max 20 characters').optional().or(z.literal('')),
 });
 
 interface MobileFaultReportProps {
@@ -84,7 +84,7 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
             </button>
           )}
           <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-semibold text-white drop-shadow-md">Anmäl fel</h1>
+            <h1 className="text-lg font-semibold text-white drop-shadow-md">Report Fault</h1>
             {buildingName && (
               <p className="text-sm text-white/80 drop-shadow-sm truncate">{buildingName}{spaceName ? ` · ${spaceName}` : ''}</p>
             )}
@@ -123,13 +123,13 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
                   render={({ field }) => (
                     <FormItem>
                       <FormFieldWithHelp
-                        label="Beskrivning"
+                        label="Description"
                         required
-                        helpText="Beskriv felet så tydligt du kan för att underlätta processen för alla involverade personer."
+                        helpText="Describe the fault as clearly as possible to help all involved parties."
                       />
                       <FormControl>
                         <Textarea
-                          placeholder="Beskriv felet så tydligt du kan..."
+                          placeholder="Describe the fault as clearly as possible..."
                           rows={4}
                           className="rounded-xl bg-muted/50 border-0 focus-visible:ring-1 text-base"
                           {...field}
@@ -147,8 +147,8 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
                   render={({ field }) => (
                     <FormItem>
                       <FormFieldWithHelp
-                        label="Felkod"
-                        helpText="Ange en matchande felkod om en sådan finns angiven på installationen."
+                        label="Error Code"
+                        helpText="Enter a matching error code if one is specified on the installation."
                       />
                       <FormControl>
                         <ErrorCodeCombobox
@@ -169,13 +169,13 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
                   render={({ field }) => (
                     <FormItem>
                       <FormFieldWithHelp
-                        label="Återkoppling via e-post"
-                        helpText="Fyll i din e-postadress om du vill ha återkoppling om ärendet."
+                        label="Email for follow-up"
+                        helpText="Enter your email if you want to receive updates on the case."
                       />
                       <FormControl>
                         <ClearableInput
                           type="email"
-                          placeholder="Fyll i e-post om du vill ha återkoppling"
+                          placeholder="Enter email for follow-up"
                           className="h-12 rounded-xl bg-muted/50 border-0 focus-visible:ring-1 text-base"
                           value={field.value || ''}
                           onChange={field.onChange}
@@ -196,13 +196,13 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
                   render={({ field }) => (
                     <FormItem>
                       <FormFieldWithHelp
-                        label="Kontakt, telefonnummer"
-                        helpText="Fyll i ditt telefonnummer om du vill bli kontaktad."
+                        label="Contact phone number"
+                        helpText="Enter your phone number if you want to be contacted."
                       />
                       <FormControl>
                         <ClearableInput
                           type="tel"
-                          placeholder="Fyll i telefonnummer"
+                          placeholder="Enter phone number"
                           className="h-12 rounded-xl bg-muted/50 border-0 focus-visible:ring-1 text-base"
                           value={field.value || ''}
                           onChange={field.onChange}
@@ -218,7 +218,7 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
 
                 {/* Photos */}
                 <div className="space-y-2">
-                  <Label>Bifoga bilder</Label>
+                  <Label>Attach images</Label>
                   <PhotoCapture
                     photos={photos}
                     onPhotosChange={setPhotos}
@@ -243,7 +243,7 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
                 {isSubmitting && (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 )}
-                Skicka felanmälan
+                Submit fault report
               </Button>
             </div>
           </form>

@@ -19,11 +19,11 @@ import {
 import { cn } from '@/lib/utils';
 
 const TYPE_CONFIG: Record<string, { icon: React.ReactNode; label: string }> = {
-  underutilized: { icon: <Minimize2 className="h-4 w-4" />, label: 'Underutnyttjad' },
-  overcrowded: { icon: <Maximize2 className="h-4 w-4" />, label: 'Överbelastad' },
-  merge: { icon: <Merge className="h-4 w-4" />, label: 'Slå samman' },
-  convert: { icon: <ArrowDownUp className="h-4 w-4" />, label: 'Konvertera' },
-  rezone: { icon: <Layers className="h-4 w-4" />, label: 'Omzona' },
+  underutilized: { icon: <Minimize2 className="h-4 w-4" />, label: 'Underutilized' },
+  overcrowded: { icon: <Maximize2 className="h-4 w-4" />, label: 'Overcrowded' },
+  merge: { icon: <Merge className="h-4 w-4" />, label: 'Merge' },
+  convert: { icon: <ArrowDownUp className="h-4 w-4" />, label: 'Convert' },
+  rezone: { icon: <Layers className="h-4 w-4" />, label: 'Rezone' },
 };
 
 const PRIORITY_COLORS = {
@@ -72,8 +72,8 @@ export default function RoomOptimizationTab({ facility }: { facility?: Facility 
   if (!effectiveFacility) {
     return (
       <div className="text-center py-12 text-muted-foreground">
-        <LayoutGrid className="h-12 w-12 mx-auto mb-3 opacity-40" />
-        <p>Välj en byggnad för att analysera rumsoptimering</p>
+         <LayoutGrid className="h-12 w-12 mx-auto mb-3 opacity-40" />
+         <p>Select a building to analyze room optimization</p>
       </div>
     );
   }
@@ -82,12 +82,12 @@ export default function RoomOptimizationTab({ facility }: { facility?: Facility 
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-foreground">Rumsoptimering</h3>
-          <p className="text-xs text-muted-foreground">AI-driven analys av ytanvändning</p>
+           <h3 className="text-sm font-semibold text-foreground">Room Optimization</h3>
+           <p className="text-xs text-muted-foreground">AI-driven analysis of space utilization</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => analyze()} disabled={isLoading}>
           <RefreshCw className={cn('h-3.5 w-3.5 mr-1.5', isLoading && 'animate-spin')} />
-          {isLoading ? 'Analyserar...' : 'Analysera'}
+          {isLoading ? 'Analyzing...' : 'Analyze'}
         </Button>
       </div>
 
@@ -111,7 +111,7 @@ export default function RoomOptimizationTab({ facility }: { facility?: Facility 
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-muted-foreground">Utnyttjandegrad</span>
+                <span className="text-xs font-medium text-muted-foreground">Utilization Rate</span>
                 <span className={cn(
                   'text-lg font-bold',
                   data.utilizationScore > 70 ? 'text-emerald-500' :
@@ -125,19 +125,19 @@ export default function RoomOptimizationTab({ facility }: { facility?: Facility 
               {data.statistics && (
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="bg-muted/50 rounded p-2">
-                    <span className="text-muted-foreground">Total yta</span>
-                    <span className="block font-semibold">{data.statistics.totalArea?.toLocaleString()} m²</span>
-                  </div>
-                  <div className="bg-muted/50 rounded p-2">
-                    <span className="text-muted-foreground">Snittbeläggning</span>
+                     <span className="text-muted-foreground">Total Area</span>
+                     <span className="block font-semibold">{data.statistics.totalArea?.toLocaleString()} m²</span>
+                   </div>
+                   <div className="bg-muted/50 rounded p-2">
+                     <span className="text-muted-foreground">Avg Occupancy</span>
                     <span className="block font-semibold">{data.statistics.avgOccupancy}%</span>
                   </div>
                   <div className="bg-amber-500/10 rounded p-2">
-                    <span className="text-muted-foreground">Underutnyttjade</span>
-                    <span className="block font-semibold text-amber-500">{data.statistics.underutilizedRooms}</span>
-                  </div>
-                  <div className="bg-destructive/10 rounded p-2">
-                    <span className="text-muted-foreground">Överbelastade</span>
+                     <span className="text-muted-foreground">Underutilized</span>
+                     <span className="block font-semibold text-amber-500">{data.statistics.underutilizedRooms}</span>
+                   </div>
+                   <div className="bg-destructive/10 rounded p-2">
+                     <span className="text-muted-foreground">Overcrowded</span>
                     <span className="block font-semibold text-destructive">{data.statistics.overcrowdedRooms}</span>
                   </div>
                 </div>

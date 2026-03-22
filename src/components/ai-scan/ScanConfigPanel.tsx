@@ -81,7 +81,6 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
   const [buildingSettings, setBuildingSettings] = useState<Record<string, BuildingSettings>>({});
   const [loadingSettings, setLoadingSettings] = useState(true);
 
-  // Pre-select all active templates on load
   useEffect(() => {
     if (templates.length > 0 && selectedTemplates.length === 0) {
       const allActive = templates.filter(t => t.is_active).map(t => t.object_type);
@@ -89,19 +88,16 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
     }
   }, [templates]);
 
-  // Pre-select building from context
   useEffect(() => {
     if (preselectedBuildingGuid && !selectedBuilding) {
       setSelectedBuilding(preselectedBuildingGuid);
     }
   }, [preselectedBuildingGuid]);
 
-  // Load building settings to check Ivion configuration
   useEffect(() => {
     loadBuildingSettings();
   }, []);
 
-  // Check Ivion connection when building is selected
   useEffect(() => {
     if (selectedBuilding && buildingSettings[selectedBuilding]?.ivion_site_id) {
       checkIvionConnection();
@@ -131,7 +127,6 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
     }
   };
 
-  // Check Ivion connection status (auto-authenticates)
   const checkIvionConnection = async () => {
     setIsCheckingIvion(true);
     setIvionStatus(null);
@@ -161,7 +156,6 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
     }
   };
 
-  // Toggle template selection
   const toggleTemplate = (objectType: string) => {
     setSelectedTemplates(prev => 
       prev.includes(objectType)
@@ -170,19 +164,17 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
     );
   };
 
-  // Get Ivion site ID for selected building
   const getIvionSiteId = (): string | null => {
     if (!selectedBuilding) return null;
     return buildingSettings[selectedBuilding]?.ivion_site_id || null;
   };
 
-  // Test image access for selected building (HEAD-based, quick check)
   const testImageAccess = async () => {
     const siteId = getIvionSiteId();
     if (!siteId) {
       toast({
-        title: 'Ivion ej konfigurerat',
-        description: 'Vald byggnad har ingen Ivion-site konfigurerad',
+        title: 'Ivion not configured',
+        description: 'Selected building has no Ivion site configured',
         variant: 'destructive',
       });
       return;
@@ -201,20 +193,19 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
     } catch (error: any) {
       setAccessTestResult({
         success: false,
-        message: error.message || 'Kunde inte testa bildåtkomst',
+        message: error.message || 'Could not test image access',
       });
     } finally {
       setIsTestingAccess(false);
     }
   };
 
-  // Test actual image download (GET-based, real download verification)
   const testImageDownload = async () => {
     const siteId = getIvionSiteId();
     if (!siteId) {
       toast({
-        title: 'Ivion ej konfigurerat',
-        description: 'Vald byggnad har ingen Ivion-site konfigurerad',
+        title: 'Ivion not configured',
+        description: 'Selected building has no Ivion site configured',
         variant: 'destructive',
       });
       return;
@@ -233,8 +224,8 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
       
       if (!data.success) {
         toast({
-          title: 'Bildnedladdning misslyckades',
-          description: data.error || 'Kontrollera NavVis/Ivion behörigheter',
+          title: 'Image download failed',
+          description: data.error || 'Check NavVis/Ivion permissions',
           variant: 'destructive',
         });
       }
@@ -242,7 +233,7 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
       setDownloadTestResult({
         success: false,
         attempts: [],
-        error: error.message || 'Kunde inte testa bildnedladdning',
+        error: error.message || 'Could not test image download',
       });
     } finally {
       setIsTestingDownload(false);
@@ -255,13 +246,12 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
-  // Start scan — browser-based mode
   const startScan = async () => {
     const siteId = getIvionSiteId();
     if (!selectedBuilding || !siteId || selectedTemplates.length === 0) {
       toast({
-        title: 'Ofullständig konfiguration',
-        description: 'Välj byggnad och minst en objekttyp att söka efter',
+        title: 'Incomplete configuration',
+        description: 'Select a building and at least one object type to scan for',
         variant: 'destructive',
       });
       return;
@@ -270,7 +260,6 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
     setIsStarting(true);
 
     try {
-      // Create scan job in DB
       const { data, error } = await supabase.functions.invoke('ai-asset-detection', {
         body: {
           action: 'start-scan',
@@ -282,19 +271,17 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
 
       if (error) throw error;
 
-      // Use the same Ivion base URL as the rest of the app
       const ivionBaseUrl = IVION_DEFAULT_BASE_URL;
 
       toast({
-        title: 'Skanning startar',
-        description: 'Öppnar 360°-visaren för webbläsarbaserad skanning...',
+        title: 'Scan starting',
+        description: 'Opening 360° viewer for browser-based scanning...',
       });
 
-      // Launch browser-based scan
       onScanStarted(data, { ivionBaseUrl });
     } catch (error: any) {
       toast({
-        title: 'Kunde inte starta skanning',
+        title: 'Could not start scan',
         description: error.message,
         variant: 'destructive',
       });
@@ -303,7 +290,6 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
     }
   };
 
-  // Filter buildings with Ivion configured
   const buildingsWithIvion = buildings.filter(b => 
     buildingSettings[b.fm_guid]?.ivion_site_id
   );
@@ -316,34 +302,33 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
 
   return (
     <div className="space-y-6 pb-4 max-w-4xl mx-auto">
-      {/* Two-column layout on desktop */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       {/* Building Selection */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Building2 className="h-5 w-5" />
-            Välj byggnad
+            Select Building
           </CardTitle>
           <CardDescription>
-            Välj vilken byggnad som ska skannas. Endast byggnader med konfigurerad Ivion-koppling visas.
+            Choose which building to scan. Only buildings with a configured Ivion connection are shown.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {loadingSettings ? (
-            <p className="text-sm text-muted-foreground">Laddar byggnader...</p>
+            <p className="text-sm text-muted-foreground">Loading buildings...</p>
           ) : buildingsWithIvion.length === 0 ? (
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                Inga byggnader har Ivion-site konfigurerat. Gå till byggnadsinställningar och lägg till Ivion Site ID.
+                No buildings have an Ivion site configured. Go to building settings and add an Ivion Site ID.
               </AlertDescription>
             </Alert>
           ) : (
             <>
               <Select value={selectedBuilding} onValueChange={setSelectedBuilding}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Välj byggnad..." />
+                  <SelectValue placeholder="Select building..." />
                 </SelectTrigger>
                 <SelectContent>
                   {buildingsWithIvion.map(building => (
@@ -361,23 +346,23 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
                     {isCheckingIvion ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">Kontrollerar Ivion-anslutning...</span>
+                        <span className="text-sm text-muted-foreground">Checking Ivion connection...</span>
                       </>
                     ) : ivionStatus?.connected ? (
                       <>
                         <Wifi className="h-4 w-4 text-green-600" />
                         <span className="text-sm text-green-700 dark:text-green-400">
-                          Ivion ansluten
+                          Ivion connected
                         </span>
                         <Badge variant="secondary" className="ml-auto text-xs">
-                          {ivionStatus.authMethod === 'credentials' ? 'Auto-inloggad' : 'Token'}
+                          {ivionStatus.authMethod === 'credentials' ? 'Auto-login' : 'Token'}
                         </Badge>
                       </>
                     ) : (
                       <>
                         <WifiOff className="h-4 w-4 text-destructive" />
                         <span className="text-sm text-destructive">
-                          {ivionStatus?.message || 'Ivion ej ansluten'}
+                          {ivionStatus?.message || 'Ivion not connected'}
                         </span>
                         <Button
                           variant="outline"
@@ -386,7 +371,7 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
                           className="ml-auto"
                         >
                           <RefreshCw className="h-3 w-3 mr-1" />
-                          Försök igen
+                          Retry
                         </Button>
                       </>
                     )}
@@ -401,7 +386,7 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
                       disabled={isTestingAccess || isTestingDownload || !ivionStatus?.connected}
                     >
                       {isTestingAccess ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-                      {isTestingAccess ? 'Testar...' : 'Testa åtkomst (snabb)'}
+                      {isTestingAccess ? 'Testing...' : 'Test access (quick)'}
                     </Button>
                     {accessTestResult && (
                       <div className={`flex items-center gap-1 text-sm ${
@@ -426,7 +411,7 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
                       disabled={isTestingAccess || isTestingDownload}
                     >
                       {isTestingDownload ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Download className="h-4 w-4 mr-1" />}
-                      {isTestingDownload ? 'Laddar ner...' : 'Testa bildnedladdning (GET)'}
+                      {isTestingDownload ? 'Downloading...' : 'Test image download (GET)'}
                     </Button>
                   </div>
 
@@ -442,14 +427,14 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
                           <>
                             <CheckCircle2 className="h-4 w-4 text-green-600" />
                             <span className="text-green-700 dark:text-green-400">
-                              Bildnedladdning OK ({downloadTestResult.contentType}, {formatBytes(downloadTestResult.imageSize || 0)})
+                              Image download OK ({downloadTestResult.contentType}, {formatBytes(downloadTestResult.imageSize || 0)})
                             </span>
                           </>
                         ) : (
                           <>
                             <AlertCircle className="h-4 w-4 text-destructive" />
                             <span className="text-destructive">
-                              {downloadTestResult.error || 'Bildnedladdning misslyckades'}
+                              {downloadTestResult.error || 'Image download failed'}
                             </span>
                           </>
                         )}
@@ -458,7 +443,7 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
                       {/* Show attempts for debugging */}
                       {downloadTestResult.attempts.length > 0 && (
                         <div className="mt-2 space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground">Försök:</p>
+                          <p className="text-xs font-medium text-muted-foreground">Attempts:</p>
                           {downloadTestResult.attempts.map((attempt, i) => (
                             <div key={i} className="text-xs font-mono bg-background/50 p-1 rounded flex items-center gap-2">
                               <span className={`px-1 rounded ${
@@ -477,8 +462,8 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
                       
                       {!downloadTestResult.success && (
                         <p className="text-xs text-muted-foreground mt-2">
-                          Detta indikerar att NavVis/Ivion-kontot kan lista datasets men saknar behörighet att ladda ner bilddata. 
-                          Kontrollera kontots behörigheter i NavVis.
+                          This indicates the NavVis/Ivion account can list datasets but lacks permission to download image data.
+                          Check the account permissions in NavVis.
                         </p>
                       )}
                     </div>
@@ -495,10 +480,10 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Scan className="h-5 w-5" />
-            Välj objekttyper
+            Select Object Types
           </CardTitle>
           <CardDescription>
-            Välj vilka typer av objekt AI:n ska leta efter i 360°-bilderna.
+            Choose which types of objects the AI should look for in the 360° images.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -528,7 +513,7 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
             
             {templates.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                Inga detektionsmallar konfigurerade.
+                No detection templates configured.
               </p>
             )}
           </div>
@@ -543,16 +528,16 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
             <Info className="h-5 w-5 text-muted-foreground mt-0.5" />
             <div className="text-sm text-muted-foreground space-y-2">
               <p>
-                <strong>Så fungerar det:</strong> Skanningen körs direkt i webbläsaren via 360°-visaren.
-                AI:n analyserar skärmbilder tagna från panoramavyn och identifierar objekt baserat på valda mallar.
+                <strong>How it works:</strong> The scan runs directly in the browser via the 360° viewer.
+                The AI analyzes screenshots taken from the panorama view and identifies objects based on selected templates.
               </p>
               <p>
-                Detekterade objekt visas i granskningskön där du kan godkänna eller avvisa dem.
-                Godkända objekt skapas automatiskt som tillgångar i systemet.
+                Detected objects appear in the review queue where you can approve or reject them.
+                Approved objects are automatically created as assets in the system.
               </p>
               <p>
-                <strong>OBS:</strong> Håll webbläsarfliken öppen under hela skanningen.
-                Du kan pausa och återuppta när som helst.
+                <strong>Note:</strong> Keep the browser tab open during the entire scan.
+                You can pause and resume at any time.
               </p>
             </div>
           </div>
@@ -567,7 +552,7 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
           disabled={!canStartScan}
         >
           <Scan className="h-5 w-5 mr-2" />
-          {isStarting ? 'Startar...' : 'Starta AI-skanning'}
+          {isStarting ? 'Starting...' : 'Start AI Scan'}
         </Button>
       </div>
     </div>

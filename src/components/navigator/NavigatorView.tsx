@@ -193,8 +193,8 @@ export default function NavigatorView() {
     // Store a flag to indicate 2D mode should be activated
     setViewer3dFmGuid(node.fmGuid);
     setActiveApp('native_viewer');
-    toast.info(`Öppnar 2D-vy för "${node.commonName || node.name}"`, {
-      description: 'Växla till 2D-läge i verktygsfältet',
+    toast.info(`Opening 2D view for "${node.commonName || node.name}"`, {
+      description: 'Switch to 2D mode in the toolbar',
     });
   }, [setViewer3dFmGuid, setActiveApp]);
 
@@ -294,7 +294,7 @@ export default function NavigatorView() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Sök..."
+            placeholder="Search..."
             className="flex-1 h-8 sm:h-9 text-sm"
           />
           <div className="flex gap-0.5 sm:gap-1 shrink-0">
@@ -303,7 +303,7 @@ export default function NavigatorView() {
               size="icon"
               className="h-8 w-8 sm:h-9 sm:w-9"
               onClick={() => setViewModeLocal('tree')}
-              title="Trädvy"
+              title="Tree view"
             >
               <Network className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </Button>
@@ -312,7 +312,7 @@ export default function NavigatorView() {
               size="icon"
               className="h-8 w-8 sm:h-9 sm:w-9"
               onClick={() => setViewModeLocal('list')}
-              title="Listvy"
+              title="List view"
             >
               <List className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </Button>
@@ -321,13 +321,13 @@ export default function NavigatorView() {
 
         <div className="rounded-lg border border-border bg-card p-1.5 sm:p-2 overflow-hidden">
           {isLoadingData ? (
-            <div className="p-2 sm:p-3 text-xs sm:text-sm text-muted-foreground">Laddar data...</div>
+            <div className="p-2 sm:p-3 text-xs sm:text-sm text-muted-foreground">Loading data...</div>
           ) : viewMode === 'list' && query.trim().length >= 2 ? (
             // List view with search results
             <SearchResultsList
               results={searchResults}
               onSelect={handleSearchResultSelect}
-              emptyMessage="Inga resultat för din sökning"
+              emptyMessage="No results for your search"
             />
           ) : (
             <div className="h-[calc(100vh-200px)]">
