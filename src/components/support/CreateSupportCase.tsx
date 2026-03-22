@@ -205,7 +205,7 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
 
           {/* Building selector */}
           <div className="space-y-2">
-            <Label>Byggnad</Label>
+            <Label>Building</Label>
             {buildings.length > 0 ? (
               <Select value={buildingGuid} onValueChange={handleBuildingChange}>
                 <SelectTrigger><SelectValue placeholder="Välj byggnad..." /></SelectTrigger>
