@@ -56,7 +56,7 @@ const FmAccessObjectPanel: React.FC<FmAccessObjectPanelProps> = ({ selectedNode,
   }
 
   const nodeGuid = displayNode.guid || displayNode.systemGuid || '';
-  const name = displayNode.objectName || displayNode.name || 'Namnlöst';
+  const name = displayNode.objectName || displayNode.name || 'Unnamed';
   const classLabel = displayNode.classId ? CLASS_LABELS[displayNode.classId] || displayNode.className : displayNode.className;
   const props = displayNode.properties || {};
   const propEntries = Object.entries(props).filter(([k]) => !k.startsWith('_'));
