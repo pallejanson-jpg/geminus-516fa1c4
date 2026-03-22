@@ -105,7 +105,7 @@ const CreateViewDialog: React.FC<CreateViewDialogProps> = ({
           {/* Building info */}
           {viewState?.buildingName && (
             <p className="text-sm text-muted-foreground">
-              Byggnad: <span className="font-medium text-foreground">{viewState.buildingName}</span>
+              Building: <span className="font-medium text-foreground">{viewState.buildingName}</span>
             </p>
           )}
 
