@@ -192,7 +192,7 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 {floors.map((floor) => {
                   const isSelected = formData.levelFmGuid === floor.fmGuid;
-                  const displayName = floor.commonName || floor.name || 'Våning';
+                  const displayName = floor.commonName || floor.name || 'Floor';
 
                   return (
                     <Button
