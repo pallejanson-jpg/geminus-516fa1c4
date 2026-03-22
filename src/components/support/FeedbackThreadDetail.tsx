@@ -31,11 +31,11 @@ interface FeedbackThreadDetailProps {
 }
 
 const STATUS_OPTIONS = [
-  { value: 'open', label: 'Öppen' },
-  { value: 'planned', label: 'Planerad' },
-  { value: 'in_progress', label: 'Pågår' },
-  { value: 'done', label: 'Klar' },
-  { value: 'declined', label: 'Avböjd' },
+  { value: 'open', label: 'Open' },
+  { value: 'planned', label: 'Planned' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'done', label: 'Done' },
+  { value: 'declined', label: 'Declined' },
 ];
 
 const FeedbackThreadDetail: React.FC<FeedbackThreadDetailProps> = ({
