@@ -70,7 +70,7 @@ const FeedbackCreateForm: React.FC<FeedbackCreateFormProps> = ({ open, onClose, 
         })),
         ...(docs || []).map(d => ({
           type: 'doc' as const,
-          title: d.file_name || 'Hjälpdokumentation',
+          title: d.file_name || 'Help documentation',
           description: d.content?.substring(0, 100) + '…',
           id: d.id,
         })),
