@@ -123,9 +123,9 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
                   render={({ field }) => (
                     <FormItem>
                       <FormFieldWithHelp
-                        label="Beskrivning"
+                        label="Description"
                         required
-                        helpText="Beskriv felet så tydligt du kan för att underlätta processen för alla involverade personer."
+                        helpText="Describe the fault as clearly as possible to help all involved parties."
                       />
                       <FormControl>
                         <Textarea
