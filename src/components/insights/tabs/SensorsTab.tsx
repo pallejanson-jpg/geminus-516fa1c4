@@ -299,7 +299,7 @@ export default function SensorsTab() {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
             <metricDef.icon className="h-4 w-4" style={{ color: metricDef.color }} />
-            Trendgraf – {metricDef.label}
+            Trend Chart – {metricDef.label}
           </CardTitle>
           <CardDescription>Dagligt snitt, senaste 7 dagar</CardDescription>
         </CardHeader>
