@@ -57,7 +57,7 @@ const MobileBuildingSelector: React.FC<MobileBuildingSelectorProps> = ({ onSelec
       {/* Building grid */}
       <ScrollArea className="flex-1">
         <div className="p-4">
-          <p className="text-muted-foreground mb-4">Välj en byggnad att visa</p>
+          <p className="text-muted-foreground mb-4">Select a building to view</p>
           
           {buildings.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
