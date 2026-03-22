@@ -898,7 +898,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setDetailDialog(null)}>
-              Stäng
+              Close
             </Button>
             {detailDialog?.status === 'pending' && (
               <>
