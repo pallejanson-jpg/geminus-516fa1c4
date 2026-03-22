@@ -81,7 +81,7 @@ const ErrorCodeCombobox: React.FC<ErrorCodeComboboxProps> = ({ value, onChange, 
           className="w-full justify-between font-normal h-10"
         >
           <span className={cn('truncate', !value && 'text-muted-foreground')}>
-            {selectedLabel || 'Ange en matchande felkod'}
+            {selectedLabel || 'Enter a matching error code'}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
