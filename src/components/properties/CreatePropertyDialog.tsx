@@ -337,7 +337,7 @@ export default function CreatePropertyDialog({
               </AccordionTrigger>
               <AccordionContent className="space-y-3 pt-2">
                 <p className="text-xs text-muted-foreground">
-                  Lämna tomt för att använda globala inställningar.
+                  Leave empty to use global settings.
                 </p>
                 <SecretInput label="API URL" field="assetplus_api_url" placeholder="https://..." />
                 <SecretInput label="API Key" field="assetplus_api_key" />
