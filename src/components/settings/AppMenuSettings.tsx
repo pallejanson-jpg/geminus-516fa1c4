@@ -126,7 +126,7 @@ const SortableSidebarItem: React.FC<{
             onCheckedChange={() => onToggleDivider(item.id)}
           />
           <Label htmlFor={`divider-${item.id}`} className="text-xs text-muted-foreground whitespace-nowrap">
-            Avdelare
+            Divider
           </Label>
         </div>
       </div>
