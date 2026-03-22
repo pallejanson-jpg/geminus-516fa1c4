@@ -124,9 +124,9 @@ const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[95vw] w-[95vw] h-[85vh] p-0 overflow-hidden flex flex-col">
         <DialogHeader className="p-4 pb-2 flex-shrink-0">
-          <DialogTitle>Välj position i 3D-modellen</DialogTitle>
+          <DialogTitle>Select position in 3D model</DialogTitle>
           <p className="text-sm text-muted-foreground">
-            Klicka i modellen för att välja position
+            Click in the model to select a position
           </p>
         </DialogHeader>
         <div className="flex-1 min-h-0 relative">
