@@ -321,7 +321,7 @@ export default function NavigatorView() {
 
         <div className="rounded-lg border border-border bg-card p-1.5 sm:p-2 overflow-hidden">
           {isLoadingData ? (
-            <div className="p-2 sm:p-3 text-xs sm:text-sm text-muted-foreground">Laddar data...</div>
+            <div className="p-2 sm:p-3 text-xs sm:text-sm text-muted-foreground">Loading data...</div>
           ) : viewMode === 'list' && query.trim().length >= 2 ? (
             // List view with search results
             <SearchResultsList
