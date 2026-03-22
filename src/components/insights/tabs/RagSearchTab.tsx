@@ -24,8 +24,8 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-foreground">Smart dokumentsökning</h3>
-        <p className="text-xs text-muted-foreground">AI-driven semantisk sökning i byggnads&shy;dokumentation</p>
+         <h3 className="text-sm font-semibold text-foreground">Smart Document Search</h3>
+         <p className="text-xs text-muted-foreground">AI-powered semantic search in building documentation</p>
       </div>
 
       {/* Search input */}
