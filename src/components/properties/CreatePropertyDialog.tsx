@@ -364,7 +364,7 @@ export default function CreatePropertyDialog({
               </AccordionTrigger>
               <AccordionContent className="space-y-3 pt-2">
                 <p className="text-xs text-muted-foreground">
-                  Lämna tomt för att använda globala inställningar.
+                  Leave empty to use global settings.
                 </p>
                 <SecretInput label="API URL" field="senslinc_api_url" placeholder="https://..." />
                 <SecretInput label="E-post" field="senslinc_email" />
