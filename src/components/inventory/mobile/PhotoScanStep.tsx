@@ -366,8 +366,8 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
           <Button className="w-full h-12" onClick={handleConfirm}>
             <ChevronRight className="h-4 w-4 mr-2" />
             {aiResult.confidence >= 0.7
-              ? 'Använd förslag & gå vidare'
-              : 'Förhandsgranska & korrigera'}
+              ? 'Use suggestion & continue'
+              : 'Preview & correct'}
           </Button>
         )}
 
