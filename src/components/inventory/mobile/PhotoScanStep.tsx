@@ -271,7 +271,7 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
                   disabled={isAnalyzing}
                 >
                   <Camera className="h-3.5 w-3.5 mr-1" />
-                  Nytt foto
+                  New photo
                 </Button>
               </div>
             </div>
