@@ -114,7 +114,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b">
-              <span className="font-semibold text-sm text-foreground">Navigering</span>
+              <span className="font-semibold text-sm text-foreground">Navigation</span>
               <button
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors"
