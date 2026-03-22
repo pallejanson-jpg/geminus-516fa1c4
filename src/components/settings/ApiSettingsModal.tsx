@@ -918,7 +918,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         if (accAuthStatus !== 'authenticated') return; // Guard: only fetch if authenticated
         const effectiveProjectId = manualAccProjectId.trim() || selectedAccProjectId;
         if (!effectiveProjectId) {
-            toast({ variant: 'destructive', title: 'Projekt-ID saknas', description: 'Ange ett ACC-projekt-ID först.' });
+            toast({ variant: 'destructive', title: 'Project ID missing', description: 'Enter an ACC project ID first.' });
             return;
         }
         setIsLoadingAccFolders(true);
