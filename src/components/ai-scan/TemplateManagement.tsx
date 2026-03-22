@@ -549,18 +549,18 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               <X className="h-4 w-4 mr-2" />
-              Avbryt
+              Cancel
             </Button>
             <Button onClick={handleSave} disabled={isSaving}>
               {isSaving ? (
                 <>
                   <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Sparar...
+                  Saving...
                 </>
               ) : (
                 <>
                   <Save className="h-4 w-4 mr-2" />
-                  Spara
+                  Save
                 </>
               )}
             </Button>
