@@ -292,7 +292,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
               ) : (
                 <>
                   <Camera className="h-6 w-6" />
-                  <span className="text-sm">Ta foto</span>
+                  <span className="text-sm">Take photo</span>
                 </>
               )}
             </Button>
