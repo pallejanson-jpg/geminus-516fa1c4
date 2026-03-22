@@ -351,8 +351,8 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
               <div className="space-y-1 flex-1">
                 <p className="text-sm text-destructive">{error}</p>
                 <Button variant="outline" size="sm" onClick={handleReanalyze} className="h-7 text-xs">
-                  <RefreshCw className="h-3 w-3 mr-1" />
-                  Försök igen
+                   <RefreshCw className="h-3 w-3 mr-1" />
+                   Try again
                 </Button>
               </div>
             </div>
