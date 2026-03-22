@@ -1244,7 +1244,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                       disabled={bipApplied === s.code}
                     >
                       {bipApplied === s.code ? <Check className="h-3 w-3 mr-1" /> : <Tag className="h-3 w-3 mr-1" />}
-                      {bipApplied === s.code ? 'Vald' : 'Välj'}
+                      {bipApplied === s.code ? 'Selected' : 'Select'}
                     </Button>
                   </div>
                   <div className="flex flex-wrap gap-1.5 text-xs">
