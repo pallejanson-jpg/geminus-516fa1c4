@@ -488,7 +488,7 @@ const SymbolSettings: React.FC = () => {
                 </label>
               </div>
               <p className="text-xs text-muted-foreground">
-                Ladda upp en bild eller ange en URL
+                Upload an image or enter a URL
               </p>
             </div>
 
