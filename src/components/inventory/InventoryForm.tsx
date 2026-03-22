@@ -690,7 +690,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
         <Textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Fritext beskrivning..."
+          placeholder="Free text description..."
           className="min-h-[80px]"
           maxLength={1000}
         />
