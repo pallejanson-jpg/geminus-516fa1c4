@@ -575,7 +575,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
       {/* 3D Position & 360+ Section */}
       {buildingFmGuid && (
         <div className="space-y-3">
-          <Label className="text-base">Position (valfritt)</Label>
+          <Label className="text-base">Position (optional)</Label>
           
           {coordinates && (
             <div className="bg-muted/50 rounded-lg p-3 flex items-center justify-between">
