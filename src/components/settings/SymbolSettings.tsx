@@ -387,7 +387,7 @@ const SymbolSettings: React.FC = () => {
               </div>
               <div className="flex items-center gap-2 mt-2">
                 <Label htmlFor="custom-color" className="text-xs text-muted-foreground">
-                  Egen färg:
+                  Custom color:
                 </Label>
                 <input
                   id="custom-color"
