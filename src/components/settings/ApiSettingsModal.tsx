@@ -2810,7 +2810,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         </Button>
                                                     </div>
                                                     <p className="text-xs text-muted-foreground">
-                                                        Välj ett projekt från dropdown eller ange ID manuellt.
+                                                        Select a project from the dropdown or enter an ID manually.
                                                     </p>
                                                 </div>
 
