@@ -147,8 +147,8 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
                   render={({ field }) => (
                     <FormItem>
                       <FormFieldWithHelp
-                        label="Felkod"
-                        helpText="Ange en matchande felkod om en sådan finns angiven på installationen."
+                        label="Error Code"
+                        helpText="Enter a matching error code if one is specified on the installation."
                       />
                       <FormControl>
                         <ErrorCodeCombobox
