@@ -237,7 +237,7 @@ const BuildingSelector: React.FC = () => {
         <div className="relative mb-4">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder={activeTab === 'buildings' ? 'Sök byggnad...' : 'Sök sparade vyer...'}
+            placeholder={activeTab === 'buildings' ? 'Search buildings...' : 'Search saved views...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
