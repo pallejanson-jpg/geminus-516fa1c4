@@ -271,7 +271,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline gap-2">
-                          <span className="text-sm font-medium">{c.profile?.display_name || 'Användare'}</span>
+                          <span className="text-sm font-medium">{c.profile?.display_name || 'User'}</span>
                           <span className="text-xs text-muted-foreground">
                             {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
                           </span>
