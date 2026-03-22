@@ -366,7 +366,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
                   }}
                   onFocus={() => { if (geocodingResults.length > 0) setShowGeoResults(true); }}
                   onBlur={() => setTimeout(() => setShowGeoResults(false), 200)}
-                  placeholder="Skriv adress eller välj i kartan"
+                  placeholder="Enter address or select on map"
                   className="h-8 text-xs"
                 />
                 {/* Geocoding dropdown */}
