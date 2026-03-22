@@ -185,7 +185,7 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Prioritet</Label>
+              <Label>Priority</Label>
               <Select value={priority} onValueChange={setPriority}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
