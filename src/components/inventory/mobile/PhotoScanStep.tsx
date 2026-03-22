@@ -187,15 +187,15 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
   };
 
   const PROPERTY_LABELS: Record<string, string> = {
-    manufacturer: 'Tillverkare',
-    brand: 'Märke',
-    model: 'Modell',
-    size: 'Storlek',
-    color: 'Färg',
-    condition: 'Skick',
-    text_visible: 'Synlig text',
+    manufacturer: 'Manufacturer',
+    brand: 'Brand',
+    model: 'Model',
+    size: 'Size',
+    color: 'Color',
+    condition: 'Condition',
+    text_visible: 'Visible text',
     material: 'Material',
-    installation_type: 'Montering',
+    installation_type: 'Mounting',
   };
 
   const conditionLabel = (c: string) => {
