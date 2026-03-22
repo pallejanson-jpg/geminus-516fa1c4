@@ -27,24 +27,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
   const { activeApp, setActiveApp, appConfigs, selectedFacility, open360WithContext } = useContext(AppContext);
   const isMobile = useIsMobile();
   const currentContext = getCurrentContext(activeApp, selectedFacility);
-
-  const [sidebarOrder, setSidebarOrder] = useState<SidebarItem[]>(getSidebarOrder);
-
-  useEffect(() => {
-    const handleSettingsChange = (e: Event) => {
-      const customEvent = e as CustomEvent<SidebarItem[]>;
-      if (customEvent.detail) setSidebarOrder(customEvent.detail);
-    };
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === SIDEBAR_ORDER_STORAGE_KEY) setSidebarOrder(getSidebarOrder());
-    };
-    window.addEventListener(SIDEBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
-    window.addEventListener('storage', handleStorageChange);
-    return () => {
-      window.removeEventListener(SIDEBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, []);
+  const sidebarOrder = useSidebarOrder();
 
   const handleCoreClick = useCallback((key: string) => {
     setActiveApp(key);

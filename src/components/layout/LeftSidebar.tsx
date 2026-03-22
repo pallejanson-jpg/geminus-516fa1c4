@@ -22,29 +22,8 @@ const LeftSidebar: React.FC = () => {
     } = useContext(AppContext);
     
     const t = THEMES[theme];
-    const [sidebarOrder, setSidebarOrder] = useState<SidebarItem[]>(getSidebarOrder);
+    const sidebarOrder = useSidebarOrder();
     const currentContext = getCurrentContext(activeApp, selectedFacility);
-
-    // Listen for changes from AppMenuSettings
-    useEffect(() => {
-        const handleSettingsChange = (e: Event) => {
-            const customEvent = e as CustomEvent<SidebarItem[]>;
-            if (customEvent.detail) {
-                setSidebarOrder(customEvent.detail);
-            }
-        };
-        const handleStorageChange = (e: StorageEvent) => {
-            if (e.key === SIDEBAR_ORDER_STORAGE_KEY) {
-                setSidebarOrder(getSidebarOrder());
-            }
-        };
-        window.addEventListener(SIDEBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
-        window.addEventListener('storage', handleStorageChange);
-        return () => {
-            window.removeEventListener(SIDEBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
-            window.removeEventListener('storage', handleStorageChange);
-        };
-    }, []);
 
     const getIconColor = (key: string) => {
         if (activeApp === key) return '';
