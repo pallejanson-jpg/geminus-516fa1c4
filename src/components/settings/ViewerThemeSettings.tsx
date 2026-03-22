@@ -231,7 +231,7 @@ const ViewerThemeSettings: React.FC = () => {
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-medium flex items-center gap-2">
               <Palette className="h-4 w-4" />
-              Skapa nytt tema
+              Create New Theme
             </h4>
           </div>
           
