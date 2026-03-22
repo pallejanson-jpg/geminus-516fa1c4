@@ -352,7 +352,7 @@ const ApprovalDialog: React.FC<{
                   <SelectValue placeholder="Select room" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Inget rum</SelectItem>
+                  <SelectItem value="none">No room</SelectItem>
                   {rooms.map(r => (
                     <SelectItem key={r.fm_guid} value={r.fm_guid}>
                       {r.name || r.common_name || r.fm_guid}
