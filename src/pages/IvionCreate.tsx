@@ -274,7 +274,7 @@ const IvionCreate: React.FC = () => {
       <Card className="w-full max-w-lg mx-auto">
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Registrera tillgång från Ivion</CardTitle>
+            <CardTitle className="text-lg">Register Asset from Ivion</CardTitle>
             <Button variant="ghost" size="icon" onClick={handleClose}>
               <X className="h-4 w-4" />
             </Button>
