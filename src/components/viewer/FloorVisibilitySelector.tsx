@@ -347,7 +347,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
           <CollapsibleTrigger asChild>
             <Button variant="ghost" size="sm" className="h-auto p-0 hover:bg-transparent justify-start gap-1 sm:gap-1.5 min-w-0 flex-1">
               <Layers className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground flex-shrink-0" />
-              <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider cursor-pointer truncate">Våningsplan</Label>
+              <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider cursor-pointer truncate">Floors</Label>
               <span className="text-[10px] sm:text-xs text-muted-foreground flex-shrink-0">({visibleCount}/{totalCount})</span>
               <ChevronDown className={cn("h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground transition-transform flex-shrink-0", isExpanded && "rotate-180")} />
             </Button>
