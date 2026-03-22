@@ -210,15 +210,15 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
     const siteId = buildingSettings?.ivion_site_id;
 
     if (!ivionUrl && !siteId) {
-      toast.error('Ivion ej konfigurerad', {
-        description: 'Ange Ivion Site ID för byggnaden under byggnadsinställningar, och konfigurera IVION_API_URL i Cloud-secrets.',
+      toast.error('Ivion not configured', {
+        description: 'Set the Ivion Site ID for this building in building settings, and configure IVION_API_URL in Cloud secrets.',
       });
       return;
     }
 
     if (!siteId) {
-      toast.error('Ingen Ivion-site kopplad', {
-        description: 'Koppla byggnaden till en Ivion-site i byggnadsinställningar',
+      toast.error('No Ivion site linked', {
+        description: 'Link the building to an Ivion site in building settings',
       });
       return;
     }
