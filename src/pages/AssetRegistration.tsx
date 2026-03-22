@@ -349,7 +349,7 @@ export default function AssetRegistration() {
         />
         {isPickingCoordinates && (
           <div className="absolute top-3 left-3 z-20 bg-primary/90 text-primary-foreground text-xs px-3 py-1.5 rounded-md shadow-md">
-            Håll nedtryckt / dubbelklicka för att välja position
+            Long-press / double-click to select position
           </div>
         )}
       </div>
