@@ -89,7 +89,7 @@ const ErrorCodeCombobox: React.FC<ErrorCodeComboboxProps> = ({ value, onChange, 
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
         <Command shouldFilter={true}>
           <CommandInput
-            placeholder="Sök eller skriv felkod..."
+            placeholder="Search or enter error code..."
             value={searchQuery}
             onValueChange={setSearchQuery}
             onKeyDown={(e) => {
