@@ -283,7 +283,7 @@ export default function CreatePropertyDialog({
         <div className="space-y-6 mt-6">
           {/* Section 1: Building Identity */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-foreground">Byggnadsidentitet</h3>
+            <h3 className="text-sm font-semibold text-foreground">Building Identity</h3>
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">FM GUID *</Label>
               <Input
