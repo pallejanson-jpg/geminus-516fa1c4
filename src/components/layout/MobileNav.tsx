@@ -13,10 +13,10 @@ import { SIDEBAR_ITEM_META, getCurrentContext } from '@/lib/sidebar-config';
 
 // Core navigation items
 const CORE_NAV = [
-  { key: 'home',       icon: Home,       label: 'Hem' },
+  { key: 'home',       icon: Home,       label: 'Home' },
   { key: 'portfolio',  icon: LayoutGrid, label: 'Portfolio' },
   { key: 'navigation', icon: Network,    label: 'Navigator' },
-  { key: 'map',        icon: Globe,      label: 'Karta' },
+  { key: 'map',        icon: Globe,      label: 'Map' },
 ] as const;
 
 interface MobileNavProps {
