@@ -506,7 +506,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Avbryt</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction 
               onClick={() => deleteJobId && deleteScanJob(deleteJobId)}
               disabled={isDeleting}
