@@ -653,7 +653,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                     )}
                     
                     <p className="text-[11px] sm:text-xs text-muted-foreground">
-                      Visas som bakgrundsbild på byggnadens landningssida
+                      Shown as background image on the building landing page
                     </p>
                     
                     <input

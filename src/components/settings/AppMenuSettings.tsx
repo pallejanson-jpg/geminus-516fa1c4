@@ -224,11 +224,11 @@ const AppMenuSettings: React.FC<AppMenuSettingsProps> = ({ isOpen, onClose }) =>
         <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
           <Button variant="outline" onClick={handleReset} className="w-full sm:w-auto">
             <RotateCcw className="h-4 w-4 mr-2" />
-            Återställ
+            Reset
           </Button>
           <Button onClick={handleSave} className="w-full sm:w-auto">
             <Save className="h-4 w-4 mr-2" />
-            Spara
+            Save
           </Button>
         </DialogFooter>
       </DialogContent>
