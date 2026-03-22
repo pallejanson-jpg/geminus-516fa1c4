@@ -150,11 +150,11 @@ const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
               </p>
               <Button size="sm" variant="outline" onClick={() => setPendingCoords(null)} className="gap-1">
                 <RotateCcw className="h-3.5 w-3.5" />
-                Välj om
+                Reselect
               </Button>
               <Button size="sm" onClick={handleConfirm} className="gap-1">
                 <Check className="h-3.5 w-3.5" />
-                Bekräfta
+                Confirm
               </Button>
             </div>
           )}

@@ -275,7 +275,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
                 </p>
               )}
               <Button size="sm" variant="outline" onClick={handleClearRoute} className="text-xs w-full mt-1">
-                Rensa rutt
+                Clear route
               </Button>
             </div>
           )}

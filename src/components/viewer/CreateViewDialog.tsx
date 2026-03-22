@@ -142,16 +142,16 @@ const CreateViewDialog: React.FC<CreateViewDialogProps> = ({
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose} disabled={isSaving}>
-            Avbryt
+            Cancel
           </Button>
           <Button onClick={handleSave} disabled={isSaving || !name.trim()}>
             {isSaving ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Sparar...
+                Saving...
               </>
             ) : (
-              'Spara vy'
+              'Save view'
             )}
           </Button>
         </DialogFooter>
