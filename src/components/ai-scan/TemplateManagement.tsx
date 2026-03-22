@@ -353,7 +353,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <h3 className="font-medium">{template.name}</h3>
                       <Badge variant={template.is_active ? 'default' : 'secondary'}>
-                        {template.is_active ? 'Aktiv' : 'Inaktiv'}
+                        {template.is_active ? 'Active' : 'Inactive'}
                       </Badge>
                     </div>
                     {template.description && (
