@@ -78,7 +78,7 @@ export default function RagSearchTab({ facility }: { facility?: Facility }) {
                 </div>
                 {data.sources?.length > 0 && (
                   <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                    <span className="text-[10px] text-muted-foreground">Källor:</span>
+                    <span className="text-[10px] text-muted-foreground">Sources:</span>
                     {data.sources.map((s, i) => (
                       <Badge key={i} variant="secondary" className="text-[10px]">
                         <FileText className="h-3 w-3 mr-1" />
