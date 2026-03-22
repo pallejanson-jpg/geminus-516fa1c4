@@ -179,7 +179,7 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
                             </div>
                             <div className="space-y-1.5">
                                 <Label htmlFor="longitude" className="text-xs">
-                                    Longitud
+                                    Longitude
                                 </Label>
                                 <Input
                                     id="longitude"
