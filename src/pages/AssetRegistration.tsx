@@ -80,12 +80,12 @@ function AssetRegistrationForm({
     e.preventDefault();
     
     if (!designation.trim()) {
-      toast.error('Benämning/nummer är obligatoriskt');
+      toast.error('Designation/number is required');
       return;
     }
 
     if (!coordinates) {
-      toast.error('Välj en position i 3D-vyn först');
+      toast.error('Select a position in the 3D view first');
       return;
     }
 
@@ -117,17 +117,17 @@ function AssetRegistrationForm({
       });
 
       if (error) throw new Error(error.message);
-      if (!data?.success) throw new Error(data?.error || 'Okänt fel vid skapande');
+      if (!data?.success) throw new Error(data?.error || 'Unknown error during creation');
 
-      toast.success('Tillgång registrerad!', {
-        description: `${designation} har lagts till i ${registrationContext.parentNode.commonName || registrationContext.parentNode.name}`,
+      toast.success('Asset registered!', {
+        description: `${designation} has been added to ${registrationContext.parentNode.commonName || registrationContext.parentNode.name}`,
       });
 
       onComplete();
     } catch (error) {
       console.error('Failed to create asset:', error);
-      toast.error('Kunde inte registrera tillgång', {
-        description: error instanceof Error ? error.message : 'Ett oväntat fel inträffade',
+      toast.error('Could not register asset', {
+        description: error instanceof Error ? error.message : 'An unexpected error occurred',
       });
     } finally {
       setIsLoading(false);
@@ -138,7 +138,7 @@ function AssetRegistrationForm({
     <Card className="border-t rounded-t-none">
       <CardHeader className="py-3 px-4">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Registrera tillgång</CardTitle>
+          <CardTitle className="text-base">Register Asset</CardTitle>
           <Button variant="ghost" size="icon" onClick={onCancel} className="h-8 w-8">
             <X className="h-4 w-4" />
           </Button>
@@ -152,7 +152,7 @@ function AssetRegistrationForm({
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Coordinate picker */}
           <div className="space-y-2">
-            <Label>Position i 3D-vy *</Label>
+            <Label>Position in 3D view *</Label>
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -162,7 +162,7 @@ function AssetRegistrationForm({
                 disabled={isLoading}
               >
                 <MapPin className="h-4 w-4" />
-                {isPickingCoordinates ? 'Väntar på klick...' : coordinates ? 'Ändra position' : 'Välj position'}
+                {isPickingCoordinates ? 'Waiting for click...' : coordinates ? 'Change position' : 'Select position'}
               </Button>
               {coordinates && (
                 <div className="flex items-center gap-1 px-3 bg-muted rounded-md text-sm">
@@ -177,10 +177,10 @@ function AssetRegistrationForm({
 
           {/* Asset type dropdown */}
           <div className="space-y-2">
-            <Label htmlFor="assetType">Typ av tillgång</Label>
+            <Label htmlFor="assetType">Asset Type</Label>
             <Select value={assetType} onValueChange={setAssetType} disabled={isLoading}>
               <SelectTrigger>
-                <SelectValue placeholder="Välj typ..." />
+                <SelectValue placeholder="Select type..." />
               </SelectTrigger>
               <SelectContent>
                 {ASSET_TYPES.map((type) => (
@@ -194,12 +194,12 @@ function AssetRegistrationForm({
 
           {/* Designation */}
           <div className="space-y-2">
-            <Label htmlFor="designation">Benämning / Nummer *</Label>
+            <Label htmlFor="designation">Designation / Number *</Label>
             <Input
               id="designation"
               value={designation}
               onChange={(e) => setDesignation(e.target.value)}
-              placeholder="t.ex. BS-001, Stol-A1"
+              placeholder="e.g. FE-001, Chair-A1"
               required
               disabled={isLoading}
             />
@@ -207,7 +207,7 @@ function AssetRegistrationForm({
 
           {/* Object category dropdown */}
           <div className="space-y-2">
-            <Label htmlFor="objectCategory">Objektkategori (IFC)</Label>
+            <Label htmlFor="objectCategory">Object Category (IFC)</Label>
             <Select value={objectCategory} onValueChange={setObjectCategory} disabled={isLoading}>
               <SelectTrigger>
                 <SelectValue />
@@ -224,12 +224,12 @@ function AssetRegistrationForm({
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="description">Beskrivning (valfritt)</Label>
+            <Label htmlFor="description">Description (optional)</Label>
             <Input
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Fritext beskrivning..."
+              placeholder="Free-text description..."
               disabled={isLoading}
             />
           </div>
@@ -243,7 +243,7 @@ function AssetRegistrationForm({
               disabled={isLoading}
               className="flex-1"
             >
-              Avbryt
+              Cancel
             </Button>
             <Button 
               type="submit" 
@@ -253,10 +253,10 @@ function AssetRegistrationForm({
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Registrerar...
+                  Registering...
                 </>
               ) : (
-                'Registrera'
+                'Register'
               )}
             </Button>
           </div>
@@ -331,7 +331,7 @@ export default function AssetRegistration() {
   if (!assetRegistrationContext) {
     return (
       <div className="h-full flex items-center justify-center">
-        <p className="text-muted-foreground">Ingen registreringskontext aktiv</p>
+        <p className="text-muted-foreground">No registration context active</p>
       </div>
     );
   }
@@ -349,7 +349,7 @@ export default function AssetRegistration() {
         />
         {isPickingCoordinates && (
           <div className="absolute top-3 left-3 z-20 bg-primary/90 text-primary-foreground text-xs px-3 py-1.5 rounded-md shadow-md">
-            Håll nedtryckt / dubbelklicka för att välja position
+            Long-press / double-click to select position
           </div>
         )}
       </div>

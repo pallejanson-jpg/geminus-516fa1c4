@@ -338,38 +338,38 @@ const SymbolSettings: React.FC = () => {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {editingSymbol ? 'Redigera symbol' : 'Ny annotationssymbol'}
+              {editingSymbol ? 'Edit Symbol' : 'New Annotation Symbol'}
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="symbol-name">Namn</Label>
+              <Label htmlFor="symbol-name">Name</Label>
               <Input
                 id="symbol-name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="t.ex. Brandsymboler"
+                placeholder="e.g. Fire Symbols"
                 className="h-11"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="symbol-category">Kategori</Label>
+              <Label htmlFor="symbol-category">Category</Label>
               <Input
                 id="symbol-category"
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                placeholder="t.ex. Fire, Sensor, Sprinkler"
+                placeholder="e.g. Fire, Sensor, Sprinkler"
                 className="h-11"
               />
               <p className="text-xs text-muted-foreground">
-                Används för att matcha assets baserat på kategori eller namn
+                Used to match assets based on category or name
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label>Färg</Label>
+              <Label>Color</Label>
               <div className="flex flex-wrap gap-2">
                 {COLOR_PALETTE.map((color) => (
                   <button
@@ -387,7 +387,7 @@ const SymbolSettings: React.FC = () => {
               </div>
               <div className="flex items-center gap-2 mt-2">
                 <Label htmlFor="custom-color" className="text-xs text-muted-foreground">
-                  Egen färg:
+                  Custom color:
                 </Label>
                 <input
                   id="custom-color"
@@ -408,7 +408,7 @@ const SymbolSettings: React.FC = () => {
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                <Label htmlFor="symbol-icon">Ikon (valfritt)</Label>
+                <Label htmlFor="symbol-icon">Icon (optional)</Label>
               </div>
               
               {/* Preview */}
@@ -442,7 +442,7 @@ const SymbolSettings: React.FC = () => {
                   id="symbol-icon"
                   value={formData.icon_url}
                   onChange={(e) => setFormData({ ...formData, icon_url: e.target.value })}
-                  placeholder="URL eller ladda upp..."
+                  placeholder="URL or upload..."
                   className="h-11 flex-1"
                 />
                 <label className="cursor-pointer">
@@ -468,13 +468,13 @@ const SymbolSettings: React.FC = () => {
                         
                         setFormData({ ...formData, icon_url: publicUrl });
                         toast({
-                          title: 'Ikon uppladdad',
-                          description: 'Bilden har laddats upp',
+                          title: 'Icon uploaded',
+                          description: 'The image has been uploaded',
                         });
                       } catch (error: any) {
                         toast({
                           variant: 'destructive',
-                          title: 'Uppladdning misslyckades',
+                          title: 'Upload failed',
                           description: error.message,
                         });
                       }
@@ -488,12 +488,12 @@ const SymbolSettings: React.FC = () => {
                 </label>
               </div>
               <p className="text-xs text-muted-foreground">
-                Ladda upp en bild eller ange en URL
+                Upload an image or enter a URL
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="marker-html">Anpassad HTML (valfritt)</Label>
+              <Label htmlFor="marker-html">Custom HTML (optional)</Label>
               <textarea
                 id="marker-html"
                 value={formData.marker_html}
@@ -502,7 +502,7 @@ const SymbolSettings: React.FC = () => {
                 className="w-full h-20 px-3 py-2 text-sm border rounded-md resize-none"
               />
               <p className="text-xs text-muted-foreground">
-                Egen HTML för avancerade markörer
+                Custom HTML for advanced markers
               </p>
             </div>
 
@@ -515,7 +515,7 @@ const SymbolSettings: React.FC = () => {
                 className="rounded"
               />
               <Label htmlFor="is-default" className="text-sm font-normal">
-                Använd som standard om ingen kategori matchar
+                Use as default if no category matches
               </Label>
             </div>
           </div>
@@ -527,7 +527,7 @@ const SymbolSettings: React.FC = () => {
               disabled={isSaving}
             >
               <X className="h-4 w-4 mr-2" />
-              Avbryt
+              Cancel
             </Button>
             <Button onClick={handleSave} disabled={isSaving}>
               {isSaving ? (
@@ -535,7 +535,7 @@ const SymbolSettings: React.FC = () => {
               ) : (
                 <Save className="h-4 w-4 mr-2" />
               )}
-              {editingSymbol ? 'Uppdatera' : 'Skapa'}
+              {editingSymbol ? 'Update' : 'Create'}
             </Button>
           </DialogFooter>
         </DialogContent>

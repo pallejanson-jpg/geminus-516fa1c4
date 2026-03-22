@@ -89,20 +89,20 @@ interface ColumnDef {
 
 // System property definitions
 const SYSTEM_COLUMNS: ColumnDef[] = [
-  { key: 'designation', label: 'Beteckning', category: 'system' },
-  { key: 'commonName', label: 'Namn', category: 'system' },
-  { key: 'assetType', label: 'Typ', category: 'system' },
-  { key: 'category', label: 'Kategori', category: 'system' },
-  { key: 'levelCommonName', label: 'Våning', category: 'system' },
-  { key: 'roomName', label: 'Rum', category: 'system' },
+  { key: 'designation', label: 'Designation', category: 'system' },
+  { key: 'commonName', label: 'Name', category: 'system' },
+  { key: 'assetType', label: 'Type', category: 'system' },
+  { key: 'category', label: 'Category', category: 'system' },
+  { key: 'levelCommonName', label: 'Floor', category: 'system' },
+  { key: 'roomName', label: 'Room', category: 'system' },
   { key: 'fmGuid', label: 'FMGUID', category: 'system' },
 ];
 
 // Status columns
 const STATUS_COLUMNS: ColumnDef[] = [
-  { key: 'createdInModel', label: 'I modell', category: 'status' },
+  { key: 'createdInModel', label: 'In Model', category: 'status' },
   { key: 'annotationPlaced', label: 'Annotation', category: 'status' },
-  { key: 'isLocal', label: 'Synkad', category: 'status' },
+  { key: 'isLocal', label: 'Synced', category: 'status' },
 ];
 
 // Default visible columns
@@ -287,7 +287,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           
           toast({
             title: 'Assets synkade',
-            description: `Hämtade ${result.count} assets för denna byggnad`,
+            description: `Fetched ${result.count} assets for this building`,
           });
         } else if (!result.synced) {
           console.log('AssetsView: Sync not triggered (already in sync or error)');
@@ -295,7 +295,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       } catch (error: any) {
         console.error('AssetsView: Failed to sync assets:', error);
         toast({
-          title: 'Kunde inte synka assets',
+          title: 'Could not sync assets',
           description: error.message,
           variant: 'destructive',
         });
@@ -549,20 +549,20 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       const result = await syncAssetToAssetPlus(asset.fmGuid);
       if (result.success) {
         toast({
-          title: 'Synkad!',
-          description: `${asset.designation} har synkats till Asset+`,
+          title: 'Synced!',
+          description: `${asset.designation} has been synced to Asset+`,
         });
       } else {
         toast({
-          title: 'Kunde inte synka',
-          description: result.error || 'Okänt fel',
+          title: 'Could not sync',
+          description: result.error || 'Unknown error',
           variant: 'destructive',
         });
       }
     } catch (error: any) {
       toast({
-        title: 'Synkfel',
-        description: error.message || 'Kunde inte synka asset',
+        title: 'Sync error',
+        description: error.message || 'Could not sync asset',
         variant: 'destructive',
       });
     } finally {
@@ -579,8 +579,8 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     const unsyncedAssets = assetData.filter((a) => a.isLocal && a.roomFmGuid);
     if (unsyncedAssets.length === 0) {
       toast({
-        title: 'Inga att synka',
-        description: 'Alla assets är redan synkade eller saknar rum-koppling',
+        title: 'Nothing to sync',
+        description: 'All assets are already synced or missing room association',
       });
       return;
     }
@@ -591,14 +591,14 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       const result = await batchSyncAssetsToAssetPlus(fmGuids);
       
       toast({
-        title: 'Batch-synk klar',
-        description: `Synkade ${result.synced} av ${result.total}. ${result.failed} misslyckades.`,
+        title: 'Batch sync complete',
+        description: `Synced ${result.synced} of ${result.total}. ${result.failed} failed.`,
         variant: result.failed > 0 ? 'destructive' : 'default',
       });
     } catch (error: any) {
       toast({
-        title: 'Batch-synk misslyckades',
-        description: error.message || 'Kunde inte synka assets',
+        title: 'Batch sync failed',
+        description: error.message || 'Could not sync assets',
         variant: 'destructive',
       });
     } finally {
@@ -641,8 +641,8 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     
     if (selectedAssets.length === 0) {
       toast({
-        title: 'Inga att placera',
-        description: 'Valda assets finns redan i modell eller har redan annotation',
+        title: 'Nothing to place',
+        description: 'Selected assets are already in the model or have an annotation',
       });
       return;
     }
@@ -658,8 +658,8 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     
     if (selectedAssets.length === 0) {
       toast({
-        title: 'Inga att synka',
-        description: 'Valda assets är redan synkade eller saknar rum-koppling',
+        title: 'Nothing to sync',
+        description: 'Selected assets are already synced or missing room association',
       });
       return;
     }

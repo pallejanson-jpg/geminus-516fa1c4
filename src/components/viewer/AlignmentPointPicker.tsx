@@ -96,13 +96,13 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           setIvionPoint(surfacePt);
           setStep('picking3D');
           setCaptureError(null);
-          toast.success(`360° punkt fångad: (${surfacePt.x.toFixed(1)}, ${surfacePt.y.toFixed(1)}, ${surfacePt.z.toFixed(1)})`);
+          toast.success(`360° point captured: (${surfacePt.x.toFixed(1)}, ${surfacePt.y.toFixed(1)}, ${surfacePt.z.toFixed(1)})`);
           console.log('[AlignmentPicker] 360° surface estimate:', surfacePt, 'tripod:', tp, 'dir:', vd, 'dist:', rayDistance);
         } else {
-          setCaptureError('Ingen panoramaposition tillgänglig. Navigera till en bild först.');
+          setCaptureError('No panorama position available. Navigate to an image first.');
         }
       } catch (e: any) {
-        setCaptureError(`Fel: ${e.message}`);
+        setCaptureError(`Error: ${e.message}`);
       }
     };
 
@@ -152,7 +152,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
         const picked: Vec3 = { x: worldPos[0], y: worldPos[1], z: worldPos[2] };
         setBimPoint(picked);
         setStep('done');
-        toast.success(`3D-punkt vald: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
+          toast.success(`3D point selected: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
       }
     };
     window.addEventListener('xeokit-pick', handlePick as EventListener);
@@ -173,10 +173,10 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           }
           setBimPoint(picked);
           setStep('done');
-          toast.success(`3D-punkt vald: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
+          toast.success(`3D point selected: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
           console.log('[AlignmentPicker] 3D point picked:', picked);
         } else {
-          toast.warning('Ingen yta träffad. Klicka direkt på en vägg, golv eller pelare.');
+          toast.warning('No surface hit. Click directly on a wall, floor or column.');
         }
       });
     }

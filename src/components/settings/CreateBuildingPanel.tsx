@@ -124,7 +124,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
     const handler = (e: BeforeUnloadEvent) => {
       if (activeJobIdRef.current) {
         e.preventDefault();
-        e.returnValue = 'IFC-konvertering pågår. Är du säker på att du vill lämna?';
+        e.returnValue = 'IFC conversion in progress. Are you sure you want to leave?';
         // Mark job as failed on unload (best-effort via sendBeacon with auth headers)
         const jobId = activeJobIdRef.current;
         const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -248,7 +248,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
   // ── Create building handler ──
   const handleCreate = async () => {
     if (!complexDesignation || !complexName || !buildingDesignation || !buildingName) {
-      toast({ variant: 'destructive', title: 'Fyll i alla obligatoriska fält' });
+      toast({ variant: 'destructive', title: 'Fill in all required fields' });
       return;
     }
 
@@ -280,9 +280,9 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       setSelectedBuildingFmGuid(created.buildingFmGuid);
       setShowCreateForm(false);
 
-      toast({ title: 'Byggnad skapad!', description: data.message });
+      toast({ title: 'Building created!', description: data.message });
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Fel vid skapande', description: err.message });
+      toast({ variant: 'destructive', title: 'Error creating building', description: err.message });
     } finally {
       setIsCreating(false);
     }
@@ -832,11 +832,11 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
 
       const result = await resp.json();
       toast({
-        title: 'Byggnader köade',
-        description: `${result.enqueued} jobb köade, ${result.skipped} hoppades över (av ${result.total_buildings} byggnader).`,
+        title: 'Buildings enqueued',
+        description: `${result.enqueued} jobs enqueued, ${result.skipped} skipped (of ${result.total_buildings} buildings).`,
       });
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Batch-enqueue misslyckades', description: err.message });
+      toast({ variant: 'destructive', title: 'Batch enqueue failed', description: err.message });
     } finally {
       setIsBatchEnqueuing(false);
     }
@@ -875,16 +875,16 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
     try {
       const result = await deleteBuilding(selectedBuildingFmGuid);
       if (result.success) {
-        toast({ title: 'Byggnad raderad', description: `${result.summary.assetsDeleted} objekt raderade, ${result.summary.expiredInAssetPlus} expirerade i Asset+.` });
+        toast({ title: 'Building deleted', description: `${result.summary.assetsDeleted} objects deleted, ${result.summary.expiredInAssetPlus} expired in Asset+.` });
         setSelectedBuildingFmGuid('');
         setCreatedBuilding(null);
         fetchBuildings();
       } else {
-        toast({ variant: 'destructive', title: 'Delvis misslyckad', description: `${result.summary.expireErrors} objekt kunde inte expireras i Asset+.` });
+        toast({ variant: 'destructive', title: 'Partially failed', description: `${result.summary.expireErrors} objects could not be expired in Asset+.` });
         fetchBuildings();
       }
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Radering misslyckades', description: err.message });
+      toast({ variant: 'destructive', title: 'Deletion failed', description: err.message });
     } finally {
       setIsDeleting(false);
     }
@@ -902,10 +902,10 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
 
   const getStatusBadge = (status: string) => {
     const map: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string }> = {
-      pending: { variant: 'secondary', label: 'Köad' },
-      processing: { variant: 'default', label: 'Bearbetar' },
-      done: { variant: 'outline', label: 'Klar' },
-      error: { variant: 'destructive', label: 'Fel' },
+      pending: { variant: 'secondary', label: 'Queued' },
+      processing: { variant: 'default', label: 'Processing' },
+      done: { variant: 'outline', label: 'Done' },
+      error: { variant: 'destructive', label: 'Error' },
     };
     const s = map[status] || { variant: 'secondary' as const, label: status };
     return <Badge variant={s.variant} className="text-[9px]">{s.label}</Badge>;
@@ -961,17 +961,17 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                   <AlertDialogHeader>
                     <AlertDialogTitle className="flex items-center gap-2">
                       <AlertTriangle className="h-5 w-5 text-destructive" />
-                      Radera byggnad?
+                      Delete building?
                     </AlertDialogTitle>
                     <AlertDialogDescription>
-                      <strong>{selectedBuilding?.commonName}</strong> och alla tillhörande objekt (våningsplan, rum, inventarier) raderas permanent.
-                      Synkade objekt expireras i Asset+. Denna åtgärd kan inte ångras.
+                      <strong>{selectedBuilding?.commonName}</strong> and all associated objects (floors, rooms, inventory) will be permanently deleted.
+                      Synced objects will be expired in Asset+. This action cannot be undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>Avbryt</AlertDialogCancel>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction onClick={handleDeleteBuilding} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                      Radera allt
+                      Delete All
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -1044,13 +1044,13 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           disabled={isBatchEnqueuing}
         >
           {isBatchEnqueuing ? (
-            <><Loader2 className="h-4 w-4 animate-spin" />Köar byggnader...</>
+            <><Loader2 className="h-4 w-4 animate-spin" />Enqueuing buildings...</>
           ) : (
-            <><PlayCircle className="h-4 w-4" />Köa alla byggnader</>
+            <><PlayCircle className="h-4 w-4" />Enqueue all buildings</>
           )}
         </Button>
         <p className="text-[11px] text-muted-foreground mt-1.5">
-          Skapar konverteringsjobb för alla byggnader med IFC- eller XKT-filer.
+          Creates conversion jobs for all buildings with IFC or XKT files.
         </p>
       </div>
 
@@ -1238,7 +1238,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
               </AccordionTrigger>
               <AccordionContent className="px-3 pb-3 pt-1 space-y-2">
                 {conversionJobs.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Inga konverteringsjobb för denna byggnad.</p>
+                  <p className="text-xs text-muted-foreground">No conversion jobs for this building.</p>
                 ) : (
                   conversionJobs.map(job => (
                     <div key={job.id} className="border rounded-md p-2.5 space-y-1.5 bg-muted/20">
@@ -1276,17 +1276,17 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                             })}
                           >
                             <Eye className="h-3 w-3" />
-                            {expandedJobLogs.has(job.id) ? 'Dölj loggar' : 'Visa loggar'}
+                            {expandedJobLogs.has(job.id) ? 'Hide logs' : 'Show logs'}
                           </Button>
                         )}
                         {isStuckJob(job) && (
                           <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 gap-1" onClick={() => handleResetJob(job.id)}>
-                            <RotateCcw className="h-3 w-3" /> Återställ
+                            <RotateCcw className="h-3 w-3" /> Reset
                           </Button>
                         )}
                         {(job.status === 'done' || job.status === 'error') && (
                           <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 gap-1 text-destructive" onClick={() => handleDeleteJob(job.id)}>
-                            <X className="h-3 w-3" /> Radera
+                            <X className="h-3 w-3" /> Delete
                           </Button>
                         )}
                       </div>
@@ -1294,7 +1294,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                   ))
                 )}
                 <Button variant="ghost" size="sm" className="w-full text-xs gap-1.5" onClick={fetchConversionJobs}>
-                  <RefreshCw className="h-3 w-3" /> Uppdatera
+                  <RefreshCw className="h-3 w-3" /> Refresh
                 </Button>
               </AccordionContent>
             </AccordionItem>

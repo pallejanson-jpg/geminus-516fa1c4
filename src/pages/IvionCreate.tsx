@@ -150,19 +150,19 @@ const IvionCreate: React.FC = () => {
   const handleSubmit = async () => {
     // Validation
     if (!name.trim()) {
-      toast.error('Namn är obligatoriskt');
+      toast.error('Name is required');
       return;
     }
     if (!category) {
-      toast.error('Välj en kategori');
+      toast.error('Select a category');
       return;
     }
     if (!symbolId) {
-      toast.error('Välj en symbol');
+      toast.error('Select a symbol');
       return;
     }
     if (!buildingFmGuid) {
-      toast.error('Välj en byggnad');
+      toast.error('Select a building');
       return;
     }
 
@@ -211,7 +211,7 @@ const IvionCreate: React.FC = () => {
       if (error) throw error;
 
       setIsSaved(true);
-      toast.success('Tillgång skapad!');
+      toast.success('Asset created!');
       
       // Notify parent window if embedded in iframe
       if (window.parent !== window) {
@@ -222,7 +222,7 @@ const IvionCreate: React.FC = () => {
         }, '*');
       }
     } catch (error: any) {
-      toast.error('Kunde inte spara', {
+      toast.error('Could not save', {
         description: error.message,
       });
     } finally {
@@ -240,7 +240,7 @@ const IvionCreate: React.FC = () => {
 
   const handlePositionPicked = (coords: { x: number; y: number; z: number }) => {
     setCoordinates(coords);
-    toast.success('Position vald');
+    toast.success('Position selected');
   };
 
   // Group symbols by category
@@ -256,12 +256,12 @@ const IvionCreate: React.FC = () => {
         <Card className="w-full max-w-md">
           <CardContent className="pt-6 text-center">
             <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Tillgång skapad!</h2>
+            <h2 className="text-xl font-semibold mb-2">Asset Created!</h2>
             <p className="text-muted-foreground mb-6">
-              {name} har sparats och kan nu ses i Geminus.
+              {name} has been saved and can now be viewed in Geminus.
             </p>
             <Button onClick={handleClose} className="w-full">
-              Stäng
+              Close
             </Button>
           </CardContent>
         </Card>
@@ -274,7 +274,7 @@ const IvionCreate: React.FC = () => {
       <Card className="w-full max-w-lg mx-auto">
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Registrera tillgång från Ivion</CardTitle>
+            <CardTitle className="text-lg">Register Asset from Ivion</CardTitle>
             <Button variant="ghost" size="icon" onClick={handleClose}>
               <X className="h-4 w-4" />
             </Button>
@@ -310,11 +310,11 @@ const IvionCreate: React.FC = () => {
 
           {/* Name input */}
           <div className="space-y-2">
-            <Label>Namn / Beteckning *</Label>
+            <Label>Name / Designation *</Label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="t.ex. Brandsläckare BS-001"
+              placeholder="e.g. Fire Extinguisher FE-001"
               className="h-12"
               autoFocus
               maxLength={100}
@@ -323,10 +323,10 @@ const IvionCreate: React.FC = () => {
 
           {/* Category dropdown */}
           <div className="space-y-2">
-            <Label>Kategori *</Label>
+            <Label>Category *</Label>
             <Select value={category} onValueChange={setCategory}>
               <SelectTrigger className="h-12">
-                <SelectValue placeholder="Välj kategori..." />
+                <SelectValue placeholder="Select category..." />
               </SelectTrigger>
               <SelectContent className="bg-popover z-50">
                 {INVENTORY_CATEGORIES.map((cat) => (
@@ -346,7 +346,7 @@ const IvionCreate: React.FC = () => {
             <Label>Symbol *</Label>
             <Select value={symbolId} onValueChange={setSymbolId}>
               <SelectTrigger className="h-12">
-                <SelectValue placeholder="Välj symbol..." />
+                <SelectValue placeholder="Select symbol..." />
               </SelectTrigger>
               <SelectContent className="bg-popover z-50 max-h-60">
                 {Object.entries(groupedSymbols).map(([cat, syms]) => (
@@ -382,10 +382,10 @@ const IvionCreate: React.FC = () => {
           {/* Building dropdown */}
           <div className="space-y-2">
             <Label>
-              Byggnad *
+              Building *
               {matchedBuilding && (
                 <span className="text-muted-foreground text-xs ml-2">
-                  (matchad från Ivion site)
+                  (matched from Ivion site)
                 </span>
               )}
             </Label>
@@ -398,7 +398,7 @@ const IvionCreate: React.FC = () => {
               }}
             >
               <SelectTrigger className="h-12">
-                <SelectValue placeholder="Välj byggnad..." />
+                <SelectValue placeholder="Select building..." />
               </SelectTrigger>
               <SelectContent className="bg-popover z-50">
                 {buildings.map((b) => (
@@ -413,7 +413,7 @@ const IvionCreate: React.FC = () => {
           {/* Floor dropdown - only show when building is selected and has floors */}
           {buildingFmGuid && floors.length > 0 && (
             <div className="space-y-2">
-              <Label>Våningsplan</Label>
+              <Label>Floor</Label>
               <Select 
                 value={levelFmGuid} 
                 onValueChange={(v) => {
@@ -422,7 +422,7 @@ const IvionCreate: React.FC = () => {
                 }}
               >
                 <SelectTrigger className="h-12">
-                  <SelectValue placeholder="Välj våning..." />
+                  <SelectValue placeholder="Select floor..." />
                 </SelectTrigger>
                 <SelectContent className="bg-popover z-50">
                   {floors.map((f) => (
@@ -438,10 +438,10 @@ const IvionCreate: React.FC = () => {
           {/* Room dropdown - only show when floor is selected and has rooms */}
           {levelFmGuid && rooms.length > 0 && (
             <div className="space-y-2">
-              <Label>Rum</Label>
+              <Label>Room</Label>
               <Select value={roomFmGuid} onValueChange={setRoomFmGuid}>
                 <SelectTrigger className="h-12">
-                  <SelectValue placeholder="Välj rum..." />
+                  <SelectValue placeholder="Select room..." />
                 </SelectTrigger>
                 <SelectContent className="bg-popover z-50 max-h-60">
                   {rooms.map((r) => (
@@ -465,18 +465,18 @@ const IvionCreate: React.FC = () => {
                 className="w-full h-12"
               >
                 <Crosshair className="h-4 w-4 mr-2" />
-                Välj position i 3D
+                Select position in 3D
               </Button>
             </div>
           )}
 
           {/* Description */}
           <div className="space-y-2">
-            <Label>Beskrivning (valfritt)</Label>
+            <Label>Description (optional)</Label>
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Fritext beskrivning..."
+              placeholder="Free-text description..."
               className="min-h-[80px]"
               maxLength={1000}
             />
@@ -491,7 +491,7 @@ const IvionCreate: React.FC = () => {
               className="flex-1 h-12"
               disabled={isLoading}
             >
-              Avbryt
+              Cancel
             </Button>
             <Button
               onClick={handleSubmit}
@@ -501,7 +501,7 @@ const IvionCreate: React.FC = () => {
               {isLoading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
-                'Spara'
+                'Save'
               )}
             </Button>
           </div>
