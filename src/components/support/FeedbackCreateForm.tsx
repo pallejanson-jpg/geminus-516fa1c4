@@ -136,12 +136,12 @@ const FeedbackCreateForm: React.FC<FeedbackCreateFormProps> = ({ open, onClose, 
 
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="fb-title">Titel</Label>
+            <Label htmlFor="fb-title">Title</Label>
             <Input
               id="fb-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Beskriv din idé kortfattat…"
+              placeholder="Describe your idea briefly…"
             />
           </div>
 
