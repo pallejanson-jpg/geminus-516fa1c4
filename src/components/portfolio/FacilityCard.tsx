@@ -88,11 +88,11 @@ const FacilityCard: React.FC<FacilityCardProps> = ({ facility, onClick, showSpli
           <div className="grid grid-cols-3 gap-3 text-center text-white mb-2">
             <div>
               <p className="text-lg font-bold">{facility.numberOfLevels || '-'}</p>
-              <p className="text-[10px] text-white/60 uppercase">Våningar</p>
+              <p className="text-[10px] text-white/60 uppercase">Floors</p>
             </div>
             <div>
               <p className="text-lg font-bold">{facility.numberOfSpaces || '-'}</p>
-              <p className="text-[10px] text-white/60 uppercase">Rum</p>
+              <p className="text-[10px] text-white/60 uppercase">Rooms</p>
             </div>
             <div>
               <p className="text-lg font-bold">{facility.area ? `${facility.area}` : '-'}</p>
