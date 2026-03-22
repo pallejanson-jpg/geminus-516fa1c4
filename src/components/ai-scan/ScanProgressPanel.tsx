@@ -297,7 +297,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
             {/* Progress bar */}
             <div className="space-y-2">
               <div className="flex justify-between text-xs md:text-sm">
-                <span>Bearbetade bilder</span>
+                <span>Processed images</span>
                 <span>{currentJob.processed_images} / {currentJob.total_images || '?'}</span>
               </div>
               <Progress 
