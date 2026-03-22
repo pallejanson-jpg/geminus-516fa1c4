@@ -267,8 +267,8 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
       ));
 
       toast({
-        title: template.is_active ? 'Mall inaktiverad' : 'Mall aktiverad',
-        description: `"${template.name}" är nu ${template.is_active ? 'inaktiv' : 'aktiv'}.`,
+        title: template.is_active ? 'Template deactivated' : 'Template activated',
+        description: `"${template.name}" is now ${template.is_active ? 'inactive' : 'active'}.`,
       });
 
       onTemplatesChanged?.();
