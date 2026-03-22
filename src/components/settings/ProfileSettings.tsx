@@ -121,7 +121,7 @@ const ProfileSettings: React.FC = () => {
       {/* Name & Email */}
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="displayName">Namn</Label>
+          <Label htmlFor="displayName">Name</Label>
           <Input
             id="displayName"
             value={profile.displayName}
