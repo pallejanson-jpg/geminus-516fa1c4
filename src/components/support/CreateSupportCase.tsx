@@ -216,7 +216,7 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
                 </SelectContent>
               </Select>
             ) : (
-              <Input value={buildingName} onChange={e => setBuildingName(e.target.value)} placeholder="Byggnadsnamn" />
+              <Input value={buildingName} onChange={e => setBuildingName(e.target.value)} placeholder="Building name" />
             )}
           </div>
 
