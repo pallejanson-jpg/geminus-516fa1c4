@@ -1,6 +1,6 @@
 import React from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { sv } from 'date-fns/locale';
+import { enUS } from 'date-fns/locale';
 import { MapPin, ChevronRight, Package } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -52,9 +52,9 @@ const SavedItemsList: React.FC<SavedItemsListProps> = ({
     return (
       <div className="h-full flex flex-col items-center justify-center text-center p-8">
         <Package className="h-12 w-12 text-muted-foreground/50 mb-4" />
-        <p className="text-lg font-medium text-muted-foreground">Inga sparade objekt</p>
+        <p className="text-lg font-medium text-muted-foreground">No saved items</p>
         <p className="text-sm text-muted-foreground/70 mt-1">
-          Registrera din första tillgång för att se den här
+          Register your first asset to see it here
         </p>
       </div>
     );
@@ -86,7 +86,7 @@ const SavedItemsList: React.FC<SavedItemsListProps> = ({
             {/* Details */}
             <div className="flex-1 min-w-0">
               <div className="font-medium truncate">
-                {item.name || item.common_name || 'Namnlös tillgång'}
+                {item.name || item.common_name || 'Unnamed asset'}
               </div>
               <div className="text-sm text-muted-foreground flex items-center gap-2">
                 {item.asset_type && (
@@ -101,7 +101,7 @@ const SavedItemsList: React.FC<SavedItemsListProps> = ({
               <div className="text-xs text-muted-foreground/70 mt-0.5">
                 {formatDistanceToNow(new Date(item.created_at), { 
                   addSuffix: true, 
-                  locale: sv 
+                  locale: enUS 
                 })}
               </div>
             </div>

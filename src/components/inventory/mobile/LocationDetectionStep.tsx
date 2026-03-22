@@ -105,7 +105,7 @@ const LocationDetectionStep: React.FC<LocationDetectionStepProps> = ({ onComplet
         <div className="text-center space-y-2">
           <h2 className="text-xl font-semibold">Are you at {nearbyBuilding.commonName}?</h2>
           <p className="text-muted-foreground">
-            Ca {formatDistance(nearbyBuilding.distance)} bort
+            Approx. {formatDistance(nearbyBuilding.distance)} away
           </p>
         </div>
         <div className="flex flex-col gap-3 w-full max-w-xs">

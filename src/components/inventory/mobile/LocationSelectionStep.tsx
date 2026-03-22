@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AppContext } from '@/context/AppContext';
 import type { WizardFormData } from './MobileInventoryWizard';
 
-// Konstant för "inget rum valt" - Radix UI kräver icke-tom sträng
+// Constant for "no room selected" - Radix UI requires non-empty string
 const NONE_ROOM_VALUE = '__none__';
 
 interface LocationSelectionStepProps {
@@ -127,29 +127,29 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
 
   const canContinue = formData.buildingFmGuid && formData.levelFmGuid;
 
-  // Visa loading om data fortfarande laddas
+  // Show loading if data is still loading
   if (isLoadingData) {
     return (
       <div className="p-4 space-y-4">
         <Skeleton className="h-14 w-full" />
         <Skeleton className="h-14 w-full" />
         <Skeleton className="h-14 w-full" />
-        <p className="text-center text-muted-foreground">Laddar byggnader...</p>
+        <p className="text-center text-muted-foreground">Loading buildings...</p>
       </div>
     );
   }
 
-  // Visa meddelande om data är tom efter laddning
+  // Show message if data is empty after loading
   if (!isLoadingData && navigatorTreeData.length === 0) {
     return (
       <div className="p-4 space-y-4 flex flex-col items-center justify-center h-full">
         <Building2 className="h-12 w-12 text-muted-foreground" />
         <p className="text-muted-foreground text-center">
-          Ingen data hittades. Kontrollera att synkronisering har genomförts i Inställningar.
+          No data found. Check that synchronization has been completed in Settings.
         </p>
         <Button variant="outline" onClick={() => refreshInitialData()}>
           <RefreshCw className="h-4 w-4 mr-2" />
-          Försök igen
+          Try again
         </Button>
       </div>
     );
@@ -162,11 +162,11 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <Building2 className="h-5 w-5 text-primary" />
-            <Label className="text-base font-medium">Byggnad *</Label>
+            <Label className="text-base font-medium">Building *</Label>
           </div>
           <Select value={formData.buildingFmGuid} onValueChange={handleBuildingChange}>
             <SelectTrigger className="h-14 text-base">
-              <SelectValue placeholder="Välj byggnad..." />
+              <SelectValue placeholder="Select building..." />
             </SelectTrigger>
             <SelectContent className="bg-popover z-50">
               {buildings.map((b) => (
@@ -186,13 +186,13 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Layers className="h-5 w-5 text-primary" />
-              <Label className="text-base font-medium">Våning *</Label>
+              <Label className="text-base font-medium">Floor *</Label>
             </div>
             {floors.length > 0 ? (
               <div className="grid grid-cols-2 gap-3">
                 {floors.map((floor) => {
                   const isSelected = formData.levelFmGuid === floor.fmGuid;
-                  const displayName = floor.commonName || floor.name || 'Våning';
+                  const displayName = floor.commonName || floor.name || 'Floor';
 
                   return (
                     <Button
@@ -208,7 +208,7 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
                 })}
               </div>
             ) : (
-              <p className="text-muted-foreground text-sm">Inga våningar hittades för denna byggnad</p>
+              <p className="text-muted-foreground text-sm">No floors found for this building</p>
             )}
           </div>
         )}
@@ -218,18 +218,18 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <DoorOpen className="h-5 w-5 text-primary" />
-              <Label className="text-base font-medium">Rum (valfritt)</Label>
+              <Label className="text-base font-medium">Room (optional)</Label>
             </div>
             <Select 
               value={formData.roomFmGuid || NONE_ROOM_VALUE} 
               onValueChange={handleRoomChange}
             >
               <SelectTrigger className="h-14 text-base">
-                <SelectValue placeholder="Välj rum..." />
+                <SelectValue placeholder="Select room..." />
               </SelectTrigger>
               <SelectContent className="bg-popover z-50 max-h-64">
                 <SelectItem value={NONE_ROOM_VALUE} className="py-3">
-                  Inget specifikt rum
+                  No specific room
                 </SelectItem>
                 {rooms.map((room) => (
                   <SelectItem key={room.fmGuid} value={room.fmGuid} className="py-3">
@@ -244,9 +244,9 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
         {/* Quick loop toggle */}
         <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
           <div className="space-y-1">
-            <Label className="text-base">Snabb-registrering</Label>
+            <Label className="text-base">Quick registration</Label>
             <p className="text-sm text-muted-foreground">
-              Behåll plats och kategori för nästa tillgång
+              Keep location and category for next asset
             </p>
           </div>
           <Switch checked={quickLoopEnabled} onCheckedChange={setQuickLoopEnabled} />
@@ -258,7 +258,7 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
           disabled={!canContinue}
           className="w-full h-14 text-lg mt-4"
         >
-          Fortsätt →
+          Continue →
         </Button>
       </div>
     </ScrollArea>

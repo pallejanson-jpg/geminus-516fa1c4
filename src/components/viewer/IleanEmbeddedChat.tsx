@@ -13,9 +13,9 @@ interface IleanEmbeddedChatProps {
 }
 
 const STARTER_QUESTIONS = [
-  'Vilka dokument finns för denna byggnad?',
-  'Finns det driftkort för ventilationen?',
-  'Vad säger brandskyddsdokumentationen?',
+  'What documents are available for this building?',
+  'Are there operation cards for the ventilation?',
+  'What does the fire safety documentation say?',
 ];
 
 export default function IleanEmbeddedChat({ buildingFmGuid, buildingName }: IleanEmbeddedChatProps) {
@@ -38,10 +38,10 @@ export default function IleanEmbeddedChat({ buildingFmGuid, buildingName }: Ilea
       {/* Context indicator */}
       <div className="px-3 py-1.5 text-xs text-muted-foreground border-b border-border/50 bg-muted/30 shrink-0">
         {contextEntity.entityName
-          ? `Kontext: ${contextEntity.entityName} (${contextEntity.entityType})`
+          ? `Context: ${contextEntity.entityName} (${contextEntity.entityType})`
           : buildingName
-            ? `Kontext: ${buildingName}`
-            : 'Ingen byggnadskontext'}
+            ? `Context: ${buildingName}`
+            : 'No building context'}
       </div>
 
       {/* Messages */}
@@ -50,7 +50,7 @@ export default function IleanEmbeddedChat({ buildingFmGuid, buildingName }: Ilea
           <div className="text-center space-y-3 pt-4">
             <FileText className="h-8 w-8 mx-auto text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">
-              Ställ frågor om dokument för {buildingName || 'denna byggnad'}.
+              Ask questions about documents for {buildingName || 'this building'}.
             </p>
             <div className="space-y-1.5">
               {STARTER_QUESTIONS.map((q) => (
@@ -89,7 +89,7 @@ export default function IleanEmbeddedChat({ buildingFmGuid, buildingName }: Ilea
         {isSending && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" />
-            Ilean tänker...
+            Ilean is thinking...
           </div>
         )}
       </div>
@@ -100,7 +100,7 @@ export default function IleanEmbeddedChat({ buildingFmGuid, buildingName }: Ilea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-          placeholder="Ställ en fråga om dokument..."
+          placeholder="Ask a question about documents..."
           className="h-8 text-sm"
           disabled={isSending}
         />

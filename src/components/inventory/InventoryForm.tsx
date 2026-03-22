@@ -54,17 +54,17 @@ export interface InventoryCategory {
 }
 
 export const INVENTORY_CATEGORIES: InventoryCategory[] = [
-  { value: 'fire_extinguisher', label: 'Brandsläckare', Icon: Flame, color: 'text-red-500' },
-  { value: 'fire_blanket', label: 'Brandfilt', Icon: ShieldAlert, color: 'text-orange-500' },
-  { value: 'fire_hose', label: 'Brandslang', Icon: Droplets, color: 'text-red-600' },
-  { value: 'emergency_exit', label: 'Nödutgång', Icon: DoorOpen, color: 'text-green-500' },
+  { value: 'fire_extinguisher', label: 'Fire Extinguisher', Icon: Flame, color: 'text-red-500' },
+  { value: 'fire_blanket', label: 'Fire Blanket', Icon: ShieldAlert, color: 'text-orange-500' },
+  { value: 'fire_hose', label: 'Fire Hose', Icon: Droplets, color: 'text-red-600' },
+  { value: 'emergency_exit', label: 'Emergency Exit', Icon: DoorOpen, color: 'text-green-500' },
   { value: 'sensor', label: 'Sensor', Icon: Radio, color: 'text-blue-500' },
   { value: 'sprinkler', label: 'Sprinkler', Icon: Droplets, color: 'text-cyan-500' },
-  { value: 'hvac_unit', label: 'Luftbehandling', Icon: Fan, color: 'text-slate-500' },
-  { value: 'lamp', label: 'Lampa', Icon: Lightbulb, color: 'text-yellow-500' },
-  { value: 'furniture', label: 'Möbel', Icon: Armchair, color: 'text-amber-600' },
-  { value: 'it_equipment', label: 'IT-utrustning', Icon: Monitor, color: 'text-purple-500' },
-  { value: 'other', label: 'Övrigt', Icon: Package, color: 'text-muted-foreground' },
+  { value: 'hvac_unit', label: 'HVAC Unit', Icon: Fan, color: 'text-slate-500' },
+  { value: 'lamp', label: 'Lamp', Icon: Lightbulb, color: 'text-yellow-500' },
+  { value: 'furniture', label: 'Furniture', Icon: Armchair, color: 'text-amber-600' },
+  { value: 'it_equipment', label: 'IT Equipment', Icon: Monitor, color: 'text-purple-500' },
+  { value: 'other', label: 'Other', Icon: Package, color: 'text-muted-foreground' },
 ];
 
 const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefill, editItem, onClearEdit, onOpen360, onOpen3d, pendingPosition, onPendingPositionConsumed }) => {
@@ -123,7 +123,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
   useEffect(() => {
     if (pendingPosition) {
       setCoordinates(pendingPosition);
-      toast.success('Position vald!', {
+      toast.success('Position selected!', {
         description: `X: ${pendingPosition.x.toFixed(2)}, Y: ${pendingPosition.y.toFixed(2)}, Z: ${pendingPosition.z.toFixed(2)}`,
       });
       if (onPendingPositionConsumed) {
@@ -199,7 +199,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
   // Handler for 3D position picking
   const handlePositionPicked = (coords: { x: number; y: number; z: number }) => {
     setCoordinates(coords);
-    toast.success('Position vald!', {
+    toast.success('Position selected!', {
       description: `X: ${coords.x.toFixed(2)}, Y: ${coords.y.toFixed(2)}, Z: ${coords.z.toFixed(2)}`,
     });
   };
@@ -210,15 +210,15 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
     const siteId = buildingSettings?.ivion_site_id;
 
     if (!ivionUrl && !siteId) {
-      toast.error('Ivion ej konfigurerad', {
-        description: 'Ange Ivion Site ID för byggnaden under byggnadsinställningar, och konfigurera IVION_API_URL i Cloud-secrets.',
+      toast.error('Ivion not configured', {
+        description: 'Set the Ivion Site ID for this building in building settings, and configure IVION_API_URL in Cloud secrets.',
       });
       return;
     }
 
     if (!siteId) {
-      toast.error('Ingen Ivion-site kopplad', {
-        description: 'Koppla byggnaden till en Ivion-site i byggnadsinställningar',
+      toast.error('No Ivion site linked', {
+        description: 'Link the building to an Ivion site in building settings',
       });
       return;
     }
@@ -233,8 +233,8 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
       onOpen360(fullUrl);
     } else {
       window.open(fullUrl, '_blank');
-      toast.info('Ivion öppnat i ny flik', {
-        description: 'Long-press för att skapa en POI, sedan synka tillbaka',
+      toast.info('Ivion opened in new tab', {
+        description: 'Long-press to create a POI, then sync back',
       });
     }
   };
@@ -242,7 +242,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
   // Handler for syncing POIs from Ivion 360+
   const handleSync360 = async () => {
     if (!buildingSettings?.ivion_site_id || !buildingFmGuid) {
-      toast.error('Ivion ej konfigurerat för denna byggnad');
+      toast.error('Ivion not configured for this building');
       return;
     }
 
@@ -259,21 +259,21 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
       if (error) throw error;
 
       if (data?.imported > 0) {
-        toast.success(`Synkade ${data.imported} nya POIs från Ivion`, {
-          description: `${data.skipped} redan importerade`,
+        toast.success(`Synced ${data.imported} new POIs from Ivion`, {
+          description: `${data.skipped} already imported`,
         });
       } else if (data?.skipped > 0) {
-        toast.info('Inga nya POIs', {
-          description: `${data.skipped} POIs redan importerade`,
+        toast.info('No new POIs', {
+          description: `${data.skipped} POIs already imported`,
         });
       } else {
-        toast.info('Inga POIs hittades', {
-          description: 'Skapa en POI i Ivion först (long-press i panoramat)',
+        toast.info('No POIs found', {
+          description: 'Create a POI in Ivion first (long-press in the panorama)',
         });
       }
     } catch (err: any) {
       console.error('Sync 360+ error:', err);
-      toast.error('Kunde inte synka från Ivion', {
+      toast.error('Could not sync from Ivion', {
         description: err.message,
       });
     } finally {
@@ -284,19 +284,19 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
   const handleSubmit = async () => {
     // Validation
     if (!name.trim()) {
-      toast.error('Namn är obligatoriskt');
+      toast.error('Name is required');
       return;
     }
     if (!category) {
-      toast.error('Välj en kategori');
+      toast.error('Select a category');
       return;
     }
     if (!symbolId) {
-      toast.error('Välj en symbol');
+      toast.error('Select a symbol');
       return;
     }
     if (!buildingFmGuid) {
-      toast.error('Välj en byggnad');
+      toast.error('Select a building');
       return;
     }
 
@@ -346,7 +346,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
 
         if (error) throw error;
 
-        toast.success('Tillgång uppdaterad!');
+        toast.success('Asset updated!');
         onSaved({
           fm_guid: editingFmGuid,
           name: name.trim(),
@@ -407,7 +407,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
 
         if (error) throw error;
 
-        toast.success('Tillgång sparad!');
+        toast.success('Asset saved!');
         onSaved({
           fm_guid: newAsset.fm_guid,
           name: newAsset.name,
@@ -426,7 +426,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
       }
     } catch (error: any) {
       console.error('Save error:', error);
-      toast.error('Kunde inte spara', {
+      toast.error('Could not save', {
         description: error.message,
       });
     } finally {
@@ -454,7 +454,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
         <div className="flex items-center justify-between bg-primary/10 border border-primary/30 rounded-lg p-3">
           <div className="flex items-center gap-2">
             <Pencil className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium">Redigerar: {name || 'Tillgång'}</span>
+            <span className="text-sm font-medium">Editing: {name || 'Asset'}</span>
           </div>
           <Button
             type="button"
@@ -465,18 +465,18 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
               resetForm();
             }}
           >
-            Avbryt redigering
+            Cancel editing
           </Button>
         </div>
       )}
 
       {/* Name - large input */}
       <div className="space-y-2">
-        <Label className="text-base">Namn / Beteckning *</Label>
+        <Label className="text-base">Name / Designation *</Label>
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="t.ex. Brandsläckare BS-001"
+          placeholder="e.g. Fire Extinguisher BS-001"
           className="h-12 text-base"
           autoFocus
           maxLength={100}
@@ -485,10 +485,10 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
 
       {/* Category dropdown */}
       <div className="space-y-2">
-        <Label className="text-base">Kategori *</Label>
+        <Label className="text-base">Category *</Label>
         <Select value={category} onValueChange={setCategory}>
           <SelectTrigger className="h-12">
-            <SelectValue placeholder="Välj kategori..." />
+            <SelectValue placeholder="Select category..." />
           </SelectTrigger>
           <SelectContent className="bg-popover z-50">
             {INVENTORY_CATEGORIES.map((cat) => (
@@ -508,7 +508,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
         <Label className="text-base">Symbol *</Label>
         <Select value={symbolId} onValueChange={setSymbolId}>
           <SelectTrigger className="h-12">
-            <SelectValue placeholder="Välj symbol..." />
+            <SelectValue placeholder="Select symbol..." />
           </SelectTrigger>
           <SelectContent className="bg-popover z-50 max-h-60">
             {Object.entries(groupedSymbols).map(([cat, syms]) => (
@@ -575,7 +575,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
       {/* 3D Position & 360+ Section */}
       {buildingFmGuid && (
         <div className="space-y-3">
-          <Label className="text-base">Position (valfritt)</Label>
+          <Label className="text-base">Position (optional)</Label>
           
           {coordinates && (
             <div className="bg-muted/50 rounded-lg p-3 flex items-center justify-between">
@@ -613,7 +613,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
           >
             <Crosshair className="h-4 w-4 mr-2" />
             <span className="text-xs sm:text-sm">
-              {coordinates ? 'Ändra 3D-position' : 'Välj 3D-position'}
+              {coordinates ? 'Change 3D position' : 'Select 3D position'}
             </span>
           </Button>
 
@@ -634,11 +634,11 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
                   className="w-full h-14 text-base gap-3"
                 >
                   <Camera className="h-5 w-5" />
-                  Starta inventering i 360°
+                  Start inventory in 360°
                 </Button>
 
                 <div className="text-xs text-muted-foreground text-center pt-1">
-                  eller använd manuell synk:
+                  or use manual sync:
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
@@ -649,7 +649,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
                     className="h-10"
                   >
                     <Eye className="h-4 w-4 mr-1.5" />
-                    <span className="text-xs">Öppna 360+</span>
+                    <span className="text-xs">Open 360+</span>
                   </Button>
                   <Button
                     type="button"
@@ -663,14 +663,14 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
                     ) : (
                       <RefreshCw className="h-4 w-4 mr-1.5" />
                     )}
-                    <span className="text-xs">Synka</span>
+                    <span className="text-xs">Sync</span>
                   </Button>
                 </div>
               </>
             ) : (
               <div className="text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-md flex items-center gap-2">
                 <Info className="h-3.5 w-3.5 shrink-0" />
-                <span>360+ kräver att Ivion Site ID är konfigurerat i byggnadsinställningarna.</span>
+                <span>360+ requires an Ivion Site ID to be configured in building settings.</span>
               </div>
             )}
           </div>
@@ -686,11 +686,11 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
 
       {/* Description - expandable */}
       <div className="space-y-2">
-        <Label className="text-base">Beskrivning (valfritt)</Label>
+        <Label className="text-base">Description (optional)</Label>
         <Textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Fritext beskrivning..."
+          placeholder="Free text description..."
           className="min-h-[80px]"
           maxLength={1000}
         />
@@ -712,10 +712,10 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
           className="flex-1 h-12"
           disabled={isLoading}
         >
-          {isEditing ? 'Avbryt' : 'Rensa'}
+          {isEditing ? 'Cancel' : 'Clear'}
         </Button>
         <Button type="submit" className="flex-1 h-12" disabled={isLoading}>
-          {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : (isEditing ? 'Uppdatera' : 'Spara')}
+          {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : (isEditing ? 'Update' : 'Save')}
         </Button>
       </div>
 

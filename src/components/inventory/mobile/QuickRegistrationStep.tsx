@@ -105,10 +105,10 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
         .getPublicUrl(filePath);
 
       updateFormData({ imageUrl: publicUrlData.publicUrl });
-      toast.success('Bild uppladdad!');
+      toast.success('Image uploaded!');
     } catch (err: any) {
       console.error('Upload error:', err);
-      toast.error('Kunde inte ladda upp bild', { description: err.message });
+      toast.error('Could not upload image', { description: err.message });
     } finally {
       setIsUploading(false);
     }
@@ -117,11 +117,11 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
   const handleSubmit = async (registerAnother: boolean) => {
     // Validation
     if (!formData.name.trim()) {
-      toast.error('Namn är obligatoriskt');
+      toast.error('Name is required');
       return;
     }
     if (!formData.symbolId) {
-      toast.error('Välj en symbol');
+      toast.error('Select a symbol');
       return;
     }
 
@@ -203,14 +203,14 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
 
       if (error) throw error;
 
-      toast.success(isEditing ? 'Tillgång uppdaterad!' : 'Tillgång sparad!', {
-        description: `${formData.name} ${isEditing ? 'uppdaterad' : 'registrerad'}${formData.levelName ? ` på ${formData.levelName}` : ''}`,
+      toast.success(isEditing ? 'Asset updated!' : 'Asset saved!', {
+        description: `${formData.name} ${isEditing ? 'updated' : 'registered'}${formData.levelName ? ` on ${formData.levelName}` : ''}`,
       });
 
       onComplete(registerAnother);
     } catch (error: any) {
       console.error('Save error:', error);
-      toast.error('Kunde inte spara', { description: error.message });
+      toast.error('Could not save', { description: error.message });
     } finally {
       setIsLoading(false);
     }
@@ -251,7 +251,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
 
         {/* Camera / Image capture - Large touch target */}
         <div className="space-y-2">
-          <Label className="text-base font-medium">Foto</Label>
+          <Label className="text-base font-medium">Photo</Label>
           <input
             ref={fileInputRef}
             type="file"
@@ -265,7 +265,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
             <div className="relative">
               <img
                 src={formData.imageUrl}
-                alt="Uppladdad bild"
+               alt="Uploaded image"
                 className="w-full h-40 object-cover rounded-lg border"
               />
               <Button
@@ -276,7 +276,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
               >
-                {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Byt bild'}
+                {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Change image'}
               </Button>
             </div>
           ) : (
@@ -292,7 +292,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
               ) : (
                 <>
                   <Camera className="h-6 w-6" />
-                  <span className="text-sm">Ta foto</span>
+                  <span className="text-sm">Take photo</span>
                 </>
               )}
             </Button>
@@ -301,11 +301,11 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
 
         {/* Name input */}
         <div className="space-y-1.5">
-          <Label className="text-sm font-medium">Namn / Beteckning *</Label>
+          <Label className="text-sm font-medium">Name / Designation *</Label>
           <Input
             value={formData.name}
             onChange={(e) => updateFormData({ name: e.target.value })}
-            placeholder={`t.ex. ${categoryInfo?.label || 'Tillgång'}-001`}
+            placeholder={`e.g. ${categoryInfo?.label || 'Asset'}-001`}
             className="h-12 text-base"
             maxLength={100}
           />
@@ -329,7 +329,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
                   <span>{selectedSymbol.name}</span>
                 </div>
               ) : (
-                <span className="text-muted-foreground">Välj symbol...</span>
+                <span className="text-muted-foreground">Select symbol...</span>
               )}
             </SelectTrigger>
             <SelectContent className="bg-popover z-50 max-h-64">
@@ -364,14 +364,14 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
           <CollapsibleTrigger asChild>
             <Button type="button" variant="ghost" className="w-full justify-start gap-2 h-12">
               <FileText className="h-4 w-4" />
-              {showDescription ? 'Dölj beskrivning' : 'Lägg till beskrivning'}
+              {showDescription ? 'Hide description' : 'Add description'}
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-2">
             <Textarea
               value={formData.description}
               onChange={(e) => updateFormData({ description: e.target.value })}
-              placeholder="Valfri beskrivning..."
+              placeholder="Optional description..."
               className="min-h-24"
             />
           </CollapsibleContent>
@@ -382,28 +382,28 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
           <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
             <div className="flex items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5 text-primary" />
-              <span className="text-xs font-semibold text-primary">AI-identifierade egenskaper</span>
+              <span className="text-xs font-semibold text-primary">AI-detected properties</span>
             </div>
             <div className="flex flex-wrap gap-1">
               {formData.aiProperties.manufacturer && (
-                <Badge variant="outline" className="text-xs">Tillverkare: {formData.aiProperties.manufacturer}</Badge>
+                <Badge variant="outline" className="text-xs">Manufacturer: {formData.aiProperties.manufacturer}</Badge>
               )}
               {formData.aiProperties.model && (
-                <Badge variant="outline" className="text-xs">Modell: {formData.aiProperties.model}</Badge>
+                <Badge variant="outline" className="text-xs">Model: {formData.aiProperties.model}</Badge>
               )}
               {formData.aiProperties.size && (
-                <Badge variant="outline" className="text-xs">Storlek: {formData.aiProperties.size}</Badge>
+                <Badge variant="outline" className="text-xs">Size: {formData.aiProperties.size}</Badge>
               )}
               {formData.aiProperties.condition && (
                 <Badge variant="outline" className="text-xs">
-                  Skick: {{ good: 'Bra', fair: 'Acceptabelt', poor: 'Dåligt' }[formData.aiProperties.condition] || formData.aiProperties.condition}
+                  Condition: {{ good: 'Good', fair: 'Fair', poor: 'Poor' }[formData.aiProperties.condition] || formData.aiProperties.condition}
                 </Badge>
               )}
               {formData.aiProperties.material && (
                 <Badge variant="outline" className="text-xs">Material: {formData.aiProperties.material}</Badge>
               )}
               {formData.aiProperties.installation_type && (
-                <Badge variant="outline" className="text-xs">Montering: {formData.aiProperties.installation_type}</Badge>
+                <Badge variant="outline" className="text-xs">Mounting: {formData.aiProperties.installation_type}</Badge>
               )}
               {formData.aiProperties.text_visible && (
                 <Badge variant="outline" className="text-xs">Text: {formData.aiProperties.text_visible}</Badge>
@@ -424,7 +424,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
             ) : (
               <Plus className="h-4 w-4 mr-2" />
             )}
-            {quickLoopEnabled ? 'Spara & registrera nästa' : 'Spara & ny kategori'}
+            {quickLoopEnabled ? 'Save & register next' : 'Save & new category'}
           </Button>
 
           <Button
@@ -434,7 +434,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
             className="w-full h-10"
           >
             <Save className="h-4 w-4 mr-2" />
-            Spara & avsluta
+            Save & finish
           </Button>
         </div>
       </div>

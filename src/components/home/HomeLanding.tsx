@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext } from "@/components/ui/carousel";
 
-type AssistantType = "gunnar" | "ilean" | "doris";
+type AssistantType = "gunnar" | "ilean";
 
 const ASSISTANTS: Array<{
   id: AssistantType;
@@ -26,7 +26,6 @@ const ASSISTANTS: Array<{
 }> = [
   { id: "gunnar", title: "Geminus AI", subtitle: "Data Assistant", description: "Ask about buildings, rooms and assets", icon: Database, available: true },
   { id: "ilean", title: "Ilean", subtitle: "Document Assistant", description: "Search documents and drawings", icon: FileQuestion, available: true },
-  { id: "doris", title: "Doris", subtitle: "FM Access Assistant", description: "Integration with FM Access", icon: Sparkles, available: false },
 ];
 
 const RECENT_KEY = 'geminus-recent-buildings';

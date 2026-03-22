@@ -67,7 +67,7 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
       const jsonData = XLSX.utils.sheet_to_json<Record<string, string>>(ws);
 
       if (jsonData.length === 0) {
-        toast({ variant: 'destructive', title: 'Tomt ark', description: 'Excel-filen innehåller inga rader.' });
+        toast({ variant: 'destructive', title: 'Empty sheet', description: 'The Excel file contains no rows.' });
         return;
       }
 
@@ -109,14 +109,14 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
 
         const errors: string[] = [];
 
-        if (!designation) errors.push('Designation saknas');
+        if (!designation) errors.push('Designation missing');
 
         // Resolve room
         let resolvedRoomFmGuid: string | undefined;
         if (room) {
           resolvedRoomFmGuid = roomMap.get(room.toLowerCase().trim());
           if (!resolvedRoomFmGuid) {
-            errors.push(`Rum "${room}" hittades inte`);
+            errors.push(`Room "${room}" not found`);
           }
         }
 
@@ -139,7 +139,7 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
       setRows(parsed);
       setStep('preview');
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Kunde inte läsa fil', description: err.message });
+      toast({ variant: 'destructive', title: 'Could not read file', description: err.message });
     }
   };
 
@@ -193,10 +193,10 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5 text-primary" />
-            Importera från Excel
+            Import from Excel
           </DialogTitle>
           <DialogDescription>
-            Importera objekt till {buildingName} från en Excel-fil
+            Import objects to {buildingName} from an Excel file
           </DialogDescription>
         </DialogHeader>
 
@@ -205,8 +205,8 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
             <div className="flex flex-col items-center justify-center gap-4 py-8">
               <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center w-full">
                 <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground mb-3">
-                  Välj en ifylld Excel-fil (.xlsx)
+                 <p className="text-sm text-muted-foreground mb-3">
+                  Select a completed Excel file (.xlsx)
                 </p>
                 <Input
                   type="file"
@@ -216,7 +216,7 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Ladda ner mallen först om du inte redan har den.
+                Download the template first if you don't already have it.
               </p>
             </div>
           )}
@@ -224,12 +224,12 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
           {step === 'preview' && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="default">{validRows.length} giltiga</Badge>
+                <Badge variant="default">{validRows.length} valid</Badge>
                 {invalidRows.length > 0 && (
-                  <Badge variant="destructive">{invalidRows.length} med fel</Badge>
+                  <Badge variant="destructive">{invalidRows.length} with errors</Badge>
                 )}
                 <span className="text-xs text-muted-foreground ml-auto">
-                  Totalt {rows.length} rader
+                  Total {rows.length} rows
                 </span>
               </div>
 
@@ -240,8 +240,8 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
                       <TableHead className="w-8">#</TableHead>
                       <TableHead>Designation</TableHead>
                       <TableHead>CommonName</TableHead>
-                      <TableHead>Våning</TableHead>
-                      <TableHead>Rum</TableHead>
+                      <TableHead>Floor</TableHead>
+                      <TableHead>Room</TableHead>
                       <TableHead className="w-12">Status</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -276,7 +276,7 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
           {step === 'importing' && (
             <div className="flex flex-col items-center gap-4 py-8">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Skapar objekt...</p>
+              <p className="text-sm text-muted-foreground">Creating objects...</p>
               <Progress value={importProgress} className="w-64 h-2" />
               <p className="text-xs text-muted-foreground">{importProgress}%</p>
             </div>
@@ -285,11 +285,11 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
           {step === 'done' && (
             <div className="flex flex-col items-center gap-4 py-8">
               <CheckCircle2 className="h-10 w-10 text-green-500" />
-              <p className="text-sm font-medium">Import klar!</p>
+              <p className="text-sm font-medium">Import complete!</p>
               <div className="flex gap-4 text-sm">
-                <span className="text-green-600">{importResults.created} skapade</span>
+                <span className="text-green-600">{importResults.created} created</span>
                 {importResults.failed > 0 && (
-                  <span className="text-destructive">{importResults.failed} misslyckades</span>
+                  <span className="text-destructive">{importResults.failed} failed</span>
                 )}
               </div>
             </div>
@@ -300,17 +300,17 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
           {step === 'preview' && (
             <div className="flex gap-2 w-full justify-end">
               <Button variant="outline" onClick={resetState}>
-                <X className="h-4 w-4 mr-1" /> Avbryt
+                <X className="h-4 w-4 mr-1" /> Cancel
               </Button>
               <Button onClick={handleImport} disabled={validRows.length === 0} className="gap-1.5">
                 <Upload className="h-4 w-4" />
-                Importera {validRows.length} objekt
+                Import {validRows.length} objects
               </Button>
             </div>
           )}
           {step === 'done' && (
             <Button onClick={() => { resetState(); onOpenChange(false); }}>
-              Stäng
+              Close
             </Button>
           )}
         </DialogFooter>

@@ -36,20 +36,20 @@ interface AiResult {
 }
 
 const OBJECT_TYPE_LABELS: Record<string, string> = {
-  fire_extinguisher: 'Brandsläckare',
-  fire_alarm_button: 'Larmknapp',
-  smoke_detector: 'Rökdetektor',
-  fire_hose: 'Brandslang',
-  electrical_panel: 'Eltavla',
-  door: 'Dörr',
-  elevator: 'Hiss',
-  staircase: 'Trappa',
+  fire_extinguisher: 'Fire Extinguisher',
+  fire_alarm_button: 'Fire Alarm Button',
+  smoke_detector: 'Smoke Detector',
+  fire_hose: 'Fire Hose',
+  electrical_panel: 'Electrical Panel',
+  door: 'Door',
+  elevator: 'Elevator',
+  staircase: 'Staircase',
   ventilation: 'Ventilation',
-  hvac_unit: 'Värmepump/AC',
+  hvac_unit: 'HVAC Unit',
   sprinkler: 'Sprinkler',
-  emergency_light: 'Nödbelysning',
-  access_control: 'Passersystem',
-  other: 'Övrigt',
+  emergency_light: 'Emergency Light',
+  access_control: 'Access Control',
+  other: 'Other',
 };
 
 const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
@@ -130,11 +130,11 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
     } catch (err: any) {
       console.error('[PhotoScanStep] Analysis failed:', err);
       if (err.message?.includes('429') || err.message?.includes('Rate limit')) {
-        setError('AI-tjänsten är tillfälligt överbelastad. Försök igen om en stund.');
+        setError('The AI service is temporarily overloaded. Please try again in a moment.');
       } else if (err.message?.includes('402')) {
-        setError('AI-krediter saknas. Kontakta administratören.');
+        setError('AI credits missing. Contact the administrator.');
       } else {
-        setError('Kunde inte analysera bilden. Försök igen eller hoppa över.');
+        setError('Could not analyze the image. Try again or skip.');
       }
     } finally {
       setIsAnalyzing(false);
@@ -181,25 +181,25 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
   };
 
   const confidenceLabel = (c: number) => {
-    if (c >= 0.7) return 'Hög säkerhet';
-    if (c >= 0.4) return 'Medel säkerhet';
-    return 'Låg säkerhet';
+    if (c >= 0.7) return 'High confidence';
+    if (c >= 0.4) return 'Medium confidence';
+    return 'Low confidence';
   };
 
   const PROPERTY_LABELS: Record<string, string> = {
-    manufacturer: 'Tillverkare',
-    brand: 'Märke',
-    model: 'Modell',
-    size: 'Storlek',
-    color: 'Färg',
-    condition: 'Skick',
-    text_visible: 'Synlig text',
+    manufacturer: 'Manufacturer',
+    brand: 'Brand',
+    model: 'Model',
+    size: 'Size',
+    color: 'Color',
+    condition: 'Condition',
+    text_visible: 'Visible text',
     material: 'Material',
-    installation_type: 'Montering',
+    installation_type: 'Mounting',
   };
 
   const conditionLabel = (c: string) => {
-    const map: Record<string, string> = { good: 'Bra', fair: 'Acceptabelt', poor: 'Dåligt' };
+    const map: Record<string, string> = { good: 'Good', fair: 'Fair', poor: 'Poor' };
     return map[c] || c;
   };
 
@@ -211,10 +211,10 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
           <div className="text-center space-y-1">
             <div className="flex items-center justify-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              <h2 className="text-base font-semibold">AI-identifiering</h2>
+              <h2 className="text-base font-semibold">AI Identification</h2>
             </div>
             <p className="text-sm text-muted-foreground">
-              Fotografera objektet — AI identifierar typ och fyller i uppgifter automatiskt
+              Take a photo of the object — AI identifies the type and fills in details automatically
             </p>
           </div>
 
@@ -236,20 +236,20 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
               onClick={() => fileInputRef.current?.click()}
             >
               <Camera className="h-12 w-12 text-muted-foreground" />
-              <span className="text-base font-medium">Ta foto</span>
-              <span className="text-sm text-muted-foreground">eller välj bild från galleriet</span>
+               <span className="text-base font-medium">Take photo</span>
+               <span className="text-sm text-muted-foreground">or choose from gallery</span>
             </Button>
           ) : (
             <div className="relative rounded-lg overflow-hidden border flex-shrink-0">
               <img
                 src={imagePreview}
-                alt="Fotad bild"
+                alt="Captured image"
                 className="w-full h-48 object-cover"
               />
               {isAnalyzing && (
                 <div className="absolute inset-0 bg-background/70 flex flex-col items-center justify-center gap-2">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  <span className="text-sm font-medium">Identifierar objekt...</span>
+                  <span className="text-sm font-medium">Identifying object...</span>
                 </div>
               )}
               <div className="absolute bottom-2 right-2 flex gap-1.5">
@@ -261,7 +261,7 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
                     onClick={handleReanalyze}
                   >
                     <RefreshCw className="h-3.5 w-3.5 mr-1" />
-                    Analysera igen
+                    Re-analyze
                   </Button>
                 )}
                 <Button
@@ -271,7 +271,7 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
                   disabled={isAnalyzing}
                 >
                   <Camera className="h-3.5 w-3.5 mr-1" />
-                  Nytt foto
+                  New photo
                 </Button>
               </div>
             </div>
@@ -303,7 +303,7 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
 
               {aiResult.suggestedName && (
                 <p className="text-sm text-foreground">
-                  <span className="text-muted-foreground">Namn: </span>
+                  <span className="text-muted-foreground">Name: </span>
                   <span className="font-medium">{aiResult.suggestedName}</span>
                 </p>
               )}
@@ -332,13 +332,13 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
 
               {aiResult.suggestedSymbolId && (
                 <p className="text-xs text-primary">
-                  ✓ Symbol automatiskt vald
+                  ✓ Symbol automatically selected
                 </p>
               )}
 
               {aiResult.confidence < 0.5 && (
                 <p className="text-xs text-muted-foreground italic">
-                  Låg säkerhet — du kan korrigera i nästa steg
+                  Low confidence — you can correct in the next step
                 </p>
               )}
             </div>
@@ -351,8 +351,8 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
               <div className="space-y-1 flex-1">
                 <p className="text-sm text-destructive">{error}</p>
                 <Button variant="outline" size="sm" onClick={handleReanalyze} className="h-7 text-xs">
-                  <RefreshCw className="h-3 w-3 mr-1" />
-                  Försök igen
+                   <RefreshCw className="h-3 w-3 mr-1" />
+                   Try again
                 </Button>
               </div>
             </div>
@@ -366,8 +366,8 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
           <Button className="w-full h-12" onClick={handleConfirm}>
             <ChevronRight className="h-4 w-4 mr-2" />
             {aiResult.confidence >= 0.7
-              ? 'Använd förslag & gå vidare'
-              : 'Förhandsgranska & korrigera'}
+              ? 'Use suggestion & continue'
+              : 'Preview & correct'}
           </Button>
         )}
 
@@ -377,7 +377,7 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
           onClick={onSkip}
           disabled={isAnalyzing}
         >
-          Hoppa över →
+          Skip →
         </Button>
       </div>
     </div>

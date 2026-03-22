@@ -1,6 +1,6 @@
 import React, { useContext } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { sv } from 'date-fns/locale';
+import { enUS } from 'date-fns/locale';
 import { Package, Loader2, AlertCircle, Pencil } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -63,8 +63,8 @@ const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading, onEdit,
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground py-12">
         <Package className="h-12 w-12 mb-3 opacity-50" />
-        <p className="text-sm">Inga registrerade tillgångar ännu</p>
-        <p className="text-xs mt-1">Tryck "Ny tillgång" för att börja</p>
+        <p className="text-sm">No registered assets yet</p>
+        <p className="text-xs mt-1">Press "New asset" to get started</p>
       </div>
     );
   }
@@ -73,7 +73,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading, onEdit,
     <div className={cn("flex-1 flex flex-col min-h-0", compact && "")}>
       {!compact && (
         <h2 className="text-sm font-medium text-muted-foreground mb-2">
-          Senast registrerade {onEdit && <span className="text-xs">(klicka för att redigera)</span>}
+          Recently registered {onEdit && <span className="text-xs">(click to edit)</span>}
         </h2>
       )}
       <ScrollArea className="flex-1">
@@ -94,14 +94,14 @@ const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading, onEdit,
             const timeAgo = item.created_at
               ? formatDistanceToNow(new Date(item.created_at), {
                   addSuffix: true,
-                  locale: sv,
+                  locale: enUS,
                 })
               : item.attributes?.inventoryDate
               ? formatDistanceToNow(new Date(item.attributes.inventoryDate), {
                   addSuffix: true,
-                  locale: sv,
+                  locale: enUS,
                 })
-              : 'Just nu';
+              : 'Just now';
 
             const isSelected = selectedFmGuid === item.fm_guid;
 
@@ -133,7 +133,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading, onEdit,
                           className="text-amber-500 border-amber-500 text-[10px] px-1.5 py-0 shrink-0"
                         >
                           <AlertCircle className="h-3 w-3 mr-0.5" />
-                          Ej i modell
+                          Not in model
                         </Badge>
                       )}
                     </div>
