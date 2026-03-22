@@ -89,7 +89,7 @@ const ViewerThemeSelector: React.FC<ViewerThemeSelectorProps> = ({
         disabled={disabled}
       >
         <SelectTrigger className="h-8 text-xs sm:text-sm bg-background/80">
-          <SelectValue placeholder="Välj tema..." />
+          <SelectValue placeholder="Select theme..." />
         </SelectTrigger>
         <SelectContent className="bg-popover z-[100]">
           {themes.map((theme) => (

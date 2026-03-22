@@ -328,8 +328,8 @@ const BuildingSelector: React.FC = () => {
             <div className="h-full flex items-center justify-center">
               <div className="text-center text-muted-foreground">
                 <Camera className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p className="text-sm">Inga sparade vyer</p>
-                <p className="text-xs mt-1">Öppna en byggnad och klicka på "Skapa vy" i Visningsmenyn</p>
+                <p className="text-sm">No saved views</p>
+                <p className="text-xs mt-1">Open a building and click "Create View" in the View menu</p>
               </div>
             </div>
           ) : (

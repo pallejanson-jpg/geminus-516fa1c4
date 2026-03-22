@@ -164,7 +164,7 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid }) =>
       <div className="h-full flex items-center justify-center">
         <div className="text-center">
           <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-          <p className="text-muted-foreground">Laddar...</p>
+          <p className="text-muted-foreground">Loading...</p>
         </div>
       </div>
     );

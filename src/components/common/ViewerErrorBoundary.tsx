@@ -56,7 +56,7 @@ class ViewerErrorBoundary extends Component<ViewerErrorBoundaryProps, ViewerErro
             )}
             <Button onClick={this.handleReset} className="gap-2">
               <RefreshCw className="h-4 w-4" />
-              Försök igen
+              Try Again
             </Button>
           </div>
         </div>

@@ -584,7 +584,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                     const syntheticStorey: NavigatorNode = {
                         fmGuid: `synthetic-unknown-${buildingGuid}`,
                         category: 'Building Storey',
-                        commonName: 'Okänd våning',
+                        commonName: 'Unknown Floor',
                         name: 'Unknown Floor',
                         isSynthetic: true,
                         buildingFmGuid: buildingGuid,
