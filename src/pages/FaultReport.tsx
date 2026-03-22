@@ -172,11 +172,11 @@ const FaultReport: React.FC = () => {
       <div className="flex items-center justify-center min-h-screen bg-background p-4">
         <div className="flex flex-col items-center gap-4 text-center max-w-sm">
           <AlertTriangle className="h-10 w-10 text-destructive" />
-          <h2 className="text-lg font-semibold">Något gick fel</h2>
+          <h2 className="text-lg font-semibold">Something went wrong</h2>
           <p className="text-sm text-muted-foreground">{configError}</p>
           <Button onClick={fetchConfig} variant="outline" className="gap-2">
             <RefreshCw className="h-4 w-4" />
-            Försök igen
+            Try again
           </Button>
         </div>
       </div>
