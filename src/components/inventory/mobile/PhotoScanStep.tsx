@@ -338,7 +338,7 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
 
               {aiResult.confidence < 0.5 && (
                 <p className="text-xs text-muted-foreground italic">
-                  Låg säkerhet — du kan korrigera i nästa steg
+                  Low confidence — you can correct in the next step
                 </p>
               )}
             </div>
