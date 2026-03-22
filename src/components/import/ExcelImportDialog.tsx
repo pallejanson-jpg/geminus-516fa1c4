@@ -139,7 +139,7 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
       setRows(parsed);
       setStep('preview');
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Kunde inte läsa fil', description: err.message });
+      toast({ variant: 'destructive', title: 'Could not read file', description: err.message });
     }
   };
 
