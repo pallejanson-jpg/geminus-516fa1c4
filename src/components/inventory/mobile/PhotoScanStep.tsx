@@ -236,8 +236,8 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
               onClick={() => fileInputRef.current?.click()}
             >
               <Camera className="h-12 w-12 text-muted-foreground" />
-              <span className="text-base font-medium">Ta foto</span>
-              <span className="text-sm text-muted-foreground">eller välj bild från galleriet</span>
+               <span className="text-base font-medium">Take photo</span>
+               <span className="text-sm text-muted-foreground">or choose from gallery</span>
             </Button>
           ) : (
             <div className="relative rounded-lg overflow-hidden border flex-shrink-0">
