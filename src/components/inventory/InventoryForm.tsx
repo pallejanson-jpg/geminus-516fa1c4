@@ -485,7 +485,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
 
       {/* Category dropdown */}
       <div className="space-y-2">
-        <Label className="text-base">Kategori *</Label>
+        <Label className="text-base">Category *</Label>
         <Select value={category} onValueChange={setCategory}>
           <SelectTrigger className="h-12">
             <SelectValue placeholder="Välj kategori..." />
