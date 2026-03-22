@@ -189,10 +189,10 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
               <Select value={priority} onValueChange={setPriority}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="low">Låg</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
                   <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">Hög</SelectItem>
-                  <SelectItem value="critical">Kritisk</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="critical">Critical</SelectItem>
                 </SelectContent>
               </Select>
             </div>
