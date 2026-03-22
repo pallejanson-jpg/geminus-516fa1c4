@@ -427,7 +427,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       
       toastHook({
         variant: "destructive",
-        title: errStatus === 429 ? "Rate limit" : errStatus === 402 ? "Kredit" : errStatus === 503 ? "Tjänstfel" : "Fel",
+        title: errStatus === 429 ? "Rate limit" : errStatus === 402 ? "Credits" : errStatus === 503 ? "Service error" : "Error",
         description: errMsg,
       });
       setMessages(messages);
