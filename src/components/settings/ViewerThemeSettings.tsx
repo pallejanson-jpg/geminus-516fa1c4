@@ -464,8 +464,8 @@ const ViewerThemeSettings: React.FC = () => {
                 // View mode
                 <div className="space-y-3">
                   <p className="text-xs text-muted-foreground">
-                    {Object.keys(theme.color_mappings || {}).length} färgmappningar • 
-                    Rum-transparens: {Math.round((theme.space_opacity ?? 0.25) * 100)}%
+                    {Object.keys(theme.color_mappings || {}).length} color mappings • 
+                    Space opacity: {Math.round((theme.space_opacity ?? 0.25) * 100)}%
                   </p>
                   
                   {/* All color swatches */}
