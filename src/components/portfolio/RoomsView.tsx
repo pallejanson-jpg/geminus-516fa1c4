@@ -495,8 +495,8 @@ const RoomsView: React.FC<RoomsViewProps> = ({
 
   const title =
     facility.category === 'Building'
-      ? `Rum i ${facility.commonName || facility.name}`
-      : `Rum på ${facility.commonName || facility.name}`;
+      ? `Rooms in ${facility.commonName || facility.name}`
+      : `Rooms at ${facility.commonName || facility.name}`;
 
   // Group columns by category for dropdown
   const systemCols = allColumns.filter(c => c.category === 'system');
