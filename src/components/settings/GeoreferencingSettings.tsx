@@ -197,7 +197,7 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
                             <div className="flex items-center justify-between">
                                 <Label className="text-xs flex items-center gap-1.5">
                                     <RotateCw className="h-3 w-3" />
-                                    Rotation (grader relativt norr)
+                                    Rotation (degrees relative to north)
                                 </Label>
                                 <span className="text-xs font-mono text-muted-foreground">
                                     {rotationValue}°
