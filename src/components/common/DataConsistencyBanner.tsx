@@ -127,7 +127,7 @@ export const DataConsistencyBanner: React.FC = () => {
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1">
                 <Database className="h-3.5 w-3.5" />
-                Lokalt: {deltaResult.localCount.toLocaleString()}
+                Local: {deltaResult.localCount.toLocaleString()}
               </span>
               <span>Asset+: {deltaResult.remoteCount.toLocaleString()}</span>
             </div>
