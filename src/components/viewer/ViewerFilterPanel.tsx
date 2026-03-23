@@ -1365,7 +1365,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   useEffect(() => {
     if (!isVisible) return;
     applyFilterVisibility();
-  }, [checkedSources, checkedLevels, checkedSpaces, checkedCategories, xrayMode, applyFilterVisibility, isVisible]);
+  }, [checkedSources, checkedLevels, checkedSpaces, checkedCategories, xrayMode, applyFilterVisibility, isVisible, entityMapVersion]);
 
   // Apply coloring separately when color settings change
   useEffect(() => {
