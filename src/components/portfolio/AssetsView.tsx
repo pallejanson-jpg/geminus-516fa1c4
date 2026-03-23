@@ -997,7 +997,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                               e.stopPropagation();
                               setShowPropertiesFor([asset.fmGuid]);
                             }}
-                            title="Egenskaper"
+                            title="Properties"
                           >
                             <Info size={14} />
                           </Button>
