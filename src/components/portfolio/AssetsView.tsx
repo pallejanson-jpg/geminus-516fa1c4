@@ -1023,7 +1023,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                                 e.stopPropagation();
                                 handlePlaceAnnotation(asset);
                               }}
-                              title="Placera annotation"
+                              title="Place annotation"
                             >
                               <MapPin size={14} />
                             </Button>
