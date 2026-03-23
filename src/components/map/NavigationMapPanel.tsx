@@ -6,8 +6,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { supabase } from '@/integrations/supabase/client';
 import { MapFacility } from '@/hooks/useMapFacilities';
+import { useIsMobile } from '@/hooks/use-mobile';
 import StreetViewThumbnail from '@/components/map/StreetViewThumbnail';
 
 interface RouteStep {
@@ -214,12 +216,14 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
   activeStepIndex,
   pickingOrigin,
 }) => {
+  const isMobile = useIsMobile();
   const [profile, setProfile] = useState<'walking' | 'driving' | 'transit'>('walking');
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [selectedBuildingGuid, setSelectedBuildingGuid] = useState<string>('');
   const [selectedRoomGuid, setSelectedRoomGuid] = useState<string>('');
   const [rooms, setRooms] = useState<RoomOption[]>([]);
   const [isLocating, setIsLocating] = useState(false);
+  const [drawerExpanded, setDrawerExpanded] = useState(true);
 
   // Geocoding state
   const [originText, setOriginText] = useState('');
@@ -228,6 +232,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
   const [mapboxToken, setMapboxToken] = useState<string | null>(null);
   const geocodeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [streetViewApiKey, setStreetViewApiKey] = useState<string | null>(null);
+
   // Fetch mapbox token for geocoding
   useEffect(() => {
     supabase.functions.invoke('get-mapbox-token').then(({ data }) => {
@@ -349,6 +354,255 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
     return routeSummary.outdoorDuration + indoorTime;
   }, [routeSummary, profile]);
 
+  // Shared panel content
+  const panelContent = (
+    <div className="space-y-3">
+      {/* Picking origin banner */}
+      {pickingOrigin && (
+        <div className="bg-primary/10 border border-primary/30 rounded-md px-2 py-1.5 text-xs text-primary font-medium text-center animate-pulse">
+          Click on the map to select start point
+        </div>
+      )}
+
+      {/* Origin */}
+      <div className="space-y-1 relative">
+        <label className="text-xs text-muted-foreground">From</label>
+        <div className="flex gap-1.5">
+          <div className="relative flex-1">
+            <Input
+              value={originText}
+              onChange={(e) => {
+                setOriginText(e.target.value);
+                setShowGeoResults(true);
+              }}
+              onFocus={() => { if (geocodingResults.length > 0) setShowGeoResults(true); }}
+              onBlur={() => setTimeout(() => setShowGeoResults(false), 200)}
+              placeholder="Enter address or select on map"
+              className="h-9 text-xs"
+            />
+            {/* Geocoding dropdown */}
+            {showGeoResults && geocodingResults.length > 0 && (
+              <div className="absolute top-full left-0 right-0 z-[60] mt-0.5 bg-popover border border-border rounded-md shadow-lg overflow-hidden">
+                {geocodingResults.map((r, i) => (
+                  <button
+                    key={i}
+                    className="w-full text-left px-2 py-2 text-xs hover:bg-muted/80 transition-colors flex items-start gap-1.5"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => handleSelectGeoResult(r)}
+                  >
+                    <Search size={10} className="text-muted-foreground mt-0.5 shrink-0" />
+                    <span className="truncate">{r.place_name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <Button
+            variant="secondary"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            onClick={handleLocate}
+            disabled={isLocating}
+            title="My location (GPS)"
+          >
+            <LocateFixed size={14} className={isLocating ? 'animate-pulse' : ''} />
+          </Button>
+          {onRequestMapClick && (
+            <Button
+              variant={pickingOrigin ? 'default' : 'secondary'}
+              size="icon"
+              className="h-9 w-9 shrink-0"
+              onClick={onRequestMapClick}
+              title="Select position on map"
+            >
+              <MapPinned size={14} />
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Destination building */}
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground">To building</label>
+        <Select value={selectedBuildingGuid} onValueChange={v => { setSelectedBuildingGuid(v); setSelectedRoomGuid(''); }}>
+          <SelectTrigger className="h-9 text-xs">
+            <SelectValue placeholder="Select building" />
+          </SelectTrigger>
+          <SelectContent>
+            {facilities.filter(f => f.lat && f.lng).map(f => (
+              <SelectItem key={f.fmGuid} value={f.fmGuid!} className="text-xs">
+                {f.commonName || f.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Destination room */}
+      {rooms.length > 0 && (
+        <div className="space-y-1">
+         <label className="text-xs text-muted-foreground">To room (optional)</label>
+          <Select value={selectedRoomGuid} onValueChange={setSelectedRoomGuid}>
+            <SelectTrigger className="h-9 text-xs">
+              <SelectValue placeholder="Optional entrance" />
+            </SelectTrigger>
+            <SelectContent className="max-h-48">
+              {rooms.map(r => (
+                <SelectItem key={r.fm_guid} value={r.fm_guid} className="text-xs">
+                  {r.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Profile toggle */}
+      <div className="flex gap-1">
+        <Button
+          variant={profile === 'walking' ? 'default' : 'outline'}
+          size="sm"
+          className="flex-1 h-9 text-xs gap-1"
+          onClick={() => setProfile('walking')}
+        >
+          <Footprints size={12} /> Walk
+        </Button>
+        <Button
+          variant={profile === 'driving' ? 'default' : 'outline'}
+          size="sm"
+          className="flex-1 h-9 text-xs gap-1"
+          onClick={() => setProfile('driving')}
+        >
+          <Car size={12} /> Drive
+        </Button>
+        <Button
+          variant={profile === 'transit' ? 'default' : 'outline'}
+          size="sm"
+          className="flex-1 h-9 text-xs gap-1"
+          onClick={() => setProfile('transit')}
+        >
+          <Bus size={12} /> Transit
+        </Button>
+      </div>
+
+      {/* Navigate button */}
+      <Button
+        className="w-full h-9 text-xs"
+        disabled={!userLocation || !selectedBuildingGuid}
+        onClick={handleNavigate}
+      >
+        <Navigation size={14} className="mr-1" /> Get Directions
+      </Button>
+
+      {/* Route summary with steps */}
+      {routeSummary && (
+        <div className="bg-muted/50 rounded-md p-2 space-y-2">
+          {/* Total summary header */}
+          <div className="flex items-center justify-between text-xs font-medium">
+            <div className="flex items-center gap-1.5">
+              <Clock size={12} className="text-primary" />
+              <span>{formatDuration(totalDuration)}</span>
+            </div>
+            <span className="text-muted-foreground">
+              {formatDistance(routeSummary.outdoorDistance + routeSummary.indoorDistance)}
+            </span>
+          </div>
+
+          {/* Step-by-step timeline */}
+          {allSteps.length > 0 && (
+            <ScrollArea className={isMobile ? 'max-h-[40dvh]' : 'max-h-48'}>
+              <StepTimeline
+                steps={allSteps}
+                indoorDistance={routeSummary.indoorDistance}
+                indoorSteps={routeSummary.indoorSteps}
+                profile={profile}
+                onStepClick={onStepClick}
+                activeStepIndex={activeStepIndex}
+                streetViewApiKey={streetViewApiKey}
+              />
+            </ScrollArea>
+          )}
+
+          {/* Fallback for no steps */}
+          {allSteps.length === 0 && (
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-xs">
+                <Badge variant="secondary" className="text-[10px]">Outdoor</Badge>
+                <span>{formatDistance(routeSummary.outdoorDistance)}</span>
+                <span className="text-muted-foreground">·</span>
+                <span>{formatDuration(routeSummary.outdoorDuration)}</span>
+              </div>
+              {routeSummary.indoorDistance > 0 && (
+                <div className="flex items-center gap-2 text-xs">
+                  <Badge variant="outline" className="text-[10px]">Indoor</Badge>
+                  <span>~{formatDistance(routeSummary.indoorDistance)}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Show in building button — visible whenever route + building selected */}
+          {routeSummary && selectedBuildingGuid && onShowIndoor && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-full h-9 text-xs gap-1"
+              onClick={onShowIndoor}
+            >
+              <Building2 size={12} />
+              Show in building
+              <ArrowRight size={12} />
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  // Mobile: bottom drawer
+  if (isMobile) {
+    // Compact summary bar when route exists (shown when drawer is collapsed)
+    const summaryBar = routeSummary ? (
+      <div className="flex items-center justify-between px-3 py-1.5">
+        <div className="flex items-center gap-2 text-xs font-medium">
+          <Clock size={12} className="text-primary" />
+          <span>{formatDuration(totalDuration)}</span>
+          <span className="text-muted-foreground">·</span>
+          <span>{formatDistance(routeSummary.outdoorDistance + routeSummary.indoorDistance)}</span>
+        </div>
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
+          <X size={14} />
+        </Button>
+      </div>
+    ) : null;
+
+    return (
+      <Drawer
+        open={true}
+        onOpenChange={(open) => { if (!open) onClose(); }}
+        snapPoints={[0.35, 0.85]}
+        activeSnapPoint={drawerExpanded ? 0.85 : 0.35}
+        setActiveSnapPoint={(snap) => setDrawerExpanded(snap === 0.85)}
+      >
+        <DrawerContent className="max-h-[85dvh]">
+          <DrawerHeader className="py-2 px-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Navigation size={16} className="text-primary" />
+              <DrawerTitle className="text-sm">Navigation</DrawerTitle>
+            </div>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
+              <X size={14} />
+            </Button>
+          </DrawerHeader>
+          <div className="px-3 pb-3 overflow-y-auto">
+            {panelContent}
+          </div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
+  // Desktop: positioned card
   return (
     <div className="absolute top-3 left-3 z-20 w-80">
       <Card className="bg-card/95 backdrop-blur-sm shadow-xl border-border">
@@ -364,205 +618,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
             </Button>
           </div>
 
-          {/* Picking origin banner */}
-          {pickingOrigin && (
-            <div className="bg-primary/10 border border-primary/30 rounded-md px-2 py-1.5 text-xs text-primary font-medium text-center animate-pulse">
-              Click on the map to select start point
-            </div>
-          )}
-
-          {/* Origin */}
-          <div className="space-y-1 relative">
-            <label className="text-xs text-muted-foreground">From</label>
-            <div className="flex gap-1.5">
-              <div className="relative flex-1">
-                <Input
-                  value={originText}
-                  onChange={(e) => {
-                    setOriginText(e.target.value);
-                    setShowGeoResults(true);
-                  }}
-                  onFocus={() => { if (geocodingResults.length > 0) setShowGeoResults(true); }}
-                  onBlur={() => setTimeout(() => setShowGeoResults(false), 200)}
-                  placeholder="Enter address or select on map"
-                  className="h-8 text-xs"
-                />
-                {/* Geocoding dropdown */}
-                {showGeoResults && geocodingResults.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 z-50 mt-0.5 bg-popover border border-border rounded-md shadow-lg overflow-hidden">
-                    {geocodingResults.map((r, i) => (
-                      <button
-                        key={i}
-                        className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted/80 transition-colors flex items-start gap-1.5"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => handleSelectGeoResult(r)}
-                      >
-                        <Search size={10} className="text-muted-foreground mt-0.5 shrink-0" />
-                        <span className="truncate">{r.place_name}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <Button
-                variant="secondary"
-                size="icon"
-                className="h-8 w-8 shrink-0"
-                onClick={handleLocate}
-                disabled={isLocating}
-                title="My location (GPS)"
-              >
-                <LocateFixed size={14} className={isLocating ? 'animate-pulse' : ''} />
-              </Button>
-              {onRequestMapClick && (
-                <Button
-                  variant={pickingOrigin ? 'default' : 'secondary'}
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  onClick={onRequestMapClick}
-                  title="Select position on map"
-                >
-                  <MapPinned size={14} />
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* Destination building */}
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">To building</label>
-            <Select value={selectedBuildingGuid} onValueChange={v => { setSelectedBuildingGuid(v); setSelectedRoomGuid(''); }}>
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Select building" />
-              </SelectTrigger>
-              <SelectContent>
-                {facilities.filter(f => f.lat && f.lng).map(f => (
-                  <SelectItem key={f.fmGuid} value={f.fmGuid!} className="text-xs">
-                    {f.commonName || f.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Destination room */}
-          {rooms.length > 0 && (
-            <div className="space-y-1">
-             <label className="text-xs text-muted-foreground">To room (optional)</label>
-              <Select value={selectedRoomGuid} onValueChange={setSelectedRoomGuid}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Optional entrance" />
-                </SelectTrigger>
-                <SelectContent className="max-h-48">
-                  {rooms.map(r => (
-                    <SelectItem key={r.fm_guid} value={r.fm_guid} className="text-xs">
-                      {r.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Profile toggle */}
-          <div className="flex gap-1">
-            <Button
-              variant={profile === 'walking' ? 'default' : 'outline'}
-              size="sm"
-              className="flex-1 h-7 text-xs gap-1"
-              onClick={() => setProfile('walking')}
-            >
-              <Footprints size={12} /> Walk
-            </Button>
-            <Button
-              variant={profile === 'driving' ? 'default' : 'outline'}
-              size="sm"
-              className="flex-1 h-7 text-xs gap-1"
-              onClick={() => setProfile('driving')}
-            >
-              <Car size={12} /> Drive
-            </Button>
-            <Button
-              variant={profile === 'transit' ? 'default' : 'outline'}
-              size="sm"
-              className="flex-1 h-7 text-xs gap-1"
-              onClick={() => setProfile('transit')}
-            >
-              <Bus size={12} /> Transit
-            </Button>
-          </div>
-
-          {/* Navigate button */}
-          <Button
-            className="w-full h-8 text-xs"
-            disabled={!userLocation || !selectedBuildingGuid}
-            onClick={handleNavigate}
-          >
-            <Navigation size={14} className="mr-1" /> Get Directions
-          </Button>
-
-          {/* Route summary with steps */}
-          {routeSummary && (
-            <div className="bg-muted/50 rounded-md p-2 space-y-2">
-              {/* Total summary header */}
-              <div className="flex items-center justify-between text-xs font-medium">
-                <div className="flex items-center gap-1.5">
-                  <Clock size={12} className="text-primary" />
-                  <span>{formatDuration(totalDuration)}</span>
-                </div>
-                <span className="text-muted-foreground">
-                  {formatDistance(routeSummary.outdoorDistance + routeSummary.indoorDistance)}
-                </span>
-              </div>
-
-              {/* Step-by-step timeline */}
-              {allSteps.length > 0 && (
-                <ScrollArea className="max-h-48">
-                  <StepTimeline
-                    steps={allSteps}
-                    indoorDistance={routeSummary.indoorDistance}
-                    indoorSteps={routeSummary.indoorSteps}
-                    profile={profile}
-                    onStepClick={onStepClick}
-                    activeStepIndex={activeStepIndex}
-                    streetViewApiKey={streetViewApiKey}
-                  />
-                </ScrollArea>
-              )}
-
-              {/* Fallback for no steps */}
-              {allSteps.length === 0 && (
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 text-xs">
-                    <Badge variant="secondary" className="text-[10px]">Outdoor</Badge>
-                    <span>{formatDistance(routeSummary.outdoorDistance)}</span>
-                    <span className="text-muted-foreground">·</span>
-                    <span>{formatDuration(routeSummary.outdoorDuration)}</span>
-                  </div>
-                  {routeSummary.indoorDistance > 0 && (
-                    <div className="flex items-center gap-2 text-xs">
-                      <Badge variant="outline" className="text-[10px]">Indoor</Badge>
-                      <span>~{formatDistance(routeSummary.indoorDistance)}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Show in building button — visible whenever route + building selected */}
-              {routeSummary && selectedBuildingGuid && onShowIndoor && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="w-full h-7 text-xs gap-1"
-                  onClick={onShowIndoor}
-                >
-                  <Building2 size={12} />
-                  Show in building
-                  <ArrowRight size={12} />
-                </Button>
-              )}
-            </div>
-          )}
+          {panelContent}
         </CardContent>
       </Card>
     </div>

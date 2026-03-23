@@ -42,7 +42,7 @@ const StreetViewThumbnail: React.FC<StreetViewThumbnailProps> = ({
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-2xl p-0 overflow-hidden">
+        <DialogContent className="max-w-[90vw] sm:max-w-2xl p-0 overflow-hidden">
           <DialogHeader className="p-3 pb-0">
             <DialogTitle className="text-sm">Street View</DialogTitle>
           </DialogHeader>
