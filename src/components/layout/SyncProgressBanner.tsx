@@ -39,7 +39,7 @@ export const SyncProgressBanner: React.FC = () => {
   }, []);
 
   const handleResume = useCallback(async (subtreeId: string) => {
-    if (resumeRef.current) return; // prevent double-triggering
+    if (resumeRef.current) return;
     resumeRef.current = true;
     setIsResuming(true);
 
@@ -53,7 +53,7 @@ export const SyncProgressBanner: React.FC = () => {
           console.error('Resume sync error:', error);
           toast({
             variant: 'destructive',
-            title: 'Synkfel',
+            title: 'Sync error',
             description: error.message,
           });
           setIsResuming(false);
@@ -62,13 +62,11 @@ export const SyncProgressBanner: React.FC = () => {
         }
 
         if (data?.interrupted) {
-          // Continue after delay
           setTimeout(() => runLoop(), 2000);
         } else {
-          // Completed
           toast({
-            title: 'Synk klar',
-            description: `${data?.totalSynced || 0} tillgångar synkade.`,
+            title: 'Sync complete',
+            description: `${data?.totalSynced || 0} assets synced.`,
           });
           setIsResuming(false);
           resumeRef.current = false;
@@ -82,8 +80,8 @@ export const SyncProgressBanner: React.FC = () => {
     };
 
     toast({
-      title: 'Fortsätter synk',
-      description: 'Återupptar avbruten synkronisering...',
+      title: 'Resuming sync',
+      description: 'Continuing interrupted synchronization...',
     });
 
     runLoop();
@@ -99,17 +97,16 @@ export const SyncProgressBanner: React.FC = () => {
       if (error) throw error;
 
       toast({
-        title: 'Återställd',
-        description: 'Synkstatus har återställts. Du kan starta en ny synk.',
+        title: 'Reset',
+        description: 'Sync status has been reset. You can start a new sync.',
       });
 
-      // Clear the stale sync from local state
       setActiveSyncs(prev => prev.filter(s => s.subtree_id !== subtreeId));
       window.dispatchEvent(new CustomEvent('asset-sync-completed'));
     } catch (err: any) {
       toast({
         variant: 'destructive',
-        title: 'Kunde inte återställa',
+        title: 'Reset failed',
         description: err.message,
       });
     } finally {
@@ -139,7 +136,6 @@ export const SyncProgressBanner: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Initial fetch - get ALL running or recently active syncs
     const fetchSyncStates = async () => {
       const { data } = await supabase
         .from('asset_sync_state')
@@ -154,7 +150,6 @@ export const SyncProgressBanner: React.FC = () => {
 
     fetchSyncStates();
 
-    // Subscribe to realtime changes
     const channel = supabase
       .channel('sync-progress')
       .on(
@@ -185,7 +180,6 @@ export const SyncProgressBanner: React.FC = () => {
             });
             fetchProgress();
           } else {
-            // Remove completed/failed syncs after a delay
             setTimeout(() => {
               setActiveSyncs(prev => prev.filter(s => s.subtree_id !== newState.subtree_id));
             }, 3000);
@@ -194,7 +188,6 @@ export const SyncProgressBanner: React.FC = () => {
       )
       .subscribe();
 
-    // Also subscribe to progress updates
     const progressChannel = supabase
       .channel('sync-progress-detail')
       .on(
@@ -216,17 +209,7 @@ export const SyncProgressBanner: React.FC = () => {
     };
   }, [fetchProgress]);
 
-  // Auto-resume stale syncs on mount (with 3s delay)
-  useEffect(() => {
-    const staleSync = activeSyncs.find(s => isStale(s) && s.subtree_id === 'assets');
-    
-    if (staleSync && !isResuming && !isResetting) {
-      const timer = setTimeout(() => {
-        handleResume('assets');
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [activeSyncs, isStale, isResuming, isResetting, handleResume]);
+  // Auto-resume removed — sync is only triggered explicitly via DataConsistencyBanner or Resume button
 
   if (dismissed || activeSyncs.length === 0) {
     return null;
@@ -255,17 +238,17 @@ export const SyncProgressBanner: React.FC = () => {
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-sm font-medium truncate">
-                    {stale ? 'Synken har stannat' : 'Synkar'} {sync.subtree_name || sync.subtree_id} {progressLabel}
+                    {stale ? 'Sync stalled' : 'Syncing'} {sync.subtree_name || sync.subtree_id} {progressLabel}
                   </span>
                   {stale && (
                     <Badge variant="outline" className="text-xs border-yellow-300 bg-yellow-50 text-yellow-700 flex-shrink-0">
-                      Avbruten
+                      Interrupted
                     </Badge>
                   )}
                 </div>
                 {sync.total_assets != null && sync.total_assets > 0 && (
                   <span className="text-xs text-muted-foreground flex-shrink-0">
-                    {(progress?.totalSynced ?? sync.total_assets).toLocaleString()} objekt
+                    {(progress?.totalSynced ?? sync.total_assets).toLocaleString()} items
                   </span>
                 )}
               </div>
@@ -291,7 +274,7 @@ export const SyncProgressBanner: React.FC = () => {
                     ) : (
                       <Play className="h-3 w-3" />
                     )}
-                    Fortsätt
+                    Resume
                   </Button>
                   <Button
                     variant="ghost"
@@ -305,7 +288,7 @@ export const SyncProgressBanner: React.FC = () => {
                     ) : (
                       <RotateCcw className="h-3 w-3" />
                     )}
-                    Återställ
+                    Reset
                   </Button>
                 </div>
               )}
