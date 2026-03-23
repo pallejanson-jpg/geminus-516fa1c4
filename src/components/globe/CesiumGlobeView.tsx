@@ -5,7 +5,7 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
-import { Building2, Eye, Box, RotateCcw, Loader2, Boxes, ArrowRight } from 'lucide-react';
+import { Building2, Eye, Box, RotateCcw, Loader2, Boxes, ArrowRight, MapPin } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
