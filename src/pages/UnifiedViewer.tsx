@@ -299,6 +299,27 @@ const UnifiedViewerContent: React.FC<{
     }
   }, [sdkStatus, viewMode]);
 
+  // Apply Street View entry heading to Ivion SDK when transitioning outdoor → indoor
+  useEffect(() => {
+    if (sdkStatus !== 'ready' || viewMode !== '360') return;
+    const savedHeading = sessionStorage.getItem('street-view-entry-heading');
+    if (!savedHeading) return;
+    sessionStorage.removeItem('street-view-entry-heading');
+    const heading = parseFloat(savedHeading);
+    if (isNaN(heading)) return;
+    try {
+      const api = ivApiRef.current as any;
+      if (api?.camera?.setHeading) {
+        api.camera.setHeading(heading);
+        console.log('[UnifiedViewer] Applied Street View heading to Ivion:', heading);
+      } else if (api?.resolveMoveTo) {
+        api.resolveMoveTo({ heading });
+      }
+    } catch (e) {
+      console.warn('[UnifiedViewer] Could not apply Street View heading:', e);
+    }
+  }, [sdkStatus, viewMode]);
+
   // ─── UI state ──────────────────────────────────────────────────────
   const [showAlignment, setShowAlignment] = useState(false);
   const [showCrosshair, setShowCrosshair] = useState(true);
