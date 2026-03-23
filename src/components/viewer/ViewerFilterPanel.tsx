@@ -1490,7 +1490,26 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   const handleSpaceToggle = useCallback((fmGuid: string, checked: boolean) => {
     setCheckedSpaces(prev => { const n = new Set(prev); checked ? n.add(fmGuid) : n.delete(fmGuid); return n; });
-  }, []);
+    // Checkbox = zoom to space with camera OUTSIDE (expanded AABB)
+    const viewer = getXeokitViewer();
+    if (!viewer?.scene) return;
+    const ids = entityMapRef.current.get(fmGuid) || [];
+    if (ids.length > 0) {
+      ids.forEach((id: string) => {
+        const entity = viewer.scene.objects?.[id];
+        if (entity) { entity.visible = true; entity.pickable = true; }
+      });
+      const firstEntity = viewer.scene.objects?.[ids[0]];
+      if (firstEntity?.aabb) {
+        // Expand AABB by 2x to position camera outside the space
+        const aabb = [...firstEntity.aabb];
+        const cx = (aabb[0] + aabb[3]) / 2, cy = (aabb[1] + aabb[4]) / 2, cz = (aabb[2] + aabb[5]) / 2;
+        const dx = (aabb[3] - aabb[0]) * 0.5, dy = (aabb[4] - aabb[1]) * 0.5, dz = (aabb[5] - aabb[2]) * 0.5;
+        const expanded = [cx - dx * 2, cy - dy * 2, cz - dz * 2, cx + dx * 2, cy + dy * 2, cz + dz * 2];
+        viewer.cameraFlight?.flyTo({ aabb: expanded, duration: 0.5 });
+      }
+    }
+  }, [getXeokitViewer]);
 
   const handleCategoryToggle = useCallback((name: string, checked: boolean) => {
     setCheckedCategories(prev => { const n = new Set(prev); checked ? n.add(name) : n.delete(name); return n; });
@@ -1513,10 +1532,19 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           entity.pickable = true;
         }
       });
-      // Fly to room
+      // Name click = fly camera INSIDE the space (use center point)
       const firstEntity = viewer.scene.objects?.[ids[0]];
       if (firstEntity?.aabb) {
-        viewer.cameraFlight?.flyTo({ aabb: firstEntity.aabb, duration: 0.5 });
+        const aabb = firstEntity.aabb;
+        const cx = (aabb[0] + aabb[3]) / 2, cy = (aabb[1] + aabb[4]) / 2, cz = (aabb[2] + aabb[5]) / 2;
+        const height = aabb[4] - aabb[1];
+        // Position eye at center of space, looking forward (+X)
+        viewer.cameraFlight?.flyTo({
+          eye: [cx, cy + height * 0.3, cz],
+          look: [cx + 2, cy + height * 0.3, cz],
+          up: [0, 1, 0],
+          duration: 0.5
+        });
       }
     }
   }, [getXeokitViewer, onNodeSelect]);

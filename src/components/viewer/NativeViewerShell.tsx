@@ -751,7 +751,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const sidebarOffset = !isMobile && isSidebarExpanded ? 'left-[calc(3.5rem+12px)]' : 'left-3';
 
   return (
-    <div className="relative w-full h-full overflow-hidden native-viewer-canvas-parent" style={{ background: 'linear-gradient(180deg, rgb(255,255,255) 0%, rgb(230,230,230) 100%)' }}>
+    <div className="relative w-full h-full overflow-hidden native-viewer-canvas-parent" style={{ background: 'linear-gradient(180deg, #2D2D2D 0%, #3A3A3A 100%)' }}>
       {/* Desktop back button — hidden when parent (UnifiedViewer) has its own */}
       {!isMobile && !hideBackButton && (
         <Button
