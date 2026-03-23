@@ -95,8 +95,8 @@ export default function PredictiveMaintenanceTab({ facility }: { facility?: Faci
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-foreground">Prediktivt underhåll</h3>
-          <p className="text-xs text-muted-foreground">AI-analys av utrustning och sensorer</p>
+          <h3 className="text-sm font-semibold text-foreground">Predictive Maintenance</h3>
+          <p className="text-xs text-muted-foreground">AI analysis of equipment and sensors</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => analyze()} disabled={isLoading}>
           <RefreshCw className={cn('h-3.5 w-3.5 mr-1.5', isLoading && 'animate-spin')} />
