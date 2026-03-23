@@ -836,13 +836,14 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const hasAnyFilter = checkedSources.size > 0 || checkedLevels.size > 0 ||
       checkedSpaces.size > 0 || checkedCategories.size > 0;
 
-    // Step 0: Clean slate — reset xray (but preserve colorize if no filter active, to avoid theme flash)
+    // Step 0: Clean slate — reset xray (but DON'T reset colorize when theme is active)
     const prevXrayed = scene.xrayedObjectIds;
     if (prevXrayed?.length > 0) scene.setObjectsXRayed(prevXrayed, false);
     
-    // Only reset colorize when we actually have filters to apply
-    // This prevents the "native colors flash" when the panel first opens with no filters
-    if (hasAnyFilter || autoColorEnabled || autoColorSpaces || autoColorCategories) {
+    // Only reset colorize when we actually have filter-applied colors (not theme colors)
+    // When a theme is active, skip the colorize reset to avoid "native colors flash"
+    const themeActive = !!activeThemeIdRef.current;
+    if (!themeActive && (hasAnyFilter || autoColorEnabled || autoColorSpaces || autoColorCategories)) {
       const prevColorizedIds = scene.colorizedObjectIds;
       if (prevColorizedIds?.length > 0) {
         scene.setObjectsColorized(prevColorizedIds, false);
