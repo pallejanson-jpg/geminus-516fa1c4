@@ -13,6 +13,7 @@ import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hook
 import { ANNOTATION_FILTER_EVENT, MODEL_LOAD_REQUESTED_EVENT } from '@/lib/viewer-events';
 import { useFloorData, isArchitecturalModel } from '@/hooks/useFloorData';
 import { useModelData } from '@/hooks/useModelData';
+import { useModelNames } from '@/hooks/useModelNames';
 import { getDescendantIds, hideSpaceAndAreaObjects } from '@/hooks/useFloorVisibility';
 import { applyArchitectColors, recolorArchitectObjects } from '@/lib/architect-colors';
 import { VIEWER_THEME_CHANGED_EVENT, VIEWER_THEME_REQUESTED_EVENT } from '@/hooks/useViewerTheme';
@@ -130,6 +131,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   // ── Shared hooks for consistent data ─────────────────────────────────
   const { floors: sharedFloors } = useFloorData(viewerRef, buildingFmGuid);
   const { models: sharedModels, applyModelVisibility, assetPlusSources: apSources, storeyLookup } = useModelData(viewerRef, buildingFmGuid);
+  const { modelNamesMap } = useModelNames(buildingFmGuid);
 
   const [sourcesOpen, setSourcesOpen] = useState(true);
   const [levelsOpen, setLevelsOpen] = useState(true);
@@ -224,40 +226,62 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return map;
   }, [storeyAssets]);
 
-  // Identify A-model source GUIDs (the parentBimObjectId values that belong to architectural models)
-  const aModelSourceGuids = useMemo(() => {
-    const guids = new Set<string>();
-    // Primary: use sourceNameLookup (maps storey.sourceGuid → friendly name like "A-Arkitektur")
-    for (const [guid, name] of sourceNameLookup.entries()) {
-      if (isArchitecturalModel(name)) guids.add(normalizeGuid(guid));
-    }
-    // Fallback: check sharedModels directly by name
-    if (guids.size === 0) {
-      sharedModels.forEach(m => {
-        if (isArchitecturalModel(m.name || '')) guids.add(normalizeGuid(m.id));
-      });
-    }
-    // Fallback: if only one source exists, assume it's the A-model
-    if (guids.size === 0 && sharedModels.length === 1) {
-      guids.add(normalizeGuid(sharedModels[0].id));
-    }
-    return guids;
-  }, [sharedModels, sourceNameLookup]);
+  // Identify A-model metaObject IDs from xeokit scene (same logic as useFloorData)
+  const aModelMetaObjectIds = useMemo(() => {
+    const viewer = getXeokitViewer();
+    if (!viewer?.scene?.models) return new Set<string>();
 
-  // Levels: driven by DB storeys — ONLY show levels from A-model
+    const sceneModels = viewer.scene.models;
+    let hasAModel = false;
+    const objectIds = new Set<string>();
+
+    Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
+      // Resolve friendly name via modelNamesMap (DB lookup), same as useFloorData
+      const friendlyName =
+        modelNamesMap.get(modelId) ||
+        modelNamesMap.get(modelId.toLowerCase()) ||
+        modelNamesMap.get(modelId.replace(/\.xkt$/i, '')) ||
+        modelNamesMap.get(modelId.replace(/\.xkt$/i, '').toLowerCase()) ||
+        null;
+
+      const isArch = isArchitecturalModel(friendlyName) || isArchitecturalModel(modelId);
+      if (isArch) {
+        hasAModel = true;
+        const objIds = Object.keys(model.objects || {});
+        objIds.forEach(id => objectIds.add(id));
+      }
+    });
+
+    // If no A-model identified, return empty set (fallback: show all levels)
+    return hasAModel ? objectIds : new Set<string>();
+  }, [getXeokitViewer, modelNamesMap]);
+
+  // Levels: driven by DB storeys — ONLY show levels from A-model (using scene metaObjects)
   const levels: LevelItem[] = useMemo(() => {
+    const viewer = getXeokitViewer();
+    const metaObjects = viewer?.metaScene?.metaObjects;
+
     return storeyAssets
       .filter((storey) => {
-        // Method 1: match by sourceName (most reliable — "A-Arkitektur" etc.)
-        if (storey.sourceName && isArchitecturalModel(storey.sourceName)) return true;
-        // Method 2: match by sourceGuid against known A-model source GUIDs
-        if (aModelSourceGuids.size > 0 && storey.sourceGuid) {
-          if (aModelSourceGuids.has(normalizeGuid(storey.sourceGuid))) return true;
-          // This storey doesn't belong to A-model — exclude it
-          return false;
+        // If no A-model identified, show all levels
+        if (aModelMetaObjectIds.size === 0) return true;
+        // Check if storey's fmGuid exists as a metaObject in the A-model set
+        const fmGuid = storey.fmGuid;
+        if (aModelMetaObjectIds.has(fmGuid)) return true;
+        // Also check normalized / case-insensitive
+        if (aModelMetaObjectIds.has(fmGuid.toLowerCase())) return true;
+        if (aModelMetaObjectIds.has(fmGuid.toUpperCase())) return true;
+        // Check via metaObjects: find metaObject with matching originalSystemId
+        if (metaObjects) {
+          for (const id of Array.from(aModelMetaObjectIds)) {
+            const mo = metaObjects[id];
+            if (mo?.type?.toLowerCase() === 'ifcbuildingstorey') {
+              const moGuid = mo.originalSystemId || mo.id;
+              if (normalizeGuid(moGuid) === storey.normalizedFmGuid) return true;
+            }
+          }
         }
-        // If no A-model identified at all, include all levels
-        return aModelSourceGuids.size === 0;
+        return false;
       })
       .map((storey) => {
         const exactSharedFloor = sharedFloors.find((floor) =>
@@ -283,16 +307,13 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         };
       })
       .sort((a, b) => {
-        const sourceA = sourceNameLookup.get(a.sourceGuid) || '';
-        const sourceB = sourceNameLookup.get(b.sourceGuid) || '';
-        if (sourceA !== sourceB) return sourceA.localeCompare(sourceB, 'sv');
         const extract = (n: string) => {
           const m = n.match(/(-?\d+)/);
           return m ? parseInt(m[1], 10) : 0;
         };
         return extract(a.name) - extract(b.name) || a.name.localeCompare(b.name, 'sv');
       });
-  }, [storeyAssets, sharedFloors, buildingData, sourceNameLookup, aModelSourceGuids]);
+  }, [storeyAssets, sharedFloors, buildingData, aModelMetaObjectIds, getXeokitViewer]);
 
   // Sources: derived from ALL sharedModels so every model appears in the list
   const sources: BimSource[] = useMemo(() => {
