@@ -525,17 +525,29 @@ const CesiumGlobeView: React.FC = () => {
             onViewDetails={() => handleNavigateToFacility(selectedBuilding.facility.fmGuid!)}
             onOpen3D={() => handleOpenViewer(selectedBuilding.facility.fmGuid!)}
             extraActions={
-              <button
-                className="w-full flex items-center justify-between px-1.5 py-1.5 text-[10px] sm:text-[11px] font-medium text-foreground hover:bg-primary/10 rounded transition-colors"
-                onClick={() => handleShowBim(selectedBuilding.facility.fmGuid!)}
-                disabled={bimLoading}
-              >
-                <span className="flex items-center gap-1.5">
-                  {bimLoading ? <Loader2 size={11} className="text-primary animate-spin" /> : <Boxes size={11} className="text-primary" />}
-                  {bimLoadedFmGuid === selectedBuilding.facility.fmGuid ? 'Dölj BIM' : 'Visa BIM'}
-                </span>
-                <ArrowRight size={10} className="text-muted-foreground" />
-              </button>
+              <>
+                <button
+                  className="w-full flex items-center justify-between px-1.5 py-1.5 text-[10px] sm:text-[11px] font-medium text-foreground hover:bg-primary/10 rounded transition-colors"
+                  onClick={() => handleShowBim(selectedBuilding.facility.fmGuid!)}
+                  disabled={bimLoading}
+                >
+                  <span className="flex items-center gap-1.5">
+                    {bimLoading ? <Loader2 size={11} className="text-primary animate-spin" /> : <Boxes size={11} className="text-primary" />}
+                    {bimLoadedFmGuid === selectedBuilding.facility.fmGuid ? 'Dölj BIM' : 'Visa BIM'}
+                  </span>
+                  <ArrowRight size={10} className="text-muted-foreground" />
+                </button>
+                <button
+                  className="w-full flex items-center justify-between px-1.5 py-1.5 text-[10px] sm:text-[11px] font-medium text-foreground hover:bg-primary/10 rounded transition-colors"
+                  onClick={() => { setStreetViewFacility(selectedBuilding.facility); setSelectedBuilding(null); }}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <MapPin size={11} className="text-primary" />
+                    Street View
+                  </span>
+                  <ArrowRight size={10} className="text-muted-foreground" />
+                </button>
+              </>
             }
           />
         </div>
