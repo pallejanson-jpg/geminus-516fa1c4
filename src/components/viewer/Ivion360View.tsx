@@ -37,6 +37,8 @@ interface Ivion360ViewProps {
   onSyncRequest?: () => void;
   /** Ivion-to-BIM coordinate transform */
   ivionBimTransform?: IvionBimTransform;
+  /** Initial heading in degrees (e.g. from Street View transition) */
+  initialHeading?: number | null;
 }
 
 export default function Ivion360View({ 
@@ -48,6 +50,7 @@ export default function Ivion360View({
   ivionSiteIdProp,
   onSyncRequest,
   ivionBimTransform,
+  initialHeading,
 }: Ivion360ViewProps) {
   const isMobile = useIsMobile();
   const { ivion360Context, setIvion360Context } = useContext(AppContext);
@@ -296,6 +299,23 @@ export default function Ivion360View({
       console.warn('[Ivion360View] Could not hide SDK sidebar items:', e);
     }
   }, [sdkStatus, isMobile]);
+
+  // Apply initial heading from Street View transition
+  useEffect(() => {
+    if (sdkStatus !== 'ready' || initialHeading == null || !ivApiRef.current) return;
+    try {
+      const api = ivApiRef.current as any;
+      if (api.camera?.setHeading) {
+        api.camera.setHeading(initialHeading);
+        console.log('[Ivion360View] Applied initial heading from Street View:', initialHeading);
+      } else if (api.resolveMoveTo) {
+        api.resolveMoveTo({ heading: initialHeading });
+        console.log('[Ivion360View] Applied heading via resolveMoveTo:', initialHeading);
+      }
+    } catch (e) {
+      console.warn('[Ivion360View] Could not apply initial heading:', e);
+    }
+  }, [sdkStatus, initialHeading]);
 
   // ─── Token renewal ────────────────────────────────────────────────
 
