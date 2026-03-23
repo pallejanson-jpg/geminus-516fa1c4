@@ -172,6 +172,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   const typeIndexRef = useRef<Map<string, string[]>>(new Map());
   // Area space IDs to auto-hide
   const areaSpaceIdsRef = useRef<string[]>([]);
+  // IfcSpace entity IDs from non-A models — always hidden
+  const nonASpaceIdsRef = useRef<string[]>([]);
   // Previous solidIds for delta updates
   const prevVisibleRef = useRef<Set<string> | null>(null);
   // Counter to force categories recalc when entity map is built
@@ -559,6 +561,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const xeokitStoreys: { id: string; sysId: string; name: string; modelId: string }[] = [];
     const xeokitSpaces: { id: string; sysId: string; name: string }[] = [];
     const areaSpaceIds: string[] = [];
+    const nonASpaceIds: string[] = [];
 
     // Single pass: build typeIndex + collect storeys/spaces
     Object.values(metaObjects).forEach((mo: any) => {
@@ -576,11 +579,18 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           modelId: entityToModelId.get(mo.id) || mo.metaModel?.id || '',
         });
       } else if (typeLower === 'ifcspace') {
-        xeokitSpaces.push({
-          id: mo.id,
-          sysId: (mo.originalSystemId || mo.id || ''),
-          name: (mo.name || ''),
-        });
+        const spaceModelId = entityToModelId.get(mo.id) || mo.metaModel?.id || '';
+        const isFromAModel = aModelSceneIds.has(spaceModelId) || aModelSceneIds.size === 0;
+        if (isFromAModel) {
+          xeokitSpaces.push({
+            id: mo.id,
+            sysId: (mo.originalSystemId || mo.id || ''),
+            name: (mo.name || ''),
+          });
+        } else {
+          // Space from non-A model — track for permanent hiding
+          nonASpaceIds.push(mo.id);
+        }
         const spaceName = (mo.name || '').trim().toLowerCase();
         if (spaceName === 'area' || spaceName.startsWith('area ') || spaceName.startsWith('area:')) {
           areaSpaceIds.push(mo.id);
@@ -590,6 +600,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
     typeIndexRef.current = tIdx;
     areaSpaceIdsRef.current = areaSpaceIds;
+    nonASpaceIdsRef.current = nonASpaceIds;
 
     if (xeokitStoreys.length === 0) {
       console.warn('[FilterPanel] No IfcBuildingStorey found in metaScene');
@@ -702,7 +713,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     console.log('[FilterPanel] Entity map built:', map.size, 'entries.',
       'Levels matched:', levels.filter(l => map.has(l.fmGuid)).length, '/', levels.length,
       'Spaces matched:', allAssetSpaces.filter((s: any) => map.has(s.fmGuid || s.fm_guid)).length, '/', allAssetSpaces.length,
-      'Type index:', tIdx.size, 'types');
+      'Type index:', tIdx.size, 'types',
+      'Non-A spaces (hidden):', nonASpaceIds.length);
     return true;
   }, [getXeokitViewer, levels, sharedModels, buildingData, sharedFloors]);
 
@@ -1139,6 +1151,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       const entity = scene.objects?.[id];
       if (entity) { entity.visible = true; entity.opacity = 0.3; entity.pickable = false; }
     });
+
+    // Always hide IfcSpace entities from non-A models (they should never be visible)
+    const nonASpaces = nonASpaceIdsRef.current;
+    if (nonASpaces.length > 0) {
+      nonASpaces.forEach(id => {
+        const entity = scene.objects?.[id];
+        if (entity) { entity.visible = false; entity.pickable = false; }
+      });
+    }
 
     // Step 3: Tandem-style room cutaway — selected room solid, everything else x-ray
     if (checkedSpaces.size > 0 && spaceOnlyEntityIds && spaceOnlyEntityIds.size > 0) {
