@@ -899,10 +899,19 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
 
       // Toggle model-level visibility so xeokit actually switches rendered geometry
+      // Also trigger on-demand loading for deferred (non-A) models that aren't loaded yet
       Object.entries(sceneModels2).forEach(([modelId, model]: [string, any]) => {
         const shouldShow = checkedSceneModelIds.has(modelId);
         if (typeof model.visible !== 'undefined') {
           model.visible = shouldShow;
+        }
+      });
+
+      // Request loading for checked models that don't exist in the scene yet (deferred models)
+      checkedSceneModelIds.forEach(modelId => {
+        if (!sceneModels2[modelId]) {
+          console.log(`[FilterPanel] Requesting deferred load for model: ${modelId}`);
+          window.dispatchEvent(new CustomEvent(MODEL_LOAD_REQUESTED_EVENT, { detail: { modelId } }));
         }
       });
       
