@@ -179,7 +179,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   // ── XEOKit accessor ─────────────────────────────────────────────────────
   const getXeokitViewer = useCallback(() => {
-    return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer
+      ?? (window as any).__nativeXeokitViewer
+      ?? null;
   }, [viewerRef]);
 
   // ── Derived data from Asset+ ────────────────────────────────────────────
@@ -877,12 +879,14 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
       // Determine which scene model IDs are checked vs unchecked
       const checkedSceneModelIds = new Set<string>();
+      const requestedModelIds = new Set<string>();
 
       // Direct match: try checked source GUID as scene model ID
       checkedSources.forEach(srcGuid => {
         const sceneModel = sceneModels2[srcGuid];
         if (sceneModel) {
           checkedSceneModelIds.add(srcGuid);
+          requestedModelIds.add(srcGuid.replace(/\.xkt$/i, ''));
           const objs = sceneModel.objects || {};
           const objKeys = Array.isArray(objs) ? objs.map((e: any) => e.id).filter(Boolean) : Object.keys(objs);
           objKeys.forEach((id: string) => sourceIds!.add(id));
@@ -896,6 +900,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         
         if (guidMatch || nameMatch) {
           checkedSceneModelIds.add(sm.id);
+          requestedModelIds.add(sm.id.replace(/\.xkt$/i, ''));
           const sceneModel = sceneModels2[sm.id];
           if (sceneModel) {
             const objs = sceneModel.objects || {};
@@ -929,10 +934,11 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
 
       // Request loading for checked models that don't exist in the scene yet (deferred models)
-      checkedSceneModelIds.forEach(modelId => {
-        if (!sceneModels2[modelId]) {
-          console.log(`[FilterPanel] Requesting deferred load for model: ${modelId}`);
-          window.dispatchEvent(new CustomEvent(MODEL_LOAD_REQUESTED_EVENT, { detail: { modelId } }));
+      requestedModelIds.forEach(modelId => {
+        const normalizedModelId = modelId.replace(/\.xkt$/i, '');
+        if (!sceneModels2[normalizedModelId] && !sceneModels2[`${normalizedModelId}.xkt`]) {
+          console.log(`[FilterPanel] Requesting deferred load for model: ${normalizedModelId}`);
+          window.dispatchEvent(new CustomEvent(MODEL_LOAD_REQUESTED_EVENT, { detail: { modelId: normalizedModelId } }));
         }
       });
       
