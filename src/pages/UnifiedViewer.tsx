@@ -307,6 +307,22 @@ const UnifiedViewerContent: React.FC<{
   const [transform, setTransform] = useState<IvionBimTransform>(IDENTITY_TRANSFORM);
   const [insightsPanelOpen, setInsightsPanelOpen] = useState(!!insightsModeParam);
 
+  // Resize xeokit canvas when insights panel toggles (layout changes height)
+  useEffect(() => {
+    const doResize = () => {
+      try {
+        const xv = (window as any).__nativeXeokitViewer;
+        if (xv?.scene?.canvas) {
+          xv.scene.canvas.resizeCanvas?.();
+          xv.scene.glRedraw?.();
+        }
+      } catch {}
+    };
+    const t1 = setTimeout(doResize, 100);
+    const t2 = setTimeout(doResize, 400);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [insightsPanelOpen]);
+
   // ─── Indoor navigation state ──────────────────────────────────────
   const [navPanelOpen, setNavPanelOpen] = useState(false);
   const [navEditMode, setNavEditMode] = useState(false);
@@ -845,7 +861,9 @@ const UnifiedViewerContent: React.FC<{
       </div>
 
       {/* ─── Content area ─── */}
-      <div ref={contentRef} className="flex-1 relative">
+      <div ref={contentRef} className="flex-1 flex flex-col min-h-0">
+        {/* ─── Viewer area (relative, shrinks when insights open) ─── */}
+        <div className="flex-1 relative min-h-0">
         {/* SDK container */}
         <div
           ref={sdkContainerRef}
@@ -972,6 +990,8 @@ const UnifiedViewerContent: React.FC<{
           </div>
         )}
       </div>
+      {/* Close inner viewer area wrapper */}
+      </div>
 
       {/* ─── Navigation sidebar panel ─── */}
       {navPanelOpen && buildingData && (
@@ -989,7 +1009,7 @@ const UnifiedViewerContent: React.FC<{
         </div>
       )}
 
-      {/* ─── Insights bottom-sheet panel ─── */}
+      {/* ─── Insights bottom-sheet panel — flex sibling that shrinks the viewer ─── */}
       {buildingFmGuid && (
         <InsightsDrawerPanel
           buildingFmGuid={buildingFmGuid}

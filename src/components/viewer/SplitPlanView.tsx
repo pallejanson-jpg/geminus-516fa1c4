@@ -1217,6 +1217,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
             className="max-w-none cursor-crosshair"
             style={{
               imageRendering: 'crisp-edges',
+              filter: 'contrast(1.4)',
             }}
             draggable={false}
             onClick={handleClick}
@@ -1281,17 +1282,17 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
                 className="absolute"
                 style={{
                   width: 0, height: 0,
-                  borderLeft: `${isMobile ? 14 : 18}px solid transparent`,
-                  borderRight: `${isMobile ? 14 : 18}px solid transparent`,
-                  borderBottom: `${isMobile ? 26 : 34}px solid rgba(59, 130, 246, 0.25)`,
+                  borderLeft: `${isMobile ? 14 : 24}px solid transparent`,
+                  borderRight: `${isMobile ? 14 : 24}px solid transparent`,
+                  borderBottom: `${isMobile ? 26 : 42}px solid rgba(59, 130, 246, 0.25)`,
                   transform: `translate(-50%, -100%) rotate(${cameraPos.angle}rad)`,
                   transformOrigin: 'center bottom',
                 }}
               />
               {/* Camera dot with pulse ring */}
               <div className="absolute" style={{ transform: 'translate(-50%, -50%)' }}>
-                <div className={cn("rounded-full bg-blue-500 border-2 border-white shadow-lg relative z-10", isMobile ? "w-3 h-3" : "w-5 h-5")} />
-                <div className={cn("absolute rounded-full border-2 border-blue-400 animate-ping", isMobile ? "w-3 h-3 top-0 left-0" : "w-5 h-5 top-0 left-0")} />
+                <div className={cn("rounded-full bg-blue-500 border-2 border-white shadow-lg relative z-10", isMobile ? "w-4 h-4" : "w-7 h-7")} />
+                <div className={cn("absolute rounded-full border-2 border-blue-400 animate-ping", isMobile ? "w-4 h-4 top-0 left-0" : "w-7 h-7 top-0 left-0")} />
               </div>
             </div>
           )}

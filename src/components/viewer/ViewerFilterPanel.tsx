@@ -1251,10 +1251,57 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         xrayMat.edgeColor = [0.45, 0.45, 0.5];
       }
 
-      // Make everything visible but x-rayed
+      // Scope X-ray to the parent level(s) only — hide objects on other levels
+      // Find parent storey IDs for the selected spaces
+      const parentStoreyIds = new Set<string>();
+      if (metaObjects) {
+        spaceOnlyEntityIds.forEach(spaceId => {
+          const spaceMo = metaObjects[spaceId];
+          if (!spaceMo) return;
+          let current = spaceMo.parent;
+          while (current) {
+            if (current.type?.toLowerCase() === 'ifcbuildingstorey') {
+              parentStoreyIds.add(current.id);
+              break;
+            }
+            current = current.parent;
+          }
+        });
+      }
+
+      // Collect all entity IDs belonging to the parent storey levels
+      const levelEntityIds = new Set<string>();
+      if (metaObjects && parentStoreyIds.size > 0) {
+        const collectChildren = (mo: any) => {
+          levelEntityIds.add(mo.id);
+          if (mo.children) {
+            for (const child of mo.children) {
+              collectChildren(child);
+            }
+          }
+        };
+        parentStoreyIds.forEach(storeyId => {
+          const storeyMo = metaObjects[storeyId];
+          if (storeyMo) collectChildren(storeyMo);
+        });
+      }
+
       const allIds = scene.objectIds as string[];
-      scene.setObjectsVisible(allIds, true);
-      scene.setObjectsXRayed(allIds, true);
+
+      if (levelEntityIds.size > 0) {
+        // Hide everything NOT on this level
+        const otherLevelIds = allIds.filter((id: string) => !levelEntityIds.has(id));
+        if (otherLevelIds.length > 0) scene.setObjectsVisible(otherLevelIds, false);
+
+        // Show level objects and x-ray them
+        const levelIds = [...levelEntityIds];
+        scene.setObjectsVisible(levelIds, true);
+        scene.setObjectsXRayed(levelIds, true);
+      } else {
+        // Fallback: x-ray everything (no level info)
+        scene.setObjectsVisible(allIds, true);
+        scene.setObjectsXRayed(allIds, true);
+      }
 
       // Un-xray room + its contents
       const solidRoomIds = [...spaceOnlyEntityIds, ...roomContentIds].filter(id => !areaSet.has(id));

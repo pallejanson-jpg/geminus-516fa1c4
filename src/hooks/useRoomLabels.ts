@@ -347,8 +347,16 @@ export function useRoomLabels(
       
       // Fly camera to room
       if (entity?.aabb) {
+        // Expand AABB by 1.5x for a better overview when zooming to a room
+        const aabb = [...entity.aabb];
+        const cx = (aabb[0] + aabb[3]) / 2, cy = (aabb[1] + aabb[4]) / 2, cz = (aabb[2] + aabb[5]) / 2;
+        const expand = 1.5;
+        const expanded = [
+          cx - (cx - aabb[0]) * expand, cy - (cy - aabb[1]) * expand, cz - (cz - aabb[2]) * expand,
+          cx + (aabb[3] - cx) * expand, cy + (aabb[4] - cy) * expand, cz + (aabb[5] - cz) * expand,
+        ];
         viewer.cameraFlight?.flyTo({
-          aabb: entity.aabb,
+          aabb: expanded,
           duration: 0.8,
         });
       }
