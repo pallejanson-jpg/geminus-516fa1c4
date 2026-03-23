@@ -1434,12 +1434,6 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         style={{ touchAction: 'none' }}
       />
 
-      {/* Loading overlay — minimal text only for bootstrap/sync phases, no spinner */}
-      {phase !== 'ready' && phase !== 'error' && (phase === 'syncing' || phase === 'bootstrapping') && (
-        <div className="absolute bottom-4 left-4 z-10 px-3 py-1.5 rounded-md bg-background/70 backdrop-blur-sm">
-          <p className="text-[11px] text-muted-foreground">Preparing models…</p>
-        </div>
-      )}
 
       {/* Error state */}
       {phase === 'error' && (
