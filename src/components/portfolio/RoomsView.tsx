@@ -572,7 +572,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
             {userDefinedCols.length > 0 && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuLabel>Användardefinierade</DropdownMenuLabel>
+                <DropdownMenuLabel>User defined</DropdownMenuLabel>
                 {userDefinedCols.map(col => (
                   <DropdownMenuCheckboxItem
                     key={col.key}
