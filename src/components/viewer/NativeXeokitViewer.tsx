@@ -378,6 +378,14 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
             const resolved = assetPlusNames.get(m.model_id) || assetPlusNames.get(m.model_id.toLowerCase());
             if (resolved && resolved !== m.model_name) {
               console.log(`[NativeViewer] Name resolution: "${m.model_name}" → "${resolved}"`);
+              // Persist resolved name back to xkt_models for future loads
+              supabase.from('xkt_models')
+                .update({ model_name: resolved })
+                .eq('building_fm_guid', buildingFmGuid)
+                .eq('model_id', m.model_id)
+                .then(({ error }) => {
+                  if (!error) console.log(`[NativeViewer] Persisted model name "${resolved}" to DB`);
+                });
               m.model_name = resolved;
             }
           });
@@ -675,20 +683,26 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           setTimeout(() => done(false), 90_000);
         });
 
-      // ── Pre-fetch metadata file list in one batch call ──
+      // ── Pre-fetch metadata file list — only check for models in loadList ──
       const metadataFileSet = new Set<string>();
       try {
+        // Only check metadata for models we're actually about to load (A-models)
+        const loadModelIds = loadList.map(m => m.model_id);
         const { data: allFiles } = await supabase.storage
           .from('xkt-models')
           .list(buildingFmGuid, { limit: 1000 });
         if (allFiles) {
           allFiles.forEach((f: any) => {
             if (f.name?.endsWith('_metadata.json')) {
-              metadataFileSet.add(`${buildingFmGuid}/${f.name}`);
+              // Only include metadata files relevant to models in loadList
+              const baseName = f.name.replace('_metadata.json', '');
+              if (loadModelIds.some(id => id === baseName || id.toLowerCase() === baseName.toLowerCase())) {
+                metadataFileSet.add(`${buildingFmGuid}/${f.name}`);
+              }
             }
           });
         }
-        console.log(`[NativeViewer] Batch metadata check: found ${metadataFileSet.size} metadata files`);
+        console.log(`[NativeViewer] Batch metadata check: found ${metadataFileSet.size} metadata files for ${loadList.length} models`);
       } catch { /* continue without metadata */ }
 
       // ── Check for geometry manifest (GLB from ACC pipeline) ──
