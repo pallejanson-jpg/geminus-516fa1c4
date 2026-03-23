@@ -926,7 +926,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           
           <Button size="sm" variant="ghost" onClick={() => setSelectedRows(new Set())} className="gap-1 ml-auto">
             <ArrowLeft size={14} />
-            Avmarkera
+            Deselect
           </Button>
         </div>
       )}
