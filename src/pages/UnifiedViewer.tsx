@@ -974,6 +974,8 @@ const UnifiedViewerContent: React.FC<{
           </div>
         )}
       </div>
+      {/* Close inner viewer area wrapper */}
+      </div>
 
       {/* ─── Navigation sidebar panel ─── */}
       {navPanelOpen && buildingData && (
