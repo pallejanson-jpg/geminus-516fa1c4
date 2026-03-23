@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { useMapFacilities, MapFacility } from '@/hooks/useMapFacilities';
 import BuildingSidebar from '@/components/map/BuildingSidebar';
 import BuildingInfoCard from '@/components/map/BuildingInfoCard';
+import StreetViewOverlay from '@/components/globe/StreetViewOverlay';
 
 interface SelectedBuilding {
   facility: MapFacility;
