@@ -29,6 +29,8 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
   const [loading, setLoading] = useState(true);
   const [moving, setMoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentPos, setCurrentPos] = useState<{ lng: number; lat: number }>({ lng, lat });
+  const [currentHeading, setCurrentHeading] = useState(0);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
 
