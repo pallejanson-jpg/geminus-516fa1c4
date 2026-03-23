@@ -716,6 +716,27 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return () => clearInterval(interval);
   }, [isVisible, buildEntityMap]);
 
+  // Re-apply filter when a deferred model finishes loading in the scene
+  const pendingReapplyRef = useRef(false);
+  useEffect(() => {
+    if (!isVisible) return;
+    const viewer = getXeokitViewer();
+    if (!viewer?.scene) return;
+
+    const onModelLoaded = () => {
+      // Rebuild entity map to include the newly loaded model's objects
+      entityMapBuilt.current = false;
+      buildEntityMap();
+      // Flag for re-apply; the effect below will pick it up
+      pendingReapplyRef.current = true;
+    };
+
+    viewer.scene.on?.('modelLoaded', onModelLoaded);
+    return () => {
+      viewer.scene.off?.('modelLoaded', onModelLoaded);
+    };
+  }, [isVisible, getXeokitViewer, buildEntityMap]);
+
   // ── Fetch annotation categories ────────────────────────────────────────
   useEffect(() => {
     if (!isVisible || !buildingFmGuid) return;
@@ -1344,7 +1365,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   useEffect(() => {
     if (!isVisible) return;
     applyFilterVisibility();
-  }, [checkedSources, checkedLevels, checkedSpaces, checkedCategories, xrayMode, applyFilterVisibility, isVisible]);
+  }, [checkedSources, checkedLevels, checkedSpaces, checkedCategories, xrayMode, applyFilterVisibility, isVisible, entityMapVersion]);
 
   // Apply coloring separately when color settings change
   useEffect(() => {
