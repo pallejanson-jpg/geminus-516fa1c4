@@ -1009,7 +1009,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                               e.stopPropagation();
                               handleOpen3D(asset);
                             }}
-                            title="Öppna i 3D"
+                            title="Open in 3D"
                           >
                             <Cuboid size={14} />
                           </Button>
