@@ -123,10 +123,16 @@ export function useViewerTheme() {
         state.originalEdgeColor = [...edgeMaterial.edgeColor];
         state.originalEdgeAlpha = edgeMaterial.edgeAlpha;
       }
-      const container = document.getElementById('AssetPlusViewer');
+      const container = document.getElementById('AssetPlusViewer') || document.querySelector('.native-viewer-canvas-parent') as HTMLElement;
       if (container) {
         state.originalBackground = container.style.background || '';
       }
+    }
+
+    // Apply anthracite background for all themes
+    const bgContainer = document.getElementById('AssetPlusViewer') || document.querySelector('.native-viewer-canvas-parent') as HTMLElement;
+    if (bgContainer) {
+      bgContainer.style.background = 'linear-gradient(180deg, #2D2D2D 0%, #3A3A3A 100%)';
     }
 
     // "Model Native Colour" — restore original model colors (no architect palette)

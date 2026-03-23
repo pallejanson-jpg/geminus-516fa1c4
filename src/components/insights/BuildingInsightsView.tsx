@@ -1286,7 +1286,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                     const alarmsForViewer = alarmList
                                                         .slice(0, 50)
                                                         .map((a: any) => ({ fmGuid: a.fm_guid, roomFmGuid: a.in_room_fm_guid }));
-                                                    window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: alarmsForViewer } }));
+                                                    window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: alarmsForViewer, flyTo: true } }));
                                                 } else {
                                                     // Navigate to viewer
                                                     navigateTo3D({ visualization: 'alarms' });
@@ -1414,7 +1414,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                         sessionStorage.setItem('pending_alarm_annotations', JSON.stringify({ alarms: levelAlarms }));
                                                                         navigate(`/viewer?building=${facility.fmGuid}&mode=3d`);
                                                                     } else {
-                                                                        window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: levelAlarms } }));
+                                                                        window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: levelAlarms, flyTo: true } }));
                                                                     }
                                                                 }}
                                                             >
