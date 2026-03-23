@@ -1504,8 +1504,8 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
               {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
             </Button>
           )}
-          <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 border-border bg-background hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); onClose(); }}>
-            <X className="h-4 w-4" />
+          <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 border-border bg-background hover:bg-destructive/10 text-foreground" onClick={(e) => { e.stopPropagation(); onClose(); }}>
+            <X className="h-4 w-4 text-foreground" />
           </Button>
         </div>
       </div>
