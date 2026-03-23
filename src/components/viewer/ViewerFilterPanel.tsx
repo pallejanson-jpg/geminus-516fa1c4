@@ -267,7 +267,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         };
         return extract(a.name) - extract(b.name) || a.name.localeCompare(b.name, 'sv');
       });
-  }, [storeyAssets, sharedFloors, buildingData, aModelMetaObjectIds, getXeokitViewer]);
+  }, [storeyAssets, sharedFloors, buildingData]);
 
   // Sources: derived from ALL sharedModels so every model appears in the list
   const sources: BimSource[] = useMemo(() => {
