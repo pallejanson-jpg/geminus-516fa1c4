@@ -858,7 +858,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
             {allColumns.filter(c => c.category === 'userDefined').length > 0 && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuLabel>Användardefinierade</DropdownMenuLabel>
+                <DropdownMenuLabel>User defined</DropdownMenuLabel>
                 {allColumns.filter(c => c.category === 'userDefined').map(col => (
                   <DropdownMenuCheckboxItem
                     key={col.key}
