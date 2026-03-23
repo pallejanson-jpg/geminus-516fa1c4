@@ -490,6 +490,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     };
     window.addEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler);
     return () => window.removeEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler);
+  }, []);
 
   // ── Select tool click handler ──────────────────────────────────────────
   const activeToolRef = useRef<string | null>(null);
