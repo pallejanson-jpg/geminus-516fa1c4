@@ -227,7 +227,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
   const [showGeoResults, setShowGeoResults] = useState(false);
   const [mapboxToken, setMapboxToken] = useState<string | null>(null);
   const geocodeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  const [streetViewApiKey, setStreetViewApiKey] = useState<string | null>(null);
   // Fetch mapbox token for geocoding
   useEffect(() => {
     supabase.functions.invoke('get-mapbox-token').then(({ data }) => {
