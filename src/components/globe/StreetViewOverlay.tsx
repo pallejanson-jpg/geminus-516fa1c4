@@ -3,6 +3,7 @@ import { X, Loader2, DoorOpen, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
+import StreetViewMiniMap from './StreetViewMiniMap';
 
 // Import Cesium — base URL already set by CesiumGlobeView
 import * as Cesium from 'cesium';
