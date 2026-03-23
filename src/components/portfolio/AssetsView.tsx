@@ -901,7 +901,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           
           <Button size="sm" variant="outline" onClick={handleShowSelectedProperties} className="gap-1">
             <Info size={14} />
-            Egenskaper
+            Properties
           </Button>
           
           {selectedCanPlaceAnnotation > 0 && (
