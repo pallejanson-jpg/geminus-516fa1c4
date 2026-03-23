@@ -231,10 +231,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     for (const [guid, name] of sourceNameLookup.entries()) {
       if (isArchitecturalModel(name)) guids.add(normalizeGuid(guid));
     }
-    // Fallback: check sources list (derived from sharedModels with friendly names)
+    // Fallback: check sharedModels directly by name
     if (guids.size === 0) {
-      sources.forEach(s => {
-        if (isArchitecturalModel(s.name)) guids.add(normalizeGuid(s.guid));
+      sharedModels.forEach(m => {
+        if (isArchitecturalModel(m.name || '')) guids.add(normalizeGuid(m.id));
       });
     }
     // Fallback: if only one source exists, assume it's the A-model
@@ -242,7 +242,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       guids.add(normalizeGuid(sharedModels[0].id));
     }
     return guids;
-  }, [sharedModels, sourceNameLookup, sources]);
+  }, [sharedModels, sourceNameLookup]);
 
   // Levels: driven by DB storeys — ONLY show levels from A-model
   const levels: LevelItem[] = useMemo(() => {
