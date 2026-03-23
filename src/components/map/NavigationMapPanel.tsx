@@ -184,6 +184,15 @@ const StepTimeline: React.FC<{
             <div className="min-w-0 flex-1">
               <p className="text-xs font-medium leading-tight truncate">{step.label}</p>
               {step.detail && <p className="text-[10px] text-muted-foreground truncate">{step.detail}</p>}
+              {/* Street View thumbnail for outdoor steps with coordinates */}
+              {streetViewApiKey && step.coordinates && step.icon !== 'indoor' && (
+                <StreetViewThumbnail
+                  lat={step.coordinates.lat}
+                  lng={step.coordinates.lng}
+                  heading={0}
+                  apiKey={streetViewApiKey}
+                />
+              )}
             </div>
           </div>
         );
