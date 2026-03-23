@@ -525,6 +525,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
                     profile={profile}
                     onStepClick={onStepClick}
                     activeStepIndex={activeStepIndex}
+                    streetViewApiKey={streetViewApiKey}
                   />
                 </ScrollArea>
               )}
