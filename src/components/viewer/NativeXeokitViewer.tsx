@@ -10,8 +10,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeGuid } from '@/lib/utils';
-import { Spinner } from '@/components/ui/spinner';
-import { AlertCircle, Box, Loader2 } from 'lucide-react';
+import { AlertCircle, Box } from 'lucide-react';
 import { xktCacheService } from '@/services/xkt-cache-service';
 import { getModelFromMemory, storeModelInMemory, getMemoryStats } from '@/hooks/useXktPreload';
 import { useIsMobile } from '@/hooks/use-mobile';
