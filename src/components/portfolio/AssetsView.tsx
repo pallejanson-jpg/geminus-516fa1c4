@@ -794,32 +794,32 @@ const AssetsView: React.FC<AssetsViewProps> = ({
             <Button variant="outline" size="sm" className="gap-2">
               <Filter className="h-4 w-4" />
               {filterMode === 'all'
-                ? 'Alla'
+                ? 'All'
                 : filterMode === 'orphans'
-                  ? 'Ej i modell'
+                  ? 'Not in model'
                   : filterMode === 'unsynced'
-                    ? 'Ej synkade'
-                    : 'Utan annotation'}
+                    ? 'Not synced'
+                    : 'No annotation'}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="bg-popover">
-            <DropdownMenuLabel>Filtrera</DropdownMenuLabel>
+            <DropdownMenuLabel>Filter</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setFilterMode('all')}>
               <Check className={`h-4 w-4 mr-2 ${filterMode === 'all' ? 'opacity-100' : 'opacity-0'}`} />
-              Alla assets
+              All assets
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setFilterMode('orphans')}>
               <Check className={`h-4 w-4 mr-2 ${filterMode === 'orphans' ? 'opacity-100' : 'opacity-0'}`} />
-              Ej i modell ({orphanCount})
+              Not in model ({orphanCount})
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setFilterMode('no-annotation')}>
               <Check className={`h-4 w-4 mr-2 ${filterMode === 'no-annotation' ? 'opacity-100' : 'opacity-0'}`} />
-              Utan annotation ({noAnnotationCount})
+              No annotation ({noAnnotationCount})
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setFilterMode('unsynced')}>
               <Check className={`h-4 w-4 mr-2 ${filterMode === 'unsynced' ? 'opacity-100' : 'opacity-0'}`} />
-              Ej synkade ({unsyncedCount})
+              Not synced ({unsyncedCount})
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
