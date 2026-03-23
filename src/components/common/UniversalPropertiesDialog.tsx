@@ -1093,7 +1093,9 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       return <span className="text-sm">{displayValue.toLocaleString('en-US')}</span>;
     }
     
-    return <span className="text-sm truncate max-w-[200px] block sm:text-right" title={String(displayValue)}>{String(displayValue)}</span>;
+    // GUIDs should wrap instead of truncating
+    const isGuid = typeof displayValue === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(displayValue);
+    return <span className={cn("text-sm block sm:text-right", isGuid ? "break-all font-mono text-xs" : "truncate max-w-[240px]")} title={String(displayValue)}>{String(displayValue)}</span>;
   };
 
   // Content shared between mobile and desktop
