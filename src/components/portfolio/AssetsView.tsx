@@ -180,6 +180,13 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   const { startAnnotationPlacement } = useContext(AppContext);
   const [viewMode, setViewMode] = useState<'grid' | 'gallery'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  
+  // Debounce search for performance with large asset lists
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
   const [sortColumn, setSortColumn] = useState<string>('designation');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_VISIBLE_COLUMNS);
