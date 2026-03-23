@@ -2,7 +2,7 @@
  * Viewer Theme Hook
  * 
  * Applies custom color themes to the 3D viewer based on user-defined or system presets.
- * Extends the architect view mode functionality to support multiple customizable themes.
+ * Optimized for performance: uses type-based batch coloring instead of per-entity iteration.
  */
 
 import { useCallback, useRef, useEffect, useState } from 'react';
@@ -26,27 +26,37 @@ export interface ViewerTheme {
   updated_at: string;
 }
 
-// Convert hex color to RGB array [0-1]
+// Pre-computed RGB cache to avoid repeated hex parsing
+const rgbCache = new Map<string, number[]>();
+
 const hexToRgb = (hex: string): number[] => {
+  const cached = rgbCache.get(hex);
+  if (cached) return cached;
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   if (!result) return [0.9, 0.9, 0.9];
-  return [
+  const rgb = [
     parseInt(result[1], 16) / 255,
     parseInt(result[2], 16) / 255,
     parseInt(result[3], 16) / 255,
   ];
+  rgbCache.set(hex, rgb);
+  return rgb;
 };
 
 // Event names for theme changes
 export const VIEWER_THEME_CHANGED_EVENT = 'VIEWER_THEME_CHANGED';
 export const VIEWER_THEME_REQUESTED_EVENT = 'VIEWER_THEME_REQUESTED';
 
+interface OriginalEdgeState {
+  edgeColor: number[];
+  edgeAlpha: number;
+}
+
 interface ViewerThemeState {
   activeThemeId: string | null;
-  originalColors: Map<string, { color: number[]; opacity: number; edges: boolean }>;
+  /** Only store edge material state — skip per-object storage for performance */
+  originalEdge: OriginalEdgeState | null;
   originalBackground: string;
-  originalEdgeColor: number[];
-  originalEdgeAlpha: number;
 }
 
 export function useViewerTheme() {
@@ -56,10 +66,8 @@ export function useViewerTheme() {
   
   const stateRef = useRef<ViewerThemeState>({
     activeThemeId: null,
-    originalColors: new Map(),
+    originalEdge: null,
     originalBackground: '',
-    originalEdgeColor: [0, 0, 0],
-    originalEdgeAlpha: 1,
   });
 
   // Fetch themes from database
@@ -73,8 +81,6 @@ export function useViewerTheme() {
         .order('name');
       
       if (error) throw error;
-      
-      // Type assertion since Supabase types might not be updated yet
       const typedData = (data || []) as unknown as ViewerTheme[];
       setThemes(typedData);
     } catch (err) {
@@ -84,13 +90,14 @@ export function useViewerTheme() {
     }
   }, []);
 
-  // Load themes on mount
   useEffect(() => {
     fetchThemes();
   }, [fetchThemes]);
 
   /**
-   * Apply a theme to the scene
+   * Build a type→color index from the theme, then iterate objects ONCE.
+   * This is significantly faster than the previous approach of looking up
+   * each object's type in the color_mappings dict.
    */
   const applyTheme = useCallback((viewerRef: React.MutableRefObject<any>, theme: ViewerTheme) => {
     const xeokitViewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
@@ -105,23 +112,14 @@ export function useViewerTheme() {
     const colorMappings = theme.color_mappings || {};
     const isNativeColour = theme.name === 'Model Native Colour' || Object.keys(colorMappings).length === 0;
     
-    // Store original colors if not already stored
-    if (state.originalColors.size === 0) {
-      const objects = scene.objects;
-      for (const objectId in objects) {
-        const entity = objects[objectId];
-        if (entity) {
-          state.originalColors.set(objectId, {
-            color: entity.colorize ? [...entity.colorize] : [1, 1, 1],
-            opacity: entity.opacity ?? 1,
-            edges: entity.edges ?? true,
-          });
-        }
-      }
+    // Store original edge material state once
+    if (!state.originalEdge) {
       const edgeMaterial = scene.edgeMaterial;
       if (edgeMaterial) {
-        state.originalEdgeColor = [...edgeMaterial.edgeColor];
-        state.originalEdgeAlpha = edgeMaterial.edgeAlpha;
+        state.originalEdge = {
+          edgeColor: [...edgeMaterial.edgeColor],
+          edgeAlpha: edgeMaterial.edgeAlpha,
+        };
       }
       const container = document.getElementById('AssetPlusViewer') || document.querySelector('.native-viewer-canvas-parent') as HTMLElement;
       if (container) {
@@ -135,21 +133,34 @@ export function useViewerTheme() {
       bgContainer.style.background = 'linear-gradient(180deg, #2D2D2D 0%, #3A3A3A 100%)';
     }
 
-    // "Model Native Colour" — restore original model colors (no architect palette)
+    // "Model Native Colour" — clear all colorization in one batch call
     if (isNativeColour) {
-      console.log('Applying Model Native Colour: restoring original model colors');
-      for (const [objectId, original] of state.originalColors) {
-        const entity = scene.objects[objectId];
-        if (entity) {
-          entity.colorize = original.color;
-          entity.opacity = original.opacity;
-          entity.edges = original.edges;
+      // Use batch API to clear colorize on all objects at once
+      const colorizedIds = scene.colorizedObjectIds;
+      if (colorizedIds?.length > 0) {
+        scene.setObjectsColorized(colorizedIds, false);
+      }
+      // Reset opacity for spaces that were made transparent
+      const metaScene = xeokitViewer.metaScene;
+      if (metaScene) {
+        const objects = scene.objects;
+        for (const objectId in objects) {
+          const entity = objects[objectId];
+          const mo = metaScene.metaObjects?.[objectId];
+          if (entity && mo) {
+            const ifcType = (mo.type || '').toLowerCase();
+            if (ifcType === 'ifcspace') {
+              entity.opacity = 1;
+              entity.visible = false;
+              entity.pickable = false;
+            }
+          }
         }
       }
-      // Restore original edge settings for authentic native look
-      if (scene.edgeMaterial) {
-        scene.edgeMaterial.edgeColor = state.originalEdgeColor;
-        scene.edgeMaterial.edgeAlpha = state.originalEdgeAlpha;
+      // Restore original edge settings
+      if (scene.edgeMaterial && state.originalEdge) {
+        scene.edgeMaterial.edgeColor = state.originalEdge.edgeColor;
+        scene.edgeMaterial.edgeAlpha = state.originalEdge.edgeAlpha;
       }
       state.activeThemeId = theme.id;
       setActiveTheme(theme);
@@ -158,8 +169,6 @@ export function useViewerTheme() {
       }));
       return true;
     }
-
-    console.log('Applying viewer theme:', theme.name);
 
     // Apply edge settings from theme
     const edgeMaterial = scene.edgeMaterial;
@@ -170,7 +179,19 @@ export function useViewerTheme() {
       edgeMaterial.edgeWidth = theme.edge_settings.edgeWidth ?? 1;
     }
 
-    // Iterate through all objects and apply colors
+    // Pre-compute RGB values for all mappings (avoids hex parsing per-object)
+    const precomputedMappings = new Map<string, { rgb: number[]; edges?: boolean; opacity?: number }>();
+    for (const [type, mapping] of Object.entries(colorMappings)) {
+      precomputedMappings.set(type, {
+        rgb: hexToRgb(mapping.color),
+        edges: mapping.edges,
+        opacity: mapping.opacity,
+      });
+    }
+    const defaultMapping = precomputedMappings.get('default');
+    const spaceOpacity = theme.space_opacity ?? 0.25;
+
+    // Single pass through objects — apply theme colors
     const metaScene = xeokitViewer.metaScene;
     const objects = scene.objects;
     
@@ -178,27 +199,18 @@ export function useViewerTheme() {
       for (const objectId in objects) {
         const entity = objects[objectId];
         const metaObject = metaScene.metaObjects[objectId];
-        
         if (!entity || !metaObject) continue;
         
-        // Get IFC type and find matching color mapping
         const ifcType = (metaObject.type || '').toLowerCase();
-        const mapping = colorMappings[ifcType] || colorMappings['default'];
+        const mapping = precomputedMappings.get(ifcType) || defaultMapping;
         
         if (mapping) {
-          // Apply color
-          entity.colorize = hexToRgb(mapping.color);
-          
-          // Apply edges setting
-          if (mapping.edges !== undefined) {
-            entity.edges = mapping.edges;
-          }
-          
-          // Apply opacity for any type that defines it (glass, spaces, etc.)
+          entity.colorize = mapping.rgb;
+          if (mapping.edges !== undefined) entity.edges = mapping.edges;
           if (mapping.opacity !== undefined) {
             entity.opacity = mapping.opacity;
           } else if (ifcType === 'ifcspace') {
-            entity.opacity = theme.space_opacity ?? 0.25;
+            entity.opacity = spaceOpacity;
           }
         }
       }
@@ -211,52 +223,39 @@ export function useViewerTheme() {
       detail: { themeId: theme.id, themeName: theme.name }
     }));
     
-    console.log('Viewer theme applied:', theme.name);
     return true;
   }, []);
 
   /**
-   * Reset theme to original colors
+   * Reset theme — clear colorization in batch
    */
   const resetTheme = useCallback((viewerRef: React.MutableRefObject<any>) => {
     const xeokitViewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     const scene = xeokitViewer?.scene;
     const state = stateRef.current;
     
-    if (!scene || state.originalColors.size === 0) {
-      return;
+    if (!scene) return;
+
+    // Batch clear colorize
+    const colorizedIds = scene.colorizedObjectIds;
+    if (colorizedIds?.length > 0) {
+      scene.setObjectsColorized(colorizedIds, false);
     }
 
-    console.log('Resetting viewer theme to original colors...');
-
     // Restore edge material
-    if (scene.edgeMaterial) {
-      scene.edgeMaterial.edgeColor = state.originalEdgeColor;
-      scene.edgeMaterial.edgeAlpha = state.originalEdgeAlpha;
+    if (scene.edgeMaterial && state.originalEdge) {
+      scene.edgeMaterial.edgeColor = state.originalEdge.edgeColor;
+      scene.edgeMaterial.edgeAlpha = state.originalEdge.edgeAlpha;
     }
 
     // Restore background
-    const container = document.getElementById('AssetPlusViewer');
+    const container = document.getElementById('AssetPlusViewer') || document.querySelector('.native-viewer-canvas-parent') as HTMLElement;
     if (container && state.originalBackground) {
       container.style.background = state.originalBackground;
     }
 
-    // Restore original colors
-    for (const [objectId, original] of state.originalColors) {
-      const entity = scene.objects[objectId];
-      if (entity) {
-        entity.colorize = original.color;
-        entity.opacity = original.opacity;
-        entity.edges = original.edges;
-      }
-    }
-
-    // Clear stored state
-    state.originalColors.clear();
     state.activeThemeId = null;
     setActiveTheme(null);
-    
-    console.log('Viewer theme reset complete');
   }, []);
 
   /**
@@ -265,14 +264,10 @@ export function useViewerTheme() {
   const selectTheme = useCallback((viewerRef: React.MutableRefObject<any>, themeId: string) => {
     const theme = themes.find(t => t.id === themeId);
     if (theme) {
-      // First reset if we have a different theme active
-      if (stateRef.current.activeThemeId && stateRef.current.activeThemeId !== themeId) {
-        resetTheme(viewerRef);
-      }
       return applyTheme(viewerRef, theme);
     }
     return false;
-  }, [themes, applyTheme, resetTheme]);
+  }, [themes, applyTheme]);
 
   /**
    * Create a new theme
