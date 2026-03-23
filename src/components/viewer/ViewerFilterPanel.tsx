@@ -1151,6 +1151,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       if (entity) { entity.visible = true; entity.opacity = 0.3; entity.pickable = false; }
     });
 
+    // Always hide IfcSpace entities from non-A models (they should never be visible)
+    const nonASpaces = nonASpaceIdsRef.current;
+    if (nonASpaces.length > 0) {
+      nonASpaces.forEach(id => {
+        const entity = scene.objects?.[id];
+        if (entity) { entity.visible = false; entity.pickable = false; }
+      });
+    }
+
     // Step 3: Tandem-style room cutaway — selected room solid, everything else x-ray
     if (checkedSpaces.size > 0 && spaceOnlyEntityIds && spaceOnlyEntityIds.size > 0) {
       // Collect room contents: traverse metaScene hierarchy to find children inside the room
