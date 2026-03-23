@@ -829,7 +829,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="h-8 sm:h-9 gap-2">
               <Settings2 size={14} />
-              <span className="hidden sm:inline">Kolumner</span>
+              <span className="hidden sm:inline">Columns</span>
               <Badge variant="secondary" className="text-xs ml-1">{visibleColumns.length}</Badge>
             </Button>
           </DropdownMenuTrigger>
