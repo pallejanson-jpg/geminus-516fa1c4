@@ -572,7 +572,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
             {userDefinedCols.length > 0 && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuLabel>Användardefinierade</DropdownMenuLabel>
+                <DropdownMenuLabel>User defined</DropdownMenuLabel>
                 {userDefinedCols.map(col => (
                   <DropdownMenuCheckboxItem
                     key={col.key}
@@ -613,16 +613,16 @@ const RoomsView: React.FC<RoomsViewProps> = ({
       {/* Selection toolbar - shown when rows are selected */}
       {selectedRows.size > 0 && (
         <div className="border-b px-4 py-2 flex items-center gap-2 bg-muted/50 shrink-0">
-          <Badge variant="secondary">{selectedRows.size} markerade</Badge>
+          <Badge variant="secondary">{selectedRows.size} selected</Badge>
           
           <Button size="sm" variant="outline" onClick={handleShowSelectedProperties} className="gap-1">
             <Info size={14} />
-            Egenskaper
+            Properties
           </Button>
           
           <Button size="sm" variant="ghost" onClick={() => setSelectedRows(new Set())} className="gap-1 ml-auto">
             <ArrowLeft size={14} />
-            Avmarkera
+            Deselect
           </Button>
         </div>
       )}
@@ -684,7 +684,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                           );
                         })}
                       </SortableContext>
-                      <TableHead className="w-[80px] bg-muted/50">Åtgärder</TableHead>
+                      <TableHead className="w-[80px] bg-muted/50">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -726,7 +726,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                                 e.stopPropagation();
                                 setShowPropertiesFor([room.fmGuid]);
                               }}
-                              title="Egenskaper"
+                              title="Properties"
                             >
                               <Info size={14} />
                             </Button>
@@ -738,7 +738,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                                 e.stopPropagation();
                                 handleOpen3D(room);
                               }}
-                              title="Visa i 3D"
+                              title="View in 3D"
                             >
                               <Cuboid size={14} />
                             </Button>
@@ -851,7 +851,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                             e.stopPropagation();
                             handleOpen3D(room);
                           }}
-                          title="Visa i 3D"
+                          title="View in 3D"
                         >
                           <Cuboid size={12} />
                         </Button>

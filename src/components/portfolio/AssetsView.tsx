@@ -180,6 +180,13 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   const { startAnnotationPlacement } = useContext(AppContext);
   const [viewMode, setViewMode] = useState<'grid' | 'gallery'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  
+  // Debounce search for performance with large asset lists
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
   const [sortColumn, setSortColumn] = useState<string>('designation');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_VISIBLE_COLUMNS);
@@ -435,7 +442,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   // Filter and sort assets
   const filteredAssets = useMemo(() => {
     let result = assetData.filter((asset) => {
-      const searchLower = searchQuery.toLowerCase();
+      const searchLower = debouncedSearch.toLowerCase();
       return (
         visibleColumns.some((colKey) => {
           const val = asset[colKey];
@@ -474,7 +481,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     });
 
     return result;
-  }, [assetData, searchQuery, sortColumn, sortDirection, visibleColumns, filterMode]);
+  }, [assetData, debouncedSearch, sortColumn, sortDirection, visibleColumns, filterMode]);
 
   const handleSort = (column: string) => {
     if (sortColumn === column) {
@@ -698,18 +705,18 @@ const AssetsView: React.FC<AssetsViewProps> = ({
 
     if (colKey === 'createdInModel' || colKey === 'annotationPlaced') {
       return value ? (
-        <Badge variant="default" className="bg-green-600">Ja</Badge>
+        <Badge variant="default" className="bg-green-600">Yes</Badge>
       ) : (
-        <Badge variant="secondary">Nej</Badge>
+        <Badge variant="secondary">No</Badge>
       );
     }
 
     // isLocal: false means synced (good), true means not synced (needs action)
     if (colKey === 'isLocal') {
       return value ? (
-        <Badge variant="secondary" className="bg-amber-500/20 text-amber-600">Ej synkad</Badge>
+        <Badge variant="secondary" className="bg-amber-500/20 text-amber-600">Not synced</Badge>
       ) : (
-        <Badge variant="default" className="bg-green-600">Synkad</Badge>
+        <Badge variant="default" className="bg-green-600">Synced</Badge>
       );
     }
 
@@ -732,8 +739,8 @@ const AssetsView: React.FC<AssetsViewProps> = ({
 
   const title =
     facility.category === 'Building'
-      ? `Assets i ${facility.commonName || facility.name}`
-      : `Assets på ${facility.commonName || facility.name}`;
+      ? `Assets in ${facility.commonName || facility.name}`
+      : `Assets on ${facility.commonName || facility.name}`;
 
   // Show loading spinner if syncing assets
   if (isSyncingAssets) {
@@ -757,10 +764,10 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           <div className="min-w-0">
             <h1 className="text-sm sm:text-base md:text-lg font-bold truncate">{title}</h1>
             <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
-              {filteredAssets.length} av {assetData.length} assets
+              {filteredAssets.length} of {assetData.length} assets
               {orphanCount > 0 && (
                 <span className="ml-2 text-amber-500">
-                  • {orphanCount} ej i modell
+                  • {orphanCount} not in model
                 </span>
               )}
             </p>
@@ -778,11 +785,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
           <Input
             value={searchQuery}
-            onChange={(e) => {
-              const val = e.target.value;
-              // Debounce search by using startTransition
-              React.startTransition(() => setSearchQuery(val));
-            }}
+            onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search assets..."
             className="pl-7 sm:pl-9 h-8 sm:h-9 text-xs sm:text-sm"
           />
@@ -794,32 +797,32 @@ const AssetsView: React.FC<AssetsViewProps> = ({
             <Button variant="outline" size="sm" className="gap-2">
               <Filter className="h-4 w-4" />
               {filterMode === 'all'
-                ? 'Alla'
+                ? 'All'
                 : filterMode === 'orphans'
-                  ? 'Ej i modell'
+                  ? 'Not in model'
                   : filterMode === 'unsynced'
-                    ? 'Ej synkade'
-                    : 'Utan annotation'}
+                    ? 'Not synced'
+                    : 'No annotation'}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="bg-popover">
-            <DropdownMenuLabel>Filtrera</DropdownMenuLabel>
+            <DropdownMenuLabel>Filter</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setFilterMode('all')}>
               <Check className={`h-4 w-4 mr-2 ${filterMode === 'all' ? 'opacity-100' : 'opacity-0'}`} />
-              Alla assets
+              All assets
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setFilterMode('orphans')}>
               <Check className={`h-4 w-4 mr-2 ${filterMode === 'orphans' ? 'opacity-100' : 'opacity-0'}`} />
-              Ej i modell ({orphanCount})
+              Not in model ({orphanCount})
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setFilterMode('no-annotation')}>
               <Check className={`h-4 w-4 mr-2 ${filterMode === 'no-annotation' ? 'opacity-100' : 'opacity-0'}`} />
-              Utan annotation ({noAnnotationCount})
+              No annotation ({noAnnotationCount})
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setFilterMode('unsynced')}>
               <Check className={`h-4 w-4 mr-2 ${filterMode === 'unsynced' ? 'opacity-100' : 'opacity-0'}`} />
-              Ej synkade ({unsyncedCount})
+              Not synced ({unsyncedCount})
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -829,12 +832,12 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="h-8 sm:h-9 gap-2">
               <Settings2 size={14} />
-              <span className="hidden sm:inline">Kolumner</span>
+              <span className="hidden sm:inline">Columns</span>
               <Badge variant="secondary" className="text-xs ml-1">{visibleColumns.length}</Badge>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 max-h-80 overflow-y-auto bg-popover">
-            <DropdownMenuLabel>Systemegenskaper</DropdownMenuLabel>
+            <DropdownMenuLabel>System properties</DropdownMenuLabel>
             {SYSTEM_COLUMNS.map(col => (
               <DropdownMenuCheckboxItem
                 key={col.key}
@@ -858,7 +861,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
             {allColumns.filter(c => c.category === 'userDefined').length > 0 && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuLabel>Användardefinierade</DropdownMenuLabel>
+                <DropdownMenuLabel>User defined</DropdownMenuLabel>
                 {allColumns.filter(c => c.category === 'userDefined').map(col => (
                   <DropdownMenuCheckboxItem
                     key={col.key}
@@ -897,17 +900,17 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       {/* Selection toolbar - shown when rows are selected */}
       {selectedRows.size > 0 && (
         <div className="border-b px-4 py-2 flex items-center gap-2 bg-muted/50 shrink-0">
-          <Badge variant="secondary">{selectedRows.size} markerade</Badge>
+          <Badge variant="secondary">{selectedRows.size} selected</Badge>
           
           <Button size="sm" variant="outline" onClick={handleShowSelectedProperties} className="gap-1">
             <Info size={14} />
-            Egenskaper
+            Properties
           </Button>
           
           {selectedCanPlaceAnnotation > 0 && (
             <Button size="sm" variant="outline" onClick={handleBatchPlaceAnnotation} className="gap-1">
               <MapPin size={14} />
-              Placera ({selectedCanPlaceAnnotation})
+              Place ({selectedCanPlaceAnnotation})
             </Button>
           )}
           
@@ -920,13 +923,13 @@ const AssetsView: React.FC<AssetsViewProps> = ({
               className="gap-1"
             >
               {isBatchSyncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-              Synka ({selectedCanSync})
+              Sync ({selectedCanSync})
             </Button>
           )}
           
           <Button size="sm" variant="ghost" onClick={() => setSelectedRows(new Set())} className="gap-1 ml-auto">
             <ArrowLeft size={14} />
-            Avmarkera
+            Deselect
           </Button>
         </div>
       )}
@@ -965,7 +968,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                         ) : null;
                       })}
                     </SortableContext>
-                    <TableHead className="bg-muted/50 w-24">Åtgärder</TableHead>
+                    <TableHead className="bg-muted/50 w-24">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -997,7 +1000,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                               e.stopPropagation();
                               setShowPropertiesFor([asset.fmGuid]);
                             }}
-                            title="Egenskaper"
+                            title="Properties"
                           >
                             <Info size={14} />
                           </Button>
@@ -1009,7 +1012,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                               e.stopPropagation();
                               handleOpen3D(asset);
                             }}
-                            title="Öppna i 3D"
+                            title="Open in 3D"
                           >
                             <Cuboid size={14} />
                           </Button>
@@ -1023,7 +1026,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                                 e.stopPropagation();
                                 handlePlaceAnnotation(asset);
                               }}
-                              title="Placera annotation"
+                              title="Place annotation"
                             >
                               <MapPin size={14} />
                             </Button>
@@ -1038,7 +1041,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                                 handleSyncToAssetPlus(asset);
                               }}
                               disabled={syncingAssetIds.has(asset.fmGuid)}
-                              title="Synka till Asset+"
+                              title="Sync to Asset+"
                             >
                               {syncingAssetIds.has(asset.fmGuid) ? (
                                 <Loader2 size={14} className="animate-spin" />

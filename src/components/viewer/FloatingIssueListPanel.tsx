@@ -35,7 +35,7 @@ const FloatingIssueListPanel: React.FC<FloatingIssueListPanelProps> = ({
   // Position state - initialize to the left of parent toolbar
   const [position, setPosition] = useState({ 
     x: typeof window !== 'undefined' ? window.innerWidth - panelWidth - 20 : 200, 
-    y: 80 
+    y: 60 
   });
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
