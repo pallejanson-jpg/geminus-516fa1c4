@@ -378,6 +378,14 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
             const resolved = assetPlusNames.get(m.model_id) || assetPlusNames.get(m.model_id.toLowerCase());
             if (resolved && resolved !== m.model_name) {
               console.log(`[NativeViewer] Name resolution: "${m.model_name}" → "${resolved}"`);
+              // Persist resolved name back to xkt_models for future loads
+              supabase.from('xkt_models')
+                .update({ model_name: resolved })
+                .eq('building_fm_guid', buildingFmGuid)
+                .eq('model_id', m.model_id)
+                .then(({ error }) => {
+                  if (!error) console.log(`[NativeViewer] Persisted model name "${resolved}" to DB`);
+                });
               m.model_name = resolved;
             }
           });
