@@ -172,6 +172,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   const typeIndexRef = useRef<Map<string, string[]>>(new Map());
   // Area space IDs to auto-hide
   const areaSpaceIdsRef = useRef<string[]>([]);
+  // IfcSpace entity IDs from non-A models — always hidden
+  const nonASpaceIdsRef = useRef<string[]>([]);
   // Previous solidIds for delta updates
   const prevVisibleRef = useRef<Set<string> | null>(null);
   // Counter to force categories recalc when entity map is built
