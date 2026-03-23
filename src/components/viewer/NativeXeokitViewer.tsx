@@ -1077,6 +1077,37 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
     };
   }, [initialize]);
 
+  useEffect(() => {
+    const handler = async (event: Event) => {
+      const detail = (event as CustomEvent<{ modelId?: string }>).detail;
+      const requestedModelId = detail?.modelId?.replace(/\.xkt$/i, '');
+      if (!requestedModelId) return;
+
+      const sceneModels = viewerRef.current?.scene?.models || {};
+      if (sceneModels[requestedModelId]) return;
+
+      const secondaryQueue: Array<ModelInfo & { model_id?: string }> = (window as any).__secondaryModelQueue || [];
+      const requestedModel = secondaryQueue.find((model: any) => {
+        const candidateId = (model.model_id || model.id || '').replace(/\.xkt$/i, '');
+        return candidateId === requestedModelId;
+      });
+
+      if (!requestedModel) {
+        console.warn(`[NativeViewer] Deferred model not found in secondary queue: ${requestedModelId}`);
+        return;
+      }
+
+      try {
+        await (window as any).__loadSecondaryModel?.(requestedModel);
+      } catch (error) {
+        console.warn(`[NativeViewer] Failed deferred load for ${requestedModelId}:`, error);
+      }
+    };
+
+    window.addEventListener('MODEL_LOAD_REQUESTED', handler);
+    return () => window.removeEventListener('MODEL_LOAD_REQUESTED', handler);
+  }, []);
+
   // ── Listen for FLOOR_TILE_SWITCH (dynamic tile loading for real per-storey tiles) ──
   useEffect(() => {
     const handler = async (e: Event) => {

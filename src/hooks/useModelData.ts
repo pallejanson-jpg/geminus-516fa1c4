@@ -79,9 +79,11 @@ export function useModelData(
   // ── XEOkit accessor ──────────────────────────────────────────────────────
   const getXeokitViewer = useCallback(() => {
     try {
-      return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer
+        ?? (window as any).__nativeXeokitViewer
+        ?? null;
     } catch {
-      return null;
+      return (window as any).__nativeXeokitViewer ?? null;
     }
   }, [viewerRef]);
 
@@ -94,8 +96,9 @@ export function useModelData(
       if (key !== key.toLowerCase()) continue;
       if (seen.has(name)) continue;
       seen.add(name);
+      const canonicalId = key.replace(/\.xkt$/i, '');
       const fileName = key.endsWith('.xkt') ? key : key + '.xkt';
-      result.push({ id: key, name, fileName });
+      result.push({ id: canonicalId, name, fileName });
     }
     return result;
   }, [modelNamesMap]);
@@ -167,7 +170,7 @@ export function useModelData(
 
       const name = dbModel.name || dbModel.fileName.replace(/\.xkt$/i, '').replace(/-/g, ' ');
       const shortName = name.length > 30 ? name.substring(0, 27) + '...' : name;
-      extracted.push({ id: dbModel.fileName || dbModel.id, name, shortName, loaded: false });
+      extracted.push({ id: dbModel.id, name, shortName, loaded: false });
     });
 
     // 3. Ensure all Asset+ sources represented
