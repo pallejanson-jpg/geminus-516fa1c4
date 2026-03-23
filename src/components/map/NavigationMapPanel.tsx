@@ -579,12 +579,10 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
     return (
       <Drawer
         open={true}
+        modal={false}
         onOpenChange={(open) => { if (!open) onClose(); }}
-        snapPoints={[0.45, 0.92]}
-        activeSnapPoint={drawerExpanded ? 0.92 : 0.45}
-        setActiveSnapPoint={(snap) => setDrawerExpanded(snap === 0.92)}
       >
-        <DrawerContent className="max-h-[92dvh] flex flex-col">
+        <DrawerContent className="max-h-[92dvh] h-[92dvh] flex flex-col">
           <DrawerHeader className="py-2 px-3 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
               <Navigation size={16} className="text-primary" />
@@ -594,7 +592,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
               <X size={14} />
             </Button>
           </DrawerHeader>
-          <div className="px-3 pb-3 flex-1 overflow-y-auto overscroll-contain">
+          <div className="px-3 pb-6 flex-1 overflow-y-auto overscroll-contain -webkit-overflow-scrolling-touch">
             {panelContent}
           </div>
         </DrawerContent>

@@ -89,12 +89,12 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
 
     try {
       setMoving(true);
-      const nextPano = await provider.getNearestPanoId(aheadCart, 50);
+      const nextPano = await provider.getNearestPanoId(aheadCart, 100);
       if (nextPano && nextPano.panoId) {
         await loadPanoAtPosition(nextPano.panoId, nextPano.longitude, nextPano.latitude);
       }
-    } catch {
-      // No panorama found in that direction
+    } catch (e: any) {
+      console.warn('No panorama ahead:', e.message || e);
     } finally {
       setMoving(false);
     }
@@ -115,12 +115,12 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
 
     try {
       setMoving(true);
-      const nextPano = await provider.getNearestPanoId(aheadCart, 50);
+      const nextPano = await provider.getNearestPanoId(aheadCart, 100);
       if (nextPano && nextPano.panoId) {
         await loadPanoAtPosition(nextPano.panoId, nextPano.longitude, nextPano.latitude);
       }
-    } catch {
-      // No panorama found
+    } catch (e: any) {
+      console.warn('No panorama behind:', e.message || e);
     } finally {
       setMoving(false);
     }
@@ -165,9 +165,18 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
         if (cancelled) return;
         providerRef.current = provider;
 
-        // Find nearest panorama
+        // Find nearest panorama — try progressively larger radii
         const cartographic = Cesium.Cartographic.fromDegrees(lng, lat, 0);
-        const panoIdObject = await provider.getNearestPanoId(cartographic, 200);
+        let panoIdObject = null;
+        for (const radius of [200, 500, 1000, 2000]) {
+          try {
+            panoIdObject = await provider.getNearestPanoId(cartographic, radius);
+            if (panoIdObject) break;
+          } catch (e: any) {
+            // ZERO_RESULTS or similar — try larger radius
+            console.warn(`Street View search radius ${radius}m: ${e.message || 'no results'}`);
+          }
+        }
 
         if (!panoIdObject) {
           setError('Ingen Street View-täckning vid denna position');
