@@ -698,18 +698,18 @@ const AssetsView: React.FC<AssetsViewProps> = ({
 
     if (colKey === 'createdInModel' || colKey === 'annotationPlaced') {
       return value ? (
-        <Badge variant="default" className="bg-green-600">Ja</Badge>
+        <Badge variant="default" className="bg-green-600">Yes</Badge>
       ) : (
-        <Badge variant="secondary">Nej</Badge>
+        <Badge variant="secondary">No</Badge>
       );
     }
 
     // isLocal: false means synced (good), true means not synced (needs action)
     if (colKey === 'isLocal') {
       return value ? (
-        <Badge variant="secondary" className="bg-amber-500/20 text-amber-600">Ej synkad</Badge>
+        <Badge variant="secondary" className="bg-amber-500/20 text-amber-600">Not synced</Badge>
       ) : (
-        <Badge variant="default" className="bg-green-600">Synkad</Badge>
+        <Badge variant="default" className="bg-green-600">Synced</Badge>
       );
     }
 
