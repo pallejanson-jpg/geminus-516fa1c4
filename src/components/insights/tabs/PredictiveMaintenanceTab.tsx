@@ -86,7 +86,7 @@ export default function PredictiveMaintenanceTab({ facility }: { facility?: Faci
     return (
       <div className="text-center py-12 text-muted-foreground">
         <Activity className="h-12 w-12 mx-auto mb-3 opacity-40" />
-        <p>Välj en byggnad för att se prediktivt underhåll</p>
+        <p>Select a building to view predictive maintenance</p>
       </div>
     );
   }
