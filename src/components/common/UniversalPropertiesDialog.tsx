@@ -1481,7 +1481,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   // Desktop: Fixed right-side panel (like the 3D view menu)
   return (
     <div
-      className="fixed inset-y-0 right-0 z-[70] w-80 bg-card border-l shadow-xl flex flex-col animate-in slide-in-from-right duration-300"
+      className="fixed inset-y-0 right-0 z-[70] w-96 bg-card border-l shadow-xl flex flex-col animate-in slide-in-from-right duration-300"
     >
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b bg-muted/30 shrink-0">
