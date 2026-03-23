@@ -307,6 +307,22 @@ const UnifiedViewerContent: React.FC<{
   const [transform, setTransform] = useState<IvionBimTransform>(IDENTITY_TRANSFORM);
   const [insightsPanelOpen, setInsightsPanelOpen] = useState(!!insightsModeParam);
 
+  // Resize xeokit canvas when insights panel toggles (layout changes height)
+  useEffect(() => {
+    const doResize = () => {
+      try {
+        const xv = (window as any).__nativeXeokitViewer;
+        if (xv?.scene?.canvas) {
+          xv.scene.canvas.resizeCanvas?.();
+          xv.scene.glRedraw?.();
+        }
+      } catch {}
+    };
+    const t1 = setTimeout(doResize, 100);
+    const t2 = setTimeout(doResize, 400);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [insightsPanelOpen]);
+
   // ─── Indoor navigation state ──────────────────────────────────────
   const [navPanelOpen, setNavPanelOpen] = useState(false);
   const [navEditMode, setNavEditMode] = useState(false);
