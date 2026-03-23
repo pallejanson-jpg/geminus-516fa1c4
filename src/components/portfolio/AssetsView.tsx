@@ -481,7 +481,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     });
 
     return result;
-  }, [assetData, searchQuery, sortColumn, sortDirection, visibleColumns, filterMode]);
+  }, [assetData, debouncedSearch, sortColumn, sortDirection, visibleColumns, filterMode]);
 
   const handleSort = (column: string) => {
     if (sortColumn === column) {
