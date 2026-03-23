@@ -1058,31 +1058,12 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
             }
           } catch (e) { console.warn(`[NativeViewer] On-demand model load failed: ${modelInfo.model_id}`, e); }
         };
-        console.log(`[NativeViewer] ${secondaryQueue.length} secondary models — auto lazy-loading in background`);
+        console.log(`[NativeViewer] ${secondaryQueue.length} secondary models available — will load on demand via Filter menu`);
         window.dispatchEvent(new CustomEvent('SECONDARY_MODELS_AVAILABLE', {
           detail: { models: secondaryQueue.map(m => ({ model_id: m.model_id, model_name: m.model_name })) }
         }));
-
-        // Auto lazy-load all secondary models in background (sequentially, no spinner)
-        const lazyLoadSecondary = async () => {
-          for (const model of secondaryQueue) {
-            if (!mountedRef.current) break;
-            const sceneModels3 = viewerRef.current?.scene?.models || {};
-            const modelId = model.model_id.replace(/\.xkt$/i, '');
-            if (sceneModels3[modelId] || sceneModels3[`${modelId}.xkt`]) continue;
-            console.log(`[NativeViewer] 🔄 Background loading: ${model.model_name || model.model_id}`);
-            try {
-              await (window as any).__loadSecondaryModel?.(model);
-              // Small yield to avoid blocking UI
-              await new Promise(r => setTimeout(r, 100));
-            } catch (e) {
-              console.warn(`[NativeViewer] Background load failed: ${model.model_id}`, e);
-            }
-          }
-          console.log('[NativeViewer] ✅ All secondary models background-loaded');
-        };
-        // Start after a short delay to let the UI settle
-        setTimeout(lazyLoadSecondary, 300);
+        // No auto-loading: secondary models are loaded on-demand when the user
+        // opens the Filter menu or explicitly selects a model.
       }
 
     } catch (e) {
