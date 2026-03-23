@@ -717,6 +717,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const handleSelectIssue = useCallback((issue: BcfIssue) => {
     setSelectedIssue(issue);
     setShowIssueDetail(true);
+    // Close the issue list to prevent overlap with the detail sheet
+    setShowIssueList(false);
     
     // Navigate to the viewpoint if available with flash effect, pass selected_object_ids as fallback
     if (issue.viewpoint_json) {
