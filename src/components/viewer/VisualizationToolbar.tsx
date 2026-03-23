@@ -1213,12 +1213,12 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               <div className="flex items-center justify-between px-3 py-3 border-b shrink-0">
                 <span className="font-medium text-sm">Display</span>
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="icon"
-                  className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                  className="h-8 w-8 border-destructive/50 text-destructive hover:bg-destructive hover:text-destructive-foreground"
                   onClick={() => handleSetIsOpen(false)}
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-5 w-5" />
                 </Button>
               </div>
 
