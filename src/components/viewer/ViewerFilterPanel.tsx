@@ -224,35 +224,40 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return map;
   }, [storeyAssets]);
 
-  // Identify A-model (architectural model) source GUID
-  const aModelSourceGuid = useMemo(() => {
-    // Check sharedModels for architectural model
-    const aModel = sharedModels.find(m => isArchitecturalModel(m.name || ''));
-    if (aModel) return aModel.id;
-    // Fallback: check sourceNameLookup
+  // Identify A-model source GUIDs (the parentBimObjectId values that belong to architectural models)
+  const aModelSourceGuids = useMemo(() => {
+    const guids = new Set<string>();
+    // Primary: use sourceNameLookup (maps storey.sourceGuid → friendly name like "A-Arkitektur")
     for (const [guid, name] of sourceNameLookup.entries()) {
-      if (isArchitecturalModel(name)) return guid;
+      if (isArchitecturalModel(name)) guids.add(normalizeGuid(guid));
     }
-    // If only one source, use it
-    if (sharedModels.length === 1) return sharedModels[0].id;
-    return null;
-  }, [sharedModels, sourceNameLookup]);
+    // Fallback: check sources list (derived from sharedModels with friendly names)
+    if (guids.size === 0) {
+      sources.forEach(s => {
+        if (isArchitecturalModel(s.name)) guids.add(normalizeGuid(s.guid));
+      });
+    }
+    // Fallback: if only one source exists, assume it's the A-model
+    if (guids.size === 0 && sharedModels.length === 1) {
+      guids.add(normalizeGuid(sharedModels[0].id));
+    }
+    return guids;
+  }, [sharedModels, sourceNameLookup, sources]);
 
   // Levels: driven by DB storeys — ONLY show levels from A-model
   const levels: LevelItem[] = useMemo(() => {
     return storeyAssets
       .filter((storey) => {
-        // Only include levels belonging to the A-model
-        // Method 1: match by sourceGuid against aModelSourceGuid
-        if (aModelSourceGuid && storey.sourceGuid) {
-          if (normalizeGuid(storey.sourceGuid) === normalizeGuid(aModelSourceGuid)) return true;
-        }
-        // Method 2: match by sourceName starting with "A" (architectural model naming)
+        // Method 1: match by sourceName (most reliable — "A-Arkitektur" etc.)
         if (storey.sourceName && isArchitecturalModel(storey.sourceName)) return true;
-        // Method 3: if aModelSourceGuid was found but this storey doesn't match, exclude it
-        if (aModelSourceGuid) return false;
+        // Method 2: match by sourceGuid against known A-model source GUIDs
+        if (aModelSourceGuids.size > 0 && storey.sourceGuid) {
+          if (aModelSourceGuids.has(normalizeGuid(storey.sourceGuid))) return true;
+          // This storey doesn't belong to A-model — exclude it
+          return false;
+        }
         // If no A-model identified at all, include all levels
-        return true;
+        return aModelSourceGuids.size === 0;
       })
       .map((storey) => {
         const exactSharedFloor = sharedFloors.find((floor) =>
