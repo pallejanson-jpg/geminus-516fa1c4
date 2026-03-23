@@ -108,8 +108,11 @@ const CesiumGlobeView: React.FC = () => {
     supabase.functions.invoke('get-cesium-token').then(({ data, error }) => {
       if (!error && data?.token) {
         Cesium.Ion.defaultAccessToken = data.token;
+        setCesiumToken(data.token);
       } else {
-        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlYWE1OWUxNy1mMWZiLTQzYjYtYTQ0OS1kMWFjYmFkNjc4ZTkiLCJpZCI6NTc3MzMsImlhdCI6MTYyMjY0NjQ5OH0.XcKpgANiY19MC4bdFUXMVEBToBmqS8kuYpUlxJHYZxk';
+        const fallback = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlYWE1OWUxNy1mMWZiLTQzYjYtYTQ0OS1kMWFjYmFkNjc4ZTkiLCJpZCI6NTc3MzMsImlhdCI6MTYyMjY0NjQ5OH0.XcKpgANiY19MC4bdFUXMVEBToBmqS8kuYpUlxJHYZxk';
+        Cesium.Ion.defaultAccessToken = fallback;
+        setCesiumToken(fallback);
       }
       setTokenReady(true);
     });
