@@ -1026,7 +1026,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }
       }
 
-      // 6. Store secondary models for on-demand loading via filter panel (NO auto lazy-load)
+      // 6. Store secondary models and auto lazy-load them in background (no spinner, no blocking)
       if (secondaryQueue.length > 0) {
         (window as any).__secondaryModelQueue = secondaryQueue;
         (window as any).__loadSecondaryModel = async (modelInfo: any) => {
@@ -1037,13 +1037,52 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
             await loadModel(modelInfo);
             if (mountedRef.current && viewerRef.current?.scene) {
               applyArchitectColors(viewerRef.current);
+              // Hide IfcSpace entities from non-A models (spaces should only come from A-model)
+              const v = viewerRef.current;
+              const metaObjs = v.metaScene?.metaObjects;
+              if (metaObjs) {
+                const loadedModel = v.scene.models?.[modelInfo.model_id];
+                const objs = loadedModel?.objects || {};
+                const objIds = Array.isArray(objs) ? objs.map((e: any) => e.id).filter(Boolean) : Object.keys(objs);
+                for (const objId of objIds) {
+                  const mo = metaObjs[objId];
+                  if (mo && (mo.type || '').toLowerCase() === 'ifcspace') {
+                    const entity = v.scene.objects?.[objId];
+                    if (entity) {
+                      entity.visible = false;
+                      entity.pickable = false;
+                    }
+                  }
+                }
+              }
             }
           } catch (e) { console.warn(`[NativeViewer] On-demand model load failed: ${modelInfo.model_id}`, e); }
         };
-        console.log(`[NativeViewer] ${secondaryQueue.length} secondary models available for on-demand loading via filter panel`);
+        console.log(`[NativeViewer] ${secondaryQueue.length} secondary models — auto lazy-loading in background`);
         window.dispatchEvent(new CustomEvent('SECONDARY_MODELS_AVAILABLE', {
           detail: { models: secondaryQueue.map(m => ({ model_id: m.model_id, model_name: m.model_name })) }
         }));
+
+        // Auto lazy-load all secondary models in background (sequentially, no spinner)
+        const lazyLoadSecondary = async () => {
+          for (const model of secondaryQueue) {
+            if (!mountedRef.current) break;
+            const sceneModels3 = viewerRef.current?.scene?.models || {};
+            const modelId = model.model_id.replace(/\.xkt$/i, '');
+            if (sceneModels3[modelId] || sceneModels3[`${modelId}.xkt`]) continue;
+            console.log(`[NativeViewer] 🔄 Background loading: ${model.model_name || model.model_id}`);
+            try {
+              await (window as any).__loadSecondaryModel?.(model);
+              // Small yield to avoid blocking UI
+              await new Promise(r => setTimeout(r, 100));
+            } catch (e) {
+              console.warn(`[NativeViewer] Background load failed: ${model.model_id}`, e);
+            }
+          }
+          console.log('[NativeViewer] ✅ All secondary models background-loaded');
+        };
+        // Start after a short delay to let the UI settle
+        setTimeout(lazyLoadSecondary, 1500);
       }
 
     } catch (e) {
