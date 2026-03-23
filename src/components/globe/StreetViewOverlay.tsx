@@ -115,12 +115,12 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
 
     try {
       setMoving(true);
-      const nextPano = await provider.getNearestPanoId(aheadCart, 50);
+      const nextPano = await provider.getNearestPanoId(aheadCart, 100);
       if (nextPano && nextPano.panoId) {
         await loadPanoAtPosition(nextPano.panoId, nextPano.longitude, nextPano.latitude);
       }
-    } catch {
-      // No panorama found
+    } catch (e: any) {
+      console.warn('No panorama behind:', e.message || e);
     } finally {
       setMoving(false);
     }
