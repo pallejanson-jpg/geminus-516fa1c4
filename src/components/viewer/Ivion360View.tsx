@@ -50,6 +50,7 @@ export default function Ivion360View({
   ivionSiteIdProp,
   onSyncRequest,
   ivionBimTransform,
+  initialHeading,
 }: Ivion360ViewProps) {
   const isMobile = useIsMobile();
   const { ivion360Context, setIvion360Context } = useContext(AppContext);
