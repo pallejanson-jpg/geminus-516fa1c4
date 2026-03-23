@@ -445,7 +445,7 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
           }
           mapRef.current.fitBounds(
             [[minLng, minLat], [maxLng, maxLat]],
-            { padding: { top: 80, bottom: 80, left: 340, right: 80 }, duration: 1000 }
+            { padding: window.innerWidth < 768 ? { top: 60, bottom: 200, left: 40, right: 40 } : { top: 80, bottom: 80, left: 340, right: 80 }, duration: 1000 }
           );
         }
       }
