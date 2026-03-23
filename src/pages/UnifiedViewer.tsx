@@ -846,6 +846,8 @@ const UnifiedViewerContent: React.FC<{
 
       {/* ─── Content area ─── */}
       <div ref={contentRef} className="flex-1 flex flex-col min-h-0">
+        {/* ─── Viewer area (relative, shrinks when insights open) ─── */}
+        <div className="flex-1 relative min-h-0">
         {/* SDK container */}
         <div
           ref={sdkContainerRef}
