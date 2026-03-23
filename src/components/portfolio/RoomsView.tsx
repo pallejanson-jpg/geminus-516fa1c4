@@ -684,7 +684,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                           );
                         })}
                       </SortableContext>
-                      <TableHead className="w-[80px] bg-muted/50">Åtgärder</TableHead>
+                      <TableHead className="w-[80px] bg-muted/50">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
