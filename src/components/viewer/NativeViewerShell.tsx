@@ -110,6 +110,41 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     };
   }, []);
 
+  // Listen for VIEWER_ZOOM_TO_OBJECT from portfolio "Open in 3D"
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { fmGuid } = (e as CustomEvent).detail || {};
+      if (!fmGuid) return;
+      const viewer = (window as any).__nativeXeokitViewer;
+      if (!viewer?.scene || !viewer?.cameraFlight) return;
+      
+      const norm = (s: string) => s.toLowerCase().replace(/-/g, '');
+      const target = norm(fmGuid);
+      
+      const metaObjects = viewer.metaScene?.metaObjects || {};
+      let entityId: string | null = null;
+      for (const [id, mo] of Object.entries(metaObjects)) {
+        const sysId = norm(((mo as any).originalSystemId || (mo as any).id || ''));
+        if (sysId === target) {
+          entityId = id;
+          break;
+        }
+      }
+      
+      if (entityId) {
+        const entity = viewer.scene.objects[entityId];
+        if (entity) {
+          viewer.scene.setObjectsVisible([entityId], true);
+          viewer.scene.setObjectsSelected(viewer.scene.selectedObjectIds, false);
+          viewer.scene.setObjectsSelected([entityId], true);
+          viewer.cameraFlight.flyTo({ aabb: entity.aabb, duration: 1.5 });
+        }
+      }
+    };
+    window.addEventListener('VIEWER_ZOOM_TO_OBJECT', handler);
+    return () => window.removeEventListener('VIEWER_ZOOM_TO_OBJECT', handler);
+  }, []);
+
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
     position: { x: number; y: number };
