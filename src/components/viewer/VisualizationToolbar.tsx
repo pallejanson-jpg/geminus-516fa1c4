@@ -1217,7 +1217,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                 <Button
                   variant="outline"
                   size="icon"
-                  className="h-8 w-8 border-destructive/50 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                  className="h-8 w-8 !text-red-400 !border-red-400/50 hover:!bg-red-500 hover:!text-white"
                   onClick={() => handleSetIsOpen(false)}
                 >
                   <X className="h-5 w-5" />
