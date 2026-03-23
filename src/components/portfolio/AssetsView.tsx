@@ -965,7 +965,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                         ) : null;
                       })}
                     </SortableContext>
-                    <TableHead className="bg-muted/50 w-24">Åtgärder</TableHead>
+                    <TableHead className="bg-muted/50 w-24">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
