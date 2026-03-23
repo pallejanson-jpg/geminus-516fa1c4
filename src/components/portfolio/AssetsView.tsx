@@ -907,7 +907,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           {selectedCanPlaceAnnotation > 0 && (
             <Button size="sm" variant="outline" onClick={handleBatchPlaceAnnotation} className="gap-1">
               <MapPin size={14} />
-              Placera ({selectedCanPlaceAnnotation})
+              Place ({selectedCanPlaceAnnotation})
             </Button>
           )}
           
