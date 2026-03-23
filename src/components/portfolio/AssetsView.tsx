@@ -732,8 +732,8 @@ const AssetsView: React.FC<AssetsViewProps> = ({
 
   const title =
     facility.category === 'Building'
-      ? `Assets i ${facility.commonName || facility.name}`
-      : `Assets på ${facility.commonName || facility.name}`;
+      ? `Assets in ${facility.commonName || facility.name}`
+      : `Assets on ${facility.commonName || facility.name}`;
 
   // Show loading spinner if syncing assets
   if (isSyncingAssets) {
