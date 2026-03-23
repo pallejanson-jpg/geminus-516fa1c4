@@ -281,6 +281,18 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
     };
   }, [lat, lng, cesiumToken, loadPanoAtPosition]);
 
+  // Track heading changes
+  useEffect(() => {
+    if (loading) return;
+    const interval = setInterval(() => {
+      const viewer = viewerRef.current;
+      if (viewer && !viewer.isDestroyed()) {
+        setCurrentHeading(Cesium.Math.toDegrees(viewer.camera.heading));
+      }
+    }, 200);
+    return () => clearInterval(interval);
+  }, [loading]);
+
   // Enter building
   const handleEnterBuilding = useCallback(() => {
     const viewer = viewerRef.current;
