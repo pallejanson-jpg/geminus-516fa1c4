@@ -600,8 +600,8 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
         </Button>
       </div>
 
-      {/* Shared sidebar */}
-      {!hideSidebar && (
+      {/* Shared sidebar — hide on mobile when nav panel is open */}
+      {!hideSidebar && !(isMobile && showNavPanel) && (
         <BuildingSidebar
           facilities={sidebarItems}
           selectedId={selectedMarker?.fmGuid ?? null}
