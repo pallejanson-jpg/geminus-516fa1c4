@@ -37,6 +37,8 @@ interface Ivion360ViewProps {
   onSyncRequest?: () => void;
   /** Ivion-to-BIM coordinate transform */
   ivionBimTransform?: IvionBimTransform;
+  /** Initial heading in degrees (e.g. from Street View transition) */
+  initialHeading?: number | null;
 }
 
 export default function Ivion360View({ 
