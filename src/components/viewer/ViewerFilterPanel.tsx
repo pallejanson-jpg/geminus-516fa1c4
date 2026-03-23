@@ -1087,6 +1087,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const slabTypes = new Set(['IfcSlab', 'IfcSlabStandardCase', 'IfcPlate']);
     const areaSet = new Set(areaSpaceIdsRef.current);
 
+    // Only hide roofs/coverings when drilling into levels or spaces — 
+    // when only a source filter is active, show the full model including roof
+    const hasLevelOrSpaceFilter = checkedLevels.size > 0 || checkedSpaces.size > 0;
+
     // Use typeIndex for slab collection (fast)
     const allSlabIds: string[] = [];
     for (const st of slabTypes) {
@@ -1097,10 +1101,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     for (const id of solidIds) {
       const mo = viewer.metaScene?.metaObjects?.[id];
       if (mo) {
-        if (obstructTypes.has(mo.type)) {
+        if (obstructTypes.has(mo.type) && hasLevelOrSpaceFilter) {
           hideIds.push(id);
           solidIds.delete(id);
-        } else if (slabTypes.has(mo.type)) {
+        } else if (slabTypes.has(mo.type) && hasLevelOrSpaceFilter) {
           fadeIds.push(id);
           solidIds.delete(id);
         } else if (mo.type === 'IfcSpace') {
