@@ -726,7 +726,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                                 e.stopPropagation();
                                 setShowPropertiesFor([room.fmGuid]);
                               }}
-                              title="Egenskaper"
+                              title="Properties"
                             >
                               <Info size={14} />
                             </Button>
