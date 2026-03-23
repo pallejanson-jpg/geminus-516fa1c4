@@ -989,7 +989,7 @@ const UnifiedViewerContent: React.FC<{
         </div>
       )}
 
-      {/* ─── Insights bottom-sheet panel ─── */}
+      {/* ─── Insights bottom-sheet panel — flex sibling that shrinks the viewer ─── */}
       {buildingFmGuid && (
         <InsightsDrawerPanel
           buildingFmGuid={buildingFmGuid}
