@@ -1038,7 +1038,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                                 handleSyncToAssetPlus(asset);
                               }}
                               disabled={syncingAssetIds.has(asset.fmGuid)}
-                              title="Synka till Asset+"
+                              title="Sync to Asset+"
                             >
                               {syncingAssetIds.has(asset.fmGuid) ? (
                                 <Loader2 size={14} className="animate-spin" />
