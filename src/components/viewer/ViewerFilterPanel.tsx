@@ -226,63 +226,17 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return map;
   }, [storeyAssets]);
 
-  // Identify A-model metaObject IDs from xeokit scene (same logic as useFloorData)
-  const aModelMetaObjectIds = useMemo(() => {
-    const viewer = getXeokitViewer();
-    if (!viewer?.scene?.models) return new Set<string>();
-
-    const sceneModels = viewer.scene.models;
-    let hasAModel = false;
-    const objectIds = new Set<string>();
-
-    Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
-      // Resolve friendly name via modelNamesMap (DB lookup), same as useFloorData
-      const friendlyName =
-        modelNamesMap.get(modelId) ||
-        modelNamesMap.get(modelId.toLowerCase()) ||
-        modelNamesMap.get(modelId.replace(/\.xkt$/i, '')) ||
-        modelNamesMap.get(modelId.replace(/\.xkt$/i, '').toLowerCase()) ||
-        null;
-
-      const isArch = isArchitecturalModel(friendlyName) || isArchitecturalModel(modelId);
-      if (isArch) {
-        hasAModel = true;
-        const objIds = Object.keys(model.objects || {});
-        objIds.forEach(id => objectIds.add(id));
-      }
-    });
-
-    // If no A-model identified, return empty set (fallback: show all levels)
-    return hasAModel ? objectIds : new Set<string>();
-  }, [getXeokitViewer, modelNamesMap]);
-
-  // Levels: driven by DB storeys — ONLY show levels from A-model (using scene metaObjects)
+  // Levels: driven by DB storeys — ONLY show levels from A-model (using parentCommonName)
   const levels: LevelItem[] = useMemo(() => {
-    const viewer = getXeokitViewer();
-    const metaObjects = viewer?.metaScene?.metaObjects;
+    // Filter to A-model storeys using parentCommonName from DB (most reliable source)
+    const aModelStoreys = storeyAssets.filter((storey) => {
+      if (!storey.sourceName || isGuid(storey.sourceName)) return false;
+      return isArchitecturalModel(storey.sourceName);
+    });
+    // Fallback: if no A-model storeys identified, show all
+    const filtered = aModelStoreys.length > 0 ? aModelStoreys : storeyAssets;
 
-    return storeyAssets
-      .filter((storey) => {
-        // If no A-model identified, show all levels
-        if (aModelMetaObjectIds.size === 0) return true;
-        // Check if storey's fmGuid exists as a metaObject in the A-model set
-        const fmGuid = storey.fmGuid;
-        if (aModelMetaObjectIds.has(fmGuid)) return true;
-        // Also check normalized / case-insensitive
-        if (aModelMetaObjectIds.has(fmGuid.toLowerCase())) return true;
-        if (aModelMetaObjectIds.has(fmGuid.toUpperCase())) return true;
-        // Check via metaObjects: find metaObject with matching originalSystemId
-        if (metaObjects) {
-          for (const id of Array.from(aModelMetaObjectIds)) {
-            const mo = metaObjects[id];
-            if (mo?.type?.toLowerCase() === 'ifcbuildingstorey') {
-              const moGuid = mo.originalSystemId || mo.id;
-              if (normalizeGuid(moGuid) === storey.normalizedFmGuid) return true;
-            }
-          }
-        }
-        return false;
-      })
+    return filtered
       .map((storey) => {
         const exactSharedFloor = sharedFloors.find((floor) =>
           floor.databaseLevelFmGuids.some((g) => normalizeGuid(g) === storey.normalizedFmGuid)
