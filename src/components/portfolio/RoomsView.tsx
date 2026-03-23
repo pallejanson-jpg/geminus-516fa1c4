@@ -613,16 +613,16 @@ const RoomsView: React.FC<RoomsViewProps> = ({
       {/* Selection toolbar - shown when rows are selected */}
       {selectedRows.size > 0 && (
         <div className="border-b px-4 py-2 flex items-center gap-2 bg-muted/50 shrink-0">
-          <Badge variant="secondary">{selectedRows.size} markerade</Badge>
+          <Badge variant="secondary">{selectedRows.size} selected</Badge>
           
           <Button size="sm" variant="outline" onClick={handleShowSelectedProperties} className="gap-1">
             <Info size={14} />
-            Egenskaper
+            Properties
           </Button>
           
           <Button size="sm" variant="ghost" onClick={() => setSelectedRows(new Set())} className="gap-1 ml-auto">
             <ArrowLeft size={14} />
-            Avmarkera
+            Deselect
           </Button>
         </div>
       )}
