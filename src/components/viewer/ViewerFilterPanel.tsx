@@ -243,10 +243,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return storeyAssets
       .filter((storey) => {
         // Only include levels belonging to the A-model
+        // Method 1: match by sourceGuid against aModelSourceGuid
         if (aModelSourceGuid && storey.sourceGuid) {
-          return normalizeGuid(storey.sourceGuid) === normalizeGuid(aModelSourceGuid);
+          if (normalizeGuid(storey.sourceGuid) === normalizeGuid(aModelSourceGuid)) return true;
         }
-        // If no A-model identified, include all
+        // Method 2: match by sourceName starting with "A" (architectural model naming)
+        if (storey.sourceName && isArchitecturalModel(storey.sourceName)) return true;
+        // Method 3: if aModelSourceGuid was found but this storey doesn't match, exclude it
+        if (aModelSourceGuid) return false;
+        // If no A-model identified at all, include all levels
         return true;
       })
       .map((storey) => {
