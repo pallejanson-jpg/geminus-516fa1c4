@@ -62,7 +62,7 @@ function PredictionCard({ prediction }: { prediction: MaintenancePrediction }) {
                 {prediction.category}
               </span>
               <span>⏱ {prediction.estimatedTimeToFailure}</span>
-              <span>{Math.round(prediction.confidence * 100)}% konfidens</span>
+              <span>{Math.round(prediction.confidence * 100)}% confidence</span>
             </div>
           </div>
         </div>
