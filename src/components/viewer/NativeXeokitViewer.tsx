@@ -17,6 +17,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { applyArchitectColors } from '@/lib/architect-colors';
 import { isRealTiling, getTilesToLoad } from '@/hooks/useFloorPriorityLoading';
 import { INSIGHTS_COLOR_UPDATE_EVENT, INSIGHTS_COLOR_RESET_EVENT, ALARM_ANNOTATIONS_SHOW_EVENT, LOAD_SAVED_VIEW_EVENT, type InsightsColorUpdateDetail, type AlarmAnnotationsShowDetail } from '@/lib/viewer-events';
+import { FORCE_SHOW_SPACES_EVENT } from '@/components/viewer/RoomVisualizationPanel';
 import type { GeometryManifest } from '@/lib/types';
 
 const XEOKIT_CDN = '/lib/xeokit/xeokit-sdk.es.js';
@@ -1326,6 +1327,33 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
     window.addEventListener(INSIGHTS_COLOR_UPDATE_EVENT, handler);
     return () => window.removeEventListener(INSIGHTS_COLOR_UPDATE_EVENT, handler);
+  }, []);
+
+  // ── Listen for FORCE_SHOW_SPACES (toggle IfcSpace visibility for Insights/Visualization) ───
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const show = detail?.show ?? true;
+      const viewer = viewerRef.current;
+      if (!viewer?.scene || !viewer?.metaScene?.metaObjects) return;
+
+      const metaObjects = viewer.metaScene.metaObjects;
+      const scene = viewer.scene;
+      Object.values(metaObjects).forEach((mo: any) => {
+        const ifcType = (mo.type || '').toLowerCase();
+        if (ifcType === 'ifcspace' || ifcType === 'ifc_space' || ifcType === 'space') {
+          const entity = scene.objects?.[mo.id];
+          if (entity) {
+            entity.visible = show;
+            entity.pickable = show;
+          }
+        }
+      });
+      console.log('[NativeViewer] FORCE_SHOW_SPACES:', show);
+    };
+
+    window.addEventListener(FORCE_SHOW_SPACES_EVENT, handler);
+    return () => window.removeEventListener(FORCE_SHOW_SPACES_EVENT, handler);
   }, []);
 
   // ── Listen for Insights color reset (tab change → restore architect colors) ───
