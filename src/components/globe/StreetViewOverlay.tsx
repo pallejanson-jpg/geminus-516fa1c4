@@ -61,6 +61,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
         viewer.scene.primitives.add(pano);
         currentPanoRef.current = pano;
         currentPosRef.current = { lng: longitude, lat: latitude };
+        setCurrentPos({ lng: longitude, lat: latitude });
 
         // Position camera inside new panorama with preserved heading
         const pos = Cesium.Cartesian3.fromDegrees(longitude, latitude, 0);
