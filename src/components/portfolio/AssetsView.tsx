@@ -897,7 +897,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       {/* Selection toolbar - shown when rows are selected */}
       {selectedRows.size > 0 && (
         <div className="border-b px-4 py-2 flex items-center gap-2 bg-muted/50 shrink-0">
-          <Badge variant="secondary">{selectedRows.size} markerade</Badge>
+          <Badge variant="secondary">{selectedRows.size} selected</Badge>
           
           <Button size="sm" variant="outline" onClick={handleShowSelectedProperties} className="gap-1">
             <Info size={14} />
