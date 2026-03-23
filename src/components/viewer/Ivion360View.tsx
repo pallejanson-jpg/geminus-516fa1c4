@@ -300,6 +300,23 @@ export default function Ivion360View({
     }
   }, [sdkStatus, isMobile]);
 
+  // Apply initial heading from Street View transition
+  useEffect(() => {
+    if (sdkStatus !== 'ready' || initialHeading == null || !ivApiRef.current) return;
+    try {
+      const api = ivApiRef.current;
+      if (api.camera?.setHeading) {
+        api.camera.setHeading(initialHeading);
+        console.log('[Ivion360View] Applied initial heading from Street View:', initialHeading);
+      } else if (api.resolveMoveTo) {
+        api.resolveMoveTo({ heading: initialHeading });
+        console.log('[Ivion360View] Applied heading via resolveMoveTo:', initialHeading);
+      }
+    } catch (e) {
+      console.warn('[Ivion360View] Could not apply initial heading:', e);
+    }
+  }, [sdkStatus, initialHeading]);
+
   // ─── Token renewal ────────────────────────────────────────────────
 
   useEffect(() => {
