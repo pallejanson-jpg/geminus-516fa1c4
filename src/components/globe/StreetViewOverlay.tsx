@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { X, Loader2, DoorOpen, RotateCcw } from 'lucide-react';
+import { X, Loader2, DoorOpen, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 // Import Cesium — base URL already set by CesiumGlobeView
 import * as Cesium from 'cesium';
@@ -22,9 +22,109 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
+  const providerRef = useRef<any>(null);
+  const currentPosRef = useRef<{ lng: number; lat: number }>({ lng, lat });
+  const currentPanoRef = useRef<any>(null); // current panorama primitive
   const [loading, setLoading] = useState(true);
+  const [moving, setMoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
+
+  // Load a panorama at given position, replacing the current one
+  const loadPanoAtPosition = useCallback(async (panoId: string, longitude: number, latitude: number) => {
+    const viewer = viewerRef.current;
+    const provider = providerRef.current;
+    if (!viewer || viewer.isDestroyed() || !provider) return;
+
+    setMoving(true);
+    try {
+      // Save current heading to preserve orientation
+      const heading = viewer.camera.heading;
+
+      // Remove old panorama
+      if (currentPanoRef.current) {
+        viewer.scene.primitives.remove(currentPanoRef.current);
+        currentPanoRef.current = null;
+      }
+
+      const panoCartographic = Cesium.Cartographic.fromDegrees(longitude, latitude, 0);
+      const pano = await provider.loadPanorama({
+        cartographic: panoCartographic,
+        panoId,
+      });
+
+      if (!viewer.isDestroyed()) {
+        viewer.scene.primitives.add(pano);
+        currentPanoRef.current = pano;
+        currentPosRef.current = { lng: longitude, lat: latitude };
+
+        // Position camera inside new panorama with preserved heading
+        const pos = Cesium.Cartesian3.fromDegrees(longitude, latitude, 0);
+        viewer.scene.camera.lookAt(
+          pos,
+          new Cesium.HeadingPitchRange(heading, 0, 2)
+        );
+      }
+    } catch (err) {
+      console.error('Failed to load panorama:', err);
+    } finally {
+      setMoving(false);
+    }
+  }, []);
+
+  // Move forward in current look direction
+  const moveForward = useCallback(async () => {
+    const viewer = viewerRef.current;
+    const provider = providerRef.current;
+    if (!viewer || viewer.isDestroyed() || !provider || moving) return;
+
+    const heading = viewer.camera.heading;
+    const pos = currentPosRef.current;
+
+    // Calculate point ~30m ahead
+    const dLat = (30 / 111320) * Math.cos(heading);
+    const dLng = (30 / (111320 * Math.cos(pos.lat * Math.PI / 180))) * Math.sin(heading);
+    const aheadCart = Cesium.Cartographic.fromDegrees(pos.lng + dLng, pos.lat + dLat, 0);
+
+    try {
+      setMoving(true);
+      const nextPano = await provider.getNearestPanoId(aheadCart, 50);
+      if (nextPano && nextPano.panoId) {
+        await loadPanoAtPosition(nextPano.panoId, nextPano.longitude, nextPano.latitude);
+      }
+    } catch {
+      // No panorama found in that direction
+    } finally {
+      setMoving(false);
+    }
+  }, [moving, loadPanoAtPosition]);
+
+  // Move backward (opposite direction)
+  const moveBackward = useCallback(async () => {
+    const viewer = viewerRef.current;
+    const provider = providerRef.current;
+    if (!viewer || viewer.isDestroyed() || !provider || moving) return;
+
+    const heading = viewer.camera.heading + Math.PI; // reverse
+    const pos = currentPosRef.current;
+
+    const dLat = (30 / 111320) * Math.cos(heading);
+    const dLng = (30 / (111320 * Math.cos(pos.lat * Math.PI / 180))) * Math.sin(heading);
+    const aheadCart = Cesium.Cartographic.fromDegrees(pos.lng + dLng, pos.lat + dLat, 0);
+
+    try {
+      setMoving(true);
+      const nextPano = await provider.getNearestPanoId(aheadCart, 50);
+      if (nextPano && nextPano.panoId) {
+        await loadPanoAtPosition(nextPano.panoId, nextPano.longitude, nextPano.latitude);
+      }
+    } catch {
+      // No panorama found
+    } finally {
+      setMoving(false);
+    }
+  }, [moving, loadPanoAtPosition]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -32,10 +132,8 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
 
     const init = async () => {
       try {
-        // Ensure token is set
         Cesium.Ion.defaultAccessToken = cesiumToken;
 
-        // Create lightweight viewer for Street View only
         const viewer = new Cesium.Viewer(containerRef.current!, {
           timeline: false, animation: false, baseLayerPicker: false,
           geocoder: false, homeButton: false, sceneModePicker: false,
@@ -44,10 +142,8 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
         if (cancelled) { viewer.destroy(); return; }
         viewerRef.current = viewer;
 
-        // Hide globe — Street View renders as scene primitives
         viewer.scene.globe.show = false;
 
-        // Minimize credits
         const creditContainer = viewer.cesiumWidget.creditContainer as HTMLElement;
         if (creditContainer) {
           creditContainer.style.transform = 'scale(0.6)';
@@ -55,20 +151,19 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
           creditContainer.style.opacity = '0.4';
         }
 
-        // Get Street View key via Ion experimental endpoint
+        // Get Street View key
         const ionResponse = await Cesium.Resource.fetchJson({
           url: `${Cesium.Ion.defaultServer}/experimental/panoramas/google`,
           headers: { Authorization: `Bearer ${cesiumToken}` },
         });
-
         if (cancelled) return;
 
         (Cesium as any).GoogleMaps.defaultStreetViewStaticApiKey = ionResponse.options.key;
         (Cesium as any).GoogleMaps.streetViewStaticApiEndpoint = ionResponse.options.url;
 
-        // Create provider
         const provider = await (Cesium as any).GoogleStreetViewCubeMapPanoramaProvider.fromUrl();
         if (cancelled) return;
+        providerRef.current = provider;
 
         // Find nearest panorama
         const cartographic = Cesium.Cartographic.fromDegrees(lng, lat, 0);
@@ -80,7 +175,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
           return;
         }
 
-        // Load panorama
+        // Load initial panorama
         const panoCartographic = Cesium.Cartographic.fromDegrees(
           panoIdObject.longitude, panoIdObject.latitude, 0
         );
@@ -91,8 +186,10 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
         if (cancelled) return;
 
         viewer.scene.primitives.add(streetViewPanorama);
+        currentPanoRef.current = streetViewPanorama;
+        currentPosRef.current = { lng: panoIdObject.longitude, lat: panoIdObject.latitude };
 
-        // Position camera inside panorama
+        // Position camera
         const lookPosition = Cesium.Cartesian3.fromDegrees(
           panoIdObject.longitude, panoIdObject.latitude, 0
         );
@@ -101,7 +198,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
           new Cesium.HeadingPitchRange(Cesium.Math.toRadians(-90), 0, 2)
         );
 
-        // Configure controls: rotation/tilt only
+        // Configure controls
         const controller = viewer.scene.screenSpaceCameraController;
         controller.enableRotate = true;
         controller.enableTilt = true;
@@ -125,6 +222,28 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
           frustum.fov = Cesium.Math.clamp(fov, minFov, maxFov);
         }, Cesium.ScreenSpaceEventType.WHEEL);
 
+        // Double-click to move forward
+        handler.setInputAction(() => {
+          // Use a timeout to let the ref update
+          setTimeout(() => {
+            const v = viewerRef.current;
+            const p = providerRef.current;
+            if (!v || v.isDestroyed() || !p) return;
+
+            const h = v.camera.heading;
+            const cp = currentPosRef.current;
+            const dLat = (30 / 111320) * Math.cos(h);
+            const dLng = (30 / (111320 * Math.cos(cp.lat * Math.PI / 180))) * Math.sin(h);
+            const ac = Cesium.Cartographic.fromDegrees(cp.lng + dLng, cp.lat + dLat, 0);
+
+            p.getNearestPanoId(ac, 50).then((next: any) => {
+              if (next && next.panoId) {
+                loadPanoAtPosition(next.panoId, next.longitude, next.latitude);
+              }
+            }).catch(() => {});
+          }, 0);
+        }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+
         setLoading(false);
       } catch (err: any) {
         console.error('Street View init error:', err);
@@ -143,10 +262,12 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
         viewerRef.current.destroy();
       }
       viewerRef.current = null;
+      providerRef.current = null;
+      currentPanoRef.current = null;
     };
-  }, [lat, lng, cesiumToken]);
+  }, [lat, lng, cesiumToken, loadPanoAtPosition]);
 
-  // Enter building: capture heading and navigate to 360° view
+  // Enter building
   const handleEnterBuilding = useCallback(() => {
     const viewer = viewerRef.current;
     if (viewer && !viewer.isDestroyed()) {
@@ -167,6 +288,28 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
           <span className="text-xs text-muted-foreground">— {buildingName}</span>
         </div>
         <div className="flex items-center gap-1">
+          {/* Navigation arrows */}
+          <Button
+            variant="secondary"
+            size="icon"
+            className="h-7 w-7"
+            onClick={moveBackward}
+            disabled={moving || loading}
+            title="Gå bakåt"
+          >
+            <ArrowDown size={14} />
+          </Button>
+          <Button
+            variant="secondary"
+            size="icon"
+            className="h-7 w-7"
+            onClick={moveForward}
+            disabled={moving || loading}
+            title="Gå framåt"
+          >
+            <ArrowUp size={14} />
+          </Button>
+
           {has360 && (
             <Button variant="secondary" size="sm" className="h-7 text-xs gap-1" onClick={handleEnterBuilding}>
               <DoorOpen size={12} />
@@ -182,12 +325,36 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
       {/* Cesium container */}
       <div ref={containerRef} className="flex-1 relative" />
 
-      {/* Loading state */}
-      {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-20">
+      {/* Mobile: large forward button at bottom center */}
+      {isMobile && !loading && !error && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex gap-2">
+          <Button
+            variant="secondary"
+            size="icon"
+            className="h-12 w-12 rounded-full shadow-lg bg-card/90 backdrop-blur-sm"
+            onClick={moveBackward}
+            disabled={moving}
+          >
+            <ArrowDown size={20} />
+          </Button>
+          <Button
+            variant="default"
+            size="icon"
+            className="h-12 w-12 rounded-full shadow-lg"
+            onClick={moveForward}
+            disabled={moving}
+          >
+            <ArrowUp size={20} />
+          </Button>
+        </div>
+      )}
+
+      {/* Loading / moving state */}
+      {(loading || moving) && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-20 pointer-events-none">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 size={20} className="animate-spin" />
-            <span className="text-sm">Laddar Street View…</span>
+            <span className="text-sm">{loading ? 'Laddar Street View…' : 'Laddar panorama…'}</span>
           </div>
         </div>
       )}
