@@ -21,7 +21,7 @@ import RouteDisplayOverlay from './RouteDisplayOverlay';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
 import { AppContext } from '@/context/AppContext';
-import { VIEW_MODE_REQUESTED_EVENT, LOAD_SAVED_VIEW_EVENT, VIEWER_TOOL_CHANGED_EVENT, VIEWER_CREATE_ASSET_EVENT, type LoadSavedViewDetail, type ViewerToolChangedDetail } from '@/lib/viewer-events';
+import { VIEW_MODE_REQUESTED_EVENT, LOAD_SAVED_VIEW_EVENT, VIEWER_TOOL_CHANGED_EVENT, VIEWER_CREATE_ASSET_EVENT, VIEW_MODE_2D_TOGGLED_EVENT, type LoadSavedViewDetail, type ViewerToolChangedDetail, type ViewMode2DToggledDetail } from '@/lib/viewer-events';
 import { ROOM_LABELS_TOGGLE_EVENT, ROOM_LABELS_CONFIG_EVENT, type RoomLabelsToggleDetail } from '@/hooks/useRoomLabels';
 import useRoomLabels from '@/hooks/useRoomLabels';
 import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDialog';
@@ -467,6 +467,30 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     window.addEventListener(LOAD_SAVED_VIEW_EVENT, handler);
     return () => window.removeEventListener(LOAD_SAVED_VIEW_EVENT, handler);
   }, [applySavedView]);
+
+  // ── 2D mode: disable orbit and make IfcSpace unpickable ──────────────
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { enabled } = (e as CustomEvent<ViewMode2DToggledDetail>).detail || {};
+      const viewer = (window as any).__nativeXeokitViewer;
+      if (!viewer?.scene || !viewer?.cameraControl) return;
+
+      // Toggle navMode: planView disables orbit/rotate, keeps pan & zoom
+      viewer.cameraControl.navMode = enabled ? 'planView' : 'orbit';
+
+      // Toggle IfcSpace pickability: unpickable in 2D so objects below are clickable
+      const metaObjects = viewer.metaScene?.metaObjects;
+      if (metaObjects) {
+        Object.values(metaObjects).forEach((mo: any) => {
+          if (mo.type?.toLowerCase() !== 'ifcspace') return;
+          const entity = viewer.scene.objects?.[mo.id];
+          if (entity) entity.pickable = !enabled;
+        });
+      }
+    };
+    window.addEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler);
+    return () => window.removeEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler);
+  }, []);
 
   // ── Select tool click handler ──────────────────────────────────────────
   const activeToolRef = useRef<string | null>(null);

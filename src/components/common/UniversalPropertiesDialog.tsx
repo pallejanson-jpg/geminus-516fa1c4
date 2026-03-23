@@ -1093,7 +1093,9 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       return <span className="text-sm">{displayValue.toLocaleString('en-US')}</span>;
     }
     
-    return <span className="text-sm truncate max-w-[200px] block sm:text-right" title={String(displayValue)}>{String(displayValue)}</span>;
+    // GUIDs should wrap instead of truncating
+    const isGuid = typeof displayValue === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(displayValue);
+    return <span className={cn("text-sm block sm:text-right", isGuid ? "break-all font-mono text-xs" : "truncate max-w-[240px]")} title={String(displayValue)}>{String(displayValue)}</span>;
   };
 
   // Content shared between mobile and desktop
@@ -1138,7 +1140,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
               {Object.entries(bimFallbackData).map(([key, value]) => (
                 <div key={key} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-1.5 px-2 rounded">
                   <span className="text-xs text-muted-foreground shrink-0">{key}</span>
-                  <span className="text-sm truncate max-w-[200px] block sm:text-right" title={value}>{value}</span>
+                  <span className={cn("text-sm block sm:text-right", /^[0-9a-f]{8}-/i.test(value || '') ? "break-all font-mono text-xs" : "truncate max-w-[240px]")} title={value}>{value}</span>
                 </div>
               ))}
             </div>
@@ -1215,7 +1217,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                 {Object.entries(bimFallbackData).map(([key, value]) => (
                   <div key={key} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded">
                     <span className="text-xs text-muted-foreground shrink-0">{key}</span>
-                    <span className="text-sm truncate max-w-[180px] text-right" title={value}>{value}</span>
+                    <span className={cn("text-sm text-right", /^[0-9a-f]{8}-/i.test(value || '') ? "break-all font-mono text-xs" : "truncate max-w-[220px]")} title={value}>{value}</span>
                   </div>
                 ))}
               </CollapsibleContent>
@@ -1479,7 +1481,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   // Desktop: Fixed right-side panel (like the 3D view menu)
   return (
     <div
-      className="fixed inset-y-0 right-0 z-[70] w-80 bg-card border-l shadow-xl flex flex-col animate-in slide-in-from-right duration-300"
+      className="fixed inset-y-0 right-0 z-[70] w-96 bg-card border-l shadow-xl flex flex-col animate-in slide-in-from-right duration-300"
     >
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b bg-muted/30 shrink-0">
@@ -1502,8 +1504,8 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
               {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
             </Button>
           )}
-          <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 border-border bg-background hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); onClose(); }}>
-            <X className="h-4 w-4" />
+          <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 border-border bg-background hover:bg-destructive/10 text-foreground" onClick={(e) => { e.stopPropagation(); onClose(); }}>
+            <X className="h-4 w-4 text-foreground" />
           </Button>
         </div>
       </div>

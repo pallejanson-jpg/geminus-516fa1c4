@@ -520,9 +520,12 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         const detail = { mode: opts.mode, colorMap: opts.colorMap, nameColorMap };
 
         if (drawerMode) {
-            // Force spaces visible so coloring is visible in the 3D viewer
+            // Force spaces visible first, then apply coloring after a short delay
+            // so NativeXeokitViewer has time to process the space visibility change
             window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: true } }));
-            window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail }));
+            setTimeout(() => {
+                window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail }));
+            }, 150);
         } else if (isMobile) {
             navigateToInsights3D(opts);
         } else {
