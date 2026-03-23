@@ -1366,6 +1366,13 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const scene = viewer.scene;
     if (scene.xrayedObjectIds?.length > 0) scene.setObjectsXRayed(scene.xrayedObjectIds, false);
     if (scene.colorizedObjectIds?.length > 0) scene.setObjectsColorized(scene.colorizedObjectIds, false);
+    // Restore all model-level visibility
+    const sceneModels = scene.models || {};
+    Object.values(sceneModels).forEach((model: any) => {
+      if (typeof model.visible !== 'undefined' && !model.visible) {
+        model.visible = true;
+      }
+    });
     scene.setObjectsVisible(scene.objectIds, true);
     scene.setObjectsPickable(scene.objectIds, true);
     scene.objectIds.forEach((id: string) => {
