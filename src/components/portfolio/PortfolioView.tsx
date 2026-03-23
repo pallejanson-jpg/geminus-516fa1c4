@@ -334,6 +334,13 @@ const PortfolioView: React.FC = () => {
     setActiveApp('native_viewer');
     setShowRoomsFor(null);
     setShowAssetsFor(null);
+    
+    // Dispatch zoom-to event after a delay to allow viewer to load
+    if (fmGuid !== buildingGuid) {
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('VIEWER_ZOOM_TO_OBJECT', { detail: { fmGuid } }));
+      }, 3000);
+    }
   };
 
   // Handle selecting a room to show its landing page
