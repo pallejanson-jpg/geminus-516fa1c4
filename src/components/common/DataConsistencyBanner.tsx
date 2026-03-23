@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AlertTriangle, RefreshCw, X, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -36,6 +36,7 @@ export const DataConsistencyBanner: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [dismissed, setDismissed] = useState(() => isDismissedInStorage());
   const { toast } = useToast();
+  const resumeRef = useRef(false);
 
   const dismiss = () => {
     setDismissed(true);
@@ -64,43 +65,91 @@ export const DataConsistencyBanner: React.FC = () => {
   };
 
   const syncWithCleanup = async () => {
+    if (resumeRef.current) return;
+    resumeRef.current = true;
     setIsSyncing(true);
+
     try {
       toast({
         title: 'Syncing...',
-        description: 'Two-way sync: pulling from and pushing to Asset+',
+        description: 'Step 1: Syncing building structure (buildings, floors, rooms)...',
       });
 
-      const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
-        body: { action: 'sync-with-cleanup' }
+      // Step 1: Sync structure (buildings, floors, rooms) — lightweight, won't timeout
+      const { data: structData, error: structError } = await supabase.functions.invoke('asset-plus-sync', {
+        body: { action: 'sync-structure' }
       });
-      
-      if (error) throw error;
-      
-      if (data?.success) {
-        toast({
-          title: 'Sync complete',
-          description: data.message,
-        });
-        setDeltaResult(null);
-        setDismissed(false);
-        try { localStorage.removeItem(DISMISS_KEY); } catch {}
-        
-        window.dispatchEvent(new CustomEvent('asset-sync-completed', {
-          detail: { totalSynced: data.totalSynced, orphansRemoved: data.orphansRemoved, pushed: data.pushed }
-        }));
-        
-        setTimeout(checkDelta, 2000);
-      }
+
+      if (structError) throw structError;
+
+      toast({
+        title: 'Structure synced',
+        description: `${structData?.totalSynced || 0} structural objects synced. Starting asset sync...`,
+      });
+
+      // Step 2: Resumable asset sync loop — each call handles one page, then returns
+      const runAssetLoop = async () => {
+        try {
+          const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+            body: { action: 'sync-assets-resumable' }
+          });
+
+          if (error) {
+            console.error('Asset sync error:', error);
+            toast({
+              variant: 'destructive',
+              title: 'Sync error',
+              description: error.message,
+            });
+            setIsSyncing(false);
+            resumeRef.current = false;
+            return;
+          }
+
+          if (data?.interrupted) {
+            // More pages to go — continue after short delay
+            setTimeout(() => runAssetLoop(), 2000);
+          } else {
+            // All done
+            toast({
+              title: 'Sync complete',
+              description: `${data?.totalSynced || 0} assets synced.`,
+            });
+            setIsSyncing(false);
+            resumeRef.current = false;
+            setDeltaResult(null);
+            setDismissed(false);
+            try { localStorage.removeItem(DISMISS_KEY); } catch {}
+
+            window.dispatchEvent(new CustomEvent('asset-sync-completed', {
+              detail: { totalSynced: data?.totalSynced }
+            }));
+
+            // Re-check delta after completion
+            setTimeout(checkDelta, 2000);
+          }
+        } catch (err: any) {
+          console.error('Asset sync exception:', err);
+          toast({
+            variant: 'destructive',
+            title: 'Sync error',
+            description: err.message || 'Unknown error',
+          });
+          setIsSyncing(false);
+          resumeRef.current = false;
+        }
+      };
+
+      runAssetLoop();
     } catch (error) {
-      console.error('Sync failed:', error);
+      console.error('Structure sync failed:', error);
       toast({
         title: 'Sync failed',
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
-    } finally {
       setIsSyncing(false);
+      resumeRef.current = false;
     }
   };
 
