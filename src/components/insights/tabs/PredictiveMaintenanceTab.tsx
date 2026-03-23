@@ -23,9 +23,9 @@ import {
 import { cn } from '@/lib/utils';
 
 const RISK_CONFIG = {
-  high: { color: 'text-destructive', bg: 'bg-destructive/10', border: 'border-destructive/30', icon: ShieldAlert, label: 'Hög risk' },
-  medium: { color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/30', icon: AlertTriangle, label: 'Medel' },
-  low: { color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', icon: ShieldCheck, label: 'Låg risk' },
+  high: { color: 'text-destructive', bg: 'bg-destructive/10', border: 'border-destructive/30', icon: ShieldAlert, label: 'High risk' },
+  medium: { color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/30', icon: AlertTriangle, label: 'Medium' },
+  low: { color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', icon: ShieldCheck, label: 'Low risk' },
 };
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
