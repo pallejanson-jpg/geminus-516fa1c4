@@ -926,7 +926,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
               <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
                 <CardTitle className="text-sm sm:text-base flex items-center gap-2">
                   <Eye size={14} className="sm:w-4 sm:h-4 text-primary shrink-0" />
-                  Sparade vyer
+                  Saved views
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-3 sm:px-6 overflow-hidden">

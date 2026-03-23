@@ -10,9 +10,9 @@ export const VISUALIZATION_QUICK_SELECT_EVENT = 'VISUALIZATION_QUICK_SELECT';
 const VIZ_ITEMS: { type: VisualizationType; icon: React.ElementType; label: string }[] = [
   { type: 'temperature', icon: Thermometer, label: 'Temp' },
   { type: 'co2', icon: Wind, label: 'CO₂' },
-  { type: 'humidity', icon: Droplets, label: 'Fukt' },
-  { type: 'occupancy', icon: Users, label: 'Belägg.' },
-  { type: 'area', icon: Ruler, label: 'Yta' },
+  { type: 'humidity', icon: Droplets, label: 'Humid.' },
+  { type: 'occupancy', icon: Users, label: 'Occup.' },
+  { type: 'area', icon: Ruler, label: 'Area' },
 ];
 
 const VisualizationQuickBar: React.FC<{ className?: string }> = ({ className }) => {

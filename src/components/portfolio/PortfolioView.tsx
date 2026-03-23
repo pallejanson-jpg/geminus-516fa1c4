@@ -494,7 +494,7 @@ const PortfolioView: React.FC = () => {
               {heroBuilding.commonName || heroBuilding.name}
             </h2>
             <div className="flex items-center gap-4 text-white/70 text-xs sm:text-sm">
-              <span>{heroBuilding.numberOfLevels || 0} våningar</span>
+              <span>{heroBuilding.numberOfLevels || 0} floors</span>
               <span>{heroBuilding.numberOfSpaces || 0} rum</span>
               <span>{heroBuilding.area ? `${heroBuilding.area.toLocaleString()} m²` : ''}</span>
             </div>
