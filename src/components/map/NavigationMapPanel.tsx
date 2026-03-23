@@ -106,7 +106,8 @@ const StepTimeline: React.FC<{
   profile: string;
   onStepClick?: (index: number, coords: { lat: number; lng: number }) => void;
   activeStepIndex?: number | null;
-}> = ({ steps, indoorDistance, indoorSteps, profile, onStepClick, activeStepIndex }) => {
+  streetViewApiKey?: string | null;
+}> = ({ steps, indoorDistance, indoorSteps, profile, onStepClick, activeStepIndex, streetViewApiKey }) => {
   const displaySteps = useMemo(() => {
     const result: DisplayStep[] = [];
 
