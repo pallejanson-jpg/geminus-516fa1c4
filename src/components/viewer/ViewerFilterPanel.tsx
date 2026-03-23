@@ -224,35 +224,40 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return map;
   }, [storeyAssets]);
 
-  // Identify A-model (architectural model) source GUID
-  const aModelSourceGuid = useMemo(() => {
-    // Check sharedModels for architectural model
-    const aModel = sharedModels.find(m => isArchitecturalModel(m.name || ''));
-    if (aModel) return aModel.id;
-    // Fallback: check sourceNameLookup
+  // Identify A-model source GUIDs (the parentBimObjectId values that belong to architectural models)
+  const aModelSourceGuids = useMemo(() => {
+    const guids = new Set<string>();
+    // Primary: use sourceNameLookup (maps storey.sourceGuid → friendly name like "A-Arkitektur")
     for (const [guid, name] of sourceNameLookup.entries()) {
-      if (isArchitecturalModel(name)) return guid;
+      if (isArchitecturalModel(name)) guids.add(normalizeGuid(guid));
     }
-    // If only one source, use it
-    if (sharedModels.length === 1) return sharedModels[0].id;
-    return null;
+    // Fallback: check sharedModels directly by name
+    if (guids.size === 0) {
+      sharedModels.forEach(m => {
+        if (isArchitecturalModel(m.name || '')) guids.add(normalizeGuid(m.id));
+      });
+    }
+    // Fallback: if only one source exists, assume it's the A-model
+    if (guids.size === 0 && sharedModels.length === 1) {
+      guids.add(normalizeGuid(sharedModels[0].id));
+    }
+    return guids;
   }, [sharedModels, sourceNameLookup]);
 
   // Levels: driven by DB storeys — ONLY show levels from A-model
   const levels: LevelItem[] = useMemo(() => {
     return storeyAssets
       .filter((storey) => {
-        // Only include levels belonging to the A-model
-        // Method 1: match by sourceGuid against aModelSourceGuid
-        if (aModelSourceGuid && storey.sourceGuid) {
-          if (normalizeGuid(storey.sourceGuid) === normalizeGuid(aModelSourceGuid)) return true;
-        }
-        // Method 2: match by sourceName starting with "A" (architectural model naming)
+        // Method 1: match by sourceName (most reliable — "A-Arkitektur" etc.)
         if (storey.sourceName && isArchitecturalModel(storey.sourceName)) return true;
-        // Method 3: if aModelSourceGuid was found but this storey doesn't match, exclude it
-        if (aModelSourceGuid) return false;
+        // Method 2: match by sourceGuid against known A-model source GUIDs
+        if (aModelSourceGuids.size > 0 && storey.sourceGuid) {
+          if (aModelSourceGuids.has(normalizeGuid(storey.sourceGuid))) return true;
+          // This storey doesn't belong to A-model — exclude it
+          return false;
+        }
         // If no A-model identified at all, include all levels
-        return true;
+        return aModelSourceGuids.size === 0;
       })
       .map((storey) => {
         const exactSharedFloor = sharedFloors.find((floor) =>
@@ -287,7 +292,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         };
         return extract(a.name) - extract(b.name) || a.name.localeCompare(b.name, 'sv');
       });
-  }, [storeyAssets, sharedFloors, buildingData, sourceNameLookup, aModelSourceGuid]);
+  }, [storeyAssets, sharedFloors, buildingData, sourceNameLookup, aModelSourceGuids]);
 
   // Sources: derived from ALL sharedModels so every model appears in the list
   const sources: BimSource[] = useMemo(() => {
@@ -1490,7 +1495,26 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   const handleSpaceToggle = useCallback((fmGuid: string, checked: boolean) => {
     setCheckedSpaces(prev => { const n = new Set(prev); checked ? n.add(fmGuid) : n.delete(fmGuid); return n; });
-  }, []);
+    // Checkbox = zoom to space with camera OUTSIDE (expanded AABB)
+    const viewer = getXeokitViewer();
+    if (!viewer?.scene) return;
+    const ids = entityMapRef.current.get(fmGuid) || [];
+    if (ids.length > 0) {
+      ids.forEach((id: string) => {
+        const entity = viewer.scene.objects?.[id];
+        if (entity) { entity.visible = true; entity.pickable = true; }
+      });
+      const firstEntity = viewer.scene.objects?.[ids[0]];
+      if (firstEntity?.aabb) {
+        // Expand AABB by 2x to position camera outside the space
+        const aabb = [...firstEntity.aabb];
+        const cx = (aabb[0] + aabb[3]) / 2, cy = (aabb[1] + aabb[4]) / 2, cz = (aabb[2] + aabb[5]) / 2;
+        const dx = (aabb[3] - aabb[0]) * 0.5, dy = (aabb[4] - aabb[1]) * 0.5, dz = (aabb[5] - aabb[2]) * 0.5;
+        const expanded = [cx - dx * 2, cy - dy * 2, cz - dz * 2, cx + dx * 2, cy + dy * 2, cz + dz * 2];
+        viewer.cameraFlight?.flyTo({ aabb: expanded, duration: 0.5 });
+      }
+    }
+  }, [getXeokitViewer]);
 
   const handleCategoryToggle = useCallback((name: string, checked: boolean) => {
     setCheckedCategories(prev => { const n = new Set(prev); checked ? n.add(name) : n.delete(name); return n; });
@@ -1513,10 +1537,19 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           entity.pickable = true;
         }
       });
-      // Fly to room
+      // Name click = fly camera INSIDE the space (use center point)
       const firstEntity = viewer.scene.objects?.[ids[0]];
       if (firstEntity?.aabb) {
-        viewer.cameraFlight?.flyTo({ aabb: firstEntity.aabb, duration: 0.5 });
+        const aabb = firstEntity.aabb;
+        const cx = (aabb[0] + aabb[3]) / 2, cy = (aabb[1] + aabb[4]) / 2, cz = (aabb[2] + aabb[5]) / 2;
+        const height = aabb[4] - aabb[1];
+        // Position eye at center of space, looking forward (+X)
+        viewer.cameraFlight?.flyTo({
+          eye: [cx, cy + height * 0.3, cz],
+          look: [cx + 2, cy + height * 0.3, cz],
+          up: [0, 1, 0],
+          duration: 0.5
+        });
       }
     }
   }, [getXeokitViewer, onNodeSelect]);
