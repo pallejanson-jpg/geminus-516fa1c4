@@ -243,10 +243,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return storeyAssets
       .filter((storey) => {
         // Only include levels belonging to the A-model
+        // Method 1: match by sourceGuid against aModelSourceGuid
         if (aModelSourceGuid && storey.sourceGuid) {
-          return normalizeGuid(storey.sourceGuid) === normalizeGuid(aModelSourceGuid);
+          if (normalizeGuid(storey.sourceGuid) === normalizeGuid(aModelSourceGuid)) return true;
         }
-        // If no A-model identified, include all
+        // Method 2: match by sourceName starting with "A" (architectural model naming)
+        if (storey.sourceName && isArchitecturalModel(storey.sourceName)) return true;
+        // Method 3: if aModelSourceGuid was found but this storey doesn't match, exclude it
+        if (aModelSourceGuid) return false;
+        // If no A-model identified at all, include all levels
         return true;
       })
       .map((storey) => {
@@ -851,7 +856,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     });
 
     if (!hasAnyFilter) {
-      // No filter: show everything (except spaces)
+      // No filter: show everything (except spaces), but only A-model objects
       const prev = prevVisibleRef.current;
       if (prev) {
         // Delta: show what was previously hidden
@@ -863,6 +868,20 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           if (entity) { entity.visible = false; entity.pickable = false; }
         });
         prevVisibleRef.current = null;
+      }
+
+      // Hide non-A models at model level (same as the "else" branch for sources)
+      const sceneModelsNoFilter = viewer.scene.models || {};
+      const hasIdentifiableAModelNoFilter = Object.entries(sceneModelsNoFilter).some(([mId, m]: [string, any]) => {
+        const mName = (m as any).name || sourceNameLookup.get(mId) || mId;
+        return isArchitecturalModel(mName);
+      });
+      if (hasIdentifiableAModelNoFilter) {
+        Object.entries(sceneModelsNoFilter).forEach(([modelId, model]: [string, any]) => {
+          if (typeof model.visible === 'undefined') return;
+          const modelName = (model as any).name || sourceNameLookup.get(modelId) || modelId;
+          model.visible = isArchitecturalModel(modelName);
+        });
       }
 
       window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
@@ -959,10 +978,21 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         sourceIds = null;
       }
     } else {
-      // No source filter active — ensure all models are visible at model level
+      // No source filter active — only show A-model(s), hide secondary models
       const sceneModels2 = viewer.scene.models || {};
-      Object.values(sceneModels2).forEach((model: any) => {
-        if (typeof model.visible !== 'undefined' && !model.visible) {
+      Object.entries(sceneModels2).forEach(([modelId, model]: [string, any]) => {
+        if (typeof model.visible === 'undefined') return;
+        // Check if this is an A-model by name or by being the first/only model
+        const modelName = model.name || sourceNameLookup.get(modelId) || modelId;
+        const isAModel = isArchitecturalModel(modelName);
+        // If we can't identify any A-model (e.g. all GUIDs), keep all visible
+        const hasIdentifiableAModel = Object.entries(sceneModels2).some(([mId, m]: [string, any]) => {
+          const mName = (m as any).name || sourceNameLookup.get(mId) || mId;
+          return isArchitecturalModel(mName);
+        });
+        if (hasIdentifiableAModel) {
+          model.visible = isAModel;
+        } else {
           model.visible = true;
         }
       });
