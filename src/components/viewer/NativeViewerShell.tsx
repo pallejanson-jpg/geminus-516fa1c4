@@ -13,6 +13,7 @@ import ViewerFilterPanel from './ViewerFilterPanel';
 import ViewerContextMenu from './ViewerContextMenu';
 import ViewerToolbar from './ViewerToolbar';
 import VisualizationToolbar from './VisualizationToolbar';
+import RoomVisualizationPanel from './RoomVisualizationPanel';
 import InventoryPanel from './InventoryPanel';
 import InventoryFormSheet from '@/components/inventory/InventoryFormSheet';
 import RouteDisplayOverlay from './RouteDisplayOverlay';
@@ -107,6 +108,41 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       window.removeEventListener('MOBILE_TOGGLE_FILTER_PANEL', handleToggleFilter);
       window.removeEventListener('MOBILE_TOGGLE_VIZ_MENU', handleToggleViz);
     };
+  }, []);
+
+  // Listen for VIEWER_ZOOM_TO_OBJECT from portfolio "Open in 3D"
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { fmGuid } = (e as CustomEvent).detail || {};
+      if (!fmGuid) return;
+      const viewer = (window as any).__nativeXeokitViewer;
+      if (!viewer?.scene || !viewer?.cameraFlight) return;
+      
+      const norm = (s: string) => s.toLowerCase().replace(/-/g, '');
+      const target = norm(fmGuid);
+      
+      const metaObjects = viewer.metaScene?.metaObjects || {};
+      let entityId: string | null = null;
+      for (const [id, mo] of Object.entries(metaObjects)) {
+        const sysId = norm(((mo as any).originalSystemId || (mo as any).id || ''));
+        if (sysId === target) {
+          entityId = id;
+          break;
+        }
+      }
+      
+      if (entityId) {
+        const entity = viewer.scene.objects[entityId];
+        if (entity) {
+          viewer.scene.setObjectsVisible([entityId], true);
+          viewer.scene.setObjectsSelected(viewer.scene.selectedObjectIds, false);
+          viewer.scene.setObjectsSelected([entityId], true);
+          viewer.cameraFlight.flyTo({ aabb: entity.aabb, duration: 1.5 });
+        }
+      }
+    };
+    window.addEventListener('VIEWER_ZOOM_TO_OBJECT', handler);
+    return () => window.removeEventListener('VIEWER_ZOOM_TO_OBJECT', handler);
   }, []);
 
   // Context menu state
@@ -854,6 +890,21 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           onToggleVisualization={(visible) => setShowRoomVisualization(visible)}
           externalOpen={showVisualizationMenu}
           onExternalOpenChange={setShowVisualizationMenu}
+        />
+      )}
+
+      {/* Room Visualization Panel — always mounted when viewer ready so color filter events work */}
+      {isViewerReady && buildingFmGuid && (
+        <RoomVisualizationPanel
+          viewerRef={viewerShimRef}
+          buildingFmGuid={buildingFmGuid}
+          onShowSpaces={(show) => {
+            setShowSpaces(show);
+            const assetViewer = viewerShimRef.current?.assetViewer || viewerShimRef.current?.$refs?.AssetViewer;
+            assetViewer?.onShowSpacesChanged?.(show);
+          }}
+          embedded
+          className="hidden"
         />
       )}
 

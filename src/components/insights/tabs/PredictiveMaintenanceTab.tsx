@@ -23,9 +23,9 @@ import {
 import { cn } from '@/lib/utils';
 
 const RISK_CONFIG = {
-  high: { color: 'text-destructive', bg: 'bg-destructive/10', border: 'border-destructive/30', icon: ShieldAlert, label: 'Hög risk' },
-  medium: { color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/30', icon: AlertTriangle, label: 'Medel' },
-  low: { color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', icon: ShieldCheck, label: 'Låg risk' },
+  high: { color: 'text-destructive', bg: 'bg-destructive/10', border: 'border-destructive/30', icon: ShieldAlert, label: 'High risk' },
+  medium: { color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/30', icon: AlertTriangle, label: 'Medium' },
+  low: { color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', icon: ShieldCheck, label: 'Low risk' },
 };
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -62,7 +62,7 @@ function PredictionCard({ prediction }: { prediction: MaintenancePrediction }) {
                 {prediction.category}
               </span>
               <span>⏱ {prediction.estimatedTimeToFailure}</span>
-              <span>{Math.round(prediction.confidence * 100)}% konfidens</span>
+              <span>{Math.round(prediction.confidence * 100)}% confidence</span>
             </div>
           </div>
         </div>
@@ -86,7 +86,7 @@ export default function PredictiveMaintenanceTab({ facility }: { facility?: Faci
     return (
       <div className="text-center py-12 text-muted-foreground">
         <Activity className="h-12 w-12 mx-auto mb-3 opacity-40" />
-        <p>Välj en byggnad för att se prediktivt underhåll</p>
+        <p>Select a building to view predictive maintenance</p>
       </div>
     );
   }
@@ -95,12 +95,12 @@ export default function PredictiveMaintenanceTab({ facility }: { facility?: Faci
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-foreground">Prediktivt underhåll</h3>
-          <p className="text-xs text-muted-foreground">AI-analys av utrustning och sensorer</p>
+          <h3 className="text-sm font-semibold text-foreground">Predictive Maintenance</h3>
+          <p className="text-xs text-muted-foreground">AI analysis of equipment and sensors</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => analyze()} disabled={isLoading}>
           <RefreshCw className={cn('h-3.5 w-3.5 mr-1.5', isLoading && 'animate-spin')} />
-          {isLoading ? 'Analyserar...' : 'Analysera'}
+          {isLoading ? 'Analyzing...' : 'Analyze'}
         </Button>
       </div>
 
@@ -126,7 +126,7 @@ export default function PredictiveMaintenanceTab({ facility }: { facility?: Faci
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-muted-foreground">Övergripande riskpoäng</span>
+                <span className="text-xs font-medium text-muted-foreground">Overall risk score</span>
                 <span className={cn(
                   'text-lg font-bold',
                   data.overallRiskScore > 70 ? 'text-destructive' :
@@ -159,7 +159,7 @@ export default function PredictiveMaintenanceTab({ facility }: { facility?: Faci
             <Card>
               <CardContent className="p-6 text-center">
                 <Shield className="h-10 w-10 mx-auto mb-2 text-emerald-500" />
-                <p className="text-sm text-muted-foreground">Inga underhållsrisker identifierade</p>
+                <p className="text-sm text-muted-foreground">No maintenance risks identified</p>
               </CardContent>
             </Card>
           )}

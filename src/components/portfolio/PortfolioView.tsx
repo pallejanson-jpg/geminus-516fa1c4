@@ -334,6 +334,13 @@ const PortfolioView: React.FC = () => {
     setActiveApp('native_viewer');
     setShowRoomsFor(null);
     setShowAssetsFor(null);
+    
+    // Dispatch zoom-to event after a delay to allow viewer to load
+    if (fmGuid !== buildingGuid) {
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('VIEWER_ZOOM_TO_OBJECT', { detail: { fmGuid } }));
+      }, 3000);
+    }
   };
 
   // Handle selecting a room to show its landing page
@@ -494,7 +501,7 @@ const PortfolioView: React.FC = () => {
               {heroBuilding.commonName || heroBuilding.name}
             </h2>
             <div className="flex items-center gap-4 text-white/70 text-xs sm:text-sm">
-              <span>{heroBuilding.numberOfLevels || 0} våningar</span>
+              <span>{heroBuilding.numberOfLevels || 0} floors</span>
               <span>{heroBuilding.numberOfSpaces || 0} rum</span>
               <span>{heroBuilding.area ? `${heroBuilding.area.toLocaleString()} m²` : ''}</span>
             </div>

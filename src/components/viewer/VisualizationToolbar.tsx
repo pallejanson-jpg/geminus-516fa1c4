@@ -48,11 +48,11 @@ import { VisualizationType, VISUALIZATION_CONFIGS } from "@/lib/visualization-ut
 // import { LEVEL_LABELS_TOGGLE_EVENT } from "@/hooks/useLevelLabels"; // disabled
 
 const VIZ_LIST_ITEMS: { type: VisualizationType; icon: React.ElementType; label: string }[] = [
-  { type: 'temperature', icon: Thermometer, label: 'Temperatur' },
+  { type: 'temperature', icon: Thermometer, label: 'Temperature' },
   { type: 'co2', icon: Wind, label: 'CO₂' },
-  { type: 'humidity', icon: Droplets, label: 'Luftfuktighet' },
-  { type: 'occupancy', icon: Users, label: 'Beläggning' },
-  { type: 'area', icon: Ruler, label: 'Yta (NTA)' },
+  { type: 'humidity', icon: Droplets, label: 'Humidity' },
+  { type: 'occupancy', icon: Users, label: 'Occupancy' },
+  { type: 'area', icon: Ruler, label: 'Area (NTA)' },
 ];
 
 /** Inline sub-component: clickable list of room visualization types */
@@ -717,6 +717,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const handleSelectIssue = useCallback((issue: BcfIssue) => {
     setSelectedIssue(issue);
     setShowIssueDetail(true);
+    // Close the issue list to prevent overlap with the detail sheet
+    setShowIssueList(false);
     
     // Navigate to the viewpoint if available with flash effect, pass selected_object_ids as fallback
     if (issue.viewpoint_json) {
@@ -875,16 +877,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
         </Label>
 
         <div className="space-y-2 sm:space-y-3">
-          {/* 2D Plan View Toggle */}
-          <div className="flex items-center justify-between py-1.5 sm:py-2">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className={cn("p-1 sm:p-1.5 rounded-md", is2DMode ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
-                <SquareDashed className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </div>
-              <span className="text-xs sm:text-sm">2D/3D</span>
-            </div>
-            <Switch checked={is2DMode} onCheckedChange={handle2DModeToggle} />
-          </div>
+          {/* 2D/3D toggle removed — handled by mode switcher in top bar */}
 
           {/* Model Tree Toggle */}
           {onToggleTreeView && (
@@ -1215,7 +1208,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                 <Button
                   variant="outline"
                   size="icon"
-                  className="h-8 w-8 border-destructive/50 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                  className="h-8 w-8 !text-red-400 !border-red-400/50 hover:!bg-red-500 hover:!text-white"
                   onClick={() => handleSetIsOpen(false)}
                 >
                   <X className="h-5 w-5" />

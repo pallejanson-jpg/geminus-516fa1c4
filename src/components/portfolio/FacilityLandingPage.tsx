@@ -708,7 +708,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
             {/* Building: Floor carousel (no room grid — rooms moved to storey page) */}
             {isBuilding && childStoreys.length > 0 && (
               <div className="mt-4 sm:mt-6 animate-in fade-in duration-500 min-w-0 overflow-hidden">
-                <h3 className="text-base sm:text-lg font-bold mb-3 sm:mb-4">Våningar ({childStoreys.length})</h3>
+                <h3 className="text-base sm:text-lg font-bold mb-3 sm:mb-4">Floors ({childStoreys.length})</h3>
                 
                 <Carousel opts={{ align: 'start', dragFree: true }} className="mb-4">
                   <CarouselContent className="-ml-2">
@@ -926,7 +926,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
               <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
                 <CardTitle className="text-sm sm:text-base flex items-center gap-2">
                   <Eye size={14} className="sm:w-4 sm:h-4 text-primary shrink-0" />
-                  Sparade vyer
+                  Saved views
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-3 sm:px-6 overflow-hidden">
