@@ -235,6 +235,13 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
     });
   }, []);
 
+  // Fetch Street View API key
+  useEffect(() => {
+    supabase.functions.invoke('get-streetview-key').then(({ data }) => {
+      if (data?.key) setStreetViewApiKey(data.key);
+    });
+  }, []);
+
   // Update origin text when location changes externally
   useEffect(() => {
     if (userLocation) {
