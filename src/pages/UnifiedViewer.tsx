@@ -845,7 +845,7 @@ const UnifiedViewerContent: React.FC<{
       </div>
 
       {/* ─── Content area ─── */}
-      <div ref={contentRef} className="flex-1 relative">
+      <div ref={contentRef} className="flex-1 flex flex-col min-h-0">
         {/* SDK container */}
         <div
           ref={sdkContainerRef}
