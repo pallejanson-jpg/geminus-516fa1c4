@@ -1286,7 +1286,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                     const alarmsForViewer = alarmList
                                                         .slice(0, 50)
                                                         .map((a: any) => ({ fmGuid: a.fm_guid, roomFmGuid: a.in_room_fm_guid }));
-                                                    window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: alarmsForViewer } }));
+                                                    window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: alarmsForViewer, flyTo: true } }));
                                                 } else {
                                                     // Navigate to viewer
                                                     navigateTo3D({ visualization: 'alarms' });
