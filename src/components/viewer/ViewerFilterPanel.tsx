@@ -842,22 +842,26 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }
 
     // Step 1: Compute solidIds via cascading filters
-    // Source filter
+    // Source filter — also toggle model-level visibility for reliable switching
     let sourceIds: Set<string> | null = null;
     if (checkedSources.size > 0) {
       sourceIds = new Set<string>();
       
-      // Collect all objects from checked source models via scene.models
       const sceneModels2 = viewer.scene.models || {};
       const metaObjects = viewer.metaScene?.metaObjects;
-      
-      // Build lookup: source guid → scene model IDs
       const checkedSourceGuidsNorm = new Set(Array.from(checkedSources).map(g => normalizeGuid(g)));
-      
+      const checkedSourceNames = new Set(
+        sources.filter(s => checkedSources.has(s.guid)).map(s => s.name.toLowerCase())
+      );
+
+      // Determine which scene model IDs are checked vs unchecked
+      const checkedSceneModelIds = new Set<string>();
+
       // Direct match: try checked source GUID as scene model ID
       checkedSources.forEach(srcGuid => {
         const sceneModel = sceneModels2[srcGuid];
         if (sceneModel) {
+          checkedSceneModelIds.add(srcGuid);
           const objs = sceneModel.objects || {};
           const objKeys = Array.isArray(objs) ? objs.map((e: any) => e.id).filter(Boolean) : Object.keys(objs);
           objKeys.forEach((id: string) => sourceIds!.add(id));
@@ -865,22 +869,18 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
       
       // Match via sharedModels (name or ID match)
-      const checkedSourceNames = new Set(
-        sources.filter(s => checkedSources.has(s.guid)).map(s => s.name.toLowerCase())
-      );
-      
       sharedModels.forEach(sm => {
         const guidMatch = checkedSourceGuidsNorm.has(normalizeGuid(sm.id));
         const nameMatch = checkedSourceNames.has((sm.name || '').toLowerCase());
         
         if (guidMatch || nameMatch) {
+          checkedSceneModelIds.add(sm.id);
           const sceneModel = sceneModels2[sm.id];
           if (sceneModel) {
             const objs = sceneModel.objects || {};
             const objKeys = Array.isArray(objs) ? objs.map((e: any) => e.id).filter(Boolean) : Object.keys(objs);
             objKeys.forEach((id: string) => sourceIds!.add(id));
             
-            // Fallback: if scene model has no objects, use metaObjects
             if (objKeys.length === 0 && metaObjects) {
               Object.values(metaObjects).forEach((mo: any) => {
                 if (mo.metaModel?.id === sm.id) sourceIds!.add(mo.id);
@@ -897,11 +897,27 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       checkedSources.forEach(srcGuid => {
         eMap.get(`source::${srcGuid}`)?.forEach(id => sourceIds!.add(id));
       });
+
+      // Toggle model-level visibility so xeokit actually switches rendered geometry
+      Object.entries(sceneModels2).forEach(([modelId, model]: [string, any]) => {
+        const shouldShow = checkedSceneModelIds.has(modelId);
+        if (typeof model.visible !== 'undefined') {
+          model.visible = shouldShow;
+        }
+      });
       
       if (sourceIds.size === 0) {
         console.warn('[FilterPanel] Source filter produced 0 IDs — falling back to all objects');
         sourceIds = null;
       }
+    } else {
+      // No source filter active — ensure all models are visible at model level
+      const sceneModels2 = viewer.scene.models || {};
+      Object.values(sceneModels2).forEach((model: any) => {
+        if (typeof model.visible !== 'undefined' && !model.visible) {
+          model.visible = true;
+        }
+      });
     }
 
     // Level filter
@@ -1350,6 +1366,13 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const scene = viewer.scene;
     if (scene.xrayedObjectIds?.length > 0) scene.setObjectsXRayed(scene.xrayedObjectIds, false);
     if (scene.colorizedObjectIds?.length > 0) scene.setObjectsColorized(scene.colorizedObjectIds, false);
+    // Restore all model-level visibility
+    const sceneModels = scene.models || {};
+    Object.values(sceneModels).forEach((model: any) => {
+      if (typeof model.visible !== 'undefined' && !model.visible) {
+        model.visible = true;
+      }
+    });
     scene.setObjectsVisible(scene.objectIds, true);
     scene.setObjectsPickable(scene.objectIds, true);
     scene.objectIds.forEach((id: string) => {
