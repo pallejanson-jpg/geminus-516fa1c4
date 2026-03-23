@@ -544,9 +544,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
           pickSurface: true,
         });
         if (pickResult?.worldPos && pickResult?.worldNormal) {
+          // Negate worldNormal: the pick normal points outward from the surface,
+          // but xeokit dir points toward the DISCARDED half-space.
+          // We want to cut away the side the user clicked on (visible side),
+          // so we negate the normal to discard inward from the click point.
+          const n = pickResult.worldNormal;
+          const negDir = [-n[0], -n[1], -n[2]];
           const sectionPlane = sectionPluginRef.current?.createSectionPlane?.({
             pos: pickResult.worldPos,
-            dir: pickResult.worldNormal,
+            dir: negDir,
           });
           // Show interactive drag gizmo/control for the created plane
           if (sectionPlane && sectionPluginRef.current?.showControl) {

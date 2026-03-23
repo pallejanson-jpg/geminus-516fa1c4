@@ -10,7 +10,7 @@ import { cn, normalizeGuid } from '@/lib/utils';
 import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
-import { ANNOTATION_FILTER_EVENT } from '@/lib/viewer-events';
+import { ANNOTATION_FILTER_EVENT, MODEL_LOAD_REQUESTED_EVENT } from '@/lib/viewer-events';
 import { useFloorData, isArchitecturalModel } from '@/hooks/useFloorData';
 import { useModelData } from '@/hooks/useModelData';
 import { getDescendantIds, hideSpaceAndAreaObjects } from '@/hooks/useFloorVisibility';
@@ -899,10 +899,19 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
 
       // Toggle model-level visibility so xeokit actually switches rendered geometry
+      // Also trigger on-demand loading for deferred (non-A) models that aren't loaded yet
       Object.entries(sceneModels2).forEach(([modelId, model]: [string, any]) => {
         const shouldShow = checkedSceneModelIds.has(modelId);
         if (typeof model.visible !== 'undefined') {
           model.visible = shouldShow;
+        }
+      });
+
+      // Request loading for checked models that don't exist in the scene yet (deferred models)
+      checkedSceneModelIds.forEach(modelId => {
+        if (!sceneModels2[modelId]) {
+          console.log(`[FilterPanel] Requesting deferred load for model: ${modelId}`);
+          window.dispatchEvent(new CustomEvent(MODEL_LOAD_REQUESTED_EVENT, { detail: { modelId } }));
         }
       });
       
