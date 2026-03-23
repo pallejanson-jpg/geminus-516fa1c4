@@ -3,6 +3,7 @@ import { X, Loader2, DoorOpen, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
+import StreetViewMiniMap from './StreetViewMiniMap';
 
 // Import Cesium — base URL already set by CesiumGlobeView
 import * as Cesium from 'cesium';
@@ -28,6 +29,8 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
   const [loading, setLoading] = useState(true);
   const [moving, setMoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentPos, setCurrentPos] = useState<{ lng: number; lat: number }>({ lng, lat });
+  const [currentHeading, setCurrentHeading] = useState(0);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
 
@@ -58,6 +61,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
         viewer.scene.primitives.add(pano);
         currentPanoRef.current = pano;
         currentPosRef.current = { lng: longitude, lat: latitude };
+        setCurrentPos({ lng: longitude, lat: latitude });
 
         // Position camera inside new panorama with preserved heading
         const pos = Cesium.Cartesian3.fromDegrees(longitude, latitude, 0);
@@ -197,6 +201,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
         viewer.scene.primitives.add(streetViewPanorama);
         currentPanoRef.current = streetViewPanorama;
         currentPosRef.current = { lng: panoIdObject.longitude, lat: panoIdObject.latitude };
+        setCurrentPos({ lng: panoIdObject.longitude, lat: panoIdObject.latitude });
 
         // Position camera
         const lookPosition = Cesium.Cartesian3.fromDegrees(
@@ -276,6 +281,18 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
     };
   }, [lat, lng, cesiumToken, loadPanoAtPosition]);
 
+  // Track heading changes
+  useEffect(() => {
+    if (loading) return;
+    const interval = setInterval(() => {
+      const viewer = viewerRef.current;
+      if (viewer && !viewer.isDestroyed()) {
+        setCurrentHeading(Cesium.Math.toDegrees(viewer.camera.heading));
+      }
+    }, 200);
+    return () => clearInterval(interval);
+  }, [loading]);
+
   // Enter building
   const handleEnterBuilding = useCallback(() => {
     const viewer = viewerRef.current;
@@ -331,8 +348,19 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
         </div>
       </div>
 
-      {/* Cesium container */}
       <div ref={containerRef} className="flex-1 relative" />
+
+      {/* Mini-map overlay */}
+      {!loading && !error && (
+        <StreetViewMiniMap
+          lng={currentPos.lng}
+          lat={currentPos.lat}
+          heading={currentHeading}
+          buildingLng={lng}
+          buildingLat={lat}
+          buildingName={buildingName}
+        />
+      )}
 
       {/* Mobile: large forward button at bottom center */}
       {isMobile && !loading && !error && (
