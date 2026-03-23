@@ -785,11 +785,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
           <Input
             value={searchQuery}
-            onChange={(e) => {
-              const val = e.target.value;
-              // Debounce search by using startTransition
-              React.startTransition(() => setSearchQuery(val));
-            }}
+            onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search assets..."
             className="pl-7 sm:pl-9 h-8 sm:h-9 text-xs sm:text-sm"
           />
