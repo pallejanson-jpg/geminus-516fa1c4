@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { MapFacility } from '@/hooks/useMapFacilities';
+import StreetViewThumbnail from '@/components/map/StreetViewThumbnail';
 
 interface RouteStep {
   instruction?: string;
@@ -105,7 +106,8 @@ const StepTimeline: React.FC<{
   profile: string;
   onStepClick?: (index: number, coords: { lat: number; lng: number }) => void;
   activeStepIndex?: number | null;
-}> = ({ steps, indoorDistance, indoorSteps, profile, onStepClick, activeStepIndex }) => {
+  streetViewApiKey?: string | null;
+}> = ({ steps, indoorDistance, indoorSteps, profile, onStepClick, activeStepIndex, streetViewApiKey }) => {
   const displaySteps = useMemo(() => {
     const result: DisplayStep[] = [];
 
@@ -182,6 +184,15 @@ const StepTimeline: React.FC<{
             <div className="min-w-0 flex-1">
               <p className="text-xs font-medium leading-tight truncate">{step.label}</p>
               {step.detail && <p className="text-[10px] text-muted-foreground truncate">{step.detail}</p>}
+              {/* Street View thumbnail for outdoor steps with coordinates */}
+              {streetViewApiKey && step.coordinates && step.icon !== 'indoor' && (
+                <StreetViewThumbnail
+                  lat={step.coordinates.lat}
+                  lng={step.coordinates.lng}
+                  heading={0}
+                  apiKey={streetViewApiKey}
+                />
+              )}
             </div>
           </div>
         );
@@ -216,11 +227,18 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
   const [showGeoResults, setShowGeoResults] = useState(false);
   const [mapboxToken, setMapboxToken] = useState<string | null>(null);
   const geocodeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  const [streetViewApiKey, setStreetViewApiKey] = useState<string | null>(null);
   // Fetch mapbox token for geocoding
   useEffect(() => {
     supabase.functions.invoke('get-mapbox-token').then(({ data }) => {
       if (data?.token) setMapboxToken(data.token);
+    });
+  }, []);
+
+  // Fetch Street View API key
+  useEffect(() => {
+    supabase.functions.invoke('get-streetview-key').then(({ data }) => {
+      if (data?.key) setStreetViewApiKey(data.key);
     });
   }, []);
 
@@ -507,6 +525,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
                     profile={profile}
                     onStepClick={onStepClick}
                     activeStepIndex={activeStepIndex}
+                    streetViewApiKey={streetViewApiKey}
                   />
                 </ScrollArea>
               )}

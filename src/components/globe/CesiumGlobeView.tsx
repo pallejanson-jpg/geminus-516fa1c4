@@ -5,7 +5,7 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
-import { Building2, Eye, Box, RotateCcw, Loader2, Boxes, ArrowRight } from 'lucide-react';
+import { Building2, Eye, Box, RotateCcw, Loader2, Boxes, ArrowRight, MapPin } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { useMapFacilities, MapFacility } from '@/hooks/useMapFacilities';
 import BuildingSidebar from '@/components/map/BuildingSidebar';
 import BuildingInfoCard from '@/components/map/BuildingInfoCard';
+import StreetViewOverlay from '@/components/globe/StreetViewOverlay';
 
 interface SelectedBuilding {
   facility: MapFacility;
@@ -80,6 +81,8 @@ const CesiumGlobeView: React.FC = () => {
   const [viewerReady, setViewerReady] = useState(false);
   const [bimLoading, setBimLoading] = useState(false);
   const [bimLoadedFmGuid, setBimLoadedFmGuid] = useState<string | null>(null);
+  const [streetViewFacility, setStreetViewFacility] = useState<MapFacility | null>(null);
+  const [cesiumToken, setCesiumToken] = useState<string | null>(null);
 
   // Sidebar items from shared hook
   const sidebarItems = useMemo(() =>
@@ -105,8 +108,11 @@ const CesiumGlobeView: React.FC = () => {
     supabase.functions.invoke('get-cesium-token').then(({ data, error }) => {
       if (!error && data?.token) {
         Cesium.Ion.defaultAccessToken = data.token;
+        setCesiumToken(data.token);
       } else {
-        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlYWE1OWUxNy1mMWZiLTQzYjYtYTQ0OS1kMWFjYmFkNjc4ZTkiLCJpZCI6NTc3MzMsImlhdCI6MTYyMjY0NjQ5OH0.XcKpgANiY19MC4bdFUXMVEBToBmqS8kuYpUlxJHYZxk';
+        const fallback = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlYWE1OWUxNy1mMWZiLTQzYjYtYTQ0OS1kMWFjYmFkNjc4ZTkiLCJpZCI6NTc3MzMsImlhdCI6MTYyMjY0NjQ5OH0.XcKpgANiY19MC4bdFUXMVEBToBmqS8kuYpUlxJHYZxk';
+        Cesium.Ion.defaultAccessToken = fallback;
+        setCesiumToken(fallback);
       }
       setTokenReady(true);
     });
@@ -519,20 +525,45 @@ const CesiumGlobeView: React.FC = () => {
             onViewDetails={() => handleNavigateToFacility(selectedBuilding.facility.fmGuid!)}
             onOpen3D={() => handleOpenViewer(selectedBuilding.facility.fmGuid!)}
             extraActions={
-              <button
-                className="w-full flex items-center justify-between px-1.5 py-1.5 text-[10px] sm:text-[11px] font-medium text-foreground hover:bg-primary/10 rounded transition-colors"
-                onClick={() => handleShowBim(selectedBuilding.facility.fmGuid!)}
-                disabled={bimLoading}
-              >
-                <span className="flex items-center gap-1.5">
-                  {bimLoading ? <Loader2 size={11} className="text-primary animate-spin" /> : <Boxes size={11} className="text-primary" />}
-                  {bimLoadedFmGuid === selectedBuilding.facility.fmGuid ? 'Dölj BIM' : 'Visa BIM'}
-                </span>
-                <ArrowRight size={10} className="text-muted-foreground" />
-              </button>
+              <>
+                <button
+                  className="w-full flex items-center justify-between px-1.5 py-1.5 text-[10px] sm:text-[11px] font-medium text-foreground hover:bg-primary/10 rounded transition-colors"
+                  onClick={() => handleShowBim(selectedBuilding.facility.fmGuid!)}
+                  disabled={bimLoading}
+                >
+                  <span className="flex items-center gap-1.5">
+                    {bimLoading ? <Loader2 size={11} className="text-primary animate-spin" /> : <Boxes size={11} className="text-primary" />}
+                    {bimLoadedFmGuid === selectedBuilding.facility.fmGuid ? 'Dölj BIM' : 'Visa BIM'}
+                  </span>
+                  <ArrowRight size={10} className="text-muted-foreground" />
+                </button>
+                <button
+                  className="w-full flex items-center justify-between px-1.5 py-1.5 text-[10px] sm:text-[11px] font-medium text-foreground hover:bg-primary/10 rounded transition-colors"
+                  onClick={() => { setStreetViewFacility(selectedBuilding.facility); setSelectedBuilding(null); }}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <MapPin size={11} className="text-primary" />
+                    Street View
+                  </span>
+                  <ArrowRight size={10} className="text-muted-foreground" />
+                </button>
+              </>
             }
           />
         </div>
+      )}
+
+      {/* Street View overlay */}
+      {streetViewFacility && cesiumToken && (
+        <StreetViewOverlay
+          lat={streetViewFacility.lat}
+          lng={streetViewFacility.lng}
+          buildingName={streetViewFacility.displayName}
+          fmGuid={streetViewFacility.fmGuid!}
+          has360={streetViewFacility.has360}
+          cesiumToken={cesiumToken}
+          onClose={() => setStreetViewFacility(null)}
+        />
       )}
 
       {mapFacilities.length === 0 && (
