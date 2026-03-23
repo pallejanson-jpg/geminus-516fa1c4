@@ -858,6 +858,21 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         />
       )}
 
+      {/* Room Visualization Panel — always mounted when viewer ready so color filter events work */}
+      {isViewerReady && buildingFmGuid && (
+        <RoomVisualizationPanel
+          viewerRef={viewerShimRef}
+          buildingFmGuid={buildingFmGuid}
+          onShowSpaces={(show) => {
+            setShowSpaces(show);
+            const assetViewer = viewerShimRef.current?.assetViewer || viewerShimRef.current?.$refs?.AssetViewer;
+            assetViewer?.onShowSpacesChanged?.(show);
+          }}
+          embedded
+          className="hidden"
+        />
+      )}
+
       {/* Asset panel — independent from visualization menu */}
       {isViewerReady && buildingFmGuid && (
         <InventoryPanel
