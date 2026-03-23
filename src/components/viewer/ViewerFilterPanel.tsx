@@ -561,6 +561,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const xeokitStoreys: { id: string; sysId: string; name: string; modelId: string }[] = [];
     const xeokitSpaces: { id: string; sysId: string; name: string }[] = [];
     const areaSpaceIds: string[] = [];
+    const nonASpaceIds: string[] = [];
 
     // Single pass: build typeIndex + collect storeys/spaces
     Object.values(metaObjects).forEach((mo: any) => {
@@ -578,11 +579,18 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           modelId: entityToModelId.get(mo.id) || mo.metaModel?.id || '',
         });
       } else if (typeLower === 'ifcspace') {
-        xeokitSpaces.push({
-          id: mo.id,
-          sysId: (mo.originalSystemId || mo.id || ''),
-          name: (mo.name || ''),
-        });
+        const spaceModelId = entityToModelId.get(mo.id) || mo.metaModel?.id || '';
+        const isFromAModel = aModelSceneIds.has(spaceModelId) || aModelSceneIds.size === 0;
+        if (isFromAModel) {
+          xeokitSpaces.push({
+            id: mo.id,
+            sysId: (mo.originalSystemId || mo.id || ''),
+            name: (mo.name || ''),
+          });
+        } else {
+          // Space from non-A model — track for permanent hiding
+          nonASpaceIds.push(mo.id);
+        }
         const spaceName = (mo.name || '').trim().toLowerCase();
         if (spaceName === 'area' || spaceName.startsWith('area ') || spaceName.startsWith('area:')) {
           areaSpaceIds.push(mo.id);
@@ -592,6 +600,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
     typeIndexRef.current = tIdx;
     areaSpaceIdsRef.current = areaSpaceIds;
+    nonASpaceIdsRef.current = nonASpaceIds;
 
     if (xeokitStoreys.length === 0) {
       console.warn('[FilterPanel] No IfcBuildingStorey found in metaScene');
