@@ -92,3 +92,6 @@ verify_jwt = false
 
 [functions.google-routes]
 verify_jwt = false
+
+[functions.get-streetview-key]
+verify_jwt = false
