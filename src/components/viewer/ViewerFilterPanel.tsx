@@ -717,6 +717,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   }, [isVisible, buildEntityMap]);
 
   // Re-apply filter when a deferred model finishes loading in the scene
+  const pendingReapplyRef = useRef(false);
   useEffect(() => {
     if (!isVisible) return;
     const viewer = getXeokitViewer();
@@ -726,17 +727,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       // Rebuild entity map to include the newly loaded model's objects
       entityMapBuilt.current = false;
       buildEntityMap();
-      // Re-apply filter after a short delay to let the entity map settle
-      setTimeout(() => {
-        applyFilterVisibility();
-      }, 200);
+      // Flag for re-apply; the effect below will pick it up
+      pendingReapplyRef.current = true;
     };
 
     viewer.scene.on?.('modelLoaded', onModelLoaded);
     return () => {
       viewer.scene.off?.('modelLoaded', onModelLoaded);
     };
-  }, [isVisible, getXeokitViewer, buildEntityMap, applyFilterVisibility]);
+  }, [isVisible, getXeokitViewer, buildEntityMap]);
 
   // ── Fetch annotation categories ────────────────────────────────────────
   useEffect(() => {
