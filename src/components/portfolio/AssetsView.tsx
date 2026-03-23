@@ -920,7 +920,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
               className="gap-1"
             >
               {isBatchSyncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-              Synka ({selectedCanSync})
+              Sync ({selectedCanSync})
             </Button>
           )}
           
