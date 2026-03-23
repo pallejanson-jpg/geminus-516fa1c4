@@ -738,7 +738,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                                 e.stopPropagation();
                                 handleOpen3D(room);
                               }}
-                              title="Visa i 3D"
+                              title="View in 3D"
                             >
                               <Cuboid size={14} />
                             </Button>
