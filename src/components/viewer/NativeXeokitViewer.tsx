@@ -1082,7 +1082,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           console.log('[NativeViewer] ✅ All secondary models background-loaded');
         };
         // Start after a short delay to let the UI settle
-        setTimeout(lazyLoadSecondary, 1500);
+        setTimeout(lazyLoadSecondary, 300);
       }
 
     } catch (e) {
