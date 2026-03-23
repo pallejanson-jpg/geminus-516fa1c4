@@ -1217,7 +1217,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                 {Object.entries(bimFallbackData).map(([key, value]) => (
                   <div key={key} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded">
                     <span className="text-xs text-muted-foreground shrink-0">{key}</span>
-                    <span className="text-sm truncate max-w-[180px] text-right" title={value}>{value}</span>
+                    <span className={cn("text-sm text-right", /^[0-9a-f]{8}-/i.test(value || '') ? "break-all font-mono text-xs" : "truncate max-w-[220px]")} title={value}>{value}</span>
                   </div>
                 ))}
               </CollapsibleContent>
