@@ -348,8 +348,19 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
         </div>
       </div>
 
-      {/* Cesium container */}
       <div ref={containerRef} className="flex-1 relative" />
+
+      {/* Mini-map overlay */}
+      {!loading && !error && (
+        <StreetViewMiniMap
+          lng={currentPos.lng}
+          lat={currentPos.lat}
+          heading={currentHeading}
+          buildingLng={lng}
+          buildingLat={lat}
+          buildingName={buildingName}
+        />
+      )}
 
       {/* Mobile: large forward button at bottom center */}
       {isMobile && !loading && !error && (
