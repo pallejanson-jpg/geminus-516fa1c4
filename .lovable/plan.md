@@ -1,34 +1,60 @@
 
 
-# Fix: Filter Menu Levels — Use A-Model Filtering (Same as useFloorData)
+# Analysis & Updated Plan
 
-## Problem
+## User Questions Answered
 
-The Filter menu's level listing uses `parentCommonName` / `parentBimObjectId` attributes from the DB to identify which storeys belong to the A-model. These attributes are often empty or GUID-like, causing the filter to fail and either show all levels or none.
+### "Can we not use the XKT worker for Asset+ buildings like Småviken?"
+Correct. The XKT worker pipeline (IFC→XKT conversion with per-storey splitting) only applies to IFC-uploaded buildings. Asset+ buildings like Småviken have pre-built XKT files served from the Asset+ 3D API — they are downloaded whole and cached in storage. The per-storey binary splitting done by the worker is not available for these models.
 
-Meanwhile, `useFloorData` (used by FloorVisibilitySelector) successfully filters levels to the A-model using a different approach: it uses `modelNamesMap` (from `useModelNames`) to resolve xeokit scene model IDs to friendly names, then checks which metaObjects belong to A-model objects.
+### "Can we just fetch the A-model and lazy-load the rest?"
+Yes — and this is **already implemented** in NativeXeokitViewer (lines 631-641). It splits models into A-models and secondary, loads A-models first, and defers secondary models. However, **the overhead before that split is the problem**: it queries ALL models from DB, lists ALL files in storage, and batch-checks metadata files for ALL models. These parallel fetches add latency even though only the A-model will be loaded initially.
 
-## Solution
+### "Akerselva: the model is called ARK-modell in Asset+, shouldn't starts-with-A work?"
+Yes. The DB data confirms `parentCommonName = "ARK-modell"` for the storey with `parentBimObjectId = bc185635...`. The name resolution in NativeXeokitViewer **does** resolve this (line 378: model_name gets updated from GUID to "ARK-modell"). So `isArchitectural("ARK-modell")` returns true (starts with "A"). This should already work correctly for model prioritization.
 
-Replace the current `aModelSourceGuids` + `storeyAssets.filter()` approach in ViewerFilterPanel with the same logic used by `useFloorData`:
+However, in `xkt_models` table, the `model_name` column still stores the raw GUID `bc185635...` — not "ARK-modell". The resolution only happens in-memory during viewer init. **Fix**: persist the resolved name back to `xkt_models` so future loads don't need the resolution step.
 
-1. Use `modelNamesMap` (already available via `useModelNames` through `useModelData`) to resolve model IDs to friendly names
-2. Classify scene models as A-model or not using `isArchitecturalModel(friendlyName)`
-3. Build a set of A-model object IDs from the scene
-4. Filter the DB storeys by checking if their `fmGuid` (or `normalizedFmGuid`) exists as a metaObject in the A-model's object set
+### "Is the 'Modell 2' the Orphan model from Asset+?"
+Looking at the DB: Akerselva has two models — `bc185635...` (8.6 MB, no name → resolved to "ARK-modell") and `0e687ea4...` (9.2 MB, named "Modell 2"). There's no storey data linking to `0e687ea4...` (only `bc185635...` appears in parentBimObjectId). So yes, "Modell 2" is likely the Orphan model from Asset+ — it has no storey associations and was given a generic name.
 
-### Changes
+## Proposed Changes
 
-**File: `src/components/viewer/ViewerFilterPanel.tsx`**
+### 1. Fix Level Filtering (Småviken still broken)
+**Root cause**: The current approach (lines 229-284) tries to match storey `fmGuid` values against xeokit metaObject IDs from A-models. This fails because Asset+ storey GUIDs (e.g. `38591717-...`) are different from xeokit entity IDs.
 
-- Import `useModelNames` hook (or access `modelNamesMap` from existing `useModelData`)
-- Replace the `aModelSourceGuids` memo with a new `aModelObjectIds` memo that:
-  1. Gets the xeokit viewer's scene models
-  2. Uses `modelNamesMap` to resolve each model ID to a friendly name
-  3. Checks `isArchitecturalModel(friendlyName)` for each
-  4. Collects all object IDs from matching A-models into a Set
-- Update the `levels` memo filter: instead of checking `storey.sourceName` / `storey.sourceGuid`, check if the storey's `fmGuid` exists as a metaObject ID in the A-model object set (using `viewer.metaScene.metaObjects`)
-- Fallback: if no A-model is identified, show all levels (same as useFloorData)
+**Fix**: Use `parentCommonName` (already available as `storey.sourceName`) directly. Filter storeys where `isArchitecturalModel(sourceName)` returns true. Fallback to all if none match.
 
-This aligns the Filter menu, Portfolio, FloorVisibilitySelector, and Navigator to use the same A-model detection logic.
+**File**: `src/components/viewer/ViewerFilterPanel.tsx`
+- Replace `aModelMetaObjectIds` memo (lines 229-257) and the level filter (lines 264-284) with:
+```typescript
+const levels = useMemo(() => {
+  // Filter to A-model storeys using parentCommonName from DB
+  const filtered = storeyAssets.filter((storey) => {
+    if (!storey.sourceName || isGuid(storey.sourceName)) return false;
+    return isArchitecturalModel(storey.sourceName);
+  });
+  // Fallback: if no A-model storeys found, show all
+  const result = filtered.length > 0 ? filtered : storeyAssets;
+  return result.map(...).sort(...); // existing mapping/sorting
+}, [storeyAssets, ...]);
+```
+- Remove `aModelMetaObjectIds` memo entirely.
+
+### 2. Optimize Viewer Init for A-Model-Only Loading
+**File**: `src/components/viewer/NativeXeokitViewer.tsx`
+- After resolving model names (line 385), **skip the storage listing** (lines 336-360) for models that already have DB records. The storage listing is redundant when DB data exists.
+- Move the metadata file batch-check (lines 678-692) to only check files for models in the `loadList` (A-models), not all models.
+- Persist resolved model names back to `xkt_models` so Akerselva's "ARK-modell" is cached for next time.
+
+### 3. Optimize Preload Hook
+**File**: `src/hooks/useXktPreload.ts`
+- Already only preloads A-models (correct behavior). No changes needed.
+
+## Technical Details
+
+- `parentCommonName` values in DB: "A-modell" (Småviken), "ARK-modell" (Akerselva), "B-modell", "E-modell", "V-modell"
+- `isArchitecturalModel()` checks: starts with "A", contains "ARKITEKT", excludes NON_ARCH_PREFIXES
+- Both "A-modell" and "ARK-modell" pass this check correctly
+- The `sourceName` field in `storeyAssets` maps directly to `attrs.parentCommonName` (line 213)
 
