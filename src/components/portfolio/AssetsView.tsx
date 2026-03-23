@@ -834,7 +834,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 max-h-80 overflow-y-auto bg-popover">
-            <DropdownMenuLabel>Systemegenskaper</DropdownMenuLabel>
+            <DropdownMenuLabel>System properties</DropdownMenuLabel>
             {SYSTEM_COLUMNS.map(col => (
               <DropdownMenuCheckboxItem
                 key={col.key}
