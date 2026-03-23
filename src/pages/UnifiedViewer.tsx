@@ -583,6 +583,17 @@ const UnifiedViewerContent: React.FC<{
   const isSplit2D3D = viewMode === 'split2d3d';
   const shouldUseNative3D = true;
 
+  // ─── Dispatch zoom-to-entity for native viewer when entity param is present ──
+  useEffect(() => {
+    if (!entityFmGuid || !viewerReady || !shouldUseNative3D) return;
+    const timer = setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('VIEWER_ZOOM_TO_OBJECT', {
+        detail: { fmGuid: entityFmGuid }
+      }));
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [entityFmGuid, viewerReady, shouldUseNative3D]);
+
   // Draggable split ratio for desktop split2d3d
   const [desktopSplitRatio, setDesktopSplitRatio] = useState(40);
   const desktopDragRef = useRef(false);
