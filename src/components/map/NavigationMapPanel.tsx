@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { MapFacility } from '@/hooks/useMapFacilities';
+import StreetViewThumbnail from '@/components/map/StreetViewThumbnail';
 
 interface RouteStep {
   instruction?: string;
