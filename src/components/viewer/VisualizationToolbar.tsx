@@ -877,16 +877,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
         </Label>
 
         <div className="space-y-2 sm:space-y-3">
-          {/* 2D Plan View Toggle */}
-          <div className="flex items-center justify-between py-1.5 sm:py-2">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className={cn("p-1 sm:p-1.5 rounded-md", is2DMode ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
-                <SquareDashed className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </div>
-              <span className="text-xs sm:text-sm">2D/3D</span>
-            </div>
-            <Switch checked={is2DMode} onCheckedChange={handle2DModeToggle} />
-          </div>
+          {/* 2D/3D toggle removed — handled by mode switcher in top bar */}
 
           {/* Model Tree Toggle */}
           {onToggleTreeView && (
