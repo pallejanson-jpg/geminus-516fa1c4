@@ -1425,7 +1425,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                 </div>
                                                 {alarmLevelFilter && (
                                                     <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setAlarmLevelFilter('')}>
-                                                        <X className="h-3 w-3" /> Visa alla våningar
+                                                        <X className="h-3 w-3" /> Show all floors
                                                     </Button>
                                                 )}
                                             </CardContent>

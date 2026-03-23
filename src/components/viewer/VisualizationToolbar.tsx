@@ -48,11 +48,11 @@ import { VisualizationType, VISUALIZATION_CONFIGS } from "@/lib/visualization-ut
 // import { LEVEL_LABELS_TOGGLE_EVENT } from "@/hooks/useLevelLabels"; // disabled
 
 const VIZ_LIST_ITEMS: { type: VisualizationType; icon: React.ElementType; label: string }[] = [
-  { type: 'temperature', icon: Thermometer, label: 'Temperatur' },
+  { type: 'temperature', icon: Thermometer, label: 'Temperature' },
   { type: 'co2', icon: Wind, label: 'CO₂' },
-  { type: 'humidity', icon: Droplets, label: 'Luftfuktighet' },
-  { type: 'occupancy', icon: Users, label: 'Beläggning' },
-  { type: 'area', icon: Ruler, label: 'Yta (NTA)' },
+  { type: 'humidity', icon: Droplets, label: 'Humidity' },
+  { type: 'occupancy', icon: Users, label: 'Occupancy' },
+  { type: 'area', icon: Ruler, label: 'Area (NTA)' },
 ];
 
 /** Inline sub-component: clickable list of room visualization types */

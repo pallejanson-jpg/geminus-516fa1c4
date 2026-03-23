@@ -159,7 +159,7 @@ export default function PredictiveMaintenanceTab({ facility }: { facility?: Faci
             <Card>
               <CardContent className="p-6 text-center">
                 <Shield className="h-10 w-10 mx-auto mb-2 text-emerald-500" />
-                <p className="text-sm text-muted-foreground">Inga underhållsrisker identifierade</p>
+                <p className="text-sm text-muted-foreground">No maintenance risks identified</p>
               </CardContent>
             </Card>
           )}
