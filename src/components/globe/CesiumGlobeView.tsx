@@ -553,6 +553,19 @@ const CesiumGlobeView: React.FC = () => {
         </div>
       )}
 
+      {/* Street View overlay */}
+      {streetViewFacility && cesiumToken && (
+        <StreetViewOverlay
+          lat={streetViewFacility.lat}
+          lng={streetViewFacility.lng}
+          buildingName={streetViewFacility.displayName}
+          fmGuid={streetViewFacility.fmGuid!}
+          has360={streetViewFacility.has360}
+          cesiumToken={cesiumToken}
+          onClose={() => setStreetViewFacility(null)}
+        />
+      )}
+
       {mapFacilities.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
           <Card className="bg-card/90 backdrop-blur-sm">
