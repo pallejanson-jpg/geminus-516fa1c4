@@ -6,7 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+const STALE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes — detect stale faster
+const STALE_CHECK_INTERVAL_MS = 30_000; // re-evaluate every 30s
 
 interface SyncState {
   subtree_id: string;
@@ -32,13 +33,15 @@ export const SyncProgressBanner: React.FC = () => {
   const [isResuming, setIsResuming] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const resumeRef = useRef(false);
+  const autoResumedRef = useRef(false);
+  const [, forceRender] = useState(0); // tick to re-evaluate staleness
 
   const isStale = useCallback((sync: SyncState) => {
     if (sync.sync_status !== 'running' || !sync.last_sync_started_at) return false;
     return Date.now() - new Date(sync.last_sync_started_at).getTime() > STALE_THRESHOLD_MS;
   }, []);
 
-  const handleResume = useCallback(async (subtreeId: string) => {
+  const handleResume = useCallback(async (_subtreeId: string) => {
     if (resumeRef.current) return;
     resumeRef.current = true;
     setIsResuming(true);
@@ -70,6 +73,7 @@ export const SyncProgressBanner: React.FC = () => {
           });
           setIsResuming(false);
           resumeRef.current = false;
+          autoResumedRef.current = false;
           window.dispatchEvent(new CustomEvent('asset-sync-completed'));
         }
       } catch (err: any) {
@@ -102,6 +106,7 @@ export const SyncProgressBanner: React.FC = () => {
       });
 
       setActiveSyncs(prev => prev.filter(s => s.subtree_id !== subtreeId));
+      autoResumedRef.current = false;
       window.dispatchEvent(new CustomEvent('asset-sync-completed'));
     } catch (err: any) {
       toast({
@@ -135,12 +140,33 @@ export const SyncProgressBanner: React.FC = () => {
     }
   }, []);
 
+  // Periodic staleness re-evaluation
+  useEffect(() => {
+    if (activeSyncs.length === 0) return;
+    const timer = setInterval(() => forceRender(n => n + 1), STALE_CHECK_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [activeSyncs.length]);
+
+  // Auto-resume stale "assets" jobs once per page load
+  useEffect(() => {
+    if (autoResumedRef.current || resumeRef.current || isResuming) return;
+    const staleAssetSync = activeSyncs.find(
+      s => s.subtree_id === 'assets' && isStale(s)
+    );
+    if (staleAssetSync) {
+      autoResumedRef.current = true;
+      console.log('[SyncProgressBanner] Auto-resuming stale asset sync');
+      handleResume(staleAssetSync.subtree_id);
+    }
+  }, [activeSyncs, isStale, handleResume, isResuming]);
+
   useEffect(() => {
     const fetchSyncStates = async () => {
+      // Fetch both running AND recently-interrupted syncs
       const { data } = await supabase
         .from('asset_sync_state')
         .select('*')
-        .eq('sync_status', 'running');
+        .in('sync_status', ['running', 'interrupted']);
       
       if (data && data.length > 0) {
         setActiveSyncs(data);
@@ -167,7 +193,7 @@ export const SyncProgressBanner: React.FC = () => {
             return;
           }
           
-          if (newState.sync_status === 'running') {
+          if (newState.sync_status === 'running' || newState.sync_status === 'interrupted') {
             setDismissed(false);
             setActiveSyncs(prev => {
               const existing = prev.findIndex(s => s.subtree_id === newState.subtree_id);
@@ -209,8 +235,6 @@ export const SyncProgressBanner: React.FC = () => {
     };
   }, [fetchProgress]);
 
-  // Auto-resume removed — sync is only triggered explicitly via DataConsistencyBanner or Resume button
-
   if (dismissed || activeSyncs.length === 0) {
     return null;
   }
@@ -219,6 +243,8 @@ export const SyncProgressBanner: React.FC = () => {
     <div className="bg-primary/5 border-b border-primary/20 px-4 py-2">
       {activeSyncs.map((sync) => {
         const stale = isStale(sync);
+        const interrupted = sync.sync_status === 'interrupted';
+        const showActions = stale || interrupted;
         const progressPercent = progress?.totalBuildings && progress.totalBuildings > 0
           ? Math.round(((progress.currentBuildingIndex ?? 0) / progress.totalBuildings) * 100)
           : null;
@@ -228,7 +254,7 @@ export const SyncProgressBanner: React.FC = () => {
 
         return (
           <div key={sync.subtree_id} className="flex items-center gap-3">
-            {stale ? (
+            {showActions && !isResuming ? (
               <AlertCircle className="h-4 w-4 text-yellow-500 flex-shrink-0" />
             ) : (
               <RefreshCw className="h-4 w-4 text-primary animate-spin flex-shrink-0" />
@@ -238,9 +264,9 @@ export const SyncProgressBanner: React.FC = () => {
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-sm font-medium truncate">
-                    {stale ? 'Sync stalled' : 'Syncing'} {sync.subtree_name || sync.subtree_id} {progressLabel}
+                    {showActions && !isResuming ? 'Sync stalled' : 'Syncing'} {sync.subtree_name || sync.subtree_id} {progressLabel}
                   </span>
-                  {stale && (
+                  {showActions && !isResuming && (
                     <Badge variant="outline" className="text-xs border-yellow-300 bg-yellow-50 text-yellow-700 flex-shrink-0">
                       Interrupted
                     </Badge>
@@ -253,14 +279,21 @@ export const SyncProgressBanner: React.FC = () => {
                 )}
               </div>
               
-              {!stale && progressPercent !== null && (
+              {!showActions && progressPercent !== null && (
                 <Progress 
                   value={progressPercent} 
                   className="h-1 mt-1" 
                 />
               )}
 
-              {stale && (
+              {isResuming && progressPercent !== null && (
+                <Progress 
+                  value={progressPercent} 
+                  className="h-1 mt-1" 
+                />
+              )}
+
+              {showActions && !isResuming && (
                 <div className="flex gap-2 mt-1.5">
                   <Button
                     variant="outline"
