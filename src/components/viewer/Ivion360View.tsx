@@ -304,7 +304,7 @@ export default function Ivion360View({
   useEffect(() => {
     if (sdkStatus !== 'ready' || initialHeading == null || !ivApiRef.current) return;
     try {
-      const api = ivApiRef.current;
+      const api = ivApiRef.current as any;
       if (api.camera?.setHeading) {
         api.camera.setHeading(initialHeading);
         console.log('[Ivion360View] Applied initial heading from Street View:', initialHeading);
