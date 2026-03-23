@@ -442,7 +442,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   // Filter and sort assets
   const filteredAssets = useMemo(() => {
     let result = assetData.filter((asset) => {
-      const searchLower = searchQuery.toLowerCase();
+      const searchLower = debouncedSearch.toLowerCase();
       return (
         visibleColumns.some((colKey) => {
           const val = asset[colKey];
