@@ -56,13 +56,19 @@ const STORAGE_KEY = 'roomVisualizationSettings';
 /** Resolve the xeokit viewer instance from the ref — tries Asset+ shim path first, then native */
 export const resolveXeokitViewer = (viewerRef: React.MutableRefObject<any>): any | null => {
   const v = viewerRef.current;
-  // Asset+ shim path
+  // Asset+ shim path (full nesting)
   const shim = v?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
   if (shim?.scene) return shim;
+  // NativeViewerShell shim path (without AssetViewer nesting)
+  const nativeShim = v?.$refs?.assetView?.viewer;
+  if (nativeShim?.scene) return nativeShim;
   // Native xeokit viewer path
   if (v?.viewer?.scene) return v.viewer;
   // Direct ref
   if (v?.scene) return v;
+  // Global fallback for NativeXeokitViewer
+  const globalViewer = (window as any).__nativeXeokitViewer;
+  if (globalViewer?.scene) return globalViewer;
   return null;
 };
 /**
