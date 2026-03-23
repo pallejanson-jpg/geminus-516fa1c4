@@ -13,7 +13,7 @@ import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hook
 import { ANNOTATION_FILTER_EVENT, MODEL_LOAD_REQUESTED_EVENT } from '@/lib/viewer-events';
 import { useFloorData, isArchitecturalModel } from '@/hooks/useFloorData';
 import { useModelData } from '@/hooks/useModelData';
-import { useModelNames } from '@/hooks/useModelNames';
+
 import { getDescendantIds, hideSpaceAndAreaObjects } from '@/hooks/useFloorVisibility';
 import { applyArchitectColors, recolorArchitectObjects } from '@/lib/architect-colors';
 import { VIEWER_THEME_CHANGED_EVENT, VIEWER_THEME_REQUESTED_EVENT } from '@/hooks/useViewerTheme';
