@@ -81,6 +81,8 @@ const CesiumGlobeView: React.FC = () => {
   const [viewerReady, setViewerReady] = useState(false);
   const [bimLoading, setBimLoading] = useState(false);
   const [bimLoadedFmGuid, setBimLoadedFmGuid] = useState<string | null>(null);
+  const [streetViewFacility, setStreetViewFacility] = useState<MapFacility | null>(null);
+  const [cesiumToken, setCesiumToken] = useState<string | null>(null);
 
   // Sidebar items from shared hook
   const sidebarItems = useMemo(() =>
