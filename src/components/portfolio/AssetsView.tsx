@@ -757,10 +757,10 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           <div className="min-w-0">
             <h1 className="text-sm sm:text-base md:text-lg font-bold truncate">{title}</h1>
             <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
-              {filteredAssets.length} av {assetData.length} assets
+              {filteredAssets.length} of {assetData.length} assets
               {orphanCount > 0 && (
                 <span className="ml-2 text-amber-500">
-                  • {orphanCount} ej i modell
+                  • {orphanCount} not in model
                 </span>
               )}
             </p>
