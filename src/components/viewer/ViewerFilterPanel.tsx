@@ -131,6 +131,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   // ── Shared hooks for consistent data ─────────────────────────────────
   const { floors: sharedFloors } = useFloorData(viewerRef, buildingFmGuid);
   const { models: sharedModels, applyModelVisibility, assetPlusSources: apSources, storeyLookup } = useModelData(viewerRef, buildingFmGuid);
+  const { modelNamesMap } = useModelNames(buildingFmGuid);
 
   const [sourcesOpen, setSourcesOpen] = useState(true);
   const [levelsOpen, setLevelsOpen] = useState(true);
