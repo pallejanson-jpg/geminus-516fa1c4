@@ -1414,7 +1414,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                         sessionStorage.setItem('pending_alarm_annotations', JSON.stringify({ alarms: levelAlarms }));
                                                                         navigate(`/viewer?building=${facility.fmGuid}&mode=3d`);
                                                                     } else {
-                                                                        window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: levelAlarms } }));
+                                                                        window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: levelAlarms, flyTo: true } }));
                                                                     }
                                                                 }}
                                                             >

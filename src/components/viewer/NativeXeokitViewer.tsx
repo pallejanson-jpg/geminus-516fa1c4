@@ -1425,6 +1425,12 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       });
 
       // Second pass: match rooms (always, for context highlighting)
+      // Build a name-based lookup for room matching fallback
+      const roomNameGuids = new Set<string>();
+      detail.alarms.forEach(a => {
+        if (a.roomFmGuid) roomNameGuids.add(normalizeGuid(a.roomFmGuid));
+      });
+
       Object.values(metaObjects).forEach((mo: any) => {
         if (mo.type !== 'IfcSpace') return;
         const sysId = normalizeGuid(mo.originalSystemId || '');
@@ -1435,6 +1441,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           if (entity) {
             entity.xrayed = false;
             entity.visible = true;
+            entity.pickable = true;
             entity.colorize = matchedIds.length === 0 ? alarmColor : roomColor;
             entity.opacity = matchedIds.length === 0 ? 0.8 : 0.6;
             matchedIds.push(mo.id);
