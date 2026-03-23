@@ -713,7 +713,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     console.log('[FilterPanel] Entity map built:', map.size, 'entries.',
       'Levels matched:', levels.filter(l => map.has(l.fmGuid)).length, '/', levels.length,
       'Spaces matched:', allAssetSpaces.filter((s: any) => map.has(s.fmGuid || s.fm_guid)).length, '/', allAssetSpaces.length,
-      'Type index:', tIdx.size, 'types');
+      'Type index:', tIdx.size, 'types',
+      'Non-A spaces (hidden):', nonASpaceIds.length);
     return true;
   }, [getXeokitViewer, levels, sharedModels, buildingData, sharedFloors]);
 
