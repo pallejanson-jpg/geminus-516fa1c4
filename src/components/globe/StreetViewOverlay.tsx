@@ -201,6 +201,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
         viewer.scene.primitives.add(streetViewPanorama);
         currentPanoRef.current = streetViewPanorama;
         currentPosRef.current = { lng: panoIdObject.longitude, lat: panoIdObject.latitude };
+        setCurrentPos({ lng: panoIdObject.longitude, lat: panoIdObject.latitude });
 
         // Position camera
         const lookPosition = Cesium.Cartesian3.fromDegrees(
