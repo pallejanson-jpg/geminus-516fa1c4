@@ -30,6 +30,8 @@ interface UniversalPropertiesDialogProps {
   /** Whether the dialog is pinned (stays open and updates on selection change) */
   isPinned?: boolean;
   onPinToggle?: () => void;
+  /** When true, renders as inline flex sibling instead of fixed overlay (for viewer integration) */
+  inline?: boolean;
 }
 
 interface PropertyItem {
