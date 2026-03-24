@@ -562,6 +562,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
       case 'colorFilter': setSubSheet('colorFilter'); break;
       case 'actions': setSubSheet('actions'); break;
       case 'settings': setSubSheet('settings'); break;
+      case 'navigation': setSubSheet('navigation'); break;
       case 'insights':
         setSheetOpen(false);
         setTimeout(() => setInsightsPanelOpen(true), 200);
