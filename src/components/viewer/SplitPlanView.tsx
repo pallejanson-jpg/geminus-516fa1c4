@@ -885,7 +885,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
             }
           }
 
-          if (!isLargeArea && isSplitMode) {
+          // In split mode, 2D clicks are for navigation only — no object selection
+          if (!isSplitMode && !isLargeArea) {
             pickedEntityId = entityId;
             pickedFmGuid = metaObj?.originalSystemId || null;
             pickedEntityName = metaObj?.name || metaObj?.type || null;
@@ -1217,7 +1218,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
             className="max-w-none cursor-crosshair"
             style={{
               imageRendering: 'crisp-edges',
-              filter: 'contrast(1.4)',
+              filter: 'contrast(1.8)',
             }}
             draggable={false}
             onClick={handleClick}
