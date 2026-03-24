@@ -1545,13 +1545,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     if (!viewer?.scene) return;
     const ids = entityMapRef.current.get(fmGuid) || [];
     if (ids.length > 0) {
-      // Deselect previous
-      viewer.scene.setObjectsSelected(viewer.scene.selectedObjectIds, false);
-      // Select and make visible
+      // Make visible (no selection — no green highlight)
       ids.forEach((id: string) => {
         const entity = viewer.scene.objects?.[id];
         if (entity) {
-          entity.selected = true;
           entity.visible = true;
           entity.pickable = true;
         }
@@ -1562,7 +1559,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         const aabb = firstEntity.aabb;
         const cx = (aabb[0] + aabb[3]) / 2, cy = (aabb[1] + aabb[4]) / 2, cz = (aabb[2] + aabb[5]) / 2;
         const height = aabb[4] - aabb[1];
-        // Position eye at center of space, looking forward (+X)
         viewer.cameraFlight?.flyTo({
           eye: [cx, cy + height * 0.3, cz],
           look: [cx + 2, cy + height * 0.3, cz],
