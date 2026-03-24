@@ -92,6 +92,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   entityId,
   isPinned = false,
   onPinToggle,
+  inline = false,
 }) => {
   const isMobile = useIsMobile();
   
