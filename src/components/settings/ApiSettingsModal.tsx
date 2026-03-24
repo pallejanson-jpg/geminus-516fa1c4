@@ -16,7 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
     Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2,
-    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles, FileText, FolderOpen, ChevronRight, ChevronDown as ChevronDownIcon, File, Database as DatabaseIcon, Cuboid, Bot, Network
+    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles, FileText, FolderOpen, ChevronRight, ChevronDown as ChevronDownIcon, File, Database as DatabaseIcon, Cuboid, Bot, Network, RotateCcw
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -3236,6 +3236,39 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             syncStatus={syncCheck?.xkt?.syncState?.sync_status}
                                             errorMessage={syncCheck?.xkt?.syncState?.error_message}
                                         />
+
+                                        {/* Rebuild Geometry Mappings */}
+                                        <div className="flex items-center gap-2 rounded-lg border p-3 bg-muted/20">
+                                            <Database className="h-4 w-4 text-primary" />
+                                            <div className="flex-1">
+                                                <span className="text-sm font-medium">Geometry Mappings</span>
+                                                <p className="text-xs text-muted-foreground">Rebuild model/floor/entity linkage from existing data</p>
+                                            </div>
+                                            <Button
+                                                onClick={async () => {
+                                                    try {
+                                                        toast({ title: "Rebuilding geometry mappings..." });
+                                                        const { data, error } = await supabase.functions.invoke('rebuild-geometry-map', {
+                                                            body: { buildingFmGuid: favoriteBuildings[0]?.fm_guid },
+                                                        });
+                                                        if (error) throw error;
+                                                        toast({
+                                                            title: "Mappings rebuilt",
+                                                            description: `${data?.mappingsCreated || 0} mappings created for ${data?.totalAssets || 0} assets`,
+                                                        });
+                                                    } catch (err: any) {
+                                                        toast({ title: "Rebuild failed", description: err.message, variant: "destructive" });
+                                                    }
+                                                }}
+                                                size="sm"
+                                                variant="outline"
+                                                className="gap-1"
+                                                disabled={!favoriteBuildings[0]?.fm_guid || isSyncingStructure || isSyncingAssets}
+                                            >
+                                                <RotateCcw className="h-3 w-3" />
+                                                Rebuild
+                                            </Button>
+                                        </div>
 
                                         {/* System count in status summary */}
                                         {systemCount > 0 && (
