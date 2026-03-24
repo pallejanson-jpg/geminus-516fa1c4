@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useContext } from 'react';
 import { useModelNames } from '@/hooks/useModelNames';
 import { AppContext } from '@/context/AppContext';
+import { supabase } from '@/integrations/supabase/client';
 
 const isGuid = (str: string): boolean =>
   !!str && str.length >= 20 && /^[0-9a-f]{8}[-]?[0-9a-f]{4}/i.test(str);
@@ -14,8 +15,10 @@ export interface ModelInfo {
 
 /**
  * Shared hook for listing BIM models with friendly names.
- * Combines xeokit scene.models + xkt_models DB + Asset+ storey lookup.
- * Single source of truth used by ModelVisibilitySelector and ViewerFilterPanel.
+ * Resolution priority:
+ *   1. geometry_entity_map (canonical mapping layer)
+ *   2. useModelNames hook (xkt_models + Asset+ API)
+ *   3. Asset+ storey attributes (parentBimObjectId → parentCommonName)
  *
  * Also provides a batch-optimised `applyModelVisibility` function.
  */
@@ -28,10 +31,47 @@ export function useModelData(
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // ── Asset+ storey-based source lookup ────────────────────────────────────
+  // ── geometry_entity_map storey lookup (primary) ──────────────────────────
+  const [gemStoreyData, setGemStoreyData] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!buildingFmGuid) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('geometry_entity_map' as any)
+        .select('asset_fm_guid, model_id, source_model_guid, source_model_name, source_storey_name')
+        .eq('building_fm_guid', buildingFmGuid)
+        .eq('entity_type', 'storey');
+      if (!error && data && !cancelled) {
+        setGemStoreyData(data as any[]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [buildingFmGuid]);
+
+  // ── Storey-based source lookup (geometry_entity_map primary, allData fallback) ──
   const storeyLookup = useMemo(() => {
     const byGuid = new Map<string, { parentName: string; sourceGuid: string }>();
     const byName = new Map<string, { parentName: string; sourceGuid: string }>();
+
+    // Primary: geometry_entity_map
+    if (gemStoreyData.length > 0) {
+      gemStoreyData.forEach((row: any) => {
+        const parentName = row.source_model_name;
+        const sourceGuid = row.source_model_guid || row.model_id || '';
+        if (parentName && !isGuid(parentName)) {
+          const fmGuid = (row.asset_fm_guid || '').toLowerCase();
+          if (fmGuid) {
+            byGuid.set(fmGuid, { parentName, sourceGuid });
+            byGuid.set(fmGuid.replace(/-/g, ''), { parentName, sourceGuid });
+          }
+        }
+      });
+      if (byGuid.size > 0) return { byGuid, byName };
+    }
+
+    // Fallback: allData
     if (!allData || !buildingFmGuid) return { byGuid, byName };
 
     allData
@@ -54,11 +94,25 @@ export function useModelData(
         }
       });
     return { byGuid, byName };
-  }, [allData, buildingFmGuid]);
+  }, [gemStoreyData, allData, buildingFmGuid]);
 
   // Asset+ sources: parentBimObjectId → parentCommonName
   const assetPlusSources = useMemo(() => {
     const map = new Map<string, string>();
+
+    // Primary: geometry_entity_map
+    if (gemStoreyData.length > 0) {
+      gemStoreyData.forEach((row: any) => {
+        const guid = row.source_model_guid || row.model_id;
+        const name = row.source_model_name;
+        if (guid && name && !isGuid(name)) {
+          map.set(guid, name);
+        }
+      });
+      if (map.size > 0) return map;
+    }
+
+    // Fallback
     if (!allData || !buildingFmGuid) return map;
     allData
       .filter((a: any) =>
@@ -74,7 +128,7 @@ export function useModelData(
         }
       });
     return map;
-  }, [allData, buildingFmGuid]);
+  }, [gemStoreyData, allData, buildingFmGuid]);
 
   // ── XEOkit accessor ──────────────────────────────────────────────────────
   const getXeokitViewer = useCallback(() => {
