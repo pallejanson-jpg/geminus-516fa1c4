@@ -828,8 +828,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       checkedSpaces.size > 0 || checkedCategories.size > 0;
 
     // Step 0: Clean slate — reset xray (but DON'T reset colorize when theme is active)
-    const prevXrayed = scene.xrayedObjectIds;
-    if (prevXrayed?.length > 0) scene.setObjectsXRayed(prevXrayed, false);
+    let prevXrayed: string[] = [];
+    try { prevXrayed = scene.xrayedObjectIds || []; } catch (_e) { /* scene teardown */ }
+    if (prevXrayed.length > 0) scene.setObjectsXRayed(prevXrayed, false);
     
     // Only reset colorize when we actually have filter-applied colors (not theme colors)
     // When a theme is active, skip the colorize reset to avoid "native colors flash"
