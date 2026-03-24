@@ -200,6 +200,16 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
   const { configs: roomLabelConfigs, loading: loadingRoomLabelConfigs } = useRoomLabelConfigs();
   const { captureViewpoint, captureScreenshot, getSelectedObjectIds, restoreViewpoint } = useBcfViewpoints({ viewerRef: viewerInstanceRef });
 
+  // Track floor changes for nav graph editor
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const guids = (e as CustomEvent).detail?.visibleFloorFmGuids;
+      if (guids?.length) setNavFloorFmGuid(guids[0]);
+    };
+    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler);
+  }, []);
+
   // Reset splitPlanReady when leaving split mode
   useEffect(() => {
     if (!isSplit) setSplitPlanReady(false);
