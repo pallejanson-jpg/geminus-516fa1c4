@@ -90,7 +90,7 @@ const BuildingSelector: React.FC = () => {
           .order('created_at', { ascending: false });
 
         if (error) throw error;
-        setSavedViews(data || []);
+        setSavedViews((data || []) as unknown as SavedView[]);
       } catch (err) {
         console.error('Failed to fetch saved views:', err);
       } finally {
