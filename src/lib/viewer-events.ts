@@ -123,6 +123,7 @@ export interface LoadSavedViewDetail {
   showAnnotations: boolean;
   visualizationType: string;
   visualizationMockData: boolean;
+  sectionPlanes?: Array<{ pos: number[]; dir: number[] }>;
 }
 
 /** Event dispatched when issue annotations should be toggled on/off */
