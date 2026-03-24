@@ -234,50 +234,34 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return guids;
   }, [sharedFloors]);
 
-  // Levels: driven by DB storeys — ONLY show levels from A-model (using parentCommonName)
+  // Levels: driven primarily by sharedFloors (useFloorData) which correctly detects A-model
+  // floors from the xeokit scene. Enriched with storeyAssets for space counts and sourceGuid.
   const levels: LevelItem[] = useMemo(() => {
-    const sharedFloorStoreys = storeyAssets.filter((storey) => sharedFloorGuidSet.has(storey.normalizedFmGuid));
+    // Strategy: Use sharedFloors as the authoritative source (they come from xeokit scene A-model detection).
+    // Enrich each with storeyAsset data for sourceGuid and space counts.
+    if (sharedFloors.length > 0) {
+      return sharedFloors.map((floor) => {
+        const allGuids = new Set<string>();
+        floor.databaseLevelFmGuids.forEach(g => allGuids.add(normalizeGuid(g)));
 
-    // Filter to A-model storeys using parentCommonName from DB (most reliable source)
-    const aModelStoreys = storeyAssets.filter((storey) => {
-      if (!storey.sourceName || isGuid(storey.sourceName)) return false;
-      return isArchitecturalModel(storey.sourceName);
-    });
+        // Find matching storeyAsset for sourceGuid
+        let sourceGuid = '';
+        for (const storey of storeyAssets) {
+          if (allGuids.has(storey.normalizedFmGuid)) {
+            sourceGuid = storey.sourceGuid;
+            break;
+          }
+        }
 
-    // Prefer floors already resolved from the A-model-aware shared floor hook.
-    let filtered = sharedFloorStoreys.length > 0 ? sharedFloorStoreys : aModelStoreys;
+        // If no sourceGuid from storeyAssets, try storeyLookup
+        if (!sourceGuid) {
+          for (const g of allGuids) {
+            const lookup = storeyLookup.byGuid.get(g);
+            if (lookup?.sourceGuid) { sourceGuid = lookup.sourceGuid; break; }
+          }
+        }
 
-    // Fallback: if no A-model storeys identified, try matching against loaded scene model names
-    if (filtered.length === 0) {
-      // Try to resolve sourceName from scene model names or sharedModels
-      const aModelSceneNames = sharedModels
-        .map(m => m.name || m.shortName || '')
-        .filter(n => !!n && isArchitecturalModel(n));
-      if (aModelSceneNames.length > 0) {
-        // Match storeys whose sourceGuid corresponds to an A-model in sharedModels
-        const aModelGuids = new Set(
-          sharedModels
-            .filter(m => isArchitecturalModel(m.name || m.shortName || ''))
-            .map(m => normalizeGuid(m.id))
-        );
-        filtered = storeyAssets.filter(s => aModelGuids.has(normalizeGuid(s.sourceGuid)));
-      }
-      if (filtered.length === 0 && sharedFloorStoreys.length > 0) {
-        filtered = sharedFloorStoreys;
-      }
-      // If still empty, show all as last resort
-      if (filtered.length === 0) filtered = storeyAssets;
-    }
-
-    return filtered
-      .map((storey) => {
-        const exactSharedFloor = sharedFloors.find((floor) =>
-          floor.databaseLevelFmGuids.some((g) => normalizeGuid(g) === storey.normalizedFmGuid)
-        );
-
-        const allGuids = new Set<string>([storey.normalizedFmGuid]);
-        exactSharedFloor?.databaseLevelFmGuids.forEach((g) => allGuids.add(normalizeGuid(g)));
-
+        // Count spaces belonging to this level
         const spaceCount = buildingData.filter((s: any) => {
           const cat = s.category;
           if (cat !== 'Space' && cat !== 'IfcSpace') return false;
@@ -286,9 +270,41 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         }).length;
 
         return {
+          fmGuid: floor.databaseLevelFmGuids[0] || floor.id,
+          allGuids: Array.from(allGuids),
+          name: floor.name,
+          sourceGuid,
+          spaceCount,
+        };
+      }).sort((a, b) => {
+        const extract = (n: string) => {
+          const m = n.match(/(-?\d+)/);
+          return m ? parseInt(m[1], 10) : 0;
+        };
+        return extract(a.name) - extract(b.name) || a.name.localeCompare(b.name, 'sv');
+      });
+    }
+
+    // Fallback: if sharedFloors is empty (viewer not ready yet), use storeyAssets
+    const aModelStoreys = storeyAssets.filter((storey) => {
+      if (!storey.sourceName || isGuid(storey.sourceName)) return false;
+      return isArchitecturalModel(storey.sourceName);
+    });
+    const filtered = aModelStoreys.length > 0 ? aModelStoreys : storeyAssets;
+
+    return filtered
+      .map((storey) => {
+        const allGuids = new Set<string>([storey.normalizedFmGuid]);
+        const spaceCount = buildingData.filter((s: any) => {
+          const cat = s.category;
+          if (cat !== 'Space' && cat !== 'IfcSpace') return false;
+          const levelGuid = normalizeGuid(s.levelFmGuid || s.level_fm_guid || '');
+          return allGuids.has(levelGuid);
+        }).length;
+        return {
           fmGuid: storey.fmGuid,
           allGuids: Array.from(allGuids),
-          name: exactSharedFloor?.name || storey.name,
+          name: storey.name,
           sourceGuid: storey.sourceGuid,
           spaceCount,
         };
@@ -300,7 +316,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         };
         return extract(a.name) - extract(b.name) || a.name.localeCompare(b.name, 'sv');
       });
-  }, [storeyAssets, sharedFloors, sharedFloorGuidSet, sharedModels, buildingData]);
+  }, [storeyAssets, sharedFloors, storeyLookup, buildingData]);
 
   // Sources: derived from ALL sharedModels so every model appears in the list
   const sources: BimSource[] = useMemo(() => {
@@ -457,9 +473,32 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
     } else if (checkedSources.size > 0) {
       scopeIds = new Set<string>();
+      // Try level-based scoping first
       levels.filter(l => checkedSources.has(l.sourceGuid)).forEach(l => {
         eMap.get(l.fmGuid)?.forEach(id => scopeIds!.add(id));
       });
+      // Fallback: if scopeIds is empty, scope by scene model objects directly
+      if (scopeIds.size === 0) {
+        const viewer = getXeokitViewer();
+        if (viewer?.scene?.models) {
+          const normalizedChecked = new Set(Array.from(checkedSources).map(g => normalizeGuid(g)));
+          // Also match by model name from sharedModels
+          const checkedModelIds = new Set<string>();
+          sharedModels.forEach(m => {
+            if (checkedSources.has(m.id) || normalizedChecked.has(normalizeGuid(m.id))) {
+              checkedModelIds.add(m.id);
+            }
+          });
+          Object.entries(viewer.scene.models).forEach(([modelId, model]: [string, any]) => {
+            if (checkedModelIds.has(modelId) || checkedSources.has(modelId) || normalizedChecked.has(normalizeGuid(modelId))) {
+              const objs = model.objects || {};
+              Object.keys(objs).forEach(id => scopeIds!.add(id));
+            }
+          });
+        }
+        // If still empty, don't filter (show all)
+        if (scopeIds.size === 0) scopeIds = null;
+      }
     }
 
     const counts = new Map<string, number>();
@@ -475,7 +514,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return Array.from(counts.entries())
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
-  }, [entityMapVersion, checkedLevels, checkedSpaces, checkedSources, levels]);
+  }, [entityMapVersion, checkedLevels, checkedSpaces, checkedSources, levels, getXeokitViewer, sharedModels]);
 
   // ── Auto-assign palette colors (stable — only when list identity changes) ──
   useEffect(() => {
@@ -817,10 +856,16 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     fetchAnnotations();
   }, [isVisible, buildingFmGuid]);
 
-  // Dispatch annotation filter event
+  // Dispatch annotation filter + toggle events
   useEffect(() => {
+    const categories = Array.from(checkedAnnotations);
     window.dispatchEvent(new CustomEvent(ANNOTATION_FILTER_EVENT, {
-      detail: { visibleCategories: Array.from(checkedAnnotations) },
+      detail: { visibleCategories: categories },
+    }));
+    // Also dispatch TOGGLE_ANNOTATIONS so the native viewer creates/shows markers
+    const show = categories.length > 0;
+    window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', {
+      detail: { show, visibleCategories: categories },
     }));
   }, [checkedAnnotations]);
 
