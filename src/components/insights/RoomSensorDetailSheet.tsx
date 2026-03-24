@@ -181,9 +181,9 @@ const SensorChart: React.FC<{
   const allLines = [
     { key: 'temperature' as const, label: 'Temp (°C)',    color: 'hsl(var(--chart-3))' },
     { key: 'co2'         as const, label: 'CO₂ (ppm)',   color: 'hsl(var(--chart-2))' },
-    { key: 'humidity'    as const, label: 'Fukt (%)',     color: 'hsl(var(--chart-7))' },
-    { key: 'light'       as const, label: 'Ljus (lux)',   color: 'hsl(var(--chart-4))' },
-    { key: 'occupancy'   as const, label: 'Belägg. (%)', color: 'hsl(var(--chart-5))' },
+    { key: 'humidity'    as const, label: 'Humidity (%)',  color: 'hsl(var(--chart-7))' },
+    { key: 'light'       as const, label: 'Light (lux)',   color: 'hsl(var(--chart-4))' },
+    { key: 'occupancy'   as const, label: 'Occup. (%)',   color: 'hsl(var(--chart-5))' },
   ];
 
   const lines = allLines.filter(l => availableFields.includes(l.key));
