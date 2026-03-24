@@ -351,7 +351,7 @@ export default function SensorsTab() {
       {!isLoading && isLive && buildingData && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border border-green-500/30 px-3 py-2 bg-green-500/5">
           <Wifi className="h-3.5 w-3.5 shrink-0 text-green-400" />
-          <span>Live-data från Senslinc · Site: {buildingData.siteName} · {buildingData.machines.length} sensorer</span>
+          <span>Live data from Senslinc · Site: {buildingData.siteName} · {buildingData.machines.length} sensors</span>
         </div>
       )}
 

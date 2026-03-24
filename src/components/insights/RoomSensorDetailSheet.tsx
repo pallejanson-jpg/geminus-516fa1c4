@@ -454,7 +454,7 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
               onClick={() => window.open(dashboardUrl, '_blank')}
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              Öppna fullständig Senslinc-dashboard
+              Open full Senslinc dashboard
             </Button>
           )}
         </div>
