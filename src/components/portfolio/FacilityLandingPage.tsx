@@ -3,8 +3,10 @@ import { extractSpaceArea } from '@/lib/building-utils';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, X, MapPin, Info, BarChart, Star, Table, Layers, 
-  DoorOpen, LayoutGrid, Zap, Settings2, Loader2, Globe, Image, Upload, RotateCcw, ChevronRight, Eye, Search
+  DoorOpen, LayoutGrid, Zap, Settings2, Loader2, Globe, Image, Upload, RotateCcw, ChevronRight, Eye, Search,
+  Thermometer, Wind, Droplets, Users
 } from 'lucide-react';
+import { VisualizationType, extractSensorValue, getVisualizationColor, generateMockSensorData, rgbToHex } from '@/lib/visualization-utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
