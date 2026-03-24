@@ -761,7 +761,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                       <Input
                         value={roomSearch}
                         onChange={(e) => setRoomSearch(e.target.value)}
-                        placeholder="Sök rum..."
+                        placeholder="Search rooms..."
                         className="h-7 pl-8 text-xs"
                       />
                     </div>
