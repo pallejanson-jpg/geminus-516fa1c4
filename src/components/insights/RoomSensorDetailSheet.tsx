@@ -347,7 +347,7 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
           {/* Gauge cards – 5 cards in responsive grid */}
           <div className="grid grid-cols-2 gap-2.5">
             <GaugeCard
-              label="Temperatur"
+              label="Temperature"
               value={data?.current.temperature ?? null}
               unit="°C"
               icon={Thermometer}
