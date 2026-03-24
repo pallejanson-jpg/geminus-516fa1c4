@@ -754,7 +754,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                           colSpan={orderedVisibleColumns.length + 2}
                           className="text-center py-8 text-muted-foreground"
                         >
-                          Inga rum hittades
+                         No rooms found
                         </TableCell>
                       </TableRow>
                     )}
