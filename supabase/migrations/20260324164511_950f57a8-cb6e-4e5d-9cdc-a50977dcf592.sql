@@ -1,0 +1,1 @@
+ALTER TABLE public.building_settings ADD COLUMN IF NOT EXISTS last_asset_sync_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;

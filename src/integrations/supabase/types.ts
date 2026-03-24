@@ -749,6 +749,7 @@ export type Database = {
           ivion_start_vlat: number | null
           ivion_start_vlon: number | null
           ivion_token_expires_at: string | null
+          last_asset_sync_at: string | null
           latitude: number | null
           longitude: number | null
           rotation: number | null
@@ -782,6 +783,7 @@ export type Database = {
           ivion_start_vlat?: number | null
           ivion_start_vlon?: number | null
           ivion_token_expires_at?: string | null
+          last_asset_sync_at?: string | null
           latitude?: number | null
           longitude?: number | null
           rotation?: number | null
@@ -815,6 +817,7 @@ export type Database = {
           ivion_start_vlat?: number | null
           ivion_start_vlon?: number | null
           ivion_token_expires_at?: string | null
+          last_asset_sync_at?: string | null
           latitude?: number | null
           longitude?: number | null
           rotation?: number | null
