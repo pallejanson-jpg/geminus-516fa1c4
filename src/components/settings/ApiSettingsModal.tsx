@@ -3249,7 +3249,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     try {
                                                         toast({ title: "Rebuilding geometry mappings..." });
                                                         const { data, error } = await supabase.functions.invoke('rebuild-geometry-map', {
-                                                            body: { buildingFmGuid: selectedBuildingFmGuid || undefined },
+                                                            body: { buildingFmGuid: favoriteBuildings[0]?.fm_guid },
                                                         });
                                                         if (error) throw error;
                                                         toast({
