@@ -856,10 +856,16 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     fetchAnnotations();
   }, [isVisible, buildingFmGuid]);
 
-  // Dispatch annotation filter event
+  // Dispatch annotation filter + toggle events
   useEffect(() => {
+    const categories = Array.from(checkedAnnotations);
     window.dispatchEvent(new CustomEvent(ANNOTATION_FILTER_EVENT, {
-      detail: { visibleCategories: Array.from(checkedAnnotations) },
+      detail: { visibleCategories: categories },
+    }));
+    // Also dispatch TOGGLE_ANNOTATIONS so the native viewer creates/shows markers
+    const show = categories.length > 0;
+    window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', {
+      detail: { show, visibleCategories: categories },
     }));
   }, [checkedAnnotations]);
 
