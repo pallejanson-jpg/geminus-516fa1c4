@@ -868,7 +868,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                       <div className="flex items-center gap-2 mb-1">
                         <Layers size={14} className="text-accent shrink-0" />
                         <span className="font-medium text-xs sm:text-sm truncate">
-                          {asset.commonName || asset.common_name || asset.name || '(namnlös)'}
+                          {asset.commonName || asset.common_name || asset.name || '(unnamed)'}
                         </span>
                       </div>
                       <div className="text-[10px] sm:text-[11px] text-muted-foreground truncate">
