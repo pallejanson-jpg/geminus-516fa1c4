@@ -1,46 +1,53 @@
 
 
-# Plan: Fix Asset Sync Message, Column Discovery & Landing Page Background
+# Plan: Per-Building Sync + Incremental Date-Based Optimization
 
-## Issues
+## Summary
 
-1. **"Syncing assets" message when assets already exist**: The `syncBuildingAssetsIfNeeded` in `asset-plus-service.ts` (line 435) still has the `isAccSourcedBuilding` bail-out that was removed from `AssetsView`. This causes the function to return `{synced: false, count: 0}` for ACC-prefixed buildings, making `AssetsView` think there are no assets and show the sync spinner. Additionally, `ensureBuildingAssets` (line 481) has the same check. The loading message also incorrectly says "Fetching assets for this building from Asset+" — it should just say "Loading assets...".
+Add per-building sync support and incremental sync using Asset+ modification dates to dramatically reduce sync time for subsequent runs.
 
-2. **Missing attribute columns in asset detail list**: The column discovery logic (line 346) filters out any attribute that is NOT an object with `{name, value}` shape. Many attributes from Asset+ sync are stored as plain strings/numbers/booleans (not wrapped in `{name, value}`). These are silently skipped, so users only see the few system columns.
+## Changes
 
-3. **Skyline background on landing page**: Currently uses `ParticleBackground` (animated floating characters). User wants the skyline picture back.
+### 1. Per-Building Sync (`supabase/functions/asset-plus-sync/index.ts`)
+
+Add optional `buildingFmGuid` parameter to `sync-assets-resumable`. When provided, only sync that single building instead of looping all buildings.
+
+```typescript
+// In sync-assets-resumable handler:
+const targetBuilding = body?.buildingFmGuid;
+const filteredBuildings = targetBuilding 
+  ? buildings.filter(b => b.fm_guid === targetBuilding)
+  : buildings;
+```
+
+### 2. Incremental Sync Based on Dates
+
+**Database migration:** Add `last_asset_sync_at` column to `building_settings` table.
+
+**Sync logic changes:**
+- Before syncing a building, check `last_asset_sync_at` from `building_settings`
+- If set and `force !== true`, add filter: `["modificationDate", ">", lastSyncAt]`
+- After completing a building, update `last_asset_sync_at`
+- If the incremental fetch returns 0 results, skip immediately (building is up to date)
+
+### 3. Quick Count Check
+
+Before fetching any objects for a building, do a count-only query to Asset+ and compare with local count. If they match and no `force` flag, skip entirely.
+
+### 4. UI: Trigger Per-Building Sync
+
+In `AssetsView.tsx` and `CreateBuildingPanel.tsx`, when syncing assets for a specific building, pass `buildingFmGuid` to the edge function instead of triggering a full sync.
 
 ## Files to Modify
 
-### 1. `src/services/asset-plus-service.ts`
-- **Remove `isAccSourcedBuilding` check** from `syncBuildingAssetsIfNeeded` (line 435-438) and `ensureBuildingAssets` (line 481-484). All buildings should check the database first and only sync if no assets exist — regardless of source.
+| File | Change |
+|------|--------|
+| `supabase/functions/asset-plus-sync/index.ts` | Per-building filter, incremental date filter, count-check skip |
+| `src/services/asset-plus-service.ts` | Pass `buildingFmGuid` in sync calls |
+| DB migration | Add `last_asset_sync_at` to `building_settings` |
 
-### 2. `src/components/portfolio/AssetsView.tsx`
-- **Fix loading message** (lines 753-756): Change from "Syncing assets... Fetching assets for this building from Asset+" to "Loading assets..." — generic, source-agnostic.
-- **Fix column discovery** (lines 343-356): Also discover plain-value attributes (strings, numbers) that are NOT `{name, value}` objects. Add a branch for non-object attribute values to create columns from them too. Skip known internal keys like `tenantId`, `checkedOut`, etc.
+## Expected Impact
 
-### 3. `src/components/home/HomeLanding.tsx`
-- **Replace `ParticleBackground`** with a skyline background image. Use an `img` or CSS background with a city skyline image (e.g. from Unsplash or a local asset). Apply a dark overlay for text readability, keeping the same layout structure.
-
-## Technical Details
-
-**Column discovery fix:**
-```typescript
-Object.entries(attrs).forEach(([key, value]: [string, any]) => {
-  if (discoveredColumns.has(key)) return;
-  if (SKIP_KEYS.includes(key)) return;
-  
-  if (value && typeof value === 'object' && 'name' in value && 'value' in value) {
-    // Wrapped property: {name, value}
-    discoveredColumns.set(key, { key, label: value.name || key, category: 'userDefined' });
-  } else if (value !== null && value !== undefined && typeof value !== 'object') {
-    // Plain scalar attribute
-    discoveredColumns.set(key, { key, label: extractPropertyName(key), category: 'userDefined' });
-  }
-});
-```
-
-**extractPropertyValue also needs updating** to handle plain scalar values (it currently only unwraps `{value}` objects).
-
-**Skyline background**: Use a high-quality skyline image URL with `object-cover` positioning, overlaid with `bg-background/70` for readability — same overlay pattern as the current `ParticleBackground`.
+- First sync: same as today (full pull)
+- Subsequent syncs: skip buildings with matching counts, only fetch modified objects — reducing from minutes to seconds for unchanged buildings
 
