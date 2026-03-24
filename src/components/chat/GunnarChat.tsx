@@ -696,6 +696,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
 
   /** Parse action:type:payload links and dispatch the appropriate action */
   const handleActionLink = useCallback((href: string) => {
+    try {
     const parts = href.replace(/^action:/, '').split(':');
     const actionType = parts[0];
     
