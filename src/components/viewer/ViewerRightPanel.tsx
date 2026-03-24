@@ -271,6 +271,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
       const camera = xeokitViewer.camera;
       const building = allData.find((b: any) => b.fmGuid === buildingFmGuid && b.category === 'Building');
       const resolvedBuildingName = buildingName || building?.commonName || building?.name || 'Unknown building';
+      const xeokitViewer2 = xeokitViewer;
       const viewState = {
         buildingFmGuid,
         buildingName: resolvedBuildingName,
@@ -287,6 +288,10 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
         showAnnotations,
         visualizationType: 'none',
         visualizationMockData: false,
+        sectionPlanes: Object.values(xeokitViewer2.scene?.sectionPlanes || {}).map((sp: any) => ({
+          pos: [...(sp.pos || [0, 0, 0])],
+          dir: [...(sp.dir || [0, 0, -1])],
+        })),
       };
       setPendingViewState(viewState);
       setShowCreateViewDialog(true);
