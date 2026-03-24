@@ -35,6 +35,7 @@ interface SavedView {
   show_annotations: boolean | null;
   visualization_type: string | null;
   visualization_mock_data: boolean | null;
+  section_planes: Array<{ pos: number[]; dir: number[] }> | null;
 }
 
 /**
