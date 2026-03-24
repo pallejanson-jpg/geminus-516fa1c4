@@ -1,0 +1,1 @@
+ALTER TABLE saved_views ADD COLUMN section_planes jsonb DEFAULT null;

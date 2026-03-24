@@ -1599,6 +1599,7 @@ export type Database = {
           id: string
           name: string
           screenshot_url: string | null
+          section_planes: Json | null
           show_annotations: boolean | null
           show_spaces: boolean | null
           updated_at: string | null
@@ -1621,6 +1622,7 @@ export type Database = {
           id?: string
           name: string
           screenshot_url?: string | null
+          section_planes?: Json | null
           show_annotations?: boolean | null
           show_spaces?: boolean | null
           updated_at?: string | null
@@ -1643,6 +1645,7 @@ export type Database = {
           id?: string
           name?: string
           screenshot_url?: string | null
+          section_planes?: Json | null
           show_annotations?: boolean | null
           show_spaces?: boolean | null
           updated_at?: string | null
