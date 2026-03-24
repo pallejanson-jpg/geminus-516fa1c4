@@ -692,10 +692,15 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
         className="relative z-50 flex items-center justify-between px-3 pointer-events-none"
         style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 6px)', paddingBottom: '6px', background: 'linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, transparent 100%)' }}
       >
-        <Button variant="ghost" size="icon" onClick={onGoBack} className="h-8 w-8 text-white hover:bg-white/20 pointer-events-auto">
-          <X className="h-5 w-5" />
-        </Button>
-        <span className="text-white text-xs font-medium truncate max-w-[50vw] pointer-events-none">{buildingData.name}</span>
+        <div className="flex items-center gap-1 pointer-events-auto">
+          <Button variant="ghost" size="icon" onClick={onGoBack} className="h-8 w-8 text-white hover:bg-white/20">
+            <X className="h-5 w-5" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => { setSubSheet(null); setShowFilterPanel(true); }} className="h-8 w-8 text-white hover:bg-white/20">
+            <Filter className="h-4 w-4" />
+          </Button>
+        </div>
+        <span className="text-white text-xs font-medium truncate max-w-[40vw] pointer-events-none">{buildingData.name}</span>
         <Button variant="ghost" size="icon" onClick={() => { setSubSheet(null); setSheetOpen(true); }} className="h-8 w-8 text-white hover:bg-white/20 pointer-events-auto">
           <Menu className="h-5 w-5" />
         </Button>
