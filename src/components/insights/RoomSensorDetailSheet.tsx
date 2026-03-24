@@ -424,7 +424,7 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
             <div className="rounded-xl border border-border bg-card p-3 space-y-1">
               <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                 <Building2 className="h-3.5 w-3.5" />
-                Maskininfo
+                Machine Info
               </div>
               {data.siteName && (
                 <p className="text-xs text-foreground/70">Site: {data.siteName}</p>
