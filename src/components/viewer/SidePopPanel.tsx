@@ -62,14 +62,15 @@ const SidePopPanel: React.FC<SidePopPanelProps> = ({
   const parentCenter = parentPosition.x + parentWidth / 2;
   const showOnLeft = parentCenter > screenWidth / 2;
 
+  const clampedTop = Math.max(56, parentPosition.y); // Keep below header
   const position = showOnLeft
     ? { 
         left: Math.max(8, parentPosition.x - panelWidth - gap), 
-        top: parentPosition.y 
+        top: clampedTop 
       }
     : { 
         left: Math.min(screenWidth - panelWidth - 8, parentPosition.x + parentWidth + gap), 
-        top: parentPosition.y 
+        top: clampedTop 
       };
 
   return (
