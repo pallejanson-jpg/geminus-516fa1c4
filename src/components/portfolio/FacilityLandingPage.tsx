@@ -811,7 +811,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                             })}
                           >
                             <div className="text-[10px] text-muted-foreground truncate mb-0.5">
-                              {space.commonName || space.name || '(namnlöst)'}
+                              {space.commonName || space.name || '(unnamed)'}
                             </div>
                             <div className="text-base font-bold leading-none text-foreground">
                               {displayArea ? `${displayArea}` : '—'}
