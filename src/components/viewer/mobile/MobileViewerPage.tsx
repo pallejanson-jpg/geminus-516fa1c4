@@ -21,8 +21,12 @@ import {
   Settings, ChevronRight, Eye, EyeOff, Loader2, Scan, User,
   Compass, PenTool, RotateCcw, Layers, ChevronUp, ChevronDown,
   Palette, Camera, Home, MessageSquare, MessageSquarePlus,
-  Plus, Radio, Map, Type, Sun,
+  Plus, Radio, Map, Type, Sun, Navigation,
 } from 'lucide-react';
+import NavigationPanel from '@/components/viewer/NavigationPanel';
+import NavGraphEditorOverlay from '@/components/viewer/NavGraphEditorOverlay';
+import RouteDisplayOverlay from '@/components/viewer/RouteDisplayOverlay';
+import type { NavGraph, RouteResult } from '@/lib/pathfinding';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
