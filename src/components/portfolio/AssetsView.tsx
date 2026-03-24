@@ -47,7 +47,7 @@ import { Facility } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { AppContext } from '@/context/AppContext';
-import { syncBuildingAssetsIfNeeded, syncAssetToAssetPlus, batchSyncAssetsToAssetPlus, fetchAssetsForBuilding, isAccSourcedBuilding } from '@/services/asset-plus-service';
+import { syncBuildingAssetsIfNeeded, syncAssetToAssetPlus, batchSyncAssetsToAssetPlus, fetchAssetsForBuilding } from '@/services/asset-plus-service';
 import {
   DndContext,
   closestCenter,
@@ -107,6 +107,12 @@ const STATUS_COLUMNS: ColumnDef[] = [
 
 // Default visible columns
 const DEFAULT_VISIBLE_COLUMNS = ['designation', 'commonName', 'assetType', 'levelCommonName', 'createdInModel'];
+
+// Asset types to exclude from the list
+const EXCLUDED_ASSET_TYPES = ['IfcAlarm'];
+
+// Row pagination limit
+const ROW_PAGE_SIZE = 200;
 
 // Sortable Column Header Component
 const SortableColumnHeader: React.FC<{
@@ -196,6 +202,9 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   const [syncingAssetIds, setSyncingAssetIds] = useState<Set<string>>(new Set());
   const [isBatchSyncing, setIsBatchSyncing] = useState(false);
   
+  // Row pagination
+  const [rowLimit, setRowLimit] = useState(ROW_PAGE_SIZE);
+  
   // Local assets state for on-demand sync
   const [localAssets, setLocalAssets] = useState<any[]>(assets);
   const [hasTriedSync, setHasTriedSync] = useState(false);
@@ -206,8 +215,6 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   // Properties dialog state - supports multiple selection
   const [showPropertiesFor, setShowPropertiesFor] = useState<string[] | null>(null);
 
-  // Properties are shown only via explicit "Egenskaper" button click
-
   // Sync localAssets when props change
   useEffect(() => {
     setLocalAssets(assets);
@@ -215,10 +222,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
 
   // On-demand sync: ALWAYS check database on mount, then sync if needed
   useEffect(() => {
-    // Only for buildings with fmGuid
     if (!facility.fmGuid || facility.category !== 'Building') return;
-    
-    // Prevent multiple simultaneous syncs
     if (hasTriedSync) return;
 
     const initAssets = async () => {
@@ -228,12 +232,11 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       console.log('AssetsView: Initializing assets for building', facility.fmGuid);
       
       try {
-        // Step 1: Always fetch from database first (ignore props)
+        // Step 1: Always fetch from database first
         const existingAssets = await fetchAssetsForBuilding(facility.fmGuid!);
         console.log('AssetsView: Found', existingAssets.length, 'existing assets in database');
         
         if (existingAssets.length > 0) {
-          // Map to expected format
           const mapped = existingAssets.map((asset: any) => ({
             fm_guid: asset.fmGuid,
             category: asset.category,
@@ -256,22 +259,12 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           return;
         }
         
-        // Step 2: ACC-sourced buildings don't need Asset+ sync — their assets come from BIM import
-        if (isAccSourcedBuilding(facility.fmGuid!)) {
-          console.log('AssetsView: ACC-sourced building, skipping Asset+ sync');
-          setIsSyncingAssets(false);
-          return;
-        }
-        
-        // Step 3: No local assets - trigger sync from Asset+
+        // Step 2: No local assets - trigger sync
         console.log('AssetsView: No local assets, triggering sync...');
         const result = await syncBuildingAssetsIfNeeded(facility.fmGuid!);
         
         if (result.synced && result.count > 0) {
-          // Fetch newly synced assets from database
           const newAssets = await fetchAssetsForBuilding(facility.fmGuid!);
-          
-          // Map to expected format
           const mapped = newAssets.map((asset: any) => ({
             fm_guid: asset.fmGuid,
             category: asset.category,
@@ -330,22 +323,21 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     return key;
   };
 
-  // Dynamically extract ALL available columns from asset data (including User Defined)
+  // Dynamically extract ALL available columns from asset data (limit scan to first 100 for perf)
   const allColumns: ColumnDef[] = useMemo(() => {
     const discoveredColumns = new Map<string, ColumnDef>();
 
-    // Add system columns first
     SYSTEM_COLUMNS.forEach(col => {
       discoveredColumns.set(col.key, col);
     });
 
-    // Add status columns
     STATUS_COLUMNS.forEach(col => {
       discoveredColumns.set(col.key, col);
     });
 
-    // Scan all assets to find User Defined Properties
-    localAssets.forEach(asset => {
+    // Limit scan to first 100 assets for performance
+    const sampleAssets = localAssets.slice(0, 100);
+    sampleAssets.forEach(asset => {
       const attrs = asset.attributes || {};
       
       Object.entries(attrs).forEach(([key, value]: [string, any]) => {
@@ -353,7 +345,6 @@ const AssetsView: React.FC<AssetsViewProps> = ({
         if (key.startsWith('_') || key === 'tenantId' || key === 'checkedOut' || key === 'createdInModel') return;
         if (typeof value !== 'object' || !value) return;
         
-        // This is a User Defined Property (has structure like {name, value, dataType, ...})
         if ('name' in value && 'value' in value) {
           const propertyName = value.name || extractPropertyName(key);
           discoveredColumns.set(key, {
@@ -375,7 +366,6 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   ): any => {
     if (!attributes) return null;
 
-    // Direct access first
     if (key in attributes) {
       const val = attributes[key];
       if (val && typeof val === 'object' && 'value' in val) {
@@ -384,7 +374,6 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       return val;
     }
 
-    // Try prefix matching for keys with hash suffixes
     const keyLower = key.toLowerCase();
     for (const attrKey of Object.keys(attributes)) {
       if (attrKey.toLowerCase().startsWith(keyLower)) {
@@ -398,14 +387,16 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     return null;
   }, []);
 
-  // Transform raw asset data with deduplication
+  // Transform raw asset data with deduplication and IfcAlarm filtering
   const assetData: AssetData[] = useMemo(() => {
-    // Deduplicate by fmGuid first to prevent duplicate entries
     const seenGuids = new Set<string>();
     const uniqueAssets = localAssets.filter((asset) => {
       const guid = asset.fm_guid || asset.fmGuid;
       if (!guid || seenGuids.has(guid)) return false;
       seenGuids.add(guid);
+      // Filter out excluded asset types
+      const assetType = asset.asset_type || asset.assetType || '';
+      if (EXCLUDED_ASSET_TYPES.includes(assetType)) return false;
       return true;
     });
     
@@ -428,7 +419,6 @@ const AssetsView: React.FC<AssetsViewProps> = ({
         raw: asset,
       };
 
-      // Extract User Defined property values
       allColumns.forEach(col => {
         if (col.category === 'userDefined') {
           result[col.key] = extractPropertyValue(attrs, col.key) || '-';
@@ -452,7 +442,6 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       );
     });
 
-    // Apply filter mode
     if (filterMode === 'orphans') {
       result = result.filter((a) => !a.createdInModel);
     } else if (filterMode === 'no-annotation') {
@@ -461,19 +450,16 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       result = result.filter((a) => a.isLocal === true);
     }
 
-    // Sort
     result.sort((a, b) => {
       let aVal = a[sortColumn];
       let bVal = b[sortColumn];
 
-      // Handle boolean sorting
       if (typeof aVal === 'boolean' && typeof bVal === 'boolean') {
         return sortDirection === 'asc'
           ? Number(aVal) - Number(bVal)
           : Number(bVal) - Number(aVal);
       }
 
-      // Handle string sorting
       const aStr = String(aVal || '').toLowerCase();
       const bStr = String(bVal || '').toLowerCase();
       const comparison = aStr.localeCompare(bStr, 'sv', { numeric: true });
@@ -482,6 +468,9 @@ const AssetsView: React.FC<AssetsViewProps> = ({
 
     return result;
   }, [assetData, debouncedSearch, sortColumn, sortDirection, visibleColumns, filterMode]);
+
+  // Paginated assets for rendering
+  const displayedAssets = useMemo(() => filteredAssets.slice(0, rowLimit), [filteredAssets, rowLimit]);
 
   const handleSort = (column: string) => {
     if (sortColumn === column) {
@@ -517,7 +506,6 @@ const AssetsView: React.FC<AssetsViewProps> = ({
 
   const handleOpen3D = (asset: AssetData) => {
     if (onOpen3D) {
-      // If this is a local asset (not in model), auto-enable local annotations
       if (asset.isLocal || !asset.createdInModel) {
         localStorage.setItem('viewer-show-local-annotations', 'true');
       }
@@ -526,7 +514,6 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   };
 
   const handlePlaceAnnotation = (asset: AssetData) => {
-    // Use context to start annotation placement flow
     const buildingGuid = asset.buildingFmGuid || facility.fmGuid;
     if (buildingGuid) {
       startAnnotationPlacement(asset.raw, buildingGuid);
@@ -622,6 +609,18 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     }
   }, [filteredAssets]);
 
+  const handleToggleRow = useCallback((fmGuid: string) => {
+    setSelectedRows(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(fmGuid)) {
+        newSet.delete(fmGuid);
+      } else {
+        newSet.add(fmGuid);
+      }
+      return newSet;
+    });
+  }, []);
+
   const handleSelectRow = useCallback((fmGuid: string, checked: boolean) => {
     setSelectedRows(prev => {
       const newSet = new Set(prev);
@@ -634,7 +633,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     });
   }, []);
 
-  // Batch action handlers - now supports multi-select
+  // Batch action handlers
   const handleShowSelectedProperties = useCallback(() => {
     if (selectedRows.size > 0) {
       setShowPropertiesFor(Array.from(selectedRows));
@@ -654,7 +653,6 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       return;
     }
     
-    // Place first one - user needs to do one at a time
     handlePlaceAnnotation(selectedAssets[0]);
   }, [selectedRows, filteredAssets, toast, handlePlaceAnnotation]);
 
@@ -692,6 +690,14 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     }
   }, [selectedRows, filteredAssets, toast]);
 
+  const handleOpen3DSelected = useCallback(() => {
+    if (selectedRows.size === 1) {
+      const fmGuid = Array.from(selectedRows)[0];
+      const asset = filteredAssets.find(a => a.fmGuid === fmGuid);
+      if (asset) handleOpen3D(asset);
+    }
+  }, [selectedRows, filteredAssets]);
+
   // Sync column order with visible columns
   const orderedVisibleColumns = useMemo(() => {
     const ordered = columnOrder.filter((key) => visibleColumns.includes(key));
@@ -711,7 +717,6 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       );
     }
 
-    // isLocal: false means synced (good), true means not synced (needs action)
     if (colKey === 'isLocal') {
       return value ? (
         <Badge variant="secondary" className="bg-amber-500/20 text-amber-600">Not synced</Badge>
@@ -727,12 +732,10 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   const noAnnotationCount = assetData.filter((a) => !a.annotationPlaced).length;
   const unsyncedCount = assetData.filter((a) => a.isLocal === true).length;
   
-  // Count how many selected can have annotation placed
   const selectedCanPlaceAnnotation = filteredAssets.filter(a => 
     selectedRows.has(a.fmGuid) && !a.createdInModel && !a.annotationPlaced
   ).length;
   
-  // Count how many selected can be synced
   const selectedCanSync = filteredAssets.filter(a => 
     selectedRows.has(a.fmGuid) && a.isLocal && a.roomFmGuid
   ).length;
@@ -906,6 +909,13 @@ const AssetsView: React.FC<AssetsViewProps> = ({
             <Info size={14} />
             Properties
           </Button>
+
+          {selectedRows.size === 1 && onOpen3D && (
+            <Button size="sm" variant="outline" onClick={handleOpen3DSelected} className="gap-1">
+              <Cuboid size={14} />
+              3D
+            </Button>
+          )}
           
           {selectedCanPlaceAnnotation > 0 && (
             <Button size="sm" variant="outline" onClick={handleBatchPlaceAnnotation} className="gap-1">
@@ -968,15 +978,15 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                         ) : null;
                       })}
                     </SortableContext>
-                    <TableHead className="bg-muted/50 w-24">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredAssets.map((asset) => (
+                  {displayedAssets.map((asset) => (
                     <TableRow 
                       key={asset.fmGuid} 
-                      className={`hover:bg-muted/30 cursor-pointer ${selectedRows.has(asset.fmGuid) ? 'bg-muted/50' : ''}`}
-                      onClick={() => onSelectAsset?.(asset.fmGuid)}
+                      className={`hover:bg-muted/30 cursor-pointer ${selectedRows.has(asset.fmGuid) ? 'bg-primary/10' : ''}`}
+                      onClick={() => handleToggleRow(asset.fmGuid)}
+                      onDoubleClick={() => setShowPropertiesFor([asset.fmGuid])}
                     >
                       {/* Checkbox cell */}
                       <TableCell className="py-2 w-10" onClick={(e) => e.stopPropagation()}>
@@ -990,74 +1000,12 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                           {formatCellValue(colKey, asset[colKey])}
                         </TableCell>
                       ))}
-                      <TableCell className="py-2">
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setShowPropertiesFor([asset.fmGuid]);
-                            }}
-                            title="Properties"
-                          >
-                            <Info size={14} />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpen3D(asset);
-                            }}
-                            title="Open in 3D"
-                          >
-                            <Cuboid size={14} />
-                          </Button>
-                          {/* Only show place annotation for assets NOT in model and without annotation */}
-                          {!asset.createdInModel && !asset.annotationPlaced && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-amber-500 hover:text-amber-600"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handlePlaceAnnotation(asset);
-                              }}
-                              title="Place annotation"
-                            >
-                              <MapPin size={14} />
-                            </Button>
-                          )}
-                          {asset.isLocal && asset.roomFmGuid && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-blue-500 hover:text-blue-600"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSyncToAssetPlus(asset);
-                              }}
-                              disabled={syncingAssetIds.has(asset.fmGuid)}
-                              title="Sync to Asset+"
-                            >
-                              {syncingAssetIds.has(asset.fmGuid) ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <RefreshCw size={14} />
-                              )}
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
                     </TableRow>
                   ))}
                   {filteredAssets.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={orderedVisibleColumns.length + 2}
+                        colSpan={orderedVisibleColumns.length + 1}
                         className="text-center py-12 text-muted-foreground"
                       >
                         <Box className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -1069,17 +1017,30 @@ const AssetsView: React.FC<AssetsViewProps> = ({
               </Table>
             </DndContext>
             </div>
+            {/* Show more button */}
+            {rowLimit < filteredAssets.length && (
+              <div className="flex justify-center py-3">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setRowLimit(prev => prev + ROW_PAGE_SIZE)}
+                  className="gap-2"
+                >
+                  Show more ({filteredAssets.length - rowLimit} remaining)
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="p-2 sm:p-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-              {filteredAssets.map((asset) => (
+              {displayedAssets.map((asset) => (
                 <Card
                   key={asset.fmGuid}
                   className={`group hover:shadow-md transition-shadow cursor-pointer ${
                     selectedRows.has(asset.fmGuid) ? 'ring-2 ring-primary' : ''
                   }`}
-                  onClick={() => handleSelectRow(asset.fmGuid, !selectedRows.has(asset.fmGuid))}
+                  onClick={() => handleToggleRow(asset.fmGuid)}
+                  onDoubleClick={() => setShowPropertiesFor([asset.fmGuid])}
                 >
                   <CardContent className="p-3">
                     <div className="flex items-start justify-between mb-2">
@@ -1107,32 +1068,6 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                       <span className="text-xs text-muted-foreground truncate">
                         {asset.assetType}
                       </span>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpen3D(asset);
-                          }}
-                        >
-                          <Cuboid size={12} />
-                        </Button>
-                        {!asset.createdInModel && !asset.annotationPlaced && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-amber-500"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handlePlaceAnnotation(asset);
-                            }}
-                          >
-                            <MapPin size={12} />
-                          </Button>
-                        )}
-                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -1144,6 +1079,17 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                 </div>
               )}
             </div>
+            {rowLimit < filteredAssets.length && (
+              <div className="flex justify-center py-3">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setRowLimit(prev => prev + ROW_PAGE_SIZE)}
+                  className="gap-2"
+                >
+                  Show more ({filteredAssets.length - rowLimit} remaining)
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1158,7 +1104,6 @@ const AssetsView: React.FC<AssetsViewProps> = ({
             setSelectedRows(new Set());
           }}
           onUpdate={() => {
-            // Refresh assets after update
             setShowPropertiesFor(null);
             setSelectedRows(new Set());
           }}

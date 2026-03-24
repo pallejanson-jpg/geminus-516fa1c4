@@ -98,16 +98,14 @@ interface ColumnDef {
   key: string;
   label: string;
   category: 'system' | 'userDefined' | 'calculated';
-  dataType?: number; // 0=string, 3=number
+  dataType?: number;
 }
 
 // Helper to extract readable name from attribute key
 const extractPropertyName = (key: string): string => {
-  // Remove hash suffix (e.g., "hyresobjektF6155460E35181F569CF0C37DD10056448C5EBD3" -> "hyresobjekt")
   const match = key.match(/^([a-zA-ZåäöÅÄÖ]+)/);
   if (match) {
     const baseName = match[1].toLowerCase();
-    // Capitalize first letter
     return baseName.charAt(0).toUpperCase() + baseName.slice(1);
   }
   return key;
@@ -217,8 +215,6 @@ const RoomsView: React.FC<RoomsViewProps> = ({
   // Properties dialog state - supports multiple selection
   const [showPropertiesFor, setShowPropertiesFor] = useState<string[] | null>(null);
 
-  // Properties are shown only via explicit "Egenskaper" button click
-
   // DnD sensors
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -229,27 +225,24 @@ const RoomsView: React.FC<RoomsViewProps> = ({
   const allColumns: ColumnDef[] = useMemo(() => {
     const discoveredColumns = new Map<string, ColumnDef>();
 
-    // Add system columns first
     SYSTEM_COLUMNS.forEach(col => {
       discoveredColumns.set(col.key, col);
     });
 
-    // Add calculated columns
     CALCULATED_COLUMNS.forEach(col => {
       discoveredColumns.set(col.key, col);
     });
 
-    // Scan all rooms to find User Defined Properties
-    rooms.forEach(room => {
+    // Limit scan to first 100 rooms for performance
+    const sampleRooms = rooms.slice(0, 100);
+    sampleRooms.forEach(room => {
       const attrs = room.attributes || {};
       
       Object.entries(attrs).forEach(([key, value]: [string, any]) => {
-        // Skip already-known system properties and internal fields
         if (discoveredColumns.has(key)) return;
         if (key.startsWith('_') || key === 'tenantId' || key === 'checkedOut' || key === 'createdInModel') return;
         if (typeof value !== 'object' || !value) return;
         
-        // This is a User Defined Property (has structure like {name, value, dataType, ...})
         if ('name' in value && 'value' in value) {
           const propertyName = value.name || extractPropertyName(key);
           discoveredColumns.set(key, {
@@ -272,7 +265,6 @@ const RoomsView: React.FC<RoomsViewProps> = ({
   ): any => {
     if (!attributes) return null;
 
-    // Direct access first
     if (key in attributes) {
       const val = attributes[key];
       if (val && typeof val === 'object' && 'value' in val) {
@@ -281,7 +273,6 @@ const RoomsView: React.FC<RoomsViewProps> = ({
       return val;
     }
 
-    // Try prefix matching for keys with hash suffixes
     const keyLower = key.toLowerCase();
     for (const attrKey of Object.keys(attributes)) {
       if (attrKey.toLowerCase().startsWith(keyLower)) {
@@ -304,28 +295,20 @@ const RoomsView: React.FC<RoomsViewProps> = ({
         levelFmGuid: room.levelFmGuid,
       };
 
-      // Extract all column values
       allColumns.forEach(col => {
         if (col.category === 'system') {
-          // System properties come from attrs directly or room object
           result[col.key] = attrs[col.key] || room[col.key] || '-';
         } else if (col.category === 'calculated') {
-          // Special calculated fields
           result[col.key] = extractPropertyValue(attrs, col.key) || 0;
         } else {
-          // User Defined Properties
           result[col.key] = extractPropertyValue(attrs, col.key) || '-';
         }
       });
 
-      // Override roomNumber with extracted value if available
       const roomNum = extractPropertyValue(attrs, 'rumsnummer');
       if (roomNum) result.roomNumber = roomNum;
 
-      // Override commonName
       result.commonName = room.commonName || room.name || attrs.commonName || 'Unknown';
-
-      // Override levelCommonName
       result.levelCommonName = attrs.levelCommonName || attrs.levelDesignation || '-';
 
       return result;
@@ -336,7 +319,6 @@ const RoomsView: React.FC<RoomsViewProps> = ({
   const filteredRooms = useMemo(() => {
     let result = roomData.filter((room) => {
       const searchLower = searchQuery.toLowerCase();
-      // Search across all visible columns
       return visibleColumns.some(colKey => {
         const val = room[colKey];
         if (val === null || val === undefined || val === '-') return false;
@@ -344,17 +326,14 @@ const RoomsView: React.FC<RoomsViewProps> = ({
       }) || room.fmGuid.toLowerCase().includes(searchLower);
     });
 
-    // Sort
     result.sort((a, b) => {
       let aVal = a[sortColumn];
       let bVal = b[sortColumn];
 
-      // Handle numeric sorting
       if (typeof aVal === 'number' && typeof bVal === 'number') {
         return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
       }
 
-      // Handle string sorting
       const aStr = String(aVal || '').toLowerCase();
       const bStr = String(bVal || '').toLowerCase();
       const comparison = aStr.localeCompare(bStr, 'sv', { numeric: true });
@@ -364,7 +343,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
     return result;
   }, [roomData, searchQuery, sortColumn, sortDirection, visibleColumns]);
 
-  // Build a deterministic color map: unique commonName → color
+  // Build a deterministic color map
   const roomNameColorMap = useMemo(() => {
     const names = [...new Set(filteredRooms.map(r => String(r.commonName || '')))].sort();
     const map: Record<string, string> = {};
@@ -372,7 +351,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
     return map;
   }, [filteredRooms]);
 
-  // Extract sensor values for each room when a metric is active
+  // Extract sensor values
   const roomSensorValues = useMemo(() => {
     if (activeSensorMetric === 'none') return new Map<string, number | null>();
     const map = new Map<string, number | null>();
@@ -397,11 +376,9 @@ const RoomsView: React.FC<RoomsViewProps> = ({
   const toggleColumn = (columnKey: string) => {
     setVisibleColumns((prev) => {
       if (prev.includes(columnKey)) {
-        // Remove from visible and column order
         setColumnOrder(order => order.filter(k => k !== columnKey));
         return prev.filter((c) => c !== columnKey);
       } else {
-        // Add to visible and column order
         setColumnOrder(order => [...order, columnKey]);
         return [...prev, columnKey];
       }
@@ -425,12 +402,6 @@ const RoomsView: React.FC<RoomsViewProps> = ({
     }
   };
 
-  const handleSelectRoom = (room: RoomData) => {
-    if (onSelectRoom) {
-      onSelectRoom(room.fmGuid);
-    }
-  };
-
   // Multi-selection handlers
   const handleSelectAll = useCallback((checked: boolean) => {
     if (checked) {
@@ -439,6 +410,18 @@ const RoomsView: React.FC<RoomsViewProps> = ({
       setSelectedRows(new Set());
     }
   }, [filteredRooms]);
+
+  const handleToggleRow = useCallback((fmGuid: string) => {
+    setSelectedRows(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(fmGuid)) {
+        newSet.delete(fmGuid);
+      } else {
+        newSet.add(fmGuid);
+      }
+      return newSet;
+    });
+  }, []);
 
   const handleSelectRow = useCallback((fmGuid: string, checked: boolean) => {
     setSelectedRows(prev => {
@@ -452,12 +435,19 @@ const RoomsView: React.FC<RoomsViewProps> = ({
     });
   }, []);
 
-  // Batch action handlers - now supports multi-select
   const handleShowSelectedProperties = useCallback(() => {
     if (selectedRows.size > 0) {
       setShowPropertiesFor(Array.from(selectedRows));
     }
   }, [selectedRows]);
+
+  const handleOpen3DSelected = useCallback(() => {
+    if (selectedRows.size === 1) {
+      const fmGuid = Array.from(selectedRows)[0];
+      const room = filteredRooms.find(r => r.fmGuid === fmGuid);
+      if (room) handleOpen3D(room);
+    }
+  }, [selectedRows, filteredRooms]);
 
   // Sync column order with visible columns
   const orderedVisibleColumns = useMemo(() => {
@@ -472,7 +462,6 @@ const RoomsView: React.FC<RoomsViewProps> = ({
     
     const col = allColumns.find(c => c.key === colKey);
     
-    // Format numbers
     if (col?.dataType === 3 || typeof value === 'number') {
       if (colKey === 'nta' || colKey.toLowerCase().includes('nta')) {
         return value > 0 ? Math.round(value).toLocaleString('sv-SE') : '-';
@@ -619,6 +608,13 @@ const RoomsView: React.FC<RoomsViewProps> = ({
             <Info size={14} />
             Properties
           </Button>
+
+          {selectedRows.size === 1 && onOpen3D && (
+            <Button size="sm" variant="outline" onClick={handleOpen3DSelected} className="gap-1">
+              <Cuboid size={14} />
+              3D
+            </Button>
+          )}
           
           <Button size="sm" variant="ghost" onClick={() => setSelectedRows(new Set())} className="gap-1 ml-auto">
             <ArrowLeft size={14} />
@@ -684,7 +680,6 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                           );
                         })}
                       </SortableContext>
-                      <TableHead className="w-[80px] bg-muted/50">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -698,11 +693,12 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                       return (
                       <TableRow 
                         key={room.fmGuid} 
-                        className={`hover:bg-muted/50 cursor-pointer ${selectedRows.has(room.fmGuid) ? 'bg-muted/50' : ''}`}
+                        className={`hover:bg-muted/50 cursor-pointer ${selectedRows.has(room.fmGuid) ? 'bg-primary/10' : ''}`}
                         style={{
                           borderLeft: rowSensorHex ? `3px solid ${rowSensorHex}` : rowNameColor ? `3px solid ${rowNameColor}` : undefined,
                         }}
-                        onClick={() => handleSelectRoom(room)}
+                        onClick={() => handleToggleRow(room.fmGuid)}
+                        onDoubleClick={() => handleOpen3D(room)}
                       >
                         {/* Checkbox cell */}
                         <TableCell className="py-2 w-10" onClick={(e) => e.stopPropagation()}>
@@ -716,34 +712,6 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                             {formatCellValue(colKey, room[colKey])}
                           </TableCell>
                         ))}
-                        <TableCell className="py-2">
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setShowPropertiesFor([room.fmGuid]);
-                              }}
-                              title="Properties"
-                            >
-                              <Info size={14} />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpen3D(room);
-                              }}
-                              title="View in 3D"
-                            >
-                              <Cuboid size={14} />
-                            </Button>
-                          </div>
-                        </TableCell>
                       </TableRow>
                       );
                     })}
@@ -751,7 +719,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                     {filteredRooms.length === 0 && (
                       <TableRow>
                         <TableCell
-                          colSpan={orderedVisibleColumns.length + 2}
+                          colSpan={orderedVisibleColumns.length + 1}
                           className="text-center py-8 text-muted-foreground"
                         >
                          No rooms found
@@ -775,7 +743,6 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                   : null;
                 const sensorHex = sensorRgb ? rgbToHex(sensorRgb) : null;
 
-                // Use sensor color if metric active, else room name color
                 const cardBorderColor = sensorHex ? sensorHex + '88' : nameColor;
                 const cardBgColor = sensorHex ? sensorHex + '18' : nameColor ? nameColor.replace(')', ', 0.08)').replace('hsl(', 'hsla(') : undefined;
                 const headerBg = sensorHex
@@ -794,7 +761,8 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                       borderColor: cardBorderColor,
                       backgroundColor: cardBgColor,
                     }}
-                    onClick={() => handleSelectRow(room.fmGuid, !selectedRows.has(room.fmGuid))}
+                    onClick={() => handleToggleRow(room.fmGuid)}
+                    onDoubleClick={() => handleOpen3D(room)}
                   >
                     <div
                       className="h-20 relative flex items-center justify-center"
@@ -822,7 +790,6 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                           onCheckedChange={(checked) => handleSelectRow(room.fmGuid, !!checked)}
                         />
                       </div>
-                      {/* Name color dot */}
                       {nameColor && activeSensorMetric === 'none' && (
                         <div
                           className="absolute top-2 left-2 h-3 w-3 rounded-full border border-background/50"
@@ -843,18 +810,6 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                             ? `${Math.round(room.nta)} m²` 
                             : '-'}
                         </span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpen3D(room);
-                          }}
-                          title="View in 3D"
-                        >
-                          <Cuboid size={12} />
-                        </Button>
                       </div>
                     </CardContent>
                   </Card>
