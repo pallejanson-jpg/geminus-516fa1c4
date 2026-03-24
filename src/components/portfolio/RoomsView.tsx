@@ -208,6 +208,21 @@ const RoomsView: React.FC<RoomsViewProps> = ({
   
   // Sensor metric state
   const [activeSensorMetric, setActiveSensorMetric] = useState<VisualizationType>('none');
+  
+  // Auto-sort when sensor metric is activated
+  const handleSensorMetricToggle = useCallback((metricKey: VisualizationType) => {
+    setActiveSensorMetric(prev => {
+      const next = prev === metricKey ? 'none' : metricKey;
+      if (next !== 'none') {
+        setSortColumn('__sensor__');
+        setSortDirection('desc');
+      } else if (sortColumn === '__sensor__') {
+        setSortColumn('roomNumber');
+        setSortDirection('asc');
+      }
+      return next;
+    });
+  }, [sortColumn]);
 
   // Multi-selection state
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
