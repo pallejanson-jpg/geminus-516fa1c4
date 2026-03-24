@@ -21,8 +21,12 @@ import {
   Settings, ChevronRight, Eye, EyeOff, Loader2, Scan, User,
   Compass, PenTool, RotateCcw, Layers, ChevronUp, ChevronDown,
   Palette, Camera, Home, MessageSquare, MessageSquarePlus,
-  Plus, Radio, Map, Type, Sun,
+  Plus, Radio, Map as MapIcon, Type, Sun, Navigation,
 } from 'lucide-react';
+import NavigationPanel from '@/components/viewer/NavigationPanel';
+import NavGraphEditorOverlay from '@/components/viewer/NavGraphEditorOverlay';
+import RouteDisplayOverlay from '@/components/viewer/RouteDisplayOverlay';
+import type { NavGraph, RouteResult } from '@/lib/pathfinding';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
@@ -100,11 +104,12 @@ const MENU_ITEMS = [
   { id: 'display', Icon: Eye, label: 'Display', hasSubmenu: true },
   { id: 'colorFilter', Icon: Palette, label: 'Color filter', hasSubmenu: true },
   { id: 'actions', Icon: Camera, label: 'Actions', hasSubmenu: true },
+  { id: 'navigation', Icon: Navigation, label: 'Navigation', hasSubmenu: true },
   { id: 'insights', Icon: BarChart2, label: 'Insights' },
   { id: 'settings', Icon: Settings, label: 'Settings', hasSubmenu: true },
 ];
 
-type SubSheetId = 'viewMode' | 'toolbarConfig' | 'display' | 'filter' | 'colorFilter' | 'actions' | 'settings' | null;
+type SubSheetId = 'viewMode' | 'toolbarConfig' | 'display' | 'filter' | 'colorFilter' | 'actions' | 'navigation' | 'settings' | null;
 
 const getViewer = () => (window as any).__nativeXeokitViewer;
 
@@ -182,10 +187,28 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
   const [isSubmittingIssue, setIsSubmittingIssue] = useState(false);
   const [isSavingStartView, setIsSavingStartView] = useState(false);
 
+  // Navigation graph state
+  const [navPanelOpen, setNavPanelOpen] = useState(false);
+  const [navEditMode, setNavEditMode] = useState(false);
+  const [navGraph, setNavGraph] = useState<NavGraph>({ nodes: new globalThis.Map(), edges: [] });
+  const [navRoute, setNavRoute] = useState<RouteResult | null>(null);
+  const [navFloorFmGuid, setNavFloorFmGuid] = useState<string | null>(null);
+  const [planRoomLabels, setPlanRoomLabels] = useState<Array<{ id: string; name: string; x: number; y: number }>>([]);
+
   // Floor data
   const { floors } = useFloorData(viewerInstanceRef, buildingData.fmGuid);
   const { configs: roomLabelConfigs, loading: loadingRoomLabelConfigs } = useRoomLabelConfigs();
   const { captureViewpoint, captureScreenshot, getSelectedObjectIds, restoreViewpoint } = useBcfViewpoints({ viewerRef: viewerInstanceRef });
+
+  // Track floor changes for nav graph editor
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const guids = (e as CustomEvent).detail?.visibleFloorFmGuids;
+      if (guids?.length) setNavFloorFmGuid(guids[0]);
+    };
+    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler);
+  }, []);
 
   // Reset splitPlanReady when leaving split mode
   useEffect(() => {
@@ -549,6 +572,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
       case 'colorFilter': setSubSheet('colorFilter'); break;
       case 'actions': setSubSheet('actions'); break;
       case 'settings': setSubSheet('settings'); break;
+      case 'navigation': setSubSheet('navigation'); break;
       case 'insights':
         setSheetOpen(false);
         setTimeout(() => setInsightsPanelOpen(true), 200);
@@ -594,6 +618,48 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
           <NativeViewerShell buildingFmGuid={buildingData.fmGuid} onClose={onGoBack} hideBackButton hideMobileOverlay hideToolbar hideFloorSwitcher showGeminusMenu={viewMode === '3d'} />
         )}
       </div>
+
+      {/* ── Fullscreen plan overlay for Nav Graph Editor ── */}
+      {navPanelOpen && (
+        <div className="absolute inset-0 z-20">
+          <SplitPlanView
+            viewerRef={viewerInstanceRef}
+            buildingFmGuid={buildingData.fmGuid}
+            onRoomLabelsChange={setPlanRoomLabels}
+            navigationOverlay={
+              <>
+                {navEditMode && (
+                  <NavGraphEditorOverlay
+                    graph={navGraph}
+                    onGraphChange={setNavGraph}
+                    roomLabels={planRoomLabels}
+                    floorFmGuid={navFloorFmGuid}
+                  />
+                )}
+                {!navEditMode && navRoute && (
+                  <RouteDisplayOverlay route={navRoute} />
+                )}
+              </>
+            }
+            monochrome
+            lockCameraToFloor={false}
+            syncFloorSelection={false}
+          />
+          {/* Navigation Panel floating card */}
+          <div className="absolute bottom-24 left-2 right-2 z-50 max-h-[50dvh] bg-card border border-border rounded-lg shadow-xl overflow-auto">
+            <NavigationPanel
+              buildingFmGuid={buildingData.fmGuid}
+              onRouteCalculated={setNavRoute}
+              onGraphLoaded={setNavGraph}
+              onEditModeChange={setNavEditMode}
+              onGraphSave={setNavGraph}
+              currentFloorFmGuid={navFloorFmGuid}
+              graph={navGraph}
+              onClose={() => { setNavPanelOpen(false); setNavEditMode(false); setNavRoute(null); }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* ── Transparent top bar ── */}
       <div
@@ -754,7 +820,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
                 {/* Minimap */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-md bg-muted text-muted-foreground"><Map className="h-4 w-4" /></div>
+                    <div className="p-1.5 rounded-md bg-muted text-muted-foreground"><MapIcon className="h-4 w-4" /></div>
                     <span className="text-sm">Minimap</span>
                   </div>
                   <Switch checked={showMinimap} onCheckedChange={(checked) => { setShowMinimap(checked); window.dispatchEvent(new CustomEvent(MINIMAP_TOGGLE_EVENT, { detail: { visible: checked } })); }} />
@@ -865,7 +931,47 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
             </>
           )}
 
-          {/* ── Settings sub-sheet ── */}
+          {/* ── Navigation sub-sheet ── */}
+          {subSheet === 'navigation' && (
+            <>
+              <DrawerHeader className="pb-2">
+                <div className="flex items-center gap-2"><BackButton /><DrawerTitle className="text-base">Navigation</DrawerTitle></div>
+              </DrawerHeader>
+              <div className="px-2 pb-6">
+                <div className="space-y-2">
+                  <Button
+                    variant={navPanelOpen ? 'default' : 'outline'}
+                    className="w-full justify-start gap-2 h-11"
+                    onClick={() => {
+                      setNavPanelOpen(true);
+                      setSheetOpen(false);
+                    }}
+                  >
+                    <div className={cn("p-1.5 rounded-md", navPanelOpen ? "bg-primary-foreground/20" : "bg-primary/10 text-primary")}>
+                      <Navigation className="h-4 w-4" />
+                    </div>
+                    <span className="text-sm">{navPanelOpen ? 'Navigation open' : 'Open navigation'}</span>
+                  </Button>
+                  {navPanelOpen && (
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start gap-2 h-11"
+                      onClick={() => {
+                        setNavPanelOpen(false);
+                        setNavEditMode(false);
+                        setNavRoute(null);
+                        setSheetOpen(false);
+                      }}
+                    >
+                      <div className="p-1.5 rounded-md bg-destructive/10 text-destructive"><X className="h-4 w-4" /></div>
+                      <span className="text-sm">Close navigation</span>
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
           {subSheet === 'settings' && (
             <>
               <DrawerHeader className="pb-2">
