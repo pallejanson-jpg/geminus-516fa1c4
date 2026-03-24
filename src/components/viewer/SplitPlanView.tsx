@@ -426,7 +426,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     }
 
     // Precompute entity type buckets scoped to this storey
-    const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifcwallelementedcase', 'ifccurtainwall', 'ifccolumn', 'ifccolumnstandardcase', 'ifcbeam', 'ifcbeamstandardcase']);
+    const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifcwallelementedcase', 'ifccurtainwall', 'ifccolumn', 'ifccolumnstandardcase', 'ifcbeam', 'ifcbeamstandardcase', 'ifcmember', 'ifcmemberstandardcase', 'ifcrailing', 'ifcrailingstandardcase', 'ifcstairflight', 'ifcstair']);
     const slabTypes = new Set(['ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase', 'ifcroof', 'ifccovering', 'ifcplate']);
     const spaceTypes = new Set(['ifcspace']);
     const doorTypes = new Set(['ifcdoor', 'ifcdoorstandardcase', 'ifcwindow', 'ifcwindowstandardcase']);
@@ -514,9 +514,9 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       }
     }
 
-    // Bold wall edges for Dalux-style crisp plan
+      // Bold wall edges for Dalux-style crisp plan
     if (scene.edgeMaterial) {
-      scene.edgeMaterial.edgeWidth = 4;
+      scene.edgeMaterial.edgeWidth = 6;
       scene.edgeMaterial.edgeColor = [0, 0, 0];
     }
     for (const id of wallIds) {
@@ -524,7 +524,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       if (!entity) continue;
       saveStyle(id);
       entity.visible = true;
-      entity.colorize = [0.25, 0.25, 0.25];
+      entity.colorize = [0.1, 0.1, 0.1];
       entity.opacity = 1;
       entity.edges = true;
     }
@@ -885,7 +885,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
             }
           }
 
-          if (!isLargeArea && !isSplitMode) {
+          if (!isLargeArea && isSplitMode) {
             pickedEntityId = entityId;
             pickedFmGuid = metaObj?.originalSystemId || null;
             pickedEntityName = metaObj?.name || metaObj?.type || null;
