@@ -800,7 +800,6 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     }
   }, [executeAction]);
 
-  const KNOWN_ACTIONS = new Set(['flyTo', 'openViewer', 'showFloor', 'selectInTree', 'switchTo2D', 'switchTo3D', 'showFloorIn3D', 'isolateModel', 'showDrawing', 'openViewer3D', 'selectBuilding', 'changeLang', 'listVoices', 'selectVoice']);
 
   /** Custom renderers for react-markdown to intercept action links */
   const markdownComponents: Components = useMemo(() => ({
@@ -808,7 +807,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       if (href?.startsWith("action:")) {
         // Sanitize: only render as button if the action type is known
         const actionType = href.replace(/^action:/, '').split(':')[0];
-        if (!KNOWN_ACTIONS.has(actionType)) {
+        if (!CLIENT_KNOWN_ACTIONS.has(actionType)) {
           // Unknown action token — render as plain text, strip GUIDs
           return <span>{children}</span>;
         }
