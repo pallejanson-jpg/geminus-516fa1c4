@@ -426,7 +426,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     }
 
     // Precompute entity type buckets scoped to this storey
-    const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifcwallelementedcase', 'ifccurtainwall', 'ifccolumn', 'ifccolumnstandardcase', 'ifcbeam', 'ifcbeamstandardcase']);
+    const wallTypes = new Set(['ifcwall', 'ifcwallstandardcase', 'ifcwallelementedcase', 'ifccurtainwall', 'ifccolumn', 'ifccolumnstandardcase', 'ifcbeam', 'ifcbeamstandardcase', 'ifcmember', 'ifcmemberstandardcase', 'ifcrailing', 'ifcrailingstandardcase', 'ifcstairflight', 'ifcstair']);
     const slabTypes = new Set(['ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase', 'ifcroof', 'ifccovering', 'ifcplate']);
     const spaceTypes = new Set(['ifcspace']);
     const doorTypes = new Set(['ifcdoor', 'ifcdoorstandardcase', 'ifcwindow', 'ifcwindowstandardcase']);
