@@ -113,9 +113,11 @@ export function useFloorData(
   // ── XEOkit viewer accessor ──────────────────────────────────────────────
   const getXeokitViewer = useCallback(() => {
     try {
-      return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer
+        ?? (window as any).__nativeXeokitViewer
+        ?? null;
     } catch {
-      return null;
+      return (window as any).__nativeXeokitViewer ?? null;
     }
   }, [viewerRef]);
 

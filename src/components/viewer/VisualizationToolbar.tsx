@@ -50,17 +50,60 @@ import { VisualizationType, VISUALIZATION_CONFIGS } from "@/lib/visualization-ut
 /** Navigation Speed slider sub-component */
 export const NAV_SPEED_CHANGED_EVENT = 'NAV_SPEED_CHANGED';
 
+/** Granular event for per-axis speed changes */
+export const NAV_SPEED_GRANULAR_EVENT = 'NAV_SPEED_GRANULAR';
+
+const SPEED_KEYS = {
+  zoom: 'viewer-speed-zoom',
+  pan: 'viewer-speed-pan',
+  rotate: 'viewer-speed-rotate',
+  master: 'viewer-nav-speed',
+};
+
+function readSpeed(key: string, fallback = 100) {
+  try { return parseInt(localStorage.getItem(key) || String(fallback)); } catch { return fallback; }
+}
+
 const NavigationSpeedSlider: React.FC = () => {
   const isMobile = useIsMobile();
-  const [speed, setSpeed] = React.useState(() => {
-    try { return parseInt(localStorage.getItem('viewer-nav-speed') || '100'); } catch { return 100; }
+  const [master, setMaster] = React.useState(() => readSpeed(SPEED_KEYS.master));
+  const [zoom, setZoom] = React.useState(() => readSpeed(SPEED_KEYS.zoom));
+  const [pan, setPan] = React.useState(() => readSpeed(SPEED_KEYS.pan));
+  const [rotate, setRotate] = React.useState(() => readSpeed(SPEED_KEYS.rotate));
+  const [expanded, setExpanded] = React.useState(false);
+  const [fastNav, setFastNav] = React.useState(() => {
+    try { return localStorage.getItem('viewer-fastnav-enabled') === 'true'; } catch { return false; }
   });
 
-  const handleChange = React.useCallback((value: number[]) => {
+  const dispatchAll = React.useCallback((z: number, p: number, r: number) => {
+    window.dispatchEvent(new CustomEvent(NAV_SPEED_GRANULAR_EVENT, { detail: { zoom: z, pan: p, rotate: r } }));
+  }, []);
+
+  const handleMaster = React.useCallback((value: number[]) => {
     const v = value[0];
-    setSpeed(v);
-    localStorage.setItem('viewer-nav-speed', String(v));
+    setMaster(v);
+    setZoom(v); setPan(v); setRotate(v);
+    localStorage.setItem(SPEED_KEYS.master, String(v));
+    localStorage.setItem(SPEED_KEYS.zoom, String(v));
+    localStorage.setItem(SPEED_KEYS.pan, String(v));
+    localStorage.setItem(SPEED_KEYS.rotate, String(v));
     window.dispatchEvent(new CustomEvent(NAV_SPEED_CHANGED_EVENT, { detail: { speed: v } }));
+  }, []);
+
+  const handleAxis = React.useCallback((axis: 'zoom' | 'pan' | 'rotate', value: number[]) => {
+    const v = value[0];
+    const next = { zoom, pan, rotate, [axis]: v };
+    if (axis === 'zoom') setZoom(v);
+    if (axis === 'pan') setPan(v);
+    if (axis === 'rotate') setRotate(v);
+    localStorage.setItem(SPEED_KEYS[axis], String(v));
+    dispatchAll(next.zoom, next.pan, next.rotate);
+  }, [zoom, pan, rotate, dispatchAll]);
+
+  const handleFastNav = React.useCallback((checked: boolean) => {
+    setFastNav(checked);
+    localStorage.setItem('viewer-fastnav-enabled', String(checked));
+    window.dispatchEvent(new CustomEvent('FASTNAV_TOGGLE', { detail: { enabled: checked } }));
   }, []);
 
   return (
@@ -70,11 +113,38 @@ const NavigationSpeedSlider: React.FC = () => {
           <Move3D className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
         </div>
         <span className="text-xs sm:text-sm">Navigation speed</span>
-        <span className="text-xs font-medium ml-auto">{speed}%</span>
+        <span className="text-xs font-medium ml-auto">{master}%</span>
       </div>
-      <div className="pl-8 sm:pl-10">
-        <Slider value={[speed]} onValueChange={handleChange} min={25} max={300} step={25} className="w-full" />
-        <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+      <div className="pl-8 sm:pl-10 space-y-2">
+        <Slider value={[master]} onValueChange={handleMaster} min={25} max={300} step={25} className="w-full" />
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="text-[10px] sm:text-xs text-primary hover:underline"
+        >
+          {expanded ? 'Hide per-axis' : 'Per-axis settings ▸'}
+        </button>
+        {expanded && (
+          <div className="space-y-2 pt-1">
+            {([
+              { label: 'Zoom', key: 'zoom' as const, val: zoom },
+              { label: 'Pan', key: 'pan' as const, val: pan },
+              { label: 'Rotate', key: 'rotate' as const, val: rotate },
+            ]).map(({ label, key, val }) => (
+              <div key={key}>
+                <div className="flex justify-between text-[10px] sm:text-xs text-muted-foreground mb-0.5">
+                  <span>{label}</span><span>{val}%</span>
+                </div>
+                <Slider value={[val]} onValueChange={(v) => handleAxis(key, v)} min={25} max={300} step={25} className="w-full" />
+              </div>
+            ))}
+          </div>
+        )}
+        {/* FastNav toggle */}
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-[10px] sm:text-xs text-muted-foreground">FastNav (snappier interaction)</span>
+          <Switch checked={fastNav} onCheckedChange={handleFastNav} />
+        </div>
+        <p className="text-[10px] sm:text-xs text-muted-foreground">
           {isMobile ? 'Touch navigation' : 'Mouse & keyboard navigation'}
         </p>
       </div>
