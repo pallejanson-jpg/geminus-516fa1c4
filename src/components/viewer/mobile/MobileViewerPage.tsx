@@ -263,6 +263,15 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
     } else if (mode === '3d') {
       window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: false } }));
       window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
+      // Reset visibility: show all objects when switching back to 3D
+      const viewer = getViewer();
+      if (viewer?.scene) {
+        viewer.scene.setObjectsVisible(viewer.scene.objectIds, true);
+      }
+      setSoloFloorId(null);
+      window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+        detail: { floorId: null, isAllFloorsVisible: true, isSoloFloor: false } as FloorSelectionEventDetail,
+      }));
     } else if (mode === 'split2d3d') {
       window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: false } }));
       window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
