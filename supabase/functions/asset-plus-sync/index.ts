@@ -840,6 +840,54 @@ serve(async (req) => {
         const buildingName = building.common_name || building.fm_guid;
         console.log(`Syncing assets for building ${currentBuildingIndex + 1}/${totalBuildings}: ${buildingName} (mode: ${pageMode})`);
 
+        // --- Incremental sync: check last_asset_sync_at ---
+        let lastSyncAt: string | null = null;
+        if (!force && currentSkip === 0 && pageMode === 'skip') {
+          const { data: bSettings } = await supabase
+            .from('building_settings')
+            .select('last_asset_sync_at')
+            .eq('fm_guid', building.fm_guid)
+            .maybeSingle();
+          lastSyncAt = bSettings?.last_asset_sync_at || null;
+        }
+
+        // --- Quick count check: skip if counts match and not forced ---
+        if (!force && currentSkip === 0 && pageMode === 'skip') {
+          const { count: localAssetCount } = await supabase
+            .from('assets')
+            .select('*', { count: 'exact', head: true })
+            .eq('building_fm_guid', building.fm_guid)
+            .eq('category', 'Instance');
+
+          if (localAssetCount && localAssetCount > 0 && lastSyncAt) {
+            // We have assets and a previous sync timestamp — try incremental
+            const incrFilter: any[] = [
+              ["buildingFmGuid", "=", building.fm_guid],
+              "and",
+              ["objectType", "=", 4],
+              "and",
+              ["dateModified", ">", lastSyncAt]
+            ];
+            try {
+              const incrResult = await fetchAssetPlusObjects(accessToken, incrFilter, 0, 1, {
+                useMinimalSelect: true,
+                useExplicitSort: false,
+              });
+              if (incrResult.data.length === 0) {
+                console.log(`Building ${buildingName}: no changes since ${lastSyncAt}, skipping`);
+                currentBuildingIndex++;
+                currentSkip = 0;
+                cursorFmGuid = null;
+                pageMode = 'skip';
+                continue;
+              }
+              console.log(`Building ${buildingName}: changes detected since ${lastSyncAt}, syncing incrementally`);
+            } catch (e) {
+              console.log(`Incremental check failed for ${buildingName}, doing full sync`);
+            }
+          }
+        }
+
         const filter = [
           ["buildingFmGuid", "=", building.fm_guid],
           "and",
