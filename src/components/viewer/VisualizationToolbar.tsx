@@ -371,7 +371,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const [isSoloFloor, setIsSoloFloor] = useState(false);
   
   // Viewer settings collapsible state
-  const [viewerSettingsOpen, setViewerSettingsOpen] = useState(false);
+  const [viewerSettingsOpen, setViewerSettingsOpen] = useState(true);
   const [architectBackground, setArchitectBackground] = useState<BackgroundPresetId>('sage');
   const [showRoomLabels, setShowRoomLabels] = useState(false);
   const [activeRoomLabelConfigId, setActiveRoomLabelConfigId] = useState<string | null>(null);
