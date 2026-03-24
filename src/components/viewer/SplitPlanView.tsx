@@ -885,7 +885,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
             }
           }
 
-          if (!isLargeArea && !isSplitMode) {
+          if (!isLargeArea && isSplitMode) {
             pickedEntityId = entityId;
             pickedFmGuid = metaObj?.originalSystemId || null;
             pickedEntityName = metaObj?.name || metaObj?.type || null;
