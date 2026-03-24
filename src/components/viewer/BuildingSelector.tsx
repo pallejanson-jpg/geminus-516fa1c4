@@ -148,6 +148,7 @@ const BuildingSelector: React.FC = () => {
         showAnnotations: view.show_annotations || false,
         visualizationType: view.visualization_type || 'none',
         visualizationMockData: view.visualization_mock_data || false,
+        sectionPlanes: view.section_planes || undefined,
       };
       
       window.dispatchEvent(new CustomEvent(LOAD_SAVED_VIEW_EVENT, { detail: eventDetail }));
