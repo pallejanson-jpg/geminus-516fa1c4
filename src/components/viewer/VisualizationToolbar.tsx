@@ -1096,6 +1096,9 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             />
           </div>
 
+          {/* Navigation Speed */}
+          <NavigationSpeedSlider />
+
           {/* Lighting Controls */}
           <LightingControlsPanel viewerRef={viewerRef} isViewerReady={isViewerReady} />
 
