@@ -415,7 +415,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           }
 
           if (show && belongsToVisibleFloor) {
-            entity.colorize = [0.898, 0.894, 0.890]; // SPACE_COLOR
+            entity.colorize = [0.72, 0.83, 0.89]; // Light blue
             entity.opacity = 0.3;
             entity.pickable = true;
             entity.visible = true;
