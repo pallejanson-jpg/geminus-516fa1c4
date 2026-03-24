@@ -1380,7 +1380,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', scene.objectIds.length, 'delta: show', toShow.length, 'hide', toHide.length);
     isApplyingRef.current = false;
     }); // end requestAnimationFrame
-    }, 300); // debounce 300ms
+    }, 500); // debounce 500ms
   }, [getXeokitViewer, checkedSources, checkedLevels, checkedSpaces, checkedCategories,
     levels, spaces, sources, sharedModels, xrayMode]);
 
