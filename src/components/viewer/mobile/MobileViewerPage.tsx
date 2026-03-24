@@ -371,7 +371,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
         window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, { detail: { tool: null } as ViewerToolChangedDetail }));
         break;
     }
-  }, [isXrayActive, soloFloorId]);
+  }, [isXrayActive, soloFloorId, viewMode]);
 
   /* ── Floor selection ── */
   const handleFloorClick = useCallback((floor: FloorInfo) => {
