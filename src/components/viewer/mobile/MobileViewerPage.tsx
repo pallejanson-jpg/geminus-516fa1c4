@@ -187,6 +187,14 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
   const [isSubmittingIssue, setIsSubmittingIssue] = useState(false);
   const [isSavingStartView, setIsSavingStartView] = useState(false);
 
+  // Navigation graph state
+  const [navPanelOpen, setNavPanelOpen] = useState(false);
+  const [navEditMode, setNavEditMode] = useState(false);
+  const [navGraph, setNavGraph] = useState<NavGraph>({ nodes: new Map(), edges: [] });
+  const [navRoute, setNavRoute] = useState<RouteResult | null>(null);
+  const [navFloorFmGuid, setNavFloorFmGuid] = useState<string | null>(null);
+  const [planRoomLabels, setPlanRoomLabels] = useState<Array<{ id: string; name: string; x: number; y: number }>>([]);
+
   // Floor data
   const { floors } = useFloorData(viewerInstanceRef, buildingData.fmGuid);
   const { configs: roomLabelConfigs, loading: loadingRoomLabelConfigs } = useRoomLabelConfigs();
