@@ -4,7 +4,7 @@ import { Database, FileQuestion, Sparkles, Building2, Eye, ChevronLeft, ChevronR
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import ParticleBackground from "@/components/home/ParticleBackground";
+
 import GunnarChat from "@/components/chat/GunnarChat";
 import { useAllBuildingSettings } from "@/hooks/useAllBuildingSettings";
 import { AppContext } from "@/context/AppContext";
