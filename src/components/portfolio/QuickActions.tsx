@@ -183,7 +183,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
           {onFaultReport && (
             <Button variant="ghost" onClick={() => onFaultReport(facility)} className={btnClass}>
               <AlertTriangle size={iconSize} className="text-destructive" />
-              <span className={labelClass}>Felanmälan</span>
+              <span className={labelClass}>Fault Report</span>
             </Button>
           )}
         </div>

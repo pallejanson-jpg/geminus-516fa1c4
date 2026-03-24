@@ -1075,7 +1075,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
               {filteredAssets.length === 0 && (
                 <div className="col-span-full text-center py-12 text-muted-foreground">
                   <Box className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Inga assets hittades</p>
+                  <p>No assets found</p>
                 </div>
               )}
             </div>
