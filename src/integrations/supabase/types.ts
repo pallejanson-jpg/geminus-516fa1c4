@@ -1257,6 +1257,57 @@ export type Database = {
         }
         Relationships: []
       }
+      geometry_entity_map: {
+        Row: {
+          asset_fm_guid: string
+          building_fm_guid: string
+          created_at: string | null
+          entity_type: string
+          external_entity_id: string | null
+          id: string
+          last_seen_at: string | null
+          metadata: Json | null
+          model_id: string | null
+          source_model_guid: string | null
+          source_model_name: string | null
+          source_storey_name: string | null
+          source_system: string
+          storey_fm_guid: string | null
+        }
+        Insert: {
+          asset_fm_guid: string
+          building_fm_guid: string
+          created_at?: string | null
+          entity_type?: string
+          external_entity_id?: string | null
+          id?: string
+          last_seen_at?: string | null
+          metadata?: Json | null
+          model_id?: string | null
+          source_model_guid?: string | null
+          source_model_name?: string | null
+          source_storey_name?: string | null
+          source_system?: string
+          storey_fm_guid?: string | null
+        }
+        Update: {
+          asset_fm_guid?: string
+          building_fm_guid?: string
+          created_at?: string | null
+          entity_type?: string
+          external_entity_id?: string | null
+          id?: string
+          last_seen_at?: string | null
+          metadata?: Json | null
+          model_id?: string | null
+          source_model_guid?: string | null
+          source_model_name?: string | null
+          source_storey_name?: string | null
+          source_system?: string
+          storey_fm_guid?: string | null
+        }
+        Relationships: []
+      }
       gunnar_conversations: {
         Row: {
           building_fm_guid: string | null
