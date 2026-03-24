@@ -819,8 +819,7 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
                       variant="outline"
                       className="text-xs sm:text-sm gap-1"
                       onClick={() => {
-                        sessionStorage.setItem('cesium-street-view-target', JSON.stringify({ lat: selectedMarker.lat, lng: selectedMarker.lng }));
-                        navigate(`/globe?lat=${selectedMarker.lat}&lng=${selectedMarker.lng}&streetview=1`);
+                        window.open(`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${selectedMarker.lat},${selectedMarker.lng}`, '_blank');
                       }}
                     >
                       <Eye size={14} />
