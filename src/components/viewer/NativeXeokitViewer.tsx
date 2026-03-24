@@ -1522,9 +1522,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   }, []);
 
   // ── Listen for TOGGLE_ANNOTATIONS (show/hide annotation markers from assets) ───
-  // ── Listen for NAV_SPEED_CHANGED (live update cameraControl rates) ───
+  // ── Listen for NAV_SPEED_CHANGED (master) and NAV_SPEED_GRANULAR (per-axis) ───
   useEffect(() => {
-    const handler = (e: Event) => {
+    const masterHandler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       const speed = detail?.speed ?? 100;
       const multiplier = Math.max(0.25, Math.min(3, speed / 100));
@@ -1545,8 +1545,60 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       }
       console.log('[NativeViewer] NAV_SPEED_CHANGED:', speed, '% →', multiplier, 'x');
     };
-    window.addEventListener('NAV_SPEED_CHANGED', handler);
-    return () => window.removeEventListener('NAV_SPEED_CHANGED', handler);
+
+    const granularHandler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const viewer = viewerRef.current;
+      if (!viewer?.cameraControl) return;
+      const cc = viewer.cameraControl;
+      const isMob = isMobileRef.current;
+      const zM = Math.max(0.25, Math.min(3, (detail?.zoom ?? 100) / 100));
+      const pM = Math.max(0.25, Math.min(3, (detail?.pan ?? 100) / 100));
+      const rM = Math.max(0.25, Math.min(3, (detail?.rotate ?? 100) / 100));
+      if (isMob) {
+        cc.dragRotationRate = 70 * rM;
+        cc.touchPanRate = 0.14 * pM;
+        cc.touchDollyRate = 0.09 * zM;
+      } else {
+        cc.dragRotationRate = 120 * rM;
+        cc.touchPanRate = 0.3 * pM;
+        cc.touchDollyRate = 0.15 * zM;
+        cc.mouseWheelDollyRate = 50 * zM;
+        cc.keyboardDollyRate = 5 * zM;
+      }
+      console.log('[NativeViewer] NAV_SPEED_GRANULAR: zoom', detail?.zoom, 'pan', detail?.pan, 'rotate', detail?.rotate);
+    };
+
+    const fastNavHandler = (e: Event) => {
+      const enabled = (e as CustomEvent).detail?.enabled ?? false;
+      const viewer = viewerRef.current;
+      if (!viewer?.scene) return;
+      // FastNav: reduce quality during interaction for snappier feel
+      viewer.scene.pbrEnabled = !enabled;
+      if (viewer.scene.canvas) {
+        viewer.scene.canvas.gl?.flush?.();
+      }
+      console.log('[NativeViewer] FastNav:', enabled ? 'ON' : 'OFF');
+    };
+
+    window.addEventListener('NAV_SPEED_CHANGED', masterHandler);
+    window.addEventListener('NAV_SPEED_GRANULAR', granularHandler);
+    window.addEventListener('FASTNAV_TOGGLE', fastNavHandler);
+
+    // Apply initial FastNav state
+    try {
+      const fn = localStorage.getItem('viewer-fastnav-enabled');
+      if (fn === 'true') {
+        const viewer = viewerRef.current;
+        if (viewer?.scene) viewer.scene.pbrEnabled = false;
+      }
+    } catch {}
+
+    return () => {
+      window.removeEventListener('NAV_SPEED_CHANGED', masterHandler);
+      window.removeEventListener('NAV_SPEED_GRANULAR', granularHandler);
+      window.removeEventListener('FASTNAV_TOGGLE', fastNavHandler);
+    };
   }, []);
 
   useEffect(() => {
