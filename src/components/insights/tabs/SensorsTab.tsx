@@ -222,6 +222,8 @@ export default function SensorsTab() {
   const handleRoomClick = (room: { fmGuid: string; commonName?: string; name?: string }) => {
     setSheetRoom({ fmGuid: room.fmGuid, name: room.commonName || room.name || room.fmGuid });
     setSheetOpen(true);
+    // Select only this room in the 3D viewer
+    window.dispatchEvent(new CustomEvent('VIEWER_SELECT_ENTITY', { detail: { entityId: room.fmGuid, fmGuid: room.fmGuid, entityName: room.commonName || room.name || null } }));
   };
 
   return (
