@@ -733,7 +733,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                             <img src={img} alt="" className="w-full h-full object-cover" />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
                             <span className="absolute bottom-1.5 left-2 right-2 text-[11px] font-semibold text-white truncate">
-                              {storey.commonName || storey.name || `Våning ${idx + 1}`}
+                              {storey.commonName || storey.name || `Floor ${idx + 1}`}
                             </span>
                           </button>
                         </CarouselItem>
