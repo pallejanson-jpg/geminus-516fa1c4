@@ -177,6 +177,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
   const [clipHeight, setClipHeight] = useState(1.2);
   const [showRoomLabels, setShowRoomLabels] = useState(false);
   const [activeRoomLabelConfigId, setActiveRoomLabelConfigId] = useState<string | null>(null);
+  const [navSpeed, setNavSpeed] = useState(() => { try { return parseInt(localStorage.getItem('viewer-nav-speed') || '100'); } catch { return 100; } });
 
   // Actions states
   const [showCreateViewDialog, setShowCreateViewDialog] = useState(false);
@@ -710,7 +711,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
       <div className="flex-1" />
 
       {/* ── Floor popover pill ── */}
-      {floors.length > 1 && (
+      {floors.length > 0 && (
         <div className="relative z-50 flex justify-center pb-1 pointer-events-none">
           <Popover>
             <PopoverTrigger asChild>
@@ -1066,6 +1067,21 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
 
                 {/* Lighting */}
                 <LightingControlsPanel viewerRef={viewerInstanceRef} isViewerReady={viewerReady} />
+
+                <Separator />
+
+                {/* Navigation Speed */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-md bg-muted text-muted-foreground"><SlidersHorizontal className="h-4 w-4" /></div>
+                    <span className="text-sm">Navigation speed</span>
+                    <span className="text-xs font-medium ml-auto">{navSpeed}%</span>
+                  </div>
+                  <div className="pl-10">
+                    <Slider value={[navSpeed]} onValueChange={(v) => { setNavSpeed(v[0]); localStorage.setItem('viewer-nav-speed', String(v[0])); window.dispatchEvent(new CustomEvent('NAV_SPEED_CHANGED', { detail: { speed: v[0] } })); }} min={25} max={300} step={25} className="w-full" />
+                    <p className="text-xs text-muted-foreground mt-1">Touch navigation</p>
+                  </div>
+                </div>
               </div>
             </>
           )}
