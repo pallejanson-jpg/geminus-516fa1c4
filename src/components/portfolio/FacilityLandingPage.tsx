@@ -3,8 +3,10 @@ import { extractSpaceArea } from '@/lib/building-utils';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, X, MapPin, Info, BarChart, Star, Table, Layers, 
-  DoorOpen, LayoutGrid, Zap, Settings2, Loader2, Globe, Image, Upload, RotateCcw, ChevronRight, Eye, Search
+  DoorOpen, LayoutGrid, Zap, Settings2, Loader2, Globe, Image, Upload, RotateCcw, ChevronRight, Eye, Search,
+  Thermometer, Wind, Droplets, Users
 } from 'lucide-react';
+import { VisualizationType, extractSensorValue, getVisualizationColor, generateMockSensorData, rgbToHex } from '@/lib/visualization-utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -74,6 +76,14 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   const [selectedFloorIdx, setSelectedFloorIdx] = useState(0);
   const [roomSearch, setRoomSearch] = useState('');
   const [roomSortKey, setRoomSortKey] = useState<'name' | 'number' | 'area'>('name');
+  const [activeRoomMetric, setActiveRoomMetric] = useState<VisualizationType>('none');
+
+  const ROOM_VIZ_METRICS = [
+    { key: 'temperature' as VisualizationType, label: 'Temp', icon: Thermometer },
+    { key: 'co2' as VisualizationType, label: 'CO₂', icon: Wind },
+    { key: 'humidity' as VisualizationType, label: 'Humidity', icon: Droplets },
+    { key: 'occupancy' as VisualizationType, label: 'Occupancy', icon: Users },
+  ];
 
   // Saved views for this building
   const [savedViews, setSavedViews] = useState<Array<{ id: string; name: string; screenshot_url: string | null; created_at: string | null }>>([]);
@@ -731,7 +741,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                             <img src={img} alt="" className="w-full h-full object-cover" />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
                             <span className="absolute bottom-1.5 left-2 right-2 text-[11px] font-semibold text-white truncate">
-                              {storey.commonName || storey.name || `Våning ${idx + 1}`}
+                              {storey.commonName || storey.name || `Floor ${idx + 1}`}
                             </span>
                           </button>
                         </CarouselItem>
@@ -748,7 +758,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                 <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
                   <CardTitle className="text-sm sm:text-base flex items-center gap-2">
                     <DoorOpen size={14} className="sm:w-4 sm:h-4 text-primary shrink-0" />
-                    Rum ({childSpaces.length})
+                    Rooms ({childSpaces.length})
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="px-3 sm:px-6 overflow-hidden min-w-0">
@@ -759,12 +769,12 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                       <Input
                         value={roomSearch}
                         onChange={(e) => setRoomSearch(e.target.value)}
-                        placeholder="Sök rum..."
+                        placeholder="Search rooms..."
                         className="h-7 pl-8 text-xs"
                       />
                     </div>
                     <div className="flex gap-1 shrink-0">
-                      {([['name', 'Namn'], ['number', 'Nr'], ['area', 'Yta']] as const).map(([key, label]) => (
+                      {([['name', 'Name'], ['number', 'No'], ['area', 'Area']] as const).map(([key, label]) => (
                         <button
                           key={key}
                           type="button"
@@ -779,10 +789,27 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                     </div>
                   </div>
 
+                  {/* Sensor metric buttons */}
+                  <div className="flex items-center gap-1.5 mb-3">
+                    <span className="text-[10px] text-muted-foreground mr-1">Visualize:</span>
+                    {ROOM_VIZ_METRICS.map(m => (
+                      <Button
+                        key={m.key}
+                        size="sm"
+                        variant={activeRoomMetric === m.key ? 'default' : 'outline'}
+                        className="h-7 px-2 text-[10px] gap-1"
+                        onClick={() => setActiveRoomMetric(prev => prev === m.key ? 'none' : m.key)}
+                      >
+                        <m.icon className="h-3 w-3" />
+                        {m.label}
+                      </Button>
+                    ))}
+                  </div>
+
                   {/* Insights-style compact room grid */}
                   {filteredRooms.length === 0 ? (
                     <div className="text-center text-muted-foreground py-6 text-sm">
-                      {roomSearch ? 'Inga rum matchade sökningen' : 'Inga rum registrerade på denna våning'}
+                      {roomSearch ? 'No rooms matched the search' : 'No rooms registered on this floor'}
                     </div>
                   ) : (
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5">
@@ -794,10 +821,21 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                         const ntaVal = spaceArea && space.attributes[spaceArea]?.value;
                         const displayArea = ntaVal || (area > 0 ? area.toFixed(1) : null);
 
+                        // Sensor value & color
+                        const sensorVal = activeRoomMetric !== 'none'
+                          ? (extractSensorValue(space.attributes, activeRoomMetric) ?? generateMockSensorData(space.fmGuid, activeRoomMetric))
+                          : null;
+                        const sensorRgb = sensorVal !== null ? getVisualizationColor(sensorVal, activeRoomMetric) : null;
+                        const sensorHex = sensorRgb ? rgbToHex(sensorRgb) : undefined;
+
                         return (
                           <div
                             key={space.fmGuid}
                             className="rounded-lg border text-center p-2.5 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-md active:scale-95"
+                            style={{
+                              backgroundColor: sensorHex ? sensorHex + '22' : undefined,
+                              borderColor: sensorHex ? sensorHex + '55' : undefined,
+                            }}
                             onClick={() => setSelectedFacility({
                               fmGuid: space.fmGuid,
                               name: space.name,
@@ -809,14 +847,23 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                             })}
                           >
                             <div className="text-[10px] text-muted-foreground truncate mb-0.5">
-                              {space.commonName || space.name || '(namnlöst)'}
+                              {space.commonName || space.name || '(unnamed)'}
                             </div>
-                            <div className="text-base font-bold leading-none text-foreground">
-                              {displayArea ? `${displayArea}` : '—'}
+                            <div
+                              className="text-base font-bold leading-none"
+                              style={{ color: sensorHex ?? 'hsl(var(--foreground))' }}
+                            >
+                              {activeRoomMetric !== 'none' && sensorVal !== null
+                                ? sensorVal.toFixed(1)
+                                : displayArea ? `${displayArea}` : '—'}
                             </div>
                             <div className="text-[9px] text-muted-foreground">
-                              {displayArea ? 'm²' : ''}
-                              {roomNum ? ` · ${roomNum}` : ''}
+                              {activeRoomMetric !== 'none' && sensorVal !== null
+                                ? (activeRoomMetric === 'temperature' ? '°C' : activeRoomMetric === 'co2' ? 'ppm' : '%')
+                                : <>
+                                    {displayArea ? 'm²' : ''}
+                                    {roomNum ? ` · ${roomNum}` : ''}
+                                  </>}
                             </div>
                           </div>
                         );
@@ -843,7 +890,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
               <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
                 <CardTitle className="text-sm sm:text-base flex items-center gap-2">
                   <Layers size={14} className="sm:w-4 sm:h-4 text-primary shrink-0" />
-                  Tillgångar ({childAssets.length})
+                  Assets ({childAssets.length})
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-3 sm:px-6 overflow-hidden">
@@ -866,7 +913,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                       <div className="flex items-center gap-2 mb-1">
                         <Layers size={14} className="text-accent shrink-0" />
                         <span className="font-medium text-xs sm:text-sm truncate">
-                          {asset.commonName || asset.common_name || asset.name || '(namnlös)'}
+                          {asset.commonName || asset.common_name || asset.name || '(unnamed)'}
                         </span>
                       </div>
                       <div className="text-[10px] sm:text-[11px] text-muted-foreground truncate">
@@ -880,7 +927,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                       onClick={() => onShowAssets(facility)}
                       className="rounded-xl border border-dashed border-border bg-muted/30 p-3 flex items-center justify-center text-xs text-muted-foreground hover:bg-muted/50 transition-colors"
                     >
-                      +{childAssets.length - 20} fler
+                      +{childAssets.length - 20} more
                     </button>
                   )}
                 </div>
