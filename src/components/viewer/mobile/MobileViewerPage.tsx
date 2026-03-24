@@ -710,7 +710,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
       <div className="flex-1" />
 
       {/* ── Floor popover pill ── */}
-      {floors.length > 1 && (
+      {floors.length > 0 && (
         <div className="relative z-50 flex justify-center pb-1 pointer-events-none">
           <Popover>
             <PopoverTrigger asChild>
