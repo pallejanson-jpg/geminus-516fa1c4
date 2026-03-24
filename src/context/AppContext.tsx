@@ -444,14 +444,14 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
             if (buildingMap.has(storey.buildingFmGuid)) {
                 let displayName = storey.commonName || storey.name;
                 if (!displayName) {
-                    // Try to derive from attributes
+                    // Try to derive from attributes (levelCommonName, levelDesignation, designation)
                     const attrs = storey.attributes || {};
-                    const parentName = attrs.parentCommonName || '';
+                    displayName = attrs.levelCommonName || attrs.levelDesignation || attrs.designation || attrs.parentCommonName;
+                }
+                if (!displayName) {
                     const count = (namelessCounterByBuilding.get(storey.buildingFmGuid) || 0) + 1;
                     namelessCounterByBuilding.set(storey.buildingFmGuid, count);
-                    displayName = parentName
-                        ? `${parentName} (floor ${count})`
-                        : `Unnamed floor ${count}`;
+                    displayName = `Unnamed floor ${count}`;
                 }
                 storeyMap.set(storey.fmGuid, { ...storey, commonName: displayName, children: [] });
             }

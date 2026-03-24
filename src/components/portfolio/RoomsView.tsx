@@ -324,7 +324,14 @@ const RoomsView: React.FC<RoomsViewProps> = ({
       if (roomNum) result.roomNumber = roomNum;
 
       result.commonName = room.commonName || room.name || attrs.commonName || 'Unknown';
-      result.levelCommonName = attrs.levelCommonName || attrs.levelDesignation || '-';
+      // Try multiple fallbacks for floor name
+      let levelName = attrs.levelCommonName || attrs.levelDesignation;
+      if (!levelName && room.levelFmGuid) {
+        // Look up parent storey from rooms array
+        const parentStorey = rooms.find(r => r.fmGuid === room.levelFmGuid);
+        levelName = parentStorey?.commonName || parentStorey?.name;
+      }
+      result.levelCommonName = levelName || '-';
 
       return result;
     });
