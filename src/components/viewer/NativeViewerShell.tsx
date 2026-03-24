@@ -966,6 +966,8 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           showSpaces={showSpaces}
           onShowSpacesChange={(show) => {
             setShowSpaces(show);
+            // Set explicit user toggle flag to prevent FORCE_SHOW_SPACES from overriding
+            (window as any).__spacesUserExplicitOff = !show;
             const assetViewer = viewerShimRef.current?.assetViewer || viewerShimRef.current?.$refs?.AssetViewer;
             assetViewer?.onShowSpacesChanged?.(show);
           }}
