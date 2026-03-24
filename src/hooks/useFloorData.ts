@@ -53,7 +53,7 @@ export function useFloorData(
   const [floors, setFloors] = useState<FloorInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // ── DB name fetch ───────────────────────────────────────────────────────
+  // ── DB name fetch (geometry_entity_map primary, assets fallback) ──────
   useEffect(() => {
     if (!buildingFmGuid) return;
 
@@ -61,6 +61,29 @@ export function useFloorData(
 
     const fetchFloorNames = async () => {
       try {
+        // Primary: geometry_entity_map — authoritative storey names
+        const { data: gemData, error: gemError } = await supabase
+          .from('geometry_entity_map' as any)
+          .select('asset_fm_guid, source_storey_name, source_model_name, source_model_guid')
+          .eq('building_fm_guid', buildingFmGuid)
+          .eq('entity_type', 'storey');
+
+        if (!gemError && gemData && (gemData as any[]).length > 0 && !cancelled) {
+          const nameMap = new Map<string, string>();
+          (gemData as any[]).forEach((row: any) => {
+            const displayName = row.source_storey_name;
+            if (!displayName) return;
+            nameMap.set(row.asset_fm_guid, displayName);
+            nameMap.set(row.asset_fm_guid.toLowerCase(), displayName);
+            nameMap.set(row.asset_fm_guid.toUpperCase(), displayName);
+          });
+          if (nameMap.size > 0) {
+            setFloorNamesMap(nameMap);
+            return;
+          }
+        }
+
+        // Fallback: assets table
         const { data, error } = await supabase
           .from('assets')
           .select('fm_guid, name, common_name')

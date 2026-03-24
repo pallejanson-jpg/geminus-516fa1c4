@@ -449,9 +449,14 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                     displayName = attrs.levelCommonName || attrs.levelDesignation || attrs.designation || attrs.parentCommonName;
                 }
                 if (!displayName) {
+                    // Try geometry_entity_map data embedded in attributes
+                    const attrs = storey.attributes || {};
+                    displayName = attrs.source_storey_name || attrs.sourceStoreyName;
+                }
+                if (!displayName) {
                     const count = (namelessCounterByBuilding.get(storey.buildingFmGuid) || 0) + 1;
                     namelessCounterByBuilding.set(storey.buildingFmGuid, count);
-                    displayName = `Unnamed floor ${count}`;
+                    displayName = `Floor ${count}`;
                 }
                 storeyMap.set(storey.fmGuid, { ...storey, commonName: displayName, children: [] });
             }
