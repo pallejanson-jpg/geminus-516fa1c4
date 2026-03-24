@@ -442,7 +442,7 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
           {!isLoading && isLive && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-lg border border-green-500/20 px-3 py-2 bg-green-500/5">
               <Wifi className="h-3.5 w-3.5 shrink-0 text-green-400" />
-              <span>Live-data från Senslinc · Maskin #{data?.machinePk}</span>
+              <span>Live data from Senslinc · Machine #{data?.machinePk}</span>
             </div>
           )}
 
