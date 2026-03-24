@@ -1353,6 +1353,13 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       const metaObjects = viewer.metaScene.metaObjects;
       const scene = viewer.scene;
+      // Track force-show state globally so filter panel can respect it
+      (window as any).__spacesForceVisible = show;
+
+      // Light blue default for spaces: RGB 184, 212, 227 → normalized
+      const SPACE_DEFAULT_COLOR: [number, number, number] = [184 / 255, 212 / 255, 227 / 255];
+      const SPACE_DEFAULT_OPACITY = 0.25;
+
       Object.values(metaObjects).forEach((mo: any) => {
         const ifcType = (mo.type || '').toLowerCase();
         if (ifcType === 'ifcspace' || ifcType === 'ifc_space' || ifcType === 'space') {
@@ -1360,6 +1367,14 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           if (entity) {
             entity.visible = show;
             entity.pickable = show;
+            if (show) {
+              // Apply light blue default color — visualization will override with sensor colors
+              entity.colorize = SPACE_DEFAULT_COLOR;
+              entity.opacity = SPACE_DEFAULT_OPACITY;
+            } else {
+              entity.colorize = null;
+              entity.opacity = 1.0;
+            }
           }
         }
       });

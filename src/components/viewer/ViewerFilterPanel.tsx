@@ -845,12 +845,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       }
     }
 
-    // Hide all IfcSpace entities by default (fast via typeIndex)
+    // Hide all IfcSpace entities by default — UNLESS visualization is forcing them visible
+    const spacesForced = !!(window as any).__spacesForceVisible;
     const spaceEntityIds = typeIndexRef.current.get('IfcSpace') || [];
-    spaceEntityIds.forEach(id => {
-      const entity = scene.objects?.[id];
-      if (entity) { entity.visible = false; entity.pickable = false; }
-    });
+    if (!spacesForced) {
+      spaceEntityIds.forEach(id => {
+        const entity = scene.objects?.[id];
+        if (entity) { entity.visible = false; entity.pickable = false; }
+      });
+    }
 
     if (!hasAnyFilter) {
       // No filter: show everything (except spaces), but only A-model objects
@@ -859,11 +862,13 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         // Delta: show what was previously hidden
         scene.setObjectsVisible(scene.objectIds, true);
         scene.setObjectsPickable(scene.objectIds, true);
-        // Re-hide spaces
-        spaceEntityIds.forEach(id => {
-          const entity = scene.objects?.[id];
-          if (entity) { entity.visible = false; entity.pickable = false; }
-        });
+        // Re-hide spaces (unless visualization is forcing them visible)
+        if (!spacesForced) {
+          spaceEntityIds.forEach(id => {
+            const entity = scene.objects?.[id];
+            if (entity) { entity.visible = false; entity.pickable = false; }
+          });
+        }
         prevVisibleRef.current = null;
       }
 
@@ -1506,7 +1511,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     } else {
       applyArchitectColors(viewer);
     }
-    hideSpaceAndAreaObjects(viewer);
+    if (!(window as any).__spacesForceVisible) {
+      hideSpaceAndAreaObjects(viewer);
+    }
     prevVisibleRef.current = null;
   }, [isVisible, getXeokitViewer]);
 
