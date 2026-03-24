@@ -259,7 +259,7 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
 }) => {
   const { data, isLoading, isLive, error } = useSenslincData(open ? roomFmGuid : null);
 
-  const displayName = roomName || data?.machineName || 'Rum';
+  const displayName = roomName || data?.machineName || 'Room';
   const machineLabel = data?.machineLabel || data?.machineName;
   const dashboardUrl = data?.dashboardUrl || '';
 
