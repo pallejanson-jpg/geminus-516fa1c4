@@ -473,9 +473,32 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
     } else if (checkedSources.size > 0) {
       scopeIds = new Set<string>();
+      // Try level-based scoping first
       levels.filter(l => checkedSources.has(l.sourceGuid)).forEach(l => {
         eMap.get(l.fmGuid)?.forEach(id => scopeIds!.add(id));
       });
+      // Fallback: if scopeIds is empty, scope by scene model objects directly
+      if (scopeIds.size === 0) {
+        const viewer = getXeokitViewer();
+        if (viewer?.scene?.models) {
+          const normalizedChecked = new Set(Array.from(checkedSources).map(g => normalizeGuid(g)));
+          // Also match by model name from sharedModels
+          const checkedModelIds = new Set<string>();
+          sharedModels.forEach(m => {
+            if (checkedSources.has(m.id) || normalizedChecked.has(normalizeGuid(m.id))) {
+              checkedModelIds.add(m.id);
+            }
+          });
+          Object.entries(viewer.scene.models).forEach(([modelId, model]: [string, any]) => {
+            if (checkedModelIds.has(modelId) || checkedSources.has(modelId) || normalizedChecked.has(normalizeGuid(modelId))) {
+              const objs = model.objects || {};
+              Object.keys(objs).forEach(id => scopeIds!.add(id));
+            }
+          });
+        }
+        // If still empty, don't filter (show all)
+        if (scopeIds.size === 0) scopeIds = null;
+      }
     }
 
     const counts = new Map<string, number>();
@@ -491,7 +514,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return Array.from(counts.entries())
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
-  }, [entityMapVersion, checkedLevels, checkedSpaces, checkedSources, levels]);
+  }, [entityMapVersion, checkedLevels, checkedSpaces, checkedSources, levels, getXeokitViewer, sharedModels]);
 
   // ── Auto-assign palette colors (stable — only when list identity changes) ──
   useEffect(() => {
