@@ -819,7 +819,7 @@ serve(async (req) => {
       await updateSyncState(supabase, 'assets', 'running', totalSynced);
       let interrupted = false;
       let softError: string | null = null;
-      const take = 200;
+      const take = 100; // Reduced from 200 to accommodate full object payloads with user-defined properties
 
       while (currentBuildingIndex < totalBuildings && !interrupted) {
         const building = buildings[currentBuildingIndex];
