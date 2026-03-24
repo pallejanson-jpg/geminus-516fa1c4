@@ -1490,8 +1490,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const viewer = getXeokitViewer();
     if (!viewer?.scene) return;
     const scene = viewer.scene;
-    if (scene.xrayedObjectIds?.length > 0) scene.setObjectsXRayed(scene.xrayedObjectIds, false);
-    if (scene.colorizedObjectIds?.length > 0) scene.setObjectsColorized(scene.colorizedObjectIds, false);
+    try { const xIds = scene.xrayedObjectIds; if (xIds?.length > 0) scene.setObjectsXRayed(xIds, false); } catch (_e) { /* ignore */ }
+    try { const cIds = scene.colorizedObjectIds; if (cIds?.length > 0) scene.setObjectsColorized(cIds, false); } catch (_e) { /* ignore */ }
     // Restore all model-level visibility
     const sceneModels = scene.models || {};
     Object.values(sceneModels).forEach((model: any) => {
