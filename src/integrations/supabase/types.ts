@@ -1901,6 +1901,7 @@ export type Database = {
       }
       viewer_themes: {
         Row: {
+          background_color: string | null
           color_mappings: Json
           created_at: string
           edge_settings: Json | null
@@ -1911,6 +1912,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          background_color?: string | null
           color_mappings?: Json
           created_at?: string
           edge_settings?: Json | null
@@ -1921,6 +1923,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          background_color?: string | null
           color_mappings?: Json
           created_at?: string
           edge_settings?: Json | null
