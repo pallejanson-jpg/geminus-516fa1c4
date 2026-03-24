@@ -766,7 +766,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                       />
                     </div>
                     <div className="flex gap-1 shrink-0">
-                      {([['name', 'Namn'], ['number', 'Nr'], ['area', 'Yta']] as const).map(([key, label]) => (
+                      {([['name', 'Name'], ['number', 'No'], ['area', 'Area']] as const).map(([key, label]) => (
                         <button
                           key={key}
                           type="button"
