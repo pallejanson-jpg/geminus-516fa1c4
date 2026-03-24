@@ -882,7 +882,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                       onClick={() => onShowAssets(facility)}
                       className="rounded-xl border border-dashed border-border bg-muted/30 p-3 flex items-center justify-center text-xs text-muted-foreground hover:bg-muted/50 transition-colors"
                     >
-                      +{childAssets.length - 20} fler
+                      +{childAssets.length - 20} more
                     </button>
                   )}
                 </div>
