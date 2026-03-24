@@ -1002,7 +1002,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                         />
                       </TableCell>
                       {orderedVisibleColumns.map((colKey) => (
-                        <TableCell key={colKey} className="py-1.5 sm:py-2 whitespace-nowrap text-[11px] sm:text-sm">
+                        <TableCell key={colKey} className="py-1.5 sm:py-2 whitespace-nowrap text-[11px] sm:text-sm text-foreground">
                           {formatCellValue(colKey, asset[colKey])}
                         </TableCell>
                       ))}

@@ -355,7 +355,7 @@ const CesiumGlobeView: React.FC = () => {
           heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
           scaleByDistance: new Cesium.NearFarScalar(500, 1.4, 2000000, 0.8),
         },
-        label: {
+        label: facility.displayName ? {
           text: facility.displayName, font: '13px sans-serif',
           fillColor: Cesium.Color.WHITE, outlineColor: Cesium.Color.BLACK, outlineWidth: 2,
           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
