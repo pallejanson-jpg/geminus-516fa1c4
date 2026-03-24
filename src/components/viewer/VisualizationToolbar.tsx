@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useContext, useRef } from "react";
-import { Layers, MessageSquare, MessageSquarePlus, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed, Settings, ChevronDown, Type, TreeDeciduous, Eye, Thermometer, Wind, Droplets, Users, Ruler } from "lucide-react";
+import { Layers, MessageSquare, MessageSquarePlus, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed, Settings, ChevronDown, Type, TreeDeciduous, Eye, Thermometer, Wind, Droplets, Users, Ruler, Move3D } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useFlashHighlight } from "@/hooks/useFlashHighlight";
 
