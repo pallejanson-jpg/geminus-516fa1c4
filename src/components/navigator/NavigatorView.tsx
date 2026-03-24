@@ -6,7 +6,7 @@ import { type NavigatorNode } from "@/components/navigator/TreeNode";
 import { VirtualTree } from "@/components/navigator/VirtualTree";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { X, List, Network } from "lucide-react";
+import { X, List, Network, Eye, Box, Square, ClipboardList, Plus, RefreshCw, Wrench } from "lucide-react";
 import { useSearchResults, SearchResult } from "@/hooks/useSearchResults";
 import { SearchResultsList } from "@/components/common/SearchResultsList";
 import { useXktPreload } from "@/hooks/useXktPreload";
@@ -45,12 +45,10 @@ function findAncestorGuids(tree: NavigatorNode[], targetGuids: Set<string>): Set
     }
     
     if (hasTargetDescendant && !isTarget) {
-      // This node is an ancestor of a target
       ancestors.add(node.fmGuid);
     }
     
     if (hasTargetDescendant) {
-      // Add all ancestors in the path
       path.forEach(guid => ancestors.add(guid));
     }
     
@@ -78,6 +76,9 @@ export default function NavigatorView() {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [viewMode, setViewModeLocal] = useState<'tree' | 'list'>('tree');
+
+  // Selected node for context toolbar
+  const [selectedNode, setSelectedNode] = useState<NavigatorNode | null>(null);
 
   // Search results for list view
   const searchResults = useSearchResults(navigatorTreeData, query, 50);
@@ -125,7 +126,6 @@ export default function NavigatorView() {
       if (isExpanding) {
         next.add(fmGuid);
         
-        // Check if the toggled node is a building
         const node = allData.find((a: any) => a.fmGuid === fmGuid);
         if (node?.category === 'Building') {
           setLastExpandedBuilding(fmGuid);
@@ -138,24 +138,24 @@ export default function NavigatorView() {
     });
   }, [allData]);
 
+  const handleSelect = useCallback((node: NavigatorNode) => {
+    setSelectedNode(prev => prev?.fmGuid === node.fmGuid ? null : node);
+  }, []);
+
   const handleAddChild = useCallback((parentNode: NavigatorNode) => {
-    // Find building fmGuid for the parent node
     let buildingFmGuid = '';
     let storeyFmGuid = '';
     
     if (parentNode.category === 'Space') {
-      // Find building from the parent's buildingFmGuid attribute
       const assetData = allData.find((a: any) => a.fmGuid === parentNode.fmGuid);
       buildingFmGuid = assetData?.buildingFmGuid || '';
       storeyFmGuid = assetData?.levelFmGuid || '';
     }
     
     if (!buildingFmGuid) {
-      // Fallback: use the space's fmGuid as building
       buildingFmGuid = parentNode.fmGuid;
     }
 
-    // Start the 3D-assisted registration flow
     startAssetRegistration({
       parentNode,
       buildingFmGuid,
@@ -166,7 +166,6 @@ export default function NavigatorView() {
 
 
   const handleView = useCallback((node: NavigatorNode) => {
-    // Navigate to Portfolio view for buildings
     if (node.category === 'Building') {
       setSelectedFacility({
         fmGuid: node.fmGuid,
@@ -183,14 +182,11 @@ export default function NavigatorView() {
   }, [setSelectedFacility, setActiveApp]);
 
   const handleOpen3D = useCallback((node: NavigatorNode) => {
-    // Set the FMGUID and navigate to 3D viewer
     setViewer3dFmGuid(node.fmGuid);
     setActiveApp('native_viewer');
   }, [setViewer3dFmGuid, setActiveApp]);
 
   const handleOpen2D = useCallback((node: NavigatorNode) => {
-    // Set the FMGUID and navigate to 3D viewer (will start in 2D mode for floors)
-    // Store a flag to indicate 2D mode should be activated
     setViewer3dFmGuid(node.fmGuid);
     setActiveApp('native_viewer');
     toast.info(`Opening 2D view for "${node.commonName || node.name}"`, {
@@ -199,7 +195,6 @@ export default function NavigatorView() {
   }, [setViewer3dFmGuid, setActiveApp]);
 
   const handleInventory = useCallback((node: NavigatorNode) => {
-    // Build prefill based on node category
     const assetData = allData.find((a: any) => a.fmGuid === node.fmGuid);
     
     let prefill = {
@@ -255,7 +250,6 @@ export default function NavigatorView() {
   }, [allData]);
 
   const handleSearchResultSelect = useCallback((result: SearchResult) => {
-    // Navigate based on category
     if (result.category === 'Building') {
       setSelectedFacility({
         fmGuid: result.fmGuid,
@@ -265,12 +259,18 @@ export default function NavigatorView() {
       });
       setActiveApp('portfolio');
     } else {
-      // For non-buildings, open 3D viewer
       setViewer3dFmGuid(result.fmGuid);
     }
   }, [setSelectedFacility, setActiveApp, setViewer3dFmGuid]);
 
   const selectedFmGuidSet = useMemo(() => new Set(aiSelectedFmGuids), [aiSelectedFmGuids]);
+
+  // Context toolbar: determine which actions to show based on selected node
+  const canAddChild = selectedNode?.category === 'Space';
+  const canOpen2D = selectedNode?.category === 'Building Storey';
+  const canInventory = selectedNode && ['Building', 'Building Storey', 'Space'].includes(selectedNode.category || '');
+  const canCreateWorkOrder = selectedNode && ['Building', 'Building Storey', 'Space', 'Instance'].includes(selectedNode.category || '');
+  const canSyncToAssetPlus = selectedNode?.category === 'Instance' && selectedNode.isLocal === true && selectedNode.inRoomFmGuid;
 
   return (
     <TooltipProvider>
@@ -319,11 +319,107 @@ export default function NavigatorView() {
           </div>
         </div>
 
+        {/* Context toolbar - shown when a node is selected */}
+        {selectedNode && (
+          <div className="mb-2 flex items-center gap-1 px-1 py-1 rounded-md bg-muted/50 border border-border">
+            <span className="text-[10px] sm:text-xs text-muted-foreground truncate max-w-[120px] px-1">
+              {selectedNode.commonName || selectedNode.name}
+            </span>
+            <div className="flex items-center gap-0.5 ml-auto shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => handleOpen3D(selectedNode)}
+                title="3D"
+              >
+                <Box className="h-3 w-3 text-primary" />
+              </Button>
+              {canOpen2D && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => handleOpen2D(selectedNode)}
+                  title="2D"
+                >
+                  <Square className="h-3 w-3 text-accent-foreground" />
+                </Button>
+              )}
+              {selectedNode.category === 'Building' && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => handleView(selectedNode)}
+                  title="Details"
+                >
+                  <Eye className="h-3 w-3 text-muted-foreground" />
+                </Button>
+              )}
+              {canInventory && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => handleInventory(selectedNode)}
+                  title="Inventory"
+                >
+                  <ClipboardList className="h-3 w-3 text-orange-500" />
+                </Button>
+              )}
+              {canCreateWorkOrder && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => handleCreateWorkOrder(selectedNode)}
+                  title="Work Order"
+                >
+                  <Wrench className="h-3 w-3 text-amber-600" />
+                </Button>
+              )}
+              {canAddChild && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => handleAddChild(selectedNode)}
+                  title="Add"
+                >
+                  <Plus className="h-3 w-3 text-muted-foreground" />
+                </Button>
+              )}
+              {canSyncToAssetPlus && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => {
+                    toast.info('Sync to Asset+ triggered');
+                  }}
+                  title="Sync to Asset+"
+                >
+                  <RefreshCw className="h-3 w-3 text-blue-500" />
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setSelectedNode(null)}
+                title="Deselect"
+              >
+                <X className="h-3 w-3 text-muted-foreground" />
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="rounded-lg border border-border bg-card p-1.5 sm:p-2 overflow-hidden">
           {isLoadingData ? (
             <div className="p-2 sm:p-3 text-xs sm:text-sm text-muted-foreground">Loading data...</div>
           ) : viewMode === 'list' && query.trim().length >= 2 ? (
-            // List view with search results
             <SearchResultsList
               results={searchResults}
               onSelect={handleSearchResultSelect}
@@ -335,14 +431,10 @@ export default function NavigatorView() {
                 nodes={visibleTree}
                 expanded={expanded}
                 selectedFmGuids={selectedFmGuidSet}
+                selectedNodeFmGuid={selectedNode?.fmGuid || null}
                 scrollToFmGuid={aiSelectedFmGuids[0] || null}
                 onToggle={onToggle}
-                onAddChild={handleAddChild}
-                onView={handleView}
-                onOpen3D={handleOpen3D}
-                onOpen2D={handleOpen2D}
-                onInventory={handleInventory}
-                onCreateWorkOrder={handleCreateWorkOrder}
+                onSelect={handleSelect}
               />
             </div>
           )}
