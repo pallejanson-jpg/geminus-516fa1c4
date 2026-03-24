@@ -609,6 +609,48 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
         )}
       </div>
 
+      {/* ── Fullscreen plan overlay for Nav Graph Editor ── */}
+      {navPanelOpen && (
+        <div className="absolute inset-0 z-20">
+          <SplitPlanView
+            viewerRef={viewerInstanceRef}
+            buildingFmGuid={buildingData.fmGuid}
+            onRoomLabelsChange={setPlanRoomLabels}
+            navigationOverlay={
+              <>
+                {navEditMode && (
+                  <NavGraphEditorOverlay
+                    graph={navGraph}
+                    onGraphChange={setNavGraph}
+                    roomLabels={planRoomLabels}
+                    floorFmGuid={navFloorFmGuid}
+                  />
+                )}
+                {!navEditMode && navRoute && (
+                  <RouteDisplayOverlay route={navRoute} />
+                )}
+              </>
+            }
+            monochrome
+            lockCameraToFloor={false}
+            syncFloorSelection={false}
+          />
+          {/* Navigation Panel floating card */}
+          <div className="absolute bottom-24 left-2 right-2 z-50 max-h-[50dvh] bg-card border border-border rounded-lg shadow-xl overflow-auto">
+            <NavigationPanel
+              buildingFmGuid={buildingData.fmGuid}
+              onRouteCalculated={setNavRoute}
+              onGraphLoaded={setNavGraph}
+              onEditModeChange={setNavEditMode}
+              onGraphSave={setNavGraph}
+              currentFloorFmGuid={navFloorFmGuid}
+              graph={navGraph}
+              onClose={() => { setNavPanelOpen(false); setNavEditMode(false); setNavRoute(null); }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* ── Transparent top bar ── */}
       <div
         className="relative z-50 flex items-center justify-between px-3 pointer-events-none"
