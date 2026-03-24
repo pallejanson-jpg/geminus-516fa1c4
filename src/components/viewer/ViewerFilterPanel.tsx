@@ -850,9 +850,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     if (prevXrayed.length > 0) scene.setObjectsXRayed(prevXrayed, false);
     
     // Only reset colorize when we actually have filter-applied colors (not theme colors)
-    // When a theme is active, skip the colorize reset to avoid "native colors flash"
+    // When a theme is active OR visualization is forcing spaces, skip the colorize reset
     const themeActive = !!activeThemeIdRef.current;
-    if (!themeActive && (hasAnyFilter || autoColorEnabled || autoColorSpaces || autoColorCategories)) {
+    const spacesForced = !!(window as any).__spacesForceVisible;
+    if (!themeActive && !spacesForced && (hasAnyFilter || autoColorEnabled || autoColorSpaces || autoColorCategories)) {
       let prevColorizedIds: string[] = [];
       try { prevColorizedIds = scene.colorizedObjectIds || []; } catch (_e) { /* scene teardown */ }
       if (prevColorizedIds.length > 0) {
