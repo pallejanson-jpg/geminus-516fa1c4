@@ -862,11 +862,13 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         // Delta: show what was previously hidden
         scene.setObjectsVisible(scene.objectIds, true);
         scene.setObjectsPickable(scene.objectIds, true);
-        // Re-hide spaces
-        spaceEntityIds.forEach(id => {
-          const entity = scene.objects?.[id];
-          if (entity) { entity.visible = false; entity.pickable = false; }
-        });
+        // Re-hide spaces (unless visualization is forcing them visible)
+        if (!spacesForced) {
+          spaceEntityIds.forEach(id => {
+            const entity = scene.objects?.[id];
+            if (entity) { entity.visible = false; entity.pickable = false; }
+          });
+        }
         prevVisibleRef.current = null;
       }
 
