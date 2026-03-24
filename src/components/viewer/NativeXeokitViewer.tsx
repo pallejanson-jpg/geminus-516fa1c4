@@ -1595,6 +1595,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   }, [buildingFmGuid]);
 
 
+  return (
     <div className="relative w-full h-full">
       <canvas
         ref={canvasRef}
