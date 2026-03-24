@@ -116,21 +116,17 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       // Clear existing section planes
       const existingPlanes = Object.values(viewer.scene.sectionPlanes || {});
       existingPlanes.forEach((sp: any) => sp.destroy?.());
-      // Create new ones
-      const SectionPlane = viewer.scene.canvas?.viewer?.plugins?.SectionPlanes || null;
+      // Restore section planes using the viewer's SectionPlane class
       detail.sectionPlanes.forEach((sp: { pos: number[]; dir: number[] }) => {
         try {
-          new (viewer.scene.constructor.SectionPlane || Object.getPrototypeOf(viewer.scene).constructor.SectionPlane)?.(viewer.scene, { pos: sp.pos, dir: sp.dir, active: true });
-        } catch {
-          // Fallback: use xeokit SectionPlane constructor if available
-          try {
-            const scene = viewer.scene;
-            if (scene.SectionPlane) {
-              new scene.SectionPlane(scene, { pos: sp.pos, dir: sp.dir, active: true });
-            }
-          } catch (e2) {
-            console.warn('[NativeViewerShell] Could not restore section plane:', e2);
+          // xeokit exposes SectionPlane on the scene
+          const scene = viewer.scene;
+          // Create via scene utility
+          if (typeof scene.createSectionPlane === 'function') {
+            scene.createSectionPlane({ pos: sp.pos, dir: sp.dir, active: true });
           }
+        } catch (e) {
+          console.warn('[NativeViewerShell] Could not restore section plane:', e);
         }
       });
     }
