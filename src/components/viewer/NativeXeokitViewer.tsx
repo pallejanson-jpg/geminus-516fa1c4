@@ -1490,7 +1490,111 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
     return () => window.removeEventListener(ALARM_ANNOTATIONS_SHOW_EVENT, handler);
   }, []);
 
-  return (
+  // ── Listen for TOGGLE_ANNOTATIONS (show/hide annotation markers from assets) ───
+  useEffect(() => {
+    const markerContainerRef = { current: null as HTMLDivElement | null };
+
+    const handler = async (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const show = detail?.show ?? true;
+      const viewer = viewerRef.current;
+
+      // Toggle existing markers
+      if (markerContainerRef.current) {
+        markerContainerRef.current.style.display = show ? 'block' : 'none';
+        if (!show) return;
+      }
+
+      if (!show) return;
+      if (!viewer?.scene) return;
+
+      // Fetch annotation assets
+      try {
+        const { data: annotations } = await supabase
+          .from('assets')
+          .select('fm_guid, common_name, name, coordinate_x, coordinate_y, coordinate_z, symbol_id')
+          .eq('building_fm_guid', buildingFmGuid)
+          .eq('annotation_placed', true)
+          .not('coordinate_x', 'is', null);
+
+        if (!annotations?.length) {
+          console.log('[NativeViewer] No annotation assets found');
+          return;
+        }
+
+        // Fetch symbol colors
+        const symbolIds = [...new Set(annotations.filter(a => a.symbol_id).map(a => a.symbol_id!))];
+        let symbolColors = new Map<string, string>();
+        if (symbolIds.length > 0) {
+          const { data: symbols } = await supabase
+            .from('annotation_symbols')
+            .select('id, color, name')
+            .in('id', symbolIds);
+          symbols?.forEach(s => symbolColors.set(s.id, s.color));
+        }
+
+        // Create or reuse container
+        const canvas = viewer.scene.canvas?.canvas;
+        if (!canvas) return;
+        const parent = canvas.parentElement;
+        if (!parent) return;
+
+        if (markerContainerRef.current) {
+          markerContainerRef.current.remove();
+        }
+
+        const container = document.createElement('div');
+        container.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:30;overflow:hidden;';
+        parent.appendChild(container);
+        markerContainerRef.current = container;
+
+        // Create marker elements
+        annotations.forEach(ann => {
+          const color = ann.symbol_id ? (symbolColors.get(ann.symbol_id) || '#3b82f6') : '#3b82f6';
+          const label = ann.common_name || ann.name || 'Annotation';
+          const marker = document.createElement('div');
+          marker.style.cssText = `position:absolute;pointer-events:auto;cursor:pointer;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:500;color:white;background:${color};white-space:nowrap;transform:translate(-50%,-100%);box-shadow:0 1px 3px rgba(0,0,0,0.3);`;
+          marker.textContent = label;
+          marker.title = label;
+          container.appendChild(marker);
+
+          // Position update function
+          const updatePos = () => {
+            if (!viewer.scene?.canvas) return;
+            const worldPos = [ann.coordinate_x || 0, ann.coordinate_y || 0, ann.coordinate_z || 0];
+            const canvasPos = viewer.scene.camera
+              ? worldToCanvas(viewer, worldPos)
+              : null;
+            if (canvasPos && canvasPos[2] > 0) {
+              marker.style.left = canvasPos[0] + 'px';
+              marker.style.top = canvasPos[1] + 'px';
+              marker.style.display = 'block';
+            } else {
+              marker.style.display = 'none';
+            }
+          };
+
+          // Update on camera changes
+          viewer.scene.camera?.on?.('matrix', updatePos);
+          updatePos();
+        });
+
+        console.log('[NativeViewer] TOGGLE_ANNOTATIONS: created', annotations.length, 'markers');
+      } catch (err) {
+        console.warn('[NativeViewer] Failed to load annotations:', err);
+      }
+    };
+
+    window.addEventListener('TOGGLE_ANNOTATIONS', handler);
+    return () => {
+      window.removeEventListener('TOGGLE_ANNOTATIONS', handler);
+      if (markerContainerRef.current) {
+        markerContainerRef.current.remove();
+      }
+    };
+  }, [buildingFmGuid]);
+
+
     <div className="relative w-full h-full">
       <canvas
         ref={canvasRef}
