@@ -452,7 +452,7 @@ export function useRoomLabels(
       let centerZ = (aabb[2] + aabb[5]) / 2;
       
       // Sample child entity AABBs to find a weighted centroid closer to actual geometry
-      const childIds = childrenMap.get(metaObj.id);
+      const childIds = labelChildrenMap.get(metaObj.id);
       if (childIds && childIds.length > 0) {
         let sumX = 0, sumZ = 0, count = 0;
         childIds.forEach(childId => {
