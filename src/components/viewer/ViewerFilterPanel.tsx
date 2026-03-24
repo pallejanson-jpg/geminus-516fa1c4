@@ -1334,7 +1334,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           entity.pickable = true;
           entity.xrayed = false;
           entity.opacity = 0.7;
-          entity.colorize = null;
+          // Don't reset colorize — theme will re-apply after filter completes
         }
       });
 
