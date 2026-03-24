@@ -97,10 +97,10 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     const handleFloorChange = (e: CustomEvent<FloorSelectionEventDetail>) => {
       const { visibleFloorFmGuids: guids, isAllFloorsVisible } = e.detail;
       setEventIsAllVisible(!!isAllFloorsVisible);
-      if (guids && guids.length > 0) {
+      if (isAllFloorsVisible) {
+        setEventFloorGuids(null); // null = all floors, skip filtering
+      } else if (guids && guids.length > 0) {
         setEventFloorGuids(guids);
-      } else if (isAllFloorsVisible) {
-        setEventFloorGuids(null); // null = all floors
       }
       // Also invalidate cache
       setCacheKey(`${buildingFmGuid}-${Date.now()}`);
