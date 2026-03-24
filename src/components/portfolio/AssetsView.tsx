@@ -954,7 +954,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       <div className="flex-1 overflow-auto">
         {viewMode === 'grid' ? (
           <div className="p-2 sm:p-4">
-            <div className="border rounded-lg overflow-x-auto">
+            <div className="overflow-x-auto">
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background">
@@ -1002,7 +1002,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                         />
                       </TableCell>
                       {orderedVisibleColumns.map((colKey) => (
-                        <TableCell key={colKey} className="py-1.5 sm:py-2 whitespace-nowrap text-[11px] sm:text-sm">
+                        <TableCell key={colKey} className="py-1.5 sm:py-2 whitespace-nowrap text-[11px] sm:text-sm text-foreground">
                           {formatCellValue(colKey, asset[colKey])}
                         </TableCell>
                       ))}
