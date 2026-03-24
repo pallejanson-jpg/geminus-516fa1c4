@@ -190,7 +190,8 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
   // Navigation graph state
   const [navPanelOpen, setNavPanelOpen] = useState(false);
   const [navEditMode, setNavEditMode] = useState(false);
-  const [navGraph, setNavGraph] = useState<NavGraph>(() => ({ nodes: new Map(), edges: [] }));
+  const emptyGraph: NavGraph = { nodes: new Map() as any, edges: [] };
+  const [navGraph, setNavGraph] = useState<NavGraph>(emptyGraph);
   const [navRoute, setNavRoute] = useState<RouteResult | null>(null);
   const [navFloorFmGuid, setNavFloorFmGuid] = useState<string | null>(null);
   const [planRoomLabels, setPlanRoomLabels] = useState<Array<{ id: string; name: string; x: number; y: number }>>([]);
