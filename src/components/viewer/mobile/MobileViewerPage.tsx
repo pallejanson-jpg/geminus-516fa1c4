@@ -297,7 +297,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
         }));
       }
       if (viewer?.cameraControl) {
-        viewer.cameraControl.navMode = 'orbit';
+        viewer.cameraControl.navMode = viewMode === '2d' ? 'planView' : 'orbit';
         viewer.cameraControl.followPointer = true;
       }
       setActiveTool('orbit');
