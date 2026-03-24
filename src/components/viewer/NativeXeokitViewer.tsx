@@ -1550,38 +1550,58 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   }, []);
 
   useEffect(() => {
-    const markerContainerRef = { current: null as HTMLDivElement | null };
+    let markerContainer: HTMLDivElement | null = null;
+    let cameraUnsubs: Array<() => void> = [];
 
     const handler = async (e: Event) => {
       const detail = (e as CustomEvent).detail;
       const show = detail?.show ?? true;
+      const visibleCategories: string[] | undefined = detail?.visibleCategories;
       const viewer = viewerRef.current;
 
       // Toggle existing markers
-      if (markerContainerRef.current) {
-        markerContainerRef.current.style.display = show ? 'block' : 'none';
+      if (markerContainer) {
+        markerContainer.style.display = show ? 'block' : 'none';
         if (!show) return;
+        // If categories filter changed, update individual marker visibility
+        if (visibleCategories && markerContainer.children.length > 0) {
+          const catSet = new Set(visibleCategories);
+          Array.from(markerContainer.children).forEach((el: any) => {
+            const cat = el.dataset?.category;
+            if (cat) {
+              el.style.display = catSet.size === 0 || catSet.has(cat) ? 'block' : 'none';
+            }
+          });
+          return;
+        }
+        if (markerContainer.children.length > 0) return; // already created
       }
 
       if (!show) return;
       if (!viewer?.scene) return;
 
-      // Fetch annotation assets
+      // Fetch annotation assets — include both annotation_placed=true AND created_in_model=false
       try {
         const { data: annotations } = await supabase
           .from('assets')
-          .select('fm_guid, common_name, name, coordinate_x, coordinate_y, coordinate_z, symbol_id')
+          .select('fm_guid, common_name, name, asset_type, coordinate_x, coordinate_y, coordinate_z, symbol_id')
           .eq('building_fm_guid', buildingFmGuid)
-          .eq('annotation_placed', true)
-          .not('coordinate_x', 'is', null);
+          .or('annotation_placed.eq.true,created_in_model.eq.false');
 
         if (!annotations?.length) {
           console.log('[NativeViewer] No annotation assets found');
           return;
         }
 
+        // Filter by visible categories if provided
+        let filtered = annotations;
+        if (visibleCategories && visibleCategories.length > 0) {
+          const catSet = new Set(visibleCategories);
+          filtered = annotations.filter(a => catSet.has(a.asset_type || 'Other'));
+        }
+
         // Fetch symbol colors
-        const symbolIds = [...new Set(annotations.filter(a => a.symbol_id).map(a => a.symbol_id!))];
+        const symbolIds = [...new Set(filtered.filter(a => a.symbol_id).map(a => a.symbol_id!))];
         let symbolColors = new Map<string, string>();
         if (symbolIds.length > 0) {
           const { data: symbols } = await supabase
@@ -1597,23 +1617,24 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         const parent = canvas.parentElement;
         if (!parent) return;
 
-        if (markerContainerRef.current) {
-          markerContainerRef.current.remove();
+        if (markerContainer) {
+          markerContainer.remove();
         }
 
         const container = document.createElement('div');
         container.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:30;overflow:hidden;';
         parent.appendChild(container);
-        markerContainerRef.current = container;
+        markerContainer = container;
 
         // Create marker elements
-        annotations.forEach(ann => {
+        filtered.forEach(ann => {
           const color = ann.symbol_id ? (symbolColors.get(ann.symbol_id) || '#3b82f6') : '#3b82f6';
           const label = ann.common_name || ann.name || 'Annotation';
           const marker = document.createElement('div');
           marker.style.cssText = `position:absolute;pointer-events:auto;cursor:pointer;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:500;color:white;background:${color};white-space:nowrap;transform:translate(-50%,-100%);box-shadow:0 1px 3px rgba(0,0,0,0.3);`;
           marker.textContent = label;
           marker.title = label;
+          marker.dataset.category = ann.asset_type || 'Other';
           container.appendChild(marker);
 
           // Position update function
@@ -1633,11 +1654,12 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           };
 
           // Update on camera changes
-          viewer.scene.camera?.on?.('matrix', updatePos);
+          const unsub = viewer.scene.camera?.on?.('matrix', updatePos);
+          if (unsub) cameraUnsubs.push(() => viewer.scene.camera?.off?.('matrix', unsub));
           updatePos();
         });
 
-        console.log('[NativeViewer] TOGGLE_ANNOTATIONS: created', annotations.length, 'markers');
+        console.log('[NativeViewer] TOGGLE_ANNOTATIONS: created', filtered.length, 'markers');
       } catch (err) {
         console.warn('[NativeViewer] Failed to load annotations:', err);
       }
@@ -1646,8 +1668,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
     window.addEventListener('TOGGLE_ANNOTATIONS', handler);
     return () => {
       window.removeEventListener('TOGGLE_ANNOTATIONS', handler);
-      if (markerContainerRef.current) {
-        markerContainerRef.current.remove();
+      cameraUnsubs.forEach(fn => fn());
+      if (markerContainer) {
+        markerContainer.remove();
       }
     };
   }, [buildingFmGuid]);
