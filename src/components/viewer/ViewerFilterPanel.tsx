@@ -1338,32 +1338,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         }
       });
 
-      // Auto fly INSIDE the selected room (first-person perspective)
-      const roomIds = [...spaceOnlyEntityIds];
-      if (roomIds.length > 0) {
-        try {
-          const aabb = scene.getAABB(roomIds);
-          // Position camera at center of room, looking along longest horizontal axis
-          const cx = (aabb[0] + aabb[3]) / 2;
-          const cy = aabb[1] + ((aabb[4] - aabb[1]) * 0.55); // slightly above center (eye height)
-          const cz = (aabb[2] + aabb[5]) / 2;
-          const dx = aabb[3] - aabb[0];
-          const dz = aabb[5] - aabb[2];
-          // Look toward the longer wall direction
-          const lookX = dx > dz ? cx + dx * 0.4 : cx;
-          const lookZ = dz >= dx ? cz + dz * 0.4 : cz;
-          if (viewer.cameraFlight) {
-            viewer.cameraFlight.flyTo({
-              eye: [cx, cy, cz],
-              look: [lookX, cy, lookZ],
-              up: [0, 1, 0],
-              duration: 1.0,
-            });
-          }
-        } catch (e) {
-          console.warn('[FilterPanel] fly-inside room failed:', e);
-        }
-      }
+      // NOTE: Auto fly removed — fly behavior is ONLY triggered by explicit user
+      // interactions (handleSpaceToggle for checkbox, handleSpaceClick for name click)
     }
 
     // Ensure area spaces stay hidden
