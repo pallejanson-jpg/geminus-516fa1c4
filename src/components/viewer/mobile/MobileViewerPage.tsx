@@ -879,7 +879,47 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
             </>
           )}
 
-          {/* ── Settings sub-sheet ── */}
+          {/* ── Navigation sub-sheet ── */}
+          {subSheet === 'navigation' && (
+            <>
+              <DrawerHeader className="pb-2">
+                <div className="flex items-center gap-2"><BackButton /><DrawerTitle className="text-base">Navigation</DrawerTitle></div>
+              </DrawerHeader>
+              <div className="px-2 pb-6">
+                <div className="space-y-2">
+                  <Button
+                    variant={navPanelOpen ? 'default' : 'outline'}
+                    className="w-full justify-start gap-2 h-11"
+                    onClick={() => {
+                      setNavPanelOpen(true);
+                      setSheetOpen(false);
+                    }}
+                  >
+                    <div className={cn("p-1.5 rounded-md", navPanelOpen ? "bg-primary-foreground/20" : "bg-primary/10 text-primary")}>
+                      <Navigation className="h-4 w-4" />
+                    </div>
+                    <span className="text-sm">{navPanelOpen ? 'Navigation open' : 'Open navigation'}</span>
+                  </Button>
+                  {navPanelOpen && (
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start gap-2 h-11"
+                      onClick={() => {
+                        setNavPanelOpen(false);
+                        setNavEditMode(false);
+                        setNavRoute(null);
+                        setSheetOpen(false);
+                      }}
+                    >
+                      <div className="p-1.5 rounded-md bg-destructive/10 text-destructive"><X className="h-4 w-4" /></div>
+                      <span className="text-sm">Close navigation</span>
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
           {subSheet === 'settings' && (
             <>
               <DrawerHeader className="pb-2">
