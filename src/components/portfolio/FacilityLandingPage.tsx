@@ -76,6 +76,14 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   const [selectedFloorIdx, setSelectedFloorIdx] = useState(0);
   const [roomSearch, setRoomSearch] = useState('');
   const [roomSortKey, setRoomSortKey] = useState<'name' | 'number' | 'area'>('name');
+  const [activeRoomMetric, setActiveRoomMetric] = useState<VisualizationType>('none');
+
+  const ROOM_VIZ_METRICS = [
+    { key: 'temperature' as VisualizationType, label: 'Temp', icon: Thermometer },
+    { key: 'co2' as VisualizationType, label: 'CO₂', icon: Wind },
+    { key: 'humidity' as VisualizationType, label: 'Humidity', icon: Droplets },
+    { key: 'occupancy' as VisualizationType, label: 'Occupancy', icon: Users },
+  ];
 
   // Saved views for this building
   const [savedViews, setSavedViews] = useState<Array<{ id: string; name: string; screenshot_url: string | null; created_at: string | null }>>([]);
