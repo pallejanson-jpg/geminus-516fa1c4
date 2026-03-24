@@ -1522,6 +1522,33 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   }, []);
 
   // ── Listen for TOGGLE_ANNOTATIONS (show/hide annotation markers from assets) ───
+  // ── Listen for NAV_SPEED_CHANGED (live update cameraControl rates) ───
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const speed = detail?.speed ?? 100;
+      const multiplier = Math.max(0.25, Math.min(3, speed / 100));
+      const viewer = viewerRef.current;
+      if (!viewer?.cameraControl) return;
+      const cc = viewer.cameraControl;
+      const isMob = isMobileRef.current;
+      if (isMob) {
+        cc.dragRotationRate = 70 * multiplier;
+        cc.touchPanRate = 0.14 * multiplier;
+        cc.touchDollyRate = 0.09 * multiplier;
+      } else {
+        cc.dragRotationRate = 120 * multiplier;
+        cc.touchPanRate = 0.3 * multiplier;
+        cc.touchDollyRate = 0.15 * multiplier;
+        cc.mouseWheelDollyRate = 50 * multiplier;
+        cc.keyboardDollyRate = 5 * multiplier;
+      }
+      console.log('[NativeViewer] NAV_SPEED_CHANGED:', speed, '% →', multiplier, 'x');
+    };
+    window.addEventListener('NAV_SPEED_CHANGED', handler);
+    return () => window.removeEventListener('NAV_SPEED_CHANGED', handler);
+  }, []);
+
   useEffect(() => {
     const markerContainerRef = { current: null as HTMLDivElement | null };
 

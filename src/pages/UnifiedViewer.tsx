@@ -147,16 +147,22 @@ const UnifiedViewerContent: React.FC<{
       // Validate computed positions
       if (!newEye.every((v: number) => Number.isFinite(v)) || !newLook.every((v: number) => Number.isFinite(v))) return;
 
+      // Ensure perspective projection for 3D response
+      if (viewer.camera.projection !== 'perspective') {
+        viewer.camera.projection = 'perspective';
+      }
+
       viewer.cameraFlight.flyTo({
         eye: newEye,
         look: newLook,
         up: [0, 1, 0],
-        duration: 0.5,
+        duration: 0.3,
       }, () => {
         // Force a canvas redraw after flyTo completes to prevent blank 3D pane
         try {
           viewer.scene.canvas?.resizeCanvas?.();
           viewer.scene.glRedraw?.();
+          viewer.scene.fire?.('tick');
         } catch {}
       });
     };
