@@ -1,6 +1,6 @@
 import React, { useState, useContext, useCallback, useEffect, useMemo, useRef } from 'react';
 import Map, { Popup, Marker, NavigationControl, GeolocateControl, Source, Layer } from 'react-map-gl';
-import { MapPin, Maximize2, Layers, Loader2, Palette, ArrowLeft, Navigation } from 'lucide-react';
+import { MapPin, Maximize2, Layers, Loader2, Palette, ArrowLeft, Navigation, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
