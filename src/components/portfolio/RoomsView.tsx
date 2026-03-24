@@ -442,12 +442,22 @@ const RoomsView: React.FC<RoomsViewProps> = ({
   }, [selectedRows]);
 
   const handleOpen3DSelected = useCallback(() => {
-    if (selectedRows.size === 1) {
-      const fmGuid = Array.from(selectedRows)[0];
-      const room = filteredRooms.find(r => r.fmGuid === fmGuid);
-      if (room) handleOpen3D(room);
+    if (selectedRows.size === 0 || !onOpen3D) return;
+    const guids = Array.from(selectedRows);
+    // Navigate to viewer with first selected room's floor, then dispatch multi-select event
+    const firstRoom = filteredRooms.find(r => r.fmGuid === guids[0]);
+    if (firstRoom) {
+      onOpen3D(firstRoom.fmGuid, firstRoom.levelFmGuid);
+      // After navigation, dispatch event to highlight all selected rooms
+      if (guids.length > 1) {
+        setTimeout(() => {
+          guids.slice(1).forEach(guid => {
+            window.dispatchEvent(new CustomEvent('VIEWER_ZOOM_TO_OBJECT', { detail: { fmGuid: guid, selectOnly: true } }));
+          });
+        }, 3000);
+      }
     }
-  }, [selectedRows, filteredRooms]);
+  }, [selectedRows, filteredRooms, onOpen3D]);
 
   // Sync column order with visible columns
   const orderedVisibleColumns = useMemo(() => {
