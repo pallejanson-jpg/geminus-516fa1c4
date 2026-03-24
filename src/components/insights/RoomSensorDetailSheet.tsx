@@ -363,7 +363,7 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
               isLoading={isLoading}
             />
             <GaugeCard
-              label="Luftfuktighet"
+              label="Humidity"
               value={data?.current.humidity ?? null}
               unit="%"
               icon={Droplets}
