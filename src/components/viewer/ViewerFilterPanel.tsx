@@ -233,8 +233,24 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       if (!storey.sourceName || isGuid(storey.sourceName)) return false;
       return isArchitecturalModel(storey.sourceName);
     });
-    // Fallback: if no A-model storeys identified, show all
-    const filtered = aModelStoreys.length > 0 ? aModelStoreys : storeyAssets;
+    // Fallback: if no A-model storeys identified, try matching against loaded scene model names
+    let filtered = aModelStoreys;
+    if (filtered.length === 0) {
+      // Try to resolve sourceName from scene model names or sharedModels
+      const sceneModelNames = sharedModels.map(m => m.name || m.shortName || '').filter(Boolean);
+      const aModelSceneNames = sceneModelNames.filter(n => isArchitecturalModel(n));
+      if (aModelSceneNames.length > 0) {
+        // Match storeys whose sourceGuid corresponds to an A-model in sharedModels
+        const aModelGuids = new Set(
+          sharedModels
+            .filter(m => isArchitecturalModel(m.name || m.shortName || ''))
+            .map(m => normalizeGuid(m.id))
+        );
+        filtered = storeyAssets.filter(s => aModelGuids.has(normalizeGuid(s.sourceGuid)));
+      }
+      // If still empty, show all as last resort
+      if (filtered.length === 0) filtered = storeyAssets;
+    }
 
     return filtered
       .map((storey) => {
