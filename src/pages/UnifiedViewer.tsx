@@ -984,6 +984,36 @@ const UnifiedViewerContent: React.FC<{
           </>
         )}
 
+        {/* ── Pure 2D mode: fullscreen SplitPlanView when nav panel open ── */}
+        {is2DMode && navPanelOpen && (
+          <div className="absolute inset-0 z-20">
+            <SplitPlanView
+              viewerRef={viewerInstanceRef}
+              buildingFmGuid={buildingData.fmGuid}
+              className="h-full"
+              syncFloorSelection={false}
+              lockCameraToFloor={false}
+              monochrome
+              onRoomLabelsChange={setPlanRoomLabels}
+              navigationOverlay={
+                <>
+                  {navEditMode && (
+                    <NavGraphEditorOverlay
+                      graph={navGraph}
+                      onGraphChange={setNavGraph}
+                      roomLabels={planRoomLabels}
+                      floorFmGuid={navFloorFmGuid}
+                    />
+                  )}
+                  {!navEditMode && navRoute && (
+                    <RouteDisplayOverlay route={navRoute} />
+                  )}
+                </>
+              }
+            />
+          </div>
+        )}
+
         {/* Crosshair overlay for alignment in VT mode */}
         {isVTMode && showAlignment && showCrosshair && (
           <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center">
