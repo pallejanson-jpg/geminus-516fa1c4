@@ -371,7 +371,7 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
               isLoading={isLoading}
             />
             <GaugeCard
-              label="Belysning"
+              label="Lighting"
               value={data?.current.light ?? null}
               unit="lux"
               icon={Sun}
