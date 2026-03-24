@@ -790,6 +790,33 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
         updatePayload.coordinate_z = parseFloat(formData.coordinate_z) || 0;
       }
 
+      // Collect user-defined attribute edits (keys starting with attr_)
+      const attrUpdates: Record<string, any> = {};
+      Object.entries(formData).forEach(([key, value]) => {
+        if (!key.startsWith('attr_')) return;
+        const attrKey = key.replace('attr_', '');
+        const originalAttrs = assets[0]?.attributes || {};
+        const originalVal = originalAttrs[attrKey];
+        
+        // Handle structured {name, value, dataType} properties
+        if (originalVal && typeof originalVal === 'object' && 'name' in originalVal) {
+          attrUpdates[attrKey] = { ...originalVal, value };
+          assetPlusProperties.push({
+            name: originalVal.name || attrKey,
+            value: value ?? '',
+            dataType: originalVal.dataType ?? 0,
+          });
+        } else {
+          attrUpdates[attrKey] = value;
+        }
+      });
+
+      // If user-defined attributes changed, merge into the existing JSONB
+      if (Object.keys(attrUpdates).length > 0) {
+        const existingAttrs = assets[0]?.attributes || {};
+        updatePayload.attributes = { ...existingAttrs, ...attrUpdates };
+      }
+
       // Check if any assets need Asset+ sync (is_local = false)
       const syncedAssets = assets.filter(a => a.is_local === false);
       const hasSyncedAssets = syncedAssets.length > 0 && assetPlusProperties.length > 0;
