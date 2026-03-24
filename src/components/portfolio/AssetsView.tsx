@@ -913,7 +913,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           {selectedRows.size === 1 && onOpen3D && (
             <Button size="sm" variant="outline" onClick={handleOpen3DSelected} className="gap-1">
               <Cuboid size={14} />
-              3D
+              Viewer
             </Button>
           )}
           
@@ -1009,7 +1009,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                         className="text-center py-12 text-muted-foreground"
                       >
                         <Box className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                        <p>Inga assets hittades</p>
+                        <p>No assets found</p>
                       </TableCell>
                     </TableRow>
                   )}
@@ -1075,7 +1075,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
               {filteredAssets.length === 0 && (
                 <div className="col-span-full text-center py-12 text-muted-foreground">
                   <Box className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Inga assets hittades</p>
+                  <p>No assets found</p>
                 </div>
               )}
             </div>

@@ -208,6 +208,21 @@ const RoomsView: React.FC<RoomsViewProps> = ({
   
   // Sensor metric state
   const [activeSensorMetric, setActiveSensorMetric] = useState<VisualizationType>('none');
+  
+  // Auto-sort when sensor metric is activated
+  const handleSensorMetricToggle = useCallback((metricKey: VisualizationType) => {
+    setActiveSensorMetric(prev => {
+      const next = prev === metricKey ? 'none' : metricKey;
+      if (next !== 'none') {
+        setSortColumn('__sensor__');
+        setSortDirection('desc');
+      } else if (sortColumn === '__sensor__') {
+        setSortColumn('roomNumber');
+        setSortDirection('asc');
+      }
+      return next;
+    });
+  }, [sortColumn]);
 
   // Multi-selection state
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
@@ -309,7 +324,14 @@ const RoomsView: React.FC<RoomsViewProps> = ({
       if (roomNum) result.roomNumber = roomNum;
 
       result.commonName = room.commonName || room.name || attrs.commonName || 'Unknown';
-      result.levelCommonName = attrs.levelCommonName || attrs.levelDesignation || '-';
+      // Try multiple fallbacks for floor name
+      let levelName = attrs.levelCommonName || attrs.levelDesignation;
+      if (!levelName && room.levelFmGuid) {
+        // Look up parent storey from rooms array
+        const parentStorey = rooms.find(r => r.fmGuid === room.levelFmGuid);
+        levelName = parentStorey?.commonName || parentStorey?.name;
+      }
+      result.levelCommonName = levelName || '-';
 
       return result;
     });
@@ -327,6 +349,13 @@ const RoomsView: React.FC<RoomsViewProps> = ({
     });
 
     result.sort((a, b) => {
+      // Sensor value sorting
+      if (sortColumn === '__sensor__') {
+        const aVal = roomSensorValues.get(a.fmGuid) ?? -Infinity;
+        const bVal = roomSensorValues.get(b.fmGuid) ?? -Infinity;
+        return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+      }
+
       let aVal = a[sortColumn];
       let bVal = b[sortColumn];
 
@@ -442,12 +471,22 @@ const RoomsView: React.FC<RoomsViewProps> = ({
   }, [selectedRows]);
 
   const handleOpen3DSelected = useCallback(() => {
-    if (selectedRows.size === 1) {
-      const fmGuid = Array.from(selectedRows)[0];
-      const room = filteredRooms.find(r => r.fmGuid === fmGuid);
-      if (room) handleOpen3D(room);
+    if (selectedRows.size === 0 || !onOpen3D) return;
+    const guids = Array.from(selectedRows);
+    // Navigate to viewer with first selected room's floor, then dispatch multi-select event
+    const firstRoom = filteredRooms.find(r => r.fmGuid === guids[0]);
+    if (firstRoom) {
+      onOpen3D(firstRoom.fmGuid, firstRoom.levelFmGuid);
+      // After navigation, dispatch event to highlight all selected rooms
+      if (guids.length > 1) {
+        setTimeout(() => {
+          guids.slice(1).forEach(guid => {
+            window.dispatchEvent(new CustomEvent('VIEWER_ZOOM_TO_OBJECT', { detail: { fmGuid: guid, selectOnly: true } }));
+          });
+        }, 3000);
+      }
     }
-  }, [selectedRows, filteredRooms]);
+  }, [selectedRows, filteredRooms, onOpen3D]);
 
   // Sync column order with visible columns
   const orderedVisibleColumns = useMemo(() => {
@@ -609,10 +648,10 @@ const RoomsView: React.FC<RoomsViewProps> = ({
             Properties
           </Button>
 
-          {selectedRows.size === 1 && onOpen3D && (
+          {onOpen3D && (
             <Button size="sm" variant="outline" onClick={handleOpen3DSelected} className="gap-1">
               <Cuboid size={14} />
-              3D
+              Viewer
             </Button>
           )}
           
@@ -632,7 +671,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
             size="sm"
             variant={activeSensorMetric === m.key ? 'default' : 'outline'}
             className="h-7 px-2 text-[10px] gap-1"
-            onClick={() => setActiveSensorMetric(prev => prev === m.key ? 'none' : m.key)}
+            onClick={() => handleSensorMetricToggle(m.key)}
           >
             <m.icon className="h-3 w-3" />
             {m.label}
