@@ -789,6 +789,23 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                     </div>
                   </div>
 
+                  {/* Sensor metric buttons */}
+                  <div className="flex items-center gap-1.5 mb-3">
+                    <span className="text-[10px] text-muted-foreground mr-1">Visualize:</span>
+                    {ROOM_VIZ_METRICS.map(m => (
+                      <Button
+                        key={m.key}
+                        size="sm"
+                        variant={activeRoomMetric === m.key ? 'default' : 'outline'}
+                        className="h-7 px-2 text-[10px] gap-1"
+                        onClick={() => setActiveRoomMetric(prev => prev === m.key ? 'none' : m.key)}
+                      >
+                        <m.icon className="h-3 w-3" />
+                        {m.label}
+                      </Button>
+                    ))}
+                  </div>
+
                   {/* Insights-style compact room grid */}
                   {filteredRooms.length === 0 ? (
                     <div className="text-center text-muted-foreground py-6 text-sm">
@@ -804,10 +821,21 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                         const ntaVal = spaceArea && space.attributes[spaceArea]?.value;
                         const displayArea = ntaVal || (area > 0 ? area.toFixed(1) : null);
 
+                        // Sensor value & color
+                        const sensorVal = activeRoomMetric !== 'none'
+                          ? (extractSensorValue(space.attributes, activeRoomMetric) ?? generateMockSensorData(space.fmGuid, activeRoomMetric))
+                          : null;
+                        const sensorRgb = sensorVal !== null ? getVisualizationColor(sensorVal, activeRoomMetric) : null;
+                        const sensorHex = sensorRgb ? rgbToHex(sensorRgb) : undefined;
+
                         return (
                           <div
                             key={space.fmGuid}
                             className="rounded-lg border text-center p-2.5 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-md active:scale-95"
+                            style={{
+                              backgroundColor: sensorHex ? sensorHex + '22' : undefined,
+                              borderColor: sensorHex ? sensorHex + '55' : undefined,
+                            }}
                             onClick={() => setSelectedFacility({
                               fmGuid: space.fmGuid,
                               name: space.name,
@@ -821,12 +849,21 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                             <div className="text-[10px] text-muted-foreground truncate mb-0.5">
                               {space.commonName || space.name || '(unnamed)'}
                             </div>
-                            <div className="text-base font-bold leading-none text-foreground">
-                              {displayArea ? `${displayArea}` : '—'}
+                            <div
+                              className="text-base font-bold leading-none"
+                              style={{ color: sensorHex ?? 'hsl(var(--foreground))' }}
+                            >
+                              {activeRoomMetric !== 'none' && sensorVal !== null
+                                ? sensorVal.toFixed(1)
+                                : displayArea ? `${displayArea}` : '—'}
                             </div>
                             <div className="text-[9px] text-muted-foreground">
-                              {displayArea ? 'm²' : ''}
-                              {roomNum ? ` · ${roomNum}` : ''}
+                              {activeRoomMetric !== 'none' && sensorVal !== null
+                                ? (activeRoomMetric === 'temperature' ? '°C' : activeRoomMetric === 'co2' ? 'ppm' : '%')
+                                : <>
+                                    {displayArea ? 'm²' : ''}
+                                    {roomNum ? ` · ${roomNum}` : ''}
+                                  </>}
                             </div>
                           </div>
                         );
