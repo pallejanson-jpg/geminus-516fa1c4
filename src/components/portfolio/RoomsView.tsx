@@ -342,6 +342,13 @@ const RoomsView: React.FC<RoomsViewProps> = ({
     });
 
     result.sort((a, b) => {
+      // Sensor value sorting
+      if (sortColumn === '__sensor__') {
+        const aVal = roomSensorValues.get(a.fmGuid) ?? -Infinity;
+        const bVal = roomSensorValues.get(b.fmGuid) ?? -Infinity;
+        return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+      }
+
       let aVal = a[sortColumn];
       let bVal = b[sortColumn];
 
