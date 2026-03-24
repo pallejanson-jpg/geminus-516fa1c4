@@ -366,7 +366,7 @@ const CesiumGlobeView: React.FC = () => {
           backgroundColor: Cesium.Color.fromCssColorString('rgba(0,0,0,0.5)'),
           backgroundPadding: new Cesium.Cartesian2(6, 3),
           scaleByDistance: new Cesium.NearFarScalar(500, 1.2, 2000000, 0.7),
-        },
+        } : undefined,
       });
     });
   }, [mapFacilities, selectedFmGuid, viewerReady]);
