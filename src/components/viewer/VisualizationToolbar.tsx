@@ -579,6 +579,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           show_annotations: pendingViewState.showAnnotations,
           visualization_type: pendingViewState.visualizationType,
           visualization_mock_data: pendingViewState.visualizationMockData,
+          section_planes: pendingViewState.sectionPlanes?.length ? pendingViewState.sectionPlanes : null,
         });
 
       if (insertError) {

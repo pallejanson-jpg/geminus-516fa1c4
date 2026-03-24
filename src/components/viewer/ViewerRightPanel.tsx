@@ -325,6 +325,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
         visible_model_ids: pendingViewState.visibleModelIds, visible_floor_ids: pendingViewState.visibleFloorIds,
         show_spaces: pendingViewState.showSpaces, show_annotations: pendingViewState.showAnnotations,
         visualization_type: pendingViewState.visualizationType, visualization_mock_data: pendingViewState.visualizationMockData,
+        section_planes: pendingViewState.sectionPlanes?.length ? pendingViewState.sectionPlanes : null,
       });
       if (insertError) throw insertError;
       toast({ title: "View saved!", description: `"${name}" has been saved` });
