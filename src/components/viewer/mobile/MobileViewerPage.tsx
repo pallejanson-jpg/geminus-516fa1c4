@@ -328,9 +328,13 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
 
     setActiveTool(toolId);
 
+    const is2D = viewMode === '2d';
     switch (toolId) {
       case 'orbit':
-        if (viewer?.cameraControl) { viewer.cameraControl.navMode = 'orbit'; viewer.cameraControl.followPointer = true; }
+        if (viewer?.cameraControl) {
+          viewer.cameraControl.navMode = is2D ? 'planView' : 'orbit';
+          viewer.cameraControl.followPointer = true;
+        }
         window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, { detail: { tool: null } as ViewerToolChangedDetail }));
         break;
       case 'pan':
@@ -338,19 +342,32 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
         window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, { detail: { tool: null } as ViewerToolChangedDetail }));
         break;
       case 'select':
-        if (viewer?.cameraControl) { viewer.cameraControl.navMode = 'orbit'; viewer.cameraControl.followPointer = true; }
+        if (viewer?.cameraControl) {
+          viewer.cameraControl.navMode = is2D ? 'planView' : 'orbit';
+          viewer.cameraControl.followPointer = true;
+        }
         window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, { detail: { tool: 'select' } as ViewerToolChangedDetail }));
         break;
       case 'measure':
-        if (viewer?.cameraControl) { viewer.cameraControl.navMode = 'orbit'; viewer.cameraControl.followPointer = true; }
+        if (viewer?.cameraControl) {
+          viewer.cameraControl.navMode = is2D ? 'planView' : 'orbit';
+          viewer.cameraControl.followPointer = true;
+        }
         window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, { detail: { tool: 'measure' } as ViewerToolChangedDetail }));
         break;
       case 'section':
-        if (viewer?.cameraControl) { viewer.cameraControl.navMode = 'orbit'; viewer.cameraControl.followPointer = true; }
+        if (viewer?.cameraControl) {
+          viewer.cameraControl.navMode = is2D ? 'planView' : 'orbit';
+          viewer.cameraControl.followPointer = true;
+        }
         window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, { detail: { tool: 'slicer' } as ViewerToolChangedDetail }));
         break;
       case 'firstPerson':
-        if (viewer?.cameraControl) { viewer.cameraControl.navMode = 'firstPerson'; viewer.cameraControl.followPointer = true; viewer.cameraControl.constrainVertical = true; }
+        if (!is2D && viewer?.cameraControl) {
+          viewer.cameraControl.navMode = 'firstPerson';
+          viewer.cameraControl.followPointer = true;
+          viewer.cameraControl.constrainVertical = true;
+        }
         window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, { detail: { tool: null } as ViewerToolChangedDetail }));
         break;
     }
