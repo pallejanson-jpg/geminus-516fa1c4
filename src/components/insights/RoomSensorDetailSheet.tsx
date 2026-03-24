@@ -433,7 +433,7 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
                 <p className="text-xs text-foreground/70">Line: {data.lineName}</p>
               )}
               {data.machinePk > 0 && (
-                <p className="text-xs text-foreground/70">Maskin PK: {data.machinePk}</p>
+                <p className="text-xs text-foreground/70">Machine PK: {data.machinePk}</p>
               )}
             </div>
           )}
