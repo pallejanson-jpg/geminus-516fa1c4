@@ -788,6 +788,14 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         toast.success(`Voice changed to ${voiceName || 'System default'}`);
         break;
       }
+      default:
+        console.warn(`Unknown action type: ${actionType}`);
+        toast.info("This action is not available.");
+        break;
+    }
+    } catch (err) {
+      console.error("Action execution failed:", err);
+      toast.error("Something went wrong executing that action.");
     }
   }, [executeAction]);
 
