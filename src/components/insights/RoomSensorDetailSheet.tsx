@@ -390,7 +390,7 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
 
           {/* 7-day trend */}
           <div className="rounded-xl border border-border bg-card p-4">
-            <p className="text-xs font-medium text-muted-foreground mb-3">Senaste 7 dagarna</p>
+            <p className="text-xs font-medium text-muted-foreground mb-3">Last 7 days</p>
             {isLoading ? (
               <div className="h-44 flex items-center justify-center">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
