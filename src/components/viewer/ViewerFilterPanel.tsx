@@ -304,13 +304,14 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   // Sources: derived from ALL sharedModels so every model appears in the list
   const sources: BimSource[] = useMemo(() => {
-    // Count storeys per source from ALL storeyAssets (not filtered levels)
+    // Count storeys per source — ONLY from A-model levels (filtered list)
+    const aModelLevelSourceGuids = new Set<string>();
+    levels.forEach(l => aModelLevelSourceGuids.add(normalizeGuid(l.sourceGuid)));
+
     const storeyCountBySource = new Map<string, number>();
-    storeyAssets.forEach(storey => {
-      if (storey.sourceGuid) {
-        const norm = normalizeGuid(storey.sourceGuid);
-        storeyCountBySource.set(norm, (storeyCountBySource.get(norm) || 0) + 1);
-      }
+    levels.forEach(level => {
+      const norm = normalizeGuid(level.sourceGuid);
+      storeyCountBySource.set(norm, (storeyCountBySource.get(norm) || 0) + 1);
     });
 
     return sharedModels.map((model, idx) => {
