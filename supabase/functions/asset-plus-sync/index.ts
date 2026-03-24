@@ -768,12 +768,14 @@ serve(async (req) => {
     if (action === 'sync-assets-resumable' || action === 'sync-assets-chunked') {
       const MAX_EXECUTION_TIME = 45000; // 45 seconds (conservative for 60s limit)
       const startTime = Date.now();
+      const force = body?.force === true;
+      const targetBuildingFmGuid = body?.buildingFmGuid || null;
       
       const accessToken = await getAccessToken();
-      console.log('Starting sync-assets-resumable');
+      console.log(`Starting sync-assets-resumable (target: ${targetBuildingFmGuid || 'all'}, force: ${force})`);
 
       // Get all buildings from local DB
-      const { data: buildings, error: buildingsError } = await supabase
+      const { data: allBuildings, error: buildingsError } = await supabase
         .from('assets')
         .select('fm_guid, common_name')
         .eq('category', 'Building')
@@ -781,10 +783,22 @@ serve(async (req) => {
 
       if (buildingsError) throw buildingsError;
 
-      if (!buildings || buildings.length === 0) {
+      if (!allBuildings || allBuildings.length === 0) {
         await updateSyncState(supabase, 'assets', 'failed', 0, 'No buildings found. Run structure sync first.');
         return new Response(
           JSON.stringify({ success: false, error: 'No buildings found. Run structure sync first.', interrupted: false }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Filter to target building if specified
+      const buildings = targetBuildingFmGuid
+        ? allBuildings.filter((b: any) => b.fm_guid === targetBuildingFmGuid)
+        : allBuildings;
+
+      if (buildings.length === 0) {
+        return new Response(
+          JSON.stringify({ success: false, error: `Building ${targetBuildingFmGuid} not found locally.`, interrupted: false }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
