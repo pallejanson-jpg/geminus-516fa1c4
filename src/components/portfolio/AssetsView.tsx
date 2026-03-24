@@ -1009,7 +1009,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                         className="text-center py-12 text-muted-foreground"
                       >
                         <Box className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                        <p>Inga assets hittades</p>
+                        <p>No assets found</p>
                       </TableCell>
                     </TableRow>
                   )}
