@@ -3263,7 +3263,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 size="sm"
                                                 variant="outline"
                                                 className="gap-1"
-                                                disabled={!selectedBuildingFmGuid || isSyncingStructure || isSyncingAssets}
+                                                disabled={!favoriteBuildings[0]?.fm_guid || isSyncingStructure || isSyncingAssets}
                                             >
                                                 <RotateCcw className="h-3 w-3" />
                                                 Rebuild
