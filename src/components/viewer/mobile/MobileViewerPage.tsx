@@ -767,7 +767,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
                 {/* Minimap */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-md bg-muted text-muted-foreground"><Map className="h-4 w-4" /></div>
+                    <div className="p-1.5 rounded-md bg-muted text-muted-foreground"><MapIcon className="h-4 w-4" /></div>
                     <span className="text-sm">Minimap</span>
                   </div>
                   <Switch checked={showMinimap} onCheckedChange={(checked) => { setShowMinimap(checked); window.dispatchEvent(new CustomEvent(MINIMAP_TOGGLE_EVENT, { detail: { visible: checked } })); }} />
