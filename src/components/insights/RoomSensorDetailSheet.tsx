@@ -52,13 +52,13 @@ function calculateAirQualityScore(current: { temperature: number | null; co2: nu
     count++;
   }
 
-  if (count === 0) return { score: 0, label: 'Okänd', color: 'hsl(var(--muted-foreground))' };
+  if (count === 0) return { score: 0, label: 'Unknown', color: 'hsl(var(--muted-foreground))' };
 
   const score = Math.round(total / count);
-  if (score >= 80) return { score, label: 'Utmärkt', color: 'hsl(var(--chart-3))' };
-  if (score >= 60) return { score, label: 'Bra', color: 'hsl(var(--chart-8))' };
-  if (score >= 40) return { score, label: 'Acceptabelt', color: 'hsl(var(--chart-4))' };
-  return { score, label: 'Dålig', color: 'hsl(var(--chart-5))' };
+  if (score >= 80) return { score, label: 'Excellent', color: 'hsl(var(--chart-3))' };
+  if (score >= 60) return { score, label: 'Good', color: 'hsl(var(--chart-8))' };
+  if (score >= 40) return { score, label: 'Acceptable', color: 'hsl(var(--chart-4))' };
+  return { score, label: 'Poor', color: 'hsl(var(--chart-5))' };
 }
 
 // ── Comfort explanation ──
