@@ -1519,10 +1519,13 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     });
     scene.setObjectsVisible(scene.objectIds, true);
     scene.setObjectsPickable(scene.objectIds, true);
-    scene.objectIds.forEach((id: string) => {
-      const entity = scene.objects?.[id];
-      if (entity && entity.opacity < 1) entity.opacity = 1.0;
-    });
+    // Only reset opacity if visualization is NOT active (otherwise we'd wipe sensor colors)
+    if (!(window as any).__spacesForceVisible) {
+      scene.objectIds.forEach((id: string) => {
+        const entity = scene.objects?.[id];
+        if (entity && entity.opacity < 1) entity.opacity = 1.0;
+      });
+    }
 
     if (activeThemeIdRef.current) {
       window.dispatchEvent(new CustomEvent(VIEWER_THEME_REQUESTED_EVENT, {
