@@ -65,24 +65,24 @@ function calculateAirQualityScore(current: { temperature: number | null; co2: nu
 function getComfortExplanation(current: { temperature: number | null; co2: number | null; humidity: number | null; light: number | null }): string[] {
   const tips: string[] = [];
   if (current.temperature !== null) {
-    if (current.temperature < 18) tips.push('🥶 Temperaturen är under komfortgränsen (18°C). Överväg att höja värmen.');
-    else if (current.temperature > 24) tips.push('🌡️ Temperaturen är hög (>24°C). Ventilation eller kylning rekommenderas.');
-    else tips.push('✅ Temperaturen ligger inom komfortzonen (18–24°C).');
+    if (current.temperature < 18) tips.push('🥶 Temperature is below the comfort threshold (18°C). Consider increasing heating.');
+    else if (current.temperature > 24) tips.push('🌡️ Temperature is high (>24°C). Ventilation or cooling is recommended.');
+    else tips.push('✅ Temperature is within the comfort zone (18–24°C).');
   }
   if (current.co2 !== null) {
-    if (current.co2 > 1000) tips.push('⚠️ CO₂-nivån är hög (>1000 ppm). Öka ventilationen för bättre luftkvalitet.');
-    else if (current.co2 > 800) tips.push('🔔 CO₂-nivån börjar bli hög. Överväg att vädra.');
-    else tips.push('✅ CO₂-nivån är god (<800 ppm).');
+    if (current.co2 > 1000) tips.push('⚠️ CO₂ level is high (>1000 ppm). Increase ventilation for better air quality.');
+    else if (current.co2 > 800) tips.push('🔔 CO₂ level is getting high. Consider ventilating.');
+    else tips.push('✅ CO₂ level is good (<800 ppm).');
   }
   if (current.humidity !== null) {
-    if (current.humidity < 30) tips.push('💨 Luftfuktigheten är låg (<30%). Kan orsaka torrhet.');
-    else if (current.humidity > 70) tips.push('💧 Luftfuktigheten är hög (>70%). Risk för mögel.');
-    else tips.push('✅ Luftfuktigheten är inom komfortzonen (30–70%).');
+    if (current.humidity < 30) tips.push('💨 Humidity is low (<30%). May cause dryness.');
+    else if (current.humidity > 70) tips.push('💧 Humidity is high (>70%). Risk of mold.');
+    else tips.push('✅ Humidity is within the comfort zone (30–70%).');
   }
   if (current.light !== null) {
-    if (current.light < 100) tips.push('🌙 Belysningen är svag (<100 lux). Kan påverka produktivitet.');
-    else if (current.light > 1000) tips.push('☀️ Starkt ljus (>1000 lux). Kontrollera bländning.');
-    else tips.push('✅ Belysningen är på en komfortabel nivå.');
+    if (current.light < 100) tips.push('🌙 Lighting is dim (<100 lux). May affect productivity.');
+    else if (current.light > 1000) tips.push('☀️ Strong light (>1000 lux). Check for glare.');
+    else tips.push('✅ Lighting is at a comfortable level.');
   }
   return tips;
 }
