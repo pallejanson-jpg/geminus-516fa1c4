@@ -99,6 +99,8 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
  * Same as applyArchitectColors but doesn't hide spaces — preserves current visibility.
  */
 export function recolorArchitectObjects(viewer: any): number {
+  // Skip if a color filter is actively applied
+  if ((window as any).__colorFilterActive) return 0;
   const scene = viewer?.scene;
   const metaScene = viewer?.metaScene;
   if (!scene) return 0;
