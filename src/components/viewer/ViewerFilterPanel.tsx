@@ -1511,7 +1511,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     } else {
       applyArchitectColors(viewer);
     }
-    hideSpaceAndAreaObjects(viewer);
+    if (!(window as any).__spacesForceVisible) {
+      hideSpaceAndAreaObjects(viewer);
+    }
     prevVisibleRef.current = null;
   }, [isVisible, getXeokitViewer]);
 
