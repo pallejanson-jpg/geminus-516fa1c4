@@ -810,9 +810,23 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
                     <Badge variant="secondary" className="text-[10px] sm:text-xs">{selectedMarker.numberOfLevels} floors</Badge>
                     <Badge variant="secondary" className="text-[10px] sm:text-xs">{selectedMarker.area?.toLocaleString()} m²</Badge>
                   </div>
-                  <Button size="sm" className="w-full text-xs sm:text-sm" onClick={() => handleOpenFacility(selectedMarker)}>
-                    View details
-                  </Button>
+                  <div className="flex gap-1.5">
+                    <Button size="sm" className="flex-1 text-xs sm:text-sm" onClick={() => handleOpenFacility(selectedMarker)}>
+                      View details
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs sm:text-sm gap-1"
+                      onClick={() => {
+                        sessionStorage.setItem('cesium-street-view-target', JSON.stringify({ lat: selectedMarker.lat, lng: selectedMarker.lng }));
+                        navigate(`/globe?lat=${selectedMarker.lat}&lng=${selectedMarker.lng}&streetview=1`);
+                      }}
+                    >
+                      <Eye size={14} />
+                      Street View
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
