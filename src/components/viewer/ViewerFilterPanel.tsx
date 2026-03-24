@@ -850,9 +850,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     if (prevXrayed.length > 0) scene.setObjectsXRayed(prevXrayed, false);
     
     // Only reset colorize when we actually have filter-applied colors (not theme colors)
-    // When a theme is active, skip the colorize reset to avoid "native colors flash"
+    // When a theme is active OR visualization is forcing spaces, skip the colorize reset
     const themeActive = !!activeThemeIdRef.current;
-    if (!themeActive && (hasAnyFilter || autoColorEnabled || autoColorSpaces || autoColorCategories)) {
+    const spacesForced = !!(window as any).__spacesForceVisible;
+    if (!themeActive && !spacesForced && (hasAnyFilter || autoColorEnabled || autoColorSpaces || autoColorCategories)) {
       let prevColorizedIds: string[] = [];
       try { prevColorizedIds = scene.colorizedObjectIds || []; } catch (_e) { /* scene teardown */ }
       if (prevColorizedIds.length > 0) {
@@ -865,7 +866,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }
 
     // Hide all IfcSpace entities by default — UNLESS visualization is forcing them visible
-    const spacesForced = !!(window as any).__spacesForceVisible;
     const spaceEntityIds = typeIndexRef.current.get('IfcSpace') || [];
     if (!spacesForced) {
       spaceEntityIds.forEach(id => {
@@ -1518,10 +1518,13 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     });
     scene.setObjectsVisible(scene.objectIds, true);
     scene.setObjectsPickable(scene.objectIds, true);
-    scene.objectIds.forEach((id: string) => {
-      const entity = scene.objects?.[id];
-      if (entity && entity.opacity < 1) entity.opacity = 1.0;
-    });
+    // Only reset opacity if visualization is NOT active (otherwise we'd wipe sensor colors)
+    if (!(window as any).__spacesForceVisible) {
+      scene.objectIds.forEach((id: string) => {
+        const entity = scene.objects?.[id];
+        if (entity && entity.opacity < 1) entity.opacity = 1.0;
+      });
+    }
 
     if (activeThemeIdRef.current) {
       window.dispatchEvent(new CustomEvent(VIEWER_THEME_REQUESTED_EVENT, {
