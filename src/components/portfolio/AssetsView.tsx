@@ -340,7 +340,19 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     sampleAssets.forEach(asset => {
       const attrs = asset.attributes || {};
       
-      const SKIP_ATTR_KEYS = ['tenantId', 'checkedOut', 'createdInModel', 'objectTypeId', 'objectType', 'parentGuid', 'buildingGuid', 'levelGuid', 'roomGuid'];
+      const SKIP_ATTR_KEYS = [
+        'tenantId', 'checkedOut', 'createdInModel', 'objectTypeId', 'objectType', 'parentGuid', 
+        'buildingGuid', 'levelGuid', 'roomGuid', '_id', 'fmGuid', 'category',
+        'buildingFmGuid', 'levelFmGuid', 'inRoomFmGuid', 'complexFmGuid', 'parentFmGuid',
+        'fromRoomFmGuid', 'toRoomFmGuid', 'commonName', 'designation', 'objectTypeValue',
+        'dateCreated', 'dateModified', 'dateExpired', 'grossArea',
+        'buildingCommonName', 'complexCommonName', 'buildingDesignation', 'complexDesignation',
+        'levelCommonName', 'levelDesignation', 'levelName', 'levelNumber',
+        'inRoomCommonName', 'inRoomDesignation', 'parentCommonName', 'parentDesignation',
+        'fromRoomCommonName', 'fromRoomDesignation', 'toRoomCommonName', 'toRoomDesignation',
+        'securitySchemaId', 'securitySchemaName', 'parentBimObjectId',
+        'syncProperties', 'ivionSource', 'ivionImageId',
+      ];
       Object.entries(attrs).forEach(([key, value]: [string, any]) => {
         if (discoveredColumns.has(key)) return;
         if (key.startsWith('_') || SKIP_ATTR_KEYS.includes(key)) return;

@@ -116,7 +116,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   // On mobile, only open 'local' by default to save space
   const [openSections, setOpenSections] = useState<Set<string>>(
-    new Set(isMobile ? ['geminus'] : ['system', 'geminus', 'area'])
+    new Set(isMobile ? ['geminus'] : ['system', 'geminus', 'area', 'user-defined'])
   );
   
   // Resize state (desktop only)
@@ -646,32 +646,58 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     if (!isMultiMode && firstAsset.attributes) {
       const attrs = firstAsset.attributes as Record<string, any>;
       
+      // Keys that are already mapped to system/geminus props or are internal
+      const SKIP_ATTR_KEYS = [
+        'fmGuid', 'category', 'objectType', 'tenantId', '_id', 'objectTypeValue',
+        'checkedOut', 'createdInModel', 'parentGuid', 'buildingGuid', 'levelGuid', 'roomGuid',
+        'buildingFmGuid', 'levelFmGuid', 'inRoomFmGuid', 'complexFmGuid', 'parentFmGuid',
+        'fromRoomFmGuid', 'toRoomFmGuid', 'commonName', 'designation',
+        'dateCreated', 'dateModified', 'dateExpired', 'grossArea',
+        'buildingCommonName', 'complexCommonName', 'buildingDesignation', 'complexDesignation',
+        'levelCommonName', 'levelDesignation', 'levelName', 'levelNumber',
+        'inRoomCommonName', 'inRoomDesignation', 'parentCommonName', 'parentDesignation',
+        'fromRoomCommonName', 'fromRoomDesignation', 'toRoomCommonName', 'toRoomDesignation',
+        'securitySchemaId', 'securitySchemaName', 'parentBimObjectId',
+        'syncProperties', 'ivionSource', 'ivionImageId',
+        'bipTypeId', 'bipBsabE', 'bipAff', 'bipCode',
+      ];
+      
       Object.entries(attrs).forEach(([key, value]) => {
-        // Skip already-mapped system fields
-        if (['fmGuid', 'category', 'objectType', 'tenantId', '_id'].includes(key)) return;
+        if (SKIP_ATTR_KEYS.includes(key)) return;
         
         let displayValue = value;
         let displayLabel = key;
+        let isUserDefined = false;
         
-        // Handle structured Asset+ values
-        if (value && typeof value === 'object' && 'value' in value) {
+        // Handle structured Asset+ values with {name, value, dataType}
+        if (value && typeof value === 'object' && 'value' in value && 'name' in value) {
           displayValue = value.value;
           displayLabel = value.name || key;
+          isUserDefined = true;
         }
         
-        // Determine section: GUID values → system, area fields → area, rest → geminus
+        // Skip null/undefined display values and internal-looking keys
+        if (displayValue === null || displayValue === undefined) return;
+        
+        // Determine section: user-defined properties (with {name,value}) → 'user-defined', 
+        // GUID values → system, area fields → area, rest → geminus
         const keyLower = key.toLowerCase();
         const isArea = AREA_FIELDS.some(f => keyLower.includes(f));
         const valIsGuid = isGuidValue(displayValue);
+        
+        let section: PropertyItem['section'] = 'geminus';
+        if (isUserDefined) section = 'user-defined';
+        else if (valIsGuid) section = 'system';
+        else if (isArea) section = 'area';
         
         props.push({
           key: `attr_${key}`,
           label: displayLabel,
           value: displayValue,
-          editable: false,
+          editable: isUserDefined, // User-defined properties are editable
           source: 'asset-plus',
           type: typeof displayValue === 'number' ? 'number' : 'text',
-          section: valIsGuid ? 'system' : (isArea ? 'area' : 'geminus'),
+          section,
         });
       });
     }
@@ -762,6 +788,33 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       }
       if (formData.coordinate_z !== undefined && formData.coordinate_z !== '') {
         updatePayload.coordinate_z = parseFloat(formData.coordinate_z) || 0;
+      }
+
+      // Collect user-defined attribute edits (keys starting with attr_)
+      const attrUpdates: Record<string, any> = {};
+      Object.entries(formData).forEach(([key, value]) => {
+        if (!key.startsWith('attr_')) return;
+        const attrKey = key.replace('attr_', '');
+        const originalAttrs = assets[0]?.attributes || {};
+        const originalVal = originalAttrs[attrKey];
+        
+        // Handle structured {name, value, dataType} properties
+        if (originalVal && typeof originalVal === 'object' && 'name' in originalVal) {
+          attrUpdates[attrKey] = { ...originalVal, value };
+          assetPlusProperties.push({
+            name: originalVal.name || attrKey,
+            value: value ?? '',
+            dataType: originalVal.dataType ?? 0,
+          });
+        } else {
+          attrUpdates[attrKey] = value;
+        }
+      });
+
+      // If user-defined attributes changed, merge into the existing JSONB
+      if (Object.keys(attrUpdates).length > 0) {
+        const existingAttrs = assets[0]?.attributes || {};
+        updatePayload.attributes = { ...existingAttrs, ...attrUpdates };
       }
 
       // Check if any assets need Asset+ sync (is_local = false)
