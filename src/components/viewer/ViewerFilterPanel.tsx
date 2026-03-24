@@ -836,8 +836,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     // When a theme is active, skip the colorize reset to avoid "native colors flash"
     const themeActive = !!activeThemeIdRef.current;
     if (!themeActive && (hasAnyFilter || autoColorEnabled || autoColorSpaces || autoColorCategories)) {
-      const prevColorizedIds = scene.colorizedObjectIds;
-      if (prevColorizedIds?.length > 0) {
+      let prevColorizedIds: string[] = [];
+      try { prevColorizedIds = scene.colorizedObjectIds || []; } catch (_e) { /* scene teardown */ }
+      if (prevColorizedIds.length > 0) {
         scene.setObjectsColorized(prevColorizedIds, false);
         prevColorizedIds.forEach((id: string) => {
           const entity = scene.objects?.[id];
