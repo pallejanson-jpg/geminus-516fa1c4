@@ -280,7 +280,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     if (visibleFloorFmGuids && visibleFloorFmGuids.length > 0) {
       const lowerCaseVisibleGuids = visibleFloorFmGuids.map(g => g.toLowerCase());
       roomData = roomData.filter(room => {
-        if (!room.levelFmGuid) return false;
+        if (!room.levelFmGuid) return true; // Include rooms without floor association
         return lowerCaseVisibleGuids.includes(room.levelFmGuid.toLowerCase());
       });
     }
