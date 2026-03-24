@@ -913,7 +913,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           {selectedRows.size === 1 && onOpen3D && (
             <Button size="sm" variant="outline" onClick={handleOpen3DSelected} className="gap-1">
               <Cuboid size={14} />
-              3D
+              Viewer
             </Button>
           )}
           
