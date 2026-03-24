@@ -21,10 +21,13 @@ export interface ViewerTheme {
   is_system: boolean;
   color_mappings: Record<string, ThemeColorMapping>;
   edge_settings: Record<string, any>;
+  background_color?: string | null;
   space_opacity: number;
   created_at: string;
   updated_at: string;
 }
+
+export const DEFAULT_VIEWER_THEME_BACKGROUND = 'hsl(210 10% 91%)';
 
 // Pre-computed RGB cache to avoid repeated hex parsing
 const rgbCache = new Map<string, number[]>();
@@ -127,10 +130,10 @@ export function useViewerTheme() {
       }
     }
 
-    // Apply anthracite background for all themes
+    // Apply configured background for theme
     const bgContainer = document.getElementById('AssetPlusViewer') || document.querySelector('.native-viewer-canvas-parent') as HTMLElement;
     if (bgContainer) {
-      bgContainer.style.background = 'linear-gradient(180deg, #2D2D2D 0%, #3A3A3A 100%)';
+      bgContainer.style.background = theme.background_color || DEFAULT_VIEWER_THEME_BACKGROUND;
     }
 
     // "Model Native Colour" — clear all colorization in one batch call
@@ -280,6 +283,7 @@ export function useViewerTheme() {
         is_system: false,
         color_mappings: theme.color_mappings as unknown as Record<string, unknown>,
         edge_settings: theme.edge_settings as unknown as Record<string, unknown>,
+          background_color: theme.background_color,
         space_opacity: theme.space_opacity,
       } as any)
       .select()
@@ -300,6 +304,7 @@ export function useViewerTheme() {
         name: updates.name,
         color_mappings: updates.color_mappings as unknown as Record<string, unknown>,
         edge_settings: updates.edge_settings as unknown as Record<string, unknown>,
+        background_color: updates.background_color,
         space_opacity: updates.space_opacity,
       } as any)
       .eq('id', id);

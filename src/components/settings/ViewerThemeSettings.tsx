@@ -28,7 +28,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { useViewerTheme, ViewerTheme, ThemeColorMapping } from '@/hooks/useViewerTheme';
+import { useViewerTheme, ViewerTheme, ThemeColorMapping, DEFAULT_VIEWER_THEME_BACKGROUND } from '@/hooks/useViewerTheme';
 
 // IFC categories for color mapping
 const IFC_CATEGORIES = [
@@ -53,6 +53,7 @@ interface EditingTheme {
   name: string;
   color_mappings: Record<string, ThemeColorMapping>;
   edge_settings: { enabled: boolean };
+  background_color: string;
   space_opacity: number;
 }
 
@@ -81,6 +82,7 @@ const ViewerThemeSettings: React.FC = () => {
       name: 'Nytt tema',
       color_mappings: defaultMappings,
       edge_settings: { enabled: true },
+      background_color: DEFAULT_VIEWER_THEME_BACKGROUND,
       space_opacity: 0.25,
     });
     setIsCreatingNew(true);
@@ -104,6 +106,7 @@ const ViewerThemeSettings: React.FC = () => {
       name: theme.name,
       color_mappings: mappings as Record<string, ThemeColorMapping>,
       edge_settings: (theme.edge_settings as { enabled: boolean }) || { enabled: true },
+      background_color: theme.background_color || DEFAULT_VIEWER_THEME_BACKGROUND,
       space_opacity: theme.space_opacity ?? 0.25,
     });
     setEditingThemeId(theme.id);
@@ -128,6 +131,7 @@ const ViewerThemeSettings: React.FC = () => {
           name: editingTheme.name,
           color_mappings: editingTheme.color_mappings,
           edge_settings: editingTheme.edge_settings,
+          background_color: editingTheme.background_color,
           space_opacity: editingTheme.space_opacity,
         });
         toast({ title: 'Tema uppdaterat', description: `"${editingTheme.name}" har sparats.` });
@@ -137,6 +141,7 @@ const ViewerThemeSettings: React.FC = () => {
           is_system: false,
           color_mappings: editingTheme.color_mappings,
           edge_settings: editingTheme.edge_settings,
+          background_color: editingTheme.background_color,
           space_opacity: editingTheme.space_opacity,
         });
         toast({ title: 'Tema skapat', description: `"${editingTheme.name}" har skapats.` });
@@ -244,6 +249,22 @@ const ViewerThemeSettings: React.FC = () => {
               placeholder="Theme name"
               className="h-8 text-sm"
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Background color</Label>
+            <div className="flex items-center gap-2">
+              <div
+                className="h-8 w-8 rounded border border-border"
+                style={{ background: editingTheme.background_color }}
+              />
+              <Input
+                value={editingTheme.background_color}
+                onChange={(e) => setEditingTheme({ ...editingTheme, background_color: e.target.value })}
+                placeholder={DEFAULT_VIEWER_THEME_BACKGROUND}
+                className="h-8 text-sm"
+              />
+            </div>
           </div>
 
           <Separator />
@@ -375,6 +396,22 @@ const ViewerThemeSettings: React.FC = () => {
                     />
                   </div>
 
+                   <div className="space-y-1.5">
+                     <Label className="text-xs">Background color</Label>
+                     <div className="flex items-center gap-2">
+                       <div
+                         className="h-8 w-8 rounded border border-border"
+                         style={{ background: editingTheme.background_color }}
+                       />
+                       <Input
+                         value={editingTheme.background_color}
+                         onChange={(e) => setEditingTheme({ ...editingTheme, background_color: e.target.value })}
+                         placeholder={DEFAULT_VIEWER_THEME_BACKGROUND}
+                         className="h-8 text-sm"
+                       />
+                     </div>
+                   </div>
+
                   <Separator />
 
                   {/* Color mappings */}
@@ -465,6 +502,7 @@ const ViewerThemeSettings: React.FC = () => {
                 <div className="space-y-3">
                   <p className="text-xs text-muted-foreground">
                     {Object.keys(theme.color_mappings || {}).length} color mappings • 
+                    Background: {theme.background_color || DEFAULT_VIEWER_THEME_BACKGROUND} • 
                     Space opacity: {Math.round((theme.space_opacity ?? 0.25) * 100)}%
                   </p>
                   
