@@ -867,8 +867,10 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   // Calculate left offset for floor switcher and filter button based on sidebar
   const sidebarOffset = !isMobile && isSidebarExpanded ? 'left-[calc(3.5rem+12px)]' : 'left-3';
 
-  return (
-    <div className="relative w-full h-full overflow-hidden native-viewer-canvas-parent" style={{ background: 'linear-gradient(180deg, #2D2D2D 0%, #3A3A3A 100%)' }}>
+    return (
+    <div className="flex flex-row w-full h-full overflow-hidden">
+      {/* Main viewer area — shrinks when properties panel is open */}
+      <div className="flex-1 relative overflow-hidden native-viewer-canvas-parent" style={{ background: 'linear-gradient(180deg, #2D2D2D 0%, #3A3A3A 100%)' }}>
       {/* Desktop back button — hidden when parent (UnifiedViewer) has its own */}
       {!isMobile && !hideBackButton && (
         <Button
@@ -1051,18 +1053,6 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         />
       )}
 
-      {/* Properties dialog */}
-      {propertiesEntity && (
-        <UniversalPropertiesDialog
-          isOpen={!!propertiesEntity}
-          onClose={() => { setPropertiesEntity(null); setPropertiesPinned(false); }}
-          fmGuids={propertiesEntity.fmGuid || propertiesEntity.entityId}
-          entityId={propertiesEntity.entityId}
-          isPinned={propertiesPinned}
-          onPinToggle={() => setPropertiesPinned(p => !p)}
-        />
-      )}
-
       {/* Pick-position mode indicator */}
       {isPickingPosition && (
         <div className="absolute top-3 left-3 z-50 pointer-events-none">
@@ -1088,6 +1078,20 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         isPickingPosition={isPickingPosition}
         onPendingPositionConsumed={() => setPendingAssetPosition(null)}
       />
+      </div>
+
+      {/* Properties panel — renders as flex sibling to shrink canvas */}
+      {propertiesEntity && (
+        <UniversalPropertiesDialog
+          isOpen={!!propertiesEntity}
+          onClose={() => { setPropertiesEntity(null); setPropertiesPinned(false); }}
+          fmGuids={propertiesEntity.fmGuid || propertiesEntity.entityId}
+          entityId={propertiesEntity.entityId}
+          isPinned={propertiesPinned}
+          onPinToggle={() => setPropertiesPinned(p => !p)}
+          inline
+        />
+      )}
     </div>
   );
 };

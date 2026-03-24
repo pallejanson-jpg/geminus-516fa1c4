@@ -169,7 +169,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
               className={btnClass}
             >
               <ClipboardList size={iconSize} className="text-accent" />
-              <span className={labelClass}>Inventering</span>
+              <span className={labelClass}>Inventory</span>
             </Button>
           )}
 
@@ -183,7 +183,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
           {onFaultReport && (
             <Button variant="ghost" onClick={() => onFaultReport(facility)} className={btnClass}>
               <AlertTriangle size={iconSize} className="text-destructive" />
-              <span className={labelClass}>Felanmälan</span>
+              <span className={labelClass}>Fault Report</span>
             </Button>
           )}
         </div>
