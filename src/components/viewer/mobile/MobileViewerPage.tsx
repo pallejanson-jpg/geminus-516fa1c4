@@ -177,6 +177,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
   const [clipHeight, setClipHeight] = useState(1.2);
   const [showRoomLabels, setShowRoomLabels] = useState(false);
   const [activeRoomLabelConfigId, setActiveRoomLabelConfigId] = useState<string | null>(null);
+  const [navSpeed, setNavSpeed] = useState(() => { try { return parseInt(localStorage.getItem('viewer-nav-speed') || '100'); } catch { return 100; } });
 
   // Actions states
   const [showCreateViewDialog, setShowCreateViewDialog] = useState(false);
