@@ -1749,11 +1749,12 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     {/* Backdrop removed for stability — panel closes only via X button */}
     <div
       className={cn(
-        "fixed left-0 top-[44px] bottom-0 z-[65] w-[85%] max-w-[320px] sm:w-[320px]",
+        "fixed left-0 top-[44px] z-[65] w-[85%] max-w-[320px] sm:w-[320px]",
         "bg-card/95 backdrop-blur-xl border-r shadow-2xl text-foreground",
         "flex flex-col",
         "animate-in slide-in-from-left duration-200"
       )}
+      style={{ bottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b">
