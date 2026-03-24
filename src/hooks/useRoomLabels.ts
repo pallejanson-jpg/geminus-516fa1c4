@@ -398,6 +398,16 @@ export function useRoomLabels(
     let createdCount = 0;
     let filteredCount = 0;
 
+    // Build parent->children map for geometry centroid calculation
+    const labelChildrenMap = new Map<string, string[]>();
+    Object.values(metaObjects).forEach((mo: any) => {
+      const parentId = mo.parent?.id;
+      if (parentId) {
+        if (!labelChildrenMap.has(parentId)) labelChildrenMap.set(parentId, []);
+        labelChildrenMap.get(parentId)!.push(mo.id);
+      }
+    });
+
     Object.values(metaObjects).forEach((metaObj: any) => {
       if (metaObj.type?.toLowerCase() !== 'ifcspace') return;
 
@@ -430,17 +440,37 @@ export function useRoomLabels(
       const entity = scene.objects?.[metaObj.id];
       if (!entity?.aabb) return;
 
-      // Calculate center position - height from config
+      // Calculate center position - use geometry centroid when available for accuracy
+      // AABB center is unreliable for L/T-shaped rooms (corridor center can land outside room)
       const aabb = entity.aabb;
       const labelHeight = viewModeRef.current === '2d' 
         ? aabb[1] + 0.1   // Floor level for 2D plan view
         : aabb[1] + config.heightOffset;
       
-      const center = [
-        (aabb[0] + aabb[3]) / 2,
-        labelHeight,
-        (aabb[2] + aabb[5]) / 2,
-      ];
+      // Try to compute a better centroid from child mesh positions
+      let centerX = (aabb[0] + aabb[3]) / 2;
+      let centerZ = (aabb[2] + aabb[5]) / 2;
+      
+      // Sample child entity AABBs to find a weighted centroid closer to actual geometry
+      const childIds = labelChildrenMap.get(metaObj.id);
+      if (childIds && childIds.length > 0) {
+        let sumX = 0, sumZ = 0, count = 0;
+        childIds.forEach(childId => {
+          const childEntity = scene.objects?.[childId];
+          if (childEntity?.aabb) {
+            const ca = childEntity.aabb;
+            sumX += (ca[0] + ca[3]) / 2;
+            sumZ += (ca[2] + ca[5]) / 2;
+            count++;
+          }
+        });
+        if (count > 0) {
+          centerX = sumX / count;
+          centerZ = sumZ / count;
+        }
+      }
+      
+      const center = [centerX, labelHeight, centerZ];
 
       // Get room info from metadata
       const fmGuid = metaObj.originalSystemId || metaObj.id;
