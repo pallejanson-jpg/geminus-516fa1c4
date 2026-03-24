@@ -9,14 +9,9 @@ interface VirtualTreeProps {
   expanded: Set<string>;
   selectedFmGuids?: Set<string>;
   scrollToFmGuid?: string | null;
+  selectedNodeFmGuid?: string | null;
   onToggle: (fmGuid: string) => void;
-  onAddChild?: (node: NavigatorNode) => void;
-  onView?: (node: NavigatorNode) => void;
-  onOpen3D?: (node: NavigatorNode) => void;
-  onOpen2D?: (node: NavigatorNode) => void;
-  onInventory?: (node: NavigatorNode) => void;
-  onSyncToAssetPlus?: (node: NavigatorNode) => void;
-  onCreateWorkOrder?: (node: NavigatorNode) => void;
+  onSelect?: (node: NavigatorNode) => void;
 }
 
 const ROW_HEIGHT = 36;
@@ -31,14 +26,9 @@ export function VirtualTree({
   expanded,
   selectedFmGuids,
   scrollToFmGuid,
+  selectedNodeFmGuid,
   onToggle,
-  onAddChild,
-  onView,
-  onOpen3D,
-  onOpen2D,
-  onInventory,
-  onSyncToAssetPlus,
-  onCreateWorkOrder,
+  onSelect,
 }: VirtualTreeProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -99,6 +89,7 @@ export function VirtualTree({
         {virtualItems.map((virtualItem) => {
           const flatNode = flatNodes[virtualItem.index];
           const isSelected = selectedFmGuids?.has(flatNode.fmGuid) ?? false;
+          const isNodeSelected = selectedNodeFmGuid === flatNode.fmGuid;
 
           return (
             <VirtualTreeRow
@@ -112,15 +103,9 @@ export function VirtualTree({
                 height: `${virtualItem.size}px`,
                 transform: `translateY(${virtualItem.start}px)`,
               }}
-              isSelected={isSelected}
+              isSelected={isSelected || isNodeSelected}
               onToggle={onToggle}
-              onAddChild={onAddChild}
-              onView={onView}
-              onOpen3D={onOpen3D}
-              onOpen2D={onOpen2D}
-              onInventory={onInventory}
-              onSyncToAssetPlus={onSyncToAssetPlus}
-              onCreateWorkOrder={onCreateWorkOrder}
+              onSelect={onSelect}
             />
           );
         })}
