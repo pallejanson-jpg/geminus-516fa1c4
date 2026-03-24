@@ -1239,9 +1239,11 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               <DrawerHeader className="py-2 px-3">
                 <DrawerTitle className="text-sm">Display</DrawerTitle>
               </DrawerHeader>
-              <div className="px-3 pb-3 overflow-y-auto max-h-[85dvh]">
-                {toolbarContent}
-              </div>
+              <ScrollArea className="max-h-[85dvh]">
+                <div className="px-3 pb-3">
+                  {toolbarContent}
+                </div>
+              </ScrollArea>
             </DrawerContent>
           </Drawer>
         )}
