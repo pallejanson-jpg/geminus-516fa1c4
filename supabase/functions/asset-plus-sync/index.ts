@@ -333,9 +333,9 @@ async function fetchWithAdaptiveRetry(
   
   for (const take of takeSizes) {
     try {
-      // Use minimal select and explicit sort to reduce memory pressure
+      // Fetch full objects (including user-defined properties) with explicit sort
       const result = await fetchAssetPlusObjects(accessToken, filter, skip, take, {
-        useMinimalSelect: true,
+        useMinimalSelect: false,
         useExplicitSort: true,
         cursorFmGuid: cursorFmGuid || undefined,
       });
