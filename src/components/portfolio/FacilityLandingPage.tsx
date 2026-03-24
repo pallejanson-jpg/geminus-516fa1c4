@@ -845,7 +845,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
               <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
                 <CardTitle className="text-sm sm:text-base flex items-center gap-2">
                   <Layers size={14} className="sm:w-4 sm:h-4 text-primary shrink-0" />
-                  Tillgångar ({childAssets.length})
+                  Assets ({childAssets.length})
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-3 sm:px-6 overflow-hidden">
