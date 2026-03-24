@@ -1378,6 +1378,14 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }));
 
     console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', scene.objectIds.length, 'delta: show', toShow.length, 'hide', toHide.length);
+
+    // Re-apply active theme after filter to prevent "native colors flash"
+    if (activeThemeIdRef.current) {
+      window.dispatchEvent(new CustomEvent(VIEWER_THEME_REQUESTED_EVENT, {
+        detail: { themeId: activeThemeIdRef.current }
+      }));
+    }
+
     isApplyingRef.current = false;
     }); // end requestAnimationFrame
     }, 500); // debounce 500ms
