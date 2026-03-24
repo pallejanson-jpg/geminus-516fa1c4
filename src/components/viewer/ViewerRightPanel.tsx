@@ -271,6 +271,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
       const camera = xeokitViewer.camera;
       const building = allData.find((b: any) => b.fmGuid === buildingFmGuid && b.category === 'Building');
       const resolvedBuildingName = buildingName || building?.commonName || building?.name || 'Unknown building';
+      const xeokitViewer2 = xeokitViewer;
       const viewState = {
         buildingFmGuid,
         buildingName: resolvedBuildingName,
@@ -287,6 +288,10 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
         showAnnotations,
         visualizationType: 'none',
         visualizationMockData: false,
+        sectionPlanes: Object.values(xeokitViewer2.scene?.sectionPlanes || {}).map((sp: any) => ({
+          pos: [...(sp.pos || [0, 0, 0])],
+          dir: [...(sp.dir || [0, 0, -1])],
+        })),
       };
       setPendingViewState(viewState);
       setShowCreateViewDialog(true);
@@ -320,6 +325,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
         visible_model_ids: pendingViewState.visibleModelIds, visible_floor_ids: pendingViewState.visibleFloorIds,
         show_spaces: pendingViewState.showSpaces, show_annotations: pendingViewState.showAnnotations,
         visualization_type: pendingViewState.visualizationType, visualization_mock_data: pendingViewState.visualizationMockData,
+        section_planes: pendingViewState.sectionPlanes?.length ? pendingViewState.sectionPlanes : null,
       });
       if (insertError) throw insertError;
       toast({ title: "View saved!", description: `"${name}" has been saved` });

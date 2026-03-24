@@ -233,8 +233,24 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       if (!storey.sourceName || isGuid(storey.sourceName)) return false;
       return isArchitecturalModel(storey.sourceName);
     });
-    // Fallback: if no A-model storeys identified, show all
-    const filtered = aModelStoreys.length > 0 ? aModelStoreys : storeyAssets;
+    // Fallback: if no A-model storeys identified, try matching against loaded scene model names
+    let filtered = aModelStoreys;
+    if (filtered.length === 0) {
+      // Try to resolve sourceName from scene model names or sharedModels
+      const sceneModelNames = sharedModels.map(m => m.name || m.shortName || '').filter(Boolean);
+      const aModelSceneNames = sceneModelNames.filter(n => isArchitecturalModel(n));
+      if (aModelSceneNames.length > 0) {
+        // Match storeys whose sourceGuid corresponds to an A-model in sharedModels
+        const aModelGuids = new Set(
+          sharedModels
+            .filter(m => isArchitecturalModel(m.name || m.shortName || ''))
+            .map(m => normalizeGuid(m.id))
+        );
+        filtered = storeyAssets.filter(s => aModelGuids.has(normalizeGuid(s.sourceGuid)));
+      }
+      // If still empty, show all as last resort
+      if (filtered.length === 0) filtered = storeyAssets;
+    }
 
     return filtered
       .map((storey) => {
@@ -1318,36 +1334,12 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           entity.pickable = true;
           entity.xrayed = false;
           entity.opacity = 0.7;
-          entity.colorize = null;
+          // Don't reset colorize — theme will re-apply after filter completes
         }
       });
 
-      // Auto fly INSIDE the selected room (first-person perspective)
-      const roomIds = [...spaceOnlyEntityIds];
-      if (roomIds.length > 0) {
-        try {
-          const aabb = scene.getAABB(roomIds);
-          // Position camera at center of room, looking along longest horizontal axis
-          const cx = (aabb[0] + aabb[3]) / 2;
-          const cy = aabb[1] + ((aabb[4] - aabb[1]) * 0.55); // slightly above center (eye height)
-          const cz = (aabb[2] + aabb[5]) / 2;
-          const dx = aabb[3] - aabb[0];
-          const dz = aabb[5] - aabb[2];
-          // Look toward the longer wall direction
-          const lookX = dx > dz ? cx + dx * 0.4 : cx;
-          const lookZ = dz >= dx ? cz + dz * 0.4 : cz;
-          if (viewer.cameraFlight) {
-            viewer.cameraFlight.flyTo({
-              eye: [cx, cy, cz],
-              look: [lookX, cy, lookZ],
-              up: [0, 1, 0],
-              duration: 1.0,
-            });
-          }
-        } catch (e) {
-          console.warn('[FilterPanel] fly-inside room failed:', e);
-        }
-      }
+      // NOTE: Auto fly removed — fly behavior is ONLY triggered by explicit user
+      // interactions (handleSpaceToggle for checkbox, handleSpaceClick for name click)
     }
 
     // Ensure area spaces stay hidden
@@ -1386,9 +1378,17 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }));
 
     console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', scene.objectIds.length, 'delta: show', toShow.length, 'hide', toHide.length);
+
+    // Re-apply active theme after filter to prevent "native colors flash"
+    if (activeThemeIdRef.current) {
+      window.dispatchEvent(new CustomEvent(VIEWER_THEME_REQUESTED_EVENT, {
+        detail: { themeId: activeThemeIdRef.current }
+      }));
+    }
+
     isApplyingRef.current = false;
     }); // end requestAnimationFrame
-    }, 300); // debounce 300ms
+    }, 500); // debounce 500ms
   }, [getXeokitViewer, checkedSources, checkedLevels, checkedSpaces, checkedCategories,
     levels, spaces, sources, sharedModels, xrayMode]);
 
@@ -1553,13 +1553,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     if (!viewer?.scene) return;
     const ids = entityMapRef.current.get(fmGuid) || [];
     if (ids.length > 0) {
-      // Deselect previous
-      viewer.scene.setObjectsSelected(viewer.scene.selectedObjectIds, false);
-      // Select and make visible
+      // Make visible (no selection — no green highlight)
       ids.forEach((id: string) => {
         const entity = viewer.scene.objects?.[id];
         if (entity) {
-          entity.selected = true;
           entity.visible = true;
           entity.pickable = true;
         }
@@ -1570,7 +1567,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         const aabb = firstEntity.aabb;
         const cx = (aabb[0] + aabb[3]) / 2, cy = (aabb[1] + aabb[4]) / 2, cz = (aabb[2] + aabb[5]) / 2;
         const height = aabb[4] - aabb[1];
-        // Position eye at center of space, looking forward (+X)
         viewer.cameraFlight?.flyTo({
           eye: [cx, cy + height * 0.3, cz],
           look: [cx + 2, cy + height * 0.3, cz],

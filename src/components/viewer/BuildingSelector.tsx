@@ -35,6 +35,7 @@ interface SavedView {
   show_annotations: boolean | null;
   visualization_type: string | null;
   visualization_mock_data: boolean | null;
+  section_planes: Array<{ pos: number[]; dir: number[] }> | null;
 }
 
 /**
@@ -89,7 +90,7 @@ const BuildingSelector: React.FC = () => {
           .order('created_at', { ascending: false });
 
         if (error) throw error;
-        setSavedViews(data || []);
+        setSavedViews((data || []) as unknown as SavedView[]);
       } catch (err) {
         console.error('Failed to fetch saved views:', err);
       } finally {
@@ -147,6 +148,7 @@ const BuildingSelector: React.FC = () => {
         showAnnotations: view.show_annotations || false,
         visualizationType: view.visualization_type || 'none',
         visualizationMockData: view.visualization_mock_data || false,
+        sectionPlanes: view.section_planes || undefined,
       };
       
       window.dispatchEvent(new CustomEvent(LOAD_SAVED_VIEW_EVENT, { detail: eventDetail }));

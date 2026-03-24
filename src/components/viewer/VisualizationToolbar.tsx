@@ -511,8 +511,12 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
         visibleFloorIds,
         showSpaces,
         showAnnotations,
-        visualizationType: 'none', // Will be enhanced when RoomVisualizationPanel provides this
+        visualizationType: 'none',
         visualizationMockData: false,
+        sectionPlanes: Object.values(xeokitViewer.scene?.sectionPlanes || {}).map((sp: any) => ({
+          pos: [...(sp.pos || [0, 0, 0])],
+          dir: [...(sp.dir || [0, 0, -1])],
+        })),
       };
 
       setPendingViewState(viewState);
@@ -575,6 +579,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           show_annotations: pendingViewState.showAnnotations,
           visualization_type: pendingViewState.visualizationType,
           visualization_mock_data: pendingViewState.visualizationMockData,
+          section_planes: pendingViewState.sectionPlanes?.length ? pendingViewState.sectionPlanes : null,
         });
 
       if (insertError) {

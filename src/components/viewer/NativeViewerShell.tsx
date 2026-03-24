@@ -22,6 +22,8 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
 import { AppContext } from '@/context/AppContext';
 import { VIEW_MODE_REQUESTED_EVENT, LOAD_SAVED_VIEW_EVENT, VIEWER_TOOL_CHANGED_EVENT, VIEWER_CREATE_ASSET_EVENT, VIEW_MODE_2D_TOGGLED_EVENT, type LoadSavedViewDetail, type ViewerToolChangedDetail, type ViewMode2DToggledDetail } from '@/lib/viewer-events';
+import { CLIP_HEIGHT_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
+import { FORCE_SHOW_SPACES_EVENT } from './RoomVisualizationPanel';
 import { ROOM_LABELS_TOGGLE_EVENT, ROOM_LABELS_CONFIG_EVENT, type RoomLabelsToggleDetail } from '@/hooks/useRoomLabels';
 import useRoomLabels from '@/hooks/useRoomLabels';
 import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDialog';
@@ -69,9 +71,64 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     viewer.camera.look = detail.cameraLook;
     viewer.camera.up = detail.cameraUp;
     viewer.camera.projection = detail.cameraProjection || 'perspective';
+
     // Dispatch view mode if specified
     if (detail.viewMode) {
       window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: detail.viewMode } }));
+    }
+
+    // Restore clip height
+    if (detail.clipHeight != null) {
+      window.dispatchEvent(new CustomEvent(CLIP_HEIGHT_CHANGED_EVENT, { detail: { height: detail.clipHeight } }));
+    }
+
+    // Restore floor visibility
+    if (detail.visibleFloorIds && detail.visibleFloorIds.length > 0) {
+      window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+        detail: {
+          floorId: detail.visibleFloorIds.length === 1 ? detail.visibleFloorIds[0] : null,
+          floorName: null, bounds: null,
+          visibleMetaFloorIds: [], visibleFloorFmGuids: detail.visibleFloorIds,
+          isAllFloorsVisible: false,
+          isSoloFloor: detail.visibleFloorIds.length === 1,
+          fromFilterPanel: false,
+        } as FloorSelectionEventDetail,
+      }));
+    }
+
+    // Restore model visibility
+    if (detail.visibleModelIds && detail.visibleModelIds.length > 0 && viewer.scene?.models) {
+      const visibleSet = new Set(detail.visibleModelIds);
+      Object.entries(viewer.scene.models).forEach(([modelId, model]: [string, any]) => {
+        if (typeof model.visible !== 'undefined') {
+          model.visible = visibleSet.has(modelId);
+        }
+      });
+    }
+
+    // Restore showSpaces
+    if (detail.showSpaces) {
+      window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { enabled: true } }));
+    }
+
+    // Restore section planes
+    if (detail.sectionPlanes && Array.isArray(detail.sectionPlanes) && viewer.scene) {
+      // Clear existing section planes
+      const existingPlanes = Object.values(viewer.scene.sectionPlanes || {});
+      existingPlanes.forEach((sp: any) => sp.destroy?.());
+      // Restore section planes using the viewer's SectionPlane class
+      detail.sectionPlanes.forEach((sp: { pos: number[]; dir: number[] }) => {
+        try {
+          // xeokit exposes SectionPlane on the scene
+          const scene = viewer.scene;
+          // Create via scene utility
+          if (typeof scene.createSectionPlane === 'function') {
+            scene.createSectionPlane({ pos: sp.pos, dir: sp.dir, active: true });
+          }
+        } catch (e) {
+          console.warn('[NativeViewerShell] Could not restore section plane:', e);
+        }
+      });
     }
   }, []);
 
