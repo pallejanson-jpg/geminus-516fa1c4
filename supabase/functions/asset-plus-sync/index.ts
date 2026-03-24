@@ -1024,6 +1024,15 @@ serve(async (req) => {
           currentSkip = 0;
           cursorFmGuid = null;
           pageMode = 'skip'; // Reset to skip mode for new building
+
+          // Update last_asset_sync_at for this building
+          await supabase
+            .from('building_settings')
+            .upsert({
+              fm_guid: building.fm_guid,
+              last_asset_sync_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'fm_guid' });
           
           // Save progress
           await supabase
