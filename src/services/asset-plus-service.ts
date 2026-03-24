@@ -431,11 +431,6 @@ export async function fetchRoomSensorData(buildingFmGuid: string): Promise<any[]
  * Returns true if sync was triggered, false if assets already exist.
  */
 export async function syncBuildingAssetsIfNeeded(buildingFmGuid: string): Promise<{ synced: boolean; count: number }> {
-  // ACC-sourced buildings already have assets from BIM sync — skip Asset+ sync
-  if (isAccSourcedBuilding(buildingFmGuid)) {
-    console.log(`Building ${buildingFmGuid} is ACC-sourced, skipping Asset+ sync`);
-    return { synced: false, count: 0 };
-  }
   // Check local count
   const { count, error: countError } = await supabase
     .from("assets")
