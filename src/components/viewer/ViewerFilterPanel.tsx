@@ -237,9 +237,19 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   // Levels: driven primarily by sharedFloors (useFloorData) which correctly detects A-model
   // floors from the xeokit scene. Enriched with storeyAssets for space counts and sourceGuid.
   const levels: LevelItem[] = useMemo(() => {
-    // Strategy: Use sharedFloors as the authoritative source (they come from xeokit scene A-model detection).
-    // Enrich each with storeyAsset data for sourceGuid and space counts.
-    if (sharedFloors.length > 0) {
+    // Count DB-driven A-model storeys to compare against scene-derived floors
+    const aModelStoreyCount = storeyAssets.filter((s) => {
+      if (!s.sourceName || isGuid(s.sourceName)) return false;
+      return isArchitecturalModel(s.sourceName);
+    }).length;
+
+    // Quality check: use sharedFloors only if they are reasonably complete
+    // compared to DB storeys. If DB has significantly more A-model storeys,
+    // the scene data is incomplete (e.g. Småviken: scene=2, DB=10).
+    const sceneIsReliable = sharedFloors.length > 0 &&
+      (aModelStoreyCount === 0 || sharedFloors.length >= aModelStoreyCount * 0.7);
+
+    if (sceneIsReliable) {
       return sharedFloors.map((floor) => {
         const allGuids = new Set<string>();
         floor.databaseLevelFmGuids.forEach(g => allGuids.add(normalizeGuid(g)));
