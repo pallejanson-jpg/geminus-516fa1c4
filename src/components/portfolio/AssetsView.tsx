@@ -340,16 +340,22 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     sampleAssets.forEach(asset => {
       const attrs = asset.attributes || {};
       
+      const SKIP_ATTR_KEYS = ['tenantId', 'checkedOut', 'createdInModel', 'objectTypeId', 'objectType', 'parentGuid', 'buildingGuid', 'levelGuid', 'roomGuid'];
       Object.entries(attrs).forEach(([key, value]: [string, any]) => {
         if (discoveredColumns.has(key)) return;
-        if (key.startsWith('_') || key === 'tenantId' || key === 'checkedOut' || key === 'createdInModel') return;
-        if (typeof value !== 'object' || !value) return;
+        if (key.startsWith('_') || SKIP_ATTR_KEYS.includes(key)) return;
         
-        if ('name' in value && 'value' in value) {
+        if (value && typeof value === 'object' && 'name' in value && 'value' in value) {
           const propertyName = value.name || extractPropertyName(key);
           discoveredColumns.set(key, {
             key,
             label: propertyName,
+            category: 'userDefined',
+          });
+        } else if (value !== null && value !== undefined && typeof value !== 'object') {
+          discoveredColumns.set(key, {
+            key,
+            label: extractPropertyName(key),
             category: 'userDefined',
           });
         }
