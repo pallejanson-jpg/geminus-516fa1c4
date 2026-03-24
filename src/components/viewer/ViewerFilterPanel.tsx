@@ -828,15 +828,17 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       checkedSpaces.size > 0 || checkedCategories.size > 0;
 
     // Step 0: Clean slate — reset xray (but DON'T reset colorize when theme is active)
-    const prevXrayed = scene.xrayedObjectIds;
-    if (prevXrayed?.length > 0) scene.setObjectsXRayed(prevXrayed, false);
+    let prevXrayed: string[] = [];
+    try { prevXrayed = scene.xrayedObjectIds || []; } catch (_e) { /* scene teardown */ }
+    if (prevXrayed.length > 0) scene.setObjectsXRayed(prevXrayed, false);
     
     // Only reset colorize when we actually have filter-applied colors (not theme colors)
     // When a theme is active, skip the colorize reset to avoid "native colors flash"
     const themeActive = !!activeThemeIdRef.current;
     if (!themeActive && (hasAnyFilter || autoColorEnabled || autoColorSpaces || autoColorCategories)) {
-      const prevColorizedIds = scene.colorizedObjectIds;
-      if (prevColorizedIds?.length > 0) {
+      let prevColorizedIds: string[] = [];
+      try { prevColorizedIds = scene.colorizedObjectIds || []; } catch (_e) { /* scene teardown */ }
+      if (prevColorizedIds.length > 0) {
         scene.setObjectsColorized(prevColorizedIds, false);
         prevColorizedIds.forEach((id: string) => {
           const entity = scene.objects?.[id];
@@ -1488,8 +1490,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const viewer = getXeokitViewer();
     if (!viewer?.scene) return;
     const scene = viewer.scene;
-    if (scene.xrayedObjectIds?.length > 0) scene.setObjectsXRayed(scene.xrayedObjectIds, false);
-    if (scene.colorizedObjectIds?.length > 0) scene.setObjectsColorized(scene.colorizedObjectIds, false);
+    try { const xIds = scene.xrayedObjectIds; if (xIds?.length > 0) scene.setObjectsXRayed(xIds, false); } catch (_e) { /* ignore */ }
+    try { const cIds = scene.colorizedObjectIds; if (cIds?.length > 0) scene.setObjectsColorized(cIds, false); } catch (_e) { /* ignore */ }
     // Restore all model-level visibility
     const sceneModels = scene.models || {};
     Object.values(sceneModels).forEach((model: any) => {
