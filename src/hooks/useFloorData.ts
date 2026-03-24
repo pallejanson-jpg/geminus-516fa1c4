@@ -214,9 +214,6 @@ export function useFloorData(
             if (!floor.metaObjectIds.includes(metaObject.id)) {
               floor.metaObjectIds.push(metaObject.id);
             }
-            if (!floor.databaseLevelFmGuids.includes(fmGuid)) {
-              floor.databaseLevelFmGuids.push(fmGuid);
-            }
             break;
           }
         }
