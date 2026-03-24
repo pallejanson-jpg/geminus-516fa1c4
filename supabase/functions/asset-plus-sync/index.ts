@@ -768,12 +768,14 @@ serve(async (req) => {
     if (action === 'sync-assets-resumable' || action === 'sync-assets-chunked') {
       const MAX_EXECUTION_TIME = 45000; // 45 seconds (conservative for 60s limit)
       const startTime = Date.now();
+      const force = body?.force === true;
+      const targetBuildingFmGuid = body?.buildingFmGuid || null;
       
       const accessToken = await getAccessToken();
-      console.log('Starting sync-assets-resumable');
+      console.log(`Starting sync-assets-resumable (target: ${targetBuildingFmGuid || 'all'}, force: ${force})`);
 
       // Get all buildings from local DB
-      const { data: buildings, error: buildingsError } = await supabase
+      const { data: allBuildings, error: buildingsError } = await supabase
         .from('assets')
         .select('fm_guid, common_name')
         .eq('category', 'Building')
@@ -781,10 +783,22 @@ serve(async (req) => {
 
       if (buildingsError) throw buildingsError;
 
-      if (!buildings || buildings.length === 0) {
+      if (!allBuildings || allBuildings.length === 0) {
         await updateSyncState(supabase, 'assets', 'failed', 0, 'No buildings found. Run structure sync first.');
         return new Response(
           JSON.stringify({ success: false, error: 'No buildings found. Run structure sync first.', interrupted: false }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Filter to target building if specified
+      const buildings = targetBuildingFmGuid
+        ? allBuildings.filter((b: any) => b.fm_guid === targetBuildingFmGuid)
+        : allBuildings;
+
+      if (buildings.length === 0) {
+        return new Response(
+          JSON.stringify({ success: false, error: `Building ${targetBuildingFmGuid} not found locally.`, interrupted: false }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -825,6 +839,54 @@ serve(async (req) => {
         const building = buildings[currentBuildingIndex];
         const buildingName = building.common_name || building.fm_guid;
         console.log(`Syncing assets for building ${currentBuildingIndex + 1}/${totalBuildings}: ${buildingName} (mode: ${pageMode})`);
+
+        // --- Incremental sync: check last_asset_sync_at ---
+        let lastSyncAt: string | null = null;
+        if (!force && currentSkip === 0 && pageMode === 'skip') {
+          const { data: bSettings } = await supabase
+            .from('building_settings')
+            .select('last_asset_sync_at')
+            .eq('fm_guid', building.fm_guid)
+            .maybeSingle();
+          lastSyncAt = bSettings?.last_asset_sync_at || null;
+        }
+
+        // --- Quick count check: skip if counts match and not forced ---
+        if (!force && currentSkip === 0 && pageMode === 'skip') {
+          const { count: localAssetCount } = await supabase
+            .from('assets')
+            .select('*', { count: 'exact', head: true })
+            .eq('building_fm_guid', building.fm_guid)
+            .eq('category', 'Instance');
+
+          if (localAssetCount && localAssetCount > 0 && lastSyncAt) {
+            // We have assets and a previous sync timestamp — try incremental
+            const incrFilter: any[] = [
+              ["buildingFmGuid", "=", building.fm_guid],
+              "and",
+              ["objectType", "=", 4],
+              "and",
+              ["dateModified", ">", lastSyncAt]
+            ];
+            try {
+              const incrResult = await fetchAssetPlusObjects(accessToken, incrFilter, 0, 1, {
+                useMinimalSelect: true,
+                useExplicitSort: false,
+              });
+              if (incrResult.data.length === 0) {
+                console.log(`Building ${buildingName}: no changes since ${lastSyncAt}, skipping`);
+                currentBuildingIndex++;
+                currentSkip = 0;
+                cursorFmGuid = null;
+                pageMode = 'skip';
+                continue;
+              }
+              console.log(`Building ${buildingName}: changes detected since ${lastSyncAt}, syncing incrementally`);
+            } catch (e) {
+              console.log(`Incremental check failed for ${buildingName}, doing full sync`);
+            }
+          }
+        }
 
         const filter = [
           ["buildingFmGuid", "=", building.fm_guid],
@@ -962,6 +1024,15 @@ serve(async (req) => {
           currentSkip = 0;
           cursorFmGuid = null;
           pageMode = 'skip'; // Reset to skip mode for new building
+
+          // Update last_asset_sync_at for this building
+          await supabase
+            .from('building_settings')
+            .upsert({
+              fm_guid: building.fm_guid,
+              last_asset_sync_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'fm_guid' });
           
           // Save progress
           await supabase
@@ -1074,6 +1145,16 @@ serve(async (req) => {
       }
 
       await updateSyncState(supabase, syncStateId, 'completed', totalSynced);
+
+      // Update last_asset_sync_at for this building
+      await supabase
+        .from('building_settings')
+        .upsert({
+          fm_guid: buildingFmGuid,
+          last_asset_sync_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'fm_guid' });
+
       console.log(`Single building sync completed: ${totalSynced} assets`);
 
       return new Response(
