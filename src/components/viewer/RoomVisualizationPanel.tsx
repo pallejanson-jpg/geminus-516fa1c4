@@ -97,10 +97,10 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     const handleFloorChange = (e: CustomEvent<FloorSelectionEventDetail>) => {
       const { visibleFloorFmGuids: guids, isAllFloorsVisible } = e.detail;
       setEventIsAllVisible(!!isAllFloorsVisible);
-      if (guids && guids.length > 0) {
+      if (isAllFloorsVisible) {
+        setEventFloorGuids(null); // null = all floors, skip filtering
+      } else if (guids && guids.length > 0) {
         setEventFloorGuids(guids);
-      } else if (isAllFloorsVisible) {
-        setEventFloorGuids(null); // null = all floors
       }
       // Also invalidate cache
       setCacheKey(`${buildingFmGuid}-${Date.now()}`);
@@ -280,7 +280,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     if (visibleFloorFmGuids && visibleFloorFmGuids.length > 0) {
       const lowerCaseVisibleGuids = visibleFloorFmGuids.map(g => g.toLowerCase());
       roomData = roomData.filter(room => {
-        if (!room.levelFmGuid) return false;
+        if (!room.levelFmGuid) return true; // Include rooms without floor association
         return lowerCaseVisibleGuids.includes(room.levelFmGuid.toLowerCase());
       });
     }
