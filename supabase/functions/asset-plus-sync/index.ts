@@ -428,6 +428,59 @@ function objectTypeToCategory(objectType: number): string {
   return categories[objectType] || 'Unknown';
 }
 
+// Write geometry mapping rows for synced Asset+ objects
+async function upsertGeometryMappings(supabase: any, items: any[]): Promise<void> {
+  if (items.length === 0) return;
+
+  const now = new Date().toISOString();
+  const rows = items.map((item: any) => {
+    const category = objectTypeToCategory(item.objectType);
+    const entityType = category === 'Building' ? 'building'
+      : category === 'Building Storey' ? 'storey'
+      : category === 'Space' ? 'space'
+      : 'instance';
+
+    // Extract parent BIM model info from attributes
+    const parentModelGuid = item.parentBimObjectId || null;
+    const parentModelName = item.parentCommonName || null;
+
+    return {
+      building_fm_guid: item.buildingFmGuid || item.fmGuid,
+      asset_fm_guid: item.fmGuid,
+      source_system: 'asset_plus',
+      external_entity_id: item.originalSystemId || item.fmGuid,
+      entity_type: entityType,
+      model_id: parentModelGuid || null,
+      storey_fm_guid: item.levelFmGuid || null,
+      source_model_guid: parentModelGuid,
+      source_model_name: parentModelName,
+      source_storey_name: entityType === 'storey' ? (item.commonName || item.designation || null) : null,
+      metadata: {},
+      last_seen_at: now,
+    };
+  });
+
+  // Batch upsert in chunks of 500
+  for (let i = 0; i < rows.length; i += 500) {
+    const chunk = rows.slice(i, i + 500);
+    const { error } = await supabase
+      .from('geometry_entity_map')
+      .upsert(chunk, { onConflict: 'source_system,building_fm_guid,asset_fm_guid,COALESCE(model_id, \'\')' })
+      .then((res: any) => res, (err: any) => {
+        // Fallback: try individual inserts if batch upsert fails on unique index
+        console.debug('Batch geometry mapping upsert failed, using individual inserts');
+        return { error: err };
+      });
+    
+    if (error) {
+      // Try one-by-one as fallback for unique index with COALESCE
+      for (const row of chunk) {
+        await supabase.from('geometry_entity_map').upsert(row).then(() => {}, () => {});
+      }
+    }
+  }
+}
+
 async function upsertAssets(supabase: any, items: any[]): Promise<number> {
   if (items.length === 0) return 0;
 
@@ -456,6 +509,14 @@ async function upsertAssets(supabase: any, items: any[]): Promise<number> {
     });
 
   if (error) throw error;
+
+  // Also populate geometry entity map
+  try {
+    await upsertGeometryMappings(supabase, items);
+  } catch (e) {
+    console.debug('geometry_entity_map upsert failed (non-fatal):', e);
+  }
+
   return assets.length;
 }
 
