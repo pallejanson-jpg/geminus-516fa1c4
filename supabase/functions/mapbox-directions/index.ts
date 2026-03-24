@@ -55,6 +55,7 @@ serve(async (req) => {
           instruction: s.maneuver?.instruction,
           distance: s.distance,
           duration: s.duration,
+          maneuver: s.maneuver?.location ? { location: s.maneuver.location } : undefined,
         })),
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
