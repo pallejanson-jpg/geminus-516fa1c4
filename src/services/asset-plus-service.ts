@@ -472,12 +472,6 @@ export async function ensureBuildingAssets(
   buildingFmGuid: string,
   options?: { waitForSync?: boolean }
 ): Promise<{ hasAssets: boolean; count: number; syncing: boolean }> {
-  // ACC-sourced buildings already have assets from BIM sync — skip Asset+ sync
-  if (isAccSourcedBuilding(buildingFmGuid)) {
-    console.log(`ensureBuildingAssets: ${buildingFmGuid} is ACC-sourced, skipping Asset+ sync`);
-    return { hasAssets: false, count: 0, syncing: false };
-  }
-
   // 1. Check local count
   const { count, error: countError } = await supabase
     .from("assets")

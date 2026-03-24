@@ -756,9 +756,9 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     return (
       <div className="absolute inset-0 z-40 bg-background flex flex-col items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-        <p className="text-lg font-medium">Syncing assets...</p>
+        <p className="text-lg font-medium">Loading assets...</p>
         <p className="text-sm text-muted-foreground mt-1">
-          Fetching assets for this building from Asset+
+          Checking and loading assets for this building
         </p>
       </div>
     );
