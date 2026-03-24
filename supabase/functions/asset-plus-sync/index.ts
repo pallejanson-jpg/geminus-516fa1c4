@@ -1145,6 +1145,16 @@ serve(async (req) => {
       }
 
       await updateSyncState(supabase, syncStateId, 'completed', totalSynced);
+
+      // Update last_asset_sync_at for this building
+      await supabase
+        .from('building_settings')
+        .upsert({
+          fm_guid: buildingFmGuid,
+          last_asset_sync_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'fm_guid' });
+
       console.log(`Single building sync completed: ${totalSynced} assets`);
 
       return new Response(
