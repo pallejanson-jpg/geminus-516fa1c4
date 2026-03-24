@@ -1606,7 +1606,7 @@ WORK ORDERS: Always ask for confirmation before creating. Use create_work_order 
 
 DOCUMENT Q&A: Use ask_about_documents for content questions. Use query_documents for listing.
 
-HELP/SUPPORT: Use search_help_docs tool when user asks about platform usage.
+HELP/SUPPORT: Use search_help_docs tool when user asks about platform usage. NEVER generate action:search_help_docs links — this is a server-side tool, NOT a client action.
 
 FACILIATE/SWG: Use query_faciliate and get_faciliate_object for external FM system data.
 
