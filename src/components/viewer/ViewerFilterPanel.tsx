@@ -226,19 +226,33 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return map;
   }, [storeyAssets]);
 
+  const sharedFloorGuidSet = useMemo(() => {
+    const guids = new Set<string>();
+    sharedFloors.forEach((floor) => {
+      floor.databaseLevelFmGuids.forEach((guid) => guids.add(normalizeGuid(guid)));
+    });
+    return guids;
+  }, [sharedFloors]);
+
   // Levels: driven by DB storeys — ONLY show levels from A-model (using parentCommonName)
   const levels: LevelItem[] = useMemo(() => {
+    const sharedFloorStoreys = storeyAssets.filter((storey) => sharedFloorGuidSet.has(storey.normalizedFmGuid));
+
     // Filter to A-model storeys using parentCommonName from DB (most reliable source)
     const aModelStoreys = storeyAssets.filter((storey) => {
       if (!storey.sourceName || isGuid(storey.sourceName)) return false;
       return isArchitecturalModel(storey.sourceName);
     });
+
+    // Prefer floors already resolved from the A-model-aware shared floor hook.
+    let filtered = sharedFloorStoreys.length > 0 ? sharedFloorStoreys : aModelStoreys;
+
     // Fallback: if no A-model storeys identified, try matching against loaded scene model names
-    let filtered = aModelStoreys;
     if (filtered.length === 0) {
       // Try to resolve sourceName from scene model names or sharedModels
-      const sceneModelNames = sharedModels.map(m => m.name || m.shortName || '').filter(Boolean);
-      const aModelSceneNames = sceneModelNames.filter(n => isArchitecturalModel(n));
+      const aModelSceneNames = sharedModels
+        .map(m => m.name || m.shortName || '')
+        .filter(n => !!n && isArchitecturalModel(n));
       if (aModelSceneNames.length > 0) {
         // Match storeys whose sourceGuid corresponds to an A-model in sharedModels
         const aModelGuids = new Set(
@@ -247,6 +261,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             .map(m => normalizeGuid(m.id))
         );
         filtered = storeyAssets.filter(s => aModelGuids.has(normalizeGuid(s.sourceGuid)));
+      }
+      if (filtered.length === 0 && sharedFloorStoreys.length > 0) {
+        filtered = sharedFloorStoreys;
       }
       // If still empty, show all as last resort
       if (filtered.length === 0) filtered = storeyAssets;
@@ -271,7 +288,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         return {
           fmGuid: storey.fmGuid,
           allGuids: Array.from(allGuids),
-          name: storey.name,
+          name: exactSharedFloor?.name || storey.name,
           sourceGuid: storey.sourceGuid,
           spaceCount,
         };
@@ -283,7 +300,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         };
         return extract(a.name) - extract(b.name) || a.name.localeCompare(b.name, 'sv');
       });
-  }, [storeyAssets, sharedFloors, buildingData]);
+  }, [storeyAssets, sharedFloors, sharedFloorGuidSet, sharedModels, buildingData]);
 
   // Sources: derived from ALL sharedModels so every model appears in the list
   const sources: BimSource[] = useMemo(() => {
