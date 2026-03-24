@@ -338,7 +338,7 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
                   {airQuality.label}
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Air Quality Score baserat på temperatur, CO₂ och luftfuktighet
+                  Air Quality Score based on temperature, CO₂ and humidity
                 </p>
               </div>
             </div>
