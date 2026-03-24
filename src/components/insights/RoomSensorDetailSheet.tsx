@@ -309,7 +309,7 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
                 size="icon"
                 className="h-7 w-7 hover:bg-primary/10"
                 onClick={() => window.open(dashboardUrl, '_blank')}
-                title="Öppna i Senslinc"
+                title="Open in Senslinc"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
               </Button>
