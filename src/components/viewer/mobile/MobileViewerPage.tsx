@@ -111,6 +111,86 @@ const MENU_ITEMS = [
 
 type SubSheetId = 'viewMode' | 'toolbarConfig' | 'display' | 'filter' | 'colorFilter' | 'actions' | 'navigation' | 'settings' | null;
 
+const SPEED_KEYS = { zoom: 'viewer-speed-zoom', pan: 'viewer-speed-pan', rotate: 'viewer-speed-rotate', master: 'viewer-nav-speed' };
+const readSpd = (key: string, fb = 100) => { try { return parseInt(localStorage.getItem(key) || String(fb)); } catch { return fb; } };
+
+/** Mobile-specific navigation speed with per-axis sliders + FastNav */
+const MobileNavigationSpeed: React.FC<{ navSpeed: number; setNavSpeed: (v: number) => void }> = ({ navSpeed, setNavSpeed }) => {
+  const [zoom, setZoom] = React.useState(() => readSpd(SPEED_KEYS.zoom));
+  const [pan, setPan] = React.useState(() => readSpd(SPEED_KEYS.pan));
+  const [rotate, setRotate] = React.useState(() => readSpd(SPEED_KEYS.rotate));
+  const [expanded, setExpanded] = React.useState(false);
+  const [fastNav, setFastNav] = React.useState(() => { try { return localStorage.getItem('viewer-fastnav-enabled') === 'true'; } catch { return false; } });
+
+  const dispatchGranular = React.useCallback((z: number, p: number, r: number) => {
+    window.dispatchEvent(new CustomEvent('NAV_SPEED_GRANULAR', { detail: { zoom: z, pan: p, rotate: r } }));
+  }, []);
+
+  const handleMaster = React.useCallback((value: number[]) => {
+    const v = value[0];
+    setNavSpeed(v);
+    setZoom(v); setPan(v); setRotate(v);
+    localStorage.setItem(SPEED_KEYS.master, String(v));
+    localStorage.setItem(SPEED_KEYS.zoom, String(v));
+    localStorage.setItem(SPEED_KEYS.pan, String(v));
+    localStorage.setItem(SPEED_KEYS.rotate, String(v));
+    window.dispatchEvent(new CustomEvent('NAV_SPEED_CHANGED', { detail: { speed: v } }));
+  }, [setNavSpeed]);
+
+  const handleAxis = React.useCallback((axis: 'zoom' | 'pan' | 'rotate', value: number[]) => {
+    const v = value[0];
+    const next = { zoom, pan, rotate, [axis]: v };
+    if (axis === 'zoom') setZoom(v);
+    if (axis === 'pan') setPan(v);
+    if (axis === 'rotate') setRotate(v);
+    localStorage.setItem(SPEED_KEYS[axis], String(v));
+    dispatchGranular(next.zoom, next.pan, next.rotate);
+  }, [zoom, pan, rotate, dispatchGranular]);
+
+  const handleFastNav = React.useCallback((checked: boolean) => {
+    setFastNav(checked);
+    localStorage.setItem('viewer-fastnav-enabled', String(checked));
+    window.dispatchEvent(new CustomEvent('FASTNAV_TOGGLE', { detail: { enabled: checked } }));
+  }, []);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <div className="p-1.5 rounded-md bg-muted text-muted-foreground"><SlidersHorizontal className="h-4 w-4" /></div>
+        <span className="text-sm">Navigation speed</span>
+        <span className="text-xs font-medium ml-auto">{navSpeed}%</span>
+      </div>
+      <div className="pl-10 space-y-2">
+        <Slider value={[navSpeed]} onValueChange={handleMaster} min={25} max={300} step={25} className="w-full" />
+        <button onClick={() => setExpanded(!expanded)} className="text-xs text-primary hover:underline">
+          {expanded ? 'Hide per-axis' : 'Per-axis settings ▸'}
+        </button>
+        {expanded && (
+          <div className="space-y-2 pt-1">
+            {([
+              { label: 'Zoom', key: 'zoom' as const, val: zoom },
+              { label: 'Pan', key: 'pan' as const, val: pan },
+              { label: 'Rotate', key: 'rotate' as const, val: rotate },
+            ]).map(({ label, key, val }) => (
+              <div key={key}>
+                <div className="flex justify-between text-xs text-muted-foreground mb-0.5">
+                  <span>{label}</span><span>{val}%</span>
+                </div>
+                <Slider value={[val]} onValueChange={(v) => handleAxis(key, v)} min={25} max={300} step={25} className="w-full" />
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-xs text-muted-foreground">FastNav (snappier interaction)</span>
+          <Switch checked={fastNav} onCheckedChange={handleFastNav} />
+        </div>
+        <p className="text-xs text-muted-foreground">Touch navigation</p>
+      </div>
+    </div>
+  );
+};
+
 const getViewer = () => (window as any).__nativeXeokitViewer;
 
 interface MobileViewerPageProps {
