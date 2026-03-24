@@ -71,7 +71,7 @@ const ALL_TOOLS: ToolDef[] = [
   { id: 'select', label: 'Select', icon: <MousePointer2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'tool' },
   { id: 'measure', label: 'Measure', icon: <Ruler className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'tool' },
   { id: 'section', label: 'Section', icon: <Scissors className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'tool' },
-  { id: 'viewMode', label: '2D/3D', icon: <Cuboid className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'mode' },
+  // viewMode removed — handled by mode switcher in header
   // Configurable extras
   { id: 'xray', label: 'X-ray', icon: <Box className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
   { id: 'onHover', label: 'On hover info', icon: <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },

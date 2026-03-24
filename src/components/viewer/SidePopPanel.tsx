@@ -62,23 +62,24 @@ const SidePopPanel: React.FC<SidePopPanelProps> = ({
   const parentCenter = parentPosition.x + parentWidth / 2;
   const showOnLeft = parentCenter > screenWidth / 2;
 
+  const clampedTop = Math.max(56, parentPosition.y); // Keep below header
   const position = showOnLeft
     ? { 
         left: Math.max(8, parentPosition.x - panelWidth - gap), 
-        top: parentPosition.y 
+        top: clampedTop 
       }
     : { 
         left: Math.min(screenWidth - panelWidth - 8, parentPosition.x + parentWidth + gap), 
-        top: parentPosition.y 
+        top: clampedTop 
       };
 
   return (
     <>
       {/* Backdrop — click to close */}
-      <div className="fixed inset-0 z-[60]" onClick={onClose} />
+      <div className="fixed inset-0 z-[64]" onClick={onClose} />
       <div
         className={cn(
-          "fixed z-[61] border rounded-lg shadow-lg",
+          "fixed z-[65] border rounded-lg shadow-lg",
           "bg-card/65 backdrop-blur-md",
           "animate-in fade-in-0 slide-in-from-right-2 duration-200",
           showOnLeft && "slide-in-from-left-2",

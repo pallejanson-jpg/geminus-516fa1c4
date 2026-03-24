@@ -188,7 +188,12 @@ const ObjectColorFilterPanel: React.FC<ObjectColorFilterPanelProps> = ({ viewerR
       if (entity) { entity.colorize = null; entity.opacity = 1.0; }
     });
 
-    if (enabledRules.length === 0) { setMatchCount(0); return; }
+    if (enabledRules.length === 0) {
+      setMatchCount(0);
+      // Clear the global color filter flag
+      (window as any).__colorFilterActive = false;
+      return;
+    }
 
     Object.values(metaObjects).forEach((metaObj: any) => {
       const fmGuid = (metaObj.originalSystemId || metaObj.id || '').toLowerCase();
@@ -209,6 +214,8 @@ const ObjectColorFilterPanel: React.FC<ObjectColorFilterPanelProps> = ({ viewerR
       }
     });
 
+    // Set global flag so other systems (architect colors, space toggle) don't overwrite
+    (window as any).__colorFilterActive = count > 0;
     setMatchCount(count);
   }, [rules, viewerRef, attrMap]);
 
@@ -220,6 +227,7 @@ const ObjectColorFilterPanel: React.FC<ObjectColorFilterPanelProps> = ({ viewerR
       const entity = xv.scene.objects?.[id];
       if (entity) { entity.colorize = null; entity.opacity = 1.0; }
     });
+    (window as any).__colorFilterActive = false;
     setMatchCount(null);
   }, [viewerRef]);
 

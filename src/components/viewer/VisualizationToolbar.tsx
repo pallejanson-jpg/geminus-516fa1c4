@@ -356,6 +356,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   useEffect(() => {
     const handleForceShowSpaces = (e: CustomEvent) => {
       const shouldShow = !!e.detail?.show;
+      // Respect user's explicit off — don't auto re-enable
+      if (shouldShow && (window as any).__spacesUserExplicitOff) return;
       if (shouldShow !== showSpaces) {
         if (onShowSpacesChange) {
           onShowSpacesChange(shouldShow);
@@ -780,6 +782,12 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
   const handleToggleSpaces = useCallback(() => {
     const newValue = !showSpaces;
+    // Clear the explicit-off flag when user turns ON
+    if (newValue) {
+      (window as any).__spacesUserExplicitOff = false;
+    } else {
+      (window as any).__spacesUserExplicitOff = true;
+    }
     // Use callback if controlled, otherwise local state
     if (onShowSpacesChange) {
       onShowSpacesChange(newValue);
