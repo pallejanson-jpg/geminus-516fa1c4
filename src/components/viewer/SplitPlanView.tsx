@@ -885,7 +885,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
             }
           }
 
-          if (!isLargeArea && isSplitMode) {
+          // In split mode, 2D clicks are for navigation only — no object selection
+          if (!isSplitMode && !isLargeArea) {
             pickedEntityId = entityId;
             pickedFmGuid = metaObj?.originalSystemId || null;
             pickedEntityName = metaObj?.name || metaObj?.type || null;
