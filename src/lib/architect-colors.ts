@@ -37,6 +37,8 @@ export const SPACE_COLOR = [0.722, 0.831, 0.890]; // Light blue #B8D4E3
  * Spaces are pre-colored but hidden. All other objects get IFC-type-based colors.
  */
 export function applyArchitectColors(viewer: any): { colorized: number; hiddenSpaces: number } {
+  // Skip if a color filter is actively applied — don't overwrite user-applied colors
+  if ((window as any).__colorFilterActive) return { colorized: 0, hiddenSpaces: 0 };
   const scene = viewer?.scene;
   const metaScene = viewer?.metaScene;
   if (!scene) return { colorized: 0, hiddenSpaces: 0 };
@@ -97,6 +99,8 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
  * Same as applyArchitectColors but doesn't hide spaces — preserves current visibility.
  */
 export function recolorArchitectObjects(viewer: any): number {
+  // Skip if a color filter is actively applied
+  if ((window as any).__colorFilterActive) return 0;
   const scene = viewer?.scene;
   const metaScene = viewer?.metaScene;
   if (!scene) return 0;
