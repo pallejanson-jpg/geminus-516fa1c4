@@ -664,7 +664,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
             size="sm"
             variant={activeSensorMetric === m.key ? 'default' : 'outline'}
             className="h-7 px-2 text-[10px] gap-1"
-            onClick={() => setActiveSensorMetric(prev => prev === m.key ? 'none' : m.key)}
+            onClick={() => handleSensorMetricToggle(m.key)}
           >
             <m.icon className="h-3 w-3" />
             {m.label}
