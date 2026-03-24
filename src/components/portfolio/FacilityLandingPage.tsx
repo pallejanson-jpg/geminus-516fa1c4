@@ -784,7 +784,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                   {/* Insights-style compact room grid */}
                   {filteredRooms.length === 0 ? (
                     <div className="text-center text-muted-foreground py-6 text-sm">
-                      {roomSearch ? 'Inga rum matchade sökningen' : 'Inga rum registrerade på denna våning'}
+                      {roomSearch ? 'No rooms matched the search' : 'No rooms registered on this floor'}
                     </div>
                   ) : (
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5">
