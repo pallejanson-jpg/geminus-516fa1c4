@@ -340,16 +340,22 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     sampleAssets.forEach(asset => {
       const attrs = asset.attributes || {};
       
+      const SKIP_ATTR_KEYS = ['tenantId', 'checkedOut', 'createdInModel', 'objectTypeId', 'objectType', 'parentGuid', 'buildingGuid', 'levelGuid', 'roomGuid'];
       Object.entries(attrs).forEach(([key, value]: [string, any]) => {
         if (discoveredColumns.has(key)) return;
-        if (key.startsWith('_') || key === 'tenantId' || key === 'checkedOut' || key === 'createdInModel') return;
-        if (typeof value !== 'object' || !value) return;
+        if (key.startsWith('_') || SKIP_ATTR_KEYS.includes(key)) return;
         
-        if ('name' in value && 'value' in value) {
+        if (value && typeof value === 'object' && 'name' in value && 'value' in value) {
           const propertyName = value.name || extractPropertyName(key);
           discoveredColumns.set(key, {
             key,
             label: propertyName,
+            category: 'userDefined',
+          });
+        } else if (value !== null && value !== undefined && typeof value !== 'object') {
+          discoveredColumns.set(key, {
+            key,
+            label: extractPropertyName(key),
             category: 'userDefined',
           });
         }
@@ -750,9 +756,9 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     return (
       <div className="absolute inset-0 z-40 bg-background flex flex-col items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-        <p className="text-lg font-medium">Syncing assets...</p>
+        <p className="text-lg font-medium">Loading assets...</p>
         <p className="text-sm text-muted-foreground mt-1">
-          Fetching assets for this building from Asset+
+          Checking and loading assets for this building
         </p>
       </div>
     );

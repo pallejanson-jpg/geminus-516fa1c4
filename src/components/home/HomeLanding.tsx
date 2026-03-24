@@ -4,7 +4,7 @@ import { Database, FileQuestion, Sparkles, Building2, Eye, ChevronLeft, ChevronR
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import ParticleBackground from "@/components/home/ParticleBackground";
+
 import GunnarChat from "@/components/chat/GunnarChat";
 import { useAllBuildingSettings } from "@/hooks/useAllBuildingSettings";
 import { AppContext } from "@/context/AppContext";
@@ -163,9 +163,14 @@ export default function HomeLanding() {
 
   return (
     <div className="relative min-h-screen text-foreground">
-      {/* Full-page background */}
-      <ParticleBackground />
-      <div className="pointer-events-none absolute inset-0 bg-background/70" aria-hidden="true" />
+      {/* Full-page skyline background */}
+      <img
+        src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=1920&auto=format&fit=crop"
+        alt=""
+        aria-hidden="true"
+        className="absolute inset-0 w-full h-full object-cover"
+      />
+      <div className="pointer-events-none absolute inset-0 bg-background/75" aria-hidden="true" />
 
       {/* Main layout */}
       <div className="relative z-10 min-h-full flex flex-col items-center gap-4 sm:gap-6 px-3 sm:px-4 md:px-6 py-4 sm:py-6">
