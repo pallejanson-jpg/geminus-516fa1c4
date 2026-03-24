@@ -398,6 +398,16 @@ export function useRoomLabels(
     let createdCount = 0;
     let filteredCount = 0;
 
+    // Build parent->children map for geometry centroid calculation
+    const labelChildrenMap = new Map<string, string[]>();
+    Object.values(metaObjects).forEach((mo: any) => {
+      const parentId = mo.parent?.id;
+      if (parentId) {
+        if (!labelChildrenMap.has(parentId)) labelChildrenMap.set(parentId, []);
+        labelChildrenMap.get(parentId)!.push(mo.id);
+      }
+    });
+
     Object.values(metaObjects).forEach((metaObj: any) => {
       if (metaObj.type?.toLowerCase() !== 'ifcspace') return;
 

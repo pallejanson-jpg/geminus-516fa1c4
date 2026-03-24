@@ -866,7 +866,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }
 
     // Hide all IfcSpace entities by default — UNLESS visualization is forcing them visible
-    const spacesForcedVis = !!(window as any).__spacesForceVisible;
     const spaceEntityIds = typeIndexRef.current.get('IfcSpace') || [];
     if (!spacesForced) {
       spaceEntityIds.forEach(id => {
