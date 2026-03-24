@@ -434,6 +434,54 @@ async function populateAssetsFromMetaObjects(
 
   await appendLog(`Assets populated: ${storeyRows.length} storeys, ${spaceRows.length} spaces, ${instanceRows.length} instances`, 92);
 
+  // Populate geometry_entity_map for IFC-sourced objects
+  try {
+    const gemRows: any[] = [];
+    const gemNow = new Date().toISOString();
+
+    for (const row of storeyRows) {
+      gemRows.push({
+        building_fm_guid: buildingFmGuid,
+        asset_fm_guid: row.fm_guid,
+        source_system: 'ifc',
+        external_entity_id: row.fm_guid,
+        entity_type: 'storey',
+        storey_fm_guid: row.fm_guid,
+        source_storey_name: row.common_name,
+        last_seen_at: gemNow,
+      });
+    }
+    for (const row of spaceRows) {
+      gemRows.push({
+        building_fm_guid: buildingFmGuid,
+        asset_fm_guid: row.fm_guid,
+        source_system: 'ifc',
+        external_entity_id: row.fm_guid,
+        entity_type: 'space',
+        storey_fm_guid: row.level_fm_guid,
+        last_seen_at: gemNow,
+      });
+    }
+    for (const row of instanceRows) {
+      gemRows.push({
+        building_fm_guid: buildingFmGuid,
+        asset_fm_guid: row.fm_guid,
+        source_system: 'ifc',
+        external_entity_id: row.fm_guid,
+        entity_type: 'instance',
+        storey_fm_guid: row.level_fm_guid,
+        last_seen_at: gemNow,
+      });
+    }
+
+    for (let i = 0; i < gemRows.length; i += 500) {
+      await supabase.from("geometry_entity_map").upsert(gemRows.slice(i, i + 500)).then(() => {}, () => {});
+    }
+    await appendLog(`Geometry mappings: ${gemRows.length} rows`, 93);
+  } catch (e) {
+    console.debug("geometry_entity_map population failed (non-fatal):", e);
+  }
+
   // Diff: soft-delete assets in DB that are no longer in the IFC
   const { data: existingAssets } = await supabase
     .from("assets")
