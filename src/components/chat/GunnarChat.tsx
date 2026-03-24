@@ -76,10 +76,20 @@ function stripFollowups(content: string): string {
   return content.replace(/\n*\*\*(?:Förslag|Suggestions):\*\*[\s\S]*$/, "").trim();
 }
 
+const CLIENT_KNOWN_ACTIONS = new Set(['flyTo', 'openViewer', 'showFloor', 'selectInTree', 'switchTo2D', 'switchTo3D', 'showFloorIn3D', 'isolateModel', 'showDrawing', 'openViewer3D', 'selectBuilding', 'changeLang', 'listVoices', 'selectVoice']);
+
 /** Strip raw action tokens that leak without markdown link syntax */
 function stripRawActionTokens(content: string): string {
-  // Remove [action:type:param] patterns that are NOT inside markdown link syntax ](...)
-  return content.replace(/\[action:[^\]]+\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  // Remove [action:type:param] bracket patterns (not inside markdown links)
+  let cleaned = content.replace(/\[action:[^\]]+\]/g, "");
+  // Remove markdown links whose action type is unknown (e.g. [label](action:search_help_docs:...))
+  cleaned = cleaned.replace(/\[([^\]]+)\]\(action:([^:)]+)[^)]*\)/g, (_match, label, actionType) => {
+    if (CLIENT_KNOWN_ACTIONS.has(actionType)) return _match; // keep known actions
+    return label; // render unknown as plain text
+  });
+  // Remove bare action:type:param tokens not wrapped in markdown
+  cleaned = cleaned.replace(/(?<!\()\baction:[a-z_]+:[^\s)]+/gi, "");
+  return cleaned.replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function getContextualGreeting(context?: GunnarContext): string {
