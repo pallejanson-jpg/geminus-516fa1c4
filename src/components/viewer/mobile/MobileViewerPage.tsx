@@ -104,11 +104,12 @@ const MENU_ITEMS = [
   { id: 'display', Icon: Eye, label: 'Display', hasSubmenu: true },
   { id: 'colorFilter', Icon: Palette, label: 'Color filter', hasSubmenu: true },
   { id: 'actions', Icon: Camera, label: 'Actions', hasSubmenu: true },
+  { id: 'navigation', Icon: Navigation, label: 'Navigation', hasSubmenu: true },
   { id: 'insights', Icon: BarChart2, label: 'Insights' },
   { id: 'settings', Icon: Settings, label: 'Settings', hasSubmenu: true },
 ];
 
-type SubSheetId = 'viewMode' | 'toolbarConfig' | 'display' | 'filter' | 'colorFilter' | 'actions' | 'settings' | null;
+type SubSheetId = 'viewMode' | 'toolbarConfig' | 'display' | 'filter' | 'colorFilter' | 'actions' | 'navigation' | 'settings' | null;
 
 const getViewer = () => (window as any).__nativeXeokitViewer;
 
