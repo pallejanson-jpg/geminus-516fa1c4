@@ -47,6 +47,41 @@ import { VISUALIZATION_QUICK_SELECT_EVENT } from "./VisualizationQuickBar";
 import { VisualizationType, VISUALIZATION_CONFIGS } from "@/lib/visualization-utils";
 // import { LEVEL_LABELS_TOGGLE_EVENT } from "@/hooks/useLevelLabels"; // disabled
 
+/** Navigation Speed slider sub-component */
+export const NAV_SPEED_CHANGED_EVENT = 'NAV_SPEED_CHANGED';
+
+const NavigationSpeedSlider: React.FC = () => {
+  const isMobile = useIsMobile();
+  const [speed, setSpeed] = React.useState(() => {
+    try { return parseInt(localStorage.getItem('viewer-nav-speed') || '100'); } catch { return 100; }
+  });
+
+  const handleChange = React.useCallback((value: number[]) => {
+    const v = value[0];
+    setSpeed(v);
+    localStorage.setItem('viewer-nav-speed', String(v));
+    window.dispatchEvent(new CustomEvent(NAV_SPEED_CHANGED_EVENT, { detail: { speed: v } }));
+  }, []);
+
+  return (
+    <div className="space-y-1.5 sm:space-y-2 py-1.5 sm:py-2">
+      <div className="flex items-center gap-2 sm:gap-3 mb-1">
+        <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
+          <Move3D className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+        </div>
+        <span className="text-xs sm:text-sm">Navigation speed</span>
+        <span className="text-xs font-medium ml-auto">{speed}%</span>
+      </div>
+      <div className="pl-8 sm:pl-10">
+        <Slider value={[speed]} onValueChange={handleChange} min={25} max={300} step={25} className="w-full" />
+        <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+          {isMobile ? 'Touch navigation' : 'Mouse & keyboard navigation'}
+        </p>
+      </div>
+    </div>
+  );
+};
+
 const VIZ_LIST_ITEMS: { type: VisualizationType; icon: React.ElementType; label: string }[] = [
   { type: 'temperature', icon: Thermometer, label: 'Temperature' },
   { type: 'co2', icon: Wind, label: 'CO₂' },
