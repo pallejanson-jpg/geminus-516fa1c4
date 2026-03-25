@@ -171,7 +171,7 @@ const RoomLabelSettings: React.FC = () => {
 
                     {/* Scale with distance */}
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs">Skala med avstånd</Label>
+                      <Label className="text-xs">Scale with distance</Label>
                       <Switch
                         checked={editForm.scale_with_distance ?? true}
                         onCheckedChange={(v) => setEditForm({ ...editForm, scale_with_distance: v })}
