@@ -250,7 +250,7 @@ const ApprovalDialog: React.FC<{
           {/* Confidence badge */}
           <div className="flex items-center gap-2">
             <Badge variant="secondary">
-              Konfidens: {Math.round(detection.confidence * 100)}%
+              Confidence: {Math.round(detection.confidence * 100)}%
             </Badge>
             {props.brand && <Badge variant="outline">{props.brand}</Badge>}
             {props.model && <Badge variant="outline">{props.model}</Badge>}
