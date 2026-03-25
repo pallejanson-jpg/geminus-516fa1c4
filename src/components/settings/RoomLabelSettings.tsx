@@ -247,11 +247,11 @@ const RoomLabelSettings: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <Button size="sm" variant="outline" onClick={() => startEdit(config)}>
                         <Edit2 className="h-4 w-4 mr-1" />
-                        Redigera
-                      </Button>
-                      <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteConfig(config.id)}>
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        Ta bort
+                         Edit
+                       </Button>
+                       <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteConfig(config.id)}>
+                         <Trash2 className="h-4 w-4 mr-1" />
+                         Delete
                       </Button>
                     </div>
                   </div>
