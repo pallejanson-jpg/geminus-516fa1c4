@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Loader2, Crosshair, Eye, X, Pencil, RefreshCw, Info, Flame, ShieldAlert, Droplets, DoorOpen, Radio, Fan, Lightbulb, Armchair, Monitor, Package, Camera, type LucideIcon } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Loader2, Crosshair, Eye, X, Pencil, RefreshCw, Info, Flame, ShieldAlert, Droplets, DoorOpen, Radio, Fan, Lightbulb, Armchair, Monitor, Package, Camera, Sparkles, BookOpen, CheckCircle2, type LucideIcon } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -67,11 +68,39 @@ export const INVENTORY_CATEGORIES: InventoryCategory[] = [
   { value: 'other', label: 'Other', Icon: Package, color: 'text-muted-foreground' },
 ];
 
+interface AiScanResult {
+  objectType: string;
+  suggestedName: string;
+  description?: string;
+  confidence: number;
+  category: string;
+  suggestedSymbolId?: string | null;
+  properties?: Record<string, string | null>;
+}
+
+interface BipSuggestion {
+  code: string;
+  title: string;
+  usercode_syntax?: string;
+  bsab_e?: string;
+  aff?: string;
+  confidence: number;
+  reasoning?: string;
+}
+
 const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefill, editItem, onClearEdit, onOpen360, onOpen3d, pendingPosition, onPendingPositionConsumed }) => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [symbols, setSymbols] = useState<AnnotationSymbol[]>([]);
   const [isEditing, setIsEditing] = useState(false);
+
+  // AI scan state
+  const [isScanning, setIsScanning] = useState(false);
+  const [aiResult, setAiResult] = useState<AiScanResult | null>(null);
+
+  // BIP classify state
+  const [isClassifying, setIsClassifying] = useState(false);
+  const [bipSuggestions, setBipSuggestions] = useState<BipSuggestion[]>([]);
 
   // Form state - initialized with prefill values
   const [name, setName] = useState('');
@@ -160,7 +189,121 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
     setRoomFmGuid(prefill?.roomFmGuid || '');
     setImageUrl(null);
     setCoordinates(null);
+    setAiResult(null);
+    setBipSuggestions([]);
   };
+
+  // AI image recognition - calls mobile-ai-scan with the uploaded image
+  const handleAiScan = useCallback(async () => {
+    if (!imageUrl) {
+      toast.error('Upload an image first');
+      return;
+    }
+    setIsScanning(true);
+    setAiResult(null);
+    try {
+      // Fetch image and convert to base64
+      const resp = await fetch(imageUrl);
+      const blob = await resp.blob();
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const dataUrl = reader.result as string;
+          resolve(dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl);
+        };
+        reader.readAsDataURL(blob);
+      });
+
+      const { data, error: fnError } = await supabase.functions.invoke('mobile-ai-scan', {
+        body: { imageBase64: base64 },
+      });
+
+      if (fnError) throw fnError;
+      if (data?.error) throw new Error(data.error);
+
+      const result = data as AiScanResult;
+      setAiResult(result);
+
+      // Auto-fill form fields
+      if (result.suggestedName) setName(result.suggestedName);
+      if (result.description) setDescription(result.description);
+      if (result.suggestedSymbolId) setSymbolId(result.suggestedSymbolId);
+
+      // Map AI category to form category
+      const categoryMap: Record<string, string> = {
+        fire_extinguisher: 'fire_extinguisher',
+        fire_alarm_button: 'sensor',
+        smoke_detector: 'sensor',
+        fire_hose: 'fire_hose',
+        electrical_panel: 'other',
+        door: 'other',
+        elevator: 'other',
+        staircase: 'other',
+        ventilation: 'hvac_unit',
+        hvac_unit: 'hvac_unit',
+        sprinkler: 'sprinkler',
+        emergency_light: 'lamp',
+        access_control: 'other',
+      };
+      const mappedCategory = categoryMap[result.objectType] || 'other';
+      setCategory(mappedCategory);
+
+      toast.success('AI identification complete', {
+        description: `${result.suggestedName} (${Math.round(result.confidence * 100)}% confidence)`,
+      });
+    } catch (err: any) {
+      console.error('[InventoryForm] AI scan failed:', err);
+      if (err.message?.includes('429')) {
+        toast.error('AI service temporarily overloaded, try again shortly');
+      } else if (err.message?.includes('402')) {
+        toast.error('AI credits exhausted');
+      } else {
+        toast.error('AI identification failed', { description: err.message });
+      }
+    } finally {
+      setIsScanning(false);
+    }
+  }, [imageUrl]);
+
+  // BIP classification
+  const handleBipClassify = useCallback(async () => {
+    if (!name.trim()) {
+      toast.error('Enter a name before classifying');
+      return;
+    }
+    setIsClassifying(true);
+    setBipSuggestions([]);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('You must be logged in');
+        return;
+      }
+
+      const { data, error: fnError } = await supabase.functions.invoke('bip-classify', {
+        body: {
+          assetName: name,
+          assetType: category,
+          category: category,
+        },
+      });
+
+      if (fnError) throw fnError;
+      if (data?.error) throw new Error(data.error);
+
+      setBipSuggestions(data?.suggestions || []);
+      if (!data?.suggestions?.length) {
+        toast.info('No BIP matches found');
+      } else {
+        toast.success(`${data.suggestions.length} BIP suggestions found`);
+      }
+    } catch (err: any) {
+      console.error('[InventoryForm] BIP classify failed:', err);
+      toast.error('BIP classification failed', { description: err.message });
+    } finally {
+      setIsClassifying(false);
+    }
+  }, [name, category]);
 
   // Fetch symbols on mount
   useEffect(() => {
@@ -677,12 +820,100 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
         </div>
       )}
 
-      {/* Image upload */}
+      {/* Image upload + AI Scan */}
       <ImageUpload
         value={imageUrl}
-        onChange={setImageUrl}
+        onChange={(url) => {
+          setImageUrl(url);
+          setAiResult(null);
+        }}
         disabled={isLoading}
       />
+
+      {/* AI Identify button */}
+      {imageUrl && (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleAiScan}
+          disabled={isScanning}
+          className="w-full h-11 gap-2 border-primary/30 hover:bg-primary/5"
+        >
+          {isScanning ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4 text-primary" />
+          )}
+          {isScanning ? 'Identifying...' : 'AI Identify from image'}
+        </Button>
+      )}
+
+      {/* AI Result display */}
+      {aiResult && !isScanning && (
+        <div className={`rounded-lg border p-3 space-y-2 ${aiResult.confidence >= 0.7 ? 'border-primary/30 bg-primary/5' : 'border-border bg-muted/30'}`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className={`h-4 w-4 ${aiResult.confidence >= 0.7 ? 'text-primary' : 'text-muted-foreground'}`} />
+              <span className="font-semibold text-sm">{aiResult.suggestedName || aiResult.objectType}</span>
+            </div>
+            <Badge variant="secondary" className="text-xs">
+              {Math.round(aiResult.confidence * 100)}%
+            </Badge>
+          </div>
+          {aiResult.description && (
+            <p className="text-xs text-muted-foreground">{aiResult.description}</p>
+          )}
+          {aiResult.properties && (
+            <div className="flex flex-wrap gap-1">
+              {Object.entries(aiResult.properties).map(([key, val]) => {
+                if (!val) return null;
+                return (
+                  <Badge key={key} variant="outline" className="text-xs">
+                    {key}: {val}
+                  </Badge>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* BIP Classify button */}
+      <Button
+        type="button"
+        variant="outline"
+        onClick={handleBipClassify}
+        disabled={isClassifying || !name.trim()}
+        className="w-full h-11 gap-2"
+      >
+        {isClassifying ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <BookOpen className="h-4 w-4" />
+        )}
+        {isClassifying ? 'Classifying...' : 'Classify (BIP)'}
+      </Button>
+
+      {/* BIP suggestions */}
+      {bipSuggestions.length > 0 && (
+        <div className="rounded-lg border p-3 space-y-2">
+          <span className="text-sm font-medium">BIP Suggestions</span>
+          {bipSuggestions.map((s, i) => (
+            <div key={i} className="bg-muted/30 rounded-md p-2 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-mono font-medium">{s.code}</span>
+                <Badge variant="secondary" className="text-xs">
+                  {Math.round(s.confidence * 100)}%
+                </Badge>
+              </div>
+              <p className="text-xs text-foreground">{s.title}</p>
+              {s.usercode_syntax && <p className="text-xs text-muted-foreground">Syntax: {s.usercode_syntax}</p>}
+              {s.bsab_e && <p className="text-xs text-muted-foreground">BSAB-E: {s.bsab_e}</p>}
+              {s.reasoning && <p className="text-xs text-muted-foreground italic">{s.reasoning}</p>}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Description - expandable */}
       <div className="space-y-2">
