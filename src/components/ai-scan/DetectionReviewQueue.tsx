@@ -842,7 +842,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                       )}
                       {detailDialog.extracted_properties.model && (
                         <div>
-                          <span className="text-muted-foreground">Modell:</span>
+                          <span className="text-muted-foreground">Model:</span>
                           <span className="ml-2 font-medium">{detailDialog.extracted_properties.model}</span>
                         </div>
                       )}
