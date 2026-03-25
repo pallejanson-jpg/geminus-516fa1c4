@@ -179,11 +179,14 @@ export function useFloorData(
         floorNamesMap.get(fmGuid.toLowerCase()) ||
         floorNamesMap.get(fmGuid.toUpperCase());
 
-      let displayName = metaObject.name || 'Unknown Floor';
+      let displayName = metaObject.name || '';
       let isGuidName = false;
       if (dbName) {
         displayName = dbName;
-      } else if (displayName.match(/^[0-9A-Fa-f-]{30,}$/)) {
+      } else if (!displayName || displayName.match(/^[0-9A-Fa-f-]{30,}$/)) {
+        // No DB name AND no meaningful metaObject name — skip this storey
+        // (likely an unnamed A/B-model placeholder)
+        if (!displayName) return;
         guidCounter++;
         displayName = `Plan ${guidCounter}`;
         isGuidName = true;

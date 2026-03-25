@@ -161,7 +161,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
       .then(({ data }) => setHasFmAccess(!!data?.fm_access_building_guid));
   }, [buildingGuid]);
 
-  // Get child storeys for buildings — prefer A-model storeys when available
+  // Get child storeys for buildings — use named storeys, exclude unnamed model placeholders
   const childStoreys = useMemo(() => {
     if (!allData || facility.category !== 'Building') return [];
     const allStoreys = allData.filter(item => 
@@ -169,18 +169,25 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
       item.buildingFmGuid === facility.fmGuid
     );
     
-    // Check if any storeys belong to architectural models (A-modell, ARK, etc.)
-    const archStoreys = allStoreys.filter(s => {
-      const parentName = s.attributes?.parentCommonName || s.attributes?.parentName || '';
-      if (!parentName) return false;
-      const upper = parentName.toUpperCase().trim();
-      if (upper.includes('ARKITEKT') || upper.includes('A-MODELL') || upper.includes('A_MODELL') || upper.includes('A MODELL') || upper === 'ARK') return true;
-      if (upper.charAt(0) === 'A' && (upper.length === 1 || /^A[\s\-_.]/.test(upper))) return true;
-      return false;
+    // Exclude unnamed model-placeholder storeys (no common_name, parentCommonName is a model name)
+    const MODEL_NAME_RE = /^(A|B|E|V|K|R|S|VS|EL|MEP|BRAND|FIRE|SPRINKLER)[\s\-_.]/i;
+    const MODEL_EXACT_RE = /^(A-MODELL|B-MODELL|E-MODELL|V-MODELL|ARK|ARKITEKT|A_MODELL|B_MODELL|E_MODELL|V_MODELL)$/i;
+    const isModelName = (name: string): boolean => {
+      const trimmed = name.trim();
+      return MODEL_NAME_RE.test(trimmed) || MODEL_EXACT_RE.test(trimmed);
+    };
+
+    // Keep storeys that have a common_name, or whose parentCommonName is NOT a model name
+    const namedStoreys = allStoreys.filter(s => {
+      const displayName = s.commonName || s.name;
+      if (displayName) return true; // Has a name — keep it
+      // No name — check if parent is a model name
+      const parentName = s.attributes?.parentCommonName || '';
+      if (parentName && isModelName(parentName)) return false; // unnamed model placeholder
+      return true; // no parent model info — keep as fallback
     });
     
-    // Use A-model storeys if available, otherwise all storeys
-    const storeys = archStoreys.length > 0 ? archStoreys : allStoreys;
+    const storeys = namedStoreys.length > 0 ? namedStoreys : allStoreys;
     
     storeys.sort((a, b) => 
       (a.commonName || a.name || '').localeCompare(
@@ -192,14 +199,62 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     return storeys;
   }, [allData, facility]);
 
-  // Get child spaces — for storey pages show rooms on this floor
+  // Identify A-model storey GUIDs for space filtering
+  const aModelStoreyGuids = useMemo(() => {
+    if (!allData || facility.category !== 'Building') return new Set<string>();
+    const guids = new Set<string>();
+    const isAModelName = (name: string): boolean => {
+      const upper = name.toUpperCase().trim();
+      if (upper.includes('ARKITEKT') || upper.includes('A-MODELL') || upper.includes('A_MODELL') || upper.includes('A MODELL') || upper === 'ARK') return true;
+      if (upper.charAt(0) === 'A' && (upper.length === 1 || /^A[\s\-_.]/.test(upper))) return true;
+      return false;
+    };
+    allData.forEach(item => {
+      if (item.category !== 'Building Storey' || item.buildingFmGuid !== facility.fmGuid) return;
+      const parentName = item.attributes?.parentCommonName || '';
+      if (parentName && isAModelName(parentName)) guids.add(item.fmGuid);
+    });
+    return guids;
+  }, [allData, facility]);
+
+  // Get child spaces — only A-model spaces, redistributed to named storeys
   const childSpaces = useMemo(() => {
     if (!allData || (!isBuilding && !isStorey)) return [];
-    return allData.filter(item => 
+    
+    let filtered = allData.filter(item => 
       item.category === 'Space' &&
-      (isBuilding ? item.buildingFmGuid === facility.fmGuid : item.levelFmGuid === facility.fmGuid)
+      (isBuilding ? item.buildingFmGuid === facility.fmGuid : true)
     );
-  }, [allData, facility, isBuilding, isStorey]);
+
+    // Filter to A-model spaces only when A-model storeys exist
+    if (aModelStoreyGuids.size > 0) {
+      filtered = filtered.filter(item => {
+        if (!item.levelFmGuid) return true; // no level info — include as fallback
+        return aModelStoreyGuids.has(item.levelFmGuid);
+      });
+    }
+
+    if (isStorey) {
+      // For storey pages: show spaces whose levelFmGuid matches this storey,
+      // OR spaces from excluded A-model storeys whose designation prefix matches this storey's name
+      const storeyName = (facility.commonName || facility.name || '').trim();
+      filtered = filtered.filter(item => {
+        if (item.levelFmGuid === facility.fmGuid) return true;
+        // Check if this space was redistributed from an excluded storey
+        const designation = item.commonName || item.name || '';
+        const prefixMatch = designation.match(/^(\d{1,3})\./);
+        if (prefixMatch) {
+          const prefix = prefixMatch[1];
+          if (storeyName === prefix || storeyName.startsWith(prefix + ' ') || storeyName.startsWith(prefix + '-')) {
+            return true;
+          }
+        }
+        return false;
+      });
+    }
+
+    return filtered;
+  }, [allData, facility, isBuilding, isStorey, aModelStoreyGuids]);
 
   // Get child assets for spaces
   const childAssets = useMemo(() => {
