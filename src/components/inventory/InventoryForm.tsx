@@ -68,11 +68,39 @@ export const INVENTORY_CATEGORIES: InventoryCategory[] = [
   { value: 'other', label: 'Other', Icon: Package, color: 'text-muted-foreground' },
 ];
 
+interface AiScanResult {
+  objectType: string;
+  suggestedName: string;
+  description?: string;
+  confidence: number;
+  category: string;
+  suggestedSymbolId?: string | null;
+  properties?: Record<string, string | null>;
+}
+
+interface BipSuggestion {
+  code: string;
+  title: string;
+  usercode_syntax?: string;
+  bsab_e?: string;
+  aff?: string;
+  confidence: number;
+  reasoning?: string;
+}
+
 const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefill, editItem, onClearEdit, onOpen360, onOpen3d, pendingPosition, onPendingPositionConsumed }) => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [symbols, setSymbols] = useState<AnnotationSymbol[]>([]);
   const [isEditing, setIsEditing] = useState(false);
+
+  // AI scan state
+  const [isScanning, setIsScanning] = useState(false);
+  const [aiResult, setAiResult] = useState<AiScanResult | null>(null);
+
+  // BIP classify state
+  const [isClassifying, setIsClassifying] = useState(false);
+  const [bipSuggestions, setBipSuggestions] = useState<BipSuggestion[]>([]);
 
   // Form state - initialized with prefill values
   const [name, setName] = useState('');
