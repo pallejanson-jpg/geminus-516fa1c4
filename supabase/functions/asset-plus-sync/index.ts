@@ -481,7 +481,7 @@ async function upsertGeometryMappings(supabase: any, items: any[]): Promise<void
   }
 }
 
-async function upsertAssets(supabase: any, items: any[]): Promise<number> {
+async function upsertAssets(supabase: any, items: any[], options?: { skipGeometryMapping?: boolean }): Promise<number> {
   if (items.length === 0) return 0;
 
   const assets = items.map((item: any) => ({
@@ -510,11 +510,13 @@ async function upsertAssets(supabase: any, items: any[]): Promise<number> {
 
   if (error) throw error;
 
-  // Also populate geometry entity map
-  try {
-    await upsertGeometryMappings(supabase, items);
-  } catch (e) {
-    console.debug('geometry_entity_map upsert failed (non-fatal):', e);
+  // Also populate geometry entity map (skip during bulk sync for performance)
+  if (!options?.skipGeometryMapping) {
+    try {
+      await upsertGeometryMappings(supabase, items);
+    } catch (e) {
+      console.debug('geometry_entity_map upsert failed (non-fatal):', e);
+    }
   }
 
   return assets.length;
@@ -989,7 +991,7 @@ serve(async (req) => {
       await updateSyncState(supabase, 'assets', 'running', totalSynced);
       let interrupted = false;
       let softError: string | null = null;
-      const take = 100; // Reduced from 200 to accommodate full object payloads with user-defined properties
+      const take = 500; // Increased for throughput — geometry mapping deferred to post-sync
 
       while (currentBuildingIndex < totalBuildings && !interrupted) {
         const building = buildings[currentBuildingIndex];
@@ -1071,7 +1073,7 @@ serve(async (req) => {
             );
             
             if (result.data.length > 0) {
-              const synced = await upsertAssets(supabase, result.data);
+              const synced = await upsertAssets(supabase, result.data, { skipGeometryMapping: true });
               totalSynced += synced;
               
               // Update cursor for next iteration
