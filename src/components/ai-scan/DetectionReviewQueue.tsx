@@ -267,7 +267,7 @@ const ApprovalDialog: React.FC<{
 
           {/* Category */}
           <div className="space-y-1">
-            <Label>Objekttyp / Kategori</Label>
+            <Label>Object type / Category</Label>
             <Input
               value={form.category}
               onChange={e => setForm(prev => ({ ...prev, category: e.target.value }))}
