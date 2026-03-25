@@ -720,7 +720,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       const attrs = firstAsset.attributes as Record<string, any>;
       if (attrs.bipTypeId || attrs.bipBsabE || attrs.bipAff) {
         if (attrs.bipTypeId) {
-          props.push({ key: 'attr_bipTypeId', label: 'BIP Typbeteckning', value: attrs.bipTypeId, editable: false, source: 'lovable', type: 'text', section: 'classification' });
+          props.push({ key: 'attr_bipTypeId', label: 'BIP Type Code', value: attrs.bipTypeId, editable: false, source: 'lovable', type: 'text', section: 'classification' });
         }
         if (attrs.bipBsabE) {
           props.push({ key: 'attr_bipBsabE', label: 'BSAB-E', value: attrs.bipBsabE, editable: false, source: 'lovable', type: 'text', section: 'classification' });
