@@ -115,17 +115,8 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   // Effective visible floor guids: prefer event-based, fall back to prop
   const visibleFloorFmGuids = eventFloorGuids ?? visibleFloorFmGuidsProp;
   
-  // Load initial state from localStorage
-  const [visualizationType, setVisualizationType] = useState<VisualizationType>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return parsed.type || 'none';
-      }
-    } catch (e) { /* ignore */ }
-    return 'none';
-  });
+  // Always start with 'none' — user must explicitly choose a color filter
+  const [visualizationType, setVisualizationType] = useState<VisualizationType>('none');
   
   const [useMockData, setUseMockData] = useState(() => {
     try {
@@ -183,6 +174,12 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   } | null>(null);
 
   const config = VISUALIZATION_CONFIGS[visualizationType];
+
+  // Reset visualization when building changes
+  useEffect(() => {
+    setVisualizationType('none');
+    setUseMockData(false);
+  }, [buildingFmGuid]);
 
   // Initialize position when panel opens
   useEffect(() => {
