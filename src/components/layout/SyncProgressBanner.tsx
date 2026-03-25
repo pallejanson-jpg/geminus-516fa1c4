@@ -92,9 +92,10 @@ export const SyncProgressBanner: React.FC = () => {
 
   const handleReset = useCallback(async (subtreeId: string) => {
     setIsResetting(true);
+    const action = subtreeId === 'structure' ? 'reset-structure-progress' : 'reset-assets-progress';
     try {
       const { error } = await supabase.functions.invoke('asset-plus-sync', {
-        body: { action: 'reset-assets-progress' }
+        body: { action }
       });
 
       if (error) throw error;
