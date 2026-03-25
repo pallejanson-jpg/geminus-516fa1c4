@@ -173,6 +173,8 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     color: [number, number, number];
   } | null>(null);
 
+  const config = VISUALIZATION_CONFIGS[visualizationType];
+
   // Reset visualization when building changes
   useEffect(() => {
     setVisualizationType('none');
