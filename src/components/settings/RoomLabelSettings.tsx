@@ -129,7 +129,7 @@ const RoomLabelSettings: React.FC = () => {
                   <div className="space-y-4">
                     {/* Name input */}
                     <div className="space-y-1.5">
-                      <Label className="text-xs">Namn</Label>
+                      <Label className="text-xs">Name</Label>
                       <Input
                         value={editForm.name || ''}
                         onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
