@@ -85,6 +85,16 @@ serve(async (req) => {
           distance: step.distanceMeters,
           duration: step.staticDuration,
         };
+        // Include start location for click-to-zoom on every step
+        if (step.startLocation?.latLng) {
+          base.maneuver = {
+            location: [step.startLocation.latLng.longitude, step.startLocation.latLng.latitude],
+          };
+        }
+        // Add a human-readable instruction for walking steps
+        if (step.travelMode === 'WALK' && step.distanceMeters) {
+          base.instruction = `Walk ${step.distanceMeters < 1000 ? Math.round(step.distanceMeters) + ' m' : (step.distanceMeters / 1000).toFixed(1) + ' km'}`;
+        }
         if (step.transitDetails) {
           const td = step.transitDetails;
           base.transit = {
@@ -96,6 +106,9 @@ serve(async (req) => {
             departureTime: td.stopDetails?.departureTime || null,
             arrivalTime: td.stopDetails?.arrivalTime || null,
             numStops: td.stopCount || 0,
+            departureLocation: step.startLocation?.latLng
+              ? { lat: step.startLocation.latLng.latitude, lng: step.startLocation.latLng.longitude }
+              : undefined,
           };
         }
         return base;
