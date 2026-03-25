@@ -729,7 +729,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           props.push({ key: 'attr_bipAff', label: 'AFF', value: attrs.bipAff, editable: false, source: 'lovable', type: 'text', section: 'classification' });
         }
         if (attrs.bipCode) {
-          props.push({ key: 'attr_bipCode', label: 'BIP Kod', value: attrs.bipCode, editable: false, source: 'lovable', type: 'text', section: 'classification' });
+          props.push({ key: 'attr_bipCode', label: 'BIP Code', value: attrs.bipCode, editable: false, source: 'lovable', type: 'text', section: 'classification' });
         }
       }
     }

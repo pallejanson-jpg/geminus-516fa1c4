@@ -126,7 +126,7 @@ export const VISUALIZATION_CONFIGS: Record<VisualizationType, VisualizationConfi
   },
   none: {
     type: 'none',
-    label: 'Ingen',
+    label: 'None',
     unit: '',
     colorStops: [],
     min: 0,
