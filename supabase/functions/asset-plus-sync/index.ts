@@ -741,53 +741,120 @@ serve(async (req) => {
       );
     }
 
-    // ============ SYNC STRUCTURE (Buildings, Storeys, Spaces) ============
+    // ============ SYNC STRUCTURE — RESUMABLE (Buildings, Storeys, Spaces) ============
     if (action === 'sync-structure') {
+      const MAX_EXECUTION_TIME = 45000; // 45s guard (60s edge fn limit)
+      const startTime = Date.now();
       await updateSyncState(supabase, 'structure', 'running');
       const accessToken = await getAccessToken();
-      console.log('Starting sync-structure (ObjectTypes 1, 2, 3) with orphan cleanup');
 
-      const filter = [
+      // Load or create progress record
+      const { data: existingProgress } = await supabase
+        .from('asset_sync_progress')
+        .select('*')
+        .eq('job', 'structure_objects')
+        .maybeSingle();
+
+      let skip = existingProgress?.skip || 0;
+      let totalSynced = existingProgress?.total_synced || 0;
+      const phase = existingProgress?.page_mode || 'upsert'; // 'upsert' or 'cleanup'
+
+      console.log(`Starting resumable sync-structure phase=${phase} skip=${skip} totalSynced=${totalSynced}`);
+
+      if (phase === 'upsert') {
+        const filter = [
+          ["objectType", "=", 1], "or",
+          ["objectType", "=", 2], "or",
+          ["objectType", "=", 3]
+        ];
+
+        const take = 200;
+        let hasMore = true;
+
+        while (hasMore) {
+          // Timeout guard
+          if (Date.now() - startTime > MAX_EXECUTION_TIME) {
+            console.log(`Structure upsert timeout at skip=${skip}, totalSynced=${totalSynced}`);
+            await supabase.from('asset_sync_progress').upsert({
+              job: 'structure_objects',
+              skip,
+              total_synced: totalSynced,
+              page_mode: 'upsert',
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'job' });
+            await updateSyncState(supabase, 'structure', 'running', totalSynced);
+
+            return new Response(
+              JSON.stringify({ success: true, interrupted: true, phase: 'upsert', totalSynced }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
+          console.log(`Fetching structure at skip=${skip}...`);
+          const result = await fetchAssetPlusObjects(accessToken, filter, skip, take);
+
+          if (result.data.length > 0) {
+            const synced = await upsertAssets(supabase, result.data);
+            totalSynced += synced;
+            console.log(`Synced ${synced} structure items (total: ${totalSynced})`);
+          }
+
+          hasMore = result.hasMore;
+          skip += take;
+          await updateSyncState(supabase, 'structure', 'running', totalSynced);
+        }
+
+        // Upsert phase complete — transition to cleanup
+        console.log(`Structure upsert done: ${totalSynced} items. Starting orphan cleanup...`);
+        await supabase.from('asset_sync_progress').upsert({
+          job: 'structure_objects',
+          skip: 0,
+          total_synced: totalSynced,
+          page_mode: 'cleanup',
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'job' });
+
+        // Check timeout before cleanup
+        if (Date.now() - startTime > MAX_EXECUTION_TIME) {
+          return new Response(
+            JSON.stringify({ success: true, interrupted: true, phase: 'cleanup', totalSynced }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
+      // ---- Cleanup phase ----
+      // Re-fetch all remote fm_guids for orphan detection (structure is ~2800, fits in memory)
+      console.log('Running orphan cleanup for structure...');
+      const cleanupFilter = [
         ["objectType", "=", 1], "or",
         ["objectType", "=", 2], "or",
         ["objectType", "=", 3]
       ];
-
       const remoteFmGuids = new Set<string>();
-      let totalSynced = 0;
-      let skip = 0;
-      const take = 200;
-      let hasMore = true;
+      let cleanupSkip = 0;
+      const cleanupTake = 500;
+      let cleanupHasMore = true;
 
-      while (hasMore) {
-        console.log(`Fetching structure at skip=${skip}...`);
-        const result = await fetchAssetPlusObjects(accessToken, filter, skip, take);
-        
-        // Collect all remote fmGuids for orphan detection
-        result.data.forEach((item: any) => {
-          remoteFmGuids.add(item.fmGuid);
-        });
-
-        if (result.data.length > 0) {
-          const synced = await upsertAssets(supabase, result.data);
-          totalSynced += synced;
-          console.log(`Synced ${synced} structure items (total: ${totalSynced})`);
+      while (cleanupHasMore) {
+        if (Date.now() - startTime > MAX_EXECUTION_TIME) {
+          console.log('Timeout during orphan fetch — will retry next invocation');
+          return new Response(
+            JSON.stringify({ success: true, interrupted: true, phase: 'cleanup', totalSynced }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
-
-        hasMore = result.hasMore;
-        skip += take;
-        await updateSyncState(supabase, 'structure', 'running', totalSynced);
+        const result = await fetchAssetPlusObjects(accessToken, cleanupFilter, cleanupSkip, cleanupTake);
+        result.data.forEach((item: any) => remoteFmGuids.add(item.fmGuid));
+        cleanupHasMore = result.hasMore;
+        cleanupSkip += cleanupTake;
       }
 
-      // --- Orphan cleanup: remove local non-is_local objects not found in Asset+ ---
-      // Exclude ACC-synced objects (acc-bim-*, acc-*) from orphan detection
       console.log(`Total remote fmGuids: ${remoteFmGuids.size}. Checking for orphans...`);
-      
       const localFmGuids = await fetchAllLocalFmGuids(supabase, ['Building', 'Building Storey', 'Space'], false, true);
       console.log(`Local non-is_local structure count (excl. ACC): ${localFmGuids.length}`);
-      
+
       const orphanFmGuids = localFmGuids.filter(guid => !remoteFmGuids.has(guid));
-      
       let orphansRemoved = 0;
       if (orphanFmGuids.length > 0) {
         console.log(`Found ${orphanFmGuids.length} orphan structure objects to remove`);
@@ -809,15 +876,18 @@ serve(async (req) => {
         console.log('No orphan structure objects found');
       }
 
+      // Done — clean up progress record
+      await supabase.from('asset_sync_progress').delete().eq('job', 'structure_objects');
       await updateSyncState(supabase, 'structure', 'completed', totalSynced);
       console.log(`Structure sync completed: ${totalSynced} items, ${orphansRemoved} orphans removed`);
 
       return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: orphansRemoved > 0 
-            ? `Synkade ${totalSynced} objekt, tog bort ${orphansRemoved} föräldralösa objekt`
-            : `Synced ${totalSynced} structure items`, 
+        JSON.stringify({
+          success: true,
+          interrupted: false,
+          message: orphansRemoved > 0
+            ? `Synced ${totalSynced} structure items, removed ${orphansRemoved} orphans`
+            : `Synced ${totalSynced} structure items`,
           totalSynced,
           orphansRemoved,
         }),
