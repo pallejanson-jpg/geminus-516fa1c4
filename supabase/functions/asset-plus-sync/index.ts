@@ -954,6 +954,26 @@ serve(async (req) => {
       const startTime = Date.now();
       const force = body?.force === true;
       const targetBuildingFmGuid = body?.buildingFmGuid || null;
+
+      // Skip guard: if assets were synced recently and not forced, return immediately
+      if (!force && !targetBuildingFmGuid) {
+        const { data: assetsState } = await supabase
+          .from('asset_sync_state')
+          .select('sync_status, last_sync_completed_at')
+          .eq('subtree_id', 'assets')
+          .maybeSingle();
+
+        if (assetsState?.sync_status === 'completed' && assetsState?.last_sync_completed_at) {
+          const msSince = Date.now() - new Date(assetsState.last_sync_completed_at).getTime();
+          if (msSince < 5 * 60 * 1000) {
+            console.log(`Assets synced ${Math.round(msSince / 1000)}s ago, skipping (use force:true to override)`);
+            return new Response(
+              JSON.stringify({ success: true, interrupted: false, skipped: true, totalSynced: 0, message: 'Assets synced recently' }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        }
+      }
       
       const accessToken = await getAccessToken();
       console.log(`Starting sync-assets-resumable (target: ${targetBuildingFmGuid || 'all'}, force: ${force})`);
