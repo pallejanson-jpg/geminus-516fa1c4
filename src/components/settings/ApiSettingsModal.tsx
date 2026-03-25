@@ -55,6 +55,7 @@ interface SyncStatus {
 interface SyncCategoryState {
     localCount: number;
     remoteCount: number;
+    accLocalCount?: number;
     inSync: boolean;
     syncState?: SyncStatus;
 }
@@ -68,7 +69,7 @@ interface NewSyncCheckResult {
         buildingCount: number;
         syncState?: SyncStatus;
     };
-    total: { localCount: number; remoteCount: number };
+    total: { localCount: number; remoteCount: number; totalWithAcc?: number; accExcluded?: number };
 }
 
 interface ConfigState {
