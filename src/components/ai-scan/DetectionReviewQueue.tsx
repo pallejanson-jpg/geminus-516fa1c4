@@ -741,7 +741,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                 )}
 
                 <div className="text-xs text-muted-foreground">
-                  Bild #{detection.ivion_image_id || '-'}
+                  Image #{detection.ivion_image_id || '-'}
                 </div>
 
                 {detection.status === 'pending' ? (
