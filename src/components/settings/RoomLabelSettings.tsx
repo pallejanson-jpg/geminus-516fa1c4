@@ -119,7 +119,7 @@ const RoomLabelSettings: React.FC = () => {
                   <Tag className="h-4 w-4 text-primary" />
                   <span className="text-sm font-medium">{config.name}</span>
                   {config.is_default && (
-                    <Badge variant="secondary" className="text-xs">Standard</Badge>
+                    <Badge variant="secondary" className="text-xs">Default</Badge>
                   )}
                 </div>
               </AccordionTrigger>
