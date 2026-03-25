@@ -820,12 +820,100 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
         </div>
       )}
 
-      {/* Image upload */}
+      {/* Image upload + AI Scan */}
       <ImageUpload
         value={imageUrl}
-        onChange={setImageUrl}
+        onChange={(url) => {
+          setImageUrl(url);
+          setAiResult(null);
+        }}
         disabled={isLoading}
       />
+
+      {/* AI Identify button */}
+      {imageUrl && (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleAiScan}
+          disabled={isScanning}
+          className="w-full h-11 gap-2 border-primary/30 hover:bg-primary/5"
+        >
+          {isScanning ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4 text-primary" />
+          )}
+          {isScanning ? 'Identifying...' : 'AI Identify from image'}
+        </Button>
+      )}
+
+      {/* AI Result display */}
+      {aiResult && !isScanning && (
+        <div className={`rounded-lg border p-3 space-y-2 ${aiResult.confidence >= 0.7 ? 'border-primary/30 bg-primary/5' : 'border-border bg-muted/30'}`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className={`h-4 w-4 ${aiResult.confidence >= 0.7 ? 'text-primary' : 'text-muted-foreground'}`} />
+              <span className="font-semibold text-sm">{aiResult.suggestedName || aiResult.objectType}</span>
+            </div>
+            <Badge variant="secondary" className="text-xs">
+              {Math.round(aiResult.confidence * 100)}%
+            </Badge>
+          </div>
+          {aiResult.description && (
+            <p className="text-xs text-muted-foreground">{aiResult.description}</p>
+          )}
+          {aiResult.properties && (
+            <div className="flex flex-wrap gap-1">
+              {Object.entries(aiResult.properties).map(([key, val]) => {
+                if (!val) return null;
+                return (
+                  <Badge key={key} variant="outline" className="text-xs">
+                    {key}: {val}
+                  </Badge>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* BIP Classify button */}
+      <Button
+        type="button"
+        variant="outline"
+        onClick={handleBipClassify}
+        disabled={isClassifying || !name.trim()}
+        className="w-full h-11 gap-2"
+      >
+        {isClassifying ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <BookOpen className="h-4 w-4" />
+        )}
+        {isClassifying ? 'Classifying...' : 'Classify (BIP)'}
+      </Button>
+
+      {/* BIP suggestions */}
+      {bipSuggestions.length > 0 && (
+        <div className="rounded-lg border p-3 space-y-2">
+          <span className="text-sm font-medium">BIP Suggestions</span>
+          {bipSuggestions.map((s, i) => (
+            <div key={i} className="bg-muted/30 rounded-md p-2 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-mono font-medium">{s.code}</span>
+                <Badge variant="secondary" className="text-xs">
+                  {Math.round(s.confidence * 100)}%
+                </Badge>
+              </div>
+              <p className="text-xs text-foreground">{s.title}</p>
+              {s.usercode_syntax && <p className="text-xs text-muted-foreground">Syntax: {s.usercode_syntax}</p>}
+              {s.bsab_e && <p className="text-xs text-muted-foreground">BSAB-E: {s.bsab_e}</p>}
+              {s.reasoning && <p className="text-xs text-muted-foreground italic">{s.reasoning}</p>}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Description - expandable */}
       <div className="space-y-2">
