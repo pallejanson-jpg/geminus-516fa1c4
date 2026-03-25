@@ -17,6 +17,7 @@ import RoomVisualizationPanel from './RoomVisualizationPanel';
 import InventoryPanel from './InventoryPanel';
 import InventoryFormSheet from '@/components/inventory/InventoryFormSheet';
 import RouteDisplayOverlay from './RouteDisplayOverlay';
+import VisualizationLegendOverlay from './VisualizationLegendOverlay';
 
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
