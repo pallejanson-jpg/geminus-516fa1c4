@@ -148,6 +148,7 @@ export default function HomeLanding() {
   const openAssistant = useCallback(
     (type: AssistantType) => {
       if (type === "gunnar") { setGunnarOpen(true); return; }
+      if (type === "ilean") { setIleanOpen(true); return; }
       toast({ title: "AI Assistant (coming soon)", description: `${type} is not yet implemented.` });
     },
     [toast],
