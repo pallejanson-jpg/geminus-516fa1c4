@@ -401,7 +401,7 @@ export class AccXktConverter {
 
       // Translation still in progress — return pending so caller can retry
       if (data?.pending) {
-        return { status: 'pending', message: `Översättning pågår (${data.translationStatus || 'pending'})...` };
+        return { status: 'pending', message: `Translation in progress (${data.translationStatus || 'pending'})...` };
       }
 
       return { status: 'failed', error: data?.error || 'Download failed' };

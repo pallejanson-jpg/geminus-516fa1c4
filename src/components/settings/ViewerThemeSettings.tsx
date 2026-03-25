@@ -134,7 +134,7 @@ const ViewerThemeSettings: React.FC = () => {
           background_color: editingTheme.background_color,
           space_opacity: editingTheme.space_opacity,
         });
-        toast({ title: 'Tema uppdaterat', description: `"${editingTheme.name}" har sparats.` });
+        toast({ title: 'Theme updated', description: `"${editingTheme.name}" has been saved.` });
       } else {
         await createTheme({
           name: editingTheme.name,
