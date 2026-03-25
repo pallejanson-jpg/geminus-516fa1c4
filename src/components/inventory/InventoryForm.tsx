@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Loader2, Crosshair, Eye, X, Pencil, RefreshCw, Info, Flame, ShieldAlert, Droplets, DoorOpen, Radio, Fan, Lightbulb, Armchair, Monitor, Package, Camera, type LucideIcon } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Loader2, Crosshair, Eye, X, Pencil, RefreshCw, Info, Flame, ShieldAlert, Droplets, DoorOpen, Radio, Fan, Lightbulb, Armchair, Monitor, Package, Camera, Sparkles, BookOpen, CheckCircle2, type LucideIcon } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
