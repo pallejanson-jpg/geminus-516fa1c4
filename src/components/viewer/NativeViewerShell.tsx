@@ -994,6 +994,9 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         />
       )}
 
+      {/* Left-side visualization legend overlay */}
+      {isViewerReady && <VisualizationLegendOverlay />}
+
       {/* Asset panel — independent from visualization menu */}
       {isViewerReady && buildingFmGuid && (
         <InventoryPanel

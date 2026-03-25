@@ -417,13 +417,13 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     });
     
     // ALSO reset any rooms that were colorized but may no longer be in current filter
-    // This prevents "sticky" colors from appearing on other floors
     colorizedRoomGuidsRef.current.forEach((fmGuid) => {
       colorizeSpace(fmGuid, null);
     });
     
-    // Clear the tracking set
+    // Clear the tracking set and global viz entity IDs
     colorizedRoomGuidsRef.current.clear();
+    (window as any).__vizColorizedEntityIds = new Set<string>();
     setColorizedCount(0);
   }, [rooms, colorizeSpace]);
 
