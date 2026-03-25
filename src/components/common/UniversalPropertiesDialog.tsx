@@ -240,11 +240,24 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
         setAssets(assetData || []);
 
         // Populate BIM fallback data from viewer metaScene (even if assets exist — for extra BIM properties)
-        if (entityId) {
+        {
           const viewer = (window as any).__nativeXeokitViewer;
-          const metaObj = viewer?.metaScene?.metaObjects?.[entityId];
-          if (metaObj) {
-            setBimFallbackFromMeta(metaObj, entityId);
+          if (viewer?.metaScene?.metaObjects) {
+            let metaObj = entityId ? viewer.metaScene.metaObjects[entityId] : null;
+            // If no entityId or no match, scan metaObjects for matching originalSystemId (fmGuid)
+            if (!metaObj && fmGuids.length === 1) {
+              const guidLower = fmGuids[0].toLowerCase();
+              for (const key of Object.keys(viewer.metaScene.metaObjects)) {
+                const mo = viewer.metaScene.metaObjects[key];
+                if (mo?.originalSystemId?.toLowerCase() === guidLower) {
+                  metaObj = mo;
+                  break;
+                }
+              }
+            }
+            if (metaObj) {
+              setBimFallbackFromMeta(metaObj, entityId || metaObj.id || fmGuids[0]);
+            }
           }
         }
 
@@ -707,7 +720,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       const attrs = firstAsset.attributes as Record<string, any>;
       if (attrs.bipTypeId || attrs.bipBsabE || attrs.bipAff) {
         if (attrs.bipTypeId) {
-          props.push({ key: 'attr_bipTypeId', label: 'BIP Typbeteckning', value: attrs.bipTypeId, editable: false, source: 'lovable', type: 'text', section: 'classification' });
+          props.push({ key: 'attr_bipTypeId', label: 'BIP Type Code', value: attrs.bipTypeId, editable: false, source: 'lovable', type: 'text', section: 'classification' });
         }
         if (attrs.bipBsabE) {
           props.push({ key: 'attr_bipBsabE', label: 'BSAB-E', value: attrs.bipBsabE, editable: false, source: 'lovable', type: 'text', section: 'classification' });
@@ -716,7 +729,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           props.push({ key: 'attr_bipAff', label: 'AFF', value: attrs.bipAff, editable: false, source: 'lovable', type: 'text', section: 'classification' });
         }
         if (attrs.bipCode) {
-          props.push({ key: 'attr_bipCode', label: 'BIP Kod', value: attrs.bipCode, editable: false, source: 'lovable', type: 'text', section: 'classification' });
+          props.push({ key: 'attr_bipCode', label: 'BIP Code', value: attrs.bipCode, editable: false, source: 'lovable', type: 'text', section: 'classification' });
         }
       }
     }

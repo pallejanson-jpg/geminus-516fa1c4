@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 
 import GunnarChat from "@/components/chat/GunnarChat";
+import IleanButton from "@/components/chat/IleanButton";
 import { useAllBuildingSettings } from "@/hooks/useAllBuildingSettings";
 import { AppContext } from "@/context/AppContext";
 import { BUILDING_IMAGES } from "@/lib/constants";
@@ -92,6 +93,7 @@ export default function HomeLanding() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [gunnarOpen, setGunnarOpen] = useState(false);
+  const [ileanOpen, setIleanOpen] = useState(false);
   const { settingsMap, isLoading: isLoadingSettings, getFavorites, getHeroImage } = useAllBuildingSettings();
   const { navigatorTreeData, setSelectedFacility, setActiveApp, allData } = useContext(AppContext);
 
@@ -147,6 +149,7 @@ export default function HomeLanding() {
   const openAssistant = useCallback(
     (type: AssistantType) => {
       if (type === "gunnar") { setGunnarOpen(true); return; }
+      if (type === "ilean") { setIleanOpen(true); return; }
       toast({ title: "AI Assistant (coming soon)", description: `${type} is not yet implemented.` });
     },
     [toast],
@@ -317,6 +320,7 @@ export default function HomeLanding() {
       </div>
 
       <GunnarChat open={gunnarOpen} onClose={() => setGunnarOpen(false)} context={{ activeApp: 'home' }} />
+      {ileanOpen && <IleanButton />}
     </div>
   );
 }
