@@ -54,7 +54,7 @@ export const VISUALIZATION_CONFIGS: Record<VisualizationType, VisualizationConfi
   },
   humidity: {
     type: 'humidity',
-    label: 'Luftfuktighet',
+    label: 'Humidity',
     unit: '%',
     colorStops: [
       { value: 20, color: [249, 115, 22] },   // Orange - too dry
