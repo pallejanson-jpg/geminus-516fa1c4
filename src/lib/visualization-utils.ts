@@ -83,7 +83,7 @@ export const VISUALIZATION_CONFIGS: Record<VisualizationType, VisualizationConfi
   },
   light: {
     type: 'light',
-    label: 'Belysning',
+    label: 'Light',
     unit: 'lux',
     colorStops: [
       { value: 0, color: [30, 30, 30] },       // Very dark
