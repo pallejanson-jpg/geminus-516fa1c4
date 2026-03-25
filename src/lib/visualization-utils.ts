@@ -98,7 +98,7 @@ export const VISUALIZATION_CONFIGS: Record<VisualizationType, VisualizationConfi
   },
   area: {
     type: 'area',
-    label: 'Yta (NTA)',
+    label: 'Area (NTA)',
     unit: 'm²',
     colorStops: [
       { value: 0, color: [255, 255, 255] },   // White - smallest
