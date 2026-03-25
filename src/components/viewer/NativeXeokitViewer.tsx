@@ -1382,6 +1382,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       const viewer = viewerRef.current;
       if (!viewer?.scene || !viewer?.metaScene?.metaObjects) return;
 
+      // Respect explicit user toggle-off
+      if (show && (window as any).__spacesUserExplicitOff) return;
+
       const metaObjects = viewer.metaScene.metaObjects;
       const scene = viewer.scene;
       // Track force-show state globally so filter panel can respect it
@@ -1391,25 +1394,49 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       const SPACE_DEFAULT_COLOR: [number, number, number] = [184 / 255, 212 / 255, 227 / 255];
       const SPACE_DEFAULT_OPACITY = 0.25;
 
+      // Read current floor filter to only show spaces on visible floors
+      const floorFilterRaw = (detail?.floorGuids as string[] | undefined) ?? [];
+      // Fallback: check if there's a global floor selection
+      let visibleFloorKeys: Set<string> | null = null;
+      if (floorFilterRaw.length > 0) {
+        visibleFloorKeys = new Set(floorFilterRaw.map((g: string) => g.toLowerCase().replace(/-/g, '')));
+      }
+
       Object.values(metaObjects).forEach((mo: any) => {
         const ifcType = (mo.type || '').toLowerCase();
         if (ifcType === 'ifcspace' || ifcType === 'ifc_space' || ifcType === 'space') {
           const entity = scene.objects?.[mo.id];
           if (entity) {
-            entity.visible = show;
-            entity.pickable = show;
-            if (show) {
-              // Apply light blue default color — visualization will override with sensor colors
+            // Check floor filter
+            let belongsToVisibleFloor = true;
+            if (visibleFloorKeys && visibleFloorKeys.size > 0) {
+              belongsToVisibleFloor = false;
+              let current = mo;
+              while (current?.parent) {
+                current = current.parent;
+                if (current?.type?.toLowerCase() === 'ifcbuildingstorey') {
+                  const storeyGuid = (current.originalSystemId || current.id || '').toLowerCase().replace(/-/g, '');
+                  belongsToVisibleFloor = visibleFloorKeys.has(storeyGuid);
+                  break;
+                }
+              }
+            }
+
+            if (show && belongsToVisibleFloor) {
+              entity.visible = true;
+              entity.pickable = true;
               entity.colorize = SPACE_DEFAULT_COLOR;
               entity.opacity = SPACE_DEFAULT_OPACITY;
-            } else {
+            } else if (!show) {
+              entity.visible = false;
+              entity.pickable = false;
               entity.colorize = null;
               entity.opacity = 1.0;
             }
           }
         }
       });
-      console.log('[NativeViewer] FORCE_SHOW_SPACES:', show);
+      console.log('[NativeViewer] FORCE_SHOW_SPACES:', show, visibleFloorKeys ? `(${visibleFloorKeys.size} floors)` : '(all floors)');
     };
 
     window.addEventListener(FORCE_SHOW_SPACES_EVENT, handler);
