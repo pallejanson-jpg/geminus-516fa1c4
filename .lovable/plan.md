@@ -1,52 +1,59 @@
 
 
-# Plan: Fix Småviken Levels + Mobile Viewer Settings
+# Plan: Fix Filter Persistence + Småviken Portfolio Floors
 
-## Root Cause
+## Problem 1: Filter Resets When Panel Closes
 
-The filter panel's `levels` memo (line 242) takes the `sharedFloors` path whenever `sharedFloors.length > 0`. For Småviken, the xeokit scene exposes only 2 partial/unnamed storeys from the A-model, so `sharedFloors` returns 2 items. This blocks the fallback path (line 288) which would correctly produce 10 storeys from the `assets` table.
+**Root cause**: Lines 1560-1596 in `ViewerFilterPanel.tsx` contain an explicit cleanup effect that fires when `isVisible` becomes false. It calls `scene.setObjectsVisible(scene.objectIds, true)` — resetting all visibility back to default. This was originally meant to clean up xray/colorize effects, but it also wipes the visibility filter.
 
-The fix: when `sharedFloors` exists but looks incomplete compared to `storeyAssets` from the DB, prefer the DB-driven list.
+**Fix**: When the panel closes and filters are still active (checked sets are non-empty), preserve the visibility state. Only reset xray, colorize, and opacity — do NOT call `setObjectsVisible(all, true)` and do NOT restore model visibility when filters are active.
 
-## Changes
+### File: `src/components/viewer/ViewerFilterPanel.tsx` (lines 1560-1596)
 
-### 1. Fix levels selection logic in ViewerFilterPanel
-**File: `src/components/viewer/ViewerFilterPanel.tsx`** (lines 239-319)
+Change the cleanup effect:
+- Check if any filter is active: `checkedSources.size > 0 || checkedLevels.size > 0 || checkedSpaces.size > 0 || checkedCategories.size > 0`
+- If filters are active: only clean up xray and colorize (visual enhancements), but keep visibility as-is. Re-apply architect colors or theme on the visible objects only.
+- If NO filters are active: keep existing full cleanup logic (show everything, reset opacity, etc.)
+- Add the checked state sets to the effect's dependency array.
 
-Replace the simple `if (sharedFloors.length > 0)` guard with a quality check:
+---
 
-```
-const aModelStoreys = storeyAssets.filter(s => 
-  s.sourceName && !isGuid(s.sourceName) && isArchitecturalModel(s.sourceName)
-);
+## Problem 2: Småviken Floors in Portfolio
 
-// Use sharedFloors only if they are MORE complete than DB storeys
-// If DB has significantly more A-model storeys, prefer DB as source of truth
-if (sharedFloors.length > 0 && (aModelStoreys.length === 0 || sharedFloors.length >= aModelStoreys.length * 0.7)) {
-  // ... existing sharedFloors mapping (lines 243-285)
-} else if (aModelStoreys.length > 0) {
-  // Use DB-driven A-model storeys (existing fallback logic, lines 289-318)
-} else {
-  // Final fallback: all storeyAssets
-}
-```
+**Root cause**: The A-modell storeys in Småviken have `common_name = NULL` and `name = NULL` in the `assets` table. The portfolio page at line 744 falls back to `Floor ${idx + 1}`. Additionally, ALL storeys from ALL models are shown (13 total), not just architectural ones.
 
-This means: if the DB says there are 10 A-model storeys but the scene only found 2, prefer the DB list. The 0.7 threshold allows for minor differences without flipping.
+This is a **data quality** issue combined with a **display logic** issue.
 
-### 2. Add per-axis speed sliders and FastNav to mobile settings
-**File: `src/components/viewer/mobile/MobileViewerPage.tsx`**
+**Fix (two parts)**:
 
-In the mobile settings drawer (where the master speed slider already exists), add:
-- Three separate sliders for Zoom, Pan, Rotate (same `NAV_SPEED_GRANULAR` event as desktop)
-- FastNav switch (dispatches `FASTNAV_TOGGLE` event)
-- Read initial values from localStorage, same keys as desktop
+### Part A: Portfolio should prefer A-model storeys
+**File: `src/components/portfolio/FacilityLandingPage.tsx`** (lines 164-179)
 
-This ensures mobile and desktop have identical Viewer Settings controls.
+Update `childStoreys` memo to prefer A-model storeys when available:
+- Import `isArchitecturalModel` from `useFloorData`
+- Filter storeys: if any storey has `parentCommonName` matching an architectural model name, only show those. Otherwise show all.
+- This matches the filter panel's existing A-model priority logic.
+
+### Part B: Better fallback names for unnamed storeys
+**File: `src/components/portfolio/FacilityLandingPage.tsx`** (line 744)
+
+When displaying a storey name, add a smarter fallback:
+- Try `storey.commonName || storey.name`
+- Then try `storey.attributes?.levelName || storey.attributes?.levelCommonName`
+- Then count contained spaces and generate "Level N (X rooms)" based on position index
+- The current `Floor ${idx+1}` fallback stays as last resort
+
+### Part C: Room assignment to correct storeys
+The rooms in Småviken DO reference A-modell storey GUIDs correctly via `level_fm_guid`. But since the storey carousel shows ALL models' storeys, rooms appear scattered. By filtering to A-model storeys only (Part A), the rooms will group correctly under the 2 unnamed A-modell storeys.
+
+Since there are only 2 A-model storeys with no names, we should also attempt to derive names from the xeokit scene. But since the portfolio doesn't have viewer access, the practical fix is the naming fallback + A-model filtering.
+
+---
 
 ## Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/components/viewer/ViewerFilterPanel.tsx` | Add quality check: prefer DB storeys when scene floors are incomplete |
-| `src/components/viewer/mobile/MobileViewerPage.tsx` | Add per-axis speed sliders + FastNav toggle to mobile settings drawer |
+| `src/components/viewer/ViewerFilterPanel.tsx` | Skip full visibility reset in cleanup effect when filters are active |
+| `src/components/portfolio/FacilityLandingPage.tsx` | Filter to A-model storeys; improve unnamed storey fallback labels |
 
