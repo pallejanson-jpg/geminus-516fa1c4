@@ -245,7 +245,6 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
 
   const handleShowIn3D = (alarm: AlarmAsset) => {
     const targetGuid = alarm.in_room_fm_guid || alarm.fm_guid;
-    setSelectedBuildingFmGuid(buildingFmGuid);
     navigate(`/viewer?building=${buildingFmGuid}&object=${targetGuid}`);
   };
 
