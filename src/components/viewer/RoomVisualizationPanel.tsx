@@ -97,8 +97,8 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     const handleFloorChange = (e: CustomEvent<FloorSelectionEventDetail>) => {
       const { visibleFloorFmGuids: guids, isAllFloorsVisible } = e.detail;
       setEventIsAllVisible(!!isAllFloorsVisible);
-      if (isAllFloorsVisible) {
-        setEventFloorGuids(null); // null = all floors, skip filtering
+      if (isAllFloorsVisible && (!guids || guids.length === 0)) {
+        setEventFloorGuids(null); // null = truly all floors visible, skip filtering
       } else if (guids && guids.length > 0) {
         setEventFloorGuids(guids);
       }
@@ -278,7 +278,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     if (visibleFloorFmGuids && visibleFloorFmGuids.length > 0) {
       const lowerCaseVisibleGuids = visibleFloorFmGuids.map(g => g.toLowerCase());
       roomData = roomData.filter(room => {
-        if (!room.levelFmGuid) return true; // Include rooms without floor association
+        if (!room.levelFmGuid) return false; // Exclude rooms without floor association when filtering
         return lowerCaseVisibleGuids.includes(room.levelFmGuid.toLowerCase());
       });
     }
@@ -474,7 +474,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         if (entity) {
           if (color) {
             entity.colorize = rgbToFloat(color);
-            entity.opacity = 0.15; // Tandem-style: nearly transparent, color visible on floor without blocking view
+            entity.opacity = 0.85;
           } else {
             entity.colorize = null; // Reset to default
             entity.opacity = 1.0; // Reset opacity
