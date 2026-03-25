@@ -94,9 +94,9 @@ const RoomLabelSettings: React.FC = () => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-medium">Rumsetiketter</h3>
+          <h3 className="text-lg font-medium">Room Labels</h3>
           <p className="text-sm text-muted-foreground">
-            Konfigurera hur etiketter visas på rum i 3D-viewern
+            Configure how labels are displayed on rooms in the 3D viewer
           </p>
         </div>
         <Button onClick={() => setShowCreateDialog(true)} size="sm" className="gap-2">
