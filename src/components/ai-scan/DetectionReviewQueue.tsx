@@ -848,7 +848,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                       )}
                       {detailDialog.extracted_properties.size && (
                         <div>
-                          <span className="text-muted-foreground">Storlek:</span>
+                          <span className="text-muted-foreground">Size:</span>
                           <span className="ml-2 font-medium">{detailDialog.extracted_properties.size}</span>
                         </div>
                       )}
