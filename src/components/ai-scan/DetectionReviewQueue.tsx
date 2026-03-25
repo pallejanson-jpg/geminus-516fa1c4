@@ -866,7 +866,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                       )}
                       {detailDialog.extracted_properties.mounting && (
                         <div>
-                          <span className="text-muted-foreground">Montering:</span>
+                          <span className="text-muted-foreground">Mounting:</span>
                           <span className="ml-2 font-medium">{detailDialog.extracted_properties.mounting}</span>
                         </div>
                       )}
