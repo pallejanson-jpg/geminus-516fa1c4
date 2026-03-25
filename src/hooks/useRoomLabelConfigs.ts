@@ -142,7 +142,7 @@ export function useRoomLabelConfigs() {
       console.error('Failed to update room label config:', error);
       toast({
         variant: 'destructive',
-        title: 'Kunde inte uppdatera',
+        title: 'Could not update',
         description: error.message,
       });
     }
