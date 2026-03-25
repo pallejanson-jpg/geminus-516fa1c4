@@ -135,8 +135,8 @@ export function useRoomLabelConfigs() {
 
       await fetchConfigs();
       toast({
-        title: 'Konfiguration uppdaterad',
-        description: 'Ändringarna har sparats.',
+        title: 'Configuration updated',
+        description: 'Changes have been saved.',
       });
     } catch (error: any) {
       console.error('Failed to update room label config:', error);
