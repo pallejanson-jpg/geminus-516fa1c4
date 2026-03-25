@@ -854,7 +854,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                       )}
                       {detailDialog.extracted_properties.type && (
                         <div>
-                          <span className="text-muted-foreground">Typ:</span>
+                          <span className="text-muted-foreground">Type:</span>
                           <span className="ml-2 font-medium">{detailDialog.extracted_properties.type}</span>
                         </div>
                       )}
