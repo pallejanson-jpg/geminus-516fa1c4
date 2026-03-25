@@ -320,6 +320,7 @@ export default function HomeLanding() {
       </div>
 
       <GunnarChat open={gunnarOpen} onClose={() => setGunnarOpen(false)} context={{ activeApp: 'home' }} />
+      {ileanOpen && <IleanButton />}
     </div>
   );
 }
