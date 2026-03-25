@@ -240,11 +240,24 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
         setAssets(assetData || []);
 
         // Populate BIM fallback data from viewer metaScene (even if assets exist — for extra BIM properties)
-        if (entityId) {
+        {
           const viewer = (window as any).__nativeXeokitViewer;
-          const metaObj = viewer?.metaScene?.metaObjects?.[entityId];
-          if (metaObj) {
-            setBimFallbackFromMeta(metaObj, entityId);
+          if (viewer?.metaScene?.metaObjects) {
+            let metaObj = entityId ? viewer.metaScene.metaObjects[entityId] : null;
+            // If no entityId or no match, scan metaObjects for matching originalSystemId (fmGuid)
+            if (!metaObj && singleGuid) {
+              const guidLower = singleGuid.toLowerCase();
+              for (const key of Object.keys(viewer.metaScene.metaObjects)) {
+                const mo = viewer.metaScene.metaObjects[key];
+                if (mo?.originalSystemId?.toLowerCase() === guidLower) {
+                  metaObj = mo;
+                  break;
+                }
+              }
+            }
+            if (metaObj) {
+              setBimFallbackFromMeta(metaObj, entityId || metaObj.id || singleGuid);
+            }
           }
         }
 
