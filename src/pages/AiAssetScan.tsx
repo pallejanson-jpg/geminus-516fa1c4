@@ -176,7 +176,7 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid }) =>
           <div className="p-1.5 bg-primary/10 rounded-lg shrink-0">
             <Scan className="h-5 w-5 text-primary" />
           </div>
-          <h1 className="text-base md:text-xl font-semibold">AI-skanning pågår</h1>
+          <h1 className="text-base md:text-xl font-semibold">AI scan in progress</h1>
         </div>
         <BrowserScanRunner
           scanJobId={browserScanConfig.scanJobId}
