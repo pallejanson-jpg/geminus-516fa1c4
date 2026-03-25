@@ -169,7 +169,7 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
         });
       } catch (err) {
         console.error('[BuildingViewerData] Error:', err);
-        setError('Kunde inte ladda byggnadsdata');
+        setError('Could not load building data');
       }
 
       setIsLoading(false);

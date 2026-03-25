@@ -171,7 +171,7 @@ export function useRoomLabelConfigs() {
       console.error('Failed to delete room label config:', error);
       toast({
         variant: 'destructive',
-        title: 'Kunde inte ta bort',
+        title: 'Could not delete',
         description: error.message,
       });
     }

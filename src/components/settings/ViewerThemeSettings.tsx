@@ -170,8 +170,8 @@ const ViewerThemeSettings: React.FC = () => {
     } catch (err: any) {
       toast({ 
         variant: 'destructive', 
-        title: 'Fel', 
-        description: err.message || 'Kunde inte ta bort temat' 
+        title: 'Error', 
+        description: err.message || 'Could not delete theme' 
       });
     }
   };

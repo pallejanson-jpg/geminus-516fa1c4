@@ -282,9 +282,9 @@ const RoomLabelSettings: React.FC = () => {
 
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Namn</Label>
+              <Label>Name</Label>
               <Input
-                placeholder="T.ex. 'Namn och area'"
+                placeholder="e.g. 'Name and area'"
                 value={editForm.name || ''}
                 onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
               />

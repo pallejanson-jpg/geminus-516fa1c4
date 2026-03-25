@@ -43,8 +43,8 @@ const Inline3dPositionPicker: React.FC<Inline3dPositionPickerProps> = ({
       if (hit?.worldPos) {
         setPendingCoords({ x: hit.worldPos[0], y: hit.worldPos[1], z: hit.worldPos[2] });
         if (viewer.camera.projection === 'ortho') {
-          toast.info('Position vald i 2D — höjden kanske inte stämmer', {
-            description: 'Byt till 3D för exakt höjd.',
+          toast.info('Position selected in 2D — height may not be accurate', {
+            description: 'Switch to 3D for exact height.',
           });
         }
       }

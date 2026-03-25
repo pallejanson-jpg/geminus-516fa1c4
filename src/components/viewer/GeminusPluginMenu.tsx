@@ -137,7 +137,7 @@ export default function GeminusPluginMenu({
       toast.success('Ärende skapat');
       handleClose();
     } catch (err: any) {
-      toast.error('Kunde inte skapa ärende: ' + (err.message || 'Okänt fel'));
+      toast.error('Could not create issue: ' + (err.message || 'Unknown error'));
     } finally {
       setIsSubmitting(false);
     }

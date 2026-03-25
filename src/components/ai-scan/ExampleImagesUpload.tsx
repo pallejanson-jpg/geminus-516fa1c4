@@ -62,7 +62,7 @@ const ExampleImagesUpload: React.FC<ExampleImagesUploadProps> = ({
       toast.success('Exempelbild uppladdad!');
     } catch (error: any) {
       console.error('Upload error:', error);
-      toast.error('Kunde inte ladda upp bild', {
+      toast.error('Could not upload image', {
         description: error.message,
       });
     } finally {

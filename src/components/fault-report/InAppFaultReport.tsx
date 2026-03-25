@@ -52,7 +52,7 @@ const InAppFaultReport: React.FC = () => {
       toast.success('Felanmälan skickad!');
     } catch (err: any) {
       console.error('Submit error:', err);
-      toast.error('Kunde inte skicka felanmälan', { description: err.message });
+      toast.error('Could not submit fault report', { description: err.message });
     } finally {
       setIsSubmitting(false);
     }
