@@ -1073,7 +1073,7 @@ serve(async (req) => {
             );
             
             if (result.data.length > 0) {
-              const synced = await upsertAssets(supabase, result.data);
+              const synced = await upsertAssets(supabase, result.data, { skipGeometryMapping: true });
               totalSynced += synced;
               
               // Update cursor for next iteration
