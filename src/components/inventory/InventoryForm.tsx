@@ -198,6 +198,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
     setCoordinates(null);
     setAiResult(null);
     setBipSuggestions([]);
+    setSelectedBip(null);
   };
 
   // AI image recognition - calls mobile-ai-scan with the uploaded image
