@@ -1,145 +1,76 @@
 
-# Plan: Restore X-Ray, Room Sensor Coloring, and Left-Side Scale in the Native Viewer
+
+# Plan: Fix Multiple Issues — Visualization, Properties, Settings, Translations, Ilean on Home
 
 ## Summary
 
-I will fix the native viewer’s right-side visualization flow so it behaves the way you described:
+Address 7 distinct issues: translate visualization labels to English, fix the properties panel showing too few properties, collapse Viewer Settings by default, translate Insight tabs, activate Ilean on home page, and answer the RAG Search demo question.
 
-- X-Ray works again
-- spaces are automatically shown when sensor visualization is active
-- only the rooms currently visible in the viewer are colorized
-- rooms are colored from real sensor properties such as temperature and CO₂
-- the left-side scale/legend is shown again
+## Answer: RAG Search Documents
 
-## Root causes found
+You have **1 document** indexed for building **Småviken** (`a8fe5835-e293-4ba3-92c6-c7e36f675f23`). That's the building to demo RAG Search.
 
-1. **X-Ray is effectively broken**
-   - `XrayToggle.tsx` skips any object that already has a `colorize` value.
-   - In this project, architect colors already colorize almost all objects, so X-Ray skips nearly the whole model.
+## Answer: Properties Panel (EB2F1C94...)
 
-2. **Room visualization is using incomplete room filtering**
-   - `RoomVisualizationPanel.tsx` currently builds rooms mostly from `allData` + selected floor GUIDs.
-   - It does **not reliably limit coloring to what is actually visible in the viewer scene**.
-   - It also filters only `category === 'Space'`, while other parts of the app support both `Space` and `IfcSpace`.
+That Space has `attributes: null` in the database — it has no stored properties beyond the basic columns. The properties panel correctly shows what's available. The `SKIP_ATTR_KEYS` filter is not the problem; there are simply no attributes stored for that room. The panel does show all DB columns (fm_guid, category, name, etc.) — but since `attributes` is null, no user-defined or Asset+ properties appear.
 
-3. **Space visibility is handled in two places**
-   - `NativeViewerShell.tsx` has floor-aware `onShowSpacesChanged`.
-   - `NativeXeokitViewer.tsx` also listens to `FORCE_SHOW_SPACES_EVENT`, but its handler currently shows **all** spaces, ignoring active floor selection.
-   - This can override the intended “only visible level(s)” behavior.
-
-4. **The legend overlay is missing in the native viewer**
-   - `VisualizationLegendOverlay.tsx` exists and listens to `VISUALIZATION_STATE_CHANGED`.
-   - But in the native viewer flow, it is not mounted in `NativeViewerShell.tsx`.
-   - That is why the left-side scale indicator is missing even though the visualization panel dispatches the event.
+However, the panel should also show BIM metadata from the viewer's `metaScene` (propertySets). It tries to do this via `entityId`, but when opened from the viewer by clicking a space, the `entityId` may not be passed. I will ensure BIM property sets are always shown when available.
 
 ## Changes
 
-### 1. Fix X-Ray behavior
-**File:** `src/components/viewer/XrayToggle.tsx`
+### 1. Translate visualization labels to English
+**File:** `src/lib/visualization-utils.ts`
 
-- Change the X-Ray logic so it does **not** treat all colorized objects as “protected”.
-- Only keep the actively highlighted sensor spaces exempt from ghosting, not the entire architect-colored model.
-- Make X-Ray compatible with the current architectural palette and room visualization colors.
+Change all `label` values in `VISUALIZATION_CONFIGS`:
+- `Temperatur` → `Temperature`
+- `Luftfuktighet` → `Humidity`
+- `Beläggning` → `Occupancy`
+- `Belysning` → `Light`
+- `Yta (NTA)` → `Area (NTA)`
+- `Anomalier` → `Anomalies`
+- `Ingen` → `None`
+- `poäng` → `score`
 
-Result:
-- X-Ray will ghost the building correctly again.
-- Sensor-colored spaces will still remain readable when visualization is active.
+### 2. Collapse Viewer Settings by default
+**File:** `src/components/viewer/VisualizationToolbar.tsx`
 
----
-
-### 2. Make room visualization use the spaces that are actually visible
-**File:** `src/components/viewer/RoomVisualizationPanel.tsx`
-
-- Expand room source filtering to support both `Space` and `IfcSpace`.
-- Build the effective visualization target list from:
-  - building rooms in `allData`
-  - current floor selection
-  - actual matching `IfcSpace` entities in the viewer
-  - actual entity visibility in the scene
-- Only colorize spaces that are currently visible in the viewer.
-
-Result:
-- “All floors” colors all visible spaces.
-- “Selected level” colors only spaces on that level.
-- Hidden floors/rooms are not included.
-
----
-
-### 3. Unify “show spaces” so floor filtering is respected
-**Files:**
-- `src/components/viewer/NativeViewerShell.tsx`
-- `src/components/viewer/NativeXeokitViewer.tsx`
-
-- Align the `FORCE_SHOW_SPACES_EVENT` handling with the current visible-floor state.
-- Ensure automatic “show spaces” for visualization respects selected floors instead of forcing every `IfcSpace` visible.
-- Keep the existing explicit user-off guard, but allow visualization mode to intentionally enable spaces when chosen from the right menu.
-
-Result:
-- Sensor visualization turns spaces on as expected.
-- But only the relevant visible rooms are shown and colored.
-
----
-
-### 4. Restore the left-side visualization scale/legend
-**File:** `src/components/viewer/NativeViewerShell.tsx`
-
-- Mount `VisualizationLegendOverlay` in the native viewer shell, the same way the older viewer flow already supports it.
-- Keep it independent from the right menu so it updates whenever visualization state changes.
-
-Result:
-- The vertical legend/scale appears again on the left.
-- It reflects the active metric and current room values.
-
----
-
-### 5. Keep the right-menu flow aligned with your intended behavior
-**Files:**
-- `src/components/viewer/VisualizationToolbar.tsx`
-- `src/components/viewer/RoomVisualizationPanel.tsx`
-
-- Keep the right-menu “Color filter” behavior tied to room sensor visualization, not generic object coloring.
-- Ensure selecting a metric:
-  - shows spaces
-  - applies room coloring
-  - updates the legend
-- Ensure selecting “None” clears colors cleanly without leaving stale room states behind.
-
-Result:
-- The right menu behaves like the earlier working sensor-based room visualization flow.
-
-## Files to modify
-
-- `src/components/viewer/XrayToggle.tsx`
-- `src/components/viewer/RoomVisualizationPanel.tsx`
-- `src/components/viewer/NativeViewerShell.tsx`
-- `src/components/viewer/NativeXeokitViewer.tsx`
-- `src/components/viewer/VisualizationToolbar.tsx`
-
-## Technical notes
-
-```text
-Visualization flow after fix:
-
-Right menu metric selected
-  → force spaces on
-  → resolve current visible floors
-  → collect matching visible IfcSpace entities
-  → map them to room data from allData
-  → read sensor properties (temperature / CO₂ / humidity / etc.)
-  → color only visible rooms
-  → publish VISUALIZATION_STATE_CHANGED
-  → left legend overlay updates
+Change line 374:
+```typescript
+const [viewerSettingsOpen, setViewerSettingsOpen] = useState(false);
 ```
 
-```text
-X-Ray after fix:
+### 3. Properties panel: show BIM metadata even without entityId
+**File:** `src/components/common/UniversalPropertiesDialog.tsx`
 
-X-Ray ON
-  → ghost normal building objects
-  → preserve active sensor-colored spaces as readable
-  → do not skip everything just because architect colors are applied
-```
+When the panel opens for a single fmGuid with null attributes, attempt to find the matching metaObject in the viewer by scanning `metaScene.metaObjects` for an object whose `originalSystemId` matches the fmGuid (case-insensitive). This ensures BIM property sets (propertySets) are displayed even when `entityId` is not explicitly passed. The BIM fallback data is already rendered — the issue is that the lookup only triggers when `entityId` is provided.
 
-## No backend changes needed
+### 4. Activate Ilean on the home page
+**File:** `src/components/home/HomeLanding.tsx`
 
-This is a viewer/UI logic fix only. No database or authentication changes are needed.
+- Import `IleanEmbeddedChat` (or the `IleanButton` component).
+- Change the `openAssistant` handler for `ilean` to open an Ilean chat panel instead of showing "coming soon" toast.
+- Add state `ileanOpen` and render the Ilean embedded chat in a floating panel (same pattern as Gunnar).
+
+### 5. Translate Insight AI tab labels
+**Files:**
+- `src/components/insights/tabs/PredictiveMaintenanceTab.tsx` — already in English, confirmed OK.
+- `src/components/insights/tabs/RoomOptimizationTab.tsx` — already in English, confirmed OK.
+- `src/components/insights/tabs/RagSearchTab.tsx` — already in English, confirmed OK.
+
+These tabs are already in English. No changes needed.
+
+### 6. Translate BIP classification labels in properties panel
+**File:** `src/components/common/UniversalPropertiesDialog.tsx`
+
+- `BIP Typbeteckning` → `BIP Type Code`
+- `BIP Kod` → `BIP Code`
+
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| `src/lib/visualization-utils.ts` | Translate all VISUALIZATION_CONFIGS labels/units to English |
+| `src/components/viewer/VisualizationToolbar.tsx` | Set `viewerSettingsOpen` default to `false` |
+| `src/components/common/UniversalPropertiesDialog.tsx` | Add BIM metaScene lookup by fmGuid when entityId is missing; translate BIP labels |
+| `src/components/home/HomeLanding.tsx` | Add Ilean chat panel (same pattern as Gunnar) |
+
