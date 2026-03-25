@@ -1,39 +1,41 @@
 
-# Plan: Temperature Indicator Default, Canonical FMGUID Resolution
 
-## Completed Changes
+# Fix Room Colorization, Red Room Bug, and Room Count
 
-### 1. Hide temperature indicator on viewer startup
-**Files:** `src/components/viewer/RoomVisualizationPanel.tsx`
-- Removed localStorage restoration of visualizationType; always starts as `'none'`
-- Added reset to `'none'` when `buildingFmGuid` changes
+## Problem Summary
 
-### 2. Canonical FMGUID resolution (BIM → Asset+)
-**Files:** `src/components/viewer/NativeViewerShell.tsx`, `src/components/common/UniversalPropertiesDialog.tsx`
+1. **Red rooms on floor switch**: xeokit selection state (`.selected = true`) persists across floor visibility changes. xeokit's default selected material is bright red.
+2. **Room colors not visible**: `colorizeSpace` sets `opacity = 0.15` — rooms are colored but nearly transparent/invisible.
+3. **Room count shows 437**: The legend bar receives ALL building rooms instead of only the rooms on the currently visible floor.
 
-Root cause: BIM models have their own Space GUIDs (e.g., `34D5BBF1...`) that differ from the canonical Asset+ GUIDs (e.g., `27675937...`). Both exist as separate rows in the `assets` table, but only the Asset+ row has user-defined attributes.
+## Changes
 
-Resolution strategy (name-based canonical matching):
-1. When an entity is clicked, get `originalSystemId` as raw GUID
-2. Check if that GUID matches an asset with attributes → use it
-3. If not, and the entity is an IfcSpace, find another Space in the same building with the same `common_name` that HAS attributes → use that
-4. Fallback to `asset_external_ids` table
-5. Final fallback: use raw GUID as-is
+### 1. Fix red rooms — clear selections on floor switch
+**File:** `src/hooks/useFloorVisibility.ts`
 
-Applied in NativeViewerShell:
-- Select tool click handler (pinned properties update)
-- Context menu right-click
-- Context menu long-press (mobile)
-- `handleContextProperties` (already had allData-based resolution)
+In `applyFloorVisibilityToScene`, before toggling object visibility, clear all selected objects:
+```ts
+// Before line 127
+const selected = scene.selectedObjectIds;
+if (selected?.length) scene.setObjectsSelected(selected, false);
+```
 
-Applied in UniversalPropertiesDialog:
-- Data fetch `useEffect` now checks if direct match has user data; if not, performs name-based DB lookup
+### 2. Fix room colorization opacity
+**File:** `src/components/viewer/RoomVisualizationPanel.tsx`
 
-### 3. DB Diagnostics
-Confirmed in Centralstationen:
-- `27675937-...` = correct Asset+ ENTRÉ with attributes + geometry_entity_map entry
-- `34D5BBF1-...` = BIM-imported ENTRÉ with no attributes, no geometry_entity_map
-- `13779DB0-...` = another BIM-imported ENTRÉ with no attributes
-- Same pattern expected in Småviken
+In `colorizeSpace` (line 477), change `entity.opacity = 0.15` to `entity.opacity = 0.85` so rooms are clearly visible with their color. The current 0.15 makes them nearly invisible.
 
-## No backend changes needed
+### 3. Fix room count to match visible floor
+**File:** `src/components/viewer/RoomVisualizationPanel.tsx`
+
+The `VISUALIZATION_STATE_CHANGED` event (line 246-252) dispatches all `rooms` to the legend overlay. The `rooms` state is already filtered by `filteredRooms` which respects `visibleFloorFmGuids`. However, on initial load `eventFloorGuids` is null and `visibleFloorFmGuidsProp` is often undefined, so the filter at line 278 is skipped and ALL 437 rooms are included.
+
+Fix: When `eventIsAllVisible` is true AND a single floor is selected in the floor switcher, the `eventFloorGuids` should not be set to null. Update the floor event handler (line 100-101): only set `eventFloorGuids(null)` when truly all floors are visible AND no floor filtering is active. Also, rooms without a `levelFmGuid` should NOT be included when floor filtering is active (remove the `if (!room.levelFmGuid) return true` fallback at line 281).
+
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| `src/hooks/useFloorVisibility.ts` | Clear selections before floor visibility toggle |
+| `src/components/viewer/RoomVisualizationPanel.tsx` | Fix opacity from 0.15→0.85; fix room count filtering |
+
