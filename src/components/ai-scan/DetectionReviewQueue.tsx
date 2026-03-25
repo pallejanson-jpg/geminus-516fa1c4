@@ -836,7 +836,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                     <div className="grid grid-cols-2 gap-2">
                       {detailDialog.extracted_properties.brand && (
                         <div>
-                          <span className="text-muted-foreground">Fabrikat:</span>
+                          <span className="text-muted-foreground">Brand:</span>
                           <span className="ml-2 font-medium">{detailDialog.extracted_properties.brand}</span>
                         </div>
                       )}
