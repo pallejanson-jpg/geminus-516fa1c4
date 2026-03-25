@@ -830,8 +830,16 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
                       size="sm"
                       variant="outline"
                       className="text-xs sm:text-sm gap-1"
+                      disabled={!cesiumToken}
                       onClick={() => {
-                        window.open(`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${selectedMarker.lat},${selectedMarker.lng}`, '_blank');
+                        setStreetViewTarget({
+                          lat: selectedMarker.lat,
+                          lng: selectedMarker.lng,
+                          name: selectedMarker.commonName || selectedMarker.name,
+                          fmGuid: selectedMarker.fmGuid!,
+                          has360: !!selectedMarker.ivionSiteId,
+                        });
+                        setSelectedMarker(null);
                       }}
                     >
                       <Eye size={14} />
@@ -844,6 +852,19 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
           </Popup>
         )}
       </Map>
+
+      {/* Street View overlay (Cesium-based) */}
+      {streetViewTarget && cesiumToken && (
+        <StreetViewOverlay
+          lat={streetViewTarget.lat}
+          lng={streetViewTarget.lng}
+          buildingName={streetViewTarget.name}
+          fmGuid={streetViewTarget.fmGuid}
+          has360={streetViewTarget.has360}
+          cesiumToken={cesiumToken}
+          onClose={() => setStreetViewTarget(null)}
+        />
+      )}
     </div>
   );
 };
