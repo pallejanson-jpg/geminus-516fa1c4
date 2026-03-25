@@ -28,40 +28,54 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Get rooms with sensor attributes for this building
+    // Get rooms and equipment — use actual category values from the database
     let query = supabase
       .from("assets")
-      .select("fm_guid, name, common_name, attributes, category, in_room_fm_guid, level_fm_guid")
-      .eq("building_fm_guid", buildingFmGuid)
-      .in("category", ["IfcSpace", "IfcSensor", "IfcActuator", "IfcAlarm", "IfcUnitaryEquipment", "IfcFan", "IfcPump", "IfcBoiler", "IfcChiller"]);
+      .select("fm_guid, name, common_name, attributes, category, asset_type, in_room_fm_guid, level_fm_guid, gross_area")
+      .eq("building_fm_guid", buildingFmGuid);
 
     if (roomFmGuids?.length) {
       query = query.in("fm_guid", roomFmGuids);
     }
 
-    const { data: assets, error: dbErr } = await query.limit(500);
+    const { data: assets, error: dbErr } = await query.limit(1000);
     if (dbErr) throw dbErr;
 
-    // Separate rooms and equipment
-    const rooms = (assets || []).filter(a => a.category === "IfcSpace");
-    const equipment = (assets || []).filter(a => a.category !== "IfcSpace");
+    // Separate rooms and equipment using actual DB categories
+    const rooms = (assets || []).filter(a => a.category === "Space" || a.category === "IfcSpace");
+    const equipment = (assets || []).filter(a => a.category === "Instance" || a.category === "IfcSensor" || a.category === "IfcActuator" || a.category === "IfcAlarm" || a.category === "IfcUnitaryEquipment" || a.category === "IfcFan" || a.category === "IfcPump" || a.category === "IfcBoiler" || a.category === "IfcChiller");
+
+    // Extract sensor data from room attributes
+    const extractSensorData = (attrs: any) => {
+      if (!attrs) return {};
+      const sensors: Record<string, any> = {};
+      for (const [key, val] of Object.entries(attrs)) {
+        const lk = key.toLowerCase();
+        if (lk.includes('temperature') || lk.includes('co2') || lk.includes('humidity') || 
+            lk.includes('occupancy') || lk.includes('sensor') || lk.includes('energy')) {
+          sensors[key] = val;
+        }
+      }
+      return sensors;
+    };
 
     // Build summary for AI analysis
     const summary = {
       buildingFmGuid,
       totalRooms: rooms.length,
       totalEquipment: equipment.length,
-      rooms: rooms.slice(0, 50).map(r => ({
+      rooms: rooms.slice(0, 80).map(r => ({
         guid: r.fm_guid,
         name: r.name || r.common_name,
-        attributes: r.attributes || {},
+        area: r.gross_area,
+        sensorData: extractSensorData(r.attributes),
       })),
       equipment: equipment.slice(0, 100).map(e => ({
         guid: e.fm_guid,
         name: e.name || e.common_name,
-        type: e.category,
+        type: e.asset_type || e.category,
         room: e.in_room_fm_guid,
-        attributes: e.attributes || {},
+        sensorData: extractSensorData(e.attributes),
       })),
     };
 
@@ -77,38 +91,38 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `Du är en expert på prediktivt underhåll för fastigheter. Analysera sensordata och utrustningsinformation för att identifiera potentiella problem INNAN de uppstår.
+            content: `You are an expert in predictive maintenance for buildings and facilities. Analyze sensor data and equipment information to identify potential issues BEFORE they occur.
 
-Svara ALLTID med ett JSON-objekt med denna struktur:
+ALWAYS respond with a JSON object using this structure:
 {
   "predictions": [
     {
-      "equipmentGuid": "guid eller null",
-      "roomGuid": "guid eller null",
+      "equipmentGuid": "guid or null",
+      "roomGuid": "guid or null",
       "riskLevel": "high" | "medium" | "low",
       "category": "hvac" | "electrical" | "plumbing" | "structural" | "fire_safety" | "other",
-      "title": "Kort titel på svenska",
-      "description": "Beskrivning av risken och rekommenderad åtgärd",
-      "estimatedTimeToFailure": "t.ex. '2-4 veckor'",
+      "title": "Short title",
+      "description": "Description of risk and recommended action",
+      "estimatedTimeToFailure": "e.g. '2-4 weeks'",
       "confidence": 0.0-1.0
     }
   ],
   "overallRiskScore": 0-100,
-  "summary": "Kort sammanfattning av byggnadens underhållsstatus"
+  "summary": "Brief summary of the building's maintenance status"
 }
 
-Basera analysen på:
-- Temperaturvärden utanför normala intervall (20-22°C ideal)
-- CO2-nivåer > 1000 ppm (ventilationsproblem)
-- Hög fuktighet > 60% (mögel/korrosionsrisk)
-- Utrustningsålder och typ (äldre HVAC = högre risk)
-- Mönster som tyder på försämring
+Base your analysis on:
+- Temperature values outside normal ranges (20-22°C ideal)
+- CO2 levels > 1000 ppm (ventilation issues)
+- High humidity > 60% (mold/corrosion risk)
+- Equipment age and type (older HVAC = higher risk)
+- Patterns indicating degradation
 
-Om data saknas, generera rimliga prediktioner baserat på utrustningstyper och rum.`,
+If sensor data is available, use it to make concrete predictions. If data is limited, generate reasonable predictions based on equipment types and rooms.`,
           },
           {
             role: "user",
-            content: `Analysera denna byggnadsdata för prediktivt underhåll:\n\n${JSON.stringify(summary, null, 2)}`,
+            content: `Analyze this building data for predictive maintenance:\n\n${JSON.stringify(summary, null, 2)}`,
           },
         ],
         max_tokens: 4000,
@@ -137,7 +151,7 @@ Om data saknas, generera rimliga prediktioner baserat på utrustningstyper och r
     let predictions;
     try {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
-      predictions = jsonMatch ? JSON.parse(jsonMatch[0]) : { predictions: [], overallRiskScore: 0, summary: "Kunde inte analysera data" };
+      predictions = jsonMatch ? JSON.parse(jsonMatch[0]) : { predictions: [], overallRiskScore: 0, summary: "Could not analyze data" };
     } catch {
       predictions = { predictions: [], overallRiskScore: 0, summary: content.slice(0, 500) };
     }

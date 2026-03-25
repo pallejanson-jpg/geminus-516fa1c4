@@ -28,12 +28,12 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Get all rooms with area and sensor data
+    // Get all rooms with area and sensor data — use actual DB categories
     const { data: rooms, error: dbErr } = await supabase
       .from("assets")
       .select("fm_guid, name, common_name, gross_area, attributes, level_fm_guid, category")
       .eq("building_fm_guid", buildingFmGuid)
-      .eq("category", "IfcSpace")
+      .in("category", ["Space", "IfcSpace"])
       .limit(500);
 
     if (dbErr) throw dbErr;
@@ -44,7 +44,7 @@ serve(async (req) => {
       .select("in_room_fm_guid, category")
       .eq("building_fm_guid", buildingFmGuid)
       .not("in_room_fm_guid", "is", null)
-      .not("category", "eq", "IfcSpace")
+      .not("category", "in", '("Space","IfcSpace")')
       .limit(1000);
 
     const equipPerRoom = new Map<string, number>();
@@ -54,15 +54,32 @@ serve(async (req) => {
       }
     });
 
+    // Extract sensor values from nested attributes
+    const extractSensor = (attrs: any, ...keys: string[]) => {
+      if (!attrs) return null;
+      for (const key of keys) {
+        if (attrs[key] !== undefined && attrs[key] !== null) return attrs[key];
+      }
+      // Search nested keys
+      for (const [k, v] of Object.entries(attrs)) {
+        const lk = k.toLowerCase();
+        for (const key of keys) {
+          if (lk.includes(key.toLowerCase())) return v;
+        }
+      }
+      return null;
+    };
+
     const roomSummary = (rooms || []).map(r => ({
       guid: r.fm_guid,
       name: r.name || r.common_name,
       area: r.gross_area,
       floor: r.level_fm_guid,
       equipmentCount: equipPerRoom.get(r.fm_guid) || 0,
-      occupancy: r.attributes?.sensorOccupancy ?? r.attributes?.occupancy ?? null,
-      temperature: r.attributes?.sensorTemperature ?? r.attributes?.temperature ?? null,
-      co2: r.attributes?.sensorCo2 ?? r.attributes?.co2 ?? null,
+      occupancy: extractSensor(r.attributes, 'sensorOccupancy', 'occupancy'),
+      temperature: extractSensor(r.attributes, 'sensorTemperature', 'temperature'),
+      co2: extractSensor(r.attributes, 'sensorCo2', 'co2'),
+      humidity: extractSensor(r.attributes, 'sensorHumidity', 'humidity'),
     }));
 
     const aiResp = await fetch(AI_GATEWAY, {
@@ -76,20 +93,20 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `Du är expert på lokaloptimering och smart ytanvändning i fastigheter. Analysera rumsdata och föreslå optimeringar.
+            content: `You are an expert in space optimization and smart space utilization in buildings. Analyze room data and suggest optimizations.
 
-Svara med JSON:
+Respond with JSON:
 {
   "utilizationScore": 0-100,
   "suggestions": [
     {
       "type": "underutilized" | "overcrowded" | "merge" | "convert" | "rezone",
       "roomGuids": ["guid1", "guid2"],
-      "title": "Kort titel",
-      "description": "Detaljerad beskrivning av förslaget",
-      "potentialSaving": "t.ex. '15% ytbesparing'",
+      "title": "Short title",
+      "description": "Detailed description of the suggestion",
+      "potentialSaving": "e.g. '15% space savings'",
       "priority": "high" | "medium" | "low",
-      "estimatedImpact": "Förväntad effekt"
+      "estimatedImpact": "Expected impact"
     }
   ],
   "statistics": {
@@ -98,18 +115,18 @@ Svara med JSON:
     "underutilizedRooms": 0,
     "overcrowdedRooms": 0
   },
-  "summary": "Övergripande sammanfattning"
+  "summary": "Overall summary"
 }
 
-Fokusera på:
-- Rum med låg beläggning (< 30%) som kan slås samman eller konverteras
-- Rum med hög beläggning (> 80%) som behöver avlastning
-- Ytor utan sensorer som bör instrumenteras
-- Energibesparingsförslag baserat på rumsanvändning`,
+Focus on:
+- Rooms with low occupancy (< 30%) that could be merged or converted
+- Rooms with high occupancy (> 80%) that need relief
+- Spaces without sensors that should be instrumented
+- Energy savings suggestions based on room usage`,
           },
           {
             role: "user",
-            content: `Analysera dessa ${roomSummary.length} rum:\n\n${JSON.stringify(roomSummary, null, 2)}`,
+            content: `Analyze these ${roomSummary.length} rooms:\n\n${JSON.stringify(roomSummary, null, 2)}`,
           },
         ],
         max_tokens: 4000,
