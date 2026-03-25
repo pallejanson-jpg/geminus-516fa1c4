@@ -510,7 +510,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
 
           {/* Step-by-step timeline */}
           {allSteps.length > 0 && (
-            <ScrollArea className={isMobile ? 'max-h-[40dvh]' : 'max-h-48'}>
+            <ScrollArea className={isMobile ? 'max-h-[40dvh]' : 'max-h-[60vh]'}>
               <StepTimeline
                 steps={allSteps}
                 indoorDistance={routeSummary.indoorDistance}
