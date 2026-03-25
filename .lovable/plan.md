@@ -1,43 +1,75 @@
 
+Fix this in two layers: viewer behavior and data mapping.
 
-# Plan: Properties Auto-Update, Clickable URLs, AI Scan Building Context, Text Colors, and Filter Reset Colors
+1. Hide the temperature indicator by default
+- Stop restoring the active visualization type from local storage on Viewer start.
+- Default the visualization state to `none` on mount/building change.
+- Keep the legend/indicator hidden until the user explicitly chooses a Color Filter.
 
-## Changes
+2. Diagnose the FMGUID mismatch as a canonical mapping problem
+What I found already:
+- In Centralstationen, both room GUIDs exist in the database for the same building:
+  - `27675937-a278-4436-863f-a138edc4bad3` = correct Asset+ room with user-defined data
+  - `34D5BBF1-A2EF-4EE9-83B4-B435E40F6EEF` = separate Space row with almost no data
+- `geometry_entity_map` contains a mapping for the correct room `2767...`
+- There is no mapping row for `34D5...`
 
-### 1. Properties panel auto-updates on selection change
-**File:** `src/components/common/UniversalPropertiesDialog.tsx`
+This means the viewer is currently trusting the raw BIM/metaScene GUID (`originalSystemId`) in some paths, instead of resolving the clicked entity to the canonical asset GUID from the mapping layer.
 
-The panel already updates when pinned in the viewer (line 597-607 in NativeViewerShell). However, the `useEffect` that fetches data (line 180) gates on `isOpen` — when `fmGuids` changes while already open, it should re-fetch. Add `fmGuids` to the dependency array of the main data-fetching `useEffect` (if not already there) so switching selection while the panel is open triggers a fresh load.
+3. Replace raw `originalSystemId` lookups with canonical entity -> asset resolution
+Update selection/properties/colorization so they resolve in this order:
+- `viewer-manifest` / `geometry_entity_map` mapping
+- `asset_external_ids`
+- then only as last fallback `metaObj.originalSystemId`
 
-### 2. URL values in properties panel become clickable
-**File:** `src/components/common/UniversalPropertiesDialog.tsx`
+This needs to be applied in:
+- `NativeViewerShell` when opening/updating the Properties panel
+- `UniversalPropertiesDialog` when fetching the asset
+- `RoomVisualizationPanel` when matching a room FMGUID to viewer entities for colorization
 
-In `renderPropertyValue` (around line 1155-1167), before the default text display, add a URL detection check: if the string value matches `https?://`, render it as an `<a href={value} target="_blank" rel="noopener noreferrer">` styled link instead of plain text.
+Goal:
+- Clicking the room geometry that currently reports `34D5...` should resolve to the canonical asset `2767...`
+- The Properties panel should then show the correct user-defined Asset+ data
+- Room colorization should use the correct room’s sensor/user-defined attributes again
 
-### 3. AI Scan inherits building context from Inventory
-**Files:** `src/pages/Inventory.tsx`, `src/App.tsx`
+4. Add targeted mismatch diagnostics
+Add temporary diagnostics for:
+- picked `entityId`
+- raw `metaObj.originalSystemId`
+- resolved canonical asset GUID
+- whether `geometry_entity_map` had a hit
 
-Currently, navigating to `/inventory/ai-scan` from Inventory doesn't pass the building. The `AiAssetScan` route in `App.tsx` (line 123) renders without props. Fix: pass the selected building GUID as a URL search param (`?building=<guid>`) from `Inventory.tsx`, and in `App.tsx` read that param and pass it as `preselectedBuildingGuid` to `AiAssetScan`.
+This will make it easy to confirm the same failure pattern in Småviken.
 
-### 4. Fix text colors across screens for readability
-**Files:** `src/components/viewer/VisualizationToolbar.tsx` and potentially other dark-background panels
+5. Clean up duplicated/incorrect room identity data
+Before doing a full sync, compare Centralstationen and Småviken for:
+- duplicate Space rows with same room name but different GUIDs
+- rows missing `geometry_entity_map`
+- viewer entities whose raw GUID differs from mapped asset GUID
 
-The right-side toolbar has a dark background but uses `text-muted-foreground` for labels which can appear grey/hard to read. Change key label text classes from `text-muted-foreground` to `text-foreground` or add `!text-white` overrides on the dark-background toolbar sections. Audit section headers and toggle labels.
+Recommended order:
+- First fix the viewer to use canonical mapping
+- Then run a targeted geometry mapping rebuild for affected buildings
+- Only do a full building sync if the mapping rebuild shows the imported room identities themselves are corrupted upstream
 
-### 5. Filter menu: "Reset Colors" button on all levels
-**File:** `src/components/viewer/ViewerFilterPanel.tsx`
+6. Recommended recovery strategy
+I do not recommend starting with a full re-sync.
+Better sequence:
+- Fix canonical resolution in the Viewer
+- Validate Centralstationen on the known room `ENTRÉ`
+- Validate Småviken on a few failing rooms
+- If needed, rebuild geometry mappings for those buildings
+- Only then consider a full re-sync if duplicates continue to be created from source data
 
-Add a "Reset Colors" button in the filter panel header/footer area. On click, it dispatches `INSIGHTS_COLOR_RESET_EVENT`, clears the `__vizColorizedEntityIds` set, clears `__colorFilterActive`, and calls `applyArchitectColors(viewer)` to restore the default color scheme. This gives users a single action to clear any room visualization or custom coloring from any level.
+Files to update
+- `src/components/viewer/VisualizationLegendOverlay.tsx` or visualization state source
+- `src/components/viewer/RoomVisualizationPanel.tsx`
+- `src/components/viewer/NativeViewerShell.tsx`
+- `src/components/common/UniversalPropertiesDialog.tsx`
+- optionally the viewer manifest / mapping consumption path if not already wired into the native viewer
 
-## Files to Modify
-
-| File | Change |
-|------|--------|
-| `src/components/common/UniversalPropertiesDialog.tsx` | Auto-update on fmGuids change; render URL values as clickable links |
-| `src/pages/Inventory.tsx` | Pass building GUID as URL param when navigating to AI Scan |
-| `src/App.tsx` | Read `building` search param and pass to `AiAssetScan` |
-| `src/components/viewer/VisualizationToolbar.tsx` | Fix grey text to white/foreground on dark backgrounds |
-| `src/components/viewer/ViewerFilterPanel.tsx` | Add "Reset Colors" button that clears all colorization |
-
-## No backend changes needed
-
+Expected outcome
+- No temperature indicator on Viewer startup
+- Clicking a room resolves to the correct Asset+ room FMGUID
+- Properties panel shows the correct user-defined properties
+- Temperature/CO2/etc. coloring works again for Centralstationen and Småviken without depending on the wrong BIM GUID
