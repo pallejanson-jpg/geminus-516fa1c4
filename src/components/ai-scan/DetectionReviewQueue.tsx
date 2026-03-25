@@ -812,7 +812,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full text-muted-foreground">
-                    Ingen förhandsvisning
+                    No preview
                   </div>
                 )}
               </div>
