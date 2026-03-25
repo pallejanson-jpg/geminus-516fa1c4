@@ -3147,6 +3147,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         {syncCheck && (
                                             <Badge variant="outline" className="ml-auto mr-2 text-xs">
                                                 {syncCheck.total?.localCount?.toLocaleString() || assetCount.toLocaleString()} objects
+                                                {syncCheck.total?.accExcluded ? ` (+${syncCheck.total.accExcluded.toLocaleString()} ACC/IFC)` : ''}
                                             </Badge>
                                         )}
                                     </div>
