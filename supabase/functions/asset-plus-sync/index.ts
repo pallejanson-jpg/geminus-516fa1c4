@@ -991,7 +991,7 @@ serve(async (req) => {
       await updateSyncState(supabase, 'assets', 'running', totalSynced);
       let interrupted = false;
       let softError: string | null = null;
-      const take = 100; // Reduced from 200 to accommodate full object payloads with user-defined properties
+      const take = 500; // Increased for throughput — geometry mapping deferred to post-sync
 
       while (currentBuildingIndex < totalBuildings && !interrupted) {
         const building = buildings[currentBuildingIndex];
