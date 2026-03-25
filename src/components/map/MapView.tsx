@@ -233,6 +233,13 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
     });
   }, []);
 
+  // Fetch Cesium token for Street View overlay
+  useEffect(() => {
+    supabase.functions.invoke('get-cesium-token').then(({ data }) => {
+      if (data?.token) setCesiumToken(data.token);
+    });
+  }, []);
+
   const handleMarkerClick = useCallback((facility: MapFacility) => {
     setSelectedMarker(facility);
     setViewState(prev => ({ ...prev, latitude: facility.lat, longitude: facility.lng, zoom: 12 }));
