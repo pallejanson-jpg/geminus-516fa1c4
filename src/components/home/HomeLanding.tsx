@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 
 import GunnarChat from "@/components/chat/GunnarChat";
+import { IleanButton } from "@/components/chat/IleanButton";
 import { useAllBuildingSettings } from "@/hooks/useAllBuildingSettings";
 import { AppContext } from "@/context/AppContext";
 import { BUILDING_IMAGES } from "@/lib/constants";
