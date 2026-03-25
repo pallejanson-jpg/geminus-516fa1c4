@@ -3170,7 +3170,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         <SyncProgressCard
                                             icon={<Building2 className="h-5 w-5 text-primary" />}
                                             title="Buildings/Floors/Rooms"
-                                            subtitle="Buildings, floors and rooms"
+                                            subtitle={syncCheck?.structure?.accLocalCount 
+                                                ? `Asset+ scope (${syncCheck.structure.accLocalCount} ACC/IFC objects excluded)` 
+                                                : 'Buildings, floors and rooms'}
                                             localCount={syncCheck?.structure?.localCount || 0}
                                             remoteCount={syncCheck?.structure?.remoteCount}
                                             inSync={syncCheck?.structure ? syncCheck.structure.inSync : null}
