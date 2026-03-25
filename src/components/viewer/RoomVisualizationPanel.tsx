@@ -519,7 +519,8 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         return;
       }
 
-      // Done
+      // Done — expose protected entity IDs globally for XrayToggle
+      (window as any).__vizColorizedEntityIds = vizEntityIdSet;
       setColorizedCount(count);
       setIsProcessing(false);
       isProcessingRef.current = false;

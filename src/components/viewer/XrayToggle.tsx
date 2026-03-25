@@ -48,13 +48,15 @@ const XrayToggle: React.FC<XrayToggleProps> = ({ viewerRef, initialEnabled = fal
       }
       scene.alphaDepthMask = false;
 
-      // Batched processing to avoid blocking the main thread
+      // Only protect sensor-visualization-colored spaces, not architect-colored objects
+      const vizGuids = (window as any).__vizColorizedEntityIds as Set<string> | undefined;
+
       const idsToXray: string[] = [];
       objectIds.forEach((id: string) => {
         const entity = scene.objects?.[id];
         if (!entity) return;
-        const c = entity.colorize;
-        if (c && (c[0] !== 1 || c[1] !== 1 || c[2] !== 1)) return;
+        // Skip entities that are currently colored by sensor visualization
+        if (vizGuids?.has(id)) return;
         idsToXray.push(id);
       });
 
@@ -69,7 +71,7 @@ const XrayToggle: React.FC<XrayToggleProps> = ({ viewerRef, initialEnabled = fal
       };
       requestAnimationFrame(processBatch);
 
-      console.log('[XrayToggle] xray ON, skipped colorized:', objectIds.length - idsToXray.length, 'xraying:', idsToXray.length);
+      console.log('[XrayToggle] xray ON, protected viz entities:', vizGuids?.size ?? 0, 'xraying:', idsToXray.length);
     } else {
       // Batched OFF processing
       let i = 0;
