@@ -820,7 +820,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
               <div className="space-y-4 text-sm">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <span className="text-muted-foreground">Konfidens:</span>
+                    <span className="text-muted-foreground">Confidence:</span>
                     <span className="ml-2 font-medium">{Math.round(detailDialog.confidence * 100)}%</span>
                   </div>
                   <div>
