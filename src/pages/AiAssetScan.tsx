@@ -68,17 +68,12 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid }) =>
 
   const handleBack = () => {
     if (browserScanConfig) {
-      // Confirm leaving active scan
       if (confirm('Cancel ongoing scan?')) {
         setBrowserScanConfig(null);
       }
       return;
     }
-    if (window.history.length > 2) {
-      navigate(-1);
-    } else {
-      navigate('/inventory');
-    }
+    navigate('/inventory');
   };
 
   useEffect(() => {
