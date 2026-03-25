@@ -2736,7 +2736,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             </div>
                                         </AccordionTrigger>
                                         <AccordionContent className="px-4 pb-4 pt-2">
-                                            <p className="text-xs text-muted-foreground">Integration med Faciliate för arbetsorder. Inte konfigurerad ännu.</p>
+                                            <p className="text-xs text-muted-foreground">Integration with Faciliate for work orders. Not configured yet.</p>
                                         </AccordionContent>
                                     </AccordionItem>
 

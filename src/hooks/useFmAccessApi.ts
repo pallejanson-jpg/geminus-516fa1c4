@@ -140,7 +140,7 @@ export function useFmAccessApi() {
   const updateObject = useCallback((guid: string, name?: string, properties?: Record<string, any>) =>
     withLoading(async () => {
       const res = await fmCall('update-object', { guid, name, properties });
-      toast({ title: 'Objekt uppdaterat' });
+      toast({ title: 'Object updated' });
       return res.data;
     }), [withLoading, toast]);
 

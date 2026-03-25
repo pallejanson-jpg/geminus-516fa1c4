@@ -250,7 +250,7 @@ const ApprovalDialog: React.FC<{
           {/* Confidence badge */}
           <div className="flex items-center gap-2">
             <Badge variant="secondary">
-              Konfidens: {Math.round(detection.confidence * 100)}%
+              Confidence: {Math.round(detection.confidence * 100)}%
             </Badge>
             {props.brand && <Badge variant="outline">{props.brand}</Badge>}
             {props.model && <Badge variant="outline">{props.model}</Badge>}
@@ -258,7 +258,7 @@ const ApprovalDialog: React.FC<{
 
           {/* Name */}
           <div className="space-y-1">
-            <Label>Namn</Label>
+            <Label>Name</Label>
             <Input
               value={form.name}
               onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
@@ -267,7 +267,7 @@ const ApprovalDialog: React.FC<{
 
           {/* Category */}
           <div className="space-y-1">
-            <Label>Objekttyp / Kategori</Label>
+            <Label>Object type / Category</Label>
             <Input
               value={form.category}
               onChange={e => setForm(prev => ({ ...prev, category: e.target.value }))}
@@ -276,7 +276,7 @@ const ApprovalDialog: React.FC<{
 
           {/* Description */}
           <div className="space-y-1">
-            <Label>Beskrivning</Label>
+            <Label>Description</Label>
             <Textarea
               value={form.description}
               onChange={e => setForm(prev => ({ ...prev, description: e.target.value }))}
@@ -602,22 +602,22 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="pending">Väntande</SelectItem>
-                  <SelectItem value="approved">Godkända</SelectItem>
-                  <SelectItem value="rejected">Avvisade</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
                 </SelectContent>
               </Select>
 
               {scanJobs.length > 0 && (
                 <Select value={selectedJobId || "all"} onValueChange={(val) => setSelectedJobId(val === "all" ? "" : val)}>
                   <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Alla skanningar" />
+                    <SelectValue placeholder="All scans" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Alla skanningar</SelectItem>
+                    <SelectItem value="all">All scans</SelectItem>
                     {scanJobs.map(job => (
                       <SelectItem key={job.id} value={job.id}>
-                        {new Date(job.created_at).toLocaleDateString('sv-SE')} ({job.detections_found})
+                        {new Date(job.created_at).toLocaleDateString('en-US')} ({job.detections_found})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -625,7 +625,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
               )}
 
               <span className="text-sm text-muted-foreground">
-                {totalCount} totalt, {pendingCount} väntande
+                {totalCount} total, {pendingCount} pending
               </span>
             </div>
 
@@ -700,7 +700,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                 ) : (
                   <div className="text-center text-muted-foreground text-sm p-4">
                     <Eye className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    Ingen förhandsvisning
+                    No preview
                   </div>
                 )}
               </div>
@@ -741,7 +741,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                 )}
 
                 <div className="text-xs text-muted-foreground">
-                  Bild #{detection.ivion_image_id || '-'}
+                  Image #{detection.ivion_image_id || '-'}
                 </div>
 
                 {detection.status === 'pending' ? (
@@ -783,7 +783,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                     variant={detection.status === 'approved' ? 'default' : 'secondary'}
                     className="w-full justify-center"
                   >
-                    {detection.status === 'approved' ? 'Godkänd' : 'Avvisad'}
+                    {detection.status === 'approved' ? 'Approved' : 'Rejected'}
                   </Badge>
                 )}
               </CardContent>
@@ -812,7 +812,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full text-muted-foreground">
-                    Ingen förhandsvisning
+                    No preview
                   </div>
                 )}
               </div>
@@ -820,11 +820,11 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
               <div className="space-y-4 text-sm">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <span className="text-muted-foreground">Konfidens:</span>
+                    <span className="text-muted-foreground">Confidence:</span>
                     <span className="ml-2 font-medium">{Math.round(detailDialog.confidence * 100)}%</span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Bild ID:</span>
+                    <span className="text-muted-foreground">Image ID:</span>
                     <span className="ml-2 font-medium">{detailDialog.ivion_image_id || '-'}</span>
                   </div>
                 </div>
@@ -832,54 +832,54 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                 {/* Extracted Properties Section */}
                 {detailDialog.extracted_properties && Object.keys(detailDialog.extracted_properties).length > 0 && (
                   <div className="border rounded-lg p-3 bg-muted/30">
-                    <h4 className="font-medium mb-2 text-foreground">Extraherade egenskaper</h4>
+                    <h4 className="font-medium mb-2 text-foreground">Extracted Properties</h4>
                     <div className="grid grid-cols-2 gap-2">
                       {detailDialog.extracted_properties.brand && (
                         <div>
-                          <span className="text-muted-foreground">Fabrikat:</span>
+                          <span className="text-muted-foreground">Brand:</span>
                           <span className="ml-2 font-medium">{detailDialog.extracted_properties.brand}</span>
                         </div>
                       )}
                       {detailDialog.extracted_properties.model && (
                         <div>
-                          <span className="text-muted-foreground">Modell:</span>
+                          <span className="text-muted-foreground">Model:</span>
                           <span className="ml-2 font-medium">{detailDialog.extracted_properties.model}</span>
                         </div>
                       )}
                       {detailDialog.extracted_properties.size && (
                         <div>
-                          <span className="text-muted-foreground">Storlek:</span>
+                          <span className="text-muted-foreground">Size:</span>
                           <span className="ml-2 font-medium">{detailDialog.extracted_properties.size}</span>
                         </div>
                       )}
                       {detailDialog.extracted_properties.type && (
                         <div>
-                          <span className="text-muted-foreground">Typ:</span>
+                          <span className="text-muted-foreground">Type:</span>
                           <span className="ml-2 font-medium">{detailDialog.extracted_properties.type}</span>
                         </div>
                       )}
                       {detailDialog.extracted_properties.color && (
                         <div>
-                          <span className="text-muted-foreground">Färg:</span>
+                          <span className="text-muted-foreground">Color:</span>
                           <span className="ml-2 font-medium">{detailDialog.extracted_properties.color}</span>
                         </div>
                       )}
                       {detailDialog.extracted_properties.mounting && (
                         <div>
-                          <span className="text-muted-foreground">Montering:</span>
+                          <span className="text-muted-foreground">Mounting:</span>
                           <span className="ml-2 font-medium">{detailDialog.extracted_properties.mounting}</span>
                         </div>
                       )}
                       {detailDialog.extracted_properties.condition && (
                         <div>
-                          <span className="text-muted-foreground">Skick:</span>
+                          <span className="text-muted-foreground">Condition:</span>
                           <span className="ml-2 font-medium">{detailDialog.extracted_properties.condition}</span>
                         </div>
                       )}
                     </div>
                     {detailDialog.extracted_properties.text_visible && (
                       <div className="mt-2 pt-2 border-t">
-                        <span className="text-muted-foreground">Synlig text:</span>
+                        <span className="text-muted-foreground">Visible text:</span>
                         <p className="mt-1 font-mono text-xs bg-background p-2 rounded">
                           {detailDialog.extracted_properties.text_visible}
                         </p>
