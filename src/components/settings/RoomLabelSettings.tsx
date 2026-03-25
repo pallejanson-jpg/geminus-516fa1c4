@@ -224,11 +224,11 @@ const RoomLabelSettings: React.FC = () => {
                     <div className="flex justify-end gap-2 pt-2">
                       <Button size="sm" variant="ghost" onClick={cancelEdit}>
                         <X className="h-4 w-4 mr-1" />
-                        Avbryt
-                      </Button>
-                      <Button size="sm" onClick={() => handleUpdate(config.id)}>
-                        <Check className="h-4 w-4 mr-1" />
-                        Spara
+                         Cancel
+                       </Button>
+                       <Button size="sm" onClick={() => handleUpdate(config.id)}>
+                         <Check className="h-4 w-4 mr-1" />
+                         Save
                       </Button>
                     </div>
                   </div>
