@@ -187,7 +187,7 @@ export default function HomeLanding() {
               <h2 className="text-base sm:text-lg font-semibold text-foreground">AI Assistants</h2>
               <p className="text-[11px] sm:text-xs text-muted-foreground">Quick help for data, documents and integrations</p>
             </div>
-            <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-3">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-center">
               {ASSISTANTS.map((a) => {
                 const Icon = a.icon;
                 return (
