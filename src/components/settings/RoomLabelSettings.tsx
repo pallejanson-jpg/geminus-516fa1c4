@@ -263,10 +263,10 @@ const RoomLabelSettings: React.FC = () => {
       ) : (
         <div className="text-center py-8 text-muted-foreground border rounded-lg bg-muted/30">
           <Tag className="h-8 w-8 mx-auto mb-2 opacity-50" />
-          <p>Inga etikettkonfigurationer ännu</p>
-          <Button onClick={() => setShowCreateDialog(true)} variant="outline" size="sm" className="mt-2">
-            Skapa din första
-          </Button>
+           <p>No label configurations yet</p>
+           <Button onClick={() => setShowCreateDialog(true)} variant="outline" size="sm" className="mt-2">
+             Create your first
+           </Button>
         </div>
       )}
 
