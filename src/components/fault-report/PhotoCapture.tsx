@@ -98,7 +98,7 @@ const PhotoCapture: React.FC<PhotoCaptureProps> = ({
       }
     } catch (error) {
       console.error('Photo upload error:', error);
-      toast.error('Fel vid uppladdning');
+      toast.error('Upload error');
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) {

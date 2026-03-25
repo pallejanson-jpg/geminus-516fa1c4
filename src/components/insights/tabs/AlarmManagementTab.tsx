@@ -138,7 +138,7 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
       fetchAlarms();
       onAlarmsDeleted?.();
     } catch (e: any) {
-      toast({ title: 'Fel vid radering', description: e.message, variant: 'destructive' });
+      toast({ title: 'Deletion error', description: e.message, variant: 'destructive' });
     } finally {
       setIsDeleting(false);
     }
