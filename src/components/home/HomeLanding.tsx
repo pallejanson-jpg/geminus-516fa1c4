@@ -196,7 +196,7 @@ export default function HomeLanding() {
                     type="button"
                     onClick={() => openAssistant(a.id)}
                     disabled={!a.available}
-                    className={`rounded-xl border border-border bg-card/60 p-3 sm:p-4 text-left transition-colors ${
+                    className={`rounded-xl border border-border bg-card/60 p-3 sm:p-4 text-left transition-colors w-full sm:w-64 ${
                       a.available ? 'hover:bg-muted hover:border-primary/50 active:bg-muted/80' : 'opacity-60 cursor-not-allowed'
                     }`}
                   >
