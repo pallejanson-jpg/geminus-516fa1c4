@@ -204,7 +204,7 @@ const RoomLabelSettings: React.FC = () => {
 
                     {/* Click action */}
                     <div className="space-y-2">
-                      <Label className="text-xs">Klickåtgärd</Label>
+                      <Label className="text-xs">Click action</Label>
                       <Select
                         value={editForm.click_action || 'none'}
                         onValueChange={(v) => setEditForm({ ...editForm, click_action: v as any })}
