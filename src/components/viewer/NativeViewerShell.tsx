@@ -754,9 +754,11 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         const entityId = pickResult?.entity?.id || null;
         let fmGuid: string | null = null;
         let entityName: string | null = null;
-        if (entityId && xeokitViewer.metaScene?.metaObjects) {
-          const metaObj = xeokitViewer.metaScene.metaObjects[entityId];
-          if (metaObj) { fmGuid = metaObj.originalSystemId || null; entityName = metaObj.name || metaObj.type || null; }
+        if (entityId) {
+          const rawGuid = xeokitViewer.metaScene?.metaObjects?.[entityId]?.originalSystemId || null;
+          const resolved = resolveCanonicalFmGuid(rawGuid, entityId);
+          fmGuid = resolved.fmGuid;
+          entityName = resolved.name;
         }
         setContextMenu({ position: { x: touchPos.x, y: touchPos.y }, entityId, fmGuid, entityName });
       }, 600);
