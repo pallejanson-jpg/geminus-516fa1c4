@@ -501,14 +501,18 @@ async function upsertAssets(supabase: any, items: any[], options?: { skipGeometr
     synced_at: new Date().toISOString(),
   }));
 
-  const { error } = await supabase
-    .from('assets')
-    .upsert(assets, { 
-      onConflict: 'fm_guid',
-      ignoreDuplicates: false 
-    });
-
-  if (error) throw error;
+  // Upsert in chunks of 100 to avoid Postgres statement timeouts on large batches
+  const UPSERT_CHUNK = 100;
+  for (let i = 0; i < assets.length; i += UPSERT_CHUNK) {
+    const chunk = assets.slice(i, i + UPSERT_CHUNK);
+    const { error } = await supabase
+      .from('assets')
+      .upsert(chunk, { 
+        onConflict: 'fm_guid',
+        ignoreDuplicates: false 
+      });
+    if (error) throw error;
+  }
 
   // Also populate geometry entity map (skip during bulk sync for performance)
   if (!options?.skipGeometryMapping) {
