@@ -265,10 +265,11 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     
     // Filter rooms for this building
     let roomData = allData
-      .filter((a: any) => 
-        a.category === 'Space' && 
-        a.buildingFmGuid?.toLowerCase() === buildingLower
-      )
+      .filter((a: any) => {
+        const cat = a.category;
+        return (cat === 'Space' || cat === 'IfcSpace') && 
+          a.buildingFmGuid?.toLowerCase() === buildingLower;
+      })
       .map((r: any) => ({
         fmGuid: r.fmGuid,
         name: r.name || r.commonName,
