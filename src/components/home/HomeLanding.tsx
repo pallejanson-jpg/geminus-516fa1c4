@@ -93,6 +93,7 @@ export default function HomeLanding() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [gunnarOpen, setGunnarOpen] = useState(false);
+  const [ileanOpen, setIleanOpen] = useState(false);
   const { settingsMap, isLoading: isLoadingSettings, getFavorites, getHeroImage } = useAllBuildingSettings();
   const { navigatorTreeData, setSelectedFacility, setActiveApp, allData } = useContext(AppContext);
 
