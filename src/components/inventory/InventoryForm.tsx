@@ -189,7 +189,121 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
     setRoomFmGuid(prefill?.roomFmGuid || '');
     setImageUrl(null);
     setCoordinates(null);
+    setAiResult(null);
+    setBipSuggestions([]);
   };
+
+  // AI image recognition - calls mobile-ai-scan with the uploaded image
+  const handleAiScan = useCallback(async () => {
+    if (!imageUrl) {
+      toast.error('Upload an image first');
+      return;
+    }
+    setIsScanning(true);
+    setAiResult(null);
+    try {
+      // Fetch image and convert to base64
+      const resp = await fetch(imageUrl);
+      const blob = await resp.blob();
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const dataUrl = reader.result as string;
+          resolve(dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl);
+        };
+        reader.readAsDataURL(blob);
+      });
+
+      const { data, error: fnError } = await supabase.functions.invoke('mobile-ai-scan', {
+        body: { imageBase64: base64 },
+      });
+
+      if (fnError) throw fnError;
+      if (data?.error) throw new Error(data.error);
+
+      const result = data as AiScanResult;
+      setAiResult(result);
+
+      // Auto-fill form fields
+      if (result.suggestedName) setName(result.suggestedName);
+      if (result.description) setDescription(result.description);
+      if (result.suggestedSymbolId) setSymbolId(result.suggestedSymbolId);
+
+      // Map AI category to form category
+      const categoryMap: Record<string, string> = {
+        fire_extinguisher: 'fire_extinguisher',
+        fire_alarm_button: 'sensor',
+        smoke_detector: 'sensor',
+        fire_hose: 'fire_hose',
+        electrical_panel: 'other',
+        door: 'other',
+        elevator: 'other',
+        staircase: 'other',
+        ventilation: 'hvac_unit',
+        hvac_unit: 'hvac_unit',
+        sprinkler: 'sprinkler',
+        emergency_light: 'lamp',
+        access_control: 'other',
+      };
+      const mappedCategory = categoryMap[result.objectType] || 'other';
+      setCategory(mappedCategory);
+
+      toast.success('AI identification complete', {
+        description: `${result.suggestedName} (${Math.round(result.confidence * 100)}% confidence)`,
+      });
+    } catch (err: any) {
+      console.error('[InventoryForm] AI scan failed:', err);
+      if (err.message?.includes('429')) {
+        toast.error('AI service temporarily overloaded, try again shortly');
+      } else if (err.message?.includes('402')) {
+        toast.error('AI credits exhausted');
+      } else {
+        toast.error('AI identification failed', { description: err.message });
+      }
+    } finally {
+      setIsScanning(false);
+    }
+  }, [imageUrl]);
+
+  // BIP classification
+  const handleBipClassify = useCallback(async () => {
+    if (!name.trim()) {
+      toast.error('Enter a name before classifying');
+      return;
+    }
+    setIsClassifying(true);
+    setBipSuggestions([]);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('You must be logged in');
+        return;
+      }
+
+      const { data, error: fnError } = await supabase.functions.invoke('bip-classify', {
+        body: {
+          assetName: name,
+          assetType: category,
+          category: category,
+        },
+      });
+
+      if (fnError) throw fnError;
+      if (data?.error) throw new Error(data.error);
+
+      setBipSuggestions(data?.suggestions || []);
+      if (!data?.suggestions?.length) {
+        toast.info('No BIP matches found');
+      } else {
+        toast.success(`${data.suggestions.length} BIP suggestions found`);
+      }
+    } catch (err: any) {
+      console.error('[InventoryForm] BIP classify failed:', err);
+      toast.error('BIP classification failed', { description: err.message });
+    } finally {
+      setIsClassifying(false);
+    }
+  }, [name, category]);
 
   // Fetch symbols on mount
   useEffect(() => {
