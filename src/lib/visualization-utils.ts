@@ -112,8 +112,8 @@ export const VISUALIZATION_CONFIGS: Record<VisualizationType, VisualizationConfi
   },
   anomaly: {
     type: 'anomaly',
-    label: 'Anomalier',
-    unit: 'poäng',
+    label: 'Anomalies',
+    unit: 'score',
     colorStops: [
       { value: 0, color: [34, 197, 94] },     // Green - normal
       { value: 25, color: [34, 197, 94] },    // Green
