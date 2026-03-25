@@ -53,7 +53,10 @@ interface AiAssetScanProps {
   preselectedBuildingGuid?: string;
 }
 
-const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid }) => {
+const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid: propBuildingGuid }) => {
+  // Also read from URL search params as fallback
+  const urlBuildingGuid = new URLSearchParams(window.location.search).get('building');
+  const preselectedBuildingGuid = propBuildingGuid || urlBuildingGuid || undefined;
   const { toast } = useToast();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
