@@ -124,6 +124,10 @@ export function applyFloorVisibilityToScene(
 
   if (idsToShow.length === 0) return [];
 
+  // Clear selection state to prevent red-highlight persistence across floor switches
+  const selected = scene.selectedObjectIds;
+  if (selected?.length) scene.setObjectsSelected(selected, false);
+
   if (scene.setObjectsVisible && scene.objectIds) {
     scene.setObjectsVisible(scene.objectIds, false);
     scene.setObjectsVisible(idsToShow, true);
