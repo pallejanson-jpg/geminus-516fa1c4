@@ -150,8 +150,8 @@ const ViewerThemeSettings: React.FC = () => {
     } catch (err: any) {
       toast({ 
         variant: 'destructive', 
-        title: 'Fel', 
-        description: err.message || 'Kunde inte spara temat' 
+        title: 'Error', 
+        description: err.message || 'Could not save theme' 
       });
     } finally {
       setIsSaving(false);
