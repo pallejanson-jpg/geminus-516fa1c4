@@ -193,8 +193,8 @@ const RoomLabelSettings: React.FC = () => {
                     {/* Flat on floor toggle */}
                     <div className="flex items-center justify-between">
                       <div>
-                        <Label className="text-xs">Platt läge</Label>
-                        <p className="text-[10px] text-muted-foreground">Lägg etiketter plant på golvet</p>
+                        <Label className="text-xs">Flat mode</Label>
+                        <p className="text-[10px] text-muted-foreground">Lay labels flat on the floor</p>
                       </div>
                       <Switch
                         checked={editForm.flat_on_floor ?? false}
