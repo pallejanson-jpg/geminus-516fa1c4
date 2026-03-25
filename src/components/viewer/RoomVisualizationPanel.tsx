@@ -474,7 +474,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         if (entity) {
           if (color) {
             entity.colorize = rgbToFloat(color);
-            entity.opacity = 0.15; // Tandem-style: nearly transparent, color visible on floor without blocking view
+            entity.opacity = 0.85;
           } else {
             entity.colorize = null; // Reset to default
             entity.opacity = 1.0; // Reset opacity
