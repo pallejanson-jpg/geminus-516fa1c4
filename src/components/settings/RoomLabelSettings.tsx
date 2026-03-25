@@ -157,7 +157,7 @@ const RoomLabelSettings: React.FC = () => {
                     {/* Height slider */}
                     <div className="space-y-2">
                       <div className="flex justify-between">
-                        <Label className="text-xs">Höjd ovanför golv</Label>
+                        <Label className="text-xs">Height above floor</Label>
                         <span className="text-xs text-muted-foreground">{(editForm.height_offset ?? 0.05).toFixed(2)}m</span>
                       </div>
                       <Slider
