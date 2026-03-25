@@ -181,8 +181,8 @@ const RoomLabelSettings: React.FC = () => {
                     {/* Occlusion toggle */}
                     <div className="flex items-center justify-between">
                       <div>
-                        <Label className="text-xs">Ocklusion</Label>
-                        <p className="text-[10px] text-muted-foreground">Dölj etiketter bakom väggar/tak</p>
+                        <Label className="text-xs">Occlusion</Label>
+                        <p className="text-[10px] text-muted-foreground">Hide labels behind walls/ceilings</p>
                       </div>
                       <Switch
                         checked={editForm.occlusion_enabled ?? true}
