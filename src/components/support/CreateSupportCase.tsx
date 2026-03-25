@@ -37,14 +37,14 @@ interface Props {
 
 // SWG portal category types (from screenshot)
 const CATEGORY_OPTIONS = [
-  { value: 'Ritningsfiler - inleverans', label: 'Ritningsfiler - inleverans' },
-  { value: 'Ritningsfiler - inleverans - Revit A', label: 'Ritningsfiler - inleverans - Revit A' },
-  { value: 'Ritningsfiler - inleverans - Modell, CAD', label: 'Ritningsfiler - inleverans - Modell, CAD' },
-  { value: 'Ritningsfiler - plottning', label: 'Ritningsfiler - plottning' },
-  { value: 'Ritningsfiler - utskick', label: 'Ritningsfiler - utskick' },
-  { value: 'Ändring av areor', label: 'Ändring av areor' },
-  { value: 'Visualisering', label: 'Visualisering' },
-  { value: 'Laserskanning', label: 'Laserskanning' },
+  { value: 'Drawing files - delivery', label: 'Drawing files - delivery' },
+  { value: 'Drawing files - delivery - Revit A', label: 'Drawing files - delivery - Revit A' },
+  { value: 'Drawing files - delivery - Model, CAD', label: 'Drawing files - delivery - Model, CAD' },
+  { value: 'Drawing files - printing', label: 'Drawing files - printing' },
+  { value: 'Drawing files - distribution', label: 'Drawing files - distribution' },
+  { value: 'Area changes', label: 'Area changes' },
+  { value: 'Visualization', label: 'Visualization' },
+  { value: 'Laser scanning', label: 'Laser scanning' },
   { value: 'Outdoor', label: 'Outdoor' },
   { value: 'Asset+', label: 'Asset+' },
   { value: 'Interaxo', label: 'Interaxo' },
