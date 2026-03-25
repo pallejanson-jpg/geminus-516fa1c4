@@ -97,8 +97,8 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     const handleFloorChange = (e: CustomEvent<FloorSelectionEventDetail>) => {
       const { visibleFloorFmGuids: guids, isAllFloorsVisible } = e.detail;
       setEventIsAllVisible(!!isAllFloorsVisible);
-      if (isAllFloorsVisible) {
-        setEventFloorGuids(null); // null = all floors, skip filtering
+      if (isAllFloorsVisible && (!guids || guids.length === 0)) {
+        setEventFloorGuids(null); // null = truly all floors visible, skip filtering
       } else if (guids && guids.length > 0) {
         setEventFloorGuids(guids);
       }
