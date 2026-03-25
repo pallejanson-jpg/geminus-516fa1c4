@@ -1,43 +1,39 @@
 
+# Plan: Temperature Indicator Default, Canonical FMGUID Resolution
 
-# Plan: Properties Auto-Update, Clickable URLs, AI Scan Building Context, Text Colors, and Filter Reset Colors
+## Completed Changes
 
-## Changes
+### 1. Hide temperature indicator on viewer startup
+**Files:** `src/components/viewer/RoomVisualizationPanel.tsx`
+- Removed localStorage restoration of visualizationType; always starts as `'none'`
+- Added reset to `'none'` when `buildingFmGuid` changes
 
-### 1. Properties panel auto-updates on selection change
-**File:** `src/components/common/UniversalPropertiesDialog.tsx`
+### 2. Canonical FMGUID resolution (BIM → Asset+)
+**Files:** `src/components/viewer/NativeViewerShell.tsx`, `src/components/common/UniversalPropertiesDialog.tsx`
 
-The panel already updates when pinned in the viewer (line 597-607 in NativeViewerShell). However, the `useEffect` that fetches data (line 180) gates on `isOpen` — when `fmGuids` changes while already open, it should re-fetch. Add `fmGuids` to the dependency array of the main data-fetching `useEffect` (if not already there) so switching selection while the panel is open triggers a fresh load.
+Root cause: BIM models have their own Space GUIDs (e.g., `34D5BBF1...`) that differ from the canonical Asset+ GUIDs (e.g., `27675937...`). Both exist as separate rows in the `assets` table, but only the Asset+ row has user-defined attributes.
 
-### 2. URL values in properties panel become clickable
-**File:** `src/components/common/UniversalPropertiesDialog.tsx`
+Resolution strategy (name-based canonical matching):
+1. When an entity is clicked, get `originalSystemId` as raw GUID
+2. Check if that GUID matches an asset with attributes → use it
+3. If not, and the entity is an IfcSpace, find another Space in the same building with the same `common_name` that HAS attributes → use that
+4. Fallback to `asset_external_ids` table
+5. Final fallback: use raw GUID as-is
 
-In `renderPropertyValue` (around line 1155-1167), before the default text display, add a URL detection check: if the string value matches `https?://`, render it as an `<a href={value} target="_blank" rel="noopener noreferrer">` styled link instead of plain text.
+Applied in NativeViewerShell:
+- Select tool click handler (pinned properties update)
+- Context menu right-click
+- Context menu long-press (mobile)
+- `handleContextProperties` (already had allData-based resolution)
 
-### 3. AI Scan inherits building context from Inventory
-**Files:** `src/pages/Inventory.tsx`, `src/App.tsx`
+Applied in UniversalPropertiesDialog:
+- Data fetch `useEffect` now checks if direct match has user data; if not, performs name-based DB lookup
 
-Currently, navigating to `/inventory/ai-scan` from Inventory doesn't pass the building. The `AiAssetScan` route in `App.tsx` (line 123) renders without props. Fix: pass the selected building GUID as a URL search param (`?building=<guid>`) from `Inventory.tsx`, and in `App.tsx` read that param and pass it as `preselectedBuildingGuid` to `AiAssetScan`.
-
-### 4. Fix text colors across screens for readability
-**Files:** `src/components/viewer/VisualizationToolbar.tsx` and potentially other dark-background panels
-
-The right-side toolbar has a dark background but uses `text-muted-foreground` for labels which can appear grey/hard to read. Change key label text classes from `text-muted-foreground` to `text-foreground` or add `!text-white` overrides on the dark-background toolbar sections. Audit section headers and toggle labels.
-
-### 5. Filter menu: "Reset Colors" button on all levels
-**File:** `src/components/viewer/ViewerFilterPanel.tsx`
-
-Add a "Reset Colors" button in the filter panel header/footer area. On click, it dispatches `INSIGHTS_COLOR_RESET_EVENT`, clears the `__vizColorizedEntityIds` set, clears `__colorFilterActive`, and calls `applyArchitectColors(viewer)` to restore the default color scheme. This gives users a single action to clear any room visualization or custom coloring from any level.
-
-## Files to Modify
-
-| File | Change |
-|------|--------|
-| `src/components/common/UniversalPropertiesDialog.tsx` | Auto-update on fmGuids change; render URL values as clickable links |
-| `src/pages/Inventory.tsx` | Pass building GUID as URL param when navigating to AI Scan |
-| `src/App.tsx` | Read `building` search param and pass to `AiAssetScan` |
-| `src/components/viewer/VisualizationToolbar.tsx` | Fix grey text to white/foreground on dark backgrounds |
-| `src/components/viewer/ViewerFilterPanel.tsx` | Add "Reset Colors" button that clears all colorization |
+### 3. DB Diagnostics
+Confirmed in Centralstationen:
+- `27675937-...` = correct Asset+ ENTRÉ with attributes + geometry_entity_map entry
+- `34D5BBF1-...` = BIM-imported ENTRÉ with no attributes, no geometry_entity_map
+- `13779DB0-...` = another BIM-imported ENTRÉ with no attributes
+- Same pattern expected in Småviken
 
 ## No backend changes needed
-
