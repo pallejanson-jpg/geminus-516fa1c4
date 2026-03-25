@@ -249,7 +249,6 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
   };
 
   const handleShowAnnotation = (alarm: AlarmAsset) => {
-    setSelectedBuildingFmGuid(buildingFmGuid);
     navigate(`/viewer?building=${buildingFmGuid}&object=${alarm.fm_guid}&annotations=true`);
   };
 
