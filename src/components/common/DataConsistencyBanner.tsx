@@ -75,19 +75,44 @@ export const DataConsistencyBanner: React.FC = () => {
         description: 'Step 1: Syncing building structure (buildings, floors, rooms)...',
       });
 
-      // Step 1: Sync structure (buildings, floors, rooms) — lightweight, won't timeout
-      const { data: structData, error: structError } = await supabase.functions.invoke('asset-plus-sync', {
-        body: { action: 'sync-structure' }
-      });
+      // Step 1: Resumable structure sync loop
+      const runStructureLoop = async () => {
+        try {
+          const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+            body: { action: 'sync-structure' }
+          });
 
-      if (structError) throw structError;
+          if (error) {
+            console.error('Structure sync error:', error);
+            toast({ variant: 'destructive', title: 'Sync error', description: error.message });
+            setIsSyncing(false);
+            resumeRef.current = false;
+            return;
+          }
 
-      toast({
-        title: 'Structure synced',
-        description: `${structData?.totalSynced || 0} structural objects synced. Starting asset sync...`,
-      });
+          if (data?.interrupted) {
+            toast({
+              title: 'Syncing structure...',
+              description: `${data.totalSynced || 0} items so far (${data.phase})...`,
+            });
+            setTimeout(() => runStructureLoop(), 2000);
+          } else {
+            // Structure done — start asset loop
+            toast({
+              title: 'Structure synced',
+              description: `${data?.totalSynced || 0} structural objects synced. Starting asset sync...`,
+            });
+            runAssetLoop();
+          }
+        } catch (err: any) {
+          console.error('Structure sync exception:', err);
+          toast({ variant: 'destructive', title: 'Sync error', description: err.message || 'Unknown error' });
+          setIsSyncing(false);
+          resumeRef.current = false;
+        }
+      };
 
-      // Step 2: Resumable asset sync loop — each call handles one page, then returns
+      // Step 2: Resumable asset sync loop
       const runAssetLoop = async () => {
         try {
           const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
@@ -96,21 +121,15 @@ export const DataConsistencyBanner: React.FC = () => {
 
           if (error) {
             console.error('Asset sync error:', error);
-            toast({
-              variant: 'destructive',
-              title: 'Sync error',
-              description: error.message,
-            });
+            toast({ variant: 'destructive', title: 'Sync error', description: error.message });
             setIsSyncing(false);
             resumeRef.current = false;
             return;
           }
 
           if (data?.interrupted) {
-            // More pages to go — continue after short delay
             setTimeout(() => runAssetLoop(), 2000);
           } else {
-            // All done
             toast({
               title: 'Sync complete',
               description: `${data?.totalSynced || 0} assets synced.`,
@@ -125,24 +144,19 @@ export const DataConsistencyBanner: React.FC = () => {
               detail: { totalSynced: data?.totalSynced }
             }));
 
-            // Re-check delta after completion
             setTimeout(checkDelta, 2000);
           }
         } catch (err: any) {
           console.error('Asset sync exception:', err);
-          toast({
-            variant: 'destructive',
-            title: 'Sync error',
-            description: err.message || 'Unknown error',
-          });
+          toast({ variant: 'destructive', title: 'Sync error', description: err.message || 'Unknown error' });
           setIsSyncing(false);
           resumeRef.current = false;
         }
       };
 
-      runAssetLoop();
+      runStructureLoop();
     } catch (error) {
-      console.error('Structure sync failed:', error);
+      console.error('Sync failed:', error);
       toast({
         title: 'Sync failed',
         description: error instanceof Error ? error.message : 'Unknown error',

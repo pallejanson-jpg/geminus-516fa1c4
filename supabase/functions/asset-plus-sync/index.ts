@@ -1234,6 +1234,19 @@ serve(async (req) => {
       );
     }
 
+    // ============ RESET STRUCTURE PROGRESS (admin-only) ============
+    if (action === 'reset-structure-progress') {
+      console.log('Resetting structure sync progress');
+      
+      await supabase.from('asset_sync_progress').delete().eq('job', 'structure_objects');
+      await updateSyncState(supabase, 'structure', 'interrupted', undefined, 'Progress reset by admin');
+      
+      return new Response(
+        JSON.stringify({ success: true, message: 'Structure sync progress reset.' }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ============ SYNC SINGLE BUILDING ASSETS (ObjectType 4 for one building) ============
     if (action === 'sync-single-building') {
       if (!buildingFmGuid) {
