@@ -832,7 +832,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                 {/* Extracted Properties Section */}
                 {detailDialog.extracted_properties && Object.keys(detailDialog.extracted_properties).length > 0 && (
                   <div className="border rounded-lg p-3 bg-muted/30">
-                    <h4 className="font-medium mb-2 text-foreground">Extraherade egenskaper</h4>
+                    <h4 className="font-medium mb-2 text-foreground">Extracted Properties</h4>
                     <div className="grid grid-cols-2 gap-2">
                       {detailDialog.extracted_properties.brand && (
                         <div>
