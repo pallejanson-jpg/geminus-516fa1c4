@@ -774,6 +774,28 @@ serve(async (req) => {
 
     // ============ SYNC STRUCTURE — RESUMABLE (Buildings, Storeys, Spaces) ============
     if (action === 'sync-structure') {
+      const force = body?.force === true;
+
+      // Skip guard: if structure was synced recently and not forced, return immediately
+      if (!force) {
+        const { data: structState } = await supabase
+          .from('asset_sync_state')
+          .select('sync_status, last_sync_completed_at')
+          .eq('subtree_id', 'structure')
+          .maybeSingle();
+
+        if (structState?.sync_status === 'completed' && structState?.last_sync_completed_at) {
+          const msSince = Date.now() - new Date(structState.last_sync_completed_at).getTime();
+          if (msSince < 5 * 60 * 1000) {
+            console.log(`Structure synced ${Math.round(msSince / 1000)}s ago, skipping (use force:true to override)`);
+            return new Response(
+              JSON.stringify({ success: true, interrupted: false, skipped: true, totalSynced: 0, message: 'Structure synced recently' }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        }
+      }
+
       const MAX_EXECUTION_TIME = 45000; // 45s guard (60s edge fn limit)
       const startTime = Date.now();
       await updateSyncState(supabase, 'structure', 'running');
