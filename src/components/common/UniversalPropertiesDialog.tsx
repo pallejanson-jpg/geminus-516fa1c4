@@ -1161,6 +1161,21 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     if (typeof displayValue === 'number') {
       return <span className="text-sm">{displayValue.toLocaleString('en-US')}</span>;
     }
+
+    // URL detection — render as clickable link
+    if (typeof displayValue === 'string' && /^https?:\/\//i.test(displayValue.trim())) {
+      return (
+        <a
+          href={displayValue.trim()}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm text-primary underline hover:text-primary/80 truncate max-w-[240px] block sm:text-right"
+          title={displayValue}
+        >
+          {displayValue.length > 40 ? displayValue.slice(0, 37) + '…' : displayValue}
+        </a>
+      );
+    }
     
     // GUIDs should wrap instead of truncating
     const isGuid = typeof displayValue === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(displayValue);

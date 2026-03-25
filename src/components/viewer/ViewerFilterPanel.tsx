@@ -1844,6 +1844,32 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             variant="ghost"
             size="sm"
             className="h-7 text-xs px-2 gap-1 text-foreground"
+            onClick={() => {
+              // Reset all colors: level, space, category colorization + insights
+              setLevelColors(new Map());
+              setSpaceColors(new Map());
+              setCategoryColors(new Map());
+              setAutoColorEnabled(false);
+              setAutoColorSpaces(false);
+              setAutoColorCategories(false);
+              // Clear global viz flags
+              (window as any).__colorFilterActive = false;
+              const vizSet = (window as any).__vizColorizedEntityIds;
+              if (vizSet instanceof Set) vizSet.clear();
+              // Dispatch insights reset + restore architect colors
+              window.dispatchEvent(new CustomEvent('INSIGHTS_COLOR_RESET'));
+              const viewer = getXeokitViewer();
+              if (viewer) applyArchitectColors(viewer);
+            }}
+            title="Reset all colors to default"
+          >
+            <Paintbrush className="h-3.5 w-3.5" />
+            Reset colors
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs px-2 gap-1 text-foreground"
             onClick={handleResetAll}
             title="Show all objects"
           >
