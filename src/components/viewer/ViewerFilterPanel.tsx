@@ -1563,37 +1563,55 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const viewer = getXeokitViewer();
     if (!viewer?.scene) return;
     const scene = viewer.scene;
+
+    // Check if any filter is still active
+    const anyFiltersActive = checkedSources.size > 0 || checkedLevels.size > 0 ||
+      checkedSpaces.size > 0 || checkedCategories.size > 0;
+
+    // Always clean up visual enhancements (xray, colorize)
     try { const xIds = scene.xrayedObjectIds; if (xIds?.length > 0) scene.setObjectsXRayed(xIds, false); } catch (_e) { /* ignore */ }
     try { const cIds = scene.colorizedObjectIds; if (cIds?.length > 0) scene.setObjectsColorized(cIds, false); } catch (_e) { /* ignore */ }
-    // Restore all model-level visibility
-    const sceneModels = scene.models || {};
-    Object.values(sceneModels).forEach((model: any) => {
-      if (typeof model.visible !== 'undefined' && !model.visible) {
-        model.visible = true;
-      }
-    });
-    scene.setObjectsVisible(scene.objectIds, true);
-    scene.setObjectsPickable(scene.objectIds, true);
-    // Only reset opacity if visualization is NOT active (otherwise we'd wipe sensor colors)
-    if (!(window as any).__spacesForceVisible) {
-      scene.objectIds.forEach((id: string) => {
-        const entity = scene.objects?.[id];
-        if (entity && entity.opacity < 1) entity.opacity = 1.0;
-      });
-    }
 
-    if (activeThemeIdRef.current) {
-      window.dispatchEvent(new CustomEvent(VIEWER_THEME_REQUESTED_EVENT, {
-        detail: { themeId: activeThemeIdRef.current }
-      }));
+    if (anyFiltersActive) {
+      // Filters are active — preserve visibility state, only re-apply theme/colors on visible objects
+      if (activeThemeIdRef.current) {
+        window.dispatchEvent(new CustomEvent(VIEWER_THEME_REQUESTED_EVENT, {
+          detail: { themeId: activeThemeIdRef.current }
+        }));
+      } else {
+        applyArchitectColors(viewer);
+      }
     } else {
-      applyArchitectColors(viewer);
-    }
-    if (!(window as any).__spacesForceVisible) {
-      hideSpaceAndAreaObjects(viewer);
+      // No filters active — full cleanup: restore everything
+      const sceneModels = scene.models || {};
+      Object.values(sceneModels).forEach((model: any) => {
+        if (typeof model.visible !== 'undefined' && !model.visible) {
+          model.visible = true;
+        }
+      });
+      scene.setObjectsVisible(scene.objectIds, true);
+      scene.setObjectsPickable(scene.objectIds, true);
+      // Only reset opacity if visualization is NOT active (otherwise we'd wipe sensor colors)
+      if (!(window as any).__spacesForceVisible) {
+        scene.objectIds.forEach((id: string) => {
+          const entity = scene.objects?.[id];
+          if (entity && entity.opacity < 1) entity.opacity = 1.0;
+        });
+      }
+
+      if (activeThemeIdRef.current) {
+        window.dispatchEvent(new CustomEvent(VIEWER_THEME_REQUESTED_EVENT, {
+          detail: { themeId: activeThemeIdRef.current }
+        }));
+      } else {
+        applyArchitectColors(viewer);
+      }
+      if (!(window as any).__spacesForceVisible) {
+        hideSpaceAndAreaObjects(viewer);
+      }
     }
     prevVisibleRef.current = null;
-  }, [isVisible, getXeokitViewer]);
+  }, [isVisible, getXeokitViewer, checkedSources, checkedLevels, checkedSpaces, checkedCategories]);
 
   // ── Handlers ────────────────────────────────────────────────────────────
 

@@ -161,13 +161,27 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
       .then(({ data }) => setHasFmAccess(!!data?.fm_access_building_guid));
   }, [buildingGuid]);
 
-  // Get child storeys for buildings
+  // Get child storeys for buildings — prefer A-model storeys when available
   const childStoreys = useMemo(() => {
     if (!allData || facility.category !== 'Building') return [];
-    const storeys = allData.filter(item => 
+    const allStoreys = allData.filter(item => 
       item.category === 'Building Storey' &&
       item.buildingFmGuid === facility.fmGuid
     );
+    
+    // Check if any storeys belong to architectural models (A-modell, ARK, etc.)
+    const archStoreys = allStoreys.filter(s => {
+      const parentName = s.attributes?.parentCommonName || s.attributes?.parentName || '';
+      if (!parentName) return false;
+      const upper = parentName.toUpperCase().trim();
+      if (upper.includes('ARKITEKT') || upper.includes('A-MODELL') || upper.includes('A_MODELL') || upper.includes('A MODELL') || upper === 'ARK') return true;
+      if (upper.charAt(0) === 'A' && (upper.length === 1 || /^A[\s\-_.]/.test(upper))) return true;
+      return false;
+    });
+    
+    // Use A-model storeys if available, otherwise all storeys
+    const storeys = archStoreys.length > 0 ? archStoreys : allStoreys;
+    
     storeys.sort((a, b) => 
       (a.commonName || a.name || '').localeCompare(
         b.commonName || b.name || '', 
