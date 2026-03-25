@@ -3170,7 +3170,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     // Restart pick mode
     const success = setupPickModeListenerInternal();
     if (success) {
-      toast.info('Klicka på en ny position');
+      toast.info('Click on a new position');
     }
   }, [tempMarkerElement, setupPickModeListenerInternal]);
 
