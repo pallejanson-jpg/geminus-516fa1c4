@@ -872,7 +872,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                       )}
                       {detailDialog.extracted_properties.condition && (
                         <div>
-                          <span className="text-muted-foreground">Skick:</span>
+                          <span className="text-muted-foreground">Condition:</span>
                           <span className="ml-2 font-medium">{detailDialog.extracted_properties.condition}</span>
                         </div>
                       )}
