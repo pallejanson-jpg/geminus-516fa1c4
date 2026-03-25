@@ -169,7 +169,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
     } catch (error: any) {
       setAutoProcess(false);
       toast({
-        title: 'Fel vid bearbetning',
+        title: 'Processing error',
         description: error.message,
         variant: 'destructive',
       });

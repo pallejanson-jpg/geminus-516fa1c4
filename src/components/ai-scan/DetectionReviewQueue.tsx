@@ -879,7 +879,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                     </div>
                     {detailDialog.extracted_properties.text_visible && (
                       <div className="mt-2 pt-2 border-t">
-                        <span className="text-muted-foreground">Synlig text:</span>
+                        <span className="text-muted-foreground">Visible text:</span>
                         <p className="mt-1 font-mono text-xs bg-background p-2 rounded">
                           {detailDialog.extracted_properties.text_visible}
                         </p>
