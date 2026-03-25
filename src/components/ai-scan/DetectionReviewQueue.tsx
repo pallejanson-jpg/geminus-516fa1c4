@@ -783,7 +783,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                     variant={detection.status === 'approved' ? 'default' : 'secondary'}
                     className="w-full justify-center"
                   >
-                    {detection.status === 'approved' ? 'Godkänd' : 'Avvisad'}
+                    {detection.status === 'approved' ? 'Approved' : 'Rejected'}
                   </Badge>
                 )}
               </CardContent>
