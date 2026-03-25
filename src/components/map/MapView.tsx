@@ -128,6 +128,10 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
   const [activeStepIndex, setActiveStepIndex] = useState<number | null>(null);
   const [activeStepCoords, setActiveStepCoords] = useState<{ lat: number; lng: number } | null>(null);
 
+  // Street View overlay state
+  const [streetViewTarget, setStreetViewTarget] = useState<{ lat: number; lng: number; name: string; fmGuid: string; has360: boolean } | null>(null);
+  const [cesiumToken, setCesiumToken] = useState<string | null>(null);
+
   // Building origin for indoor mode
   const [buildingOrigin, setBuildingOrigin] = useState<BuildingOrigin | null>(null);
 
