@@ -25,7 +25,7 @@ import {
 import { Trash2, Search, Loader2, AlertTriangle, ChevronLeft, ChevronRight, Mail, Box, MapPin, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
-import { AppContext } from '@/context/AppContext';
+
 
 interface AlarmAsset {
   id: string;
