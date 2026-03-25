@@ -22,6 +22,7 @@ import { ClusterMarker, SingleMarker } from './MapCluster';
 import BuildingSidebar from './BuildingSidebar';
 import NavigationMapPanel from './NavigationMapPanel';
 import IndoorFloorSwitcher from './IndoorFloorSwitcher';
+import StreetViewOverlay from '@/components/globe/StreetViewOverlay';
 import Supercluster from 'supercluster';
 import {
   MapColoringMode,
