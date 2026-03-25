@@ -274,9 +274,9 @@ const RoomLabelSettings: React.FC = () => {
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Ny etikettkonfiguration</DialogTitle>
+            <DialogTitle>New Label Configuration</DialogTitle>
             <DialogDescription>
-              Skapa en ny konfiguration för hur rumsetiketter visas i 3D-viewern.
+              Create a new configuration for how room labels appear in the 3D viewer.
             </DialogDescription>
           </DialogHeader>
 
