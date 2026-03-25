@@ -625,7 +625,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
               )}
 
               <span className="text-sm text-muted-foreground">
-                {totalCount} totalt, {pendingCount} väntande
+                {totalCount} total, {pendingCount} pending
               </span>
             </div>
 
