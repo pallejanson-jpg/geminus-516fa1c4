@@ -602,19 +602,19 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="pending">Väntande</SelectItem>
-                  <SelectItem value="approved">Godkända</SelectItem>
-                  <SelectItem value="rejected">Avvisade</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
                 </SelectContent>
               </Select>
 
               {scanJobs.length > 0 && (
                 <Select value={selectedJobId || "all"} onValueChange={(val) => setSelectedJobId(val === "all" ? "" : val)}>
                   <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Alla skanningar" />
+                    <SelectValue placeholder="All scans" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Alla skanningar</SelectItem>
+                    <SelectItem value="all">All scans</SelectItem>
                     {scanJobs.map(job => (
                       <SelectItem key={job.id} value={job.id}>
                         {new Date(job.created_at).toLocaleDateString('sv-SE')} ({job.detections_found})
