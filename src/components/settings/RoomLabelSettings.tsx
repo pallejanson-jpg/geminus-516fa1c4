@@ -139,7 +139,7 @@ const RoomLabelSettings: React.FC = () => {
 
                     {/* Fields selection */}
                     <div className="space-y-2">
-                      <Label className="text-xs">Fält att visa</Label>
+                      <Label className="text-xs">Fields to display</Label>
                       <div className="flex flex-wrap gap-2">
                         {AVAILABLE_LABEL_FIELDS.map((field) => (
                           <Badge
