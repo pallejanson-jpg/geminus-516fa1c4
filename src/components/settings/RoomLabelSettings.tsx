@@ -236,11 +236,11 @@ const RoomLabelSettings: React.FC = () => {
                   // View mode
                   <div className="space-y-3">
                     <p className="text-xs text-muted-foreground">
-                      Fält: {config.fields.map(f => 
-                        AVAILABLE_LABEL_FIELDS.find(af => af.key === f)?.label || f
-                      ).join(', ')} • 
-                      Höjd: {config.height_offset}m • 
-                      Klick: {getClickActionLabel(config.click_action)}
+                       Fields: {config.fields.map(f => 
+                         AVAILABLE_LABEL_FIELDS.find(af => af.key === f)?.label || f
+                       ).join(', ')} • 
+                       Height: {config.height_offset}m • 
+                       Click: {getClickActionLabel(config.click_action)}
                     </p>
                     
                     {/* Actions */}
