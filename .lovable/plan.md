@@ -1,75 +1,39 @@
 
-Fix this in two layers: viewer behavior and data mapping.
+# Plan: Temperature Indicator Default, Canonical FMGUID Resolution
 
-1. Hide the temperature indicator by default
-- Stop restoring the active visualization type from local storage on Viewer start.
-- Default the visualization state to `none` on mount/building change.
-- Keep the legend/indicator hidden until the user explicitly chooses a Color Filter.
+## Completed Changes
 
-2. Diagnose the FMGUID mismatch as a canonical mapping problem
-What I found already:
-- In Centralstationen, both room GUIDs exist in the database for the same building:
-  - `27675937-a278-4436-863f-a138edc4bad3` = correct Asset+ room with user-defined data
-  - `34D5BBF1-A2EF-4EE9-83B4-B435E40F6EEF` = separate Space row with almost no data
-- `geometry_entity_map` contains a mapping for the correct room `2767...`
-- There is no mapping row for `34D5...`
+### 1. Hide temperature indicator on viewer startup
+**Files:** `src/components/viewer/RoomVisualizationPanel.tsx`
+- Removed localStorage restoration of visualizationType; always starts as `'none'`
+- Added reset to `'none'` when `buildingFmGuid` changes
 
-This means the viewer is currently trusting the raw BIM/metaScene GUID (`originalSystemId`) in some paths, instead of resolving the clicked entity to the canonical asset GUID from the mapping layer.
+### 2. Canonical FMGUID resolution (BIM → Asset+)
+**Files:** `src/components/viewer/NativeViewerShell.tsx`, `src/components/common/UniversalPropertiesDialog.tsx`
 
-3. Replace raw `originalSystemId` lookups with canonical entity -> asset resolution
-Update selection/properties/colorization so they resolve in this order:
-- `viewer-manifest` / `geometry_entity_map` mapping
-- `asset_external_ids`
-- then only as last fallback `metaObj.originalSystemId`
+Root cause: BIM models have their own Space GUIDs (e.g., `34D5BBF1...`) that differ from the canonical Asset+ GUIDs (e.g., `27675937...`). Both exist as separate rows in the `assets` table, but only the Asset+ row has user-defined attributes.
 
-This needs to be applied in:
-- `NativeViewerShell` when opening/updating the Properties panel
-- `UniversalPropertiesDialog` when fetching the asset
-- `RoomVisualizationPanel` when matching a room FMGUID to viewer entities for colorization
+Resolution strategy (name-based canonical matching):
+1. When an entity is clicked, get `originalSystemId` as raw GUID
+2. Check if that GUID matches an asset with attributes → use it
+3. If not, and the entity is an IfcSpace, find another Space in the same building with the same `common_name` that HAS attributes → use that
+4. Fallback to `asset_external_ids` table
+5. Final fallback: use raw GUID as-is
 
-Goal:
-- Clicking the room geometry that currently reports `34D5...` should resolve to the canonical asset `2767...`
-- The Properties panel should then show the correct user-defined Asset+ data
-- Room colorization should use the correct room’s sensor/user-defined attributes again
+Applied in NativeViewerShell:
+- Select tool click handler (pinned properties update)
+- Context menu right-click
+- Context menu long-press (mobile)
+- `handleContextProperties` (already had allData-based resolution)
 
-4. Add targeted mismatch diagnostics
-Add temporary diagnostics for:
-- picked `entityId`
-- raw `metaObj.originalSystemId`
-- resolved canonical asset GUID
-- whether `geometry_entity_map` had a hit
+Applied in UniversalPropertiesDialog:
+- Data fetch `useEffect` now checks if direct match has user data; if not, performs name-based DB lookup
 
-This will make it easy to confirm the same failure pattern in Småviken.
+### 3. DB Diagnostics
+Confirmed in Centralstationen:
+- `27675937-...` = correct Asset+ ENTRÉ with attributes + geometry_entity_map entry
+- `34D5BBF1-...` = BIM-imported ENTRÉ with no attributes, no geometry_entity_map
+- `13779DB0-...` = another BIM-imported ENTRÉ with no attributes
+- Same pattern expected in Småviken
 
-5. Clean up duplicated/incorrect room identity data
-Before doing a full sync, compare Centralstationen and Småviken for:
-- duplicate Space rows with same room name but different GUIDs
-- rows missing `geometry_entity_map`
-- viewer entities whose raw GUID differs from mapped asset GUID
-
-Recommended order:
-- First fix the viewer to use canonical mapping
-- Then run a targeted geometry mapping rebuild for affected buildings
-- Only do a full building sync if the mapping rebuild shows the imported room identities themselves are corrupted upstream
-
-6. Recommended recovery strategy
-I do not recommend starting with a full re-sync.
-Better sequence:
-- Fix canonical resolution in the Viewer
-- Validate Centralstationen on the known room `ENTRÉ`
-- Validate Småviken on a few failing rooms
-- If needed, rebuild geometry mappings for those buildings
-- Only then consider a full re-sync if duplicates continue to be created from source data
-
-Files to update
-- `src/components/viewer/VisualizationLegendOverlay.tsx` or visualization state source
-- `src/components/viewer/RoomVisualizationPanel.tsx`
-- `src/components/viewer/NativeViewerShell.tsx`
-- `src/components/common/UniversalPropertiesDialog.tsx`
-- optionally the viewer manifest / mapping consumption path if not already wired into the native viewer
-
-Expected outcome
-- No temperature indicator on Viewer startup
-- Clicking a room resolves to the correct Asset+ room FMGUID
-- Properties panel shows the correct user-defined properties
-- Temperature/CO2/etc. coloring works again for Centralstationen and Småviken without depending on the wrong BIM GUID
+## No backend changes needed
