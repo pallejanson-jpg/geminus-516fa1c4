@@ -550,6 +550,61 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     return () => window.removeEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler);
   }, []);
 
+  // ── Canonical fmGuid resolution ─────────────────────────────────────────
+  // Resolves a raw BIM entity GUID (originalSystemId) to the canonical Asset+ fmGuid
+  // by checking if the raw GUID has meaningful data; if not, finds matching Space by name.
+  const resolveCanonicalFmGuid = useCallback((rawGuid: string | null, entityId: string): { fmGuid: string | null; name: string | null } => {
+    const viewer = (window as any).__nativeXeokitViewer;
+    const metaObj = viewer?.metaScene?.metaObjects?.[entityId];
+    const entityName = metaObj?.name || metaObj?.type || null;
+
+    if (!rawGuid) return { fmGuid: null, name: entityName };
+    if (!allData?.length) return { fmGuid: rawGuid, name: entityName };
+
+    const norm = (s: string) => s.toLowerCase().replace(/-/g, '');
+    const rawNorm = norm(rawGuid);
+
+    // Check if the raw GUID matches an asset with user-defined attributes
+    const directMatch = allData.find((a: any) => a.fmGuid && norm(a.fmGuid) === rawNorm);
+    if (directMatch) {
+      const attrs = directMatch.attributes || {};
+      const hasUserData = Object.keys(attrs).length > 0;
+      if (hasUserData) {
+        // Direct match has data — use it
+        return { fmGuid: directMatch.fmGuid, name: entityName };
+      }
+    }
+
+    // Raw GUID has no data — try to find canonical asset by name matching
+    const isSpace = metaObj?.type?.toLowerCase()?.includes('ifcspace') || metaObj?.type?.toLowerCase() === 'space';
+    if (isSpace && metaObj?.name) {
+      const spaceName = metaObj.name.toLowerCase().trim();
+      const buildingNorm = norm(buildingFmGuid);
+      const candidates = allData.filter((a: any) => {
+        if (!a.fmGuid || (a.category !== 'Space' && a.category !== 'IfcSpace')) return false;
+        if (norm(a.buildingFmGuid || '') !== buildingNorm) return false;
+        const aName = (a.commonName || a.name || '').toLowerCase().trim();
+        return aName === spaceName;
+      });
+      // Prefer the candidate with the most attributes (user-defined data)
+      if (candidates.length > 0) {
+        const best = candidates.reduce((a: any, b: any) => {
+          const aCount = Object.keys(a.attributes || {}).length;
+          const bCount = Object.keys(b.attributes || {}).length;
+          return bCount > aCount ? b : a;
+        });
+        const bestAttrs = Object.keys(best.attributes || {}).length;
+        if (bestAttrs > 0) {
+          console.log(`[CanonicalResolve] ${rawGuid} → ${best.fmGuid} (matched by name "${metaObj.name}", ${bestAttrs} attrs)`);
+          return { fmGuid: best.fmGuid, name: entityName };
+        }
+      }
+    }
+
+    // Fallback: use the raw GUID as-is
+    return { fmGuid: directMatch?.fmGuid || rawGuid, name: entityName };
+  }, [allData, buildingFmGuid]);
+
   // ── Select tool click handler ──────────────────────────────────────────
   const activeToolRef = useRef<string | null>(null);
 
@@ -595,23 +650,16 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
         // When properties dialog is pinned, auto-update with newly selected entity
         if (propertiesPinned && pickResult.entity.selected) {
-          let fmGuid: string | null = null;
-          let entityName: string | null = null;
-          if (xeokitViewer.metaScene?.metaObjects) {
-            const metaObj = xeokitViewer.metaScene.metaObjects[entityId];
-            if (metaObj) {
-              fmGuid = metaObj.originalSystemId || null;
-              entityName = metaObj.name || metaObj.type || null;
-            }
-          }
-          setPropertiesEntity({ entityId, fmGuid, name: entityName });
+          const rawGuid = xeokitViewer.metaScene?.metaObjects?.[entityId]?.originalSystemId || null;
+          const resolved = resolveCanonicalFmGuid(rawGuid, entityId);
+          setPropertiesEntity({ entityId, fmGuid: resolved.fmGuid, name: resolved.name });
         }
       }
     };
 
     canvas.addEventListener('click', handleSelectClick);
     return () => canvas.removeEventListener('click', handleSelectClick);
-  }, [xeokitViewer]);
+  }, [xeokitViewer, resolveCanonicalFmGuid]);
 
   // ── Pick-position click handler for inventory ─────────────────────────
   useEffect(() => {
