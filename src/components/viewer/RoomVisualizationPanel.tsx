@@ -454,6 +454,8 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
     let count = 0;
     const CHUNK_SIZE = 30;
+    // Track entity IDs for XrayToggle protection
+    const vizEntityIdSet = new Set<string>();
 
     // Phase 1: reset previous rooms in chunks
     const resetChunks: string[][] = [];
