@@ -481,7 +481,7 @@ async function upsertGeometryMappings(supabase: any, items: any[]): Promise<void
   }
 }
 
-async function upsertAssets(supabase: any, items: any[]): Promise<number> {
+async function upsertAssets(supabase: any, items: any[], options?: { skipGeometryMapping?: boolean }): Promise<number> {
   if (items.length === 0) return 0;
 
   const assets = items.map((item: any) => ({
@@ -510,11 +510,13 @@ async function upsertAssets(supabase: any, items: any[]): Promise<number> {
 
   if (error) throw error;
 
-  // Also populate geometry entity map
-  try {
-    await upsertGeometryMappings(supabase, items);
-  } catch (e) {
-    console.debug('geometry_entity_map upsert failed (non-fatal):', e);
+  // Also populate geometry entity map (skip during bulk sync for performance)
+  if (!options?.skipGeometryMapping) {
+    try {
+      await upsertGeometryMappings(supabase, items);
+    } catch (e) {
+      console.debug('geometry_entity_map upsert failed (non-fatal):', e);
+    }
   }
 
   return assets.length;
