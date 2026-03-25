@@ -88,6 +88,12 @@ interface BipSuggestion {
   reasoning?: string;
 }
 
+// Selected BIP classification
+interface SelectedBip {
+  code: string;
+  title: string;
+}
+
 const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefill, editItem, onClearEdit, onOpen360, onOpen3d, pendingPosition, onPendingPositionConsumed }) => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
