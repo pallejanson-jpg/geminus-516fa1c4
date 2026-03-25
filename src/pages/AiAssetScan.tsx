@@ -208,17 +208,17 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid }) =>
             <Scan className="h-5 w-5 md:h-6 md:w-6 text-primary" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-base md:text-xl font-semibold truncate">AI-assisterad inventering</h1>
+            <h1 className="text-base md:text-xl font-semibold truncate">AI-Assisted Inventory</h1>
             {!isMobile && (
               <p className="text-sm text-muted-foreground">
-                Automatisk detektion av brandsläckare och nödutgångsskyltar i 360°-bilder
+                Automatic detection of assets in 360° images
               </p>
             )}
           </div>
         </div>
         <Button variant="outline" size="sm" onClick={loadData} className="shrink-0">
           <RefreshCw className="h-4 w-4" />
-          {!isMobile && <span className="ml-2">Uppdatera</span>}
+          {!isMobile && <span className="ml-2">Refresh</span>}
         </Button>
       </div>
 
