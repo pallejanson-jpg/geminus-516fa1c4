@@ -3196,7 +3196,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       const success = setupPickModeListenerInternal();
       if (success) {
         setIsPickMode(true);
-        toast.info('Klicka på en yta i 3D-vyn för att välja position', {
+        toast.info('Click on a surface in the 3D view to select position', {
           duration: 5000,
         });
       }
