@@ -258,7 +258,7 @@ const ApprovalDialog: React.FC<{
 
           {/* Name */}
           <div className="space-y-1">
-            <Label>Namn</Label>
+            <Label>Name</Label>
             <Input
               value={form.name}
               onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
