@@ -1,56 +1,61 @@
 
 
-# Analysis: Asset+ Sync Issues
+# Plan: Smart Sync with User Choice
 
-## Current Status
+## Summary
 
-**Structure sync**: Working correctly now. The resumable implementation completed successfully — 2809 items synced, 2826 orphans removed. Status is `completed`.
+When a sync completed recently (within 5 minutes), show the user a choice instead of silently skipping or blindly re-running. The user can either accept "already synced" or force a full re-sync. All UI text in English.
 
-**Asset sync**: Stuck on building 15/19 (Småviken). The sync has been looping on this building for 7+ invocations, each time hitting the timeout at increasing skip values (100, 700, 1400, 2100, 2700, 3300, 3400). There is also a `statement timeout` error from the database (`canceling statement due to statement timeout`, error code 57014).
+## Changes
 
-### Root Cause: Småviken Asset Sync
+### 1. Edge Function: `supabase/functions/asset-plus-sync/index.ts`
 
-Småviken has **45,509 remote Instance objects** in Asset+. Each invocation fetches pages of ~200 and upserts them, but:
+At the top of the `sync-structure` handler, before fetching any data:
 
-1. The upsert query for this many rows triggers a **Postgres statement timeout** (the first invocation logged this error)
-2. Even without the DB timeout, the Edge Function only processes ~600-700 items before hitting its own 45s wall-clock timeout
-3. At this rate, 45,509 items / 700 per invocation = **~65 invocations** needed just for Småviken
-4. The sync IS progressing (skip went from 100 → 3400), but very slowly
+- Query `asset_sync_state` for the `structure` row's `completed_at` and `status`.
+- If `status === 'completed'` and `completed_at` is within 5 minutes, AND the request body does NOT include `force: true`, return:
+  ```json
+  { "success": true, "interrupted": false, "skipped": true, "totalSynced": 0, "message": "Structure synced recently" }
+  ```
+- If `force: true` is passed, proceed with the full sync as normal.
 
-The structure sync and asset sync do NOT run simultaneously — the `DataConsistencyBanner` correctly sequences them (structure loop finishes, then asset loop starts). The logs confirm structure completed at 05:02:36 and assets started at 05:02:44.
+Same logic for `sync-assets-resumable`: check the `assets` row in `asset_sync_state`. If completed within 5 minutes and not forced, return `{ skipped: true }`.
 
-## Geometry Mappings
+### 2. Frontend: `src/components/common/DataConsistencyBanner.tsx`
 
-The `geometry_entity_map` table is **still actively used and relevant**. It has 6,369 rows across 10 buildings (4,119 for Småviken alone). It serves as the authoritative mapping layer for:
+Update `syncWithCleanup` to handle the `skipped` response:
 
-- **`useFloorData`** — storey name resolution (primary source)
-- **`useModelData`** — model name resolution (primary source)
-- **`useModelNames`** — canonical model name lookup
-- **`viewer-manifest`** — entity-to-asset mapping for 3D viewer
-- **`rebuild-geometry-map`** — backfill/repair tool
+- When `runStructureLoop` gets `data.skipped === true`, instead of immediately proceeding, show a **toast with an action button**:
+  ```
+  Title: "Already synced"
+  Description: "Structure was synced recently. Values may already be up to date."
+  Action button: "Sync anyway" → re-calls with force: true
+  ```
+- If the user doesn't click "Sync anyway", proceed directly to the asset loop (which will also check its own skip guard).
+- When `runAssetLoop` also returns `skipped`, show a completion toast: "Everything is up to date" and stop.
+- Pass `force` flag through: `body: { action: 'sync-structure', force: forceRef.current }`.
 
-It is populated during IFC-to-XKT conversion and during Asset+ sync. This table should be kept.
+**Flow:**
+```text
+User clicks "Sync with Asset+"
+  → structure call (force: false)
+    → skipped? Show toast "Already synced" + "Sync anyway" button
+       → User ignores: proceed to asset loop
+       → User clicks "Sync anyway": restart with force: true
+    → not skipped? Normal resumable loop
+  → asset call (force: false)  
+    → skipped? Toast "Everything is up to date", done
+    → not skipped? Normal resumable loop
+```
 
-## Recommendations
+### 3. SyncProgressBanner: `src/components/layout/SyncProgressBanner.tsx`
 
-### Fix 1: Increase upsert batch efficiency for large buildings
-The current upsert logic inserts assets one page at a time (200 items), each with a full `geometry_entity_map` upsert attempt. For a 45k-item building, this is too granular.
+No changes needed — the auto-resume logic already handles stale syncs, and the skip guard only applies to recent completions.
 
-**Changes in `supabase/functions/asset-plus-sync/index.ts`**:
-- Increase page size from 200 to 500 for asset sync
-- Skip `geometry_entity_map` upsert during bulk sync (it's non-critical and causes the statement timeout) — run it as a separate post-sync step
-- Add a per-building skip counter in `asset_sync_progress` so that when Småviken times out mid-way, the next invocation continues from the correct offset within that building (currently it restarts the building each time)
-
-### Fix 2: Per-building pagination persistence
-Currently `asset_sync_progress` tracks `skip` and `current_building_index` but the skip resets to 0 when resuming from building 15. The code should persist the intra-building skip so Småviken resumes at skip=3400 instead of starting over.
-
-**Changes in `supabase/functions/asset-plus-sync/index.ts`**:
-- Store `building_skip` in progress row alongside `skip` (global) 
-- On resume, use `building_skip` for the current building
-
-### Files to Modify
+## Files to Modify
 
 | File | Change |
 |------|--------|
-| `supabase/functions/asset-plus-sync/index.ts` | Persist per-building skip; increase page size; defer geometry_entity_map upsert for large buildings |
+| `supabase/functions/asset-plus-sync/index.ts` | Add 5-min skip guard at top of `sync-structure` and `sync-assets-resumable`, bypassed by `force: true` |
+| `src/components/common/DataConsistencyBanner.tsx` | Handle `skipped` response with toast + "Sync anyway" action; pass `force` flag |
 
