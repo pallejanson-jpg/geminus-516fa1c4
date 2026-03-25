@@ -617,7 +617,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                     <SelectItem value="all">All scans</SelectItem>
                     {scanJobs.map(job => (
                       <SelectItem key={job.id} value={job.id}>
-                        {new Date(job.created_at).toLocaleDateString('sv-SE')} ({job.detections_found})
+                        {new Date(job.created_at).toLocaleDateString('en-US')} ({job.detections_found})
                       </SelectItem>
                     ))}
                   </SelectContent>
