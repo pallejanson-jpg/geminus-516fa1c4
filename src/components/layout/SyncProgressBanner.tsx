@@ -41,24 +41,23 @@ export const SyncProgressBanner: React.FC = () => {
     return Date.now() - new Date(sync.last_sync_started_at).getTime() > STALE_THRESHOLD_MS;
   }, []);
 
-  const handleResume = useCallback(async (_subtreeId: string) => {
+  const handleResume = useCallback(async (subtreeId: string) => {
     if (resumeRef.current) return;
     resumeRef.current = true;
     setIsResuming(true);
 
+    const isStructure = subtreeId === 'structure';
+    const action = isStructure ? 'sync-structure' : 'sync-assets-resumable';
+
     const runLoop = async () => {
       try {
         const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
-          body: { action: 'sync-assets-resumable' }
+          body: { action }
         });
 
         if (error) {
           console.error('Resume sync error:', error);
-          toast({
-            variant: 'destructive',
-            title: 'Sync error',
-            description: error.message,
-          });
+          toast({ variant: 'destructive', title: 'Sync error', description: error.message });
           setIsResuming(false);
           resumeRef.current = false;
           return;
@@ -69,7 +68,7 @@ export const SyncProgressBanner: React.FC = () => {
         } else {
           toast({
             title: 'Sync complete',
-            description: `${data?.totalSynced || 0} assets synced.`,
+            description: `${data?.totalSynced || 0} ${isStructure ? 'structure items' : 'assets'} synced.`,
           });
           setIsResuming(false);
           resumeRef.current = false;
@@ -85,7 +84,7 @@ export const SyncProgressBanner: React.FC = () => {
 
     toast({
       title: 'Resuming sync',
-      description: 'Continuing interrupted synchronization...',
+      description: `Continuing interrupted ${isStructure ? 'structure' : 'asset'} synchronization...`,
     });
 
     runLoop();
