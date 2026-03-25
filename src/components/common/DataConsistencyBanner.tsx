@@ -37,6 +37,7 @@ export const DataConsistencyBanner: React.FC = () => {
   const [dismissed, setDismissed] = useState(() => isDismissedInStorage());
   const { toast } = useToast();
   const resumeRef = useRef(false);
+  const forceRef = useRef(false);
 
   const dismiss = () => {
     setDismissed(true);
@@ -64,9 +65,10 @@ export const DataConsistencyBanner: React.FC = () => {
     }
   };
 
-  const syncWithCleanup = async () => {
+  const syncWithCleanup = async (forceOverride?: boolean) => {
     if (resumeRef.current) return;
     resumeRef.current = true;
+    forceRef.current = forceOverride || false;
     setIsSyncing(true);
 
     try {
@@ -79,7 +81,7 @@ export const DataConsistencyBanner: React.FC = () => {
       const runStructureLoop = async () => {
         try {
           const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
-            body: { action: 'sync-structure' }
+            body: { action: 'sync-structure', force: forceRef.current }
           });
 
           if (error) {
@@ -87,6 +89,30 @@ export const DataConsistencyBanner: React.FC = () => {
             toast({ variant: 'destructive', title: 'Sync error', description: error.message });
             setIsSyncing(false);
             resumeRef.current = false;
+            return;
+          }
+
+          // Handle skip guard response
+          if (data?.skipped) {
+            toast({
+              title: 'Already synced',
+              description: 'Structure was synced recently. Values may already be up to date.',
+              action: (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    forceRef.current = true;
+                    resumeRef.current = false;
+                    syncWithCleanup(true);
+                  }}
+                >
+                  Sync anyway
+                </Button>
+              ),
+            });
+            // Proceed to asset loop (user can force-restart via toast action)
+            runAssetLoop();
             return;
           }
 
@@ -116,12 +142,36 @@ export const DataConsistencyBanner: React.FC = () => {
       const runAssetLoop = async () => {
         try {
           const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
-            body: { action: 'sync-assets-resumable' }
+            body: { action: 'sync-assets-resumable', force: forceRef.current }
           });
 
           if (error) {
             console.error('Asset sync error:', error);
             toast({ variant: 'destructive', title: 'Sync error', description: error.message });
+            setIsSyncing(false);
+            resumeRef.current = false;
+            return;
+          }
+
+          // Handle skip guard response
+          if (data?.skipped) {
+            toast({
+              title: 'Everything is up to date',
+              description: 'Both structure and assets were synced recently.',
+              action: (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    forceRef.current = true;
+                    resumeRef.current = false;
+                    syncWithCleanup(true);
+                  }}
+                >
+                  Sync anyway
+                </Button>
+              ),
+            });
             setIsSyncing(false);
             resumeRef.current = false;
             return;
@@ -202,7 +252,7 @@ export const DataConsistencyBanner: React.FC = () => {
           <div className="mt-2 flex gap-2">
             <Button
               size="sm"
-              onClick={syncWithCleanup}
+              onClick={() => syncWithCleanup(false)}
               disabled={isSyncing}
               className="gap-1.5"
             >
