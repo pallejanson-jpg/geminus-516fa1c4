@@ -161,15 +161,15 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
           setAutoProcess(false);
           onScanCompleted(jobData);
           toast({
-            title: 'Skanning klar!',
-            description: `Hittade ${jobData.detections_found} potentiella objekt`,
+            title: 'Scan complete!',
+            description: `Found ${jobData.detections_found} potential objects`,
           });
         }
       }
     } catch (error: any) {
       setAutoProcess(false);
       toast({
-        title: 'Fel vid bearbetning',
+        title: 'Processing error',
         description: error.message,
         variant: 'destructive',
       });

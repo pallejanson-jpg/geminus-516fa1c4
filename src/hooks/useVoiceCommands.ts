@@ -164,7 +164,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       ctx.setViewMode('2d');
       window.dispatchEvent(new CustomEvent('VIEW_MODE_2D_TOGGLED', { detail: { enabled: true } }));
     },
-    description: 'Byt till 2D-vy',
+    description: 'Switch to 2D view',
     category: 'viewer',
   },
   {
@@ -175,7 +175,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       ctx.setViewMode('3d');
       window.dispatchEvent(new CustomEvent('VIEW_MODE_2D_TOGGLED', { detail: { enabled: false } }));
     },
-    description: 'Byt till 3D-vy',
+    description: 'Switch to 3D view',
     category: 'viewer',
   },
   {

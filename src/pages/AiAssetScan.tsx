@@ -68,17 +68,12 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid }) =>
 
   const handleBack = () => {
     if (browserScanConfig) {
-      // Confirm leaving active scan
       if (confirm('Cancel ongoing scan?')) {
         setBrowserScanConfig(null);
       }
       return;
     }
-    if (window.history.length > 2) {
-      navigate(-1);
-    } else {
-      navigate('/inventory');
-    }
+    navigate('/inventory');
   };
 
   useEffect(() => {
@@ -181,7 +176,7 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid }) =>
           <div className="p-1.5 bg-primary/10 rounded-lg shrink-0">
             <Scan className="h-5 w-5 text-primary" />
           </div>
-          <h1 className="text-base md:text-xl font-semibold">AI-skanning pågår</h1>
+          <h1 className="text-base md:text-xl font-semibold">AI scan in progress</h1>
         </div>
         <BrowserScanRunner
           scanJobId={browserScanConfig.scanJobId}
@@ -213,17 +208,17 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid }) =>
             <Scan className="h-5 w-5 md:h-6 md:w-6 text-primary" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-base md:text-xl font-semibold truncate">AI-assisterad inventering</h1>
+            <h1 className="text-base md:text-xl font-semibold truncate">AI-Assisted Inventory</h1>
             {!isMobile && (
               <p className="text-sm text-muted-foreground">
-                Automatisk detektion av brandsläckare och nödutgångsskyltar i 360°-bilder
+                Automatic detection of assets in 360° images
               </p>
             )}
           </div>
         </div>
         <Button variant="outline" size="sm" onClick={loadData} className="shrink-0">
           <RefreshCw className="h-4 w-4" />
-          {!isMobile && <span className="ml-2">Uppdatera</span>}
+          {!isMobile && <span className="ml-2">Refresh</span>}
         </Button>
       </div>
 
@@ -236,19 +231,19 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid }) =>
             className="flex flex-col md:flex-row items-center gap-0.5 md:gap-2 py-2 px-1 md:px-3 text-xs md:text-sm"
           >
             <Building2 className="h-4 w-4 shrink-0" />
-            <span className="truncate">{isMobile ? 'Konfig.' : 'Konfigurera'}</span>
+            <span className="truncate">{isMobile ? 'Config' : 'Configure'}</span>
           </TabsTrigger>
           <TabsTrigger 
             value="progress"
             className="flex flex-col md:flex-row items-center gap-0.5 md:gap-2 py-2 px-1 md:px-3 text-xs md:text-sm relative"
           >
             <RefreshCw className="h-4 w-4 shrink-0" />
-            <span className="truncate">Skanning</span>
+            <span className="truncate">Scanning</span>
             {activeScanJob && (
               <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-primary rounded-full md:hidden" />
             )}
             {activeScanJob && !isMobile && (
-              <Badge variant="secondary" className="ml-1 text-xs">Aktiv</Badge>
+              <Badge variant="secondary" className="ml-1 text-xs">Active</Badge>
             )}
           </TabsTrigger>
           <TabsTrigger 
@@ -256,14 +251,14 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid }) =>
             className="flex flex-col md:flex-row items-center gap-0.5 md:gap-2 py-2 px-1 md:px-3 text-xs md:text-sm"
           >
             <CheckCircle2 className="h-4 w-4 shrink-0" />
-            <span className="truncate">Granska</span>
+            <span className="truncate">Review</span>
           </TabsTrigger>
           <TabsTrigger 
             value="templates"
             className="flex flex-col md:flex-row items-center gap-0.5 md:gap-2 py-2 px-1 md:px-3 text-xs md:text-sm"
           >
             <Settings2 className="h-4 w-4 shrink-0" />
-            <span className="truncate">Mallar</span>
+            <span className="truncate">Templates</span>
           </TabsTrigger>
         </TabsList>
 

@@ -429,8 +429,8 @@ export default function Ivion360View({
             setDetectedPoi(data);
             setHasPendingPoi(true);
             setPendingPoiQueue(prev => [...prev, data]);
-            toast.info('Ny POI upptäckt i Ivion!', {
-              description: 'Klicka för att ladda in koordinater',
+            toast.info('New POI detected in Ivion!', {
+              description: 'Click to load coordinates',
             });
           }
           setLastSeenPoiId(data.id);

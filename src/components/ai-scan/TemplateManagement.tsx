@@ -112,7 +112,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
       setSymbols(symbolsResult.data || []);
     } catch (error: any) {
       toast({
-        title: 'Fel vid laddning',
+        title: 'Loading error',
         description: error.message,
         variant: 'destructive',
       });

@@ -134,7 +134,7 @@ const ViewerThemeSettings: React.FC = () => {
           background_color: editingTheme.background_color,
           space_opacity: editingTheme.space_opacity,
         });
-        toast({ title: 'Tema uppdaterat', description: `"${editingTheme.name}" har sparats.` });
+        toast({ title: 'Theme updated', description: `"${editingTheme.name}" has been saved.` });
       } else {
         await createTheme({
           name: editingTheme.name,
@@ -150,8 +150,8 @@ const ViewerThemeSettings: React.FC = () => {
     } catch (err: any) {
       toast({ 
         variant: 'destructive', 
-        title: 'Fel', 
-        description: err.message || 'Kunde inte spara temat' 
+        title: 'Error', 
+        description: err.message || 'Could not save theme' 
       });
     } finally {
       setIsSaving(false);
@@ -170,8 +170,8 @@ const ViewerThemeSettings: React.FC = () => {
     } catch (err: any) {
       toast({ 
         variant: 'destructive', 
-        title: 'Fel', 
-        description: err.message || 'Kunde inte ta bort temat' 
+        title: 'Error', 
+        description: err.message || 'Could not delete theme' 
       });
     }
   };

@@ -105,7 +105,7 @@ export function useRoomLabelConfigs() {
       console.error('Failed to create room label config:', error);
       toast({
         variant: 'destructive',
-        title: 'Kunde inte skapa konfiguration',
+        title: 'Could not create configuration',
         description: error.message,
       });
       return null;
@@ -135,14 +135,14 @@ export function useRoomLabelConfigs() {
 
       await fetchConfigs();
       toast({
-        title: 'Konfiguration uppdaterad',
-        description: 'Ändringarna har sparats.',
+        title: 'Configuration updated',
+        description: 'Changes have been saved.',
       });
     } catch (error: any) {
       console.error('Failed to update room label config:', error);
       toast({
         variant: 'destructive',
-        title: 'Kunde inte uppdatera',
+        title: 'Could not update',
         description: error.message,
       });
     }
@@ -171,7 +171,7 @@ export function useRoomLabelConfigs() {
       console.error('Failed to delete room label config:', error);
       toast({
         variant: 'destructive',
-        title: 'Kunde inte ta bort',
+        title: 'Could not delete',
         description: error.message,
       });
     }

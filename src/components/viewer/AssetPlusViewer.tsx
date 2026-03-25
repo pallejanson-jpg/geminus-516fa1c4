@@ -3170,7 +3170,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     // Restart pick mode
     const success = setupPickModeListenerInternal();
     if (success) {
-      toast.info('Klicka på en ny position');
+      toast.info('Click on a new position');
     }
   }, [tempMarkerElement, setupPickModeListenerInternal]);
 
@@ -3184,7 +3184,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         tempMarkerElement.remove();
         setTempMarkerElement(null);
       }
-      toast.info('Registreringsläge avbrutet');
+      toast.info('Registration mode cancelled');
       
       // Remove listener if exists
       if (pickModeListenerRef.current) {
@@ -3196,7 +3196,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       const success = setupPickModeListenerInternal();
       if (success) {
         setIsPickMode(true);
-        toast.info('Klicka på en yta i 3D-vyn för att välja position', {
+        toast.info('Click on a surface in the 3D view to select position', {
           duration: 5000,
         });
       }
