@@ -3184,7 +3184,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         tempMarkerElement.remove();
         setTempMarkerElement(null);
       }
-      toast.info('Registreringsläge avbrutet');
+      toast.info('Registration mode cancelled');
       
       // Remove listener if exists
       if (pickModeListenerRef.current) {
