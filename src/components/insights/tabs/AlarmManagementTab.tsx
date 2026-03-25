@@ -55,7 +55,6 @@ const PAGE_SIZE = 100;
 export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAlarmsDeleted }: AlarmManagementTabProps) {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { setSelectedBuildingFmGuid } = useContext(AppContext);
   const [alarms, setAlarms] = useState<AlarmAsset[]>([]);
   const [levelNames, setLevelNames] = useState<Map<string, string>>(new Map());
   const [roomNames, setRoomNames] = useState<Map<string, string>>(new Map());
