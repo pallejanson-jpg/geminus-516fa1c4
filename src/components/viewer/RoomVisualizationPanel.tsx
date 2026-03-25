@@ -265,10 +265,11 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     
     // Filter rooms for this building
     let roomData = allData
-      .filter((a: any) => 
-        a.category === 'Space' && 
-        a.buildingFmGuid?.toLowerCase() === buildingLower
-      )
+      .filter((a: any) => {
+        const cat = a.category;
+        return (cat === 'Space' || cat === 'IfcSpace') && 
+          a.buildingFmGuid?.toLowerCase() === buildingLower;
+      })
       .map((r: any) => ({
         fmGuid: r.fmGuid,
         name: r.name || r.commonName,
@@ -416,13 +417,13 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     });
     
     // ALSO reset any rooms that were colorized but may no longer be in current filter
-    // This prevents "sticky" colors from appearing on other floors
     colorizedRoomGuidsRef.current.forEach((fmGuid) => {
       colorizeSpace(fmGuid, null);
     });
     
-    // Clear the tracking set
+    // Clear the tracking set and global viz entity IDs
     colorizedRoomGuidsRef.current.clear();
+    (window as any).__vizColorizedEntityIds = new Set<string>();
     setColorizedCount(0);
   }, [rooms, colorizeSpace]);
 
@@ -453,6 +454,8 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
     let count = 0;
     const CHUNK_SIZE = 30;
+    // Track entity IDs for XrayToggle protection
+    const vizEntityIdSet = new Set<string>();
 
     // Phase 1: reset previous rooms in chunks
     const resetChunks: string[][] = [];
@@ -500,6 +503,9 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
             const color = getVisualizationColor(value, visualizationType);
             if (color && colorizeSpace(room.fmGuid, color)) {
               colorizedRoomGuidsRef.current.add(room.fmGuid);
+              // Also track entity IDs globally for XrayToggle to protect
+              const ids = getItemIdsByFmGuid(room.fmGuid);
+              ids.forEach(id => vizEntityIdSet.add(id));
               count++;
             }
           }
@@ -513,7 +519,8 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         return;
       }
 
-      // Done
+      // Done — expose protected entity IDs globally for XrayToggle
+      (window as any).__vizColorizedEntityIds = vizEntityIdSet;
       setColorizedCount(count);
       setIsProcessing(false);
       isProcessingRef.current = false;
