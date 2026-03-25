@@ -352,20 +352,76 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       return ids;
     };
     
-    // Index all IfcSpace objects by their fmGuid
+    // Index all IfcSpace objects by their fmGuid — use multiple matching strategies
     Object.values(metaObjects).forEach((metaObj: any) => {
       if (metaObj.type?.toLowerCase() === 'ifcspace') {
-        const fmGuid = (metaObj.originalSystemId || metaObj.id || '').toLowerCase();
-        if (fmGuid) {
-          const childIds = getAllChildIds(metaObj.id);
-          cache.set(fmGuid, childIds);
+        const childIds = getAllChildIds(metaObj.id);
+        
+        // Strategy 1: originalSystemId (IFC GlobalId)
+        const origId = (metaObj.originalSystemId || '').toLowerCase();
+        if (origId) {
+          cache.set(origId, childIds);
         }
+        
+        // Strategy 2: externalId
+        const extId = (metaObj.externalId || '').toLowerCase();
+        if (extId && extId !== origId) {
+          cache.set(extId, childIds);
+        }
+        
+        // Strategy 3: metaObj.id itself
+        const objId = (metaObj.id || '').toLowerCase();
+        if (objId && objId !== origId && objId !== extId) {
+          cache.set(objId, childIds);
+        }
+        
+        // Strategy 4: scan propertySets for fmGuid/fmguid properties
+        const propertySets = metaObj.propertySets || [];
+        propertySets.forEach((ps: any) => {
+          const props = ps.properties || [];
+          props.forEach((p: any) => {
+            const pName = (p.name || '').toLowerCase();
+            if (pName === 'fmguid' || pName === 'fm_guid' || pName === 'fm guid') {
+              const val = (p.value || '').toLowerCase();
+              if (val && !cache.has(val)) {
+                cache.set(val, childIds);
+              }
+            }
+          });
+        });
       }
     });
     
+    // Strategy 5: scan scene objects for entity IDs that contain fmGuid patterns
+    // This catches cases where the entity ID embeds the GUID
+    const scene = xeokitViewer.scene;
+    if (scene?.objects) {
+      const sceneObjectIds = Object.keys(scene.objects);
+      // Build reverse index: for each space in cache, check if any scene object ID contains it
+      // Only do this for rooms from allData that aren't yet in cache
+      const allDataRooms = filteredRooms;
+      let fallbackCount = 0;
+      allDataRooms.forEach(room => {
+        const roomGuidLower = room.fmGuid.toLowerCase();
+        if (cache.has(roomGuidLower)) return; // Already cached
+        
+        // Check if any scene object ID contains this GUID (case-insensitive)
+        const matchingIds = sceneObjectIds.filter(id => 
+          id.toLowerCase().includes(roomGuidLower)
+        );
+        if (matchingIds.length > 0) {
+          cache.set(roomGuidLower, matchingIds);
+          fallbackCount++;
+        }
+      });
+      if (fallbackCount > 0) {
+        console.log(`Entity cache: ${fallbackCount} rooms matched via scene object ID fallback`);
+      }
+    }
+    
     setEntityIdCache(cache);
-    console.log(`Built entity ID cache for ${cache.size} spaces`);
-  }, [viewerRef, cacheKey, buildingFmGuid]);
+    console.log(`Built entity ID cache: ${cache.size} entries for spaces`);
+  }, [viewerRef, cacheKey, buildingFmGuid, filteredRooms]);
 
   // Get item IDs by FmGuid using cache (fast O(1) lookup)
   const getItemIdsByFmGuid = useCallback((fmGuidToFind: string): string[] => {
