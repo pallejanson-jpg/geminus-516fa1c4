@@ -370,11 +370,11 @@ const RoomLabelSettings: React.FC = () => {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowCreateDialog(false); setEditForm({}); }}>
-              Avbryt
-            </Button>
-            <Button onClick={handleCreate} disabled={!editForm.name}>
-              Skapa
-            </Button>
+               Cancel
+             </Button>
+             <Button onClick={handleCreate} disabled={!editForm.name}>
+               Create
+             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
