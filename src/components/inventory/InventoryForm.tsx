@@ -916,12 +916,34 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
         {isClassifying ? 'Classifying...' : 'Classify (BIP)'}
       </Button>
 
-      {/* BIP suggestions */}
+      {/* BIP suggestions - clickable to select */}
       {bipSuggestions.length > 0 && (
         <div className="rounded-lg border p-3 space-y-2">
-          <span className="text-sm font-medium">BIP Suggestions</span>
+          <span className="text-sm font-medium">BIP Suggestions — click to select</span>
+          {selectedBip && (
+            <div className="flex items-center gap-2 bg-primary/10 border border-primary/30 rounded-md p-2">
+              <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+              <span className="text-sm font-mono font-medium">{selectedBip.code}</span>
+              <span className="text-xs text-muted-foreground truncate">{selectedBip.title}</span>
+              <Button type="button" variant="ghost" size="icon" className="h-6 w-6 ml-auto shrink-0" onClick={() => setSelectedBip(null)}>
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
           {bipSuggestions.map((s, i) => (
-            <div key={i} className="bg-muted/30 rounded-md p-2 space-y-1">
+            <button
+              key={i}
+              type="button"
+              onClick={() => {
+                setSelectedBip({ code: s.code, title: s.title });
+                toast.success('BIP classification selected', { description: `${s.code} — ${s.title}` });
+              }}
+              className={`w-full text-left rounded-md p-2 space-y-1 transition-colors ${
+                selectedBip?.code === s.code 
+                  ? 'bg-primary/10 border border-primary/30' 
+                  : 'bg-muted/30 hover:bg-muted/50 border border-transparent'
+              }`}
+            >
               <div className="flex items-center justify-between">
                 <span className="text-sm font-mono font-medium">{s.code}</span>
                 <Badge variant="secondary" className="text-xs">
@@ -932,7 +954,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
               {s.usercode_syntax && <p className="text-xs text-muted-foreground">Syntax: {s.usercode_syntax}</p>}
               {s.bsab_e && <p className="text-xs text-muted-foreground">BSAB-E: {s.bsab_e}</p>}
               {s.reasoning && <p className="text-xs text-muted-foreground italic">{s.reasoning}</p>}
-            </div>
+            </button>
           ))}
         </div>
       )}
