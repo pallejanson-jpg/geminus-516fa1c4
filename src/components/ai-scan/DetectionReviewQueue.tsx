@@ -276,7 +276,7 @@ const ApprovalDialog: React.FC<{
 
           {/* Description */}
           <div className="space-y-1">
-            <Label>Beskrivning</Label>
+            <Label>Description</Label>
             <Textarea
               value={form.description}
               onChange={e => setForm(prev => ({ ...prev, description: e.target.value }))}
