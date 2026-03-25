@@ -700,7 +700,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                 ) : (
                   <div className="text-center text-muted-foreground text-sm p-4">
                     <Eye className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    Ingen förhandsvisning
+                    No preview
                   </div>
                 )}
               </div>
