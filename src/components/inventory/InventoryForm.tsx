@@ -485,6 +485,13 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
               { name: 'Description', value: description.trim() || '', dataType: 0 },
               { name: 'InventoryDate', value: inventoryDate, dataType: 4 },
               { name: 'AssetCategory', value: category, dataType: 0 },
+              ...(aiResult?.properties ? Object.entries(aiResult.properties)
+                .filter(([, val]) => val)
+                .map(([key, val]) => ({ name: `AI_${key}`, value: val || '', dataType: 0 })) : []),
+              ...(selectedBip ? [
+                { name: 'BIP-code', value: selectedBip.code, dataType: 0 },
+                { name: 'BIP-description', value: selectedBip.title, dataType: 0 },
+              ] : []),
             ],
           },
           updated_at: new Date().toISOString(),
