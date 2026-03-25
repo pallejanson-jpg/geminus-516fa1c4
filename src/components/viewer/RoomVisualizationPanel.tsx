@@ -390,19 +390,15 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     });
     
     // Strategy 5: scan scene objects for entity IDs that contain fmGuid patterns
-    // This catches cases where the entity ID embeds the GUID
     const scene = xeokitViewer.scene;
     if (scene?.objects) {
       const sceneObjectIds = Object.keys(scene.objects);
-      // Build reverse index: for each space in cache, check if any scene object ID contains it
-      // Only do this for rooms from allData that aren't yet in cache
       const allDataRooms = filteredRooms;
       let fallbackCount = 0;
       allDataRooms.forEach(room => {
         const roomGuidLower = room.fmGuid.toLowerCase();
-        if (cache.has(roomGuidLower)) return; // Already cached
+        if (cache.has(roomGuidLower)) return;
         
-        // Check if any scene object ID contains this GUID (case-insensitive)
         const matchingIds = sceneObjectIds.filter(id => 
           id.toLowerCase().includes(roomGuidLower)
         );
@@ -414,6 +410,35 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       if (fallbackCount > 0) {
         console.log(`Entity cache: ${fallbackCount} rooms matched via scene object ID fallback`);
       }
+    }
+
+    // Strategy 6: Name-based matching for Asset+ rooms whose FMGUID differs from BIM GUID
+    // Build a name→childIds map from IfcSpace metaObjects
+    const nameToChildIds = new Map<string, string[]>();
+    Object.values(metaObjects).forEach((metaObj: any) => {
+      if (metaObj.type?.toLowerCase() === 'ifcspace' && metaObj.name) {
+        const nameLower = metaObj.name.trim().toLowerCase();
+        if (!nameToChildIds.has(nameLower)) {
+          nameToChildIds.set(nameLower, getAllChildIds(metaObj.id));
+        }
+      }
+    });
+
+    let nameMatchCount = 0;
+    filteredRooms.forEach(room => {
+      const roomGuidLower = room.fmGuid.toLowerCase();
+      if (cache.has(roomGuidLower)) return; // Already resolved
+      if (!room.name) return;
+
+      const roomNameLower = room.name.trim().toLowerCase();
+      const childIds = nameToChildIds.get(roomNameLower);
+      if (childIds && childIds.length > 0) {
+        cache.set(roomGuidLower, childIds);
+        nameMatchCount++;
+      }
+    });
+    if (nameMatchCount > 0) {
+      console.log(`Entity cache: ${nameMatchCount} rooms matched via name-based fallback`);
     }
     
     setEntityIdCache(cache);
