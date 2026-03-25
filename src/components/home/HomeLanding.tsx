@@ -187,7 +187,7 @@ export default function HomeLanding() {
               <h2 className="text-base sm:text-lg font-semibold text-foreground">AI Assistants</h2>
               <p className="text-[11px] sm:text-xs text-muted-foreground">Quick help for data, documents and integrations</p>
             </div>
-            <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-3">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-center">
               {ASSISTANTS.map((a) => {
                 const Icon = a.icon;
                 return (
@@ -196,7 +196,7 @@ export default function HomeLanding() {
                     type="button"
                     onClick={() => openAssistant(a.id)}
                     disabled={!a.available}
-                    className={`rounded-xl border border-border bg-card/60 p-3 sm:p-4 text-left transition-colors ${
+                    className={`rounded-xl border border-border bg-card/60 p-3 sm:p-4 text-left transition-colors w-full sm:w-64 ${
                       a.available ? 'hover:bg-muted hover:border-primary/50 active:bg-muted/80' : 'opacity-60 cursor-not-allowed'
                     }`}
                   >
