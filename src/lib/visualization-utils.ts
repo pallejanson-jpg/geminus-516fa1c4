@@ -22,7 +22,7 @@ export interface VisualizationConfig {
 export const VISUALIZATION_CONFIGS: Record<VisualizationType, VisualizationConfig> = {
   temperature: {
     type: 'temperature',
-    label: 'Temperatur',
+    label: 'Temperature',
     unit: '°C',
     colorStops: [
       { value: 16, color: [59, 130, 246] },   // Blue - cold
@@ -54,7 +54,7 @@ export const VISUALIZATION_CONFIGS: Record<VisualizationType, VisualizationConfi
   },
   humidity: {
     type: 'humidity',
-    label: 'Luftfuktighet',
+    label: 'Humidity',
     unit: '%',
     colorStops: [
       { value: 20, color: [249, 115, 22] },   // Orange - too dry
@@ -69,7 +69,7 @@ export const VISUALIZATION_CONFIGS: Record<VisualizationType, VisualizationConfi
   },
   occupancy: {
     type: 'occupancy',
-    label: 'Beläggning',
+    label: 'Occupancy',
     unit: '%',
     colorStops: [
       { value: 0, color: [156, 163, 175] },   // Gray - empty
@@ -83,7 +83,7 @@ export const VISUALIZATION_CONFIGS: Record<VisualizationType, VisualizationConfi
   },
   light: {
     type: 'light',
-    label: 'Belysning',
+    label: 'Light',
     unit: 'lux',
     colorStops: [
       { value: 0, color: [30, 30, 30] },       // Very dark
@@ -98,7 +98,7 @@ export const VISUALIZATION_CONFIGS: Record<VisualizationType, VisualizationConfi
   },
   area: {
     type: 'area',
-    label: 'Yta (NTA)',
+    label: 'Area (NTA)',
     unit: 'm²',
     colorStops: [
       { value: 0, color: [255, 255, 255] },   // White - smallest
@@ -112,8 +112,8 @@ export const VISUALIZATION_CONFIGS: Record<VisualizationType, VisualizationConfi
   },
   anomaly: {
     type: 'anomaly',
-    label: 'Anomalier',
-    unit: 'poäng',
+    label: 'Anomalies',
+    unit: 'score',
     colorStops: [
       { value: 0, color: [34, 197, 94] },     // Green - normal
       { value: 25, color: [34, 197, 94] },    // Green
@@ -126,7 +126,7 @@ export const VISUALIZATION_CONFIGS: Record<VisualizationType, VisualizationConfi
   },
   none: {
     type: 'none',
-    label: 'Ingen',
+    label: 'None',
     unit: '',
     colorStops: [],
     min: 0,
