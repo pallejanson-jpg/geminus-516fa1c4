@@ -13,10 +13,10 @@ import ReactMarkdown from 'react-markdown';
 const BUTTON_SIZE = 56;
 
 const STARTER_QUESTIONS = [
-  'Vilka dokument finns för denna fastighet?',
-  'Sammanfatta senaste underhållsrapporterna',
-  'Finns det öppna ärenden i dokumenten?',
-  'Vilken utrustning är dokumenterad?',
+  'What documents are available for this property?',
+  'Summarize the latest maintenance reports',
+  'Are there open issues in the documents?',
+  'What equipment is documented?',
 ];
 
 const ContextIcon = ({ type }: { type: string | null }) => {
