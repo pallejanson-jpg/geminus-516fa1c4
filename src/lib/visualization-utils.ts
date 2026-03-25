@@ -22,7 +22,7 @@ export interface VisualizationConfig {
 export const VISUALIZATION_CONFIGS: Record<VisualizationType, VisualizationConfig> = {
   temperature: {
     type: 'temperature',
-    label: 'Temperatur',
+    label: 'Temperature',
     unit: '°C',
     colorStops: [
       { value: 16, color: [59, 130, 246] },   // Blue - cold
