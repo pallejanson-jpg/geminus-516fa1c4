@@ -107,6 +107,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
   // BIP classify state
   const [isClassifying, setIsClassifying] = useState(false);
   const [bipSuggestions, setBipSuggestions] = useState<BipSuggestion[]>([]);
+  const [selectedBip, setSelectedBip] = useState<SelectedBip | null>(null);
 
   // Form state - initialized with prefill values
   const [name, setName] = useState('');
