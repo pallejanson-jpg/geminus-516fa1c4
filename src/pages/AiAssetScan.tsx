@@ -231,19 +231,19 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid }) =>
             className="flex flex-col md:flex-row items-center gap-0.5 md:gap-2 py-2 px-1 md:px-3 text-xs md:text-sm"
           >
             <Building2 className="h-4 w-4 shrink-0" />
-            <span className="truncate">{isMobile ? 'Konfig.' : 'Konfigurera'}</span>
+            <span className="truncate">{isMobile ? 'Config' : 'Configure'}</span>
           </TabsTrigger>
           <TabsTrigger 
             value="progress"
             className="flex flex-col md:flex-row items-center gap-0.5 md:gap-2 py-2 px-1 md:px-3 text-xs md:text-sm relative"
           >
             <RefreshCw className="h-4 w-4 shrink-0" />
-            <span className="truncate">Skanning</span>
+            <span className="truncate">Scanning</span>
             {activeScanJob && (
               <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-primary rounded-full md:hidden" />
             )}
             {activeScanJob && !isMobile && (
-              <Badge variant="secondary" className="ml-1 text-xs">Aktiv</Badge>
+              <Badge variant="secondary" className="ml-1 text-xs">Active</Badge>
             )}
           </TabsTrigger>
           <TabsTrigger 
@@ -251,14 +251,14 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid }) =>
             className="flex flex-col md:flex-row items-center gap-0.5 md:gap-2 py-2 px-1 md:px-3 text-xs md:text-sm"
           >
             <CheckCircle2 className="h-4 w-4 shrink-0" />
-            <span className="truncate">Granska</span>
+            <span className="truncate">Review</span>
           </TabsTrigger>
           <TabsTrigger 
             value="templates"
             className="flex flex-col md:flex-row items-center gap-0.5 md:gap-2 py-2 px-1 md:px-3 text-xs md:text-sm"
           >
             <Settings2 className="h-4 w-4 shrink-0" />
-            <span className="truncate">Mallar</span>
+            <span className="truncate">Templates</span>
           </TabsTrigger>
         </TabsList>
 
