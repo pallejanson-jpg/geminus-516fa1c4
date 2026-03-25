@@ -147,16 +147,16 @@ export const SyncProgressBanner: React.FC = () => {
     return () => clearInterval(timer);
   }, [activeSyncs.length]);
 
-  // Auto-resume stale "assets" jobs once per page load
+  // Auto-resume stale "assets" or "structure" jobs once per page load
   useEffect(() => {
     if (autoResumedRef.current || resumeRef.current || isResuming) return;
-    const staleAssetSync = activeSyncs.find(
-      s => s.subtree_id === 'assets' && isStale(s)
+    const staleSync = activeSyncs.find(
+      s => (s.subtree_id === 'assets' || s.subtree_id === 'structure') && isStale(s)
     );
-    if (staleAssetSync) {
+    if (staleSync) {
       autoResumedRef.current = true;
-      console.log('[SyncProgressBanner] Auto-resuming stale asset sync');
-      handleResume(staleAssetSync.subtree_id);
+      console.log(`[SyncProgressBanner] Auto-resuming stale ${staleSync.subtree_id} sync`);
+      handleResume(staleSync.subtree_id);
     }
   }, [activeSyncs, isStale, handleResume, isResuming]);
 
