@@ -22,6 +22,7 @@ import { ClusterMarker, SingleMarker } from './MapCluster';
 import BuildingSidebar from './BuildingSidebar';
 import NavigationMapPanel from './NavigationMapPanel';
 import IndoorFloorSwitcher from './IndoorFloorSwitcher';
+import StreetViewOverlay from '@/components/globe/StreetViewOverlay';
 import Supercluster from 'supercluster';
 import {
   MapColoringMode,
@@ -127,6 +128,10 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
   const [activeStepIndex, setActiveStepIndex] = useState<number | null>(null);
   const [activeStepCoords, setActiveStepCoords] = useState<{ lat: number; lng: number } | null>(null);
 
+  // Street View overlay state
+  const [streetViewTarget, setStreetViewTarget] = useState<{ lat: number; lng: number; name: string; fmGuid: string; has360: boolean } | null>(null);
+  const [cesiumToken, setCesiumToken] = useState<string | null>(null);
+
   // Building origin for indoor mode
   const [buildingOrigin, setBuildingOrigin] = useState<BuildingOrigin | null>(null);
 
@@ -225,6 +230,13 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
       if (!error && data?.token) setMapboxToken(data.token);
       else setError(error?.message || 'Mapbox token is not configured');
       setIsLoading(false);
+    });
+  }, []);
+
+  // Fetch Cesium token for Street View overlay
+  useEffect(() => {
+    supabase.functions.invoke('get-cesium-token').then(({ data }) => {
+      if (data?.token) setCesiumToken(data.token);
     });
   }, []);
 
@@ -818,8 +830,16 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
                       size="sm"
                       variant="outline"
                       className="text-xs sm:text-sm gap-1"
+                      disabled={!cesiumToken}
                       onClick={() => {
-                        window.open(`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${selectedMarker.lat},${selectedMarker.lng}`, '_blank');
+                        setStreetViewTarget({
+                          lat: selectedMarker.lat,
+                          lng: selectedMarker.lng,
+                          name: selectedMarker.commonName || selectedMarker.name,
+                          fmGuid: selectedMarker.fmGuid!,
+                          has360: !!selectedMarker.ivionSiteId,
+                        });
+                        setSelectedMarker(null);
                       }}
                     >
                       <Eye size={14} />
@@ -832,6 +852,19 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
           </Popup>
         )}
       </Map>
+
+      {/* Street View overlay (Cesium-based) */}
+      {streetViewTarget && cesiumToken && (
+        <StreetViewOverlay
+          lat={streetViewTarget.lat}
+          lng={streetViewTarget.lng}
+          buildingName={streetViewTarget.name}
+          fmGuid={streetViewTarget.fmGuid}
+          has360={streetViewTarget.has360}
+          cesiumToken={cesiumToken}
+          onClose={() => setStreetViewTarget(null)}
+        />
+      )}
     </div>
   );
 };
