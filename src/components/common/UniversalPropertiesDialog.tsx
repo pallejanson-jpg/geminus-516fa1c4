@@ -245,8 +245,8 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           if (viewer?.metaScene?.metaObjects) {
             let metaObj = entityId ? viewer.metaScene.metaObjects[entityId] : null;
             // If no entityId or no match, scan metaObjects for matching originalSystemId (fmGuid)
-            if (!metaObj && singleGuid) {
-              const guidLower = singleGuid.toLowerCase();
+            if (!metaObj && fmGuids.length === 1) {
+              const guidLower = fmGuids[0].toLowerCase();
               for (const key of Object.keys(viewer.metaScene.metaObjects)) {
                 const mo = viewer.metaScene.metaObjects[key];
                 if (mo?.originalSystemId?.toLowerCase() === guidLower) {
@@ -256,7 +256,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
               }
             }
             if (metaObj) {
-              setBimFallbackFromMeta(metaObj, entityId || metaObj.id || singleGuid);
+              setBimFallbackFromMeta(metaObj, entityId || metaObj.id || fmGuids[0]);
             }
           }
         }
