@@ -198,14 +198,17 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
 
         if (assetError) throw assetError;
 
-        // If no direct match, try looking up via asset_external_ids table or originalSystemId
-        if ((!assetData || assetData.length === 0) && entityId) {
-          // First: try resolving via originalSystemId from xeokit metaScene
+        // Check if direct match has meaningful data; if not, try canonical resolution
+        const hasUserData = assetData?.some((a: any) => a.attributes && Object.keys(a.attributes).length > 0);
+
+        // If no direct match or match has no attributes, try canonical resolution
+        if ((!assetData || assetData.length === 0 || !hasUserData) && entityId) {
           const viewer = (window as any).__nativeXeokitViewer;
           const metaObj = viewer?.metaScene?.metaObjects?.[entityId];
-          const originalSystemId = metaObj?.originalSystemId;
 
-          if (originalSystemId) {
+          // Strategy 1: originalSystemId lookup
+          const originalSystemId = metaObj?.originalSystemId;
+          if (originalSystemId && (!assetData || assetData.length === 0)) {
             const osidVariants = [originalSystemId, originalSystemId.toLowerCase(), originalSystemId.toUpperCase()];
             const { data: resolvedByOsid } = await supabase
               .from('assets')
@@ -216,7 +219,35 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
             }
           }
 
-          // Second: try asset_external_ids table
+          // Strategy 2: Name-based canonical resolution for spaces (BIM GUID → Asset+ GUID)
+          const isSpace = metaObj?.type?.toLowerCase()?.includes('ifcspace') || metaObj?.type?.toLowerCase() === 'space';
+          if (isSpace && metaObj?.name && (!assetData?.some((a: any) => a.attributes && Object.keys(a.attributes).length > 0))) {
+            const spaceName = metaObj.name.trim();
+            // Find the building fm_guid from the first matched asset or from fmGuids context
+            const buildingGuid = assetData?.[0]?.building_fm_guid;
+            if (buildingGuid) {
+              const { data: nameMatches } = await supabase
+                .from('assets')
+                .select('*')
+                .eq('building_fm_guid', buildingGuid)
+                .eq('category', 'Space')
+                .ilike('common_name', spaceName);
+              if (nameMatches && nameMatches.length > 0) {
+                // Pick the one with the most attributes
+                const best = nameMatches.reduce((a: any, b: any) => {
+                  const aCount = Object.keys(a.attributes || {}).length;
+                  const bCount = Object.keys(b.attributes || {}).length;
+                  return bCount > aCount ? b : a;
+                });
+                if (Object.keys(best.attributes || {}).length > 0) {
+                  console.log(`[Properties] Canonical resolve: ${fmGuids[0]} → ${best.fm_guid} via name "${spaceName}"`);
+                  assetData = [best];
+                }
+              }
+            }
+          }
+
+          // Strategy 3: asset_external_ids table
           if (!assetData || assetData.length === 0) {
             const { data: extIds } = await supabase
               .from('asset_external_ids')
