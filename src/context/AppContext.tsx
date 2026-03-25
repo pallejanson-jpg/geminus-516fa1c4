@@ -531,10 +531,41 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         // Build space map for instance attachment
         const spaceMap = new Map<string, NavigatorNode>();
 
+        // Determine if A-model storeys exist for this building
+        // If so, only show spaces that belong to A-model storeys
+        const hasAModelStoreys = aModelStoreyGuids.size > 0;
+
         // Attach spaces to storeys - with enhanced fallback matching
+        // Only include A-model spaces when A-model storeys exist
         spaces.forEach((space: any) => {
+            // Filter: only include spaces belonging to A-model storeys
+            if (hasAModelStoreys && space.levelFmGuid) {
+                if (!aModelStoreyGuids.has(space.levelFmGuid)) return; // skip non-A-model spaces
+            }
+
             let parentStorey = storeyMap.get(space.levelFmGuid);
             
+            // If the space's storey was excluded (unnamed model placeholder),
+            // try to redistribute to a named storey using room designation prefix
+            if (!parentStorey && excludedModelStoreyGuids.has(space.levelFmGuid) && space.buildingFmGuid) {
+                const designation = space.commonName || space.name || '';
+                // Extract prefix before first dot: "01.3.082" → "01"
+                const prefixMatch = designation.match(/^(\d{1,3})\./);
+                if (prefixMatch) {
+                    const prefix = prefixMatch[1];
+                    // Find a named storey whose commonName starts with this prefix
+                    for (const [, storey] of storeyMap) {
+                        if ((storey as any).buildingFmGuid !== space.buildingFmGuid) continue;
+                        const storeyName = (storey.commonName || '').trim();
+                        // Match "01" to storey "01", or "04" to "04 - 01" etc.
+                        if (storeyName === prefix || storeyName.startsWith(prefix + ' ') || storeyName.startsWith(prefix + '-') || storeyName.startsWith(prefix + '_')) {
+                            parentStorey = storey;
+                            break;
+                        }
+                    }
+                }
+            }
+
             // Fallback 1: Try to match by levelCommonName from attributes
             if (!parentStorey && space.buildingFmGuid) {
                 const attrs = space.attributes || {};
@@ -558,12 +589,13 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
             }
 
             // Fallback 2: Try to extract floor number from room designation/name
-            // e.g. room "1234" → floor "1", room "Plan 2 - Rum 5" → floor "2"
+            // e.g. room "01.3.082" → prefix "01" → floor "01"
             if (!parentStorey && space.buildingFmGuid) {
                 const designation = space.name || space.commonName || '';
-                const floorNumMatch = designation.match(/^(\d)/); // first digit often = floor number
-                if (floorNumMatch) {
-                    const floorNum = floorNumMatch[1];
+                // Try prefix before first dot first (more precise)
+                const prefixMatch = designation.match(/^(\d{1,3})\./);
+                if (prefixMatch) {
+                    const floorNum = prefixMatch[1];
                     const candidates = storeyNumberLookup.get(space.buildingFmGuid) || [];
                     for (const entry of candidates) {
                         const [num, guid] = entry.split('|');
@@ -573,13 +605,27 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                         }
                     }
                 }
+                if (!parentStorey) {
+                    const floorNumMatch = designation.match(/^(\d)/); // first digit often = floor number
+                    if (floorNumMatch) {
+                        const floorNum = floorNumMatch[1];
+                        const candidates = storeyNumberLookup.get(space.buildingFmGuid) || [];
+                        for (const entry of candidates) {
+                            const [num, guid] = entry.split('|');
+                            if (num === floorNum) {
+                                parentStorey = storeyMap.get(guid);
+                                break;
+                            }
+                        }
+                    }
+                }
             }
 
             // Fallback 3: parentCommonName - but ONLY if it matches a storey name, not a building/model name
             if (!parentStorey && space.buildingFmGuid) {
                 const attrs = space.attributes || {};
                 const parentName = (attrs.parentCommonName || '').toLowerCase().trim();
-                if (parentName) {
+                if (parentName && !isModelName(attrs.parentCommonName)) {
                     const lookupKey = `${space.buildingFmGuid}|${parentName}`;
                     const matchedStoreyGuid = storeyNameLookup.get(lookupKey);
                     if (matchedStoreyGuid) {
