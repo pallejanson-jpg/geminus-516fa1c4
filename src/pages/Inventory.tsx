@@ -166,7 +166,11 @@ const Inventory: React.FC = () => {
                 <Button 
                   variant="outline" 
                   size="sm" 
-                  onClick={() => navigate('/inventory/ai-scan')}
+                  onClick={() => {
+                    const buildingGuid = editItem?.building_fm_guid || inventoryPrefill?.buildingFmGuid;
+                    const params = buildingGuid ? `?building=${encodeURIComponent(buildingGuid)}` : '';
+                    navigate(`/inventory/ai-scan${params}`);
+                  }}
                   className="gap-2"
                 >
                   <Scan className="h-4 w-4" />
