@@ -501,6 +501,9 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
             const color = getVisualizationColor(value, visualizationType);
             if (color && colorizeSpace(room.fmGuid, color)) {
               colorizedRoomGuidsRef.current.add(room.fmGuid);
+              // Also track entity IDs globally for XrayToggle to protect
+              const ids = getItemIdsByFmGuid(room.fmGuid);
+              ids.forEach(id => vizEntityIdSet.add(id));
               count++;
             }
           }
