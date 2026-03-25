@@ -1240,16 +1240,33 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         setIsSyncingAssets(true);
 
         try {
-            const { data: structureData, error: structureError } = await supabase.functions.invoke('asset-plus-sync', {
-                body: { action: 'sync-structure' }
-            });
+            // Resumable structure loop
+            const runStructureLoop = async (): Promise<void> => {
+                const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+                    body: { action: 'sync-structure' }
+                });
 
-            if (structureError) throw structureError;
+                if (error) throw error;
 
-            toast({
-                title: 'Structure synced',
-                description: structureData?.message || 'Buildings, floors, and rooms are updated. Starting asset sync...',
-            });
+                await fetchSyncStatus();
+
+                if (data?.interrupted) {
+                    toast({
+                        title: 'Syncing structure...',
+                        description: `${data.totalSynced || 0} items so far (${data.phase})...`,
+                    });
+                    setTimeout(() => runStructureLoop(), 2000);
+                    return;
+                }
+
+                toast({
+                    title: 'Structure synced',
+                    description: data?.message || 'Buildings, floors, and rooms are updated. Starting asset sync...',
+                });
+
+                // Structure done — start asset loop
+                runResumableSync();
+            };
 
             const runResumableSync = async (): Promise<void> => {
                 try {
@@ -1304,7 +1321,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 description: 'Running structure sync first, then continuing asset sync automatically.',
             });
 
-            runResumableSync();
+            runStructureLoop();
         } catch (error: any) {
             toast({
                 variant: 'destructive',
