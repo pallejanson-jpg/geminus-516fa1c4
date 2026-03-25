@@ -69,7 +69,7 @@ export const VISUALIZATION_CONFIGS: Record<VisualizationType, VisualizationConfi
   },
   occupancy: {
     type: 'occupancy',
-    label: 'Beläggning',
+    label: 'Occupancy',
     unit: '%',
     colorStops: [
       { value: 0, color: [156, 163, 175] },   // Gray - empty
