@@ -824,7 +824,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                     <span className="ml-2 font-medium">{Math.round(detailDialog.confidence * 100)}%</span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Bild ID:</span>
+                    <span className="text-muted-foreground">Image ID:</span>
                     <span className="ml-2 font-medium">{detailDialog.ivion_image_id || '-'}</span>
                   </div>
                 </div>
