@@ -161,8 +161,8 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
           setAutoProcess(false);
           onScanCompleted(jobData);
           toast({
-            title: 'Skanning klar!',
-            description: `Hittade ${jobData.detections_found} potentiella objekt`,
+            title: 'Scan complete!',
+            description: `Found ${jobData.detections_found} potential objects`,
           });
         }
       }
