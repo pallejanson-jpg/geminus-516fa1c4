@@ -378,7 +378,7 @@ const ApprovalDialog: React.FC<{
           {/* Extracted props summary */}
           {props && Object.keys(props).length > 0 && (
             <div className="border rounded-lg p-3 bg-muted/30">
-              <p className="text-xs font-medium mb-1">Extracted Properties</p>
+              <p className="text-xs font-medium mb-1 text-foreground">Extracted Properties</p>
               <div className="flex flex-wrap gap-1">
                 {props.type && <Badge variant="outline" className="text-xs">{props.type}</Badge>}
                 {props.color && <Badge variant="outline" className="text-xs">{props.color}</Badge>}
