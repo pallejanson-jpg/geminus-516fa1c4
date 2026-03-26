@@ -1713,6 +1713,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           const markerCat = ann.asset_type || 'Other';
           if (catSet && !catSet.has(markerCat)) {
             marker.style.display = 'none';
+            marker.dataset.catHidden = 'true';
+          } else {
+            marker.dataset.catHidden = 'false';
           }
           container.appendChild(marker);
 
