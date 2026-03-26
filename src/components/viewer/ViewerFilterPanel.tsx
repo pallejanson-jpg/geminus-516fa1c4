@@ -275,12 +275,16 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           }
         }
 
-        // Count spaces belonging to this level
+        // Count spaces belonging to this level — only A-model spaces
         const spaceCount = buildingData.filter((s: any) => {
           const cat = s.category;
           if (cat !== 'Space' && cat !== 'IfcSpace') return false;
-          const levelGuid = normalizeGuid(s.levelFmGuid || s.level_fm_guid || '');
-          return allGuids.has(levelGuid);
+          const levelGuid = s.levelFmGuid || s.level_fm_guid || '';
+          const levelGuidNorm = normalizeGuid(levelGuid);
+          if (!allGuids.has(levelGuidNorm)) return false;
+          // Only count if the space's level is in the A-model storey set
+          if (aModelStoreyGuidSet.size > 0 && !aModelStoreyGuidSet.has(levelGuid)) return false;
+          return true;
         }).length;
 
         return {
