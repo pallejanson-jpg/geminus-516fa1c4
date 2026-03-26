@@ -65,7 +65,10 @@ const XrayToggle: React.FC<XrayToggleProps> = ({ viewerRef, initialEnabled = fal
         const end = Math.min(i + BATCH_SIZE, idsToXray.length);
         for (; i < end; i++) {
           const entity = scene.objects?.[idsToXray[i]];
-          if (entity) entity.xrayed = true;
+          if (entity) {
+            entity.xrayed = true;
+            entity.pickable = false;
+          }
         }
         if (i < idsToXray.length) requestAnimationFrame(processBatch);
       };
