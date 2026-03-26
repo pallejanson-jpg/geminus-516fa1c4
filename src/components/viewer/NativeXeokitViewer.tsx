@@ -1861,6 +1861,49 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   }, [buildingFmGuid]);
 
 
+  // ── Listen for VIEWER_SELECT_ENTITY (select + fly-to an entity by fmGuid) ───
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const fmGuid = detail?.fmGuid || detail?.entityId;
+      if (!fmGuid) return;
+
+      const viewer = viewerRef.current;
+      if (!viewer?.scene || !viewer?.metaScene) return;
+
+      const scene = viewer.scene;
+      const metaObjects = viewer.metaScene.metaObjects;
+      const targetNorm = normalizeGuid(fmGuid);
+
+      // Find matching entity
+      let matchedIds: string[] = [];
+      Object.values(metaObjects).forEach((mo: any) => {
+        const sysId = normalizeGuid(mo.originalSystemId || '');
+        const moId = normalizeGuid(mo.id || '');
+        if (sysId === targetNorm || moId === targetNorm) {
+          matchedIds.push(mo.id);
+          // Make space visible if hidden
+          const entity = scene.objects?.[mo.id];
+          if (entity) {
+            entity.visible = true;
+            entity.pickable = true;
+          }
+        }
+      });
+
+      if (matchedIds.length > 0) {
+        // Clear previous selection, select new
+        scene.setObjectsSelected(scene.selectedObjectIds, false);
+        scene.setObjectsSelected(matchedIds, true);
+        // Fly to
+        viewer.cameraFlight?.flyTo({ aabb: scene.getAABB(matchedIds), duration: 1.0 });
+      }
+    };
+
+    window.addEventListener('VIEWER_SELECT_ENTITY', handler);
+    return () => window.removeEventListener('VIEWER_SELECT_ENTITY', handler);
+  }, []);
+
   return (
     <div className="relative w-full h-full">
       <canvas
