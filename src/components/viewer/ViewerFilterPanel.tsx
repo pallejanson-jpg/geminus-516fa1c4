@@ -1013,7 +1013,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }
 
     if (!hasAnyFilter) {
-      // No filter: show everything (except spaces), but only A-model objects
+      // No filter: show everything (except spaces) — respect ModelVisibilitySelector state
       const prev = prevVisibleRef.current;
       if (prev) {
         // Delta: show what was previously hidden
@@ -1029,19 +1029,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         prevVisibleRef.current = null;
       }
 
-      // Hide non-A models at model level (same as the "else" branch for sources)
-      const sceneModelsNoFilter = viewer.scene.models || {};
-      const hasIdentifiableAModelNoFilter = Object.entries(sceneModelsNoFilter).some(([mId, m]: [string, any]) => {
-        const mName = (m as any).name || sourceNameLookup.get(mId) || mId;
-        return isArchitecturalModel(mName);
-      });
-      if (hasIdentifiableAModelNoFilter) {
-        Object.entries(sceneModelsNoFilter).forEach(([modelId, model]: [string, any]) => {
-          if (typeof model.visible === 'undefined') return;
-          const modelName = (model as any).name || sourceNameLookup.get(modelId) || modelId;
-          model.visible = isArchitecturalModel(modelName);
-        });
-      }
+      // Do NOT force-hide non-A models here — ModelVisibilitySelector manages model-level visibility.
+      // If non-A models are toggled on by the user, they should stay visible.
 
       window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
         detail: {
