@@ -1321,8 +1321,14 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       if (toHide.length > 0) scene.setObjectsVisible(toHide, true);
       if (toShow.length > 0) scene.setObjectsVisible(toShow, true);
       const nonSolidIds = allObjIds.filter((id: string) => !solidIds.has(id));
-      if (nonSolidIds.length > 0) scene.setObjectsXRayed(nonSolidIds, true);
-      if (solidIds.size > 0) scene.setObjectsXRayed([...solidIds], false);
+      if (nonSolidIds.length > 0) {
+        scene.setObjectsXRayed(nonSolidIds, true);
+        scene.setObjectsPickable(nonSolidIds, false);
+      }
+      if (solidIds.size > 0) {
+        scene.setObjectsXRayed([...solidIds], false);
+        scene.setObjectsPickable([...solidIds], true);
+      }
     } else {
       if (toHide.length > 0) scene.setObjectsVisible(toHide, false);
       if (toShow.length > 0) scene.setObjectsVisible(toShow, true);
