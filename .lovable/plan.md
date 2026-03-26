@@ -1,64 +1,81 @@
 
 
-# Fix Småviken Floor Structure — Exclude Model Storeys, Redistribute A-Model Spaces
+# Fix Filter Menu & Colorization — A-Model Spaces Only
 
 ## Problem
 
-Småviken's Asset+ data has storeys grouped by BIM model discipline (A-modell, B-modell, E-modell, V-modell) rather than physical floors. The A-model storeys have **no `common_name`**, causing "A-modell" / "Floor 1" / "Plan 1" to appear across Navigator, Portfolio, and Viewer. Meanwhile, correctly named storeys (01, 04-01, FLÄKTRUM-01, etc.) exist under E-modell and V-modell.
+The ViewerFilterPanel and RoomVisualizationPanel don't filter spaces to A-model storeys only. This causes:
+- Wrong room counts (e.g., 4 instead of 64 for Centralstationen Plan A-00)
+- Sources showing all models instead of only A/a-models
+- Colorization only hitting the few spaces that happen to match xeokit geometry from non-A models
 
-**User requirement**: Only A-model **spaces** should be shown. Named storeys (from any model) provide the structural backbone. A-model spaces must be redistributed to matching named storeys.
+## Root Cause
+
+`AppContext.buildNavigatorTree` correctly filters to A-model spaces, but `ViewerFilterPanel` and `RoomVisualizationPanel` independently read from `allData` without applying the same filter.
 
 ## Changes
 
-### 1. `src/context/AppContext.tsx` — `buildNavigatorTree`
+### 1. `src/lib/building-utils.ts` — Export shared `isAModelName` helper
 
-**Storey filtering (line ~443):** After building the storey map, identify and exclude storeys that are BIM model placeholders:
-- Storey has no `common_name` AND no `name`
-- AND `parentCommonName` matches a model pattern (A-modell, B-modell, V-modell, E-modell, ARK, etc.)
+Extract the A-model detection logic (currently duplicated in AppContext and FacilityLandingPage) into a shared exported function so all components use the same logic.
 
-These excluded storeys' FMGUIDs are tracked in a `modelStoreyGuids` set so their spaces can be redistributed.
+```ts
+export const isAModelName = (name: string | null | undefined): boolean => {
+  if (!name) return false;
+  const upper = name.toUpperCase().trim();
+  if (upper.includes('ARKITEKT') || upper.includes('A-MODELL') || ...) return true;
+  if (upper.charAt(0) === 'A' && ...) return true;
+  return false;
+};
+```
 
-**Remove `parentCommonName` from fallback chain (line 449):** Delete `attrs.parentCommonName` from the display name resolution — model names must never appear as floor names.
+Also add a helper to get A-model storey GUIDs from allData for a building:
 
-**Space filtering (line ~502):** Before attaching spaces:
-- Build a set of A-model storey GUIDs (storeys where `parentCommonName` matches A/ARK pattern)
-- **Only include spaces** whose `level_fm_guid` is in the A-model storey set (or spaces with no model classification)
-- Skip spaces belonging to B/E/V-model storeys (they duplicate A-model rooms)
+```ts
+export const getAModelStoreyGuids = (allData: any[], buildingFmGuid: string): Set<string> => { ... };
+```
 
-**Space redistribution:** For included A-model spaces whose parent storey was excluded (unnamed), match to a named storey using the room designation prefix:
-- Extract prefix from room name (e.g., `01` from `01.3.082` — take characters before the first `.`)
-- Match against named storeys whose `common_name` starts with that prefix
-- Unmatched spaces fall through to the existing orphan handling
+### 2. `src/components/viewer/ViewerFilterPanel.tsx`
 
-### 2. `src/components/portfolio/FacilityLandingPage.tsx` — `childStoreys`
+**`storeyAssets` memo (line 200):** No change needed — already computes `sourceName`.
 
-**Line ~165:** Replace the current A-model preference logic. Instead:
-- Keep all storeys that have a `common_name` (regardless of parent model)
-- Exclude storeys with no `common_name` (the unnamed A/B-model placeholders)
-- This yields the 9+ correctly named storeys
+**`levels` memo (line 239):** When computing `spaceCount` for each level, filter `buildingData` spaces to only those whose `levelFmGuid` belongs to an A-model storey. Add a memoized `aModelStoreyGuids` set derived from `storeyAssets` using `isAModelName(storey.sourceName)`.
 
-**Line ~196 `childSpaces`:** When filtering spaces for a storey, also match A-model spaces that were redistributed (spaces whose original `levelFmGuid` pointed to an excluded A-model storey, but whose designation prefix matches this storey's name).
+**`sources` memo (line 332):** Instead of showing all `sharedModels`, filter to only show sources that have A-model storeys. Use `sourceNameLookup` and `isAModelName` to determine which source GUIDs are A-models.
 
-### 3. `src/hooks/useFloorData.ts` — DB floor name resolution
+**`spaces` memo (line 364):** The `aModelLevelGuids` set is built from `levels` — but `levels` currently includes non-A-model named storeys. Fix: build a separate `aModelSpaceLevelGuids` set from `storeyAssets` where `isAModelName(sourceName)`, and use that to filter `allSpaces`.
 
-**`geometry_entity_map` query (line ~73):** Already skips rows with no `displayName` (`if (!displayName) return`). No change needed.
+**`buildEntityMap` (line 727):** The `allAssetSpaces` should also be filtered to A-model spaces only, so the entity map only maps A-model rooms to xeokit IDs.
 
-**`assets` fallback (line ~96):** Already skips entries with no `displayName` (`if (!displayName) return`). No change needed — the filtering happens naturally.
+### 3. `src/components/viewer/RoomVisualizationPanel.tsx`
 
-However, the XKT metaScene extraction (the `extractFloors` function) may still create entries for unnamed A-model storeys from the geometry. Add a filter: if a storey from the metaScene has no name in `floorNamesMap` and no name in the metaObject, skip it.
+**`filteredRooms` memo (line 258):** Add A-model filtering:
+- From `allData`, find all "Building Storey" assets for the building
+- Identify which are A-model using `isAModelName(parentCommonName)`
+- Build a set of A-model storey GUIDs
+- Filter `roomData` to only include spaces whose `levelFmGuid` is in the A-model storey set
+
+This will bring the colorized room count from ~4 to the correct ~64.
+
+### 4. Update imports in `AppContext.tsx` and `FacilityLandingPage.tsx`
+
+Replace inline `isAModelName` definitions with imports from `building-utils.ts` to ensure consistency and reduce duplication.
 
 ### Files to modify
 
 | File | Change |
 |------|--------|
-| `src/context/AppContext.tsx` | Exclude unnamed model storeys; remove `parentCommonName` fallback; filter to A-model spaces only; redistribute via designation prefix |
-| `src/components/portfolio/FacilityLandingPage.tsx` | Use named storeys (any model) instead of A-model preference; match redistributed spaces |
-| `src/hooks/useFloorData.ts` | Skip unnamed storeys in `extractFloors` when they have no DB name |
+| `src/lib/building-utils.ts` | Add exported `isAModelName` and `getAModelStoreyGuids` helpers |
+| `src/components/viewer/ViewerFilterPanel.tsx` | Filter sources to A-models; filter spaces to A-model storeys; filter space counts in levels |
+| `src/components/viewer/RoomVisualizationPanel.tsx` | Filter `filteredRooms` to A-model spaces only |
+| `src/context/AppContext.tsx` | Import shared `isAModelName` instead of inline definition |
+| `src/components/portfolio/FacilityLandingPage.tsx` | Import shared `isAModelName` instead of inline definition |
 
 ### Expected outcome
 
-- **Navigator**: Shows 01, 04-01, 05-01, 05-02, 06-01, 06-02, FLÄKTRUM-01, FLÄKTRUM-02, TAKPLAN-02 — no "A-modell" or "B-modell" entries
-- **Portfolio**: Same named storeys with correct room counts
-- **Viewer floor switcher**: Correct floor names
-- **Colorization**: Only A-model spaces colored, grouped under correct named storeys, count matches visible floor
+- **Sources**: Only A-model sources shown (e.g., "A-modell mot Klarabergsviadukten", "A-modell mot Vasagatan", etc.)
+- **Levels**: Correct space counts reflecting only A-model rooms
+- **Spaces**: Only A-model spaces listed and filtered
+- **Colorization**: All A-model rooms on the selected floor get colored (64 for Plan A-00)
+- **Categories/Modifications/Annotations**: Scoped by xeokit scene objects (all models), filtered by active source/level/space selection
 
