@@ -740,7 +740,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                   </p>
                 )}
 
-                <div className="text-xs text-muted-foreground">
+                <div className="text-xs text-foreground/60">
                   Image #{detection.ivion_image_id || '-'}
                 </div>
 
