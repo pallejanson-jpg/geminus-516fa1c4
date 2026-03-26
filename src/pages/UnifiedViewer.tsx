@@ -95,24 +95,22 @@ const UnifiedViewerContent: React.FC<{
   // Keep viewModeRef always in sync
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
 
-  // When entering split2d3d mode, auto-select first floor and set first-person mode
+  // When entering split2d3d mode, auto-select current floor and set first-person mode
   useEffect(() => {
     if (viewMode !== 'split2d3d') return;
     const timer = setTimeout(() => {
-      // Try to find the current/first floor from building data
-      const floors = buildingData?.floors || [];
-      const firstFloor = floors[0];
-      const floorFmGuid = firstFloor?.fmGuid || firstFloor?.databaseLevelFmGuids?.[0] || null;
+      // Use the floor from URL params if available
+      const targetFloorGuid = floorFmGuid || null;
 
       window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
         detail: {
           floorId: null,
-          floorName: firstFloor?.name || null,
+          floorName: floorName || null,
           bounds: null,
           visibleMetaFloorIds: [],
-          visibleFloorFmGuids: floorFmGuid ? [floorFmGuid] : [],
-          isAllFloorsVisible: !floorFmGuid,
-          isSoloFloor: !!floorFmGuid,
+          visibleFloorFmGuids: targetFloorGuid ? [targetFloorGuid] : [],
+          isAllFloorsVisible: !targetFloorGuid,
+          isSoloFloor: !!targetFloorGuid,
         },
       }));
 
@@ -125,7 +123,7 @@ const UnifiedViewerContent: React.FC<{
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [viewMode, buildingData]);
+  }, [viewMode, floorFmGuid, floorName]);
 
   // ─── Split 2D/3D: listen for SPLIT_PLAN_NAVIGATE to fly 3D camera ──
   useEffect(() => {
