@@ -1126,24 +1126,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         sourceIds = null;
       }
     } else {
-      // No source filter active — only show A-model(s), hide secondary models
-      const sceneModels2 = viewer.scene.models || {};
-      Object.entries(sceneModels2).forEach(([modelId, model]: [string, any]) => {
-        if (typeof model.visible === 'undefined') return;
-        // Check if this is an A-model by name or by being the first/only model
-        const modelName = model.name || sourceNameLookup.get(modelId) || modelId;
-        const isAModel = isArchitecturalModel(modelName);
-        // If we can't identify any A-model (e.g. all GUIDs), keep all visible
-        const hasIdentifiableAModel = Object.entries(sceneModels2).some(([mId, m]: [string, any]) => {
-          const mName = (m as any).name || sourceNameLookup.get(mId) || mId;
-          return isArchitecturalModel(mName);
-        });
-        if (hasIdentifiableAModel) {
-          model.visible = isAModel;
-        } else {
-          model.visible = true;
-        }
-      });
+      // No source filter active — respect ModelVisibilitySelector state.
+      // Do NOT force-hide non-A models; the user may have toggled them on intentionally.
     }
 
     // Level filter
