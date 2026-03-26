@@ -1474,7 +1474,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         });
       }
 
-      const allIds = scene.objectIds as string[];
+      const allIds = safeObjectIds(scene);
 
       if (levelEntityIds.size > 0) {
         // Hide everything NOT on this level
