@@ -82,32 +82,40 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
 
   // Toggle a specific category
   const handleToggleCategory = useCallback((category: string) => {
-    setCategories(prev => prev.map(c => {
-      if (c.category === category) {
-        const newVisible = !c.visible;
-        
-        // Toggle annotations in the LOCAL annotations manager
-        try {
-          const localPlugin = viewerRef.current?.localAnnotationsPlugin;
-          if (localPlugin?.annotations) {
-            Object.values(localPlugin.annotations).forEach((annotation: any) => {
-              // Check if annotation belongs to this category
-              if (annotation.category === category) {
-                annotation.markerShown = newVisible;
-                if (annotation.markerElement) {
-                  annotation.markerElement.style.display = newVisible ? 'flex' : 'none';
-                }
-              }
-            });
-          }
-        } catch (e) {
-          console.debug('Could not toggle local annotations:', e);
+    setCategories(prev => {
+      const updated = prev.map(c => {
+        if (c.category === category) {
+          return { ...c, visible: !c.visible };
         }
-        
-        return { ...c, visible: newVisible };
+        return c;
+      });
+      
+      // Dispatch TOGGLE_ANNOTATIONS with updated visible categories for NativeXeokitViewer
+      const visibleCats = updated.filter(c => c.visible).map(c => c.category);
+      window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', {
+        detail: { show: visibleCats.length > 0, visibleCategories: visibleCats },
+      }));
+      
+      // Also try legacy local annotations plugin
+      try {
+        const localPlugin = viewerRef.current?.localAnnotationsPlugin;
+        if (localPlugin?.annotations) {
+          const targetCat = updated.find(c => c.category === category);
+          Object.values(localPlugin.annotations).forEach((annotation: any) => {
+            if (annotation.category === category) {
+              annotation.markerShown = targetCat?.visible ?? true;
+              if (annotation.markerElement) {
+                annotation.markerElement.style.display = (targetCat?.visible ?? true) ? 'flex' : 'none';
+              }
+            }
+          });
+        }
+      } catch (e) {
+        console.debug('Could not toggle local annotations:', e);
       }
-      return c;
-    }));
+      
+      return updated;
+    });
   }, [viewerRef]);
 
   // Toggle all categories
@@ -115,7 +123,15 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
     const newVisible = !allVisible;
     setAllVisible(newVisible);
     
-    setCategories(prev => prev.map(c => ({ ...c, visible: newVisible })));
+    setCategories(prev => {
+      const updated = prev.map(c => ({ ...c, visible: newVisible }));
+      // Dispatch TOGGLE_ANNOTATIONS for NativeXeokitViewer
+      const visibleCats = newVisible ? updated.map(c => c.category) : [];
+      window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', {
+        detail: { show: newVisible, visibleCategories: visibleCats },
+      }));
+      return updated;
+    });
     
     // Toggle all annotations in the LOCAL annotations manager
     try {

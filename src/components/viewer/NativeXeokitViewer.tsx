@@ -980,6 +980,11 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         const allIds = scene.objectIds || [];
         if (allIds.length > 0) {
           scene.setObjectsXRayed(allIds, false);
+          // Clear any stale selection state (red highlights) from model load
+          try {
+            const selected = scene.selectedObjectIds || [];
+            if (selected.length > 0) scene.setObjectsSelected(selected, false);
+          } catch (_e) { /* scene teardown */ }
         }
 
         // Capture native model colors BEFORE applying architect palette

@@ -15,7 +15,7 @@ import { useFloorData, isArchitecturalModel } from '@/hooks/useFloorData';
 import { useModelData } from '@/hooks/useModelData';
 import { isAModelName, getAModelStoreyGuids } from '@/lib/building-utils';
 
-import { getDescendantIds, hideSpaceAndAreaObjects } from '@/hooks/useFloorVisibility';
+import { getDescendantIds, hideSpaceAndAreaObjects, calculateFloorBounds } from '@/hooks/useFloorVisibility';
 import { applyArchitectColors, recolorArchitectObjects } from '@/lib/architect-colors';
 import { VIEWER_THEME_CHANGED_EVENT, VIEWER_THEME_REQUESTED_EVENT } from '@/hooks/useViewerTheme';
 
@@ -1231,9 +1231,11 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const slabTypes = new Set(['IfcSlab', 'IfcSlabStandardCase', 'IfcPlate']);
     const areaSet = new Set(areaSpaceIdsRef.current);
 
-    // Only hide roofs/coverings when drilling into levels or spaces — 
-    // when only a source filter is active, show the full model including roof
-    const hasLevelOrSpaceFilter = checkedLevels.size > 0 || checkedSpaces.size > 0;
+    // Only hide roofs/coverings when drilling into spaces — 
+    // when only a level filter (or source filter) is active, show the full model including roof/slabs
+    // This matches the behavior of the floor switcher (FloatingFloorSwitcher)
+    const hasSpaceFilter = checkedSpaces.size > 0;
+    const hasLevelOrSpaceFilter = hasSpaceFilter;
 
     // Use typeIndex for slab collection (fast)
     const allSlabIds: string[] = [];
@@ -1539,14 +1541,21 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
     }
 
+    // Compute floor bounds for proper ceiling clipping (matching floor switcher behavior)
+    let floorBounds: { minY: number; maxY: number } | null = null;
+    if (resolvedMetaIds.length === 1) {
+      floorBounds = calculateFloorBounds(viewer, resolvedMetaIds[0]);
+    }
+
     window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
       detail: {
         floorId: visibleFmGuids.length === 1 ? visibleFmGuids[0] : null,
-        floorName: null, bounds: null,
+        floorName: null, bounds: floorBounds,
         visibleMetaFloorIds: resolvedMetaIds, visibleFloorFmGuids: visibleFmGuids,
         isAllFloorsVisible: !hasAnyFilter,
         isSoloFloor: visibleFmGuids.length === 1,
         fromFilterPanel: true,
+        skipClipping: true,
       } as FloorSelectionEventDetail,
     }));
 
