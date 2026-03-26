@@ -334,7 +334,7 @@ const ApprovalDialog: React.FC<{
               </SelectContent>
             </Select>
             {detection.ivion_dataset_name && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-foreground/60">
                 Ivion-dataset: {detection.ivion_dataset_name}
               </p>
             )}
