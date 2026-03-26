@@ -418,9 +418,11 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   // ── Spaces: cascading from checked levels (Source→Level→Space funnel) ───
   const spaces: SpaceItem[] = useMemo(() => {
-    // Build set of A-model level GUIDs for filtering
-    const aModelLevelGuids = new Set<string>();
-    levels.forEach(l => l.allGuids.forEach(g => aModelLevelGuids.add(g)));
+    // Build set of A-model level GUIDs from Asset+ data (not from levels[].allGuids which may be xeokit IDs)
+    const aModelLevelGuids = getAModelStoreyGuids(buildingData, buildingFmGuid || '');
+    // Also add normalized variants for matching
+    const aModelLevelGuidsNorm = new Set<string>();
+    aModelLevelGuids.forEach(g => aModelLevelGuidsNorm.add(normalizeGuid(g)));
 
     const allSpaces = buildingData
       .filter((a: any) => {
