@@ -528,7 +528,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
         saveStyle(id);
         entity.visible = true;
         entity.colorize = [0.65, 0.65, 0.65];
-        entity.opacity = 0.5;
+        entity.opacity = 0.7;
         entity.edges = false;
       }
     }
