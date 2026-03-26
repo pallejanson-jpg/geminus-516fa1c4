@@ -707,7 +707,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
 
               <CardContent className="p-3 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-sm">
+                  <span className="font-medium text-sm text-foreground">
                     {detection.detection_templates?.name || detection.object_type}
                   </span>
                   {getConfidenceBadge(detection.confidence)}
