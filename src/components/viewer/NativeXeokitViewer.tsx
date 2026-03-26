@@ -1722,7 +1722,40 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           // Position update function
           const updatePos = () => {
             if (!viewer.scene?.canvas) return;
-            const worldPos = [ann.coordinate_x || 0, ann.coordinate_y || 0, ann.coordinate_z || 0];
+            // If hidden by category filter, keep hidden
+            if (marker.dataset.catHidden === 'true') {
+              marker.style.display = 'none';
+              return;
+            }
+            let wx = ann.coordinate_x || 0;
+            let wy = ann.coordinate_y || 0;
+            let wz = ann.coordinate_z || 0;
+            // If no real position, try to place at room center
+            if (wx === 0 && wy === 0 && wz === 0 && ann.fm_guid) {
+              // Try to find the parent room from the scene
+              const roomGuid = (ann as any).in_room_fm_guid || (ann as any).level_fm_guid;
+              if (roomGuid) {
+                const metaObjects = viewer.metaScene?.metaObjects || {};
+                for (const mo of Object.values(metaObjects) as any[]) {
+                  const sysId = (mo.originalSystemId || '').toLowerCase();
+                  if (sysId === roomGuid.toLowerCase()) {
+                    const entity = viewer.scene.objects?.[mo.id];
+                    if (entity?.aabb) {
+                      wx = (entity.aabb[0] + entity.aabb[3]) / 2;
+                      wy = (entity.aabb[1] + entity.aabb[4]) / 2;
+                      wz = (entity.aabb[2] + entity.aabb[5]) / 2;
+                    }
+                    break;
+                  }
+                }
+              }
+              // Still (0,0,0) — skip this marker
+              if (wx === 0 && wy === 0 && wz === 0) {
+                marker.style.display = 'none';
+                return;
+              }
+            }
+            const worldPos = [wx, wy, wz];
             const canvasPos = viewer.scene.camera
               ? worldToCanvas(viewer, worldPos)
               : null;

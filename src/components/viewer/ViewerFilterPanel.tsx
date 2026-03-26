@@ -1483,6 +1483,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       const solidRoomIds = [...spaceOnlyEntityIds, ...roomContentIds].filter(id => !areaSet.has(id));
       if (solidRoomIds.length > 0) {
         scene.setObjectsXRayed(solidRoomIds, false);
+        scene.setObjectsPickable(solidRoomIds, true);
       }
 
       // Show room spaces with slight transparency
