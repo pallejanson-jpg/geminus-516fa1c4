@@ -206,9 +206,10 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
   // Discover all unique property keys from assets' attributes
   const propertyColumns: ColumnDef[] = useMemo(() => {
     if (!allData || !buildingFmGuid) return [];
+    const normalizedBuildingGuid = normalizeGuid(buildingFmGuid);
     const propKeys = new Set<string>();
     allData.forEach((a: any) => {
-      if ((a.buildingFmGuid || a.building_fm_guid) !== buildingFmGuid) return;
+      if (normalizeGuid(a.buildingFmGuid || a.building_fm_guid || '') !== normalizedBuildingGuid) return;
       const attrs = a.attributes || {};
       if (typeof attrs === 'object') {
         Object.keys(attrs).forEach(k => propKeys.add(k));
@@ -226,9 +227,10 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
   // Build asset rows — default: object_type = 4 equivalent
   const allAssets: AssetRow[] = useMemo(() => {
     if (!allData || !buildingFmGuid) return [];
+    const normalizedBuildingGuid = normalizeGuid(buildingFmGuid);
     const buildingAssets = allData.filter((a: any) => {
-      const bGuid = a.buildingFmGuid || a.building_fm_guid;
-      if (bGuid !== buildingFmGuid) return false;
+      const bGuid = normalizeGuid(a.buildingFmGuid || a.building_fm_guid || '');
+      if (bGuid !== normalizedBuildingGuid) return false;
       const cat = a.category || '';
       // Exclude structural / spatial categories — keep only "objects"
       if (['Building', 'Building Storey', 'Space', 'IfcSpace', 'IfcSite',
@@ -245,10 +247,10 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
     const roomNameMap = new Map<string, string>();
     allData.forEach((a: any) => {
       const fmGuid = a.fmGuid || a.fm_guid;
-      if (a.category === 'Building Storey' && (a.buildingFmGuid || a.building_fm_guid) === buildingFmGuid) {
+      if (a.category === 'Building Storey' && normalizeGuid(a.buildingFmGuid || a.building_fm_guid || '') === normalizedBuildingGuid) {
         levelNameMap.set(normalizeGuid(fmGuid), a.commonName || a.common_name || a.name || '');
       }
-      if ((a.category === 'Space' || a.category === 'IfcSpace') && (a.buildingFmGuid || a.building_fm_guid) === buildingFmGuid) {
+      if ((a.category === 'Space' || a.category === 'IfcSpace') && normalizeGuid(a.buildingFmGuid || a.building_fm_guid || '') === normalizedBuildingGuid) {
         roomNameMap.set(normalizeGuid(fmGuid), a.commonName || a.common_name || a.name || '');
       }
     });
