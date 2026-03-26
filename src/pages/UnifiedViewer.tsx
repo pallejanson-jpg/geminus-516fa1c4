@@ -273,20 +273,23 @@ const UnifiedViewerContent: React.FC<{
       window.dispatchEvent(new CustomEvent<ViewMode2DToggledDetail>(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: false } }));
       window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
 
-      // Reset floor isolation in 3D pane — show all objects (debounced 500ms)
+      // Carry over current floor selection from 2D mode into split mode
+      // If we came from 2D with a floor selected, keep it; otherwise show all
       const now = Date.now();
       if (now - (lastFloorEventRef.current || 0) > 500) {
         lastFloorEventRef.current = now;
         setTimeout(() => {
+          // Try to get current floor from URL param or from the floor switcher state
+          const currentFloorGuid = floorFmGuid || null;
           window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
             detail: {
               floorId: null,
-              floorName: null,
+              floorName: floorName || null,
               bounds: null,
               visibleMetaFloorIds: [],
-              visibleFloorFmGuids: [],
-              isAllFloorsVisible: true,
-              isSoloFloor: false,
+              visibleFloorFmGuids: currentFloorGuid ? [currentFloorGuid] : [],
+              isAllFloorsVisible: !currentFloorGuid,
+              isSoloFloor: !!currentFloorGuid,
             },
           }));
         }, 300);

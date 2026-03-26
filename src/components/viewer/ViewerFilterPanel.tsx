@@ -1527,11 +1527,23 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       levels.filter(l => checkedSources.has(l.sourceGuid)).forEach(l => visibleFmGuids.push(l.fmGuid));
     }
 
+    // Resolve xeokit meta storey IDs for proper ceiling clipping
+    const resolvedMetaIds: string[] = [];
+    if (visibleFmGuids.length > 0) {
+      const metaObjects = viewer.metaScene?.metaObjects || {};
+      const normalizedFmGuids = new Set(visibleFmGuids.map((g: string) => g.toLowerCase().replace(/-/g, '')));
+      Object.values(metaObjects).forEach((mo: any) => {
+        if (mo.type?.toLowerCase() !== 'ifcbuildingstorey') return;
+        const sysId = (mo.originalSystemId || mo.id || '').toLowerCase().replace(/-/g, '');
+        if (normalizedFmGuids.has(sysId)) resolvedMetaIds.push(mo.id);
+      });
+    }
+
     window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
       detail: {
         floorId: visibleFmGuids.length === 1 ? visibleFmGuids[0] : null,
         floorName: null, bounds: null,
-        visibleMetaFloorIds: [], visibleFloorFmGuids: visibleFmGuids,
+        visibleMetaFloorIds: resolvedMetaIds, visibleFloorFmGuids: visibleFmGuids,
         isAllFloorsVisible: !hasAnyFilter,
         isSoloFloor: visibleFmGuids.length === 1,
         fromFilterPanel: true,
