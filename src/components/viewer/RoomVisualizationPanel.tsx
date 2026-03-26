@@ -22,6 +22,7 @@ import {
   generateMockSensorData,
 } from '@/lib/visualization-utils';
 import { cn, normalizeGuid } from '@/lib/utils';
+import { useSenslincBuildingData } from '@/hooks/useSenslincData';
 import IoTHoverLabel from './IoTHoverLabel';
 import VisualizationLegendBar, { VISUALIZATION_LEGEND_SELECT_EVENT, type LegendSelectDetail } from './VisualizationLegendBar';
 
@@ -89,6 +90,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   embedded = false,
 }) => {
   const { allData } = useContext(AppContext);
+  const { data: buildingIoT } = useSenslincBuildingData(buildingFmGuid);
 
   // Track floor selection from events — overrides prop when available
   const [eventFloorGuids, setEventFloorGuids] = useState<string[] | null>(null);
@@ -176,6 +178,16 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   } | null>(null);
 
   const config = VISUALIZATION_CONFIGS[visualizationType];
+
+  const liveSensorMap = useMemo(() => {
+    const map = new Map<string, Record<string, number | null>>();
+    buildingIoT?.machines.forEach((machine) => {
+      if (machine.code) {
+        map.set(machine.code.toLowerCase(), machine.latest_values ?? {});
+      }
+    });
+    return map;
+  }, [buildingIoT]);
 
   // Reset visualization when building changes
   useEffect(() => {
@@ -305,8 +317,8 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   useEffect(() => {
     setRooms(filteredRooms);
     
-    // Check if any rooms have real sensor data
-    const hasReal = filteredRooms.some((room) => {
+    // Check if any rooms have real sensor data, either on the room attributes or from live IoT data
+    const hasAttributeData = filteredRooms.some((room) => {
       const attrs = room.attributes;
       if (!attrs) return false;
       const keys = Object.keys(attrs);
@@ -320,13 +332,19 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         }
       );
     });
-    setHasRealData(hasReal);
+
+    const hasLiveIoTData = filteredRooms.some((room) => {
+      const live = liveSensorMap.get(room.fmGuid.toLowerCase());
+      return !!live && Object.values(live).some((value) => typeof value === 'number' && !Number.isNaN(value));
+    });
+
+    setHasRealData(hasAttributeData || hasLiveIoTData);
 
     const floorInfo = visibleFloorFmGuids && visibleFloorFmGuids.length > 0 
       ? `${visibleFloorFmGuids.length} floors selected` 
       : 'all';
     console.log(`Room visualization: ${filteredRooms.length} rooms (floor: ${floorInfo})`);
-  }, [filteredRooms, visibleFloorFmGuids]);
+  }, [filteredRooms, visibleFloorFmGuids, liveSensorMap]);
 
   // Build entity ID cache from metaScene (rebuild when cacheKey changes)
   const cacheRetryCountRef = useRef(0);
@@ -562,7 +580,11 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       if (useMockData) {
         value = generateMockSensorData(room.fmGuid, visualizationType);
       } else {
-        value = extractSensorValue(room.attributes, visualizationType);
+        const live = liveSensorMap.get(room.fmGuid.toLowerCase());
+        const liveValue = live?.[visualizationType as keyof typeof live];
+        value = typeof liveValue === 'number' && !Number.isNaN(liveValue)
+          ? liveValue
+          : extractSensorValue(room.attributes, visualizationType);
       }
       if (value !== null) {
         const color = getVisualizationColor(value, visualizationType);
@@ -597,7 +619,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     setIsProcessing(false);
     isProcessingRef.current = false;
     console.log(`Applied ${visualizationType} color filter: ${Object.keys(colorMap).length} rooms, ${Object.keys(entityColorMap).length} entity matches`);
-  }, [visualizationType, rooms, useMockData, resetColors, entityIdCache]);
+  }, [visualizationType, rooms, useMockData, resetColors, entityIdCache, liveSensorMap]);
 
 
   // Apply visualization when type or mock data changes (AUTO-APPLY with retry)
