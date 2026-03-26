@@ -1638,22 +1638,18 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       const visibleCategories: string[] | undefined = detail?.visibleCategories;
       const viewer = viewerRef.current;
 
-      // Toggle existing markers
+      // Hide existing markers when toggling off
+      if (!show && markerContainer) {
+        markerContainer.style.display = 'none';
+        return;
+      }
+
+      // When showing: always destroy and recreate all markers so all categories are present
       if (markerContainer) {
-        markerContainer.style.display = show ? 'block' : 'none';
-        if (!show) return;
-        // If categories filter changed, update individual marker visibility
-        if (visibleCategories && markerContainer.children.length > 0) {
-          const catSet = new Set(visibleCategories);
-          Array.from(markerContainer.children).forEach((el: any) => {
-            const cat = el.dataset?.category;
-            if (cat) {
-              el.style.display = catSet.size === 0 || catSet.has(cat) ? 'block' : 'none';
-            }
-          });
-          return;
-        }
-        if (markerContainer.children.length > 0) return; // already created
+        cameraUnsubs.forEach(fn => fn());
+        cameraUnsubs = [];
+        markerContainer.remove();
+        markerContainer = null;
       }
 
       if (!show) return;
@@ -1672,12 +1668,11 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           return;
         }
 
-        // Filter by visible categories if provided
-        let filtered = annotations;
-        if (visibleCategories && visibleCategories.length > 0) {
-          const catSet = new Set(visibleCategories);
-          filtered = annotations.filter(a => catSet.has(a.asset_type || 'Other'));
-        }
+        // Create ALL markers, then apply category filter as visibility
+        const catSet = visibleCategories && visibleCategories.length > 0
+          ? new Set(visibleCategories)
+          : null;
+        const filtered = annotations;
 
         // Fetch symbol colors
         const symbolIds = [...new Set(filtered.filter(a => a.symbol_id).map(a => a.symbol_id!))];
@@ -1714,6 +1709,11 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           marker.textContent = label;
           marker.title = label;
           marker.dataset.category = ann.asset_type || 'Other';
+          // Apply category visibility filter
+          const markerCat = ann.asset_type || 'Other';
+          if (catSet && !catSet.has(markerCat)) {
+            marker.style.display = 'none';
+          }
           container.appendChild(marker);
 
           // Position update function
