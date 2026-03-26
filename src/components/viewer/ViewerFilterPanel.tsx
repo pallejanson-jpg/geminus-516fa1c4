@@ -2378,5 +2378,7 @@ const FilterRow: React.FC<FilterRowProps> = ({
     )}
   </div>
 );
+};
+
 
 export default ViewerFilterPanel;
