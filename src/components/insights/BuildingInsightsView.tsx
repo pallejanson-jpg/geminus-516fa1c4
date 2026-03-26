@@ -551,14 +551,19 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     // name-based fallback from coloring multiple rooms that share the same commonName
     const colorizeSelectedSensorRooms = useCallback((guids: Set<string>) => {
         const roomColorMap: Record<string, [number, number, number]> = {};
+        const nameColorMap: Record<string, [number, number, number]> = {};
         sensorRoomValues.forEach((room: any) => {
             if (guids.has(room.fmGuid) && room.value !== null) {
                 const rgb = getVisualizationColor(room.value, sensorMetric);
-                if (rgb) roomColorMap[room.fmGuid] = rgb;
+                if (rgb) {
+                    roomColorMap[room.fmGuid] = rgb;
+                    const name = (room.commonName || room.name || '').toLowerCase().trim();
+                    if (name) nameColorMap[name] = rgb;
+                }
             }
         });
-        // Use strictGuidMode to avoid name-based fallback coloring extra rooms
-        const detail = { mode: 'room_spaces' as const, colorMap: roomColorMap, nameColorMap: {}, strictGuidMode: true };
+        // Include nameColorMap so name-based fallback works when GUID doesn't match BIM IDs
+        const detail = { mode: 'room_spaces' as const, colorMap: roomColorMap, nameColorMap, strictGuidMode: guids.size <= 1 ? false : true };
         if (drawerMode) {
             window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: true } }));
             setTimeout(() => {
