@@ -406,9 +406,16 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
     }
 
-    // Also add "Orphan" if there are levels with no sourceGuid
+    // Handle levels with no sourceGuid: assign them to the first A-model source
+    // instead of creating a misleading "Orphan" entry (e.g. Småviken)
     const orphanLevels = levels.filter(l => !l.sourceGuid);
-    if (orphanLevels.length > 0) {
+    if (orphanLevels.length > 0 && sourceMap.size > 0) {
+      // Re-assign orphan level counts to the first A-model source
+      const firstSource = Array.from(sourceMap.values())[0];
+      if (firstSource) {
+        firstSource.storeyCount += orphanLevels.length;
+      }
+    } else if (orphanLevels.length > 0) {
       sourceMap.set('orphan', { guid: '', name: 'Orphan', storeyCount: orphanLevels.length });
     }
 

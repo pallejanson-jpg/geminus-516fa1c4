@@ -524,6 +524,9 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     (window as any).__colorFilterActive = false;
     (window as any).__vizColorizedEntityIds = new Set<string>();
     setColorizedCount(0);
+    
+    // Reset the visualization type to 'none' so re-opening the panel doesn't show stale state
+    setVisualizationType('none');
   }, [rooms, colorizeSpace]);
 
   // Apply visualization colors with chunking for smooth UI
