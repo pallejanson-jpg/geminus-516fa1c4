@@ -19,6 +19,11 @@ import { getDescendantIds, hideSpaceAndAreaObjects, calculateFloorBounds } from 
 import { applyArchitectColors, recolorArchitectObjects } from '@/lib/architect-colors';
 import { VIEWER_THEME_CHANGED_EVENT, VIEWER_THEME_REQUESTED_EVENT } from '@/hooks/useViewerTheme';
 
+/** Safe accessor for scene.objectIds – the getter throws if internal maps are null */
+function safeObjectIds(scene: any): string[] {
+  try { return scene.objectIds ?? []; } catch { return []; }
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface BimSource {
@@ -1014,8 +1019,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       const prev = prevVisibleRef.current;
       if (prev) {
         // Delta: show what was previously hidden
-        scene.setObjectsVisible(scene.objectIds, true);
-        scene.setObjectsPickable(scene.objectIds, true);
+        scene.setObjectsVisible(safeObjectIds(scene), true);
+        scene.setObjectsPickable(safeObjectIds(scene), true);
         // Re-hide spaces (unless visualization is forcing them visible)
         if (!spacesForced) {
           spaceEntityIds.forEach(id => {
@@ -1220,7 +1225,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
     let solidIds: Set<string>;
     if (filterSets.length === 0) {
-      solidIds = new Set(scene.objectIds);
+      solidIds = new Set(safeObjectIds(scene));
     } else if (filterSets.length === 1) {
       solidIds = new Set(filterSets[0]);
     } else {
@@ -1295,7 +1300,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     fadeIds.forEach(id => newVisibleSet.add(id));
 
     // Apply visibility: show solidIds + fadeIds, hide everything else
-    const allObjIds: string[] = scene.objectIds;
+    const allObjIds: string[] = safeObjectIds(scene);
     const toShow: string[] = [];
     const toHide: string[] = [];
 
@@ -1469,7 +1474,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         });
       }
 
-      const allIds = scene.objectIds as string[];
+      const allIds = safeObjectIds(scene);
 
       if (levelEntityIds.size > 0) {
         // Hide everything NOT on this level
@@ -1566,7 +1571,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       } as FloorSelectionEventDetail,
     }));
 
-    console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', scene.objectIds.length, 'delta: show', toShow.length, 'hide', toHide.length);
+    console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', safeObjectIds(scene).length, 'delta: show', toShow.length, 'hide', toHide.length);
 
     // Re-apply active theme after filter to prevent "native colors flash"
     // But skip if color filter is active — it takes precedence
@@ -1707,11 +1712,11 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           model.visible = true;
         }
       });
-      scene.setObjectsVisible(scene.objectIds, true);
-      scene.setObjectsPickable(scene.objectIds, true);
+      scene.setObjectsVisible(safeObjectIds(scene), true);
+      scene.setObjectsPickable(safeObjectIds(scene), true);
       // Only reset opacity if visualization is NOT active (otherwise we'd wipe sensor colors)
       if (!(window as any).__spacesForceVisible) {
-        scene.objectIds.forEach((id: string) => {
+        safeObjectIds(scene).forEach((id: string) => {
           const entity = scene.objects?.[id];
           if (entity && entity.opacity < 1) entity.opacity = 1.0;
         });
