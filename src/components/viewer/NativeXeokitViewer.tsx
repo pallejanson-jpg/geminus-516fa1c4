@@ -1361,6 +1361,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         const useStrictGuidMode = isFloorMode || detail.strictGuidMode;
 
         Object.values(metaObjects).forEach((mo: any) => {
+          if (alreadyColored.has(mo.id)) return;
           // In room mode, only colorize IfcSpace entities (not walls, slabs, etc.)
           if (isRoomMode) {
             const ifcType = (mo.type || '').toLowerCase();
