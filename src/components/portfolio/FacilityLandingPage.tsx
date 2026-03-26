@@ -198,12 +198,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   const aModelStoreyGuids = useMemo(() => {
     if (!allData || facility.category !== 'Building') return new Set<string>();
     const guids = new Set<string>();
-    const isAModelName = (name: string): boolean => {
-      const upper = name.toUpperCase().trim();
-      if (upper.includes('ARKITEKT') || upper.includes('A-MODELL') || upper.includes('A_MODELL') || upper.includes('A MODELL') || upper === 'ARK') return true;
-      if (upper.charAt(0) === 'A' && (upper.length === 1 || /^A[\s\-_.]/.test(upper))) return true;
-      return false;
-    };
+    // isAModelName imported from building-utils.ts
     allData.forEach(item => {
       if (item.category !== 'Building Storey' || item.buildingFmGuid !== facility.fmGuid) return;
       const parentName = item.attributes?.parentCommonName || '';
