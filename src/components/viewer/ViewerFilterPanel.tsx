@@ -15,7 +15,7 @@ import { useFloorData, isArchitecturalModel } from '@/hooks/useFloorData';
 import { useModelData } from '@/hooks/useModelData';
 import { isAModelName, getAModelStoreyGuids } from '@/lib/building-utils';
 
-import { getDescendantIds, hideSpaceAndAreaObjects } from '@/hooks/useFloorVisibility';
+import { getDescendantIds, hideSpaceAndAreaObjects, calculateFloorBounds } from '@/hooks/useFloorVisibility';
 import { applyArchitectColors, recolorArchitectObjects } from '@/lib/architect-colors';
 import { VIEWER_THEME_CHANGED_EVENT, VIEWER_THEME_REQUESTED_EVENT } from '@/hooks/useViewerTheme';
 
