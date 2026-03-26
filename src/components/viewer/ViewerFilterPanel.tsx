@@ -1300,7 +1300,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     fadeIds.forEach(id => newVisibleSet.add(id));
 
     // Apply visibility: show solidIds + fadeIds, hide everything else
-    const allObjIds: string[] = scene.objectIds;
+    const allObjIds: string[] = safeObjectIds(scene);
     const toShow: string[] = [];
     const toHide: string[] = [];
 
