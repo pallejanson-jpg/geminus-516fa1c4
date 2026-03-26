@@ -1,6 +1,7 @@
 import React, { createContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { DEFAULT_APP_CONFIGS } from '@/lib/constants';
 import { fetchLocalAssets } from '@/services/asset-plus-service';
+import { isModelName, isAModelName } from '@/lib/building-utils';
 
 type NavigatorNode = {
     fmGuid: string;
