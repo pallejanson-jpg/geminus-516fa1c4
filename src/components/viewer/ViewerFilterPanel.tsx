@@ -1225,7 +1225,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
     let solidIds: Set<string>;
     if (filterSets.length === 0) {
-      solidIds = new Set(scene.objectIds);
+      solidIds = new Set(safeObjectIds(scene));
     } else if (filterSets.length === 1) {
       solidIds = new Set(filterSets[0]);
     } else {
