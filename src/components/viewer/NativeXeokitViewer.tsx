@@ -1325,8 +1325,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           }
         });
         console.log('[NativeViewer] Applied INSIGHTS_COLOR_UPDATE via entityColorMap:', mode, Object.keys(entityColorMap).length, 'entries,', matchCount, 'entities matched');
-        return;
+        // Do NOT return early — fall through to GUID + name matching for rooms not in entityColorMap
       }
+      const alreadyColored = entityColorMap ? new Set(Object.keys(entityColorMap)) : new Set<string>();
 
       // Build a lookup of normalized fmGuid → rgb for fast matching
       const fmGuidLookup = new Map<string, [number, number, number]>();
