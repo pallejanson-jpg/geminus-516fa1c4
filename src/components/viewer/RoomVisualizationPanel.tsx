@@ -259,13 +259,22 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     if (!buildingFmGuid || !allData.length) return [];
     
     const buildingLower = buildingFmGuid.toLowerCase();
+
+    // Identify A-model storey GUIDs so we only include A-model spaces
+    const aModelGuids = getAModelStoreyGuids(allData, buildingFmGuid);
     
-    // Filter rooms for this building
+    // Filter rooms for this building — only A-model spaces
     let roomData = allData
       .filter((a: any) => {
         const cat = a.category;
-        return (cat === 'Space' || cat === 'IfcSpace') && 
-          a.buildingFmGuid?.toLowerCase() === buildingLower;
+        if (cat !== 'Space' && cat !== 'IfcSpace') return false;
+        if (a.buildingFmGuid?.toLowerCase() !== buildingLower) return false;
+        // When A-model storeys exist, restrict to those spaces only
+        if (aModelGuids.size > 0) {
+          const levelGuid = a.levelFmGuid || a.level_fm_guid || '';
+          return aModelGuids.has(levelGuid);
+        }
+        return true;
       })
       .map((r: any) => ({
         fmGuid: r.fmGuid,
