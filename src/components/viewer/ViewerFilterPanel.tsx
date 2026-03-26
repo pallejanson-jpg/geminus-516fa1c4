@@ -2316,7 +2316,7 @@ interface FilterRowProps {
   label: string;
   badge?: string;
   checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
+  onCheckedChange: (checked: boolean, event?: React.MouseEvent) => void;
   onClick?: () => void;
   dimmed?: boolean;
   color?: string;
@@ -2325,7 +2325,9 @@ interface FilterRowProps {
 
 const FilterRow: React.FC<FilterRowProps> = ({
   label, badge, checked, onCheckedChange, onClick, dimmed, color, onColorChange,
-}) => (
+}) => {
+  const lastClickEventRef = React.useRef<React.MouseEvent | null>(null);
+  return (
   <div
     className={cn(
       "flex items-center gap-2 px-3 py-1.5 hover:bg-accent/30 transition-colors cursor-pointer group",
@@ -2336,8 +2338,8 @@ const FilterRow: React.FC<FilterRowProps> = ({
     <Checkbox
       checked={checked}
       className="h-4 w-4 shrink-0"
-      onClick={(e) => e.stopPropagation()}
-      onCheckedChange={(v) => onCheckedChange(!!v)}
+      onClick={(e) => { e.stopPropagation(); lastClickEventRef.current = e as unknown as React.MouseEvent; }}
+      onCheckedChange={(v) => onCheckedChange(!!v, lastClickEventRef.current ?? undefined)}
     />
     <span className="text-sm truncate flex-1 text-foreground">{label}</span>
     {badge && <span className="text-xs text-muted-foreground shrink-0">{badge}</span>}
