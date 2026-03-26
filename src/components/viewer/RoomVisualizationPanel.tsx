@@ -596,8 +596,8 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     setColorizedCount(Object.keys(colorMap).length);
     setIsProcessing(false);
     isProcessingRef.current = false;
-    console.log(`Applied ${visualizationType} color filter: ${Object.keys(colorMap).length} rooms`);
-  }, [visualizationType, rooms, useMockData, resetColors]);
+    console.log(`Applied ${visualizationType} color filter: ${Object.keys(colorMap).length} rooms, ${Object.keys(entityColorMap).length} entity matches`);
+  }, [visualizationType, rooms, useMockData, resetColors, entityIdCache]);
 
 
   // Apply visualization when type or mock data changes (AUTO-APPLY with retry)
