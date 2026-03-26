@@ -1541,14 +1541,21 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
     }
 
+    // Compute floor bounds for proper ceiling clipping (matching floor switcher behavior)
+    let floorBounds: { minY: number; maxY: number } | null = null;
+    if (resolvedMetaIds.length === 1) {
+      floorBounds = calculateFloorBounds(viewer, resolvedMetaIds[0]);
+    }
+
     window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
       detail: {
         floorId: visibleFmGuids.length === 1 ? visibleFmGuids[0] : null,
-        floorName: null, bounds: null,
+        floorName: null, bounds: floorBounds,
         visibleMetaFloorIds: resolvedMetaIds, visibleFloorFmGuids: visibleFmGuids,
         isAllFloorsVisible: !hasAnyFilter,
         isSoloFloor: visibleFmGuids.length === 1,
         fromFilterPanel: true,
+        skipClipping: true,
       } as FloorSelectionEventDetail,
     }));
 
