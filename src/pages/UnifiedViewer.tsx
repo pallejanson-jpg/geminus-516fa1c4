@@ -121,6 +121,10 @@ const UnifiedViewerContent: React.FC<{
         viewer.cameraControl.followPointer = true;
         viewer.cameraControl.constrainVertical = true;
       }
+      // Reset 3D camera to building overview on split entry
+      if (viewer?.cameraFlight && viewer?.scene?.aabb) {
+        viewer.cameraFlight.flyTo({ aabb: viewer.scene.aabb, duration: 0.3 });
+      }
     }, 300);
     return () => clearTimeout(timer);
   }, [viewMode, floorFmGuid, floorName]);
