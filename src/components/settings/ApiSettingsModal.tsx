@@ -2755,7 +2755,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         <AccordionContent className="px-4 pb-4 pt-2">
                                             <div className="space-y-4">
                                                 <p className="text-xs text-muted-foreground">
-                                                    Integration med Autodesk Construction Cloud. Logga in med ditt Autodesk-konto för att ge appen tillgång till dina ACC-projekt.
+                                                    Integration med Autodesk Forma. Logga in med ditt Autodesk-konto för att ge appen tillgång till dina Forma-projekt.
                                                 </p>
 
                                                 {/* Autodesk Login Section */}
