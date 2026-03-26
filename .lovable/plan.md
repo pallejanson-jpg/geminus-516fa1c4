@@ -1,28 +1,41 @@
 
 
-## Status: ✅ IMPLEMENTED (v2)
-
-## Status: ✅ IMPLEMENTED
+## Status: ✅ IMPLEMENTED (v3)
 
 ## Changes Made
 
-### 1. `src/lib/building-utils.ts` — Shared helpers
-- Exported `isModelName`, `isAModelName`, and `getAModelStoreyGuids`
-- Single source of truth for A-model detection across all components
+### 1. ObjectColorFilterPanel — space coloring fix
+- After colorizing an IfcSpace entity, set `entity.visible = true` and `entity.pickable = true` so the color actually shows
 
-### 2. `src/components/viewer/ViewerFilterPanel.tsx`
-- **Sources**: Now shows only A-model sources (from `storeyAssets` with `isAModelName` filter) + Orphan
-- **Levels space count**: Filters to A-model spaces only using `getAModelStoreyGuids`
-- **Entity map (`buildEntityMap`)**: `allAssetSpaces` now filtered to A-model spaces only
+### 2. ViewerFilterPanel — theme flashing + xray pickable
+- Skip colorize reset when `__colorFilterActive` is true
+- Skip theme re-application dispatch when color filter is active
+- On cleanup: preserve colorize when color filter is active
+- X-ray mode: set `pickable=false` on xrayed (non-solid) entities, `pickable=true` on solid entities
+- Space-xray (Tandem-style): same pickable logic for xrayed vs solid room objects
 
-### 3. `src/components/viewer/RoomVisualizationPanel.tsx`
-- **`filteredRooms`**: Filters to A-model spaces only using `getAModelStoreyGuids`
+### 3. NativeXeokitViewer — annotation fixes
+- Fetch `in_room_fm_guid` and `level_fm_guid` in annotation query
+- `updatePos`: respect `data-catHidden` attribute — if category is hidden, keep marker hidden
+- Position fallback: if coordinates are (0,0,0), look up room entity AABB center; skip marker if no room found
+- Category filter: set `marker.dataset.catHidden` flag instead of relying solely on `display:none`
 
-### 4. `src/context/AppContext.tsx` & `src/components/portfolio/FacilityLandingPage.tsx`
-- Replaced inline `isModelName`/`isAModelName` definitions with imports from `building-utils.ts`
+### 4. XrayToggle — pickable fix
+- When xraying: `entity.pickable = false`
+- When un-xraying: `entity.pickable = true`
 
-## Expected outcome
-- **Sources**: Only A-model sources (e.g., "A-modell mot Klarabergsviadukten", etc.) + Orphan
-- **Levels**: Correct space counts reflecting only A-model rooms
-- **Spaces**: Only A-model spaces listed and filtered
-- **Colorization**: All A-model rooms on the selected floor get colored
+### 5. ViewerToolbar — 2D reset view fix
+- `handleResetView` checks `viewModeRef.current`; if `'2d'`, re-centers in 2D instead of flying to 3D initial camera
+- Also sets `pickable=true` on all entities during reset
+
+### 6. NativeViewerShell — right-click pan fix
+- Track `mousedown` position for right button
+- In `contextmenu` handler: if mouse moved > 5px since mousedown, suppress context menu (allow xeokit pan)
+
+### 7. UnifiedViewer — split mode auto-floor + first person
+- When entering `split2d3d`, dispatch floor selection with current/URL floor
+- Set 3D camera to `firstPerson` + `constrainVertical = true`
+
+### 8. SplitPlanView — 2D styling
+- Spaces/floors: white (`[1, 1, 1]`) instead of light gray
+- Edge width: 8px in monochrome mode for bolder walls
