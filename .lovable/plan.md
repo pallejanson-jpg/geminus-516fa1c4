@@ -1,41 +1,109 @@
 
 
-## Status: ✅ IMPLEMENTED (v3)
+# Fix: Ilean Can't Find FM Access Documents
 
-## Changes Made
+## Problem
+When using Ilean for Labradorgatan 18 (or any building), it says "no documents found." Documents exist in FM Access but the sync pipeline only stores **metadata** (names) in `fm_access_documents` — it never downloads/extracts the actual document **content** into `document_chunks` for semantic search.
 
-### 1. ObjectColorFilterPanel — space coloring fix
-- After colorizing an IfcSpace entity, set `entity.visible = true` and `entity.pickable = true` so the color actually shows
+## Current Flow (broken)
+```text
+FM Access API → sync-documents → fm_access_documents (metadata only)
+                               → document_chunks (drawing NAMES only, ~1 line each)
+```
 
-### 2. ViewerFilterPanel — theme flashing + xray pickable
-- Skip colorize reset when `__colorFilterActive` is true
-- Skip theme re-application dispatch when color filter is active
-- On cleanup: preserve colorize when color filter is active
-- X-ray mode: set `pickable=false` on xrayed (non-solid) entities, `pickable=true` on solid entities
-- Space-xray (Tandem-style): same pickable logic for xrayed vs solid room objects
+Ilean searches `document_chunks` by `building_fm_guid` + keywords → finds almost nothing because chunks contain only short drawing titles like "Ritning A-00 Plan 1".
 
-### 3. NativeXeokitViewer — annotation fixes
-- Fetch `in_room_fm_guid` and `level_fm_guid` in annotation query
-- `updatePos`: respect `data-catHidden` attribute — if category is hidden, keep marker hidden
-- Position fallback: if coordinates are (0,0,0), look up room entity AABB center; skip marker if no room found
-- Category filter: set `marker.dataset.catHidden` flag instead of relying solely on `display:none`
+## Fix: Index FM Access Document Content
 
-### 4. XrayToggle — pickable fix
-- When xraying: `entity.pickable = false`
-- When un-xraying: `entity.pickable = true`
+### 1. `supabase/functions/fm-access-sync/index.ts` — enhance `sync-documents`
 
-### 5. ViewerToolbar — 2D reset view fix
-- `handleResetView` checks `viewModeRef.current`; if `'2d'`, re-centers in 2D instead of flying to 3D initial camera
-- Also sets `pickable=true` on all entities during reset
+After storing metadata in `fm_access_documents`, also index **all collected nodes** (not just drawings) into `document_chunks`:
 
-### 6. NativeViewerShell — right-click pan fix
-- Track `mousedown` position for right button
-- In `contextmenu` handler: if mouse moved > 5px since mousedown, suppress context menu (allow xeokit pan)
+- For each node in the perspective tree, build a richer content string from available fields: `objectName`, `className`, `parentFloorName`, any description/properties
+- Also collect **rooms** (classId 107) with their names/properties as chunks — these are often what users ask about
+- Index structural nodes too (floors with room lists) so Ilean can answer "what rooms are on floor X?"
 
-### 7. UnifiedViewer — split mode auto-floor + first person
-- When entering `split2d3d`, dispatch floor selection with current/URL floor
-- Set 3D camera to `firstPerson` + `constrainVertical = true`
+Currently only drawings (classId 106) are indexed. Expand to index **all non-building nodes** (floors, rooms, documents, equipment) so the full building knowledge is searchable.
 
-### 8. SplitPlanView — 2D styling
-- Spaces/floors: white (`[1, 1, 1]`) instead of light gray
-- Edge width: 8px in monochrome mode for bolder walls
+### 2. `supabase/functions/fm-access-sync/index.ts` — also index `fm_access_drawings` content
+
+For each drawing, if a PDF URL exists, try to fetch and extract text via the existing `index-documents` AI extraction pipeline. This is optional/expensive but would give Ilean actual document content.
+
+**Simpler alternative (recommended):** Just index the full hierarchy tree as structured text chunks — room names, floor names, object names, class types. This already gives Ilean enough to answer "what documents/rooms/drawings exist?"
+
+### 3. Concrete change in `sync-documents` action
+
+After the existing drawing indexing loop (~line 239), add a second loop that indexes **all collected document nodes + structural nodes** into `document_chunks`:
+
+```ts
+// Index ALL nodes as document_chunks for semantic search
+for (const node of allNodes) {
+  const content = [
+    node.objectName || node.ObjectName || "",
+    node.className || "",
+    `Typ: ${node.classId || ""}`,
+  ].filter(Boolean).join(" | ");
+  
+  if (content.trim().length > 3) {
+    await supabase.from("document_chunks").upsert({
+      source_type: "fm_access",
+      source_id: `doc-${node.objectId || node.ObjectId}`,
+      building_fm_guid: b.fm_guid,
+      file_name: node.objectName || "FM Access dokument",
+      content,
+      chunk_index: 0,
+      metadata: { system: "fm_access", type: "document", classId: node.classId },
+    }, { onConflict: "source_type,source_id,chunk_index", ignoreDuplicates: false });
+  }
+}
+```
+
+Also index the **full structural tree** (rooms on each floor):
+
+```ts
+// Index rooms (classId 107) for richer search
+const rooms: any[] = [];
+if (Array.isArray(treeData)) {
+  treeData.forEach((n: any) => collectByClassId(n, 107, rooms));
+} else if (treeData) {
+  collectByClassId(treeData, 107, rooms);
+}
+
+for (const room of rooms) {
+  const content = [
+    room.objectName || room.ObjectName || "",
+    room._parentFloorName || "",
+    "Rum",
+  ].filter(Boolean).join(" | ");
+  
+  if (content.trim()) {
+    await supabase.from("document_chunks").upsert({
+      source_type: "fm_access",
+      source_id: `room-${room.objectId || room.ObjectId}`,
+      building_fm_guid: b.fm_guid,
+      file_name: room.objectName || "FM Access rum",
+      content,
+      chunk_index: 0,
+      metadata: { system: "fm_access", type: "room" },
+    }, { onConflict: "source_type,source_id,chunk_index", ignoreDuplicates: false });
+  }
+}
+```
+
+### 4. Also index floors (classId 105)
+
+Same pattern — collect floors and index their names so Ilean can answer "which floors exist?"
+
+## Files to modify
+
+| File | Change |
+|------|--------|
+| `supabase/functions/fm-access-sync/index.ts` | Index all FM Access nodes (documents, rooms, floors) into `document_chunks`, not just drawing titles |
+
+## After deployment
+The user needs to re-run the FM Access document sync (from Settings or via Gunnar) to populate `document_chunks` for Labradorgatan 18. After that, Ilean will find the indexed content.
+
+## Expected outcome
+- Ilean finds FM Access documents, rooms, and drawings when asked
+- Search covers all building hierarchy nodes, not just drawing names
+
