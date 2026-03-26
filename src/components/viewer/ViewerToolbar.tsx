@@ -441,7 +441,6 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     // Clear user-created section planes (NOT floor clipping planes)
     const planes = Object.entries(scene.sectionPlanes || {});
     planes.forEach(([planeId, sp]: [string, any]) => {
-      // Preserve floor/ceiling clipping planes used by the floor switcher
       if (planeId.startsWith('3d-ceiling-') || planeId.startsWith('floor-clip-') || planeId.startsWith('2d-')) return;
       try { sp.destroy(); } catch {}
     });
@@ -454,27 +453,38 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     if (allIds.length > 0) {
       scene.setObjectsVisible(allIds, true);
       scene.setObjectsXRayed(allIds, false);
+      scene.setObjectsPickable(allIds, true);
     }
-    // Fly to initial camera IMMEDIATELY (before slow color reapply)
-    if (initialCameraRef.current) {
-      viewer.cameraFlight.flyTo({
-        eye: initialCameraRef.current.eye,
-        look: initialCameraRef.current.look,
-        up: initialCameraRef.current.up,
-        duration: 0.3,
-      });
+
+    // Respect current view mode — don't jump to 3D from 2D
+    if (viewModeRef.current === '2d') {
+      // Re-center 2D view without switching to 3D
+      const sceneAABB = scene.getAABB?.();
+      if (sceneAABB) {
+        viewer.cameraFlight.flyTo({ aabb: sceneAABB, duration: 0.3 });
+      }
     } else {
-      viewer.cameraFlight.flyTo({ aabb: scene.aabb, duration: 0.3 });
+      // Fly to initial camera IMMEDIATELY (before slow color reapply)
+      if (initialCameraRef.current) {
+        viewer.cameraFlight.flyTo({
+          eye: initialCameraRef.current.eye,
+          look: initialCameraRef.current.look,
+          up: initialCameraRef.current.up,
+          duration: 0.3,
+        });
+      } else {
+        viewer.cameraFlight.flyTo({ aabb: scene.aabb, duration: 0.3 });
+      }
+      // Remove any 3D clipping only in 3D mode
+      try { remove3DClipping(); } catch {}
     }
+
     // Reset x-ray
     setIsXrayActive(false);
     // Re-apply architect color palette asynchronously to avoid blocking interaction
     requestAnimationFrame(() => {
       applyArchitectColors(viewer);
     });
-    // Remove any 3D clipping
-    try { remove3DClipping(); } catch {}
-    try { remove2DClipping(); } catch {}
     // Re-apply modifications (deleted/moved objects) so they stay deleted
     requestAnimationFrame(() => {
       window.dispatchEvent(new CustomEvent('REAPPLY_MODIFICATIONS'));
