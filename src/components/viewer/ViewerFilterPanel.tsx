@@ -2004,10 +2004,16 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
               (window as any).__colorFilterActive = false;
               const vizSet = (window as any).__vizColorizedEntityIds;
               if (vizSet instanceof Set) vizSet.clear();
-              // Dispatch insights reset + restore architect colors
+              // Dispatch insights reset + restore theme or architect colors
               window.dispatchEvent(new CustomEvent('INSIGHTS_COLOR_RESET'));
-              const viewer = getXeokitViewer();
-              if (viewer) applyArchitectColors(viewer);
+              if (activeThemeIdRef.current) {
+                window.dispatchEvent(new CustomEvent(VIEWER_THEME_REQUESTED_EVENT, {
+                  detail: { themeId: activeThemeIdRef.current }
+                }));
+              } else {
+                const viewer = getXeokitViewer();
+                if (viewer) applyArchitectColors(viewer);
+              }
             }}
             title="Reset all colors to default"
           >
