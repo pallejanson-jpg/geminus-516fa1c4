@@ -230,9 +230,9 @@ const ApprovalDialog: React.FC<{
 
   return (
     <Dialog open={open} onOpenChange={() => onClose()}>
-      <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto text-foreground">
         <DialogHeader>
-          <DialogTitle>Approve Detection</DialogTitle>
+          <DialogTitle className="text-foreground">Approve Detection</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
