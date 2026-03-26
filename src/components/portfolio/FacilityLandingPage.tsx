@@ -1,5 +1,5 @@
 import React, { useState, useContext, useMemo, useRef, useEffect } from 'react';
-import { extractSpaceArea } from '@/lib/building-utils';
+import { extractSpaceArea, isModelName, isAModelName } from '@/lib/building-utils';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, X, MapPin, Info, BarChart, Star, Table, Layers, 
@@ -170,12 +170,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     );
     
     // Exclude unnamed model-placeholder storeys (no common_name, parentCommonName is a model name)
-    const MODEL_NAME_RE = /^(A|B|E|V|K|R|S|VS|EL|MEP|BRAND|FIRE|SPRINKLER)[\s\-_.]/i;
-    const MODEL_EXACT_RE = /^(A-MODELL|B-MODELL|E-MODELL|V-MODELL|ARK|ARKITEKT|A_MODELL|B_MODELL|E_MODELL|V_MODELL)$/i;
-    const isModelName = (name: string): boolean => {
-      const trimmed = name.trim();
-      return MODEL_NAME_RE.test(trimmed) || MODEL_EXACT_RE.test(trimmed);
-    };
+    // isModelName imported from building-utils.ts
 
     // Keep storeys that have a common_name, or whose parentCommonName is NOT a model name
     const namedStoreys = allStoreys.filter(s => {
@@ -203,12 +198,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   const aModelStoreyGuids = useMemo(() => {
     if (!allData || facility.category !== 'Building') return new Set<string>();
     const guids = new Set<string>();
-    const isAModelName = (name: string): boolean => {
-      const upper = name.toUpperCase().trim();
-      if (upper.includes('ARKITEKT') || upper.includes('A-MODELL') || upper.includes('A_MODELL') || upper.includes('A MODELL') || upper === 'ARK') return true;
-      if (upper.charAt(0) === 'A' && (upper.length === 1 || /^A[\s\-_.]/.test(upper))) return true;
-      return false;
-    };
+    // isAModelName imported from building-utils.ts
     allData.forEach(item => {
       if (item.category !== 'Building Storey' || item.buildingFmGuid !== facility.fmGuid) return;
       const parentName = item.attributes?.parentCommonName || '';
