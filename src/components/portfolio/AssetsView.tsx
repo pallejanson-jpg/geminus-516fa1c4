@@ -195,8 +195,20 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   }, [searchQuery]);
   const [sortColumn, setSortColumn] = useState<string>('designation');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_VISIBLE_COLUMNS);
-  const [columnOrder, setColumnOrder] = useState<string[]>(DEFAULT_VISIBLE_COLUMNS);
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('assets-view-visible-columns');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DEFAULT_VISIBLE_COLUMNS;
+  });
+  const [columnOrder, setColumnOrder] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('assets-view-column-order');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DEFAULT_VISIBLE_COLUMNS;
+  });
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [isSyncingAssets, setIsSyncingAssets] = useState(false);
   const [syncingAssetIds, setSyncingAssetIds] = useState<Set<string>>(new Set());
