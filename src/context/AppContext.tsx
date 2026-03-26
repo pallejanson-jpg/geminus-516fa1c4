@@ -440,20 +440,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         // Build storey map - only storeys that belong to a known building
         // Also derive display names for nameless storeys
         // Detect BIM model placeholder storeys and exclude them from display
-        const MODEL_NAME_RE = /^(A|B|E|V|K|R|S|VS|EL|MEP|BRAND|FIRE|SPRINKLER)[\s\-_.]/i;
-        const MODEL_EXACT_RE = /^(A-MODELL|B-MODELL|E-MODELL|V-MODELL|ARK|ARKITEKT|A_MODELL|B_MODELL|E_MODELL|V_MODELL)$/i;
-        const isModelName = (name: string | null | undefined): boolean => {
-            if (!name) return false;
-            const trimmed = name.trim();
-            return MODEL_NAME_RE.test(trimmed) || MODEL_EXACT_RE.test(trimmed);
-        };
-        const isAModelName = (name: string | null | undefined): boolean => {
-            if (!name) return false;
-            const upper = name.toUpperCase().trim();
-            if (upper.includes('ARKITEKT') || upper.includes('A-MODELL') || upper.includes('A_MODELL') || upper.includes('A MODELL') || upper === 'ARK') return true;
-            if (upper.charAt(0) === 'A' && (upper.length === 1 || /^A[\s\-_.]/.test(upper))) return true;
-            return false;
-        };
+        // isModelName and isAModelName are now imported from building-utils.ts
 
         const storeyMap = new Map<string, NavigatorNode>();
         const excludedModelStoreyGuids = new Set<string>(); // unnamed model-placeholder storeys
