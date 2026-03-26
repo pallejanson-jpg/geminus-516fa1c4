@@ -1712,11 +1712,11 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           model.visible = true;
         }
       });
-      scene.setObjectsVisible(scene.objectIds, true);
-      scene.setObjectsPickable(scene.objectIds, true);
+      scene.setObjectsVisible(safeObjectIds(scene), true);
+      scene.setObjectsPickable(safeObjectIds(scene), true);
       // Only reset opacity if visualization is NOT active (otherwise we'd wipe sensor colors)
       if (!(window as any).__spacesForceVisible) {
-        scene.objectIds.forEach((id: string) => {
+        safeObjectIds(scene).forEach((id: string) => {
           const entity = scene.objects?.[id];
           if (entity && entity.opacity < 1) entity.opacity = 1.0;
         });
