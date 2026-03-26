@@ -1231,9 +1231,11 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const slabTypes = new Set(['IfcSlab', 'IfcSlabStandardCase', 'IfcPlate']);
     const areaSet = new Set(areaSpaceIdsRef.current);
 
-    // Only hide roofs/coverings when drilling into levels or spaces — 
-    // when only a source filter is active, show the full model including roof
-    const hasLevelOrSpaceFilter = checkedLevels.size > 0 || checkedSpaces.size > 0;
+    // Only hide roofs/coverings when drilling into spaces — 
+    // when only a level filter (or source filter) is active, show the full model including roof/slabs
+    // This matches the behavior of the floor switcher (FloatingFloorSwitcher)
+    const hasSpaceFilter = checkedSpaces.size > 0;
+    const hasLevelOrSpaceFilter = hasSpaceFilter;
 
     // Use typeIndex for slab collection (fast)
     const allSlabIds: string[] = [];
