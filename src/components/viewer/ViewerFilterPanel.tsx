@@ -363,21 +363,19 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
   }, [storeyAssets, sharedFloors, storeyLookup, buildingData]);
 
-  // Sources: only A-model sources (architectural models)
+  // Sources: ALL BIM models (not just A-models)
   const sources: BimSource[] = useMemo(() => {
-    // Count storeys per source — ONLY from A-model levels (filtered list)
+    // Count storeys per source — from all levels
     const storeyCountBySource = new Map<string, number>();
     levels.forEach(level => {
       const norm = normalizeGuid(level.sourceGuid);
       storeyCountBySource.set(norm, (storeyCountBySource.get(norm) || 0) + 1);
     });
 
-    // Collect unique A-model source names from storeyAssets
+    // Collect unique source names from storeyAssets — ALL models, not just A-models
     const sourceMap = new Map<string, { guid: string; name: string; storeyCount: number }>();
     storeyAssets.forEach(storey => {
       if (!storey.sourceGuid || !storey.sourceName || isGuid(storey.sourceName)) return;
-      // Only include A-model sources
-      if (!isAModelName(storey.sourceName)) return;
       const normGuid = normalizeGuid(storey.sourceGuid);
       if (!sourceMap.has(normGuid)) {
         sourceMap.set(normGuid, {
