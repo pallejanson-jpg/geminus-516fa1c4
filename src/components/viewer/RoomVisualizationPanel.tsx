@@ -480,6 +480,8 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     }
     
     setEntityIdCache(cache);
+    // Expose cache globally so NativeXeokitViewer's INSIGHTS_COLOR handler can use it
+    (window as any).__spaceEntityIdCache = cache;
     console.log(`Built entity ID cache: ${cache.size} entries for spaces`);
   }, [viewerRef, cacheKey, buildingFmGuid, filteredRooms]);
 
