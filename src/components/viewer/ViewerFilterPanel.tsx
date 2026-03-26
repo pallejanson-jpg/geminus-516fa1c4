@@ -2093,7 +2093,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 label={level.name}
                 badge={level.spaceCount > 0 ? `${level.spaceCount}` : undefined}
                 checked={checkedLevels.has(level.fmGuid)}
-                onCheckedChange={(checked) => handleLevelToggle(level.fmGuid, checked)}
+                onCheckedChange={(checked, event) => handleLevelToggle(level.fmGuid, checked, event)}
                 dimmed={checkedSources.size > 0 && !checkedSources.has(level.sourceGuid)}
                 color={autoColorEnabled ? levelColors.get(level.fmGuid) : undefined}
                 onColorChange={(color) => handleLevelColorChange(level.fmGuid, color)}
