@@ -2056,7 +2056,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 label={source.name}
                 badge={`${source.storeyCount}`}
                 checked={checkedSources.has(source.guid)}
-                onCheckedChange={(checked) => handleSourceToggle(source.guid, checked)}
+                onCheckedChange={(checked, event) => handleSourceToggle(source.guid, checked, event)}
               />
             ))}
             {sources.length === 0 && (
