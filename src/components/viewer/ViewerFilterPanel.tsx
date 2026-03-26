@@ -253,17 +253,24 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }).length;
 
     // Quality check: use sharedFloors only if they are reasonably complete
-    // compared to DB storeys. If DB has significantly more A-model storeys,
-    // the scene data is incomplete (e.g. Småviken: scene=2, DB=10).
     const sceneIsReliable = sharedFloors.length > 0 &&
       (aModelStoreyCount === 0 || sharedFloors.length >= aModelStoreyCount * 0.7);
 
+    const sortLevels = (arr: LevelItem[]) => arr.sort((a, b) => {
+      const extract = (n: string) => {
+        const m = n.match(/(-?\d+)/);
+        return m ? parseInt(m[1], 10) : 0;
+      };
+      return extract(a.name) - extract(b.name) || a.name.localeCompare(b.name, 'sv');
+    });
+
+    let result: LevelItem[];
+
     if (sceneIsReliable) {
-      return sharedFloors.map((floor) => {
+      result = sharedFloors.map((floor) => {
         const allGuids = new Set<string>();
         floor.databaseLevelFmGuids.forEach(g => allGuids.add(normalizeGuid(g)));
 
-        // Find matching storeyAsset by GUID first, then by name
         let sourceGuid = '';
         let matchedStorey: typeof storeyAssets[0] | null = null;
         const floorNameLower = floor.name.toLowerCase().trim();
@@ -276,7 +283,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           }
         }
 
-        // Name-based fallback: match by level name
         if (!matchedStorey) {
           for (const storey of storeyAssets) {
             const storeyNameLower = storey.name.toLowerCase().trim();
@@ -285,14 +291,12 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 floorNameLower.includes(storeyNameLower)) {
               matchedStorey = storey;
               sourceGuid = storey.sourceGuid;
-              // Add Asset+ FM GUID so downstream space filtering works
               allGuids.add(normalizeGuid(storey.fmGuid));
               break;
             }
           }
         }
 
-        // If no sourceGuid from storeyAssets, try storeyLookup
         if (!sourceGuid) {
           for (const g of allGuids) {
             const lookup = storeyLookup.byGuid.get(g);
@@ -300,16 +304,12 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           }
         }
 
-        // Count spaces belonging to this level — only A-model spaces
-        // Use aModelStoreyGuidSet (Asset+ FM GUIDs) for filtering
         const spaceCount = buildingData.filter((s: any) => {
           const cat = s.category;
           if (cat !== 'Space' && cat !== 'IfcSpace') return false;
           const levelGuid = s.levelFmGuid || s.level_fm_guid || '';
           const levelGuidNorm = normalizeGuid(levelGuid);
-          // Check if space belongs to this level via any of its GUIDs
           if (!allGuids.has(levelGuidNorm) && !allGuids.has(normalizeGuid(levelGuid))) return false;
-          // Only count if the space's level is in the A-model storey set
           if (aModelStoreyGuidSet.size > 0 && !aModelStoreyGuidSet.has(levelGuid)) return false;
           return true;
         }).length;
@@ -321,24 +321,16 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           sourceGuid,
           spaceCount,
         };
-      }).sort((a, b) => {
-        const extract = (n: string) => {
-          const m = n.match(/(-?\d+)/);
-          return m ? parseInt(m[1], 10) : 0;
-        };
-        return extract(a.name) - extract(b.name) || a.name.localeCompare(b.name, 'sv');
       });
-    }
+    } else {
+      // Fallback: if sharedFloors is empty (viewer not ready yet), use storeyAssets
+      const aModelStoreys = storeyAssets.filter((storey) => {
+        if (!storey.sourceName || isGuid(storey.sourceName)) return false;
+        return isArchitecturalModel(storey.sourceName);
+      });
+      const filtered = aModelStoreys.length > 0 ? aModelStoreys : storeyAssets;
 
-    // Fallback: if sharedFloors is empty (viewer not ready yet), use storeyAssets
-    const aModelStoreys = storeyAssets.filter((storey) => {
-      if (!storey.sourceName || isGuid(storey.sourceName)) return false;
-      return isArchitecturalModel(storey.sourceName);
-    });
-    const filtered = aModelStoreys.length > 0 ? aModelStoreys : storeyAssets;
-
-    return filtered
-      .map((storey) => {
+      result = filtered.map((storey) => {
         const allGuids = new Set<string>([storey.normalizedFmGuid]);
         const spaceCount = buildingData.filter((s: any) => {
           const cat = s.category;
@@ -353,16 +345,44 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           sourceGuid: storey.sourceGuid,
           spaceCount,
         };
-      })
-      .sort((a, b) => {
-        const extract = (n: string) => {
-          const m = n.match(/(-?\d+)/);
-          return m ? parseInt(m[1], 10) : 0;
-        };
-        return extract(a.name) - extract(b.name) || a.name.localeCompare(b.name, 'sv');
       });
-  }, [storeyAssets, sharedFloors, storeyLookup, buildingData]);
+    }
 
+    // ── Add storeys from checked non-A sources ──────────────────────────
+    // When the user selects a non-A model source, include its levels so they
+    // become selectable in the filter menu.
+    if (checkedSources.size > 0) {
+      const existingNames = new Set(result.map(l => l.name.toLowerCase().trim()));
+      const existingGuids = new Set(result.flatMap(l => l.allGuids));
+
+      storeyAssets.forEach(storey => {
+        if (!checkedSources.has(storey.sourceGuid)) return;
+        // Skip if this source is an A-model (already included)
+        if (isArchitecturalModel(storey.sourceName)) return;
+        const norm = storey.normalizedFmGuid;
+        if (existingGuids.has(norm)) return;
+        const nameLower = storey.name.toLowerCase().trim();
+        if (existingNames.has(nameLower)) {
+          // Merge GUID into existing level with same name
+          const existing = result.find(l => l.name.toLowerCase().trim() === nameLower);
+          if (existing && !existing.allGuids.includes(norm)) {
+            existing.allGuids.push(norm);
+          }
+          return;
+        }
+        result.push({
+          fmGuid: storey.fmGuid,
+          allGuids: [norm],
+          name: storey.name,
+          sourceGuid: storey.sourceGuid,
+          spaceCount: 0,
+        });
+        existingNames.add(nameLower);
+      });
+    }
+
+    return sortLevels(result);
+  }, [storeyAssets, sharedFloors, storeyLookup, buildingData, checkedSources]);
   // Sources: ALL BIM models (not just A-models)
   const sources: BimSource[] = useMemo(() => {
     // Count storeys per source — from all levels
