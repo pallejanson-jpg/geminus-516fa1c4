@@ -708,15 +708,35 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     return () => document.removeEventListener('keydown', handler);
   }, [isPickingPosition]);
 
-  // Context menu via right-click on canvas
+  // Context menu via right-click on canvas — only on stationary clicks (not pan drags)
   useEffect(() => {
     if (!xeokitViewer?.scene) return;
 
     const canvas = xeokitViewer.scene.canvas?.canvas;
     if (!canvas) return;
 
+    let rightDownPos: { x: number; y: number } | null = null;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button === 2) {
+        rightDownPos = { x: e.clientX, y: e.clientY };
+      }
+    };
+
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault();
+      
+      // Check if mouse moved significantly (pan gesture) — if so, skip context menu
+      if (rightDownPos) {
+        const dx = e.clientX - rightDownPos.x;
+        const dy = e.clientY - rightDownPos.y;
+        if (Math.sqrt(dx * dx + dy * dy) > 5) {
+          rightDownPos = null;
+          return; // Let xeokit handle the pan
+        }
+      }
+      rightDownPos = null;
+
       e.stopPropagation();
 
       const pickResult = xeokitViewer.scene.pick({
@@ -737,6 +757,9 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
       setContextMenu({ position: { x: e.clientX, y: e.clientY }, entityId, fmGuid, entityName });
     };
+
+    canvas.addEventListener('mousedown', handleMouseDown);
+    canvas.addEventListener('contextmenu', handleContextMenu);
 
     // Long-press for mobile
     let longPressTimer: ReturnType<typeof setTimeout> | null = null;

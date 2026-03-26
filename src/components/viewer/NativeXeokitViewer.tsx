@@ -1659,7 +1659,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       try {
         const { data: annotations } = await supabase
           .from('assets')
-          .select('fm_guid, common_name, name, asset_type, coordinate_x, coordinate_y, coordinate_z, symbol_id')
+          .select('fm_guid, common_name, name, asset_type, coordinate_x, coordinate_y, coordinate_z, symbol_id, in_room_fm_guid, level_fm_guid')
           .eq('building_fm_guid', buildingFmGuid)
           .or('annotation_placed.eq.true,created_in_model.eq.false');
 
