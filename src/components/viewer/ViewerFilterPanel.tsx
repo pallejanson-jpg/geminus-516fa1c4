@@ -750,9 +750,18 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       }
     });
 
-    // Match spaces
+    // Match spaces — only A-model spaces
+    const aModelGuids = getAModelStoreyGuids(buildingData, buildingFmGuid || '');
     const allAssetSpaces = buildingData
-      .filter((a: any) => a.category === 'Space' || a.category === 'IfcSpace');
+      .filter((a: any) => {
+        if (a.category !== 'Space' && a.category !== 'IfcSpace') return false;
+        // Filter to A-model spaces when we have A-model storey data
+        if (aModelGuids.size > 0) {
+          const levelGuid = a.levelFmGuid || a.level_fm_guid || '';
+          return aModelGuids.has(levelGuid);
+        }
+        return true;
+      });
     const usedSpaceIds = new Set<string>();
     allAssetSpaces.forEach((space: any) => {
       const spaceFmGuid = space.fmGuid || space.fm_guid;
