@@ -1736,19 +1736,29 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   // ── Handlers ────────────────────────────────────────────────────────────
 
-  const handleSourceToggle = useCallback((guid: string, checked: boolean) => {
-    setCheckedSources(prev => { const n = new Set(prev); checked ? n.add(guid) : n.delete(guid); return n; });
+  const handleSourceToggle = useCallback((guid: string, checked: boolean, event?: React.MouseEvent) => {
+    setCheckedSources(prev => {
+      if (!checked) { const n = new Set(prev); n.delete(guid); return n; }
+      if (event?.ctrlKey || event?.metaKey) { const n = new Set(prev); n.add(guid); return n; }
+      return new Set([guid]);
+    });
   }, []);
 
-  const handleLevelToggle = useCallback((fmGuid: string, checked: boolean) => {
-    setCheckedLevels(prev => { const n = new Set(prev); checked ? n.add(fmGuid) : n.delete(fmGuid); return n; });
+  const handleLevelToggle = useCallback((fmGuid: string, checked: boolean, event?: React.MouseEvent) => {
+    setCheckedLevels(prev => {
+      if (!checked) { const n = new Set(prev); n.delete(fmGuid); return n; }
+      if (event?.ctrlKey || event?.metaKey) { const n = new Set(prev); n.add(fmGuid); return n; }
+      return new Set([fmGuid]);
+    });
   }, []);
 
-  const handleSpaceToggle = useCallback((fmGuid: string, checked: boolean) => {
-    setCheckedSpaces(prev => { const n = new Set(prev); checked ? n.add(fmGuid) : n.delete(fmGuid); return n; });
-    if (!checked) return; // Only fly on check, not uncheck
-    // Checkbox = zoom to space with camera OUTSIDE (expanded AABB)
-    // Delay flyTo to let applyFilterVisibility run first and set up the cutaway
+  const handleSpaceToggle = useCallback((fmGuid: string, checked: boolean, event?: React.MouseEvent) => {
+    setCheckedSpaces(prev => {
+      if (!checked) { const n = new Set(prev); n.delete(fmGuid); return n; }
+      if (event?.ctrlKey || event?.metaKey) { const n = new Set(prev); n.add(fmGuid); return n; }
+      return new Set([fmGuid]);
+    });
+    if (!checked) return;
     setTimeout(() => {
       const viewer = getXeokitViewer();
       if (!viewer?.scene) return;
@@ -1760,7 +1770,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         });
         const firstEntity = viewer.scene.objects?.[ids[0]];
         if (firstEntity?.aabb) {
-          // Expand AABB by 2x to position camera outside the space
           const aabb = [...firstEntity.aabb];
           const cx = (aabb[0] + aabb[3]) / 2, cy = (aabb[1] + aabb[4]) / 2, cz = (aabb[2] + aabb[5]) / 2;
           const dx = (aabb[3] - aabb[0]) * 0.5, dy = (aabb[4] - aabb[1]) * 0.5, dz = (aabb[5] - aabb[2]) * 0.5;
@@ -1768,11 +1777,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           viewer.cameraFlight?.flyTo({ aabb: expanded, duration: 0.5 });
         }
       }
-    }, 600); // After 500ms debounce of applyFilterVisibility
+    }, 600);
   }, [getXeokitViewer]);
 
-  const handleCategoryToggle = useCallback((name: string, checked: boolean) => {
-    setCheckedCategories(prev => { const n = new Set(prev); checked ? n.add(name) : n.delete(name); return n; });
+  const handleCategoryToggle = useCallback((name: string, checked: boolean, event?: React.MouseEvent) => {
+    setCheckedCategories(prev => {
+      if (!checked) { const n = new Set(prev); n.delete(name); return n; }
+      if (event?.ctrlKey || event?.metaKey) { const n = new Set(prev); n.add(name); return n; }
+      return new Set([name]);
+    });
   }, []);
 
   const handleSpaceClick = useCallback((fmGuid: string) => {
