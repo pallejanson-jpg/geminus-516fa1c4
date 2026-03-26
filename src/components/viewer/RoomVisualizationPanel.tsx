@@ -947,7 +947,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       ref={panelRef}
       className={cn(
         'fixed z-[55] w-72',
-        'bg-card/60 backdrop-blur-md border rounded-lg shadow-xl',
+        'bg-card/60 backdrop-blur-md border border-border/30 rounded-lg shadow-xl',
         isDragging && 'cursor-grabbing opacity-90',
         className
       )}

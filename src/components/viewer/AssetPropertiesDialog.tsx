@@ -383,7 +383,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
   return (
     <div
       className={cn(
-        "fixed z-50 border rounded-lg shadow-xl transition-all",
+        "fixed z-50 border border-border/30 rounded-lg shadow-xl transition-all",
         // Semi-transparent backdrop for better 3D visibility
         "bg-card/80 backdrop-blur-md",
         "w-80 sm:w-96 max-h-[80vh] flex flex-col",

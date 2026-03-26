@@ -363,7 +363,7 @@ const FloorCarousel: React.FC<FloorCarouselProps> = ({
       </Button>
 
       {/* Floor carousel */}
-      <div className="bg-card/95 backdrop-blur-sm border rounded-lg shadow-xl p-2">
+      <div className="bg-card/95 backdrop-blur-sm border border-border/30 rounded-lg shadow-xl p-2">
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
