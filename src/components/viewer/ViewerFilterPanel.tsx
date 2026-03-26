@@ -238,6 +238,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   // Levels: driven primarily by sharedFloors (useFloorData) which correctly detects A-model
   // floors from the xeokit scene. Enriched with storeyAssets for space counts and sourceGuid.
   const levels: LevelItem[] = useMemo(() => {
+    // Build A-model storey GUID set for filtering space counts
+    const aModelStoreyGuidSet = getAModelStoreyGuids(buildingData, buildingFmGuid || '');
+
     // Count DB-driven A-model storeys to compare against scene-derived floors
     const aModelStoreyCount = storeyAssets.filter((s) => {
       if (!s.sourceName || isGuid(s.sourceName)) return false;
