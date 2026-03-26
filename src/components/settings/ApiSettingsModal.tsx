@@ -522,7 +522,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     // Ivion connection modal state
     const [isIvionModalOpen, setIsIvionModalOpen] = useState(false);
     
-    // ACC (Autodesk Construction Cloud) state — with sessionStorage persistence
+    // ACC (Autodesk Forma) state — with sessionStorage persistence
     const [accProjects, setAccProjects] = useState<any[]>(() => {
         try { return JSON.parse(sessionStorage.getItem('acc_projects') || '[]'); } catch { return []; }
     });
