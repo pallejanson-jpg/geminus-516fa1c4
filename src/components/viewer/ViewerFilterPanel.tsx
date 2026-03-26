@@ -520,7 +520,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       })
       .filter((s: SpaceItem) => s.name && s.name !== 'Unnamed')
       .sort((a: SpaceItem, b: SpaceItem) => a.name.localeCompare(b.name, 'sv', { numeric: true }));
-  }, [buildingData, checkedLevels, checkedSources, levels, getXeokitViewer]);
+  }, [buildingData, buildingFmGuid, checkedLevels, checkedSources, levels, getXeokitViewer]);
 
   // ── Categories: derived from typeIndex, scoped by active filters ────────
   const categories: CategoryItem[] = useMemo(() => {
