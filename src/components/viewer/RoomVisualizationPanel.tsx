@@ -50,6 +50,7 @@ export const FORCE_SHOW_SPACES_EVENT = 'FORCE_SHOW_SPACES';
 // Import floor selection event from the canonical source
 import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { VISUALIZATION_QUICK_SELECT_EVENT } from './VisualizationQuickBar';
+import { INSIGHTS_COLOR_UPDATE_EVENT, INSIGHTS_COLOR_RESET_EVENT } from '@/lib/viewer-events';
 
 // LocalStorage key for persisting visualization settings
 const STORAGE_KEY = 'roomVisualizationSettings';
@@ -525,6 +526,8 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   const applyVisualization = useCallback(() => {
     if (visualizationType === 'none') {
       resetColors();
+      // Also reset any x-ray state from previous visualization
+      window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_RESET_EVENT));
       return;
     }
 
@@ -541,87 +544,42 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     setIsProcessing(true);
     cancelRef.current = false; // Reset cancel flag for new run
 
-    // Collect previous guids to reset, then clear the set
-    const previousGuids = Array.from(colorizedRoomGuidsRef.current);
-    colorizedRoomGuidsRef.current.clear();
-
-    let count = 0;
-    const CHUNK_SIZE = 30;
-    // Track entity IDs for XrayToggle protection
-    const vizEntityIdSet = new Set<string>();
-
-    // Phase 1: reset previous rooms in chunks
-    const resetChunks: string[][] = [];
-    for (let i = 0; i < previousGuids.length; i += CHUNK_SIZE) {
-      resetChunks.push(previousGuids.slice(i, i + CHUNK_SIZE));
-    }
-
-    // Phase 2: apply new colors in chunks
-    const applyChunks: RoomData[][] = [];
-    for (let i = 0; i < rooms.length; i += CHUNK_SIZE) {
-      applyChunks.push(rooms.slice(i, i + CHUNK_SIZE));
-    }
-
-    let resetIndex = 0;
-    let applyIndex = 0;
-
-    const processNext = () => {
-      if (cancelRef.current) {
-        setColorizedCount(count);
-        setIsProcessing(false);
-        isProcessingRef.current = false;
-        return;
+    // Build a color map and dispatch INSIGHTS_COLOR_UPDATE so NativeXeokitViewer
+    // can x-ray the building and colorize spaces (same mechanism as Insights)
+    const colorMap: Record<string, [number, number, number]> = {};
+    const nameColorMap: Record<string, [number, number, number]> = {};
+    rooms.forEach(room => {
+      let value: number | null = null;
+      if (useMockData) {
+        value = generateMockSensorData(room.fmGuid, visualizationType);
+      } else {
+        value = extractSensorValue(room.attributes, visualizationType);
       }
-
-      // First finish resetting previous rooms
-      if (resetIndex < resetChunks.length) {
-        resetChunks[resetIndex].forEach((fmGuid) => colorizeSpace(fmGuid, null));
-        resetIndex++;
-        requestAnimationFrame(processNext);
-        return;
-      }
-
-      // Then apply new colors
-      if (applyIndex < applyChunks.length) {
-        applyChunks[applyIndex].forEach((room) => {
-          let value: number | null = null;
-
-          if (useMockData) {
-            value = generateMockSensorData(room.fmGuid, visualizationType);
-          } else {
-            value = extractSensorValue(room.attributes, visualizationType);
+      if (value !== null) {
+        const color = getVisualizationColor(value, visualizationType);
+        if (color) {
+          colorMap[room.fmGuid] = color;
+          if (room.name) {
+            nameColorMap[room.name.toLowerCase().trim()] = color;
           }
-
-          if (value !== null) {
-            const color = getVisualizationColor(value, visualizationType);
-            if (color && colorizeSpace(room.fmGuid, color)) {
-              colorizedRoomGuidsRef.current.add(room.fmGuid);
-              // Also track entity IDs globally for XrayToggle to protect
-              const ids = getItemIdsByFmGuid(room.fmGuid);
-              ids.forEach(id => vizEntityIdSet.add(id));
-              count++;
-            }
-          }
-        });
-        applyIndex++;
-        if ('requestIdleCallback' in window) {
-          requestIdleCallback(processNext, { timeout: 16 });
-        } else {
-          requestAnimationFrame(processNext);
         }
-        return;
       }
+    });
 
-      // Done — expose protected entity IDs globally for XrayToggle
-      (window as any).__vizColorizedEntityIds = vizEntityIdSet;
-      setColorizedCount(count);
-      setIsProcessing(false);
-      isProcessingRef.current = false;
-      console.log(`Applied ${visualizationType} visualization to ${count} rooms`);
-    };
+    // Dispatch to NativeXeokitViewer's INSIGHTS_COLOR_UPDATE handler
+    window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, {
+      detail: { mode: 'room_spaces', colorMap, nameColorMap },
+    }));
 
-    requestAnimationFrame(processNext);
-  }, [visualizationType, rooms, useMockData, colorizeSpace, resetColors]);
+    // Track colorized rooms
+    colorizedRoomGuidsRef.current = new Set(Object.keys(colorMap));
+    (window as any).__vizColorizedEntityIds = new Set<string>();
+    setColorizedCount(Object.keys(colorMap).length);
+    setIsProcessing(false);
+    isProcessingRef.current = false;
+    console.log(`Applied ${visualizationType} color filter: ${Object.keys(colorMap).length} rooms`);
+  }, [visualizationType, rooms, useMockData, resetColors]);
+
 
   // Apply visualization when type or mock data changes (AUTO-APPLY with retry)
   useEffect(() => {

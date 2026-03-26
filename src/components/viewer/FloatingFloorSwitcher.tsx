@@ -49,23 +49,12 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
     return () => window.removeEventListener(FLOOR_PILLS_TOGGLE_EVENT, handleToggle as EventListener);
   }, []);
 
-  // Initialize once floors arrive
+  // Initialize once floors arrive — always start with "All floors"
   useEffect(() => {
     if (isInitialized || floors.length === 0 || !isViewerReady) return;
 
-    const storageKey = `viewer-visible-floors-${buildingFmGuid}`;
-    const saved = localStorage.getItem(storageKey);
-    if (saved) {
-      try {
-        const savedIds = JSON.parse(saved) as string[];
-        const validIds = new Set(savedIds.filter(id => floors.some(f => f.id === id)));
-        setVisibleFloorIds(validIds.size > 0 ? validIds : new Set(floors.map(f => f.id)));
-      } catch {
-        setVisibleFloorIds(new Set(floors.map(f => f.id)));
-      }
-    } else {
-      setVisibleFloorIds(new Set(floors.map(f => f.id)));
-    }
+    // Always default to all floors on viewer entry
+    setVisibleFloorIds(new Set(floors.map(f => f.id)));
     setIsInitialized(true);
   }, [floors, isInitialized, isViewerReady, buildingFmGuid]);
 

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   ArrowLeft,
   Search,
@@ -203,9 +203,29 @@ const RoomsView: React.FC<RoomsViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [sortColumn, setSortColumn] = useState<string>('roomNumber');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_VISIBLE_COLUMNS);
-  const [columnOrder, setColumnOrder] = useState<string[]>(DEFAULT_VISIBLE_COLUMNS);
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('rooms-view-visible-columns');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DEFAULT_VISIBLE_COLUMNS;
+  });
+  const [columnOrder, setColumnOrder] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('rooms-view-column-order');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DEFAULT_VISIBLE_COLUMNS;
+  });
   
+  // Persist column preferences
+  useEffect(() => {
+    localStorage.setItem('rooms-view-visible-columns', JSON.stringify(visibleColumns));
+  }, [visibleColumns]);
+  useEffect(() => {
+    localStorage.setItem('rooms-view-column-order', JSON.stringify(columnOrder));
+  }, [columnOrder]);
+
   // Sensor metric state
   const [activeSensorMetric, setActiveSensorMetric] = useState<VisualizationType>('none');
   
