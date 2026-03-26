@@ -243,6 +243,8 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
     } else {
       setLocalShowAnnotations(newValue);
     }
+    // Dispatch TOGGLE_ANNOTATIONS for NativeXeokitViewer marker management
+    window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', { detail: { show: newValue } }));
     try {
       viewerRef.current?.assetViewer?.onToggleAnnotation?.(newValue);
     } catch (e) { /* ignore */ }
