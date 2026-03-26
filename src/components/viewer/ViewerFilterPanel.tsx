@@ -1647,9 +1647,17 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const anyFiltersActive = checkedSources.size > 0 || checkedLevels.size > 0 ||
       checkedSpaces.size > 0 || checkedCategories.size > 0;
 
-    // Always clean up visual enhancements (xray, colorize)
-    try { const xIds = scene.xrayedObjectIds; if (xIds?.length > 0) scene.setObjectsXRayed(xIds, false); } catch (_e) { /* ignore */ }
-    try { const cIds = scene.colorizedObjectIds; if (cIds?.length > 0) scene.setObjectsColorized(cIds, false); } catch (_e) { /* ignore */ }
+    // Always clean up visual enhancements (xray, colorize) — but preserve color filter
+    try {
+      const xIds = scene.xrayedObjectIds;
+      if (xIds?.length > 0) {
+        scene.setObjectsXRayed(xIds, false);
+        scene.setObjectsPickable(xIds, true);
+      }
+    } catch (_e) { /* ignore */ }
+    if (!(window as any).__colorFilterActive) {
+      try { const cIds = scene.colorizedObjectIds; if (cIds?.length > 0) scene.setObjectsColorized(cIds, false); } catch (_e) { /* ignore */ }
+    }
 
     if (anyFiltersActive) {
       // Filters are active — preserve visibility state, only re-apply theme/colors on visible objects
