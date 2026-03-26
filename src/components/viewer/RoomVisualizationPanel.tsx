@@ -525,6 +525,8 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   const applyVisualization = useCallback(() => {
     if (visualizationType === 'none') {
       resetColors();
+      // Also reset any x-ray state from previous visualization
+      window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_RESET_EVENT));
       return;
     }
 
@@ -540,6 +542,42 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     isProcessingRef.current = true;
     setIsProcessing(true);
     cancelRef.current = false; // Reset cancel flag for new run
+
+    // Build a color map and dispatch INSIGHTS_COLOR_UPDATE so NativeXeokitViewer
+    // can x-ray the building and colorize spaces (same mechanism as Insights)
+    const colorMap: Record<string, [number, number, number]> = {};
+    const nameColorMap: Record<string, [number, number, number]> = {};
+    rooms.forEach(room => {
+      let value: number | null = null;
+      if (useMockData) {
+        value = generateMockSensorData(room.fmGuid, visualizationType);
+      } else {
+        value = extractSensorValue(room.attributes, visualizationType);
+      }
+      if (value !== null) {
+        const color = getVisualizationColor(value, visualizationType);
+        if (color) {
+          colorMap[room.fmGuid] = color;
+          if (room.name) {
+            nameColorMap[room.name.toLowerCase().trim()] = color;
+          }
+        }
+      }
+    });
+
+    // Dispatch to NativeXeokitViewer's INSIGHTS_COLOR_UPDATE handler
+    window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, {
+      detail: { mode: 'room_spaces', colorMap, nameColorMap },
+    }));
+
+    // Track colorized rooms
+    colorizedRoomGuidsRef.current = new Set(Object.keys(colorMap));
+    (window as any).__vizColorizedEntityIds = new Set<string>();
+    setColorizedCount(Object.keys(colorMap).length);
+    setIsProcessing(false);
+    isProcessingRef.current = false;
+    console.log(`Applied ${visualizationType} color filter: ${Object.keys(colorMap).length} rooms`);
+  }, [visualizationType, rooms, useMockData, resetColors]);
 
     // Collect previous guids to reset, then clear the set
     const previousGuids = Array.from(colorizedRoomGuidsRef.current);
