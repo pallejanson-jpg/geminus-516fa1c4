@@ -735,7 +735,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                 )}
 
                 {detection.ai_description && (
-                  <p className="text-xs text-muted-foreground line-clamp-2">
+                  <p className="text-xs text-foreground/70 line-clamp-2">
                     {detection.ai_description}
                   </p>
                 )}
