@@ -2740,12 +2740,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         </AccordionContent>
                                     </AccordionItem>
 
-                                    {/* Autodesk Construction Cloud (ACC) Section */}
+                                    {/* Autodesk Forma Section */}
                                     <AccordionItem value="acc" className="border rounded-lg">
                                         <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
                                             <div className="flex items-center gap-2 flex-1">
                                                 <Layers className="h-5 w-5 text-blue-500" />
-                                                <span className="font-medium">Autodesk Construction Cloud</span>
+                                                <span className="font-medium">Autodesk Forma</span>
                                                 {accAuthStatus === 'authenticated' && <Badge className="ml-auto mr-2 text-xs bg-green-100 text-green-800 border-green-200">Inloggad</Badge>}
                                                 {accAuthStatus === 'unauthenticated' && accConnectionStatus === 'success' && <Badge className="ml-auto mr-2 text-xs bg-yellow-100 text-yellow-800 border-yellow-200">App-token</Badge>}
                                                 {accAuthStatus === 'unauthenticated' && accConnectionStatus === 'idle' && <Badge variant="outline" className="ml-auto mr-2 text-xs">ACC</Badge>}
