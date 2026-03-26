@@ -1,5 +1,5 @@
 import React, { useState, useContext, useMemo, useRef, useEffect } from 'react';
-import { extractSpaceArea } from '@/lib/building-utils';
+import { extractSpaceArea, isModelName, isAModelName } from '@/lib/building-utils';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, X, MapPin, Info, BarChart, Star, Table, Layers, 
