@@ -1715,25 +1715,29 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   const handleSpaceToggle = useCallback((fmGuid: string, checked: boolean) => {
     setCheckedSpaces(prev => { const n = new Set(prev); checked ? n.add(fmGuid) : n.delete(fmGuid); return n; });
+    if (!checked) return; // Only fly on check, not uncheck
     // Checkbox = zoom to space with camera OUTSIDE (expanded AABB)
-    const viewer = getXeokitViewer();
-    if (!viewer?.scene) return;
-    const ids = entityMapRef.current.get(fmGuid) || [];
-    if (ids.length > 0) {
-      ids.forEach((id: string) => {
-        const entity = viewer.scene.objects?.[id];
-        if (entity) { entity.visible = true; entity.pickable = true; }
-      });
-      const firstEntity = viewer.scene.objects?.[ids[0]];
-      if (firstEntity?.aabb) {
-        // Expand AABB by 2x to position camera outside the space
-        const aabb = [...firstEntity.aabb];
-        const cx = (aabb[0] + aabb[3]) / 2, cy = (aabb[1] + aabb[4]) / 2, cz = (aabb[2] + aabb[5]) / 2;
-        const dx = (aabb[3] - aabb[0]) * 0.5, dy = (aabb[4] - aabb[1]) * 0.5, dz = (aabb[5] - aabb[2]) * 0.5;
-        const expanded = [cx - dx * 2, cy - dy * 2, cz - dz * 2, cx + dx * 2, cy + dy * 2, cz + dz * 2];
-        viewer.cameraFlight?.flyTo({ aabb: expanded, duration: 0.5 });
+    // Delay flyTo to let applyFilterVisibility run first and set up the cutaway
+    setTimeout(() => {
+      const viewer = getXeokitViewer();
+      if (!viewer?.scene) return;
+      const ids = entityMapRef.current.get(fmGuid) || [];
+      if (ids.length > 0) {
+        ids.forEach((id: string) => {
+          const entity = viewer.scene.objects?.[id];
+          if (entity) { entity.visible = true; entity.pickable = true; entity.xrayed = false; }
+        });
+        const firstEntity = viewer.scene.objects?.[ids[0]];
+        if (firstEntity?.aabb) {
+          // Expand AABB by 2x to position camera outside the space
+          const aabb = [...firstEntity.aabb];
+          const cx = (aabb[0] + aabb[3]) / 2, cy = (aabb[1] + aabb[4]) / 2, cz = (aabb[2] + aabb[5]) / 2;
+          const dx = (aabb[3] - aabb[0]) * 0.5, dy = (aabb[4] - aabb[1]) * 0.5, dz = (aabb[5] - aabb[2]) * 0.5;
+          const expanded = [cx - dx * 2, cy - dy * 2, cz - dz * 2, cx + dx * 2, cy + dy * 2, cz + dz * 2];
+          viewer.cameraFlight?.flyTo({ aabb: expanded, duration: 0.5 });
+        }
       }
-    }
+    }, 600); // After 500ms debounce of applyFilterVisibility
   }, [getXeokitViewer]);
 
   const handleCategoryToggle = useCallback((name: string, checked: boolean) => {
