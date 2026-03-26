@@ -1329,6 +1329,36 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       }
       const alreadyColored = entityColorMap ? new Set(Object.keys(entityColorMap)) : new Set<string>();
 
+      // ── Use global space entity cache for direct resolution ──────────
+      // RoomVisualizationPanel builds a rich cache (6 strategies) mapping
+      // fmGuid.toLowerCase() → xeokit entity IDs. Use it to directly color
+      // entities that can't be matched by simple GUID comparison.
+      const spaceCache = (window as any).__spaceEntityIdCache as Map<string, string[]> | undefined;
+      if (spaceCache && spaceCache.size > 0 && !entityColorMap) {
+        let cacheMatchCount = 0;
+        Object.entries(colorMap).forEach(([fmGuid, rgb]) => {
+          const entityIds = spaceCache.get(fmGuid.toLowerCase());
+          if (entityIds) {
+            entityIds.forEach(id => {
+              if (alreadyColored.has(id)) return;
+              const entity = scene.objects?.[id];
+              if (entity) {
+                entity.xrayed = false;
+                entity.visible = true;
+                entity.colorize = rgb;
+                entity.opacity = 0.85;
+                alreadyColored.add(id);
+                cacheMatchCount++;
+              }
+            });
+          }
+        });
+        if (cacheMatchCount > 0) {
+          matchCount += cacheMatchCount;
+          console.log('[NativeViewer] INSIGHTS_COLOR via spaceEntityIdCache:', cacheMatchCount, 'entities');
+        }
+      }
+
       // Build a lookup of normalized fmGuid → rgb for fast matching
       const fmGuidLookup = new Map<string, [number, number, number]>();
       Object.entries(colorMap).forEach(([key, rgb]) => {
