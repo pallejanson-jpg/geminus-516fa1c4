@@ -123,7 +123,15 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
     const newVisible = !allVisible;
     setAllVisible(newVisible);
     
-    setCategories(prev => prev.map(c => ({ ...c, visible: newVisible })));
+    setCategories(prev => {
+      const updated = prev.map(c => ({ ...c, visible: newVisible }));
+      // Dispatch TOGGLE_ANNOTATIONS for NativeXeokitViewer
+      const visibleCats = newVisible ? updated.map(c => c.category) : [];
+      window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', {
+        detail: { show: newVisible, visibleCategories: visibleCats },
+      }));
+      return updated;
+    });
     
     // Toggle all annotations in the LOCAL annotations manager
     try {
