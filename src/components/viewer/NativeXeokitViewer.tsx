@@ -1763,6 +1763,13 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           marker.textContent = label;
           marker.title = label;
           marker.dataset.category = ann.asset_type || 'Other';
+          // Make annotation clickable → select entity and open properties
+          marker.addEventListener('click', (evt) => {
+            evt.stopPropagation();
+            window.dispatchEvent(new CustomEvent('VIEWER_SELECT_ENTITY', {
+              detail: { entityId: ann.fm_guid, fmGuid: ann.fm_guid, entityName: ann.common_name || ann.name || null },
+            }));
+          });
           // Apply category visibility filter
           const markerCat = ann.asset_type || 'Other';
           if (catSet && !catSet.has(markerCat)) {
