@@ -1538,7 +1538,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', scene.objectIds.length, 'delta: show', toShow.length, 'hide', toHide.length);
 
     // Re-apply active theme after filter to prevent "native colors flash"
-    if (activeThemeIdRef.current) {
+    // But skip if color filter is active — it takes precedence
+    if (activeThemeIdRef.current && !(window as any).__colorFilterActive) {
       window.dispatchEvent(new CustomEvent(VIEWER_THEME_REQUESTED_EVENT, {
         detail: { themeId: activeThemeIdRef.current }
       }));
