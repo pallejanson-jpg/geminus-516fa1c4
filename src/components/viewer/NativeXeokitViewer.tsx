@@ -1333,15 +1333,22 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           }
         });
       } else {
-        // Match by fmGuid via originalSystemId or mo.id
+      // Match by fmGuid via originalSystemId or mo.id
         const isRoomMode = mode === 'room_spaces' || mode === 'room_type' || mode === 'room_types';
         const isFloorMode = mode.startsWith('energy_floor');
         const nameColorMap = detail.nameColorMap || {};
-        // For floor-specific modes (energy_floor), use STRICT guid-only matching (no name fallback)
-        // to prevent coloring rooms on wrong floors that happen to share names
-        const useStrictGuidMode = isFloorMode;
+        // For floor-specific modes (energy_floor) and single-room selections, use STRICT guid-only
+        // matching (no name fallback) to prevent coloring rooms on wrong floors or multiple rooms
+        // that happen to share the same commonName
+        const useStrictGuidMode = isFloorMode || detail.strictGuidMode;
 
         Object.values(metaObjects).forEach((mo: any) => {
+          // In room mode, only colorize IfcSpace entities (not walls, slabs, etc.)
+          if (isRoomMode) {
+            const ifcType = (mo.type || '').toLowerCase();
+            if (ifcType !== 'ifcspace' && ifcType !== 'ifc_space' && ifcType !== 'space') return;
+          }
+
           const sysId = normalizeGuid(mo.originalSystemId || '');
           const moId = normalizeGuid(mo.id || '');
           const moName = (mo.name || '').toLowerCase().trim();
