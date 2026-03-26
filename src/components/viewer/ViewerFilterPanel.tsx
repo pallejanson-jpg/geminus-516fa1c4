@@ -1746,32 +1746,42 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   const handleSpaceClick = useCallback((fmGuid: string) => {
     onNodeSelect?.(fmGuid);
-    const viewer = getXeokitViewer();
-    if (!viewer?.scene) return;
-    const ids = entityMapRef.current.get(fmGuid) || [];
-    if (ids.length > 0) {
-      // Make visible (no selection — no green highlight)
-      ids.forEach((id: string) => {
-        const entity = viewer.scene.objects?.[id];
-        if (entity) {
-          entity.visible = true;
-          entity.pickable = true;
-        }
-      });
-      // Name click = fly camera INSIDE the space (use center point)
-      const firstEntity = viewer.scene.objects?.[ids[0]];
-      if (firstEntity?.aabb) {
-        const aabb = firstEntity.aabb;
-        const cx = (aabb[0] + aabb[3]) / 2, cy = (aabb[1] + aabb[4]) / 2, cz = (aabb[2] + aabb[5]) / 2;
-        const height = aabb[4] - aabb[1];
-        viewer.cameraFlight?.flyTo({
-          eye: [cx, cy + height * 0.3, cz],
-          look: [cx + 2, cy + height * 0.3, cz],
-          up: [0, 1, 0],
-          duration: 0.5
+    // Also select the space so cutaway activates
+    setCheckedSpaces(prev => {
+      const n = new Set(prev);
+      n.add(fmGuid);
+      return n;
+    });
+    // Delay fly-inside to let applyFilterVisibility run first
+    setTimeout(() => {
+      const viewer = getXeokitViewer();
+      if (!viewer?.scene) return;
+      const ids = entityMapRef.current.get(fmGuid) || [];
+      if (ids.length > 0) {
+        // Make visible (no selection — no green highlight)
+        ids.forEach((id: string) => {
+          const entity = viewer.scene.objects?.[id];
+          if (entity) {
+            entity.visible = true;
+            entity.pickable = true;
+            entity.xrayed = false;
+          }
         });
+        // Name click = fly camera INSIDE the space (use center point)
+        const firstEntity = viewer.scene.objects?.[ids[0]];
+        if (firstEntity?.aabb) {
+          const aabb = firstEntity.aabb;
+          const cx = (aabb[0] + aabb[3]) / 2, cy = (aabb[1] + aabb[4]) / 2, cz = (aabb[2] + aabb[5]) / 2;
+          const height = aabb[4] - aabb[1];
+          viewer.cameraFlight?.flyTo({
+            eye: [cx, cy + height * 0.3, cz],
+            look: [cx + 2, cy + height * 0.3, cz],
+            up: [0, 1, 0],
+            duration: 0.5
+          });
+        }
       }
-    }
+    }, 600); // After 500ms debounce of applyFilterVisibility
   }, [getXeokitViewer, onNodeSelect]);
 
   const handleResetSection = useCallback((section: 'sources' | 'levels' | 'spaces' | 'categories' | 'annotations' | 'modifications') => {
