@@ -170,12 +170,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     );
     
     // Exclude unnamed model-placeholder storeys (no common_name, parentCommonName is a model name)
-    const MODEL_NAME_RE = /^(A|B|E|V|K|R|S|VS|EL|MEP|BRAND|FIRE|SPRINKLER)[\s\-_.]/i;
-    const MODEL_EXACT_RE = /^(A-MODELL|B-MODELL|E-MODELL|V-MODELL|ARK|ARKITEKT|A_MODELL|B_MODELL|E_MODELL|V_MODELL)$/i;
-    const isModelName = (name: string): boolean => {
-      const trimmed = name.trim();
-      return MODEL_NAME_RE.test(trimmed) || MODEL_EXACT_RE.test(trimmed);
-    };
+    // isModelName imported from building-utils.ts
 
     // Keep storeys that have a common_name, or whose parentCommonName is NOT a model name
     const namedStoreys = allStoreys.filter(s => {
