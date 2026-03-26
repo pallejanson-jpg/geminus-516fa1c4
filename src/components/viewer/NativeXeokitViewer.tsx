@@ -1638,22 +1638,18 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       const visibleCategories: string[] | undefined = detail?.visibleCategories;
       const viewer = viewerRef.current;
 
-      // Toggle existing markers
+      // Hide existing markers when toggling off
+      if (!show && markerContainer) {
+        markerContainer.style.display = 'none';
+        return;
+      }
+
+      // When showing: always destroy and recreate all markers so all categories are present
       if (markerContainer) {
-        markerContainer.style.display = show ? 'block' : 'none';
-        if (!show) return;
-        // If categories filter changed, update individual marker visibility
-        if (visibleCategories && markerContainer.children.length > 0) {
-          const catSet = new Set(visibleCategories);
-          Array.from(markerContainer.children).forEach((el: any) => {
-            const cat = el.dataset?.category;
-            if (cat) {
-              el.style.display = catSet.size === 0 || catSet.has(cat) ? 'block' : 'none';
-            }
-          });
-          return;
-        }
-        if (markerContainer.children.length > 0) return; // already created
+        cameraUnsubs.forEach(fn => fn());
+        cameraUnsubs = [];
+        markerContainer.remove();
+        markerContainer = null;
       }
 
       if (!show) return;

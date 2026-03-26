@@ -895,7 +895,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         .from('assets')
         .select('asset_type, symbol_id')
         .eq('building_fm_guid', buildingFmGuid)
-        .or('created_in_model.eq.false,asset_type.eq.IfcAlarm');
+        .or('annotation_placed.eq.true,created_in_model.eq.false');
 
       const { count: issueCount } = await supabase
         .from('bcf_issues')
