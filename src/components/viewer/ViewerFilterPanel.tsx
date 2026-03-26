@@ -968,16 +968,20 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const hasAnyFilter = checkedSources.size > 0 || checkedLevels.size > 0 ||
       checkedSpaces.size > 0 || checkedCategories.size > 0;
 
-    // Step 0: Clean slate — reset xray (but DON'T reset colorize when theme is active)
+    // Step 0: Clean slate — reset xray (but DON'T reset colorize when theme is active or color filter is active)
     let prevXrayed: string[] = [];
     try { prevXrayed = scene.xrayedObjectIds || []; } catch (_e) { /* scene teardown */ }
-    if (prevXrayed.length > 0) scene.setObjectsXRayed(prevXrayed, false);
+    if (prevXrayed.length > 0) {
+      scene.setObjectsXRayed(prevXrayed, false);
+      scene.setObjectsPickable(prevXrayed, true);
+    }
     
     // Only reset colorize when we actually have filter-applied colors (not theme colors)
-    // When a theme is active OR visualization is forcing spaces, skip the colorize reset
+    // When a theme is active, visualization is forcing spaces, or color filter is active, skip the colorize reset
     const themeActive = !!activeThemeIdRef.current;
     const spacesForced = !!(window as any).__spacesForceVisible;
-    if (!themeActive && !spacesForced && (hasAnyFilter || autoColorEnabled || autoColorSpaces || autoColorCategories)) {
+    const colorFilterActive = !!(window as any).__colorFilterActive;
+    if (!themeActive && !spacesForced && !colorFilterActive && (hasAnyFilter || autoColorEnabled || autoColorSpaces || autoColorCategories)) {
       let prevColorizedIds: string[] = [];
       try { prevColorizedIds = scene.colorizedObjectIds || []; } catch (_e) { /* scene teardown */ }
       if (prevColorizedIds.length > 0) {
@@ -1317,8 +1321,14 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       if (toHide.length > 0) scene.setObjectsVisible(toHide, true);
       if (toShow.length > 0) scene.setObjectsVisible(toShow, true);
       const nonSolidIds = allObjIds.filter((id: string) => !solidIds.has(id));
-      if (nonSolidIds.length > 0) scene.setObjectsXRayed(nonSolidIds, true);
-      if (solidIds.size > 0) scene.setObjectsXRayed([...solidIds], false);
+      if (nonSolidIds.length > 0) {
+        scene.setObjectsXRayed(nonSolidIds, true);
+        scene.setObjectsPickable(nonSolidIds, false);
+      }
+      if (solidIds.size > 0) {
+        scene.setObjectsXRayed([...solidIds], false);
+        scene.setObjectsPickable([...solidIds], true);
+      }
     } else {
       if (toHide.length > 0) scene.setObjectsVisible(toHide, false);
       if (toShow.length > 0) scene.setObjectsVisible(toShow, true);
@@ -1459,18 +1469,21 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
         // Show level objects and x-ray them
         const levelIds = [...levelEntityIds];
-        scene.setObjectsVisible(levelIds, true);
-        scene.setObjectsXRayed(levelIds, true);
-      } else {
-        // Fallback: x-ray everything (no level info)
-        scene.setObjectsVisible(allIds, true);
-        scene.setObjectsXRayed(allIds, true);
-      }
+      scene.setObjectsVisible(levelIds, true);
+      scene.setObjectsXRayed(levelIds, true);
+      scene.setObjectsPickable(levelIds, false);
+    } else {
+      // Fallback: x-ray everything (no level info)
+      scene.setObjectsVisible(allIds, true);
+      scene.setObjectsXRayed(allIds, true);
+      scene.setObjectsPickable(allIds, false);
+    }
 
       // Un-xray room + its contents
       const solidRoomIds = [...spaceOnlyEntityIds, ...roomContentIds].filter(id => !areaSet.has(id));
       if (solidRoomIds.length > 0) {
         scene.setObjectsXRayed(solidRoomIds, false);
+        scene.setObjectsPickable(solidRoomIds, true);
       }
 
       // Show room spaces with slight transparency
@@ -1528,7 +1541,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', scene.objectIds.length, 'delta: show', toShow.length, 'hide', toHide.length);
 
     // Re-apply active theme after filter to prevent "native colors flash"
-    if (activeThemeIdRef.current) {
+    // But skip if color filter is active — it takes precedence
+    if (activeThemeIdRef.current && !(window as any).__colorFilterActive) {
       window.dispatchEvent(new CustomEvent(VIEWER_THEME_REQUESTED_EVENT, {
         detail: { themeId: activeThemeIdRef.current }
       }));
@@ -1636,9 +1650,17 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const anyFiltersActive = checkedSources.size > 0 || checkedLevels.size > 0 ||
       checkedSpaces.size > 0 || checkedCategories.size > 0;
 
-    // Always clean up visual enhancements (xray, colorize)
-    try { const xIds = scene.xrayedObjectIds; if (xIds?.length > 0) scene.setObjectsXRayed(xIds, false); } catch (_e) { /* ignore */ }
-    try { const cIds = scene.colorizedObjectIds; if (cIds?.length > 0) scene.setObjectsColorized(cIds, false); } catch (_e) { /* ignore */ }
+    // Always clean up visual enhancements (xray, colorize) — but preserve color filter
+    try {
+      const xIds = scene.xrayedObjectIds;
+      if (xIds?.length > 0) {
+        scene.setObjectsXRayed(xIds, false);
+        scene.setObjectsPickable(xIds, true);
+      }
+    } catch (_e) { /* ignore */ }
+    if (!(window as any).__colorFilterActive) {
+      try { const cIds = scene.colorizedObjectIds; if (cIds?.length > 0) scene.setObjectsColorized(cIds, false); } catch (_e) { /* ignore */ }
+    }
 
     if (anyFiltersActive) {
       // Filters are active — preserve visibility state, only re-apply theme/colors on visible objects

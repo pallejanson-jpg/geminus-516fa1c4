@@ -202,11 +202,17 @@ const ObjectColorFilterPanel: React.FC<ObjectColorFilterPanelProps> = ({ viewerR
       for (const rule of enabledRules) {
         const results = rule.conditions.map(c => evalCondition(c, metaObj, attrs));
         const match = rule.logic === 'AND' ? results.every(Boolean) : results.some(Boolean);
-        if (match) {
+          if (match) {
           const entity = scene.objects?.[metaObj.id];
           if (entity) {
             entity.colorize = rgbToFloat(hexToRgb(rule.color));
             entity.opacity = 0.85;
+            // If it's an IfcSpace, make it visible so the color actually shows
+            const objType = (metaObj.type || '').toLowerCase();
+            if (objType === 'ifcspace') {
+              entity.visible = true;
+              entity.pickable = true;
+            }
             count++;
           }
           break; // first matching rule wins
