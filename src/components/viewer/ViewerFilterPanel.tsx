@@ -2129,7 +2129,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 key={space.fmGuid}
                 label={space.designation ? `${space.name} (${space.designation})` : space.name}
                 checked={checkedSpaces.has(space.fmGuid)}
-                onCheckedChange={(checked) => handleSpaceToggle(space.fmGuid, checked)}
+                onCheckedChange={(checked, event) => handleSpaceToggle(space.fmGuid, checked, event)}
                 onClick={() => handleSpaceClick(space.fmGuid)}
                 color={autoColorSpaces ? (spaceColors.get(space.fmGuid) || LEVEL_PALETTE[spaces.indexOf(space) % LEVEL_PALETTE.length]) : undefined}
                 onColorChange={autoColorSpaces ? (c) => setSpaceColors(prev => new Map(prev).set(space.fmGuid, c)) : undefined}
