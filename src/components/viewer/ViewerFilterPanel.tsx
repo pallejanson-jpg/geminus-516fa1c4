@@ -1469,13 +1469,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
         // Show level objects and x-ray them
         const levelIds = [...levelEntityIds];
-        scene.setObjectsVisible(levelIds, true);
-        scene.setObjectsXRayed(levelIds, true);
-      } else {
-        // Fallback: x-ray everything (no level info)
-        scene.setObjectsVisible(allIds, true);
-        scene.setObjectsXRayed(allIds, true);
-      }
+      scene.setObjectsVisible(levelIds, true);
+      scene.setObjectsXRayed(levelIds, true);
+      scene.setObjectsPickable(levelIds, false);
+    } else {
+      // Fallback: x-ray everything (no level info)
+      scene.setObjectsVisible(allIds, true);
+      scene.setObjectsXRayed(allIds, true);
+      scene.setObjectsPickable(allIds, false);
+    }
 
       // Un-xray room + its contents
       const solidRoomIds = [...spaceOnlyEntityIds, ...roomContentIds].filter(id => !areaSet.has(id));
