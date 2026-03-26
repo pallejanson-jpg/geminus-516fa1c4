@@ -95,25 +95,37 @@ const UnifiedViewerContent: React.FC<{
   // Keep viewModeRef always in sync
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
 
-  // When entering split2d3d mode, ensure all floors are visible in 3D
+  // When entering split2d3d mode, auto-select first floor and set first-person mode
   useEffect(() => {
     if (viewMode !== 'split2d3d') return;
-    // Short delay to let the viewer mount
     const timer = setTimeout(() => {
+      // Try to find the current/first floor from building data
+      const floors = buildingData?.floors || [];
+      const firstFloor = floors[0];
+      const floorFmGuid = firstFloor?.fmGuid || firstFloor?.databaseLevelFmGuids?.[0] || null;
+
       window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
         detail: {
           floorId: null,
-          floorName: null,
+          floorName: firstFloor?.name || null,
           bounds: null,
           visibleMetaFloorIds: [],
-          visibleFloorFmGuids: [],
-          isAllFloorsVisible: true,
-          isSoloFloor: false,
+          visibleFloorFmGuids: floorFmGuid ? [floorFmGuid] : [],
+          isAllFloorsVisible: !floorFmGuid,
+          isSoloFloor: !!floorFmGuid,
         },
       }));
+
+      // Set 3D camera to first-person mode for split view
+      const viewer = (window as any).__nativeXeokitViewer;
+      if (viewer?.cameraControl) {
+        viewer.cameraControl.navMode = 'firstPerson';
+        viewer.cameraControl.followPointer = true;
+        viewer.cameraControl.constrainVertical = true;
+      }
     }, 300);
     return () => clearTimeout(timer);
-  }, [viewMode]);
+  }, [viewMode, buildingData]);
 
   // ─── Split 2D/3D: listen for SPLIT_PLAN_NAVIGATE to fly 3D camera ──
   useEffect(() => {
