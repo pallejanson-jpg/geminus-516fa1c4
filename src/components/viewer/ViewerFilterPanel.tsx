@@ -1571,7 +1571,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       } as FloorSelectionEventDetail,
     }));
 
-    console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', scene.objectIds.length, 'delta: show', toShow.length, 'hide', toHide.length);
+    console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', safeObjectIds(scene).length, 'delta: show', toShow.length, 'hide', toHide.length);
 
     // Re-apply active theme after filter to prevent "native colors flash"
     // But skip if color filter is active — it takes precedence
