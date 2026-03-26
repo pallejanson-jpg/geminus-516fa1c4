@@ -19,6 +19,11 @@ import { getDescendantIds, hideSpaceAndAreaObjects, calculateFloorBounds } from 
 import { applyArchitectColors, recolorArchitectObjects } from '@/lib/architect-colors';
 import { VIEWER_THEME_CHANGED_EVENT, VIEWER_THEME_REQUESTED_EVENT } from '@/hooks/useViewerTheme';
 
+/** Safe accessor for scene.objectIds – the getter throws if internal maps are null */
+function safeObjectIds(scene: any): string[] {
+  try { return scene.objectIds ?? []; } catch { return []; }
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface BimSource {
