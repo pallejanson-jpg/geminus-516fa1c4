@@ -18,6 +18,7 @@ import { applyArchitectColors } from '@/lib/architect-colors';
 import { isRealTiling, getTilesToLoad } from '@/hooks/useFloorPriorityLoading';
 import { INSIGHTS_COLOR_UPDATE_EVENT, INSIGHTS_COLOR_RESET_EVENT, ALARM_ANNOTATIONS_SHOW_EVENT, LOAD_SAVED_VIEW_EVENT, type InsightsColorUpdateDetail, type AlarmAnnotationsShowDetail } from '@/lib/viewer-events';
 import { FORCE_SHOW_SPACES_EVENT } from '@/components/viewer/RoomVisualizationPanel';
+import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import type { GeometryManifest } from '@/lib/types';
 
 const XEOKIT_CDN = '/lib/xeokit/xeokit-sdk.es.js';
