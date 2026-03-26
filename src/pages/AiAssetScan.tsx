@@ -213,7 +213,7 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid: prop
           <div className="min-w-0">
             <h1 className="text-base md:text-xl font-semibold truncate text-foreground">AI-Assisted Inventory</h1>
             {!isMobile && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-foreground/70">
                 Automatic detection of assets in 360° images
               </p>
             )}
