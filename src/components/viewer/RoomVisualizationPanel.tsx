@@ -50,6 +50,7 @@ export const FORCE_SHOW_SPACES_EVENT = 'FORCE_SHOW_SPACES';
 // Import floor selection event from the canonical source
 import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { VISUALIZATION_QUICK_SELECT_EVENT } from './VisualizationQuickBar';
+import { INSIGHTS_COLOR_UPDATE_EVENT, INSIGHTS_COLOR_RESET_EVENT } from '@/lib/viewer-events';
 
 // LocalStorage key for persisting visualization settings
 const STORAGE_KEY = 'roomVisualizationSettings';
