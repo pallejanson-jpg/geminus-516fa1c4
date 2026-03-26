@@ -174,7 +174,7 @@ const FloatingRoomCard: React.FC<FloatingRoomCardProps> = ({
     <div
       ref={cardRef}
       className={cn(
-        "fixed z-50 w-64 bg-background/95 backdrop-blur-sm border rounded-lg shadow-lg",
+        "fixed z-50 w-64 bg-background/95 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg",
         "pointer-events-auto",
         isDragging && "cursor-grabbing"
       )}

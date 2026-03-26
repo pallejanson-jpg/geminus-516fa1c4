@@ -270,7 +270,7 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
       ref={containerRef}
       className={cn(
         "absolute top-14 left-3 z-20",
-        "bg-card/95 backdrop-blur-md border border-border/50 rounded-lg shadow-xl",
+        "bg-card/95 backdrop-blur-md border border-border/30 rounded-lg shadow-xl",
         "overflow-hidden transition-all duration-200"
       )}
       style={{ width: size.width, height: size.height }}

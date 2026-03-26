@@ -701,7 +701,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
       ref={ref}
       className={cn(
         "fixed z-50",
-        "bg-card/90 backdrop-blur-md border rounded-lg shadow-xl",
+        "bg-card/90 backdrop-blur-md border border-border/30 rounded-lg shadow-xl",
         "flex flex-col",
         isDragging && "cursor-grabbing select-none"
       )}
