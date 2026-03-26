@@ -581,7 +581,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
   // Get confidence badge color
   const getConfidenceBadge = (confidence: number) => {
     if (confidence >= 0.85) {
-      return <Badge variant="default" className="bg-green-600">{Math.round(confidence * 100)}%</Badge>;
+      return <Badge variant="default" className="bg-primary text-primary-foreground">{Math.round(confidence * 100)}%</Badge>;
     } else if (confidence >= 0.5) {
       return <Badge variant="secondary">{Math.round(confidence * 100)}%</Badge>;
     }
@@ -624,7 +624,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                 </Select>
               )}
 
-              <span className="text-sm text-muted-foreground">
+              <span className="text-sm text-foreground/70">
                 {totalCount} total, {pendingCount} pending
               </span>
             </div>
@@ -707,7 +707,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
 
               <CardContent className="p-3 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-sm">
+                  <span className="font-medium text-sm text-foreground">
                     {detection.detection_templates?.name || detection.object_type}
                   </span>
                   {getConfidenceBadge(detection.confidence)}
@@ -735,12 +735,12 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                 )}
 
                 {detection.ai_description && (
-                  <p className="text-xs text-muted-foreground line-clamp-2">
+                  <p className="text-xs text-foreground/70 line-clamp-2">
                     {detection.ai_description}
                   </p>
                 )}
 
-                <div className="text-xs text-muted-foreground">
+                <div className="text-xs text-foreground/60">
                   Image #{detection.ivion_image_id || '-'}
                 </div>
 
