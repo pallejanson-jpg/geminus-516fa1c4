@@ -502,14 +502,14 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
         entity.visible = false;
       }
 
-      // Spaces: very light gray fill for room outlines
+      // Spaces: bright fill for clear Dalux-style room outlines
       for (const id of spaceIds) {
         const entity = scene.objects?.[id];
         if (!entity) continue;
         saveStyle(id);
         entity.visible = true;
-        entity.colorize = [1, 1, 1];
-        entity.opacity = 0.6;
+        entity.colorize = [0.95, 0.95, 0.95];
+        entity.opacity = 0.9;
         entity.edges = true;
       }
 
@@ -528,14 +528,14 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
         saveStyle(id);
         entity.visible = true;
         entity.colorize = [0.65, 0.65, 0.65];
-        entity.opacity = 0.5;
+        entity.opacity = 0.7;
         entity.edges = false;
       }
     }
 
       // Bold wall edges for Dalux-style crisp plan
     if (scene.edgeMaterial) {
-      scene.edgeMaterial.edgeWidth = monochrome ? 8 : 6;
+      scene.edgeMaterial.edgeWidth = monochrome ? 12 : 6;
       scene.edgeMaterial.edgeColor = [0, 0, 0];
     }
     for (const id of wallIds) {
@@ -543,7 +543,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       if (!entity) continue;
       saveStyle(id);
       entity.visible = true;
-      entity.colorize = [0.1, 0.1, 0.1];
+      entity.colorize = [0.0, 0.0, 0.0];
       entity.opacity = 1;
       entity.edges = true;
     }
