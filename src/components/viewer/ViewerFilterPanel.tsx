@@ -427,10 +427,11 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const allSpaces = buildingData
       .filter((a: any) => {
         if (a.category !== 'Space' && a.category !== 'IfcSpace') return false;
-        // Only include spaces belonging to A-model levels
-        const levelGuid = normalizeGuid(a.levelFmGuid || a.level_fm_guid || '');
+        // Only include spaces belonging to A-model levels (using Asset+ FM GUIDs)
+        const levelGuid = a.levelFmGuid || a.level_fm_guid || '';
+        const levelGuidNorm = normalizeGuid(levelGuid);
         if (aModelLevelGuids.size > 0 && levelGuid) {
-          return aModelLevelGuids.has(levelGuid);
+          return aModelLevelGuids.has(levelGuid) || aModelLevelGuidsNorm.has(levelGuidNorm);
         }
         return true;
       });
