@@ -363,21 +363,19 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
   }, [storeyAssets, sharedFloors, storeyLookup, buildingData]);
 
-  // Sources: only A-model sources (architectural models)
+  // Sources: ALL BIM models (not just A-models)
   const sources: BimSource[] = useMemo(() => {
-    // Count storeys per source — ONLY from A-model levels (filtered list)
+    // Count storeys per source — from all levels
     const storeyCountBySource = new Map<string, number>();
     levels.forEach(level => {
       const norm = normalizeGuid(level.sourceGuid);
       storeyCountBySource.set(norm, (storeyCountBySource.get(norm) || 0) + 1);
     });
 
-    // Collect unique A-model source names from storeyAssets
+    // Collect unique source names from storeyAssets — ALL models, not just A-models
     const sourceMap = new Map<string, { guid: string; name: string; storeyCount: number }>();
     storeyAssets.forEach(storey => {
       if (!storey.sourceGuid || !storey.sourceName || isGuid(storey.sourceName)) return;
-      // Only include A-model sources
-      if (!isAModelName(storey.sourceName)) return;
       const normGuid = normalizeGuid(storey.sourceGuid);
       if (!sourceMap.has(normGuid)) {
         sourceMap.set(normGuid, {
@@ -1738,19 +1736,29 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   // ── Handlers ────────────────────────────────────────────────────────────
 
-  const handleSourceToggle = useCallback((guid: string, checked: boolean) => {
-    setCheckedSources(prev => { const n = new Set(prev); checked ? n.add(guid) : n.delete(guid); return n; });
+  const handleSourceToggle = useCallback((guid: string, checked: boolean, event?: React.MouseEvent) => {
+    setCheckedSources(prev => {
+      if (!checked) { const n = new Set(prev); n.delete(guid); return n; }
+      if (event?.ctrlKey || event?.metaKey) { const n = new Set(prev); n.add(guid); return n; }
+      return new Set([guid]);
+    });
   }, []);
 
-  const handleLevelToggle = useCallback((fmGuid: string, checked: boolean) => {
-    setCheckedLevels(prev => { const n = new Set(prev); checked ? n.add(fmGuid) : n.delete(fmGuid); return n; });
+  const handleLevelToggle = useCallback((fmGuid: string, checked: boolean, event?: React.MouseEvent) => {
+    setCheckedLevels(prev => {
+      if (!checked) { const n = new Set(prev); n.delete(fmGuid); return n; }
+      if (event?.ctrlKey || event?.metaKey) { const n = new Set(prev); n.add(fmGuid); return n; }
+      return new Set([fmGuid]);
+    });
   }, []);
 
-  const handleSpaceToggle = useCallback((fmGuid: string, checked: boolean) => {
-    setCheckedSpaces(prev => { const n = new Set(prev); checked ? n.add(fmGuid) : n.delete(fmGuid); return n; });
-    if (!checked) return; // Only fly on check, not uncheck
-    // Checkbox = zoom to space with camera OUTSIDE (expanded AABB)
-    // Delay flyTo to let applyFilterVisibility run first and set up the cutaway
+  const handleSpaceToggle = useCallback((fmGuid: string, checked: boolean, event?: React.MouseEvent) => {
+    setCheckedSpaces(prev => {
+      if (!checked) { const n = new Set(prev); n.delete(fmGuid); return n; }
+      if (event?.ctrlKey || event?.metaKey) { const n = new Set(prev); n.add(fmGuid); return n; }
+      return new Set([fmGuid]);
+    });
+    if (!checked) return;
     setTimeout(() => {
       const viewer = getXeokitViewer();
       if (!viewer?.scene) return;
@@ -1762,7 +1770,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         });
         const firstEntity = viewer.scene.objects?.[ids[0]];
         if (firstEntity?.aabb) {
-          // Expand AABB by 2x to position camera outside the space
           const aabb = [...firstEntity.aabb];
           const cx = (aabb[0] + aabb[3]) / 2, cy = (aabb[1] + aabb[4]) / 2, cz = (aabb[2] + aabb[5]) / 2;
           const dx = (aabb[3] - aabb[0]) * 0.5, dy = (aabb[4] - aabb[1]) * 0.5, dz = (aabb[5] - aabb[2]) * 0.5;
@@ -1770,11 +1777,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           viewer.cameraFlight?.flyTo({ aabb: expanded, duration: 0.5 });
         }
       }
-    }, 600); // After 500ms debounce of applyFilterVisibility
+    }, 600);
   }, [getXeokitViewer]);
 
-  const handleCategoryToggle = useCallback((name: string, checked: boolean) => {
-    setCheckedCategories(prev => { const n = new Set(prev); checked ? n.add(name) : n.delete(name); return n; });
+  const handleCategoryToggle = useCallback((name: string, checked: boolean, event?: React.MouseEvent) => {
+    setCheckedCategories(prev => {
+      if (!checked) { const n = new Set(prev); n.delete(name); return n; }
+      if (event?.ctrlKey || event?.metaKey) { const n = new Set(prev); n.add(name); return n; }
+      return new Set([name]);
+    });
   }, []);
 
   const handleSpaceClick = useCallback((fmGuid: string) => {
@@ -1993,10 +2004,16 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
               (window as any).__colorFilterActive = false;
               const vizSet = (window as any).__vizColorizedEntityIds;
               if (vizSet instanceof Set) vizSet.clear();
-              // Dispatch insights reset + restore architect colors
+              // Dispatch insights reset + restore theme or architect colors
               window.dispatchEvent(new CustomEvent('INSIGHTS_COLOR_RESET'));
-              const viewer = getXeokitViewer();
-              if (viewer) applyArchitectColors(viewer);
+              if (activeThemeIdRef.current) {
+                window.dispatchEvent(new CustomEvent(VIEWER_THEME_REQUESTED_EVENT, {
+                  detail: { themeId: activeThemeIdRef.current }
+                }));
+              } else {
+                const viewer = getXeokitViewer();
+                if (viewer) applyArchitectColors(viewer);
+              }
             }}
             title="Reset all colors to default"
           >
@@ -2045,7 +2062,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 label={source.name}
                 badge={`${source.storeyCount}`}
                 checked={checkedSources.has(source.guid)}
-                onCheckedChange={(checked) => handleSourceToggle(source.guid, checked)}
+                onCheckedChange={(checked, event) => handleSourceToggle(source.guid, checked, event)}
               />
             ))}
             {sources.length === 0 && (
@@ -2082,7 +2099,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 label={level.name}
                 badge={level.spaceCount > 0 ? `${level.spaceCount}` : undefined}
                 checked={checkedLevels.has(level.fmGuid)}
-                onCheckedChange={(checked) => handleLevelToggle(level.fmGuid, checked)}
+                onCheckedChange={(checked, event) => handleLevelToggle(level.fmGuid, checked, event)}
                 dimmed={checkedSources.size > 0 && !checkedSources.has(level.sourceGuid)}
                 color={autoColorEnabled ? levelColors.get(level.fmGuid) : undefined}
                 onColorChange={(color) => handleLevelColorChange(level.fmGuid, color)}
@@ -2118,7 +2135,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 key={space.fmGuid}
                 label={space.designation ? `${space.name} (${space.designation})` : space.name}
                 checked={checkedSpaces.has(space.fmGuid)}
-                onCheckedChange={(checked) => handleSpaceToggle(space.fmGuid, checked)}
+                onCheckedChange={(checked, event) => handleSpaceToggle(space.fmGuid, checked, event)}
                 onClick={() => handleSpaceClick(space.fmGuid)}
                 color={autoColorSpaces ? (spaceColors.get(space.fmGuid) || LEVEL_PALETTE[spaces.indexOf(space) % LEVEL_PALETTE.length]) : undefined}
                 onColorChange={autoColorSpaces ? (c) => setSpaceColors(prev => new Map(prev).set(space.fmGuid, c)) : undefined}
@@ -2162,7 +2179,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 label={cat.name}
                 badge={`${cat.count}`}
                 checked={checkedCategories.has(cat.name)}
-                onCheckedChange={(checked) => handleCategoryToggle(cat.name, checked)}
+                onCheckedChange={(checked, event) => handleCategoryToggle(cat.name, checked, event)}
                 color={autoColorCategories ? (categoryColors.get(cat.name) || LEVEL_PALETTE[categories.indexOf(cat) % LEVEL_PALETTE.length]) : undefined}
                 onColorChange={autoColorCategories ? (c) => setCategoryColors(prev => new Map(prev).set(cat.name, c)) : undefined}
               />
@@ -2305,7 +2322,7 @@ interface FilterRowProps {
   label: string;
   badge?: string;
   checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
+  onCheckedChange: (checked: boolean, event?: React.MouseEvent) => void;
   onClick?: () => void;
   dimmed?: boolean;
   color?: string;
@@ -2314,7 +2331,9 @@ interface FilterRowProps {
 
 const FilterRow: React.FC<FilterRowProps> = ({
   label, badge, checked, onCheckedChange, onClick, dimmed, color, onColorChange,
-}) => (
+}) => {
+  const lastClickEventRef = React.useRef<React.MouseEvent | null>(null);
+  return (
   <div
     className={cn(
       "flex items-center gap-2 px-3 py-1.5 hover:bg-accent/30 transition-colors cursor-pointer group",
@@ -2325,8 +2344,8 @@ const FilterRow: React.FC<FilterRowProps> = ({
     <Checkbox
       checked={checked}
       className="h-4 w-4 shrink-0"
-      onClick={(e) => e.stopPropagation()}
-      onCheckedChange={(v) => onCheckedChange(!!v)}
+      onClick={(e) => { e.stopPropagation(); lastClickEventRef.current = e as unknown as React.MouseEvent; }}
+      onCheckedChange={(v) => onCheckedChange(!!v, lastClickEventRef.current ?? undefined)}
     />
     <span className="text-sm truncate flex-1 text-foreground">{label}</span>
     {badge && <span className="text-xs text-muted-foreground shrink-0">{badge}</span>}
@@ -2365,5 +2384,7 @@ const FilterRow: React.FC<FilterRowProps> = ({
     )}
   </div>
 );
+};
+
 
 export default ViewerFilterPanel;
