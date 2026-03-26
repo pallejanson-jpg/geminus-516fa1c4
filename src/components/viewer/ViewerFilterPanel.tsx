@@ -13,6 +13,7 @@ import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hook
 import { ANNOTATION_FILTER_EVENT, MODEL_LOAD_REQUESTED_EVENT } from '@/lib/viewer-events';
 import { useFloorData, isArchitecturalModel } from '@/hooks/useFloorData';
 import { useModelData } from '@/hooks/useModelData';
+import { isAModelName, getAModelStoreyGuids } from '@/lib/building-utils';
 
 import { getDescendantIds, hideSpaceAndAreaObjects } from '@/hooks/useFloorVisibility';
 import { applyArchitectColors, recolorArchitectObjects } from '@/lib/architect-colors';
@@ -237,6 +238,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   // Levels: driven primarily by sharedFloors (useFloorData) which correctly detects A-model
   // floors from the xeokit scene. Enriched with storeyAssets for space counts and sourceGuid.
   const levels: LevelItem[] = useMemo(() => {
+    // Build A-model storey GUID set for filtering space counts
+    const aModelStoreyGuidSet = getAModelStoreyGuids(buildingData, buildingFmGuid || '');
+
     // Count DB-driven A-model storeys to compare against scene-derived floors
     const aModelStoreyCount = storeyAssets.filter((s) => {
       if (!s.sourceName || isGuid(s.sourceName)) return false;
@@ -271,12 +275,16 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           }
         }
 
-        // Count spaces belonging to this level
+        // Count spaces belonging to this level — only A-model spaces
         const spaceCount = buildingData.filter((s: any) => {
           const cat = s.category;
           if (cat !== 'Space' && cat !== 'IfcSpace') return false;
-          const levelGuid = normalizeGuid(s.levelFmGuid || s.level_fm_guid || '');
-          return allGuids.has(levelGuid);
+          const levelGuid = s.levelFmGuid || s.level_fm_guid || '';
+          const levelGuidNorm = normalizeGuid(levelGuid);
+          if (!allGuids.has(levelGuidNorm)) return false;
+          // Only count if the space's level is in the A-model storey set
+          if (aModelStoreyGuidSet.size > 0 && !aModelStoreyGuidSet.has(levelGuid)) return false;
+          return true;
         }).length;
 
         return {
@@ -328,37 +336,63 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
   }, [storeyAssets, sharedFloors, storeyLookup, buildingData]);
 
-  // Sources: derived from ALL sharedModels so every model appears in the list
+  // Sources: only A-model sources (architectural models)
   const sources: BimSource[] = useMemo(() => {
     // Count storeys per source — ONLY from A-model levels (filtered list)
-    const aModelLevelSourceGuids = new Set<string>();
-    levels.forEach(l => aModelLevelSourceGuids.add(normalizeGuid(l.sourceGuid)));
-
     const storeyCountBySource = new Map<string, number>();
     levels.forEach(level => {
       const norm = normalizeGuid(level.sourceGuid);
       storeyCountBySource.set(norm, (storeyCountBySource.get(norm) || 0) + 1);
     });
 
-    return sharedModels.map((model, idx) => {
-      // Try to find a friendly name
-      let name = model.name || '';
-      const looksLikeGuid = /^[0-9a-f]{8}[-]?[0-9a-f]{4}/i.test(name) || /^[0-9a-f-]{20,}$/i.test(name);
-
-      if (!name || looksLikeGuid) {
-        // Try sourceNameLookup, apSources, storeyLookup
-        name = sourceNameLookup.get(model.id) || apSources.get(model.id) || '';
+    // Collect unique A-model source names from storeyAssets
+    const sourceMap = new Map<string, { guid: string; name: string; storeyCount: number }>();
+    storeyAssets.forEach(storey => {
+      if (!storey.sourceGuid || !storey.sourceName || isGuid(storey.sourceName)) return;
+      // Only include A-model sources
+      if (!isAModelName(storey.sourceName)) return;
+      const normGuid = normalizeGuid(storey.sourceGuid);
+      if (!sourceMap.has(normGuid)) {
+        sourceMap.set(normGuid, {
+          guid: storey.sourceGuid,
+          name: storey.sourceName,
+          storeyCount: storeyCountBySource.get(normGuid) || 0,
+        });
       }
-      if (!name || isGuid(name)) {
-        name = model.shortName || `Modell ${idx + 1}`;
-      }
+    });
 
-      const normId = normalizeGuid(model.id);
-      const storeyCount = storeyCountBySource.get(normId) || 0;
+    // If no A-model sources found from storeyAssets, fall back to sharedModels filtered by isArchitecturalModel
+    if (sourceMap.size === 0) {
+      sharedModels.forEach((model, idx) => {
+        let name = model.name || '';
+        const looksLikeGuid = isGuid(name);
+        if (!name || looksLikeGuid) {
+          name = sourceNameLookup.get(model.id) || apSources.get(model.id) || '';
+        }
+        if (!name || isGuid(name)) {
+          name = model.shortName || `Modell ${idx + 1}`;
+        }
+        // Only include if it looks like an A-model
+        if (isArchitecturalModel(name) || isAModelName(name)) {
+          const normId = normalizeGuid(model.id);
+          sourceMap.set(normId, {
+            guid: model.id,
+            name,
+            storeyCount: storeyCountBySource.get(normId) || 0,
+          });
+        }
+      });
+    }
 
-      return { guid: model.id, name, storeyCount };
-    }).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-  }, [sharedModels, storeyAssets, sourceNameLookup, apSources]);
+    // Also add "Orphan" if there are levels with no sourceGuid
+    const orphanLevels = levels.filter(l => !l.sourceGuid);
+    if (orphanLevels.length > 0) {
+      sourceMap.set('orphan', { guid: '', name: 'Orphan', storeyCount: orphanLevels.length });
+    }
+
+    return Array.from(sourceMap.values())
+      .sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+  }, [sharedModels, storeyAssets, sourceNameLookup, apSources, levels]);
 
   // ── Spaces: cascading from checked levels (Source→Level→Space funnel) ───
   const spaces: SpaceItem[] = useMemo(() => {
@@ -723,9 +757,18 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       }
     });
 
-    // Match spaces
+    // Match spaces — only A-model spaces
+    const aModelGuids = getAModelStoreyGuids(buildingData, buildingFmGuid || '');
     const allAssetSpaces = buildingData
-      .filter((a: any) => a.category === 'Space' || a.category === 'IfcSpace');
+      .filter((a: any) => {
+        if (a.category !== 'Space' && a.category !== 'IfcSpace') return false;
+        // Filter to A-model spaces when we have A-model storey data
+        if (aModelGuids.size > 0) {
+          const levelGuid = a.levelFmGuid || a.level_fm_guid || '';
+          return aModelGuids.has(levelGuid);
+        }
+        return true;
+      });
     const usedSpaceIds = new Set<string>();
     allAssetSpaces.forEach((space: any) => {
       const spaceFmGuid = space.fmGuid || space.fm_guid;
