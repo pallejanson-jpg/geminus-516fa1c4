@@ -575,9 +575,18 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       }
     });
 
+    // Build entityColorMap from cache for direct entity-level coloring (bypasses GUID matching)
+    const entityColorMap: Record<string, [number, number, number]> = {};
+    Object.entries(colorMap).forEach(([fmGuid, rgb]) => {
+      const entityIds = entityIdCache.get(fmGuid.toLowerCase());
+      if (entityIds) {
+        entityIds.forEach(id => { entityColorMap[id] = rgb; });
+      }
+    });
+
     // Dispatch to NativeXeokitViewer's INSIGHTS_COLOR_UPDATE handler
     window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, {
-      detail: { mode: 'room_spaces', colorMap, nameColorMap },
+      detail: { mode: 'room_spaces', colorMap, nameColorMap, entityColorMap },
     }));
 
     // Track colorized rooms

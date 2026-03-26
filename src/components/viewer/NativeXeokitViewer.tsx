@@ -1311,6 +1311,23 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       // Use shared normalizeGuid for comparison
 
+      // If entityColorMap is provided, use it directly (bypasses GUID matching)
+      const entityColorMap = detail.entityColorMap;
+      if (entityColorMap && Object.keys(entityColorMap).length > 0) {
+        Object.entries(entityColorMap).forEach(([entityId, rgb]) => {
+          const entity = scene.objects?.[entityId];
+          if (entity) {
+            entity.xrayed = false;
+            entity.visible = true;
+            entity.colorize = rgb;
+            entity.opacity = 0.85;
+            matchCount++;
+          }
+        });
+        console.log('[NativeViewer] Applied INSIGHTS_COLOR_UPDATE via entityColorMap:', mode, Object.keys(entityColorMap).length, 'entries,', matchCount, 'entities matched');
+        return;
+      }
+
       // Build a lookup of normalized fmGuid → rgb for fast matching
       const fmGuidLookup = new Map<string, [number, number, number]>();
       Object.entries(colorMap).forEach(([key, rgb]) => {

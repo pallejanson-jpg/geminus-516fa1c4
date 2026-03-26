@@ -76,6 +76,8 @@ export interface InsightsColorUpdateDetail {
   nameColorMap?: Record<string, [number, number, number]>;
   /** When true, only match by GUID — skip name-based fallback to avoid coloring multiple rooms with same name */
   strictGuidMode?: boolean;
+  /** Optional direct entity ID → color map — bypasses GUID matching entirely when provided */
+  entityColorMap?: Record<string, [number, number, number]>;
 }
 
 /** Type for alarm annotations show event detail */

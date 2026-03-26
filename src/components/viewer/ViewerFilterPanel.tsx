@@ -2173,7 +2173,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 label={cat.name}
                 badge={`${cat.count}`}
                 checked={checkedCategories.has(cat.name)}
-                onCheckedChange={(checked) => handleCategoryToggle(cat.name, checked)}
+                onCheckedChange={(checked, event) => handleCategoryToggle(cat.name, checked, event)}
                 color={autoColorCategories ? (categoryColors.get(cat.name) || LEVEL_PALETTE[categories.indexOf(cat) % LEVEL_PALETTE.length]) : undefined}
                 onColorChange={autoColorCategories ? (c) => setCategoryColors(prev => new Map(prev).set(cat.name, c)) : undefined}
               />
