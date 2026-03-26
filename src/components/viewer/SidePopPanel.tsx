@@ -79,7 +79,7 @@ const SidePopPanel: React.FC<SidePopPanelProps> = ({
       <div className="fixed inset-0 z-[64]" onClick={onClose} />
       <div
         className={cn(
-          "fixed z-[65] border rounded-lg shadow-lg",
+          "fixed z-[65] border border-border/30 rounded-lg shadow-lg",
           "bg-card/65 backdrop-blur-md",
           "animate-in fade-in-0 slide-in-from-right-2 duration-200",
           showOnLeft && "slide-in-from-left-2",

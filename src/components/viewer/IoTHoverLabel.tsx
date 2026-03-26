@@ -48,7 +48,7 @@ const IoTHoverLabel: React.FC<IoTHoverLabelProps> = ({
     <div
       className={cn(
         'fixed pointer-events-none z-[100]',
-        'bg-card/95 backdrop-blur-sm border rounded-lg shadow-lg',
+        'bg-card/95 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg',
         'px-3 py-2 text-sm min-w-[140px]',
         'transition-opacity duration-100',
         className
