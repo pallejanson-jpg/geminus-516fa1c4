@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Scan, Building2, CheckCircle2, RefreshCw, ArrowLeft, Settings2 } from 'lucide-react';
+import { Scan, Building2, CheckCircle2, RefreshCw, ArrowLeft, Settings2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -219,10 +219,15 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid: prop
             )}
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={loadData} className="shrink-0">
-          <RefreshCw className="h-4 w-4" />
-          {!isMobile && <span className="ml-2">Refresh</span>}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={loadData} className="shrink-0">
+            <RefreshCw className="h-4 w-4" />
+            {!isMobile && <span className="ml-2">Refresh</span>}
+          </Button>
+          <Button variant="ghost" size="icon" onClick={handleBack} className="shrink-0 h-8 w-8 md:h-10 md:w-10">
+            <X className="h-4 w-4 md:h-5 md:w-5" />
+          </Button>
+        </div>
       </div>
 
       {/* Main content */}

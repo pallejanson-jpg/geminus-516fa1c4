@@ -230,9 +230,9 @@ const ApprovalDialog: React.FC<{
 
   return (
     <Dialog open={open} onOpenChange={() => onClose()}>
-      <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto text-foreground">
         <DialogHeader>
-          <DialogTitle>Approve Detection</DialogTitle>
+          <DialogTitle className="text-foreground">Approve Detection</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -334,7 +334,7 @@ const ApprovalDialog: React.FC<{
               </SelectContent>
             </Select>
             {detection.ivion_dataset_name && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-foreground/60">
                 Ivion-dataset: {detection.ivion_dataset_name}
               </p>
             )}
@@ -367,7 +367,7 @@ const ApprovalDialog: React.FC<{
           {(detection.coordinate_x != null) && (
             <div className="space-y-1">
               <Label>Coordinates (3D)</Label>
-              <div className="text-xs font-mono bg-muted p-2 rounded">
+              <div className="text-xs font-mono bg-muted text-foreground p-2 rounded">
                 X: {detection.coordinate_x?.toFixed(2)} &nbsp;
                 Y: {detection.coordinate_y?.toFixed(2)} &nbsp;
                 Z: {detection.coordinate_z?.toFixed(2)}
@@ -378,7 +378,7 @@ const ApprovalDialog: React.FC<{
           {/* Extracted props summary */}
           {props && Object.keys(props).length > 0 && (
             <div className="border rounded-lg p-3 bg-muted/30">
-              <p className="text-xs font-medium mb-1">Extracted Properties</p>
+              <p className="text-xs font-medium mb-1 text-foreground">Extracted Properties</p>
               <div className="flex flex-wrap gap-1">
                 {props.type && <Badge variant="outline" className="text-xs">{props.type}</Badge>}
                 {props.color && <Badge variant="outline" className="text-xs">{props.color}</Badge>}
