@@ -85,6 +85,7 @@ const XrayToggle: React.FC<XrayToggleProps> = ({ viewerRef, initialEnabled = fal
           const entity = scene.objects?.[ids[i]];
           if (entity) {
             entity.xrayed = false;
+            entity.pickable = true;
             if (entity.opacity < 1.0) entity.opacity = 1.0;
           }
         }
