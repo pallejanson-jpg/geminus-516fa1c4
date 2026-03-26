@@ -74,6 +74,8 @@ export interface InsightsColorUpdateDetail {
   colorMap: Record<string, [number, number, number]>;
   /** Optional name-based lookup: maps a display name → color for fallback matching */
   nameColorMap?: Record<string, [number, number, number]>;
+  /** When true, only match by GUID — skip name-based fallback to avoid coloring multiple rooms with same name */
+  strictGuidMode?: boolean;
 }
 
 /** Type for alarm annotations show event detail */
