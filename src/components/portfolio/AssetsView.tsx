@@ -214,6 +214,14 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   const [syncingAssetIds, setSyncingAssetIds] = useState<Set<string>>(new Set());
   const [isBatchSyncing, setIsBatchSyncing] = useState(false);
   
+  // Persist column preferences
+  useEffect(() => {
+    localStorage.setItem('assets-view-visible-columns', JSON.stringify(visibleColumns));
+  }, [visibleColumns]);
+  useEffect(() => {
+    localStorage.setItem('assets-view-column-order', JSON.stringify(columnOrder));
+  }, [columnOrder]);
+
   // Row pagination
   const [rowLimit, setRowLimit] = useState(ROW_PAGE_SIZE);
   

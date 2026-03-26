@@ -218,6 +218,14 @@ const RoomsView: React.FC<RoomsViewProps> = ({
     return DEFAULT_VISIBLE_COLUMNS;
   });
   
+  // Persist column preferences
+  useEffect(() => {
+    localStorage.setItem('rooms-view-visible-columns', JSON.stringify(visibleColumns));
+  }, [visibleColumns]);
+  useEffect(() => {
+    localStorage.setItem('rooms-view-column-order', JSON.stringify(columnOrder));
+  }, [columnOrder]);
+
   // Sensor metric state
   const [activeSensorMetric, setActiveSensorMetric] = useState<VisualizationType>('none');
   
