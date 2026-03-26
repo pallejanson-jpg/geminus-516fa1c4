@@ -1160,7 +1160,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
               </AccordionTrigger>
               <AccordionContent className="px-3 pb-3 pt-1 space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Autodesk Construction Cloud settings (login, hub, project and file selection) are managed under the{' '}
+                  Autodesk Forma settings (login, hub, project and file selection) are managed under the{' '}
                   <strong>API</strong> tab. There you can log in, browse folders and sync BIM data to this building.
                 </p>
                 {onSwitchToAccTab && (

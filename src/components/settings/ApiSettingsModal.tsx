@@ -522,7 +522,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     // Ivion connection modal state
     const [isIvionModalOpen, setIsIvionModalOpen] = useState(false);
     
-    // ACC (Autodesk Construction Cloud) state — with sessionStorage persistence
+    // ACC (Autodesk Forma) state — with sessionStorage persistence
     const [accProjects, setAccProjects] = useState<any[]>(() => {
         try { return JSON.parse(sessionStorage.getItem('acc_projects') || '[]'); } catch { return []; }
     });
@@ -2740,12 +2740,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         </AccordionContent>
                                     </AccordionItem>
 
-                                    {/* Autodesk Construction Cloud (ACC) Section */}
+                                    {/* Autodesk Forma Section */}
                                     <AccordionItem value="acc" className="border rounded-lg">
                                         <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
                                             <div className="flex items-center gap-2 flex-1">
                                                 <Layers className="h-5 w-5 text-blue-500" />
-                                                <span className="font-medium">Autodesk Construction Cloud</span>
+                                                <span className="font-medium">Autodesk Forma</span>
                                                 {accAuthStatus === 'authenticated' && <Badge className="ml-auto mr-2 text-xs bg-green-100 text-green-800 border-green-200">Inloggad</Badge>}
                                                 {accAuthStatus === 'unauthenticated' && accConnectionStatus === 'success' && <Badge className="ml-auto mr-2 text-xs bg-yellow-100 text-yellow-800 border-yellow-200">App-token</Badge>}
                                                 {accAuthStatus === 'unauthenticated' && accConnectionStatus === 'idle' && <Badge variant="outline" className="ml-auto mr-2 text-xs">ACC</Badge>}
@@ -2755,7 +2755,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         <AccordionContent className="px-4 pb-4 pt-2">
                                             <div className="space-y-4">
                                                 <p className="text-xs text-muted-foreground">
-                                                    Integration med Autodesk Construction Cloud. Logga in med ditt Autodesk-konto för att ge appen tillgång till dina ACC-projekt.
+                                                    Integration med Autodesk Forma. Logga in med ditt Autodesk-konto för att ge appen tillgång till dina Forma-projekt.
                                                 </p>
 
                                                 {/* Autodesk Login Section */}
