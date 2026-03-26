@@ -258,12 +258,32 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         const allGuids = new Set<string>();
         floor.databaseLevelFmGuids.forEach(g => allGuids.add(normalizeGuid(g)));
 
-        // Find matching storeyAsset for sourceGuid
+        // Find matching storeyAsset by GUID first, then by name
         let sourceGuid = '';
+        let matchedStorey: typeof storeyAssets[0] | null = null;
+        const floorNameLower = floor.name.toLowerCase().trim();
+
         for (const storey of storeyAssets) {
           if (allGuids.has(storey.normalizedFmGuid)) {
+            matchedStorey = storey;
             sourceGuid = storey.sourceGuid;
             break;
+          }
+        }
+
+        // Name-based fallback: match by level name
+        if (!matchedStorey) {
+          for (const storey of storeyAssets) {
+            const storeyNameLower = storey.name.toLowerCase().trim();
+            if (storeyNameLower === floorNameLower ||
+                storeyNameLower.includes(floorNameLower) ||
+                floorNameLower.includes(storeyNameLower)) {
+              matchedStorey = storey;
+              sourceGuid = storey.sourceGuid;
+              // Add Asset+ FM GUID so downstream space filtering works
+              allGuids.add(normalizeGuid(storey.fmGuid));
+              break;
+            }
           }
         }
 
@@ -276,12 +296,14 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         }
 
         // Count spaces belonging to this level — only A-model spaces
+        // Use aModelStoreyGuidSet (Asset+ FM GUIDs) for filtering
         const spaceCount = buildingData.filter((s: any) => {
           const cat = s.category;
           if (cat !== 'Space' && cat !== 'IfcSpace') return false;
           const levelGuid = s.levelFmGuid || s.level_fm_guid || '';
           const levelGuidNorm = normalizeGuid(levelGuid);
-          if (!allGuids.has(levelGuidNorm)) return false;
+          // Check if space belongs to this level via any of its GUIDs
+          if (!allGuids.has(levelGuidNorm) && !allGuids.has(normalizeGuid(levelGuid))) return false;
           // Only count if the space's level is in the A-model storey set
           if (aModelStoreyGuidSet.size > 0 && !aModelStoreyGuidSet.has(levelGuid)) return false;
           return true;
@@ -396,17 +418,20 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   // ── Spaces: cascading from checked levels (Source→Level→Space funnel) ───
   const spaces: SpaceItem[] = useMemo(() => {
-    // Build set of A-model level GUIDs for filtering
-    const aModelLevelGuids = new Set<string>();
-    levels.forEach(l => l.allGuids.forEach(g => aModelLevelGuids.add(g)));
+    // Build set of A-model level GUIDs from Asset+ data (not from levels[].allGuids which may be xeokit IDs)
+    const aModelLevelGuids = getAModelStoreyGuids(buildingData, buildingFmGuid || '');
+    // Also add normalized variants for matching
+    const aModelLevelGuidsNorm = new Set<string>();
+    aModelLevelGuids.forEach(g => aModelLevelGuidsNorm.add(normalizeGuid(g)));
 
     const allSpaces = buildingData
       .filter((a: any) => {
         if (a.category !== 'Space' && a.category !== 'IfcSpace') return false;
-        // Only include spaces belonging to A-model levels
-        const levelGuid = normalizeGuid(a.levelFmGuid || a.level_fm_guid || '');
+        // Only include spaces belonging to A-model levels (using Asset+ FM GUIDs)
+        const levelGuid = a.levelFmGuid || a.level_fm_guid || '';
+        const levelGuidNorm = normalizeGuid(levelGuid);
         if (aModelLevelGuids.size > 0 && levelGuid) {
-          return aModelLevelGuids.has(levelGuid);
+          return aModelLevelGuids.has(levelGuid) || aModelLevelGuidsNorm.has(levelGuidNorm);
         }
         return true;
       });
@@ -495,7 +520,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       })
       .filter((s: SpaceItem) => s.name && s.name !== 'Unnamed')
       .sort((a: SpaceItem, b: SpaceItem) => a.name.localeCompare(b.name, 'sv', { numeric: true }));
-  }, [buildingData, checkedLevels, checkedSources, levels, getXeokitViewer]);
+  }, [buildingData, buildingFmGuid, checkedLevels, checkedSources, levels, getXeokitViewer]);
 
   // ── Categories: derived from typeIndex, scoped by active filters ────────
   const categories: CategoryItem[] = useMemo(() => {
@@ -870,7 +895,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         .from('assets')
         .select('asset_type, symbol_id')
         .eq('building_fm_guid', buildingFmGuid)
-        .or('created_in_model.eq.false,asset_type.eq.IfcAlarm');
+        .or('annotation_placed.eq.true,created_in_model.eq.false');
 
       const { count: issueCount } = await supabase
         .from('bcf_issues')
