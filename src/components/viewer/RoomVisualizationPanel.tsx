@@ -324,15 +324,20 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   }, [filteredRooms, visibleFloorFmGuids]);
 
   // Build entity ID cache from metaScene (rebuild when cacheKey changes)
+  const cacheRetryCountRef = useRef(0);
   useEffect(() => {
     const xeokitViewer = resolveXeokitViewer(viewerRef);
     if (!xeokitViewer?.metaScene?.metaObjects) {
-      // Retry after a delay if viewer isn't ready yet
+      // Retry after a delay if viewer isn't ready yet — max 10 retries to avoid infinite loop
+      if (cacheRetryCountRef.current >= 10) return;
+      cacheRetryCountRef.current++;
       const retryTimer = setTimeout(() => {
         setCacheKey(prev => prev + '-retry');
-      }, 500);
+      }, 1000);
       return () => clearTimeout(retryTimer);
     }
+    // Reset retry counter once successful
+    cacheRetryCountRef.current = 0;
 
     const metaObjects = xeokitViewer.metaScene.metaObjects;
     const cache = new Map<string, string[]>();
