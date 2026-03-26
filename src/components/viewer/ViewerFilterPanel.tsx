@@ -1527,11 +1527,23 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       levels.filter(l => checkedSources.has(l.sourceGuid)).forEach(l => visibleFmGuids.push(l.fmGuid));
     }
 
+    // Resolve xeokit meta storey IDs for proper ceiling clipping
+    const resolvedMetaIds: string[] = [];
+    if (visibleFmGuids.length > 0) {
+      const metaObjects = viewer.metaScene?.metaObjects || {};
+      const normalizedFmGuids = new Set(visibleFmGuids.map((g: string) => g.toLowerCase().replace(/-/g, '')));
+      Object.values(metaObjects).forEach((mo: any) => {
+        if (mo.type?.toLowerCase() !== 'ifcbuildingstorey') return;
+        const sysId = (mo.originalSystemId || mo.id || '').toLowerCase().replace(/-/g, '');
+        if (normalizedFmGuids.has(sysId)) resolvedMetaIds.push(mo.id);
+      });
+    }
+
     window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
       detail: {
         floorId: visibleFmGuids.length === 1 ? visibleFmGuids[0] : null,
         floorName: null, bounds: null,
-        visibleMetaFloorIds: [], visibleFloorFmGuids: visibleFmGuids,
+        visibleMetaFloorIds: resolvedMetaIds, visibleFloorFmGuids: visibleFmGuids,
         isAllFloorsVisible: !hasAnyFilter,
         isSoloFloor: visibleFmGuids.length === 1,
         fromFilterPanel: true,
@@ -1715,25 +1727,29 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   const handleSpaceToggle = useCallback((fmGuid: string, checked: boolean) => {
     setCheckedSpaces(prev => { const n = new Set(prev); checked ? n.add(fmGuid) : n.delete(fmGuid); return n; });
+    if (!checked) return; // Only fly on check, not uncheck
     // Checkbox = zoom to space with camera OUTSIDE (expanded AABB)
-    const viewer = getXeokitViewer();
-    if (!viewer?.scene) return;
-    const ids = entityMapRef.current.get(fmGuid) || [];
-    if (ids.length > 0) {
-      ids.forEach((id: string) => {
-        const entity = viewer.scene.objects?.[id];
-        if (entity) { entity.visible = true; entity.pickable = true; }
-      });
-      const firstEntity = viewer.scene.objects?.[ids[0]];
-      if (firstEntity?.aabb) {
-        // Expand AABB by 2x to position camera outside the space
-        const aabb = [...firstEntity.aabb];
-        const cx = (aabb[0] + aabb[3]) / 2, cy = (aabb[1] + aabb[4]) / 2, cz = (aabb[2] + aabb[5]) / 2;
-        const dx = (aabb[3] - aabb[0]) * 0.5, dy = (aabb[4] - aabb[1]) * 0.5, dz = (aabb[5] - aabb[2]) * 0.5;
-        const expanded = [cx - dx * 2, cy - dy * 2, cz - dz * 2, cx + dx * 2, cy + dy * 2, cz + dz * 2];
-        viewer.cameraFlight?.flyTo({ aabb: expanded, duration: 0.5 });
+    // Delay flyTo to let applyFilterVisibility run first and set up the cutaway
+    setTimeout(() => {
+      const viewer = getXeokitViewer();
+      if (!viewer?.scene) return;
+      const ids = entityMapRef.current.get(fmGuid) || [];
+      if (ids.length > 0) {
+        ids.forEach((id: string) => {
+          const entity = viewer.scene.objects?.[id];
+          if (entity) { entity.visible = true; entity.pickable = true; entity.xrayed = false; }
+        });
+        const firstEntity = viewer.scene.objects?.[ids[0]];
+        if (firstEntity?.aabb) {
+          // Expand AABB by 2x to position camera outside the space
+          const aabb = [...firstEntity.aabb];
+          const cx = (aabb[0] + aabb[3]) / 2, cy = (aabb[1] + aabb[4]) / 2, cz = (aabb[2] + aabb[5]) / 2;
+          const dx = (aabb[3] - aabb[0]) * 0.5, dy = (aabb[4] - aabb[1]) * 0.5, dz = (aabb[5] - aabb[2]) * 0.5;
+          const expanded = [cx - dx * 2, cy - dy * 2, cz - dz * 2, cx + dx * 2, cy + dy * 2, cz + dz * 2];
+          viewer.cameraFlight?.flyTo({ aabb: expanded, duration: 0.5 });
+        }
       }
-    }
+    }, 600); // After 500ms debounce of applyFilterVisibility
   }, [getXeokitViewer]);
 
   const handleCategoryToggle = useCallback((name: string, checked: boolean) => {
@@ -1742,32 +1758,42 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   const handleSpaceClick = useCallback((fmGuid: string) => {
     onNodeSelect?.(fmGuid);
-    const viewer = getXeokitViewer();
-    if (!viewer?.scene) return;
-    const ids = entityMapRef.current.get(fmGuid) || [];
-    if (ids.length > 0) {
-      // Make visible (no selection — no green highlight)
-      ids.forEach((id: string) => {
-        const entity = viewer.scene.objects?.[id];
-        if (entity) {
-          entity.visible = true;
-          entity.pickable = true;
-        }
-      });
-      // Name click = fly camera INSIDE the space (use center point)
-      const firstEntity = viewer.scene.objects?.[ids[0]];
-      if (firstEntity?.aabb) {
-        const aabb = firstEntity.aabb;
-        const cx = (aabb[0] + aabb[3]) / 2, cy = (aabb[1] + aabb[4]) / 2, cz = (aabb[2] + aabb[5]) / 2;
-        const height = aabb[4] - aabb[1];
-        viewer.cameraFlight?.flyTo({
-          eye: [cx, cy + height * 0.3, cz],
-          look: [cx + 2, cy + height * 0.3, cz],
-          up: [0, 1, 0],
-          duration: 0.5
+    // Also select the space so cutaway activates
+    setCheckedSpaces(prev => {
+      const n = new Set(prev);
+      n.add(fmGuid);
+      return n;
+    });
+    // Delay fly-inside to let applyFilterVisibility run first
+    setTimeout(() => {
+      const viewer = getXeokitViewer();
+      if (!viewer?.scene) return;
+      const ids = entityMapRef.current.get(fmGuid) || [];
+      if (ids.length > 0) {
+        // Make visible (no selection — no green highlight)
+        ids.forEach((id: string) => {
+          const entity = viewer.scene.objects?.[id];
+          if (entity) {
+            entity.visible = true;
+            entity.pickable = true;
+            entity.xrayed = false;
+          }
         });
+        // Name click = fly camera INSIDE the space (use center point)
+        const firstEntity = viewer.scene.objects?.[ids[0]];
+        if (firstEntity?.aabb) {
+          const aabb = firstEntity.aabb;
+          const cx = (aabb[0] + aabb[3]) / 2, cy = (aabb[1] + aabb[4]) / 2, cz = (aabb[2] + aabb[5]) / 2;
+          const height = aabb[4] - aabb[1];
+          viewer.cameraFlight?.flyTo({
+            eye: [cx, cy + height * 0.3, cz],
+            look: [cx + 2, cy + height * 0.3, cz],
+            up: [0, 1, 0],
+            duration: 0.5
+          });
+        }
       }
-    }
+    }, 600); // After 500ms debounce of applyFilterVisibility
   }, [getXeokitViewer, onNodeSelect]);
 
   const handleResetSection = useCallback((section: 'sources' | 'levels' | 'spaces' | 'categories' | 'annotations' | 'modifications') => {
@@ -1915,7 +1941,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       className={cn(
         "fixed left-0 top-[44px] z-[65] w-[85%] max-w-[320px] sm:w-[320px]",
         "bg-card/95 backdrop-blur-xl border-r shadow-2xl text-foreground",
-        "flex flex-col",
+        "flex flex-col max-h-[calc(100dvh-44px)]",
         "animate-in slide-in-from-left duration-200"
       )}
       style={{ bottom: 'env(safe-area-inset-bottom, 0px)' }}

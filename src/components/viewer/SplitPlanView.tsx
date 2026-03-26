@@ -446,7 +446,26 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       if (!viewer.scene.objects?.[id]) continue;
       if (wallTypes.has(t)) wallIds.push(id);
       else if (slabTypes.has(t)) slabIds.push(id);
-      else if (spaceTypes.has(t)) spaceIds.push(id);
+      else if (spaceTypes.has(t)) {
+        // Skip large "area" type spaces that cover the whole floor
+        const spaceName = (mo.name || '').trim().toLowerCase();
+        const isArea = spaceName === 'area' || spaceName.startsWith('area ') || spaceName.startsWith('area:') || spaceName === 'areas';
+        if (!isArea) {
+          // Also check if this space has an abnormally large AABB relative to the floor
+          const entity = viewer.scene.objects?.[id];
+          if (entity?.aabb) {
+            const dx = entity.aabb[3] - entity.aabb[0];
+            const dz = entity.aabb[5] - entity.aabb[2];
+            const floorArea = dx * dz;
+            // Skip spaces larger than 2000 m² (likely a covering/area object)
+            if (floorArea < 2000) {
+              spaceIds.push(id);
+            }
+          } else {
+            spaceIds.push(id);
+          }
+        }
+      }
       else if (doorTypes.has(t)) doorIds.push(id);
     }
 
