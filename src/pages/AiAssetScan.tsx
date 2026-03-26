@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Scan, Building2, CheckCircle2, RefreshCw, ArrowLeft, Settings2 } from 'lucide-react';
+import { Scan, Building2, CheckCircle2, RefreshCw, ArrowLeft, Settings2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
