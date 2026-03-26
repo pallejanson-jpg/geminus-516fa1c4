@@ -502,14 +502,14 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
         entity.visible = false;
       }
 
-      // Spaces: very light gray fill for room outlines
+      // Spaces: bright fill for clear Dalux-style room outlines
       for (const id of spaceIds) {
         const entity = scene.objects?.[id];
         if (!entity) continue;
         saveStyle(id);
         entity.visible = true;
-        entity.colorize = [1, 1, 1];
-        entity.opacity = 0.6;
+        entity.colorize = [0.95, 0.95, 0.95];
+        entity.opacity = 0.9;
         entity.edges = true;
       }
 
