@@ -206,7 +206,33 @@ serve(async (req) => {
               totalSynced++;
             }
 
-            // Also index drawings as document_chunks for semantic search
+            // Index ALL collected document nodes into document_chunks for semantic search
+            for (const node of allNodes) {
+              const nodeId = String(node.objectId || node.ObjectId || node.id || "");
+              if (!nodeId) continue;
+              const content = [
+                node.objectName || node.ObjectName || node.name || "",
+                node.className || "",
+                `Typ: ${node.classId || node.ClassId || ""}`,
+              ].filter(Boolean).join(" | ");
+
+              if (content.trim().length > 3) {
+                await supabase.from("document_chunks").upsert(
+                  {
+                    source_type: "fm_access",
+                    source_id: `doc-${nodeId}`,
+                    building_fm_guid: b.fm_guid,
+                    file_name: node.objectName || node.ObjectName || "FM Access dokument",
+                    content,
+                    chunk_index: 0,
+                    metadata: { system: "fm_access", type: "document", classId: node.classId || node.ClassId },
+                  },
+                  { onConflict: "source_type,source_id,chunk_index", ignoreDuplicates: false }
+                );
+              }
+            }
+
+            // Index drawings (classId 106) as document_chunks
             const drawings: any[] = [];
             if (Array.isArray(treeData)) {
               treeData.forEach((n: any) => collectByClassId(n, 106, drawings));
@@ -232,6 +258,71 @@ serve(async (req) => {
                     content,
                     chunk_index: 0,
                     metadata: { system: "fm_access", type: "drawing", floor: d._parentFloorName },
+                  },
+                  { onConflict: "source_type,source_id,chunk_index", ignoreDuplicates: false }
+                );
+              }
+            }
+
+            // Index rooms (classId 107)
+            const rooms: any[] = [];
+            if (Array.isArray(treeData)) {
+              treeData.forEach((n: any) => collectByClassId(n, 107, rooms));
+            } else if (treeData) {
+              collectByClassId(treeData, 107, rooms);
+            }
+
+            for (const room of rooms) {
+              const roomId = String(room.objectId || room.ObjectId || "");
+              if (!roomId) continue;
+              const content = [
+                room.objectName || room.ObjectName || "",
+                room._parentFloorName || "",
+                "Rum",
+              ].filter(Boolean).join(" | ");
+
+              if (content.trim()) {
+                await supabase.from("document_chunks").upsert(
+                  {
+                    source_type: "fm_access",
+                    source_id: `room-${roomId}`,
+                    building_fm_guid: b.fm_guid,
+                    file_name: room.objectName || room.ObjectName || "FM Access rum",
+                    content,
+                    chunk_index: 0,
+                    metadata: { system: "fm_access", type: "room", floor: room._parentFloorName },
+                  },
+                  { onConflict: "source_type,source_id,chunk_index", ignoreDuplicates: false }
+                );
+              }
+            }
+
+            // Index floors (classId 105)
+            const floors: any[] = [];
+            if (Array.isArray(treeData)) {
+              treeData.forEach((n: any) => collectByClassId(n, 105, floors));
+            } else if (treeData) {
+              collectByClassId(treeData, 105, floors);
+            }
+
+            for (const floor of floors) {
+              const floorId = String(floor.objectId || floor.ObjectId || "");
+              if (!floorId) continue;
+              const content = [
+                floor.objectName || floor.ObjectName || "",
+                "Våningsplan",
+              ].filter(Boolean).join(" | ");
+
+              if (content.trim()) {
+                await supabase.from("document_chunks").upsert(
+                  {
+                    source_type: "fm_access",
+                    source_id: `floor-${floorId}`,
+                    building_fm_guid: b.fm_guid,
+                    file_name: floor.objectName || floor.ObjectName || "FM Access våning",
+                    content,
+                    chunk_index: 0,
+                    metadata: { system: "fm_access", type: "floor" },
                   },
                   { onConflict: "source_type,source_id,chunk_index", ignoreDuplicates: false }
                 );
