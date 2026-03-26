@@ -547,7 +547,8 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
     }, [sensorRoomValues, sensorMetric, handleInsightsClick]);
 
-    // Helper: colorize only selected rooms
+    // Helper: colorize only selected rooms — uses strict guid mode to prevent
+    // name-based fallback from coloring multiple rooms that share the same commonName
     const colorizeSelectedSensorRooms = useCallback((guids: Set<string>) => {
         const roomColorMap: Record<string, [number, number, number]> = {};
         sensorRoomValues.forEach((room: any) => {
@@ -556,8 +557,19 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                 if (rgb) roomColorMap[room.fmGuid] = rgb;
             }
         });
-        handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
-    }, [sensorRoomValues, sensorMetric, handleInsightsClick]);
+        // Use strictGuidMode to avoid name-based fallback coloring extra rooms
+        const detail = { mode: 'room_spaces' as const, colorMap: roomColorMap, nameColorMap: {}, strictGuidMode: true };
+        if (drawerMode) {
+            window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: true } }));
+            setTimeout(() => {
+                window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail }));
+            }, 150);
+        } else {
+            setInlineInsightsMode('room_spaces');
+            setInlineColorMap(roomColorMap);
+            window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail }));
+        }
+    }, [sensorRoomValues, sensorMetric, drawerMode]);
 
     // Auto-colorize when switching metrics (if sensor tab is active)
     useEffect(() => {
