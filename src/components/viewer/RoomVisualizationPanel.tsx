@@ -21,7 +21,7 @@ import {
   extractSensorValue,
   generateMockSensorData,
 } from '@/lib/visualization-utils';
-import { cn } from '@/lib/utils';
+import { cn, normalizeGuid } from '@/lib/utils';
 import IoTHoverLabel from './IoTHoverLabel';
 import VisualizationLegendBar, { VISUALIZATION_LEGEND_SELECT_EVENT, type LegendSelectDetail } from './VisualizationLegendBar';
 
@@ -181,6 +181,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   useEffect(() => {
     setVisualizationType('none');
     setUseMockData(false);
+    (window as any).__colorFilterActive = false;
   }, [buildingFmGuid]);
 
   // Initialize position when panel opens
@@ -264,24 +265,27 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
     // Identify A-model storey GUIDs so we only include A-model spaces
     const aModelGuids = getAModelStoreyGuids(allData, buildingFmGuid);
+    const aModelGuidKeys = new Set(Array.from(aModelGuids).map((guid) => guid.toLowerCase()));
+    const aModelGuidNorm = new Set(Array.from(aModelGuids).map((guid) => normalizeGuid(guid)));
     
     // Filter rooms for this building — only A-model spaces
     let roomData = allData
       .filter((a: any) => {
         const cat = a.category;
         if (cat !== 'Space' && cat !== 'IfcSpace') return false;
-        if (a.buildingFmGuid?.toLowerCase() !== buildingLower) return false;
+        const assetBuildingGuid = (a.buildingFmGuid || a.building_fm_guid || '').toLowerCase();
+        if (assetBuildingGuid !== buildingLower) return false;
         // When A-model storeys exist, restrict to those spaces only
         if (aModelGuids.size > 0) {
           const levelGuid = a.levelFmGuid || a.level_fm_guid || '';
-          return aModelGuids.has(levelGuid);
+          return aModelGuidKeys.has(levelGuid.toLowerCase()) || aModelGuidNorm.has(normalizeGuid(levelGuid));
         }
         return true;
       })
       .map((r: any) => ({
-        fmGuid: r.fmGuid,
-        name: r.name || r.commonName,
-        levelFmGuid: r.levelFmGuid,
+        fmGuid: r.fmGuid || r.fm_guid,
+        name: r.name || r.commonName || r.common_name,
+        levelFmGuid: r.levelFmGuid || r.level_fm_guid,
         attributes: r.attributes,
       }));
 
@@ -517,6 +521,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     
     // Clear the tracking set and global viz entity IDs
     colorizedRoomGuidsRef.current.clear();
+    (window as any).__colorFilterActive = false;
     (window as any).__vizColorizedEntityIds = new Set<string>();
     setColorizedCount(0);
   }, [rooms, colorizeSpace]);
@@ -525,6 +530,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   const isProcessingRef = useRef(false);
   const applyVisualization = useCallback(() => {
     if (visualizationType === 'none') {
+      (window as any).__colorFilterActive = false;
       resetColors();
       // Also reset any x-ray state from previous visualization
       window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_RESET_EVENT));
@@ -572,6 +578,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     }));
 
     // Track colorized rooms
+    (window as any).__colorFilterActive = Object.keys(colorMap).length > 0;
     colorizedRoomGuidsRef.current = new Set(Object.keys(colorMap));
     (window as any).__vizColorizedEntityIds = new Set<string>();
     setColorizedCount(Object.keys(colorMap).length);

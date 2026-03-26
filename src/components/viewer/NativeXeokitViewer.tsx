@@ -979,11 +979,16 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         const scene = viewer.scene;
         const allIds = scene.objectIds || [];
         if (allIds.length > 0) {
+          (window as any).__colorFilterActive = false;
           scene.setObjectsXRayed(allIds, false);
           // Clear any stale selection state (red highlights) from model load
           try {
             const selected = scene.selectedObjectIds || [];
             if (selected.length > 0) scene.setObjectsSelected(selected, false);
+          } catch (_e) { /* scene teardown */ }
+          try {
+            const colorized = scene.colorizedObjectIds || [];
+            if (colorized.length > 0) scene.setObjectsColorized(colorized, false);
           } catch (_e) { /* scene teardown */ }
         }
 
