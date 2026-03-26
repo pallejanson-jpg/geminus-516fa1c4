@@ -1668,12 +1668,11 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           return;
         }
 
-        // Filter by visible categories if provided
-        let filtered = annotations;
-        if (visibleCategories && visibleCategories.length > 0) {
-          const catSet = new Set(visibleCategories);
-          filtered = annotations.filter(a => catSet.has(a.asset_type || 'Other'));
-        }
+        // Create ALL markers, then apply category filter as visibility
+        const catSet = visibleCategories && visibleCategories.length > 0
+          ? new Set(visibleCategories)
+          : null;
+        const filtered = annotations;
 
         // Fetch symbol colors
         const symbolIds = [...new Set(filtered.filter(a => a.symbol_id).map(a => a.symbol_id!))];
