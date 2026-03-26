@@ -1659,7 +1659,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       try {
         const { data: annotations } = await supabase
           .from('assets')
-          .select('fm_guid, common_name, name, asset_type, coordinate_x, coordinate_y, coordinate_z, symbol_id')
+          .select('fm_guid, common_name, name, asset_type, coordinate_x, coordinate_y, coordinate_z, symbol_id, in_room_fm_guid, level_fm_guid')
           .eq('building_fm_guid', buildingFmGuid)
           .or('annotation_placed.eq.true,created_in_model.eq.false');
 
@@ -1713,13 +1713,49 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           const markerCat = ann.asset_type || 'Other';
           if (catSet && !catSet.has(markerCat)) {
             marker.style.display = 'none';
+            marker.dataset.catHidden = 'true';
+          } else {
+            marker.dataset.catHidden = 'false';
           }
           container.appendChild(marker);
 
           // Position update function
           const updatePos = () => {
             if (!viewer.scene?.canvas) return;
-            const worldPos = [ann.coordinate_x || 0, ann.coordinate_y || 0, ann.coordinate_z || 0];
+            // If hidden by category filter, keep hidden
+            if (marker.dataset.catHidden === 'true') {
+              marker.style.display = 'none';
+              return;
+            }
+            let wx = ann.coordinate_x || 0;
+            let wy = ann.coordinate_y || 0;
+            let wz = ann.coordinate_z || 0;
+            // If no real position, try to place at room center
+            if (wx === 0 && wy === 0 && wz === 0 && ann.fm_guid) {
+              // Try to find the parent room from the scene
+              const roomGuid = (ann as any).in_room_fm_guid || (ann as any).level_fm_guid;
+              if (roomGuid) {
+                const metaObjects = viewer.metaScene?.metaObjects || {};
+                for (const mo of Object.values(metaObjects) as any[]) {
+                  const sysId = (mo.originalSystemId || '').toLowerCase();
+                  if (sysId === roomGuid.toLowerCase()) {
+                    const entity = viewer.scene.objects?.[mo.id];
+                    if (entity?.aabb) {
+                      wx = (entity.aabb[0] + entity.aabb[3]) / 2;
+                      wy = (entity.aabb[1] + entity.aabb[4]) / 2;
+                      wz = (entity.aabb[2] + entity.aabb[5]) / 2;
+                    }
+                    break;
+                  }
+                }
+              }
+              // Still (0,0,0) — skip this marker
+              if (wx === 0 && wy === 0 && wz === 0) {
+                marker.style.display = 'none';
+                return;
+              }
+            }
+            const worldPos = [wx, wy, wz];
             const canvasPos = viewer.scene.camera
               ? worldToCanvas(viewer, worldPos)
               : null;
