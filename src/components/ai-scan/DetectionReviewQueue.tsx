@@ -581,7 +581,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
   // Get confidence badge color
   const getConfidenceBadge = (confidence: number) => {
     if (confidence >= 0.85) {
-      return <Badge variant="default" className="bg-green-600">{Math.round(confidence * 100)}%</Badge>;
+      return <Badge variant="default" className="bg-primary text-primary-foreground">{Math.round(confidence * 100)}%</Badge>;
     } else if (confidence >= 0.5) {
       return <Badge variant="secondary">{Math.round(confidence * 100)}%</Badge>;
     }
