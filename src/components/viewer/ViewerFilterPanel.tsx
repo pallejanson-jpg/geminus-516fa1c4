@@ -258,12 +258,32 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         const allGuids = new Set<string>();
         floor.databaseLevelFmGuids.forEach(g => allGuids.add(normalizeGuid(g)));
 
-        // Find matching storeyAsset for sourceGuid
+        // Find matching storeyAsset by GUID first, then by name
         let sourceGuid = '';
+        let matchedStorey: typeof storeyAssets[0] | null = null;
+        const floorNameLower = floor.name.toLowerCase().trim();
+
         for (const storey of storeyAssets) {
           if (allGuids.has(storey.normalizedFmGuid)) {
+            matchedStorey = storey;
             sourceGuid = storey.sourceGuid;
             break;
+          }
+        }
+
+        // Name-based fallback: match by level name
+        if (!matchedStorey) {
+          for (const storey of storeyAssets) {
+            const storeyNameLower = storey.name.toLowerCase().trim();
+            if (storeyNameLower === floorNameLower ||
+                storeyNameLower.includes(floorNameLower) ||
+                floorNameLower.includes(storeyNameLower)) {
+              matchedStorey = storey;
+              sourceGuid = storey.sourceGuid;
+              // Add Asset+ FM GUID so downstream space filtering works
+              allGuids.add(normalizeGuid(storey.fmGuid));
+              break;
+            }
           }
         }
 
@@ -276,12 +296,14 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         }
 
         // Count spaces belonging to this level — only A-model spaces
+        // Use aModelStoreyGuidSet (Asset+ FM GUIDs) for filtering
         const spaceCount = buildingData.filter((s: any) => {
           const cat = s.category;
           if (cat !== 'Space' && cat !== 'IfcSpace') return false;
           const levelGuid = s.levelFmGuid || s.level_fm_guid || '';
           const levelGuidNorm = normalizeGuid(levelGuid);
-          if (!allGuids.has(levelGuidNorm)) return false;
+          // Check if space belongs to this level via any of its GUIDs
+          if (!allGuids.has(levelGuidNorm) && !allGuids.has(normalizeGuid(levelGuid))) return false;
           // Only count if the space's level is in the A-model storey set
           if (aModelStoreyGuidSet.size > 0 && !aModelStoreyGuidSet.has(levelGuid)) return false;
           return true;
