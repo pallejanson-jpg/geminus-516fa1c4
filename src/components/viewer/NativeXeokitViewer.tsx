@@ -1631,6 +1631,53 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   useEffect(() => {
     let markerContainer: HTMLDivElement | null = null;
     let cameraUnsubs: Array<() => void> = [];
+    // Track current floor filter for annotation visibility
+    let currentFloorFilter: string | null = null;
+    // Store annotation data for floor filtering
+    let markerAnnotationMap: Map<HTMLDivElement, { level_fm_guid: string | null }> = new Map();
+
+    const applyFloorFilter = () => {
+      markerAnnotationMap.forEach((ann, marker) => {
+        if (!currentFloorFilter) {
+          // No floor filter — show all (respect category filter)
+          if (marker.dataset.catHidden !== 'true') {
+            // Let camera update handle display
+            marker.dataset.floorHidden = 'false';
+          }
+        } else {
+          // Hide markers not on the selected floor
+          const onFloor = ann.level_fm_guid && ann.level_fm_guid.toLowerCase() === currentFloorFilter.toLowerCase();
+          if (!onFloor) {
+            marker.style.display = 'none';
+            marker.dataset.floorHidden = 'true';
+          } else {
+            marker.dataset.floorHidden = 'false';
+          }
+        }
+      });
+    };
+
+    const floorHandler = (e: Event) => {
+      const detail = (e as CustomEvent<FloorSelectionEventDetail>).detail;
+      if (detail?.isAllFloorsVisible || !detail?.floorId) {
+        currentFloorFilter = null;
+      } else {
+        // floorId is typically a storey meta ID — resolve to fm_guid
+        // Try to find the fm_guid from metaScene
+        const viewer = viewerRef.current;
+        let resolvedFmGuid: string | null = null;
+        if (viewer?.metaScene) {
+          const mo = viewer.metaScene.metaObjects?.[detail.floorId];
+          if (mo?.originalSystemId) {
+            resolvedFmGuid = mo.originalSystemId;
+          }
+        }
+        currentFloorFilter = resolvedFmGuid || detail.floorId;
+      }
+      applyFloorFilter();
+    };
+
+    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, floorHandler as EventListener);
 
     const handler = async (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -1651,6 +1698,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         markerContainer.remove();
         markerContainer = null;
       }
+      markerAnnotationMap = new Map();
 
       if (!show) return;
       if (!viewer?.scene) return;
@@ -1717,13 +1765,18 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           } else {
             marker.dataset.catHidden = 'false';
           }
+          marker.dataset.floorHidden = 'false';
+
+          // Store annotation data for floor filtering
+          markerAnnotationMap.set(marker, { level_fm_guid: ann.level_fm_guid || null });
+
           container.appendChild(marker);
 
           // Position update function
           const updatePos = () => {
             if (!viewer.scene?.canvas) return;
-            // If hidden by category filter, keep hidden
-            if (marker.dataset.catHidden === 'true') {
+            // If hidden by category or floor filter, keep hidden
+            if (marker.dataset.catHidden === 'true' || marker.dataset.floorHidden === 'true') {
               marker.style.display = 'none';
               return;
             }
@@ -1774,6 +1827,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           updatePos();
         });
 
+        // Apply floor filter to newly created markers
+        applyFloorFilter();
+
         console.log('[NativeViewer] TOGGLE_ANNOTATIONS: created', filtered.length, 'markers');
       } catch (err) {
         console.warn('[NativeViewer] Failed to load annotations:', err);
@@ -1783,6 +1839,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
     window.addEventListener('TOGGLE_ANNOTATIONS', handler);
     return () => {
       window.removeEventListener('TOGGLE_ANNOTATIONS', handler);
+      window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, floorHandler as EventListener);
       cameraUnsubs.forEach(fn => fn());
       if (markerContainer) {
         markerContainer.remove();
