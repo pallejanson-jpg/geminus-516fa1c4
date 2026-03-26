@@ -1709,6 +1709,11 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           marker.textContent = label;
           marker.title = label;
           marker.dataset.category = ann.asset_type || 'Other';
+          // Apply category visibility filter
+          const markerCat = ann.asset_type || 'Other';
+          if (catSet && !catSet.has(markerCat)) {
+            marker.style.display = 'none';
+          }
           container.appendChild(marker);
 
           // Position update function
