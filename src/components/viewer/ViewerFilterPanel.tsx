@@ -968,16 +968,20 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const hasAnyFilter = checkedSources.size > 0 || checkedLevels.size > 0 ||
       checkedSpaces.size > 0 || checkedCategories.size > 0;
 
-    // Step 0: Clean slate — reset xray (but DON'T reset colorize when theme is active)
+    // Step 0: Clean slate — reset xray (but DON'T reset colorize when theme is active or color filter is active)
     let prevXrayed: string[] = [];
     try { prevXrayed = scene.xrayedObjectIds || []; } catch (_e) { /* scene teardown */ }
-    if (prevXrayed.length > 0) scene.setObjectsXRayed(prevXrayed, false);
+    if (prevXrayed.length > 0) {
+      scene.setObjectsXRayed(prevXrayed, false);
+      scene.setObjectsPickable(prevXrayed, true);
+    }
     
     // Only reset colorize when we actually have filter-applied colors (not theme colors)
-    // When a theme is active OR visualization is forcing spaces, skip the colorize reset
+    // When a theme is active, visualization is forcing spaces, or color filter is active, skip the colorize reset
     const themeActive = !!activeThemeIdRef.current;
     const spacesForced = !!(window as any).__spacesForceVisible;
-    if (!themeActive && !spacesForced && (hasAnyFilter || autoColorEnabled || autoColorSpaces || autoColorCategories)) {
+    const colorFilterActive = !!(window as any).__colorFilterActive;
+    if (!themeActive && !spacesForced && !colorFilterActive && (hasAnyFilter || autoColorEnabled || autoColorSpaces || autoColorCategories)) {
       let prevColorizedIds: string[] = [];
       try { prevColorizedIds = scene.colorizedObjectIds || []; } catch (_e) { /* scene teardown */ }
       if (prevColorizedIds.length > 0) {
