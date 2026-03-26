@@ -92,7 +92,7 @@ const FloatingIssueListPanel: React.FC<FloatingIssueListPanelProps> = ({
       <div className="fixed inset-0 z-[69]" onClick={onClose} />
       <div
         className={cn(
-          "fixed z-[70] border rounded-lg shadow-lg",
+          "fixed z-[70] border border-border/30 rounded-lg shadow-lg",
           "bg-card/80 backdrop-blur-md",
           "flex flex-col",
           "animate-in fade-in-0 slide-in-from-right-2 duration-200",
