@@ -55,6 +55,31 @@ function normalizeIfcType(type: string): string {
   return (type || "").trim().toLowerCase();
 }
 
+// Shared IFC → Geminus category mapping
+const IFC_TO_GEMINUS_CATEGORY: Record<string, string> = {
+  IfcWall: "Wall", IfcWallStandardCase: "Wall", IfcCurtainWall: "Curtain Wall",
+  IfcDoor: "Door", IfcWindow: "Window",
+  IfcSlab: "Slab", IfcRoof: "Roof",
+  IfcStair: "Stair", IfcStairFlight: "Stair", IfcRamp: "Stair", IfcRampFlight: "Stair",
+  IfcColumn: "Column", IfcBeam: "Beam", IfcMember: "Beam",
+  IfcPlate: "Plate", IfcCovering: "Covering", IfcRailing: "Railing",
+  IfcFurnishingElement: "Furnishing", IfcFurniture: "Furnishing",
+  IfcFlowTerminal: "Flow Terminal", IfcFlowSegment: "Flow Segment",
+  IfcFlowFitting: "Flow Fitting", IfcFlowController: "Flow Controller",
+  IfcFlowMovingDevice: "Flow Moving Device", IfcFlowStorageDevice: "Flow Storage Device",
+  IfcFlowTreatmentDevice: "Flow Treatment Device", IfcEnergyConversionDevice: "Energy Conversion Device",
+  IfcPipeSegment: "Pipe", IfcPipeFitting: "Pipe Fitting",
+  IfcDuctSegment: "Duct", IfcDuctFitting: "Duct Fitting",
+  IfcCableCarrierSegment: "Cable Tray", IfcCableSegment: "Cable",
+  IfcBuildingElementProxy: "Proxy",
+  IfcOpeningElement: "Opening",
+  IfcAlarm: "Alarm", IfcSensor: "Sensor", IfcActuator: "Actuator",
+};
+
+function mapIfcToGeminusCategory(ifcType: string): string {
+  return IFC_TO_GEMINUS_CATEGORY[ifcType] || IFC_TO_GEMINUS_CATEGORY[ifcType?.replace(/StandardCase$/, '')] || "Instance";
+}
+
 async function loadMetaObjectsFromLatestMetadata(
   supabase: any,
   buildingFmGuid: string,
