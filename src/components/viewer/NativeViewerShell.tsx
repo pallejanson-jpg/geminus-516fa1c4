@@ -1136,6 +1136,9 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         />
       )}
 
+      {/* Sensor data overlay from AI */}
+      <SensorDataOverlay />
+
       {/* Pick-position mode indicator */}
       {isPickingPosition && (
         <div className="absolute top-3 left-3 z-50 pointer-events-none">
