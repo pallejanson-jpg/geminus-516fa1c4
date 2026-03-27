@@ -13,8 +13,19 @@ export interface GunnarSettingsData {
   visible: boolean;
   buttonPosition: { x: number; y: number } | null;
   speechLang: 'sv-SE' | 'en-US';
+  /** ElevenLabs voice ID */
   voiceName: string | null;
 }
+
+/** Preset ElevenLabs voices */
+export const ELEVENLABS_VOICES = [
+  { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel', description: 'Calm & authoritative' },
+  { id: 'Xb7hH8MSUJpSbSDYk0k2', name: 'Alice', description: 'Warm & friendly' },
+  { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', description: 'Soft & articulate' },
+  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', description: 'Clear & professional' },
+  { id: 'JBFqnCBsd6RMkjVDRZzb', name: 'George', description: 'Deep & confident' },
+  { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Liam', description: 'Energetic & engaging' },
+] as const;
 
 const DEFAULT_SETTINGS: GunnarSettingsData = {
   visible: false,
