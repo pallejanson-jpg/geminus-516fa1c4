@@ -1241,6 +1241,30 @@ async function upsertBimAssets(
         inRoomFmGuid = roomNumberMap.get(inst.room) || null;
       }
 
+      // Build bim_properties array from collected instance properties
+      const instAttributes: Record<string, any> = {
+        source: 'acc-bim',
+        acc_project_id: accProjectId,
+        acc_folder_id: folderId,
+        bim_external_id: inst.externalId,
+        bim_category: inst.category,
+        bim_object_id: inst.objectId,
+        bim_version_urn: inst.versionUrn,
+      };
+
+      if (inst.properties && Object.keys(inst.properties).length > 0) {
+        const propertyAttributes: { name: string; value: any; dataType: string }[] = [];
+        for (const [propName, propValue] of Object.entries(inst.properties)) {
+          const numVal = typeof propValue === 'string' ? parseFloat(propValue) : propValue;
+          propertyAttributes.push({
+            name: propName,
+            value: propValue,
+            dataType: typeof numVal === 'number' && !isNaN(numVal as number) ? 'Double' : 'String',
+          });
+        }
+        instAttributes.bim_properties = propertyAttributes;
+      }
+
       return {
         fm_guid: `acc-bim-instance-${inst.externalId}`,
         category: 'Instance',
@@ -1250,15 +1274,7 @@ async function upsertBimAssets(
         building_fm_guid: buildingFmGuid,
         level_fm_guid: levelFmGuid,
         in_room_fm_guid: inRoomFmGuid,
-        attributes: {
-          source: 'acc-bim',
-          acc_project_id: accProjectId,
-          acc_folder_id: folderId,
-          bim_external_id: inst.externalId,
-          bim_category: inst.category,
-          bim_object_id: inst.objectId,
-          bim_version_urn: inst.versionUrn,
-        },
+        attributes: instAttributes,
         synced_at: new Date().toISOString(),
       };
     });
