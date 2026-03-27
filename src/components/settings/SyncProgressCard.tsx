@@ -31,6 +31,8 @@ interface SyncProgressCardProps {
   totalSynced?: number | null;
   // Extra actions
   extraActions?: React.ReactNode;
+  // Last result summary (shown after sync completes)
+  lastResult?: string | null;
 }
 
 const formatDate = (dateStr: string | null, fallbackDateStr?: string | null) => {
@@ -81,6 +83,7 @@ export const SyncProgressCard: React.FC<SyncProgressCardProps> = ({
   progressLabel,
   totalSynced,
   extraActions,
+  lastResult,
 }) => {
   const isRunning = isSyncing || syncStatus === 'running';
 
@@ -220,10 +223,15 @@ export const SyncProgressCard: React.FC<SyncProgressCardProps> = ({
 
       {/* Status footer - when not syncing */}
       {!isRunning && (syncStatus || syncStartedAt || syncCompletedAt) && (
-        <div className="text-xs text-muted-foreground border-t pt-2 flex items-center gap-1">
-          <span>Senast: {formatDate(syncCompletedAt, syncStartedAt)}</span>
-          {errorMessage && (
-            <span className="text-destructive ml-2 line-clamp-1">{errorMessage}</span>
+        <div className="text-xs text-muted-foreground border-t pt-2 space-y-1">
+          <div className="flex items-center gap-1">
+            <span>Senast: {formatDate(syncCompletedAt, syncStartedAt)}</span>
+            {errorMessage && (
+              <span className="text-destructive ml-2 line-clamp-1">{errorMessage}</span>
+            )}
+          </div>
+          {lastResult && (
+            <p className="font-medium text-foreground">{lastResult}</p>
           )}
         </div>
       )}
