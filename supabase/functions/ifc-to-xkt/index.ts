@@ -475,7 +475,7 @@ async function populateAssetsFromMetaObjects(
     const attrs = extractProperties(m);
     instanceRows.push({
       fm_guid: fmGuid, name: name || t, common_name: name || t,
-      category: "Instance", asset_type: t,
+      category: mapIfcToGeminusCategory(t), asset_type: t,
       building_fm_guid: buildingFmGuid, level_fm_guid: levelFmGuid, in_room_fm_guid: inRoomFmGuid,
       is_local: false, created_in_model: true, synced_at: now,
       ...(attrs ? { attributes: { source: "ifc", ...attrs } } : {}),

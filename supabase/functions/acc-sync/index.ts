@@ -1274,7 +1274,7 @@ async function upsertBimAssets(
 
       return {
         fm_guid: `acc-bim-instance-${inst.externalId}`,
-        category: 'Instance',
+        category: mapRevitToGeminusCategory(inst.category),
         name: null,
         common_name: inst.name || inst.category || `Instance ${inst.externalId}`,
         asset_type: inst.category,
