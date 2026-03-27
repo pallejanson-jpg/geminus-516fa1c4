@@ -7,8 +7,9 @@ import { useEffect, useCallback } from 'react';
 export const AI_VIEWER_COMMAND_EVENT = 'AI_VIEWER_COMMAND';
 
 export interface AiViewerCommand {
-  action: 'highlight' | 'filter' | 'reset';
+  action: 'highlight' | 'filter' | 'colorize' | 'reset';
   entityIds?: string[];
+  colorMap?: Record<string, [number, number, number]>;
 }
 
 /**
