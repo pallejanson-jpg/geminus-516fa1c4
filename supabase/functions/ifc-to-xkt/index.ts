@@ -6,6 +6,31 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Shared IFC → Geminus category mapping
+const IFC_TO_GEMINUS_CATEGORY: Record<string, string> = {
+  IfcWall: "Wall", IfcWallStandardCase: "Wall", IfcCurtainWall: "Curtain Wall",
+  IfcDoor: "Door", IfcWindow: "Window",
+  IfcSlab: "Slab", IfcRoof: "Roof",
+  IfcStair: "Stair", IfcStairFlight: "Stair", IfcRamp: "Stair", IfcRampFlight: "Stair",
+  IfcColumn: "Column", IfcBeam: "Beam", IfcMember: "Beam",
+  IfcPlate: "Plate", IfcCovering: "Covering", IfcRailing: "Railing",
+  IfcFurnishingElement: "Furnishing", IfcFurniture: "Furnishing",
+  IfcFlowTerminal: "Flow Terminal", IfcFlowSegment: "Flow Segment",
+  IfcFlowFitting: "Flow Fitting", IfcFlowController: "Flow Controller",
+  IfcFlowMovingDevice: "Flow Moving Device", IfcFlowStorageDevice: "Flow Storage Device",
+  IfcFlowTreatmentDevice: "Flow Treatment Device", IfcEnergyConversionDevice: "Energy Conversion Device",
+  IfcPipeSegment: "Pipe", IfcPipeFitting: "Pipe Fitting",
+  IfcDuctSegment: "Duct", IfcDuctFitting: "Duct Fitting",
+  IfcCableCarrierSegment: "Cable Tray", IfcCableSegment: "Cable",
+  IfcBuildingElementProxy: "Proxy",
+  IfcOpeningElement: "Opening",
+  IfcAlarm: "Alarm", IfcSensor: "Sensor", IfcActuator: "Actuator",
+};
+
+function mapIfcToGeminusCategory(ifcType: string): string {
+  return IFC_TO_GEMINUS_CATEGORY[ifcType] || IFC_TO_GEMINUS_CATEGORY[ifcType?.replace(/StandardCase$/, '')] || "Instance";
+}
+
 /** Download WASM files and symlink so web-ifc can find them */
 async function ensureWasm(): Promise<string> {
   const dir = "/tmp/web-ifc-wasm";
@@ -475,7 +500,7 @@ async function populateAssetsFromMetaObjects(
     const attrs = extractProperties(m);
     instanceRows.push({
       fm_guid: fmGuid, name: name || t, common_name: name || t,
-      category: "Instance", asset_type: t,
+      category: mapIfcToGeminusCategory(t), asset_type: t,
       building_fm_guid: buildingFmGuid, level_fm_guid: levelFmGuid, in_room_fm_guid: inRoomFmGuid,
       is_local: false, created_in_model: true, synced_at: now,
       ...(attrs ? { attributes: { source: "ifc", ...attrs } } : {}),

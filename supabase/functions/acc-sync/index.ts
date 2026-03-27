@@ -2,6 +2,50 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyAuth, unauthorizedResponse, forbiddenResponse, corsHeaders } from "../_shared/auth.ts";
 
+// Revit category → Geminus category mapping
+const REVIT_TO_GEMINUS_CATEGORY: Record<string, string> = {
+  "Walls": "Wall", "Curtain Panels": "Curtain Wall", "Curtain Wall Panels": "Curtain Wall",
+  "Doors": "Door", "Windows": "Window",
+  "Floors": "Slab", "Roofs": "Roof",
+  "Stairs": "Stair", "Ramps": "Stair",
+  "Columns": "Column", "Structural Columns": "Column",
+  "Structural Framing": "Beam",
+  "Ceilings": "Covering", "Railings": "Railing",
+  "Furniture": "Furnishing", "Furniture Systems": "Furnishing",
+  "Mechanical Equipment": "Flow Terminal",
+  "Pipes": "Pipe", "Pipe Fittings": "Pipe Fitting", "Pipe Accessories": "Pipe Fitting",
+  "Ducts": "Duct", "Duct Fittings": "Duct Fitting", "Duct Accessories": "Duct Fitting",
+  "Cable Trays": "Cable Tray", "Cable Tray Fittings": "Cable Tray",
+  "Conduits": "Cable", "Conduit Fittings": "Cable",
+  "Sprinklers": "Flow Terminal", "Fire Alarm Devices": "Alarm",
+  "Plumbing Fixtures": "Flow Terminal", "Electrical Fixtures": "Flow Terminal",
+  "Lighting Fixtures": "Flow Terminal", "Electrical Equipment": "Flow Terminal",
+  "Generic Models": "Proxy",
+  // Swedish Revit categories
+  "Väggar": "Wall", "Dörrar": "Door", "Fönster": "Window",
+  "Golv": "Slab", "Tak": "Roof", "Trappor": "Stair",
+  "Pelare": "Column", "Balkar": "Beam", "Räcken": "Railing",
+  "Möbler": "Furnishing",
+};
+
+function mapRevitToGeminusCategory(revitCategory: string): string {
+  if (!revitCategory) return "Instance";
+  // Direct match
+  if (REVIT_TO_GEMINUS_CATEGORY[revitCategory]) return REVIT_TO_GEMINUS_CATEGORY[revitCategory];
+  // IFC type match (some ACC models use IFC types as categories)
+  if (revitCategory.startsWith("Ifc")) {
+    const IFC_MAP: Record<string, string> = {
+      IfcWall: "Wall", IfcWallStandardCase: "Wall", IfcDoor: "Door", IfcWindow: "Window",
+      IfcSlab: "Slab", IfcRoof: "Roof", IfcStair: "Stair", IfcColumn: "Column", IfcBeam: "Beam",
+      IfcCovering: "Covering", IfcRailing: "Railing", IfcFurnishingElement: "Furnishing",
+      IfcFlowTerminal: "Flow Terminal", IfcPipeSegment: "Pipe", IfcDuctSegment: "Duct",
+      IfcBuildingElementProxy: "Proxy", IfcCurtainWall: "Curtain Wall",
+    };
+    return IFC_MAP[revitCategory] || "Instance";
+  }
+  return "Instance";
+}
+
 // ============ RETRY HELPER ============
 
 async function fetchWithRetry(
@@ -1274,7 +1318,7 @@ async function upsertBimAssets(
 
       return {
         fm_guid: `acc-bim-instance-${inst.externalId}`,
-        category: 'Instance',
+        category: mapRevitToGeminusCategory(inst.category),
         name: null,
         common_name: inst.name || inst.category || `Instance ${inst.externalId}`,
         asset_type: inst.category,
