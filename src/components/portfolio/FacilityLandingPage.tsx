@@ -141,6 +141,11 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     }
   }, [settings?.ivionSiteId, settings?.latitude, settings?.longitude, settings?.rotation]);
 
+  // Sync building name input
+  React.useEffect(() => {
+    setBuildingNameInput(facility.commonName || facility.name || '');
+  }, [facility.commonName, facility.name]);
+
   const isBuilding = facility.category === 'Building';
   const isStorey = facility.category === 'Building Storey';
   const isSpace = facility.category === 'Space';
