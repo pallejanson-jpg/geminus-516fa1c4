@@ -585,6 +585,28 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4 px-3 sm:px-6 overflow-hidden">
+                  {/* Building Name */}
+                  <div className="space-y-2 min-w-0">
+                    <Label htmlFor="buildingName" className="text-xs">Building Name</Label>
+                    <div className="flex gap-2 min-w-0">
+                      <Input
+                        id="buildingName"
+                        value={buildingNameInput}
+                        onChange={(e) => setBuildingNameInput(e.target.value)}
+                        placeholder="Enter building name"
+                        className="h-8 text-sm min-w-0 flex-1"
+                      />
+                      <Button 
+                        size="sm" 
+                        onClick={handleSaveBuildingName}
+                        disabled={isSavingName || buildingNameInput === (facility.commonName || facility.name || '')}
+                        className="h-8 shrink-0"
+                      >
+                        {isSavingName ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+                      </Button>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 min-w-0">
                     <div className="space-y-2 min-w-0">
                       <Label htmlFor="ivionSiteId" className="text-xs">Ivion Site ID</Label>
