@@ -91,7 +91,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
   const proactiveFetchedRef = useRef<string>("");
   const abortRef = useRef<AbortController | null>(null);
   const spokenMessageKeyRef = useRef<string>("");
-  const ttsUnlockedRef = useRef(false);
+  
   const currentBuildingRef = useRef<string | undefined>(undefined);
 
   // Fetch proactive insights when context has a building
