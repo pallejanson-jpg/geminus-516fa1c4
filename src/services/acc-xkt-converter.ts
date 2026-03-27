@@ -205,11 +205,15 @@ export async function convertToXktWithMetadata(
     const metaObjValues = Array.isArray(xktModel.metaObjects)
       ? xktModel.metaObjects
       : Object.values(xktModel.metaObjects);
+    // Log unique types for diagnostics
+    const typeSet = new Set<string>();
     for (const metaObj of metaObjValues as any[]) {
-      const metaType = metaObj.metaType || metaObj.type || '';
+      // XKTMetaObject uses 'metaObjectType' — check it first
+      const metaType = metaObj.metaObjectType || metaObj.metaType || metaObj.type || '';
       const objId = metaObj.metaObjectId || metaObj.id || '';
       const objName = metaObj.metaObjectName || metaObj.name || metaType;
       const parentId = metaObj.parentMetaObjectId || metaObj.parentId || '';
+      if (metaType) typeSet.add(metaType);
 
       // Build xeokit MetaModel JSON entry — include IFC GlobalId if available
       const globalId = metaObj.originalSystemId || metaObj.globalId || metaObj.GlobalId || '';
