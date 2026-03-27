@@ -145,7 +145,7 @@ export function useAiViewerBridge(viewer: any, isReady: boolean) {
 
     window.addEventListener(AI_VIEWER_COMMAND_EVENT, handler);
     return () => window.removeEventListener(AI_VIEWER_COMMAND_EVENT, handler);
-  }, [isReady, highlightEntities, filterToEntities, resetView]);
+  }, [isReady, highlightEntities, filterToEntities, colorizeEntities, resetView]);
 
-  return { highlightEntities, resetView, filterToEntities };
+  return { highlightEntities, resetView, filterToEntities, colorizeEntities };
 }

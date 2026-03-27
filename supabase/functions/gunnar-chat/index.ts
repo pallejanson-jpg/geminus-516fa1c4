@@ -798,13 +798,15 @@ serve(async (req) => {
       // If format_response was called, we're done
       if (formatResponseResult) {
         console.log(`Gunnar: format_response received (${Date.now() - startTime}ms, round ${round + 1})`);
-        const structured = {
+        const structured: any = {
           message: formatResponseResult.message || "",
           action: formatResponseResult.action || "none",
           asset_ids: formatResponseResult.asset_ids || [],
           external_entity_ids: formatResponseResult.external_entity_ids || [],
           filters: formatResponseResult.filters || {},
         };
+        if (formatResponseResult.sensor_data?.length) structured.sensor_data = formatResponseResult.sensor_data;
+        if (formatResponseResult.color_map && Object.keys(formatResponseResult.color_map).length) structured.color_map = formatResponseResult.color_map;
         const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
         saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, [...userMsgs, { role: "assistant", content: structured.message }]).catch(e =>
           console.error("Failed to save conversation:", e)
