@@ -11,6 +11,7 @@ import ReactMarkdown from "react-markdown";
 import { useWebSpeechRecognition } from "@/hooks/useWebSpeechRecognition";
 import { getGunnarSettings, saveGunnarSettings } from "@/components/settings/GunnarSettings";
 import { dispatchAiViewerCommand } from "@/hooks/useAiViewerBridge";
+import { AI_SENSOR_DATA_EVENT } from "@/components/viewer/SensorDataOverlay";
 
 type Message = {
   role: "user" | "assistant";
@@ -230,6 +231,10 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
 
     if (response.action === 'colorize' && response.color_map && Object.keys(response.color_map).length > 0) {
       dispatchAiViewerCommand({ action: 'colorize', colorMap: response.color_map });
+      // Dispatch sensor data to overlay panel
+      if (response.sensor_data?.length) {
+        window.dispatchEvent(new CustomEvent(AI_SENSOR_DATA_EVENT, { detail: response.sensor_data }));
+      }
       const sensorCount = response.sensor_data?.length || Object.keys(response.color_map).length;
       toast.success(`Visar sensordata för ${sensorCount} objekt`);
       return;
