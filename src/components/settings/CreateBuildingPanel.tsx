@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,6 +10,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { deleteBuilding } from '@/services/asset-plus-service';
@@ -71,6 +72,10 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
   const [conversionStartTime, setConversionStartTime] = useState<number | null>(null);
   const [elapsedDisplay, setElapsedDisplay] = useState('');
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [availableModelSlots, setAvailableModelSlots] = useState<string[]>([]);
+  const [slotDialogOpen, setSlotDialogOpen] = useState(false);
+  const [slotChoice, setSlotChoice] = useState('');
+  const [newSlotName, setNewSlotName] = useState('');
 
   // ── Excel import state ──
   const [excelImportOpen, setExcelImportOpen] = useState(false);
@@ -247,6 +252,94 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
     if (createdBuilding) fetchBuildings();
   }, [createdBuilding, fetchBuildings]);
 
+  const inferredIfcModelName = useMemo(
+    () => ifcFile?.name.replace(/\.ifc$/i, '').trim() || 'Model',
+    [ifcFile]
+  );
+
+  const getModelSlotId = useCallback((name: string) => {
+    const normalized = name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 64);
+
+    return `slot-${normalized || 'model'}`;
+  }, []);
+
+  const loadModelSlots = useCallback(async () => {
+    if (!selectedBuildingFmGuid) {
+      setAvailableModelSlots([]);
+      return;
+    }
+
+    const { data } = await supabase
+      .from('xkt_models')
+      .select('model_name, created_at')
+      .eq('building_fm_guid', selectedBuildingFmGuid)
+      .order('created_at', { ascending: false });
+
+    const seen = new Set<string>();
+    const slots: string[] = [];
+
+    (data || []).forEach((row: any) => {
+      const name = row.model_name?.trim();
+      const key = name?.toLowerCase();
+      if (!name || !key || seen.has(key)) return;
+      seen.add(key);
+      slots.push(name);
+    });
+
+    setAvailableModelSlots(slots);
+  }, [selectedBuildingFmGuid]);
+
+  useEffect(() => {
+    void loadModelSlots();
+  }, [loadModelSlots]);
+
+  const cleanupSupersededModels = useCallback(async (
+    buildingGuid: string,
+    targetModelName: string,
+    keepModelId: string,
+  ) => {
+    const modelName = targetModelName.trim();
+    if (!buildingGuid || !modelName || !keepModelId) return;
+
+    const { data: staleModels } = await supabase
+      .from('xkt_models')
+      .select('model_id, storage_path')
+      .eq('building_fm_guid', buildingGuid)
+      .eq('model_name', modelName)
+      .neq('model_id', keepModelId);
+
+    if (!staleModels || staleModels.length === 0) {
+      await loadModelSlots();
+      return;
+    }
+
+    const stalePaths = staleModels.flatMap((row: any) => {
+      const paths: string[] = row.storage_path ? [row.storage_path] : [];
+      if (row.storage_path?.toLowerCase().endsWith('.xkt')) {
+        paths.push(row.storage_path.replace(/\.xkt$/i, '_metadata.json'));
+      }
+      return paths;
+    });
+
+    await supabase
+      .from('xkt_models')
+      .delete()
+      .eq('building_fm_guid', buildingGuid)
+      .eq('model_name', modelName)
+      .neq('model_id', keepModelId);
+
+    if (stalePaths.length > 0) {
+      await supabase.storage.from('xkt-models').remove(stalePaths);
+    }
+
+    await loadModelSlots();
+  }, [loadModelSlots]);
+
   const addLog = useCallback((msg: string) => {
     setConversionLogs(prev => [...prev, msg]);
   }, []);
@@ -330,7 +423,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
   }, [addLog]);
 
   // ── IFC upload handler (same logic as before) ──
-  const handleIfcUpload = async () => {
+  const startIfcUpload = async (targetModelName: string) => {
     if (!ifcFile || !targetBuildingFmGuid) return;
 
     setIsConverting(true);
@@ -358,7 +451,8 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      const safeModelName = ifcFile.name.replace(/\.ifc$/i, '');
+      const safeModelName = targetModelName.trim() || ifcFile.name.replace(/\.ifc$/i, '');
+      const slotModelId = getModelSlotId(safeModelName);
       
       // Determine if this is an IFC upload to an existing building (e.g. Asset+ building)
       const isUploadToExisting = !createdBuilding && existingBuildings.some(b => b.fmGuid === targetBuildingFmGuid);
@@ -437,7 +531,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
 
       if (useDirectBrowser) {
         addLog(`File is ${fileSizeMB.toFixed(0)} MB — using browser-based conversion`);
-        await runBrowserConversion(ifcFile, targetBuildingFmGuid, jobId, safeModelName, addLog, setConversionProgress);
+        await runBrowserConversion(ifcFile, targetBuildingFmGuid, jobId, safeModelName, slotModelId, addLog, setConversionProgress);
       } else {
         addLog('Starting server-side conversion...');
         startPolling(jobId);
@@ -484,7 +578,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           pollingRef.current = null;
           addLog('⚠️ Server memory limit — switching to browser conversion...');
           setConversionProgress(20);
-          await runBrowserConversion(ifcFile, targetBuildingFmGuid, jobId, safeModelName, addLog, setConversionProgress);
+          await runBrowserConversion(ifcFile, targetBuildingFmGuid, jobId, safeModelName, slotModelId, addLog, setConversionProgress);
         } else if (convResult && !convResult.success) {
           if (pollingRef.current) clearInterval(pollingRef.current);
           pollingRef.current = null;
@@ -492,6 +586,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         } else if (convResult?.success) {
           if (pollingRef.current) clearInterval(pollingRef.current);
           pollingRef.current = null;
+          await cleanupSupersededModels(targetBuildingFmGuid, safeModelName, convResult.modelId || slotModelId);
           setConversionProgress(90);
           addLog(`XKT generated: ${convResult.xktSizeMB} MB`);
           addLog(`Hierarchy: ${convResult.levels?.length || 0} levels, ${convResult.spaces?.length || 0} spaces`);
@@ -553,7 +648,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
     }
 
     async function runBrowserConversion(
-      file: File, buildingGuid: string, jobId: string, modelNameSafe: string,
+      file: File, buildingGuid: string, jobId: string, modelNameSafe: string, slotModelId: string,
       log: (msg: string) => void, setProgress: (p: number) => void,
     ) {
       const localLogs: string[] = [];
@@ -605,7 +700,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         }
         if (result.systems?.length > 0) log(`Systems: ${result.systems.length} extracted`);
 
-        const modelId = `ifc-${Date.now()}`;
+        const modelId = slotModelId;
         const storageFileName = `${modelId}.xkt`;
         const storagePath = `${buildingGuid}/${storageFileName}`;
         log('Uploading XKT to storage...');
@@ -629,6 +724,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           storage_path: storagePath, file_url: null, format: 'xkt',
           synced_at: new Date().toISOString(), source_updated_at: new Date().toISOString(),
         } as any, { onConflict: 'building_fm_guid,model_id' });
+        await cleanupSupersededModels(buildingGuid, modelNameSafe, modelId);
 
         // Persist systems
         if (result.systems?.length > 0) {
@@ -786,6 +882,32 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
     }
   };
 
+  const handleIfcUpload = async () => {
+    if (!ifcFile || !targetBuildingFmGuid) return;
+
+    const isUploadToExisting = !createdBuilding && existingBuildings.some(b => b.fmGuid === targetBuildingFmGuid);
+    if (isUploadToExisting && availableModelSlots.length > 0) {
+      const matchedSlot = availableModelSlots.find(slot => slot.toLowerCase() === inferredIfcModelName.toLowerCase());
+      setSlotChoice(matchedSlot || '__new__');
+      setNewSlotName(inferredIfcModelName);
+      setSlotDialogOpen(true);
+      return;
+    }
+
+    await startIfcUpload(inferredIfcModelName);
+  };
+
+  const confirmIfcSlotSelection = async () => {
+    const chosenModelName = (slotChoice === '__new__' ? newSlotName : slotChoice).trim();
+    if (!chosenModelName) {
+      toast({ variant: 'destructive', title: 'Enter a model name' });
+      return;
+    }
+
+    setSlotDialogOpen(false);
+    await startIfcUpload(chosenModelName);
+  };
+
   // ── Sync from Asset+ for selected building ──
   const handleSyncAssetPlus = async () => {
     if (!targetBuildingFmGuid) return;
@@ -813,6 +935,9 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
     setConversionLogs([]);
     setConversionDone(false);
     setConversionProgress(0);
+    setSlotDialogOpen(false);
+    setSlotChoice('');
+    setNewSlotName('');
   };
 
   // ── Batch enqueue all buildings ──
@@ -1312,6 +1437,51 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           </Accordion>
         </div>
       )}
+
+      <Dialog open={slotDialogOpen} onOpenChange={setSlotDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Select model slot</DialogTitle>
+            <DialogDescription>
+              Choose which model this IFC should replace for {selectedBuilding?.commonName || 'the selected building'}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Existing model slot</Label>
+              <Select value={slotChoice} onValueChange={setSlotChoice}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="Select a model slot" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableModelSlots.map(slot => (
+                    <SelectItem key={slot} value={slot}>{slot}</SelectItem>
+                  ))}
+                  <SelectItem value="__new__">Create new slot</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {slotChoice === '__new__' && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">New model name</Label>
+                <Input
+                  value={newSlotName}
+                  onChange={e => setNewSlotName(e.target.value)}
+                  placeholder="e.g. ARK"
+                  className="h-9 text-sm"
+                />
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSlotDialogOpen(false)}>Cancel</Button>
+            <Button onClick={confirmIfcSlotSelection}>Continue</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Property dialog */}
       <CreatePropertyDialog
