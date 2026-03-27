@@ -136,6 +136,38 @@ const tools = [
       },
     },
   },
+  // ── IoT / Sensor tools ──
+  {
+    type: "function",
+    function: {
+      name: "get_sensors_in_room",
+      description: "Find sensors by type (temperature, co2, humidity, IfcSensor, IfcAlarm) in a specific room. Returns sensor assets with their attributes.",
+      parameters: {
+        type: "object",
+        properties: {
+          sensor_type: { type: "string", description: "Sensor type to search (e.g. 'temperature', 'co2', 'humidity', 'IfcSensor')" },
+          room_guid: { type: "string", description: "The room's fm_guid" },
+        },
+        required: ["sensor_type", "room_guid"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_latest_sensor_values",
+      description: "Get latest sensor readings (temperature, CO2, humidity, value, unit, status) for given sensor asset fm_guids.",
+      parameters: {
+        type: "object",
+        properties: {
+          sensor_ids: { type: "array", items: { type: "string" }, description: "Array of sensor asset fm_guids" },
+        },
+        required: ["sensor_ids"],
+        additionalProperties: false,
+      },
+    },
+  },
   // ── Final structured response tool ──
   {
     type: "function",
@@ -146,7 +178,7 @@ const tools = [
         type: "object",
         properties: {
           message: { type: "string", description: "Human-readable message to display in chat" },
-          action: { type: "string", enum: ["highlight", "filter", "list", "none"], description: "Viewer action to perform" },
+          action: { type: "string", enum: ["highlight", "filter", "colorize", "list", "none"], description: "Viewer action to perform. Use 'colorize' when showing sensor data with color-coded values." },
           asset_ids: { type: "array", items: { type: "string" }, description: "Asset fm_guids found" },
           external_entity_ids: { type: "array", items: { type: "string" }, description: "xeokit entity IDs for viewer (from get_viewer_entities)" },
           filters: {
@@ -157,6 +189,29 @@ const tools = [
               room: { type: "string" },
             },
             additionalProperties: false,
+          },
+          sensor_data: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                entity_id: { type: "string", description: "xeokit external_entity_id" },
+                value: { type: "number" },
+                type: { type: "string", description: "temperature, co2, humidity" },
+                unit: { type: "string" },
+                status: { type: "string", enum: ["normal", "warning", "critical"] },
+              },
+            },
+            description: "Sensor readings mapped to viewer entities",
+          },
+          color_map: {
+            type: "object",
+            additionalProperties: {
+              type: "array",
+              items: { type: "number" },
+              description: "RGB color [r, g, b] where each value is 0-1",
+            },
+            description: "Map of external_entity_id to RGB color for colorize action. Green=[0,0.8,0.2], Yellow=[1,0.9,0], Red=[1,0.2,0.1]",
           },
         },
         required: ["message", "action"],
