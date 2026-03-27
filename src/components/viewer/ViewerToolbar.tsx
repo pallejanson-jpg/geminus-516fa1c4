@@ -16,6 +16,8 @@ import {
   Home,
   Gauge,
   Navigation,
+  Bot,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
