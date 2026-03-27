@@ -895,7 +895,11 @@ async function extractBimHierarchy(
                 objectId: obj.objectId,
                 versionUrn: idx.versionUrn,
               });
-            } else if (category === 'Revit Rooms' || category === 'Rooms' || category === 'IfcSpace') {
+            } else if (
+              category === 'Revit Rooms' || category === 'Rooms' || category === 'IfcSpace' ||
+              category === 'Spaces' || category === 'Rum' ||
+              /room/i.test(category) || /space/i.test(category)
+            ) {
               if (!debugRoomLogged) {
                 console.log(`[BIM Debug] First room props: ${JSON.stringify(obj.props).substring(0, 1500)}`);
                 debugRoomLogged = true;
