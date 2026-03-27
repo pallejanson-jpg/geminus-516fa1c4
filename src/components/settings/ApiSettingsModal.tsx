@@ -1232,15 +1232,32 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
-    // Sync structure first, then let the asset sync run as a resumable loop
+    // Sync structure only (decoupled from asset sync)
     const handleSyncStructure = async () => {
-        if (isSyncingStructure || isSyncingAssets) return;
+        if (isSyncingStructure) return;
 
         setIsSyncingStructure(true);
-        setIsSyncingAssets(true);
+        setStructureSyncLog([]);
+        setStructureSyncOutcome(null);
+        const startTime = Date.now();
+
+        const addStep = (id: string, label: string, status: 'running' | 'done' | 'error' | 'pending' = 'running') => {
+            setStructureSyncLog(prev => {
+                const existing = prev.find(s => s.id === id);
+                if (existing) {
+                    return prev.map(s => s.id === id ? { ...s, status, completedAt: status === 'done' || status === 'error' ? Date.now() : undefined } : s);
+                }
+                return [...prev, { id, label, status, startedAt: Date.now() }];
+            });
+        };
+
+        const updateStep = (id: string, updates: Partial<import('./SyncStatusLog').SyncStep>) => {
+            setStructureSyncLog(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+        };
 
         try {
-            // Resumable structure loop
+            addStep('structure', 'Syncing buildings, floors & rooms');
+
             const runStructureLoop = async (): Promise<void> => {
                 const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
                     body: { action: 'sync-structure' }
@@ -1251,85 +1268,50 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 await fetchSyncStatus();
 
                 if (data?.interrupted) {
-                    toast({
-                        title: 'Syncing structure...',
-                        description: `${data.totalSynced || 0} items so far (${data.phase})...`,
+                    updateStep('structure', {
+                        message: `${data.totalSynced || 0} items (${data.phase})...`,
+                        count: data.totalSynced || 0,
                     });
                     setTimeout(() => runStructureLoop(), 2000);
                     return;
                 }
 
-                toast({
-                    title: 'Structure synced',
-                    description: data?.message || 'Buildings, floors, and rooms are updated. Starting asset sync...',
+                updateStep('structure', { status: 'done', count: data?.totalSynced || 0, completedAt: Date.now() });
+
+                const elapsed = Date.now() - startTime;
+                setStructureSyncOutcome({
+                    success: true,
+                    summary: `Structure sync complete`,
+                    details: [
+                        `${(data?.totalSynced || 0).toLocaleString()} buildings/floors/rooms synced`,
+                    ],
+                    durationMs: elapsed,
                 });
 
-                // Structure done — start asset loop
-                runResumableSync();
-            };
-
-            const runResumableSync = async (): Promise<void> => {
-                try {
-                    const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
-                        body: { action: 'sync-assets-resumable' }
-                    });
-
-                    if (error) {
-                        toast({
-                            variant: 'destructive',
-                            title: 'Sync error',
-                            description: error.message,
-                        });
-                        setIsSyncingAssets(false);
-                        setIsSyncingStructure(false);
-                        return;
-                    }
-
-                    await fetchSyncStatus();
-                    await fetchSyncProgress();
-
-                    if (data?.interrupted) {
-                        setTimeout(() => runResumableSync(), 1000);
-                        return;
-                    }
-
-                    toast({
-                        title: 'Sync complete',
-                        description: `${data?.totalSynced || 0} assets synced successfully.`,
-                    });
-
-                    setIsSyncingAssets(false);
-                    setIsSyncingStructure(false);
-                    await checkSyncStatus();
-                    handleAutoSyncSystems();
-                    window.dispatchEvent(new CustomEvent('asset-sync-completed', {
-                        detail: { totalSynced: data?.totalSynced }
-                    }));
-                } catch (error: any) {
-                    toast({
-                        variant: 'destructive',
-                        title: 'Sync failed',
-                        description: error.message || 'Unknown error',
-                    });
-                    setIsSyncingAssets(false);
-                    setIsSyncingStructure(false);
-                }
+                setIsSyncingStructure(false);
+                await checkSyncStatus();
             };
 
             toast({
-                title: 'Starting sync',
-                description: 'Running structure sync first, then continuing asset sync automatically.',
+                title: 'Starting structure sync',
+                description: 'Syncing buildings, floors and rooms...',
             });
 
             runStructureLoop();
         } catch (error: any) {
+            setStructureSyncLog(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'error' as const, message: error.message, completedAt: Date.now() } : s));
+            setStructureSyncOutcome({
+                success: false,
+                summary: 'Structure sync failed',
+                details: [error.message],
+                durationMs: Date.now() - startTime,
+            });
             toast({
                 variant: 'destructive',
                 title: 'Sync failed',
                 description: error.message,
             });
             setIsSyncingStructure(false);
-            setIsSyncingAssets(false);
         }
     };
 
