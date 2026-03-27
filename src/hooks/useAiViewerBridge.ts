@@ -134,6 +134,9 @@ export function useAiViewerBridge(viewer: any, isReady: boolean) {
         case 'filter':
           if (command.entityIds?.length) filterToEntities(command.entityIds);
           break;
+        case 'colorize':
+          if (command.colorMap) colorizeEntities(command.colorMap);
+          break;
         case 'reset':
           resetView();
           break;
