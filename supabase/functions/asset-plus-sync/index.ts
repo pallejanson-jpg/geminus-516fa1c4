@@ -1096,7 +1096,9 @@ serve(async (req) => {
         const filter = [
           ["buildingFmGuid", "=", building.fm_guid],
           "and",
-          ["objectType", "=", 4]
+          ["objectType", "=", 4],
+          "and",
+          ["expireDate", "=", null]
         ];
 
         let hasMore = true;
