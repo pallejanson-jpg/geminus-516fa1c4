@@ -610,11 +610,24 @@ ACTION TYPES for format_response:
 - "list" — just display data in chat, no viewer action
 - "none" — simple response with no data
 
+IoT / SENSOR DATA:
+- When user asks about temperature, CO2, humidity, or environmental data:
+  1. Call get_sensors_in_room(sensor_type, room_guid) to find sensors
+  2. Call get_latest_sensor_values(sensor_ids) to get current readings
+  3. Call get_viewer_entities(asset_ids) to resolve entity IDs
+  4. Call format_response with action="colorize", include sensor_data and color_map
+- Color coding thresholds:
+  - Temperature: <20°C=blue [0.2,0.4,1], 20-26°C=green [0,0.8,0.2], >26°C=red [1,0.2,0.1]
+  - CO2: <800ppm=green, 800-1000ppm=yellow [1,0.9,0], >1000ppm=red
+  - Humidity: 30-60%=green, outside=yellow/red
+- For "show pumps with high temperature": search pumps → get sensors in same rooms → cross-reference → colorize
+
 EXAMPLES:
 User: "visa ventilation" → get_assets_by_system("ventilation") → get_viewer_entities(ids) → format_response(action="highlight")
 User: "vilka pumpar finns i rum A101" → search room A101 → get_assets_in_room(guid) → filter pumps → get_viewer_entities → format_response(action="highlight")
 User: "hitta AHU" → search_assets("AHU") → format_response(action="list")
 User: "visa alla brandlarm" → get_assets_by_system("IfcAlarm") → get_viewer_entities → format_response(action="highlight")
+User: "visa temperatur i rum A101" → get_sensors_in_room("temperature", room_guid) → get_latest_sensor_values(ids) → get_viewer_entities(ids) → format_response(action="colorize", sensor_data, color_map)
 ${userCtx}${ctx}${modelsCtx}${memoryCtx}`;
 }
 
