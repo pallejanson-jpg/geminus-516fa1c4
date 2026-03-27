@@ -881,9 +881,9 @@ serve(async (req) => {
       // Re-fetch all remote fm_guids for orphan detection (structure is ~2800, fits in memory)
       console.log('Running orphan cleanup for structure...');
       const cleanupFilter = [
-        ["objectType", "=", 1], "or",
-        ["objectType", "=", 2], "or",
-        ["objectType", "=", 3]
+        "(", ["objectType", "=", 1], "or", ["objectType", "=", 2], "or", ["objectType", "=", 3], ")",
+        "and",
+        ["expireDate", "=", null]
       ];
       const remoteFmGuids = new Set<string>();
       let cleanupSkip = 0;
