@@ -70,11 +70,36 @@ interface ModelInfo {
   is_chunk?: boolean;
   chunk_order?: number;
   parent_model_id?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 type ModelCandidate = ModelInfo & { synced_at?: string | null; source: 'db' | 'storage' };
 
 type LoadPhase = 'init' | 'loading_sdk' | 'creating_viewer' | 'syncing' | 'bootstrapping' | 'loading_models' | 'ready' | 'error';
+
+const getModelRecency = (model: Pick<ModelCandidate, 'updated_at' | 'created_at' | 'synced_at'>) =>
+  new Date(model.updated_at || model.created_at || model.synced_at || 0).getTime();
+
+const dedupeModelsByName = (items: ModelCandidate[]): ModelCandidate[] => {
+  const unnamed: ModelCandidate[] = [];
+  const named = new Map<string, ModelCandidate>();
+
+  items.forEach((item) => {
+    const key = item.model_name?.trim().toLowerCase();
+    if (!key) {
+      unnamed.push(item);
+      return;
+    }
+
+    const existing = named.get(key);
+    if (!existing || getModelRecency(item) >= getModelRecency(existing)) {
+      named.set(key, item);
+    }
+  });
+
+  return [...named.values(), ...unnamed];
+};
 
 const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   buildingFmGuid,
@@ -157,9 +182,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       const dbPromise = supabase
         .from('xkt_models')
-        .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at, is_chunk, chunk_order, parent_model_id, format')
+        .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at, is_chunk, chunk_order, parent_model_id, format, created_at, updated_at')
         .eq('building_fm_guid', buildingFmGuid)
-        .order('file_size', { ascending: true });
+        .order('updated_at', { ascending: false });
 
       const storagePromise = supabase.storage
         .from('xkt-models')
@@ -356,37 +381,38 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       // 3. Process pre-fetched model metadata (already loaded in parallel above)
       setPhase('loading_models');
       let dbError: any = dbResult.error;
-      let models: ModelCandidate[] = ((dbResult.data as any[]) ?? []).map((m) => ({
+      const dbModels: ModelCandidate[] = ((dbResult.data as any[]) ?? []).map((m) => ({
         ...m,
         source: 'db' as const,
       }));
+      let models: ModelCandidate[] = dedupeModelsByName(dbModels);
 
-      // Merge storage files
-      const mergedModels = new Map<string, ModelCandidate>();
-      models.forEach((m) => mergedModels.set(m.model_id, m));
+      if (dbModels.length !== models.length) {
+        console.log(`[NativeViewer] Deduped DB models by name: ${dbModels.length} → ${models.length}`);
+      }
 
       if (!storageResult.error && storageResult.data) {
         const xktFiles = storageResult.data.filter((f: any) =>
           f.name?.toLowerCase().endsWith('.xkt') && !f.name?.toLowerCase().endsWith('_xkt.xkt')
         );
 
-        xktFiles.forEach((file: any) => {
-          const modelId = file.name.replace(/\.xkt$/i, '');
-          if (!mergedModels.has(modelId)) {
-            mergedModels.set(modelId, {
+        if (models.length === 0) {
+          models = dedupeModelsByName(xktFiles.map((file: any) => {
+            const modelId = file.name.replace(/\.xkt$/i, '');
+            return {
               model_id: modelId,
               model_name: modelId,
               storage_path: `${buildingFmGuid}/${file.name}`,
               file_size: file.metadata?.size ?? null,
               storey_fm_guid: null,
               synced_at: null,
-              source: 'storage',
-            });
-          }
-        });
-
-        models = Array.from(mergedModels.values());
-        console.log(`[NativeViewer] Model sources → DB: ${(models || []).filter((m: any) => !!m.synced_at).length}, Storage: ${xktFiles.length}, Merged: ${models.length}`);
+              source: 'storage' as const,
+            };
+          }));
+          console.log(`[NativeViewer] Model sources → Storage bootstrap: ${xktFiles.length} raw files, using ${models.length}`);
+        } else {
+          console.log(`[NativeViewer] Model sources → DB authoritative: ${models.length} rows, ignored ${xktFiles.length} raw storage files`);
+        }
       } else if (storageResult.error) {
         console.warn('[NativeViewer] Storage list failed, continuing with DB models only:', storageResult.error.message);
       }
@@ -953,20 +979,38 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }
       };
 
-      // Process queue with strict concurrency control
-      const active = new Set<Promise<void>>();
-      for (const model of queue) {
-        let promise: Promise<void>;
-        promise = loadModel(model).finally(() => {
-          active.delete(promise);
-        });
-        active.add(promise);
+      const runQueue = async (modelsToLoad: ModelInfo[]) => {
+        const active = new Set<Promise<void>>();
+        for (const model of modelsToLoad) {
+          let promise: Promise<void>;
+          promise = loadModel(model).finally(() => {
+            active.delete(promise);
+          });
+          active.add(promise);
 
-        if (active.size >= CONCURRENT) {
-          await Promise.race(active);
+          if (active.size >= CONCURRENT) {
+            await Promise.race(active);
+          }
         }
+        await Promise.allSettled(Array.from(active));
+      };
+
+      await runQueue(queue);
+
+      const getSceneEntityCount = () =>
+        Object.values(viewer.scene?.models || {}).reduce((sum, sceneModel: any) => {
+          const count = sceneModel?.numEntities ?? Object.keys(sceneModel?.objects || {}).length ?? 0;
+          return sum + count;
+        }, 0);
+
+      if (getSceneEntityCount() === 0 && secondaryQueue.length > 0) {
+        console.warn(`[NativeViewer] Primary models produced no geometry — loading ${secondaryQueue.length} fallback model(s)`);
+        loaded = 0;
+        if (mountedRef.current) {
+          setLoadProgress({ loaded: 0, total: secondaryQueue.length });
+        }
+        await runQueue(secondaryQueue);
       }
-      await Promise.allSettled(Array.from(active));
 
       // 5. Camera: instant viewFit as fallback (no animation) if no saved start view arrives within 500ms
       if (mountedRef.current && viewer.scene) {

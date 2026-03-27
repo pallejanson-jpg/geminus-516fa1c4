@@ -31,6 +31,19 @@ function mapIfcToGeminusCategory(ifcType: string): string {
   return IFC_TO_GEMINUS_CATEGORY[ifcType] || IFC_TO_GEMINUS_CATEGORY[ifcType?.replace(/StandardCase$/, '')] || "Instance";
 }
 
+function normalizeModelSlotKey(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64) || "model";
+}
+
+function getSlotModelId(name: string): string {
+  return `slot-${normalizeModelSlotKey(name)}`;
+}
+
 /** Download WASM files and symlink so web-ifc can find them */
 async function ensureWasm(): Promise<string> {
   const dir = "/tmp/web-ifc-wasm";
@@ -761,7 +774,8 @@ Deno.serve(async (req) => {
 
     // 6. Upload XKT to storage
     await appendLog("Uploading XKT to storage...", 75);
-    const modelId = `ifc-${Date.now()}`;
+    const safeName = (modelName || ifcStoragePath).replace(/\.ifc$/i, "").trim() || "Model";
+    const modelId = getSlotModelId(safeName);
     const storageFileName = `${modelId}.xkt`;
     const storagePath = `${buildingFmGuid}/${storageFileName}`;
 
@@ -781,7 +795,6 @@ Deno.serve(async (req) => {
     await appendLog("Saving model metadata...", 80);
 
     // 7. Save metadata to xkt_models table
-    const safeName = (modelName || ifcStoragePath).replace(/\.ifc$/i, "");
     const { error: dbError } = await supabase.from("xkt_models").upsert(
       {
         building_fm_guid: buildingFmGuid,
@@ -801,6 +814,36 @@ Deno.serve(async (req) => {
       const errMsg = `Database error: ${dbError.message}`;
       await updateJob({ status: "error", error_message: errMsg });
       throw new Error(errMsg);
+    }
+
+    const { data: staleModels } = await supabase
+      .from("xkt_models")
+      .select("model_id, storage_path")
+      .eq("building_fm_guid", buildingFmGuid)
+      .eq("model_name", safeName)
+      .neq("model_id", modelId);
+
+    if (staleModels && staleModels.length > 0) {
+      const stalePaths = staleModels.flatMap((row: any) => {
+        const paths = row.storage_path ? [row.storage_path] : [];
+        if (row.storage_path?.toLowerCase().endsWith(".xkt")) {
+          paths.push(row.storage_path.replace(/\.xkt$/i, "_metadata.json"));
+        }
+        return paths;
+      });
+
+      await supabase
+        .from("xkt_models")
+        .delete()
+        .eq("building_fm_guid", buildingFmGuid)
+        .eq("model_name", safeName)
+        .neq("model_id", modelId);
+
+      if (stalePaths.length > 0) {
+        await supabase.storage.from("xkt-models").remove(stalePaths);
+      }
+
+      await appendLog(`Removed ${staleModels.length} superseded ${safeName} revision(s)`, 82);
     }
 
     // 8+9. Persist systems AND populate assets in parallel (independent DB operations)
