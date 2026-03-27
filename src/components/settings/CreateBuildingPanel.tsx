@@ -763,6 +763,9 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         setConversionDone(true);
         log('✅ Done! Browser-based conversion succeeded.');
         toast({ title: 'IFC converted!', description: `${file.name} converted in browser and saved.` });
+        // Trigger data refresh so Navigator shows new levels/rooms
+        window.dispatchEvent(new Event('building-data-changed'));
+        toast({ title: 'IFC converted!', description: `${file.name} converted in browser and saved.` });
       } catch (clientErr: any) {
         log(`❌ Browser conversion failed: ${clientErr.message}`);
         // Mark job as failed so it doesn't stay stuck
