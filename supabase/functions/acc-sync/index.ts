@@ -1037,6 +1037,13 @@ async function extractBimHierarchy(
 
   console.log(`BIM hierarchy: ${allLevels.length} levels, ${allRooms.length} rooms, ${allInstances.length} instances from ${finishedIndexes.length} models`);
 
+  if (allRooms.length === 0 && allInstances.length > 0) {
+    // Collect all seen categories for diagnostic
+    const allCats = new Set<string>();
+    // Re-scan category counts from last index
+    console.warn(`[BIM WARNING] 0 rooms found but ${allInstances.length} instances exist. Room categories may use unexpected names. Check [BIM Categories] log above for all category names.`);
+  }
+
   // === Post-processing: fix level names using room references ===
   const roomLevelRefs = new Set<string>();
   for (const room of allRooms) {
