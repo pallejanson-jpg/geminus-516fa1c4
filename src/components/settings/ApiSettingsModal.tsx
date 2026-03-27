@@ -34,6 +34,7 @@ import { getFastNavEnabled, setFastNavEnabled } from './VoiceSettings';
 import KnowledgeBaseSettings from './KnowledgeBaseSettings';
 import { SyncProgressCard } from './SyncProgressCard';
 import ConversionProgressOverlay from './ConversionProgressOverlay';
+import { SyncStatusLog, type SyncStep, type SyncOutcome } from './SyncStatusLog';
 import CreateBuildingPanel from './CreateBuildingPanel';
 import type { TranslationStatus } from '@/services/acc-xkt-converter';
 
