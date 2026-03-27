@@ -6,6 +6,7 @@
 import React, { useState, useCallback, useRef, useContext, useEffect } from 'react';
 import useSectionPlaneClipping from '@/hooks/useSectionPlaneClipping';
 import { OBJECT_MOVE_MODE_EVENT, OBJECT_DELETE_EVENT, useObjectMoveMode } from '@/hooks/useObjectMoveMode';
+import { useAiViewerBridge } from '@/hooks/useAiViewerBridge';
 import NativeXeokitViewer from './NativeXeokitViewer';
 import MobileViewerOverlay from './mobile/MobileViewerOverlay';
 import FloatingFloorSwitcher from './FloatingFloorSwitcher';
@@ -59,6 +60,9 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   // Viewer instance
   const [xeokitViewer, setXeokitViewer] = useState<any>(null);
   const [isViewerReady, setIsViewerReady] = useState(false);
+
+  // AI Viewer Bridge — listens for AI_VIEWER_COMMAND events
+  useAiViewerBridge(xeokitViewer, isViewerReady);
   const pendingSavedViewRef = useRef<LoadSavedViewDetail | null>(null);
 
   // Indoor route from navigation handoff
