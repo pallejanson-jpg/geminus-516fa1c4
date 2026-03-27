@@ -464,7 +464,13 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [syncCheck, setSyncCheck] = useState<NewSyncCheckResult | null>(null);
     const [isCheckingSync, setIsCheckingSync] = useState(false);
     const [hasCheckedSync, setHasCheckedSync] = useState(false);
-    
+
+    // Sync log state for SyncStatusLog
+    const [structureSyncLog, setStructureSyncLog] = useState<SyncStep[]>([]);
+    const [structureSyncOutcome, setStructureSyncOutcome] = useState<SyncOutcome | null>(null);
+    const [assetSyncLog, setAssetSyncLog] = useState<SyncStep[]>([]);
+    const [assetSyncOutcome, setAssetSyncOutcome] = useState<SyncOutcome | null>(null);
+
     // Progress tracking from asset_sync_progress
     const [syncProgress, setSyncProgress] = useState<{
         totalSynced: number | null;
