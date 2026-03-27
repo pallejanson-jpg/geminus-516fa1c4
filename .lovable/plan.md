@@ -1,81 +1,79 @@
 
 
-## Problem Summary
+## Analysis of Issues
 
-Three issues to address:
+### 1. Delete Building Error (Red Toast)
+The `asset-plus-delete` edge function's cleanup loop tries to delete from `bcf_issues`, `building_external_links`, and `fm_access_dou` tables. While these tables exist, the error likely comes from one of them failing silently or the edge function returning `success: false` when `expireErrors.length > 0` (line 231) — meaning the Asset+ ExpireObject API call fails for some objects. The `handleDeleteBuilding` in `CreateBuildingPanel.tsx` then shows a destructive toast with "Partially failed". Additionally, `geometry_entity_map` and `systems` table rows are not cleaned up during delete.
 
-1. **Poor sync feedback** -- During and after sync, users see only brief toasts. No persistent, detailed status panel showing what's happening step-by-step or a clear outcome summary.
+**Fix**: Add missing cleanup tables (`geometry_entity_map`, `systems`) and make the delete function more resilient — catch errors per-table so one failure doesn't block others. Also handle the case where Asset+ credentials aren't configured (skip expiry gracefully).
 
-2. **Structure sync auto-triggers asset sync** -- `handleSyncStructure` currently chains into `runResumableSync()` (assets) automatically. User wants these as two independent processes.
+### 2. Expired Buildings in Asset+ Sync
+The sync filter (`objectType = 1, 2, 3`) does **not** filter out expired objects from Asset+. The Asset+ API likely returns objects with an `expireDate` field. We need to add a filter condition like `["expireDate", "=", null]` to exclude expired buildings/objects.
 
-3. **Local objects not pushed to Asset+** -- After syncing from Asset+, local-only objects (`is_local: true`) should be pushed to Asset+ to maintain CRUD parity and avoid discrepancies.
+**Fix**: Add expireDate filter to the `fetchAssetPlusObjects` calls in the sync-structure and sync-assets actions.
+
+### 3. Property (Complex) Name in Building Selector
+The viewer's `BuildingSelector.tsx` already shows `complexCommonName - buildingName` format (line 278-281). This works when the data has `complexCommonName`. No change needed there. But the `CreateBuildingPanel.tsx` building list likely doesn't show the complex name. Need to verify and add it.
+
+### 4. Edit Building Properties Panel
+The `CreatePropertyDialog` (Properties page) edits building_settings with API credentials and location. But for editing building **names**, common names, Ivion site IDs, position, and other building-level settings, the existing panel is in `CreateBuildingPanel.tsx` (settings). The user wants a clear way to edit building names and settings. Currently `CreatePropertyDialog` handles this at the "Property" (Complex) level. We need to ensure building-level editing (name, position, Ivion site ID) is accessible — this is already partially in `useBuildingSettings.ts` and `CreateBuildingPanel.tsx`.
+
+### 5. IFC Import — Rooms Not Appearing in Navigator, No BIM Model in Viewer
+The logs show:
+- ✅ Hierarchy populated: 8 levels, 9 spaces (from server-side metadata-only extraction)
+- But browser conversion reported: "Hierarchy: 0 levels, 0 spaces"
+- XKT was generated (17.18 MB) and uploaded
+- `xkt_models` row was created
+
+**Root cause analysis**:
+- The XKT file was uploaded and a `xkt_models` record was created with `model_id: ifc-{timestamp}` 
+- The viewer fetches from `xkt_models` and loads via signed storage URL
+- Rooms ARE in the database (8 levels, 9 spaces from server extraction)
+- But the user says rooms don't show in Navigator — this could be a data refresh issue (AppContext not re-fetching after import)
+- No BIM model visible — the XKT was uploaded but the viewer might not find it if the `storage_path` or `model_id` format doesn't match expectations
+
+**Key issue**: After IFC import, the app needs to refresh its data. The navigator reads from `AppContext.navigatorTreeData` which loads from the `assets` table. After import, this data isn't refreshed. Also, the viewer needs to find the XKT model via the `xkt_models` table.
 
 ## Plan
 
-### 1. Create a shared SyncStatusLog component
+### Task 1: Fix Delete Building Error
+**File: `supabase/functions/asset-plus-delete/index.ts`**
+- Add `geometry_entity_map` (column: `building_fm_guid`) and `systems` (column: `building_fm_guid`) to the cleanup tables list
+- Wrap each cleanup table deletion in individual try/catch so one failure doesn't affect others
+- If Asset+ credentials aren't configured, skip the expire step gracefully instead of failing
+- Log which specific table caused the error
 
-**New file: `src/components/settings/SyncStatusLog.tsx`**
+### Task 2: Filter Expired Objects from Asset+ Sync
+**File: `supabase/functions/asset-plus-sync/index.ts`**
+- In the structure sync filter (line 818-822), add `["expireDate", "=", null]` condition to exclude expired buildings/floors/rooms
+- In the asset sync filter, add the same expireDate filter
+- In the orphan cleanup filter, also exclude expired objects from the remote set
 
-A reusable component that shows a persistent, scrollable log of sync steps with clear status indicators:
+### Task 3: Show Complex (Property) Name in Building Selector Lists
+**File: `src/components/viewer/BuildingSelector.tsx`** — Already done (line 278-281)
+**File: `src/components/settings/CreateBuildingPanel.tsx`** — Update the building list to show `complexCommonName - buildingName` format. Currently fetches from `assets` table with `category = Building` but may not include `complex_common_name`.
 
-- Each step shows: icon (spinner/check/error), label, count, duration
-- Sections for "Structure Sync" and "Asset Sync" with collapsible detail
-- Final summary card after completion: "X buildings, Y floors, Z rooms synced" / "X assets synced, Y local objects pushed to Asset+"
-- Error summary if any steps failed
+### Task 4: Ensure Building Editing Panel is Accessible
+The `CreatePropertyDialog` handles Complex/Property-level editing. For building-level settings (name, position, Ivion site ID, hero image, etc.), the functionality exists in `useBuildingSettings.ts` and is partially surfaced in `CreateBuildingPanel.tsx`. 
+- Add building name editing (common_name) to the building panel in `CreateBuildingPanel.tsx`
+- Ensure Ivion site ID, position, and other building settings are editable from the selected building's accordion section
 
-This component will be used both in:
-- `DataConsistencyBanner` (front page, inline expandable)
-- `ApiSettingsModal` sync tab (always visible when sync is active)
+### Task 5: Fix IFC Import — Navigator Refresh + XKT Model Loading
+**File: `src/components/settings/CreateBuildingPanel.tsx`**
+- After successful IFC conversion, dispatch a custom event to trigger AppContext data refresh so Navigator shows the new levels/rooms
+- Verify the `xkt_models` upsert creates a record that the viewer can find and load
 
-### 2. Separate Structure and Asset sync in settings
+**File: `src/context/AppContext.tsx`** (if needed)
+- Ensure it listens for a refresh event after IFC import
 
-**Edit: `src/components/settings/ApiSettingsModal.tsx`**
-
-- `handleSyncStructure`: Remove the automatic chaining to `runResumableSync()`. After structure completes, show a clear summary and stop. Do NOT set `isSyncingAssets`.
-- `handleSyncAssetsChunked`: Stays independent as-is.
-- Both cards already exist separately in the UI -- just decouple the logic.
-
-### 3. Separate sync in DataConsistencyBanner
-
-**Edit: `src/components/common/DataConsistencyBanner.tsx`**
-
-- Replace the single "Sync with Asset+" button with two buttons: "Sync Structure" and "Sync Assets"
-- Or keep one button but show a step indicator making it clear which phase is running, and allow the user to trigger them independently
-- Show the `SyncStatusLog` inline while syncing, replacing the current minimal toast-only feedback
-
-### 4. Add "push local objects" step to asset sync
-
-**Edit: `src/components/settings/ApiSettingsModal.tsx`**
-
-- After asset sync completes (pull from Asset+), add a follow-up step that calls `push-missing-to-assetplus` action (already exists in the edge function) to push local-only objects to Asset+
-- Show this as a distinct step in the SyncStatusLog: "Pushing X local objects to Asset+..."
-- Update the summary to include pushed count
-
-**Edit: `src/components/common/DataConsistencyBanner.tsx`**
-
-- Same push-local step after sync completion
-
-### 5. Enhance SyncProgressCard with outcome display
-
-**Edit: `src/components/settings/SyncProgressCard.tsx`**
-
-- Add an optional `lastResult` prop to show a summary after sync completes (e.g., "Synced 1,204 buildings/floors/rooms in 2m 15s")
-- Show success/error state persistently until next sync starts
+The core issue is likely that after IFC import completes, the Navigator tree isn't refreshed. The XKT model should load since it's stored correctly in `xkt_models` — but the viewer needs to be opened/refreshed after import.
 
 ### Technical Details
 
-- The edge function already supports `push-missing-to-assetplus` action -- no backend changes needed
-- `SyncStatusLog` will use a simple `{step, status, message, count, startedAt, completedAt}[]` state array
-- The log state will be lifted to a shared hook or passed via props so both banner and settings can display it
-- Realtime subscriptions on `asset_sync_state` and `asset_sync_progress` tables will feed the log updates
-
-### Files Changed
-
 | File | Change |
 |---|---|
-| `src/components/settings/SyncStatusLog.tsx` | New -- reusable sync log/outcome component |
-| `src/components/settings/ApiSettingsModal.tsx` | Decouple structure/asset sync, add push-local step, integrate SyncStatusLog |
-| `src/components/common/DataConsistencyBanner.tsx` | Better progress UI, separate sync triggers, push-local step |
-| `src/components/settings/SyncProgressCard.tsx` | Add lastResult/outcome display |
-| `src/components/layout/SyncProgressBanner.tsx` | Update to show richer step info from SyncStatusLog |
+| `supabase/functions/asset-plus-delete/index.ts` | Add missing cleanup tables, improve error resilience |
+| `supabase/functions/asset-plus-sync/index.ts` | Add `expireDate = null` filter to exclude expired objects |
+| `src/components/settings/CreateBuildingPanel.tsx` | Show complex name in list, add building name editing, trigger data refresh after IFC import |
+| `src/context/AppContext.tsx` | Listen for data refresh event (if not already present) |
 
