@@ -16,6 +16,8 @@ import {
   Home,
   Gauge,
   Navigation,
+  Bot,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -25,6 +27,7 @@ import { Slider } from '@/components/ui/slider';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { applyArchitectColors } from '@/lib/architect-colors';
+import GunnarChat, { GunnarContext } from '@/components/chat/GunnarChat';
 import { ARCHITECT_BACKGROUND_CHANGED_EVENT } from '@/hooks/useArchitectViewMode';
 import {
   useSectionPlaneClipping,
@@ -78,9 +81,10 @@ const ALL_TOOLS: ToolDef[] = [
   { id: 'zoomIn', label: 'Zoom in', icon: <ZoomIn className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
   { id: 'crosshair', label: 'Crosshair', icon: <Crosshair className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
   { id: 'navigation', label: 'Indoor navigation', icon: <Navigation className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
+  { id: 'geminiAi', label: 'Geminus AI', icon: <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
 ];
 
-const DEFAULT_ENABLED = ['orbit', 'firstPerson', 'fitView', 'resetView', 'select', 'measure', 'section', 'viewMode'];
+const DEFAULT_ENABLED = ['orbit', 'firstPerson', 'fitView', 'resetView', 'select', 'measure', 'section', 'viewMode', 'geminiAi'];
 
 function getEnabledTools(): string[] {
   try {
@@ -142,6 +146,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
   const [isXrayActive, setIsXrayActive] = useState(false);
   const [isOnHoverActive, setIsOnHoverActive] = useState(false);
   const [isCrosshairActive, setIsCrosshairActive] = useState(false);
+  const [isGunnarOpen, setIsGunnarOpen] = useState(false);
   const [enabledTools, setEnabledTools] = useState<string[]>(getEnabledTools);
   const [showConfig, setShowConfig] = useState(false);
   const [navSpeed, setNavSpeed] = useState(() => {
@@ -1112,6 +1117,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
                   disabled={!isReady}
                 />
               )}
+              {tool.id === 'geminiAi' && (
+                <ToolButton
+                  icon={tool.icon}
+                  label={tool.label}
+                  onClick={() => setIsGunnarOpen(p => !p)}
+                  active={isGunnarOpen}
+                  disabled={!isReady}
+                />
+              )}
             </React.Fragment>
           );
         })}
@@ -1177,6 +1191,29 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
           </PopoverContent>
         </Popover>
       </div>
+
+      {/* Geminus AI floating chat panel */}
+      {isGunnarOpen && (
+        <div className="fixed z-50 bottom-24 right-6 w-[380px] max-h-[70vh] rounded-xl bg-card/95 backdrop-blur-md border border-border shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
+          <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/50 shrink-0">
+            <span className="text-sm font-medium flex items-center gap-2">
+              <Bot className="h-4 w-4 text-primary" />
+              Geminus AI
+            </span>
+            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setIsGunnarOpen(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex-1 overflow-hidden min-h-0">
+            <GunnarChat
+              open={true}
+              onClose={() => setIsGunnarOpen(false)}
+              context={{ activeApp: 'viewer' } as GunnarContext}
+              embedded
+            />
+          </div>
+        </div>
+      )}
     </TooltipProvider>
   );
 };
