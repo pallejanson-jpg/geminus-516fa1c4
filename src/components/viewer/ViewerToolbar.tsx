@@ -1191,6 +1191,29 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
           </PopoverContent>
         </Popover>
       </div>
+
+      {/* Geminus AI floating chat panel */}
+      {isGunnarOpen && (
+        <div className="fixed z-50 bottom-24 right-6 w-[380px] max-h-[70vh] rounded-xl bg-card/95 backdrop-blur-md border border-border shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
+          <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/50 shrink-0">
+            <span className="text-sm font-medium flex items-center gap-2">
+              <Bot className="h-4 w-4 text-primary" />
+              Geminus AI
+            </span>
+            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setIsGunnarOpen(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex-1 overflow-hidden min-h-0">
+            <GunnarChat
+              open={true}
+              onClose={() => setIsGunnarOpen(false)}
+              context={{ activeApp: 'viewer' } as GunnarContext}
+              embedded
+            />
+          </div>
+        </div>
+      )}
     </TooltipProvider>
   );
 };
