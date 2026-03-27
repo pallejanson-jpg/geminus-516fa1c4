@@ -148,10 +148,8 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     setIsSpeaking(false);
   }, []);
 
-  const speakAssistant = useCallback(async (text: string) => {
-    if (!voiceOutputEnabled) return;
-    // Clean markdown
-    const cleaned = text.replace(/[*_`#>]/g, '').replace(/^[-•]\s+/gm, ', ').replace(/\s+/g, ' ').trim();
+  const speakText = useCallback(async (text: string) => {
+    const cleaned = preprocessForTTS(text);
     if (!cleaned) return;
 
     stopSpeaking();
@@ -166,7 +164,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ text: cleaned, voiceId: settings.voiceName }),
+        body: JSON.stringify({ text: cleaned, voiceId: settings.voiceName, speed: 1.0 }),
       });
 
       if (!response.ok) {
@@ -188,7 +186,12 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       console.error('TTS playback error:', e);
       setIsSpeaking(false);
     }
-  }, [voiceOutputEnabled, stopSpeaking]);
+  }, [stopSpeaking]);
+
+  const speakAssistant = useCallback(async (text: string) => {
+    if (!voiceOutputEnabled) return;
+    await speakText(text);
+  }, [voiceOutputEnabled, speakText]);
 
   // ── Structured chat call (no streaming — JSON response) ──
   const callChat = useCallback(async (userMessages: Message[], currentContext?: GunnarContext): Promise<AiStructuredResponse> => {
