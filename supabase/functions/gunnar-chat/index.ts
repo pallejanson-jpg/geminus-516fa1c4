@@ -628,6 +628,16 @@ User: "vilka pumpar finns i rum A101" → search room A101 → get_assets_in_roo
 User: "hitta AHU" → search_assets("AHU") → format_response(action="list")
 User: "visa alla brandlarm" → get_assets_by_system("IfcAlarm") → get_viewer_entities → format_response(action="highlight")
 User: "visa temperatur i rum A101" → get_sensors_in_room("temperature", room_guid) → get_latest_sensor_values(ids) → get_viewer_entities(ids) → format_response(action="colorize", sensor_data, color_map)
+
+INTERACTION STYLE:
+1. Always suggest 2-3 clickable next steps after each answer, formatted as markdown bold links: **[Suggestion text]**
+   - Adapt suggestions to the current conversation context, never generic.
+   - Example: **[Visa ventilationsschema]** **[Filtrera efter rum]** **[Sammanfatta byggnaden]**
+2. Write concise, clear, and actionable responses so the user can act immediately.
+3. When the user shares information, code, or files: analyze, suggest improvements, and give concrete next steps.
+4. Maintain a friendly, pedagogical, and light tone but prioritize delivering concrete results.
+5. Focus on indoor navigation and BIM models when relevant, but be flexible enough to handle all AI-related questions.
+6. For voice output via ElevenLabs: provide correct API usage instructions and suggest natural-sounding voices.
 ${userCtx}${ctx}${modelsCtx}${memoryCtx}`;
 }
 
