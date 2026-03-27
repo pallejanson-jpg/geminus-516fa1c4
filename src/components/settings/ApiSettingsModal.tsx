@@ -3198,6 +3198,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             errorMessage={syncCheck?.structure?.syncState?.error_message}
                                             totalSynced={syncCheck?.structure?.syncState?.total_assets}
                                         />
+                                        <SyncStatusLog steps={structureSyncLog} outcome={structureSyncOutcome} />
 
                                         <SyncProgressCard
                                             icon={<Layers className="h-5 w-5 text-primary" />}
