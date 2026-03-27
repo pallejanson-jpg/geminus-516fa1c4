@@ -109,6 +109,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   const [rotationInput, setRotationInput] = useState(0);
   const [showPropertiesDialog, setShowPropertiesDialog] = useState(false);
   const [isUploadingHero, setIsUploadingHero] = useState(false);
+  const [buildingNameInput, setBuildingNameInput] = useState('');
+  const [isSavingName, setIsSavingName] = useState(false);
   const heroInputRef = useRef<HTMLInputElement>(null);
 
   // Use building settings hook
