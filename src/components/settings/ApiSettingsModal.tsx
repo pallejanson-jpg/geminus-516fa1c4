@@ -3237,6 +3237,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 </Button>
                                             }
                                         />
+                                        <SyncStatusLog steps={assetSyncLog} outcome={assetSyncOutcome} />
 
                                         <SyncProgressCard
                                             icon={<Box className="h-5 w-5 text-primary" />}
