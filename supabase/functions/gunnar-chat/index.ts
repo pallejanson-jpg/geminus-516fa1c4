@@ -289,6 +289,21 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
       return execListBuildings(supabase, args);
     case "get_building_summary":
       return execBuildingSummary(supabase, args);
+    case "get_sensors_in_room": {
+      const { data, error } = await supabase.rpc("get_sensors_in_room", {
+        sensor_type: args.sensor_type,
+        room_guid: args.room_guid,
+      });
+      if (error) throw error;
+      return data || [];
+    }
+    case "get_latest_sensor_values": {
+      const { data, error } = await supabase.rpc("get_latest_sensor_values", {
+        sensor_ids: args.sensor_ids || [],
+      });
+      if (error) throw error;
+      return data || [];
+    }
     case "format_response":
       // Pass through — this is handled specially in the main loop
       return { formatted: true, ...args };
