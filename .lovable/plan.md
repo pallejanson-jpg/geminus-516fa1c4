@@ -1,35 +1,33 @@
 
 
-## Plan: Integrate ElevenLabs TTS (Manual API Key)
+## Plan: Add Geminus AI icon to Viewer toolbar
 
-Since the connector was declined, we'll add the ElevenLabs API key as a manual secret and proceed with the integration.
+### Overview
+Add a "Geminus AI" tool button to the ViewerToolbar that opens a floating GunnarChat panel directly in the viewer, without leaving the 3D canvas.
 
-### 1. Add ElevenLabs API Key as Secret
-Use `add_secret` to request the user's `ELEVENLABS_API_KEY`.
+### Steps
 
-### 2. Create Edge Function `supabase/functions/elevenlabs-tts/index.ts`
-- POST `{ text, voiceId? }`
-- Calls `https://api.elevenlabs.io/v1/text-to-speech/{voiceId}?output_format=mp3_44100_128`
-- Model: `eleven_multilingual_v2` (supports Swedish + English)
-- Default voice: Daniel (`onwK4e9ZLuTAKqWW03F9`) — good multilingual voice
-- Returns raw MP3 bytes with CORS headers
+1. **Add `geminus-ai` tool to `ALL_TOOLS` array** in `ViewerToolbar.tsx`
+   - New entry: `{ id: 'geminiAi', label: 'Geminus AI', icon: <Bot />, group: 'extra' }`
+   - Add `'geminiAi'` to `DEFAULT_ENABLED` so it shows by default
 
-### 3. Update `src/components/chat/GunnarChat.tsx`
-- Replace `speakAssistant` (Web Speech API) with ElevenLabs fetch + `new Audio()` playback
-- Remove `getBestVoice`, `cleanSpeechText` browser voice complexity
-- Keep `isSpeaking` state, add stop via `audioRef.current.pause()`
-- Use `fetch()` with `.blob()` (not `supabase.functions.invoke`) for binary audio
+2. **Add state and handler in `ViewerToolbar`**
+   - Add `isGunnarOpen` state
+   - When the `geminiAi` tool button is clicked, toggle `isGunnarOpen`
+   - Build a `GunnarContext` from viewer state (building, floor, room from existing toolbar state)
 
-### 4. Update `src/components/settings/GunnarSettings.tsx`
-- Replace browser voice list with ElevenLabs voice presets dropdown (Daniel, Alice, Lily, etc.)
-- Remove `useAvailableVoices` hook
-- Keep language selector
+3. **Render floating GunnarChat panel**
+   - When `isGunnarOpen` is true, render `GunnarChat` in a floating panel (similar to the pattern in `GeminusPluginMenu.tsx`)
+   - Position: bottom-right of the viewer, above the toolbar
+   - Include close button in header
+   - Use `embedded` mode for GunnarChat
 
-### File Changes
+4. **Import additions**
+   - Import `Bot` from lucide-react
+   - Import `GunnarChat` from `@/components/chat/GunnarChat`
 
-| File | Change |
-|---|---|
-| `supabase/functions/elevenlabs-tts/index.ts` | New edge function |
-| `src/components/chat/GunnarChat.tsx` | Replace Web Speech TTS with ElevenLabs |
-| `src/components/settings/GunnarSettings.tsx` | Simplify voice picker |
+### Technical details
+- The toolbar already has a pattern for toggle-state tools (xray, crosshair) — follow the same pattern
+- The floating panel will use the same styling as in `GeminusPluginMenu.tsx` (backdrop-blur, border, shadow)
+- Context will be derived from the toolbar's existing `viewer` prop and window events for selected building/floor
 
