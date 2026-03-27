@@ -885,8 +885,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
   const handleIfcUpload = async () => {
     if (!ifcFile || !targetBuildingFmGuid) return;
 
-    const isUploadToExisting = !createdBuilding && existingBuildings.some(b => b.fmGuid === targetBuildingFmGuid);
-    if (isUploadToExisting && availableModelSlots.length > 0) {
+    if (availableModelSlots.length > 0) {
       const matchedSlot = availableModelSlots.find(slot => slot.toLowerCase() === inferredIfcModelName.toLowerCase());
       setSlotChoice(matchedSlot || '__new__');
       setNewSlotName(inferredIfcModelName);
