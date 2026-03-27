@@ -130,7 +130,8 @@ export function recolorArchitectObjects(viewer: any): number {
   }
 
   // Colorize remaining objects without metaObject entries
-  const allIds = scene.objectIds || [];
+  let allIds: string[] = [];
+  try { allIds = scene.objectIds || []; } catch { /* objectIds getter can throw if internal map is null */ }
   for (const id of allIds) {
     if (processedIds.has(id)) continue;
     const entity = scene.objects?.[id];
