@@ -815,10 +815,11 @@ serve(async (req) => {
       console.log(`Starting resumable sync-structure phase=${phase} skip=${skip} totalSynced=${totalSynced}`);
 
       if (phase === 'upsert') {
+        // Filter: structure objects (1=Building, 2=Storey, 3=Space) that are NOT expired
         const filter = [
-          ["objectType", "=", 1], "or",
-          ["objectType", "=", 2], "or",
-          ["objectType", "=", 3]
+          "(", ["objectType", "=", 1], "or", ["objectType", "=", 2], "or", ["objectType", "=", 3], ")",
+          "and",
+          ["expireDate", "=", null]
         ];
 
         const take = 200;
