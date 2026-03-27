@@ -2150,6 +2150,14 @@ export type Database = {
         Returns: Json
       }
       get_assets_in_room: { Args: { room_guid: string }; Returns: Json }
+      get_latest_sensor_values: {
+        Args: { sensor_ids: string[] }
+        Returns: Json
+      }
+      get_sensors_in_room: {
+        Args: { room_guid: string; sensor_type: string }
+        Returns: Json
+      }
       get_viewer_entities: { Args: { asset_ids: string[] }; Returns: Json }
       has_role: {
         Args: {

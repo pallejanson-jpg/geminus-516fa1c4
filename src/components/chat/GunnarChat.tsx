@@ -44,7 +44,7 @@ interface GunnarChatProps {
 /** Structured AI response format */
 interface AiStructuredResponse {
   message: string;
-  action: 'highlight' | 'filter' | 'list' | 'none';
+  action: 'highlight' | 'filter' | 'colorize' | 'list' | 'none';
   asset_ids: string[];
   external_entity_ids: string[];
   filters: {
@@ -52,9 +52,19 @@ interface AiStructuredResponse {
     category?: string;
     room?: string;
   };
+  sensor_data?: Array<{
+    entity_id: string;
+    value: number;
+    type: string;
+    unit?: string;
+    status: 'normal' | 'warning' | 'critical';
+  }>;
+  color_map?: Record<string, [number, number, number]>;
   proactive_insights?: string[];
   error?: string;
 }
+
+export const AI_FILTER_SYNC_EVENT = 'AI_FILTER_SYNC';
 
 function getContextualGreeting(context?: GunnarContext): string {
   if (context?.currentBuilding?.name) {
@@ -213,6 +223,18 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
 
   // ── Execute viewer action from structured response ──
   const executeViewerAction = useCallback((response: AiStructuredResponse) => {
+    // Dispatch filter sync if filters present
+    if (response.filters && (response.filters.system || response.filters.category || response.filters.room)) {
+      window.dispatchEvent(new CustomEvent(AI_FILTER_SYNC_EVENT, { detail: response.filters }));
+    }
+
+    if (response.action === 'colorize' && response.color_map && Object.keys(response.color_map).length > 0) {
+      dispatchAiViewerCommand({ action: 'colorize', colorMap: response.color_map });
+      const sensorCount = response.sensor_data?.length || Object.keys(response.color_map).length;
+      toast.success(`Visar sensordata för ${sensorCount} objekt`);
+      return;
+    }
+
     if (!response.external_entity_ids?.length) return;
 
     switch (response.action) {
