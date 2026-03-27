@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -13,8 +13,19 @@ export interface GunnarSettingsData {
   visible: boolean;
   buttonPosition: { x: number; y: number } | null;
   speechLang: 'sv-SE' | 'en-US';
+  /** ElevenLabs voice ID */
   voiceName: string | null;
 }
+
+/** Preset ElevenLabs voices */
+export const ELEVENLABS_VOICES = [
+  { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel', description: 'Calm & authoritative' },
+  { id: 'Xb7hH8MSUJpSbSDYk0k2', name: 'Alice', description: 'Warm & friendly' },
+  { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', description: 'Soft & articulate' },
+  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', description: 'Clear & professional' },
+  { id: 'JBFqnCBsd6RMkjVDRZzb', name: 'George', description: 'Deep & confident' },
+  { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Liam', description: 'Energetic & engaging' },
+] as const;
 
 const DEFAULT_SETTINGS: GunnarSettingsData = {
   visible: false,
@@ -48,28 +59,10 @@ export function saveGunnarSettings(settings: Partial<GunnarSettingsData>): void 
   }
 }
 
-function useAvailableVoices(lang: string) {
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-
-    const update = () => {
-      const all = window.speechSynthesis.getVoices();
-      setVoices(all.filter(v => v.lang.startsWith(lang.split('-')[0])));
-    };
-
-    update();
-    window.speechSynthesis.addEventListener('voiceschanged', update);
-    return () => window.speechSynthesis.removeEventListener('voiceschanged', update);
-  }, [lang]);
-
-  return voices;
-}
+// useAvailableVoices removed — using ElevenLabs presets instead
 
 const GunnarSettings: React.FC = () => {
   const [settings, setSettings] = useState<GunnarSettingsData>(getGunnarSettings);
-  const voices = useAvailableVoices(settings.speechLang);
 
   useEffect(() => {
     const handler = (e: CustomEvent<GunnarSettingsData>) => {
@@ -95,44 +88,55 @@ const GunnarSettings: React.FC = () => {
     saveGunnarSettings({ speechLang, voiceName: null });
   };
 
-  const handleVoiceChange = (name: string) => {
-    const voiceName = name === '__default__' ? null : name;
+  const handleVoiceChange = (voiceId: string) => {
+    const voiceName = voiceId === '__default__' ? null : voiceId;
     setSettings(prev => ({ ...prev, voiceName }));
     saveGunnarSettings({ voiceName });
   };
 
-  const handleTestVoice = useCallback(() => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    
+  const [isTesting, setIsTesting] = useState(false);
+  const testAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handleTestVoice = useCallback(async () => {
+    if (isTesting) return;
+    setIsTesting(true);
+
+    // Stop any playing test audio
+    if (testAudioRef.current) {
+      testAudioRef.current.pause();
+      testAudioRef.current = null;
+    }
+
     const testText = settings.speechLang === 'sv-SE' 
       ? 'Hej! Jag är Geminus AI, din digitala fastighetsassistent.'
       : 'Hello! I am Geminus AI, your digital facility assistant.';
-    
-    const allVoices = window.speechSynthesis.getVoices();
-    const langPrefix = settings.speechLang.split('-')[0];
-    
-    let voice: SpeechSynthesisVoice | null = null;
-    if (settings.voiceName) {
-      voice = allVoices.find(v => v.name === settings.voiceName) || null;
+
+    try {
+      const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
+      const response = await fetch(TTS_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ text: testText, voiceId: settings.voiceName }),
+      });
+
+      if (!response.ok) throw new Error(`TTS failed: ${response.status}`);
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      testAudioRef.current = audio;
+      audio.onended = () => { setIsTesting(false); URL.revokeObjectURL(url); };
+      audio.onerror = () => { setIsTesting(false); URL.revokeObjectURL(url); };
+      await audio.play();
+    } catch (e) {
+      console.error('Test voice error:', e);
+      setIsTesting(false);
     }
-    if (!voice) {
-      // Pick best available
-      const langVoices = allVoices.filter(v => v.lang.startsWith(langPrefix));
-      const qualityKeywords = ['natural', 'premium', 'enhanced', 'google', 'microsoft'];
-      voice = langVoices.sort((a, b) => {
-        const scoreA = qualityKeywords.some(kw => a.name.toLowerCase().includes(kw)) ? 1 : 0;
-        const scoreB = qualityKeywords.some(kw => b.name.toLowerCase().includes(kw)) ? 1 : 0;
-        return scoreB - scoreA;
-      })[0] || null;
-    }
-    
-    const utterance = new SpeechSynthesisUtterance(testText);
-    utterance.lang = settings.speechLang;
-    utterance.rate = settings.speechLang === 'sv-SE' ? 0.95 : 1.0;
-    if (voice) utterance.voice = voice;
-    window.speechSynthesis.speak(utterance);
-  }, [settings.speechLang, settings.voiceName]);
+  }, [settings.speechLang, settings.voiceName, isTesting]);
 
   return (
     <div className="space-y-4">
@@ -218,26 +222,27 @@ const GunnarSettings: React.FC = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__default__">System default</SelectItem>
-                  {voices.map(v => (
-                    <SelectItem key={v.name} value={v.name}>
-                      {v.name}
+                  <SelectItem value="__default__">Daniel (default)</SelectItem>
+                  {ELEVENLABS_VOICES.map(v => (
+                    <SelectItem key={v.id} value={v.id}>
+                      {v.name} — {v.description}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                {voices.length === 0 ? 'No voices available for this language' : `${voices.length} voices available`}
+                High-quality ElevenLabs voices (multilingual)
               </p>
             </div>
             <Button
               variant="outline"
               size="sm"
               onClick={handleTestVoice}
+              disabled={isTesting}
               className="gap-1.5 mt-2"
             >
               <Volume2 className="h-3.5 w-3.5" />
-              Test voice
+              {isTesting ? 'Playing...' : 'Test voice'}
             </Button>
           </AccordionContent>
         </AccordionItem>
