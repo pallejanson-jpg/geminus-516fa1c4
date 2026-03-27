@@ -860,9 +860,16 @@ Deno.serve(async (req) => {
         log(`Upserted ${spacesCreated} spaces`);
       }
 
-      // Upsert instances (limit to first 2000 for edge function timeout safety)
-      const instSlice = instances.slice(0, 2000);
+      // Upsert instances (limit to first 5000 for edge function timeout safety)
+      const instSlice = instances.slice(0, 5000);
       if (instSlice.length > 0) {
+        // Build meta lookup for property extraction
+        const metaById = new Map<string, any>();
+        for (const m of metaObjectsList as any[]) {
+          const mid = m.metaObjectId || m.id || "";
+          if (mid) metaById.set(mid, m);
+        }
+
         const instRows = [];
         for (const inst of instSlice) {
           const fmGuid = await deterministicGuid([buildingFmGuid, inst.name || "", inst.ifcType || "Instance"]);
@@ -874,11 +881,40 @@ Deno.serve(async (req) => {
             const sp = spaces.find(s => s.id === inst.spaceId);
             if (sp) inRoomFmGuid = await deterministicGuid([buildingFmGuid, sp.name || "", "IfcSpace"]);
           }
+
+          // Extract properties from the meta object
+          const meta = metaById.get(inst.id);
+          let attrs: Record<string, any> | undefined;
+          if (meta) {
+            const rawProps = meta.propertySets || meta.properties || {};
+            if (rawProps && typeof rawProps === "object") {
+              const bimProperties: Array<{ name: string; value: any; dataType: string }> = [];
+              for (const [setName, setVal] of Object.entries(rawProps)) {
+                if (setVal && typeof setVal === "object" && !Array.isArray(setVal)) {
+                  for (const [propName, propValue] of Object.entries(setVal as Record<string, any>)) {
+                    if (propValue === undefined || propValue === null || propValue === "") continue;
+                    bimProperties.push({
+                      name: `${setName}/${propName}`,
+                      value: propValue,
+                      dataType: typeof propValue === "number" ? "Double" : "String",
+                    });
+                  }
+                } else if (setVal !== undefined && setVal !== null && setVal !== "") {
+                  bimProperties.push({ name: setName, value: setVal, dataType: typeof setVal === "number" ? "Double" : "String" });
+                }
+              }
+              if (bimProperties.length > 0) {
+                attrs = { source: "ifc", bim_properties: bimProperties };
+              }
+            }
+          }
+
           instRows.push({
             fm_guid: fmGuid, name: inst.name, common_name: inst.name,
             category: "Instance", asset_type: inst.ifcType,
             building_fm_guid: buildingFmGuid, level_fm_guid: levelFmGuid, in_room_fm_guid: inRoomFmGuid,
             is_local: false, created_in_model: true, synced_at: now,
+            ...(attrs ? { attributes: attrs } : {}),
           });
         }
         for (let i = 0; i < instRows.length; i += 500) {
