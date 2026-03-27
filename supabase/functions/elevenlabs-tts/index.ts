@@ -19,7 +19,7 @@ serve(async (req) => {
       });
     }
 
-    const { text, voiceId } = await req.json();
+    const { text, voiceId, speed } = await req.json();
 
     if (!text || typeof text !== "string" || text.trim().length === 0) {
       return new Response(JSON.stringify({ error: "text is required" }), {
@@ -49,10 +49,11 @@ serve(async (req) => {
           text: text.trim(),
           model_id: "eleven_multilingual_v2",
           voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.75,
-            style: 0.4,
+            stability: 0.55,
+            similarity_boost: 0.8,
+            style: 0.35,
             use_speaker_boost: true,
+            speed: typeof speed === "number" ? Math.min(1.2, Math.max(0.7, speed)) : 1.0,
           },
         }),
       }

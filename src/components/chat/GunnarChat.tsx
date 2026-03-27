@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { X, Send, Sparkles, Loader2, Info, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
+import { X, Send, Sparkles, Loader2, Info, Mic, MicOff, Volume2, VolumeX, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -12,6 +12,7 @@ import { useWebSpeechRecognition } from "@/hooks/useWebSpeechRecognition";
 import { getGunnarSettings, saveGunnarSettings } from "@/components/settings/GunnarSettings";
 import { dispatchAiViewerCommand } from "@/hooks/useAiViewerBridge";
 import { AI_SENSOR_DATA_EVENT } from "@/components/viewer/SensorDataOverlay";
+import { preprocessForTTS } from "@/lib/tts-preprocess";
 
 type Message = {
   role: "user" | "assistant";
@@ -147,10 +148,8 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     setIsSpeaking(false);
   }, []);
 
-  const speakAssistant = useCallback(async (text: string) => {
-    if (!voiceOutputEnabled) return;
-    // Clean markdown
-    const cleaned = text.replace(/[*_`#>]/g, '').replace(/^[-•]\s+/gm, ', ').replace(/\s+/g, ' ').trim();
+  const speakText = useCallback(async (text: string) => {
+    const cleaned = preprocessForTTS(text);
     if (!cleaned) return;
 
     stopSpeaking();
@@ -165,7 +164,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ text: cleaned, voiceId: settings.voiceName }),
+        body: JSON.stringify({ text: cleaned, voiceId: settings.voiceName, speed: 1.0 }),
       });
 
       if (!response.ok) {
@@ -187,7 +186,12 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       console.error('TTS playback error:', e);
       setIsSpeaking(false);
     }
-  }, [voiceOutputEnabled, stopSpeaking]);
+  }, [stopSpeaking]);
+
+  const speakAssistant = useCallback(async (text: string) => {
+    if (!voiceOutputEnabled) return;
+    await speakText(text);
+  }, [voiceOutputEnabled, speakText]);
 
   // ── Structured chat call (no streaming — JSON response) ──
   const callChat = useCallback(async (userMessages: Message[], currentContext?: GunnarContext): Promise<AiStructuredResponse> => {
@@ -369,8 +373,23 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
             msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
           )}>
             {msg.role === "assistant" ? (
-              <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1">
-                <ReactMarkdown>{msg.content}</ReactMarkdown>
+              <div>
+                <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1">
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                </div>
+                <div className="flex justify-end mt-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 opacity-50 hover:opacity-100 transition-opacity"
+                    onClick={() => {
+                      if (isSpeaking) { stopSpeaking(); } else { speakText(msg.content); }
+                    }}
+                    title={isSpeaking ? "Stoppa uppläsning" : "Läs upp"}
+                  >
+                    {isSpeaking ? <Square className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                  </Button>
+                </div>
               </div>
             ) : (
               <p className="whitespace-pre-wrap">{msg.content}</p>
