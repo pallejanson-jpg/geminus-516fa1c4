@@ -27,6 +27,7 @@ import { Slider } from '@/components/ui/slider';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { applyArchitectColors } from '@/lib/architect-colors';
+import GunnarChat, { GunnarContext } from '@/components/chat/GunnarChat';
 import { ARCHITECT_BACKGROUND_CHANGED_EVENT } from '@/hooks/useArchitectViewMode';
 import {
   useSectionPlaneClipping,
