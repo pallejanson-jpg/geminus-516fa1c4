@@ -179,10 +179,10 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
   const fetchBuildings = useCallback(async () => {
     setLoadingBuildings(true);
     try {
-      // Fetch buildings from assets table
+      // Fetch buildings from assets table (include complex_common_name)
       const { data: assets } = await supabase
         .from('assets')
-        .select('fm_guid, name, common_name')
+        .select('fm_guid, name, common_name, complex_common_name')
         .in('category', ['Building', 'IfcBuilding'])
         .order('common_name');
 
