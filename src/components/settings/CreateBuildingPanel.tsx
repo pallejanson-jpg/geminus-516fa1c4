@@ -200,13 +200,19 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       });
 
       // Build merged list — assets are the source of truth for names
-      const buildings: ExistingBuilding[] = (assets || []).map(b => ({
-        fmGuid: b.fm_guid,
-        name: b.name || '',
-        commonName: b.common_name || b.name || b.fm_guid,
-        hasCustomAssetPlus: settingsMap[b.fm_guid]?.hasAp || false,
-        hasCustomSenslinc: settingsMap[b.fm_guid]?.hasSl || false,
-      }));
+      const buildings: ExistingBuilding[] = (assets || []).map(b => {
+        const buildingLabel = b.common_name || b.name || b.fm_guid;
+        const displayName = b.complex_common_name 
+          ? `${b.complex_common_name} — ${buildingLabel}`
+          : buildingLabel;
+        return {
+          fmGuid: b.fm_guid,
+          name: b.name || '',
+          commonName: displayName,
+          hasCustomAssetPlus: settingsMap[b.fm_guid]?.hasAp || false,
+          hasCustomSenslinc: settingsMap[b.fm_guid]?.hasSl || false,
+        };
+      });
 
       // Add any building_settings entries that don't have an asset row
       (settings || []).forEach((s: any) => {

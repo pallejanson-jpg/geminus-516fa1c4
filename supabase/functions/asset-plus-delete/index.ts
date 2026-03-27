@@ -178,7 +178,7 @@ async function handleDeleteBuilding(body: any, supabase: any) {
   }
   addLog(`Deleted ${assetsDeleted} assets from local DB`);
 
-  // 4. Cleanup related tables
+  // 4. Cleanup related tables (each wrapped in try/catch for resilience)
   const cleanupTables = [
     { table: "building_settings", column: "fm_guid" },
     { table: "saved_views", column: "building_fm_guid" },
@@ -192,12 +192,19 @@ async function handleDeleteBuilding(body: any, supabase: any) {
     { table: "scan_jobs", column: "building_fm_guid" },
     { table: "bcf_issues", column: "building_fm_guid" },
     { table: "qr_report_configs", column: "building_fm_guid" },
+    { table: "geometry_entity_map", column: "building_fm_guid" },
+    { table: "systems", column: "building_fm_guid" },
+    { table: "document_chunks", column: "building_fm_guid" },
   ];
 
   for (const { table, column } of cleanupTables) {
-    const { error } = await supabase.from(table).delete().eq(column, buildingFmGuid);
-    if (error) addLog(`⚠️ Cleanup ${table}: ${error.message}`);
-    else addLog(`✓ Cleaned ${table}`);
+    try {
+      const { error } = await supabase.from(table).delete().eq(column, buildingFmGuid);
+      if (error) addLog(`⚠️ Cleanup ${table}: ${error.message}`);
+      else addLog(`✓ Cleaned ${table}`);
+    } catch (tableErr) {
+      addLog(`⚠️ Cleanup ${table} exception: ${tableErr instanceof Error ? tableErr.message : 'unknown'}`);
+    }
   }
 
   // 5. Cleanup asset_external_ids and asset_system for all deleted fm_guids
