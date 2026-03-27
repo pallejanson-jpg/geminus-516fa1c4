@@ -71,6 +71,39 @@ export function useAiViewerBridge(viewer: any, isReady: boolean) {
     console.log(`[AiViewerBridge] Filtered to ${entityIds.length} entities`);
   }, [viewer]);
 
+  const colorizeEntities = useCallback((colorMap: Record<string, [number, number, number]>) => {
+    if (!viewer || !colorMap || !Object.keys(colorMap).length) return;
+
+    const scene = viewer.scene;
+    if (!scene) return;
+
+    // Reset previous state
+    scene.setObjectsColorized(scene.colorizedObjectIds, null);
+    scene.setObjectsHighlighted(scene.highlightedObjectIds, false);
+    scene.setObjectsXRayed(scene.xrayedObjectIds, false);
+    scene.setObjectsSelected(scene.selectedObjectIds, false);
+
+    // X-ray all, then un-xray and colorize target entities
+    const allIds = Object.keys(scene.objects);
+    const entityIds = Object.keys(colorMap);
+    scene.setObjectsXRayed(allIds, true);
+    scene.setObjectsXRayed(entityIds, false);
+
+    // Apply per-entity colors
+    for (const [entityId, color] of Object.entries(colorMap)) {
+      if (scene.objects[entityId]) {
+        scene.setObjectsColorized([entityId], color);
+      }
+    }
+
+    // Fly to colorized entities
+    if (viewer.cameraFlight && entityIds.length) {
+      viewer.cameraFlight.flyTo({ aabb: scene.getAABB(entityIds), duration: 1.0 });
+    }
+
+    console.log(`[AiViewerBridge] Colorized ${entityIds.length} entities`);
+  }, [viewer]);
+
   const resetView = useCallback(() => {
     if (!viewer) return;
 
