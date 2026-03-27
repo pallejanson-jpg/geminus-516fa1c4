@@ -912,7 +912,7 @@ Deno.serve(async (req) => {
 
           instRows.push({
             fm_guid: fmGuid, name: inst.name, common_name: inst.name,
-            category: "Instance", asset_type: inst.ifcType,
+            category: mapIfcToGeminusCategory(inst.ifcType), asset_type: inst.ifcType,
             building_fm_guid: buildingFmGuid, level_fm_guid: levelFmGuid, in_room_fm_guid: inRoomFmGuid,
             is_local: false, created_in_model: true, synced_at: now,
             ...(attrs ? { attributes: attrs } : {}),
