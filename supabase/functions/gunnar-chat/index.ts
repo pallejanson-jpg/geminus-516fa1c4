@@ -136,6 +136,38 @@ const tools = [
       },
     },
   },
+  // ── IoT / Sensor tools ──
+  {
+    type: "function",
+    function: {
+      name: "get_sensors_in_room",
+      description: "Find sensors by type (temperature, co2, humidity, IfcSensor, IfcAlarm) in a specific room. Returns sensor assets with their attributes.",
+      parameters: {
+        type: "object",
+        properties: {
+          sensor_type: { type: "string", description: "Sensor type to search (e.g. 'temperature', 'co2', 'humidity', 'IfcSensor')" },
+          room_guid: { type: "string", description: "The room's fm_guid" },
+        },
+        required: ["sensor_type", "room_guid"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_latest_sensor_values",
+      description: "Get latest sensor readings (temperature, CO2, humidity, value, unit, status) for given sensor asset fm_guids.",
+      parameters: {
+        type: "object",
+        properties: {
+          sensor_ids: { type: "array", items: { type: "string" }, description: "Array of sensor asset fm_guids" },
+        },
+        required: ["sensor_ids"],
+        additionalProperties: false,
+      },
+    },
+  },
   // ── Final structured response tool ──
   {
     type: "function",
@@ -146,7 +178,7 @@ const tools = [
         type: "object",
         properties: {
           message: { type: "string", description: "Human-readable message to display in chat" },
-          action: { type: "string", enum: ["highlight", "filter", "list", "none"], description: "Viewer action to perform" },
+          action: { type: "string", enum: ["highlight", "filter", "colorize", "list", "none"], description: "Viewer action to perform. Use 'colorize' when showing sensor data with color-coded values." },
           asset_ids: { type: "array", items: { type: "string" }, description: "Asset fm_guids found" },
           external_entity_ids: { type: "array", items: { type: "string" }, description: "xeokit entity IDs for viewer (from get_viewer_entities)" },
           filters: {
@@ -157,6 +189,29 @@ const tools = [
               room: { type: "string" },
             },
             additionalProperties: false,
+          },
+          sensor_data: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                entity_id: { type: "string", description: "xeokit external_entity_id" },
+                value: { type: "number" },
+                type: { type: "string", description: "temperature, co2, humidity" },
+                unit: { type: "string" },
+                status: { type: "string", enum: ["normal", "warning", "critical"] },
+              },
+            },
+            description: "Sensor readings mapped to viewer entities",
+          },
+          color_map: {
+            type: "object",
+            additionalProperties: {
+              type: "array",
+              items: { type: "number" },
+              description: "RGB color [r, g, b] where each value is 0-1",
+            },
+            description: "Map of external_entity_id to RGB color for colorize action. Green=[0,0.8,0.2], Yellow=[1,0.9,0], Red=[1,0.2,0.1]",
           },
         },
         required: ["message", "action"],
@@ -234,6 +289,21 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
       return execListBuildings(supabase, args);
     case "get_building_summary":
       return execBuildingSummary(supabase, args);
+    case "get_sensors_in_room": {
+      const { data, error } = await supabase.rpc("get_sensors_in_room", {
+        sensor_type: args.sensor_type,
+        room_guid: args.room_guid,
+      });
+      if (error) throw error;
+      return data || [];
+    }
+    case "get_latest_sensor_values": {
+      const { data, error } = await supabase.rpc("get_latest_sensor_values", {
+        sensor_ids: args.sensor_ids || [],
+      });
+      if (error) throw error;
+      return data || [];
+    }
     case "format_response":
       // Pass through — this is handled specially in the main loop
       return { formatted: true, ...args };
@@ -540,11 +610,24 @@ ACTION TYPES for format_response:
 - "list" — just display data in chat, no viewer action
 - "none" — simple response with no data
 
+IoT / SENSOR DATA:
+- When user asks about temperature, CO2, humidity, or environmental data:
+  1. Call get_sensors_in_room(sensor_type, room_guid) to find sensors
+  2. Call get_latest_sensor_values(sensor_ids) to get current readings
+  3. Call get_viewer_entities(asset_ids) to resolve entity IDs
+  4. Call format_response with action="colorize", include sensor_data and color_map
+- Color coding thresholds:
+  - Temperature: <20°C=blue [0.2,0.4,1], 20-26°C=green [0,0.8,0.2], >26°C=red [1,0.2,0.1]
+  - CO2: <800ppm=green, 800-1000ppm=yellow [1,0.9,0], >1000ppm=red
+  - Humidity: 30-60%=green, outside=yellow/red
+- For "show pumps with high temperature": search pumps → get sensors in same rooms → cross-reference → colorize
+
 EXAMPLES:
 User: "visa ventilation" → get_assets_by_system("ventilation") → get_viewer_entities(ids) → format_response(action="highlight")
 User: "vilka pumpar finns i rum A101" → search room A101 → get_assets_in_room(guid) → filter pumps → get_viewer_entities → format_response(action="highlight")
 User: "hitta AHU" → search_assets("AHU") → format_response(action="list")
 User: "visa alla brandlarm" → get_assets_by_system("IfcAlarm") → get_viewer_entities → format_response(action="highlight")
+User: "visa temperatur i rum A101" → get_sensors_in_room("temperature", room_guid) → get_latest_sensor_values(ids) → get_viewer_entities(ids) → format_response(action="colorize", sensor_data, color_map)
 ${userCtx}${ctx}${modelsCtx}${memoryCtx}`;
 }
 
@@ -715,13 +798,15 @@ serve(async (req) => {
       // If format_response was called, we're done
       if (formatResponseResult) {
         console.log(`Gunnar: format_response received (${Date.now() - startTime}ms, round ${round + 1})`);
-        const structured = {
+        const structured: any = {
           message: formatResponseResult.message || "",
           action: formatResponseResult.action || "none",
           asset_ids: formatResponseResult.asset_ids || [],
           external_entity_ids: formatResponseResult.external_entity_ids || [],
           filters: formatResponseResult.filters || {},
         };
+        if (formatResponseResult.sensor_data?.length) structured.sensor_data = formatResponseResult.sensor_data;
+        if (formatResponseResult.color_map && Object.keys(formatResponseResult.color_map).length) structured.color_map = formatResponseResult.color_map;
         const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
         saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, [...userMsgs, { role: "assistant", content: structured.message }]).catch(e =>
           console.error("Failed to save conversation:", e)
