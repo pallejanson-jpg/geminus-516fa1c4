@@ -1117,6 +1117,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
                   disabled={!isReady}
                 />
               )}
+              {tool.id === 'geminiAi' && (
+                <ToolButton
+                  icon={tool.icon}
+                  label={tool.label}
+                  onClick={() => setIsGunnarOpen(p => !p)}
+                  active={isGunnarOpen}
+                  disabled={!isReady}
+                />
+              )}
             </React.Fragment>
           );
         })}
