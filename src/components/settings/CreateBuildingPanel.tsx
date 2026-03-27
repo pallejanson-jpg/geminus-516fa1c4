@@ -531,6 +531,8 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           addLog('✅ Done! Model is ready in the 3D viewer.');
           toast({ title: 'IFC uploaded!', description: `${ifcFile.name} converted and saved.` });
           setIsConverting(false);
+          // Trigger data refresh so Navigator shows new levels/rooms
+          window.dispatchEvent(new Event('building-data-changed'));
         }
       }
     } catch (err: any) {
