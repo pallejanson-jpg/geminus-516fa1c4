@@ -255,6 +255,14 @@ export async function convertToXktWithMetadata(
         systemMap.get(parentId)!.memberIds.push(objId);
       }
     }
+
+    // Log unique types for diagnostics
+    if (typeSet.size > 0) {
+      const ifcTypes = [...typeSet].filter(t => t.startsWith('Ifc')).sort();
+      logger(`Found ${typeSet.size} unique meta types (IFC: ${ifcTypes.length}): ${ifcTypes.slice(0, 15).join(', ')}${ifcTypes.length > 15 ? '...' : ''}`);
+    } else {
+      logger('⚠️ No meta types found in xktModel.metaObjects — type extraction failed');
+    }
   }
 
   systems.push(...systemMap.values());
