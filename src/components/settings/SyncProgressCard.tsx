@@ -83,6 +83,7 @@ export const SyncProgressCard: React.FC<SyncProgressCardProps> = ({
   progressLabel,
   totalSynced,
   extraActions,
+  lastResult,
 }) => {
   const isRunning = isSyncing || syncStatus === 'running';
 
