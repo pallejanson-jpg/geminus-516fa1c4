@@ -281,7 +281,7 @@ export async function convertToXktWithMetadata(
 
   logger('Writing XKT to ArrayBuffer...');
   const stats: Record<string, any> = { texturesSize: 0 };
-  const xktArrayBuffer = writeXKTModelToArrayBuffer(xktModel, null, stats, { zip: false });
+  const xktArrayBuffer = writeXKTModelToArrayBuffer(xktModel, null, stats, { zip: true });
 
   logger(`XKT conversion complete (${(xktArrayBuffer.byteLength / 1024 / 1024).toFixed(2)} MB, ${metaModelObjects.length} meta objects)`);
   return { xktData: xktArrayBuffer, metaModelJson, levels, spaces, systems };
