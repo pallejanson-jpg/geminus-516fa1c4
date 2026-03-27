@@ -44,7 +44,7 @@ interface GunnarChatProps {
 /** Structured AI response format */
 interface AiStructuredResponse {
   message: string;
-  action: 'highlight' | 'filter' | 'list' | 'none';
+  action: 'highlight' | 'filter' | 'colorize' | 'list' | 'none';
   asset_ids: string[];
   external_entity_ids: string[];
   filters: {
@@ -52,9 +52,19 @@ interface AiStructuredResponse {
     category?: string;
     room?: string;
   };
+  sensor_data?: Array<{
+    entity_id: string;
+    value: number;
+    type: string;
+    unit?: string;
+    status: 'normal' | 'warning' | 'critical';
+  }>;
+  color_map?: Record<string, [number, number, number]>;
   proactive_insights?: string[];
   error?: string;
 }
+
+export const AI_FILTER_SYNC_EVENT = 'AI_FILTER_SYNC';
 
 function getContextualGreeting(context?: GunnarContext): string {
   if (context?.currentBuilding?.name) {
