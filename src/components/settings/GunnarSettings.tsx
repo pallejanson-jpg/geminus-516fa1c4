@@ -238,10 +238,11 @@ const GunnarSettings: React.FC = () => {
               variant="outline"
               size="sm"
               onClick={handleTestVoice}
+              disabled={isTesting}
               className="gap-1.5 mt-2"
             >
               <Volume2 className="h-3.5 w-3.5" />
-              Test voice
+              {isTesting ? 'Playing...' : 'Test voice'}
             </Button>
           </AccordionContent>
         </AccordionItem>
