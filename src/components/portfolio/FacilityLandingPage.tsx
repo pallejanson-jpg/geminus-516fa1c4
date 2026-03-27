@@ -331,7 +331,26 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     updateIvionSiteId(ivionSiteIdInput || null);
   };
 
-  const handleSaveMapPosition = () => {
+  const handleSaveBuildingName = async () => {
+    if (!facility.fmGuid) return;
+    setIsSavingName(true);
+    try {
+      const newName = buildingNameInput.trim() || null;
+      const { error } = await supabase
+        .from('assets')
+        .update({ common_name: newName, updated_at: new Date().toISOString() })
+        .eq('fm_guid', facility.fmGuid);
+      if (error) throw error;
+      toast.success('Building name updated');
+      // Update the facility in parent state
+      setSelectedFacility({ ...facility, commonName: newName || undefined } as Facility);
+      onSettingsChanged?.();
+    } catch (err: any) {
+      toast.error(`Failed to update name: ${err.message}`);
+    } finally {
+      setIsSavingName(false);
+    }
+  };
     const lat = latitudeInput ? parseFloat(latitudeInput) : null;
     const lng = longitudeInput ? parseFloat(longitudeInput) : null;
     updateMapPosition(lat, lng);
