@@ -137,59 +137,57 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     if (open && inputRef.current) setTimeout(() => inputRef.current?.focus(), 100);
   }, [open]);
 
-  // ── TTS helpers ──
-  const cleanSpeechText = useCallback((text: string) => {
-    return text.replace(/[*_`#>]/g, "").replace(/^[-•]\s+/gm, ", ").replace(/^\d+\.\s+/gm, ", ").replace(/\.\s+/g, ". ... ").replace(/\s+/g, " ").trim();
-  }, []);
-
-  const getBestVoice = useCallback((lang: string, preferredName?: string | null): SpeechSynthesisVoice | null => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
-    const voices = window.speechSynthesis.getVoices();
-    if (preferredName) {
-      const match = voices.find(v => v.name === preferredName);
-      if (match) return match;
+  // ── ElevenLabs TTS helpers ──
+  const stopSpeaking = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current = null;
     }
-    const langPrefix = lang.split('-')[0];
-    const langVoices = voices.filter(v => v.lang.startsWith(langPrefix));
-    if (langVoices.length === 0) return null;
-    const scored = langVoices.map(v => {
-      let score = 0;
-      const nl = v.name.toLowerCase();
-      if (/neural|wavenet|studio/.test(nl)) score += 20;
-      if (/natural|premium|enhanced|google|microsoft/.test(nl)) score += 10;
-      if (!v.localService) score += 5;
-      if (v.lang === lang) score += 3;
-      if (v.default) score += 1;
-      return { voice: v, score };
-    });
-    scored.sort((a, b) => b.score - a.score);
-    return scored[0]?.voice || null;
+    setIsSpeaking(false);
   }, []);
 
-  const speakAssistant = useCallback((text: string) => {
-    if (!voiceOutputEnabled || typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    const cleaned = cleanSpeechText(text);
+  const speakAssistant = useCallback(async (text: string) => {
+    if (!voiceOutputEnabled) return;
+    // Clean markdown
+    const cleaned = text.replace(/[*_`#>]/g, '').replace(/^[-•]\s+/gm, ', ').replace(/\s+/g, ' ').trim();
     if (!cleaned) return;
-    window.speechSynthesis.cancel();
+
+    stopSpeaking();
+
     const settings = getGunnarSettings();
-    const segments = cleaned.split(/(?<=[.!?;,])\s+/).filter(s => s.trim());
-    const bestVoice = getBestVoice(settings.speechLang, settings.voiceName);
-    const baseRate = settings.speechLang === 'sv-SE' ? 0.85 : 0.88;
-    segments.forEach((segment, i) => {
-      const utterance = new SpeechSynthesisUtterance(segment.replace(/\.\.\./g, ''));
-      utterance.lang = settings.speechLang;
-      utterance.rate = baseRate;
-      utterance.pitch = 1.0 + (i % 2 === 0 ? 0.03 : -0.03);
-      utterance.volume = 0.9;
-      if (bestVoice) utterance.voice = bestVoice;
-      if (i === 0) utterance.onstart = () => setIsSpeaking(true);
-      if (i === segments.length - 1) {
-        utterance.onend = () => setIsSpeaking(false);
-        utterance.onerror = () => setIsSpeaking(false);
+    try {
+      const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
+      const response = await fetch(TTS_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ text: cleaned, voiceId: settings.voiceName }),
+      });
+
+      if (!response.ok) {
+        console.error('TTS error:', response.status);
+        return;
       }
-      window.speechSynthesis.speak(utterance);
-    });
-  }, [cleanSpeechText, voiceOutputEnabled, getBestVoice]);
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+
+      audio.onplay = () => setIsSpeaking(true);
+      audio.onended = () => { setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; };
+      audio.onerror = () => { setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; };
+
+      await audio.play();
+    } catch (e) {
+      console.error('TTS playback error:', e);
+      setIsSpeaking(false);
+    }
+  }, [voiceOutputEnabled, stopSpeaking]);
 
   // ── Structured chat call (no streaming — JSON response) ──
   const callChat = useCallback(async (userMessages: Message[], currentContext?: GunnarContext): Promise<AiStructuredResponse> => {
