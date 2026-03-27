@@ -170,8 +170,19 @@ async function loadMetaObjectsFromLatestMetadata(
             typeMap.set(storeyId, "IfcBuildingStorey");
             const storeyChildren = childrenMap.get(storeyId) || [];
             for (const spaceId of storeyChildren) {
+              // In IFC, storey children include both spaces and elements.
+              // Spaces (rooms) may be leaf nodes with no children.
+              // Heuristic: if a storey child has a name that looks like a room
+              // (contains digits, or has children), treat it as a space.
+              // Also: any node whose own children are all leaf nodes is likely a space.
               const spaceChildren = childrenMap.get(spaceId) || [];
-              if (spaceChildren.length > 0) {
+              const obj = objById.get(spaceId);
+              const name = (obj?.name || obj?.metaObjectName || "").trim();
+              // Spaces typically have room-number-like names (e.g. "01.3.082", "Room 1")
+              // or have children (contained elements). Elements like walls rarely
+              // have meaningful short names with dots/digits.
+              const looksLikeRoom = /\d/.test(name) || spaceChildren.length > 0;
+              if (looksLikeRoom) {
                 typeMap.set(spaceId, "IfcSpace");
               }
             }

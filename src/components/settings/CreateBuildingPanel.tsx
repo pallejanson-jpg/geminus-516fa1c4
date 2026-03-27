@@ -585,7 +585,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         if (result.levels.length === 0 && result.metaModelJson?.metaObjects?.length > 0) {
           log('⚠️ No levels/spaces from XKT metaObjects — extracting from metadata JSON fallback...');
           for (const obj of result.metaModelJson.metaObjects) {
-            const metaType = obj.type || '';
+            const metaType = obj.type || obj.metaObjectType || obj.metaType || '';
             const objId = obj.id || '';
             const objName = obj.name || metaType;
             const parentId = obj.parent || '';
