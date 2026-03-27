@@ -63,7 +63,6 @@ export function saveGunnarSettings(settings: Partial<GunnarSettingsData>): void 
 
 const GunnarSettings: React.FC = () => {
   const [settings, setSettings] = useState<GunnarSettingsData>(getGunnarSettings);
-  const voices = useAvailableVoices(settings.speechLang);
 
   useEffect(() => {
     const handler = (e: CustomEvent<GunnarSettingsData>) => {
