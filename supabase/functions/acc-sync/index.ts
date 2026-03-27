@@ -895,7 +895,11 @@ async function extractBimHierarchy(
                 objectId: obj.objectId,
                 versionUrn: idx.versionUrn,
               });
-            } else if (category === 'Revit Rooms' || category === 'Rooms' || category === 'IfcSpace') {
+            } else if (
+              category === 'Revit Rooms' || category === 'Rooms' || category === 'IfcSpace' ||
+              category === 'Spaces' || category === 'Rum' ||
+              /room/i.test(category) || /space/i.test(category)
+            ) {
               if (!debugRoomLogged) {
                 console.log(`[BIM Debug] First room props: ${JSON.stringify(obj.props).substring(0, 1500)}`);
                 debugRoomLogged = true;
@@ -993,6 +997,16 @@ async function extractBimHierarchy(
                 instanceName = rawName.replace(/\s*\[[\d]+\]\s*$/, '').trim();
               }
 
+              // Collect ALL instance properties for attributes
+              const instanceProperties: Record<string, any> = {};
+              if (obj.props) {
+                for (const [propKey, propValue] of Object.entries(obj.props)) {
+                  if (propValue === undefined || propValue === null || propValue === '') continue;
+                  const fieldName = (fieldsMap as Record<string, string>)[propKey] || propKey;
+                  instanceProperties[fieldName] = propValue;
+                }
+              }
+
               allInstances.push({
                 externalId,
                 name: instanceName || null,
@@ -1003,6 +1017,7 @@ async function extractBimHierarchy(
                 versionUrn: idx.versionUrn,
                 systemName: sysName || sysAbbr || null,
                 systemType: sysType || sysClass || null,
+                properties: instanceProperties,
               });
             }
           }
@@ -1021,6 +1036,13 @@ async function extractBimHierarchy(
   }
 
   console.log(`BIM hierarchy: ${allLevels.length} levels, ${allRooms.length} rooms, ${allInstances.length} instances from ${finishedIndexes.length} models`);
+
+  if (allRooms.length === 0 && allInstances.length > 0) {
+    // Collect all seen categories for diagnostic
+    const allCats = new Set<string>();
+    // Re-scan category counts from last index
+    console.warn(`[BIM WARNING] 0 rooms found but ${allInstances.length} instances exist. Room categories may use unexpected names. Check [BIM Categories] log above for all category names.`);
+  }
 
   // === Post-processing: fix level names using room references ===
   const roomLevelRefs = new Set<string>();
@@ -1226,6 +1248,30 @@ async function upsertBimAssets(
         inRoomFmGuid = roomNumberMap.get(inst.room) || null;
       }
 
+      // Build bim_properties array from collected instance properties
+      const instAttributes: Record<string, any> = {
+        source: 'acc-bim',
+        acc_project_id: accProjectId,
+        acc_folder_id: folderId,
+        bim_external_id: inst.externalId,
+        bim_category: inst.category,
+        bim_object_id: inst.objectId,
+        bim_version_urn: inst.versionUrn,
+      };
+
+      if (inst.properties && Object.keys(inst.properties).length > 0) {
+        const propertyAttributes: { name: string; value: any; dataType: string }[] = [];
+        for (const [propName, propValue] of Object.entries(inst.properties)) {
+          const numVal = typeof propValue === 'string' ? parseFloat(propValue) : propValue;
+          propertyAttributes.push({
+            name: propName,
+            value: propValue,
+            dataType: typeof numVal === 'number' && !isNaN(numVal as number) ? 'Double' : 'String',
+          });
+        }
+        instAttributes.bim_properties = propertyAttributes;
+      }
+
       return {
         fm_guid: `acc-bim-instance-${inst.externalId}`,
         category: 'Instance',
@@ -1235,15 +1281,7 @@ async function upsertBimAssets(
         building_fm_guid: buildingFmGuid,
         level_fm_guid: levelFmGuid,
         in_room_fm_guid: inRoomFmGuid,
-        attributes: {
-          source: 'acc-bim',
-          acc_project_id: accProjectId,
-          acc_folder_id: folderId,
-          bim_external_id: inst.externalId,
-          bim_category: inst.category,
-          bim_object_id: inst.objectId,
-          bim_version_urn: inst.versionUrn,
-        },
+        attributes: instAttributes,
         synced_at: new Date().toISOString(),
       };
     });

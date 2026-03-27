@@ -363,6 +363,59 @@ async function populateAssetsFromMetaObjects(
     return null;
   }
 
+  // Helper: extract property sets into a flat attributes object
+  function extractProperties(m: any): Record<string, any> | null {
+    const props = m.propertySets || m.properties || {};
+    if (!props || typeof props !== "object") return null;
+    const result: Record<string, any> = {};
+    const bimProperties: Array<{ name: string; value: any; dataType: string }> = [];
+
+    // Handle nested property sets: { "Pset_SpaceCommon": { "Area": 25.3, ... } }
+    for (const [setName, setVal] of Object.entries(props)) {
+      if (setVal && typeof setVal === "object" && !Array.isArray(setVal)) {
+        for (const [propName, propValue] of Object.entries(setVal as Record<string, any>)) {
+          if (propValue === undefined || propValue === null || propValue === "") continue;
+          const numVal = typeof propValue === "number" ? propValue : parseFloat(String(propValue));
+          bimProperties.push({
+            name: `${setName}/${propName}`,
+            value: propValue,
+            dataType: typeof propValue === "number" || (!isNaN(numVal) && String(propValue).trim() !== "") ? "Double" : "String",
+          });
+        }
+      } else if (setVal !== undefined && setVal !== null && setVal !== "") {
+        // Flat property: { "SystemName": "VS1" }
+        const numVal = typeof setVal === "number" ? setVal : parseFloat(String(setVal));
+        bimProperties.push({
+          name: setName,
+          value: setVal,
+          dataType: typeof setVal === "number" || (!isNaN(numVal) && String(setVal).trim() !== "") ? "Double" : "String",
+        });
+      }
+    }
+
+    if (bimProperties.length === 0) return null;
+    result.bim_properties = bimProperties;
+    return result;
+  }
+
+  // Helper: extract gross_area from properties
+  function extractGrossArea(m: any): number | null {
+    const props = m.propertySets || m.properties || {};
+    if (!props || typeof props !== "object") return null;
+    // Search for area in nested or flat props
+    for (const [, setVal] of Object.entries(props)) {
+      if (setVal && typeof setVal === "object" && !Array.isArray(setVal)) {
+        for (const [propName, propValue] of Object.entries(setVal as Record<string, any>)) {
+          if (/^(area|gross\s*area|net\s*area)$/i.test(propName)) {
+            const num = typeof propValue === "number" ? propValue : parseFloat(String(propValue));
+            if (!isNaN(num)) return Math.round(num * 100) / 100;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
   // Pass 1: Collect storeys
   const storeyRows: any[] = [];
   for (const m of metaObjects) {
@@ -373,10 +426,12 @@ async function populateAssetsFromMetaObjects(
     const fmGuid = id || await deterministicGuid([buildingFmGuid, name, "IfcBuildingStorey"]);
     storeyIdToFmGuid.set(id, fmGuid);
     importedFmGuids.add(fmGuid);
+    const attrs = extractProperties(m);
     storeyRows.push({
       fm_guid: fmGuid, name, common_name: name,
       category: "Building Storey", building_fm_guid: buildingFmGuid, level_fm_guid: fmGuid,
       is_local: false, created_in_model: true, synced_at: now,
+      ...(attrs ? { attributes: { source: "ifc", ...attrs } } : {}),
     });
   }
 
@@ -392,10 +447,14 @@ async function populateAssetsFromMetaObjects(
     importedFmGuids.add(fmGuid);
     const parentId = m.parentMetaObjectId || m.parentId || "";
     const levelFmGuid = storeyIdToFmGuid.get(parentId) || null;
+    const attrs = extractProperties(m);
+    const grossArea = extractGrossArea(m);
     spaceRows.push({
       fm_guid: fmGuid, name, common_name: name,
       category: "Space", building_fm_guid: buildingFmGuid, level_fm_guid: levelFmGuid,
       is_local: false, created_in_model: true, synced_at: now,
+      ...(grossArea != null ? { gross_area: grossArea } : {}),
+      ...(attrs ? { attributes: { source: "ifc", ...attrs } } : {}),
     });
   }
 
@@ -413,11 +472,13 @@ async function populateAssetsFromMetaObjects(
     const levelFmGuid = storeyMetaId ? storeyIdToFmGuid.get(storeyMetaId) || null : null;
     const parentId = m.parentMetaObjectId || m.parentId || "";
     const inRoomFmGuid = spaceIdToFmGuid.get(parentId) || null;
+    const attrs = extractProperties(m);
     instanceRows.push({
       fm_guid: fmGuid, name: name || t, common_name: name || t,
       category: "Instance", asset_type: t,
       building_fm_guid: buildingFmGuid, level_fm_guid: levelFmGuid, in_room_fm_guid: inRoomFmGuid,
       is_local: false, created_in_model: true, synced_at: now,
+      ...(attrs ? { attributes: { source: "ifc", ...attrs } } : {}),
     });
   }
 
