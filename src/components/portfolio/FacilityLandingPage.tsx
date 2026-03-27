@@ -351,6 +351,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
       setIsSavingName(false);
     }
   };
+
+  const handleSaveMapPosition = () => {
     const lat = latitudeInput ? parseFloat(latitudeInput) : null;
     const lng = longitudeInput ? parseFloat(longitudeInput) : null;
     updateMapPosition(lat, lng);
