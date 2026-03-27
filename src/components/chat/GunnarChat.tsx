@@ -373,8 +373,23 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
             msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
           )}>
             {msg.role === "assistant" ? (
-              <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1">
-                <ReactMarkdown>{msg.content}</ReactMarkdown>
+              <div>
+                <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1">
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                </div>
+                <div className="flex justify-end mt-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 opacity-50 hover:opacity-100 transition-opacity"
+                    onClick={() => {
+                      if (isSpeaking) { stopSpeaking(); } else { speakText(msg.content); }
+                    }}
+                    title={isSpeaking ? "Stoppa uppläsning" : "Läs upp"}
+                  >
+                    {isSpeaking ? <Square className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                  </Button>
+                </div>
               </div>
             ) : (
               <p className="whitespace-pre-wrap">{msg.content}</p>
