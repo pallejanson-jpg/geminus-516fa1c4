@@ -179,10 +179,10 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
   const fetchBuildings = useCallback(async () => {
     setLoadingBuildings(true);
     try {
-      // Fetch buildings from assets table
+      // Fetch buildings from assets table (include complex_common_name)
       const { data: assets } = await supabase
         .from('assets')
-        .select('fm_guid, name, common_name')
+        .select('fm_guid, name, common_name, complex_common_name')
         .in('category', ['Building', 'IfcBuilding'])
         .order('common_name');
 
@@ -200,13 +200,19 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       });
 
       // Build merged list — assets are the source of truth for names
-      const buildings: ExistingBuilding[] = (assets || []).map(b => ({
-        fmGuid: b.fm_guid,
-        name: b.name || '',
-        commonName: b.common_name || b.name || b.fm_guid,
-        hasCustomAssetPlus: settingsMap[b.fm_guid]?.hasAp || false,
-        hasCustomSenslinc: settingsMap[b.fm_guid]?.hasSl || false,
-      }));
+      const buildings: ExistingBuilding[] = (assets || []).map(b => {
+        const buildingLabel = b.common_name || b.name || b.fm_guid;
+        const displayName = b.complex_common_name 
+          ? `${b.complex_common_name} — ${buildingLabel}`
+          : buildingLabel;
+        return {
+          fmGuid: b.fm_guid,
+          name: b.name || '',
+          commonName: displayName,
+          hasCustomAssetPlus: settingsMap[b.fm_guid]?.hasAp || false,
+          hasCustomSenslinc: settingsMap[b.fm_guid]?.hasSl || false,
+        };
+      });
 
       // Add any building_settings entries that don't have an asset row
       (settings || []).forEach((s: any) => {
@@ -525,6 +531,8 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           addLog('✅ Done! Model is ready in the 3D viewer.');
           toast({ title: 'IFC uploaded!', description: `${ifcFile.name} converted and saved.` });
           setIsConverting(false);
+          // Trigger data refresh so Navigator shows new levels/rooms
+          window.dispatchEvent(new Event('building-data-changed'));
         }
       }
     } catch (err: any) {
@@ -756,6 +764,9 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         setProgress(100);
         setConversionDone(true);
         log('✅ Done! Browser-based conversion succeeded.');
+        toast({ title: 'IFC converted!', description: `${file.name} converted in browser and saved.` });
+        // Trigger data refresh so Navigator shows new levels/rooms
+        window.dispatchEvent(new Event('building-data-changed'));
         toast({ title: 'IFC converted!', description: `${file.name} converted in browser and saved.` });
       } catch (clientErr: any) {
         log(`❌ Browser conversion failed: ${clientErr.message}`);

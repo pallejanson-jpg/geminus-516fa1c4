@@ -815,10 +815,11 @@ serve(async (req) => {
       console.log(`Starting resumable sync-structure phase=${phase} skip=${skip} totalSynced=${totalSynced}`);
 
       if (phase === 'upsert') {
+        // Filter: structure objects (1=Building, 2=Storey, 3=Space) that are NOT expired
         const filter = [
-          ["objectType", "=", 1], "or",
-          ["objectType", "=", 2], "or",
-          ["objectType", "=", 3]
+          "(", ["objectType", "=", 1], "or", ["objectType", "=", 2], "or", ["objectType", "=", 3], ")",
+          "and",
+          ["expireDate", "=", null]
         ];
 
         const take = 200;
@@ -880,9 +881,9 @@ serve(async (req) => {
       // Re-fetch all remote fm_guids for orphan detection (structure is ~2800, fits in memory)
       console.log('Running orphan cleanup for structure...');
       const cleanupFilter = [
-        ["objectType", "=", 1], "or",
-        ["objectType", "=", 2], "or",
-        ["objectType", "=", 3]
+        "(", ["objectType", "=", 1], "or", ["objectType", "=", 2], "or", ["objectType", "=", 3], ")",
+        "and",
+        ["expireDate", "=", null]
       ];
       const remoteFmGuids = new Set<string>();
       let cleanupSkip = 0;
@@ -1095,7 +1096,9 @@ serve(async (req) => {
         const filter = [
           ["buildingFmGuid", "=", building.fm_guid],
           "and",
-          ["objectType", "=", 4]
+          ["objectType", "=", 4],
+          "and",
+          ["expireDate", "=", null]
         ];
 
         let hasMore = true;
