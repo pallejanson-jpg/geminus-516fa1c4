@@ -344,10 +344,10 @@ function BuildingCard({ building, onClick }: { building: RecentBuilding; onClick
           <h3 className="font-semibold text-white text-xs sm:text-sm truncate">{building.name}</h3>
         </div>
       </div>
-      <div className="p-2.5 sm:p-3 flex items-center justify-between text-[11px] sm:text-xs text-muted-foreground">
+      <div className="p-2.5 sm:p-3 grid grid-cols-3 gap-2 text-[11px] sm:text-xs text-muted-foreground text-center">
         <span>{building.numberOfLevels || 0} fl</span>
         <span>{building.numberOfSpaces || 0} rm</span>
-        <span>{building.area?.toLocaleString() || 0} m²</span>
+        <span>{building.area ? building.area.toLocaleString('sv-SE') : '0'} m²</span>
       </div>
     </button>
   );
