@@ -19,6 +19,7 @@ import InventoryPanel from './InventoryPanel';
 import InventoryFormSheet from '@/components/inventory/InventoryFormSheet';
 import RouteDisplayOverlay from './RouteDisplayOverlay';
 import VisualizationLegendOverlay from './VisualizationLegendOverlay';
+import SensorDataOverlay from './SensorDataOverlay';
 
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
@@ -1134,6 +1135,9 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           roomLabelsActive={roomLabelsVisibleRef.current}
         />
       )}
+
+      {/* Sensor data overlay from AI */}
+      <SensorDataOverlay />
 
       {/* Pick-position mode indicator */}
       {isPickingPosition && (
