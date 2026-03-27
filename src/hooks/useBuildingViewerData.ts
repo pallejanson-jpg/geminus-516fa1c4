@@ -78,6 +78,8 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
         return;
       }
 
+      console.log('[BuildingViewerData] Looking for building:', buildingFmGuid, 'in allData count:', allData.length);
+
       // Find building in allData
       const building = allData.find(
         (item: any) =>
@@ -86,10 +88,16 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
       );
 
       if (!building) {
+        console.warn('[BuildingViewerData] Building NOT found. Available buildings:', 
+          allData.filter((i: any) => i.category === 'Building' || i.category === 'IfcBuilding')
+            .map((i: any) => ({ fmGuid: i.fmGuid, name: i.commonName || i.name }))
+        );
         setError('Byggnaden kunde inte hittas');
         setIsLoading(false);
         return;
       }
+
+      console.log('[BuildingViewerData] Found building:', building.commonName || building.name);
 
       setError(null);
 
