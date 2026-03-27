@@ -31,6 +31,8 @@ interface SyncProgressCardProps {
   totalSynced?: number | null;
   // Extra actions
   extraActions?: React.ReactNode;
+  // Last result summary (shown after sync completes)
+  lastResult?: string | null;
 }
 
 const formatDate = (dateStr: string | null, fallbackDateStr?: string | null) => {
