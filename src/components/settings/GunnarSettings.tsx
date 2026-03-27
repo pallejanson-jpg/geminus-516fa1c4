@@ -59,24 +59,7 @@ export function saveGunnarSettings(settings: Partial<GunnarSettingsData>): void 
   }
 }
 
-function useAvailableVoices(lang: string) {
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-
-    const update = () => {
-      const all = window.speechSynthesis.getVoices();
-      setVoices(all.filter(v => v.lang.startsWith(lang.split('-')[0])));
-    };
-
-    update();
-    window.speechSynthesis.addEventListener('voiceschanged', update);
-    return () => window.speechSynthesis.removeEventListener('voiceschanged', update);
-  }, [lang]);
-
-  return voices;
-}
+// useAvailableVoices removed — using ElevenLabs presets instead
 
 const GunnarSettings: React.FC = () => {
   const [settings, setSettings] = useState<GunnarSettingsData>(getGunnarSettings);
