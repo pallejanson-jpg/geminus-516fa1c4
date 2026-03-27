@@ -222,16 +222,16 @@ const GunnarSettings: React.FC = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__default__">System default</SelectItem>
-                  {voices.map(v => (
-                    <SelectItem key={v.name} value={v.name}>
-                      {v.name}
+                  <SelectItem value="__default__">Daniel (default)</SelectItem>
+                  {ELEVENLABS_VOICES.map(v => (
+                    <SelectItem key={v.id} value={v.id}>
+                      {v.name} — {v.description}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                {voices.length === 0 ? 'No voices available for this language' : `${voices.length} voices available`}
+                High-quality ElevenLabs voices (multilingual)
               </p>
             </div>
             <Button
