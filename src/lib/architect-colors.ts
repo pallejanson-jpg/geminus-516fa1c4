@@ -75,7 +75,8 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
 
   // Phase 2: Apply DEFAULT_COLOR to any remaining scene objects without metaObject entries
   // This prevents raw red/uncolored objects from showing
-  const allIds = scene.objectIds || [];
+  let allIds: string[] = [];
+  try { allIds = scene.objectIds || []; } catch { /* objectIds getter can throw if internal map is null */ }
   for (const id of allIds) {
     if (processedIds.has(id)) continue;
     const entity = scene.objects?.[id];
@@ -129,7 +130,8 @@ export function recolorArchitectObjects(viewer: any): number {
   }
 
   // Colorize remaining objects without metaObject entries
-  const allIds = scene.objectIds || [];
+  let allIds: string[] = [];
+  try { allIds = scene.objectIds || []; } catch { /* objectIds getter can throw if internal map is null */ }
   for (const id of allIds) {
     if (processedIds.has(id)) continue;
     const entity = scene.objects?.[id];
