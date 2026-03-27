@@ -350,8 +350,8 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
   }, [messages, isLoading, open, voiceOutputEnabled, speakAssistant]);
 
   useEffect(() => {
-    return () => { if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel(); };
-  }, []);
+    return () => { stopSpeaking(); };
+  }, [stopSpeaking]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
