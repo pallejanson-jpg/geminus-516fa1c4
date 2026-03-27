@@ -6,6 +6,7 @@
 import React, { useState, useCallback, useRef, useContext, useEffect } from 'react';
 import useSectionPlaneClipping from '@/hooks/useSectionPlaneClipping';
 import { OBJECT_MOVE_MODE_EVENT, OBJECT_DELETE_EVENT, useObjectMoveMode } from '@/hooks/useObjectMoveMode';
+import { useAiViewerBridge } from '@/hooks/useAiViewerBridge';
 import NativeXeokitViewer from './NativeXeokitViewer';
 import MobileViewerOverlay from './mobile/MobileViewerOverlay';
 import FloatingFloorSwitcher from './FloatingFloorSwitcher';
