@@ -62,8 +62,29 @@ serve(async (req) => {
     if (!response.ok) {
       const errBody = await response.text();
       console.error("ElevenLabs error:", response.status, errBody);
-      return new Response(JSON.stringify({ error: `ElevenLabs API error: ${response.status}` }), {
-        status: 502,
+
+      let providerMessage = "TTS provider request failed";
+      let providerCode = `ELEVENLABS_${response.status}`;
+
+      try {
+        const parsed = JSON.parse(errBody);
+        providerMessage = parsed?.detail?.message || parsed?.message || providerMessage;
+        providerCode = parsed?.detail?.status || providerCode;
+      } catch {
+        providerMessage = errBody || providerMessage;
+      }
+
+      const status = response.status === 401 || response.status === 403 ? 503 : 502;
+
+      return new Response(JSON.stringify({
+        error: "Text-to-speech is temporarily unavailable",
+        provider: "elevenlabs",
+        provider_status: response.status,
+        provider_code: providerCode,
+        details: providerMessage,
+        fallback: "browser_tts",
+      }), {
+        status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
