@@ -145,8 +145,38 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       audioRef.current.src = '';
       audioRef.current = null;
     }
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
     setIsSpeaking(false);
   }, []);
+
+  const speakWithBrowserFallback = useCallback(async (text: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      toastHook({
+        title: 'TTS unavailable',
+        description: 'Voice playback is temporarily unavailable right now.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'sv-SE';
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+
+    toastHook({
+      title: 'Fallback voice enabled',
+      description: 'Using browser speech while the premium voice service is unavailable.',
+    });
+  }, [toastHook]);
 
   const speakText = useCallback(async (text: string) => {
     const cleaned = preprocessForTTS(text);
@@ -168,7 +198,9 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       });
 
       if (!response.ok) {
-        console.error('TTS error:', response.status);
+        const errorPayload = await response.json().catch(() => null);
+        console.error('TTS error:', response.status, errorPayload);
+        await speakWithBrowserFallback(cleaned);
         return;
       }
 
@@ -184,9 +216,10 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       await audio.play();
     } catch (e) {
       console.error('TTS playback error:', e);
+      await speakWithBrowserFallback(cleaned);
       setIsSpeaking(false);
     }
-  }, [stopSpeaking]);
+  }, [speakWithBrowserFallback, stopSpeaking]);
 
   const speakAssistant = useCallback(async (text: string) => {
     if (!voiceOutputEnabled) return;
