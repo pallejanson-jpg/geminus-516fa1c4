@@ -109,6 +109,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   const [rotationInput, setRotationInput] = useState(0);
   const [showPropertiesDialog, setShowPropertiesDialog] = useState(false);
   const [isUploadingHero, setIsUploadingHero] = useState(false);
+  const [buildingNameInput, setBuildingNameInput] = useState('');
+  const [isSavingName, setIsSavingName] = useState(false);
   const heroInputRef = useRef<HTMLInputElement>(null);
 
   // Use building settings hook
@@ -138,6 +140,11 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
       setRotationInput(settings.rotation);
     }
   }, [settings?.ivionSiteId, settings?.latitude, settings?.longitude, settings?.rotation]);
+
+  // Sync building name input
+  React.useEffect(() => {
+    setBuildingNameInput(facility.commonName || facility.name || '');
+  }, [facility.commonName, facility.name]);
 
   const isBuilding = facility.category === 'Building';
   const isStorey = facility.category === 'Building Storey';
@@ -322,6 +329,27 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
 
   const handleSaveIvionSiteId = () => {
     updateIvionSiteId(ivionSiteIdInput || null);
+  };
+
+  const handleSaveBuildingName = async () => {
+    if (!facility.fmGuid) return;
+    setIsSavingName(true);
+    try {
+      const newName = buildingNameInput.trim() || null;
+      const { error } = await supabase
+        .from('assets')
+        .update({ common_name: newName, updated_at: new Date().toISOString() })
+        .eq('fm_guid', facility.fmGuid);
+      if (error) throw error;
+      toast.success('Building name updated');
+      // Update the facility in parent state
+      setSelectedFacility({ ...facility, commonName: newName || undefined } as Facility);
+      onSettingsChanged?.();
+    } catch (err: any) {
+      toast.error(`Failed to update name: ${err.message}`);
+    } finally {
+      setIsSavingName(false);
+    }
   };
 
   const handleSaveMapPosition = () => {
@@ -557,6 +585,28 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4 px-3 sm:px-6 overflow-hidden">
+                  {/* Building Name */}
+                  <div className="space-y-2 min-w-0">
+                    <Label htmlFor="buildingName" className="text-xs">Building Name</Label>
+                    <div className="flex gap-2 min-w-0">
+                      <Input
+                        id="buildingName"
+                        value={buildingNameInput}
+                        onChange={(e) => setBuildingNameInput(e.target.value)}
+                        placeholder="Enter building name"
+                        className="h-8 text-sm min-w-0 flex-1"
+                      />
+                      <Button 
+                        size="sm" 
+                        onClick={handleSaveBuildingName}
+                        disabled={isSavingName || buildingNameInput === (facility.commonName || facility.name || '')}
+                        className="h-8 shrink-0"
+                      >
+                        {isSavingName ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+                      </Button>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 min-w-0">
                     <div className="space-y-2 min-w-0">
                       <Label htmlFor="ivionSiteId" className="text-xs">Ivion Site ID</Label>
