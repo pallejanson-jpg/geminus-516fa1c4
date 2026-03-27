@@ -1322,9 +1322,20 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
-    // Sync all assets with loop-until-complete behavior
+    // Sync all assets with loop-until-complete behavior + push local objects
     const handleSyncAssetsChunked = async () => {
         setIsSyncingAssets(true);
+        setAssetSyncLog([
+            { id: 'pull', label: 'Pulling assets from Asset+', status: 'running', startedAt: Date.now() },
+            { id: 'push', label: 'Pushing local objects to Asset+', status: 'pending' },
+        ]);
+        setAssetSyncOutcome(null);
+        const startTime = Date.now();
+        let totalPulled = 0;
+
+        const updateStep = (id: string, updates: Partial<SyncStep>) => {
+            setAssetSyncLog(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+        };
         
         const runResumableSync = async (): Promise<void> => {
             try {
@@ -1334,89 +1345,84 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                 if (error) {
                     console.error('Asset sync error:', error);
-                    
-                    // Check for sort memory error in the response
                     const errorMsg = error.message || '';
                     if (errorMsg.includes('Sort exceeded memory limit') || errorMsg.includes('SORT_MEMORY_LIMIT')) {
-                    toast({
-                        title: 'Trying fallback strategy',
-                        description: 'The Asset+ server hit a memory limit. Continuing with smaller batches...',
-                    });
-                        // Continue after a brief delay
                         setTimeout(() => runResumableSync(), 2000);
                         return;
                     }
-                    
-                    toast({
-                        variant: "destructive",
-                        title: "Sync Error",
-                        description: error.message,
-                    });
+                    updateStep('pull', { status: 'error', message: error.message, completedAt: Date.now() });
+                    setAssetSyncOutcome({ success: false, summary: 'Asset sync failed', details: [error.message], durationMs: Date.now() - startTime });
                     setIsSyncingAssets(false);
                     return;
                 }
 
-                // Update status display
                 await fetchSyncStatus();
 
-                // Handle soft errors (mode switches, etc.)
-                if (data?.softError === 'SWITCHED_TO_CURSOR_MODE') {
-                    toast({
-                        title: 'Switching strategy',
-                        description: 'Changing to cursor-based pagination for this building...',
-                    });
-                }
-
                 if (data?.interrupted) {
-                    // Continue syncing - call again after a short delay
+                    totalPulled = data.totalSynced || totalPulled;
                     const progressInfo = data.progress;
-                    const modeInfo = progressInfo?.pageMode === 'cursor' ? ' (cursor)' : '';
-                    console.log(`Asset sync progress: ${data.totalSynced} synced, mode: ${progressInfo?.pageMode}, continuing...`);
-                    toast({
-                        title: 'Syncing assets',
-                        description: `${data.totalSynced} assets synced (${progressInfo?.currentBuildingIndex + 1}/${progressInfo?.totalBuildings})${modeInfo}. Continuing...`,
+                    updateStep('pull', {
+                        count: totalPulled,
+                        message: progressInfo ? `Building ${(progressInfo.currentBuildingIndex || 0) + 1}/${progressInfo.totalBuildings || '?'}` : undefined,
                     });
-                    
-                    // Wait 1 second then continue
                     setTimeout(() => runResumableSync(), 1000);
                 } else {
-                    // Completed
-                    console.log(`Asset sync completed: ${data?.totalSynced} total`);
-                    toast({
-                        title: "Sync Complete",
-                        description: `${data?.totalSynced || 0} assets synced successfully.`,
-                    });
+                    totalPulled = data?.totalSynced || totalPulled;
+                    updateStep('pull', { status: 'done', count: totalPulled, completedAt: Date.now() });
+
+                    // Step 2: Push local objects to Asset+
+                    updateStep('push', { status: 'running', startedAt: Date.now() });
+                    try {
+                        const { data: pushData, error: pushError } = await supabase.functions.invoke('asset-plus-sync', {
+                            body: { action: 'push-missing-to-assetplus' }
+                        });
+                        if (pushError) throw pushError;
+                        const pushed = pushData?.created || 0;
+                        updateStep('push', { status: 'done', count: pushed, completedAt: Date.now() });
+
+                        setAssetSyncOutcome({
+                            success: true,
+                            summary: 'Asset sync complete',
+                            details: [
+                                `${totalPulled.toLocaleString()} assets pulled from Asset+`,
+                                pushed > 0 ? `${pushed} local objects pushed to Asset+` : 'No local objects to push',
+                            ],
+                            durationMs: Date.now() - startTime,
+                        });
+                    } catch (pushErr: any) {
+                        updateStep('push', { status: 'error', message: pushErr.message, completedAt: Date.now() });
+                        setAssetSyncOutcome({
+                            success: true,
+                            summary: 'Assets pulled, but push failed',
+                            details: [
+                                `${totalPulled.toLocaleString()} assets pulled from Asset+`,
+                                `Push failed: ${pushErr.message}`,
+                            ],
+                            durationMs: Date.now() - startTime,
+                        });
+                    }
+
                     setIsSyncingAssets(false);
                     await checkSyncStatus();
-                    // Auto-extract technical systems from synced attributes
                     handleAutoSyncSystems();
+                    window.dispatchEvent(new CustomEvent('asset-sync-completed', { detail: { totalSynced: totalPulled } }));
                 }
             } catch (error: any) {
                 console.error('Asset sync exception:', error);
-                
-                // Check for sort memory error
                 const errorMsg = error.message || '';
                 if (errorMsg.includes('Sort exceeded memory limit') || errorMsg.includes('SORT_MEMORY_LIMIT')) {
-                    toast({
-                        title: 'Retrying',
-                        description: 'The Asset+ server hit a memory limit. Trying again...',
-                    });
                     setTimeout(() => runResumableSync(), 3000);
                     return;
                 }
-                
-                toast({
-                    variant: "destructive",
-                    title: "Sync Failed",
-                    description: error.message,
-                });
+                updateStep('pull', { status: 'error', message: error.message, completedAt: Date.now() });
+                setAssetSyncOutcome({ success: false, summary: 'Asset sync failed', details: [error.message], durationMs: Date.now() - startTime });
                 setIsSyncingAssets(false);
             }
         };
 
         toast({
-            title: 'Starting sync',
-            description: 'Syncing all assets building by building. Continuing automatically.',
+            title: 'Starting asset sync',
+            description: 'Syncing all assets building by building...',
         });
 
         runResumableSync();
