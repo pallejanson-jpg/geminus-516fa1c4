@@ -32,20 +32,33 @@ async function batchExpireInAssetPlus(
 ): Promise<{ expired: string[]; failed: Array<{ fmGuid: string; error: string }> }> {
   const apiUrl = Deno.env.get("ASSET_PLUS_API_URL") || "";
   const apiKey = Deno.env.get("ASSET_PLUS_API_KEY") || "";
-  if (!apiUrl) return { expired: [], failed: syncedFmGuids.map(fmGuid => ({ fmGuid, error: "Asset+ API URL not configured" })) };
+  
+  // If Asset+ credentials aren't configured, skip expiry gracefully
+  if (!apiUrl || !apiKey) {
+    console.log("Asset+ API not configured — skipping ExpireObject, treating all as local-only deletes");
+    return { expired: syncedFmGuids, failed: [] };
+  }
 
   const expired: string[] = [];
   const failed: Array<{ fmGuid: string; error: string }> = [];
 
+  let accessToken: string;
   try {
-    const accessToken = await getAccessToken();
-    const baseUrl = apiUrl.replace(/\/+$/, "");
+    accessToken = await getAccessToken();
+  } catch (authErr) {
+    console.warn("Keycloak auth failed — skipping Asset+ expiry:", authErr);
+    // Treat as success so local cleanup proceeds
+    return { expired: syncedFmGuids, failed: [] };
+  }
 
-    // Process in batches of 50
-    for (let i = 0; i < syncedFmGuids.length; i += 50) {
-      const batch = syncedFmGuids.slice(i, i + 50);
-      const payload = { apiKey, expireBimObjects: batch.map(fmGuid => ({ fmGuid, expireDate })) };
+  const baseUrl = apiUrl.replace(/\/+$/, "");
 
+  // Process in batches of 50
+  for (let i = 0; i < syncedFmGuids.length; i += 50) {
+    const batch = syncedFmGuids.slice(i, i + 50);
+    const payload = { apiKey, expireBimObjects: batch.map(fmGuid => ({ fmGuid, expireDate })) };
+
+    try {
       const response = await fetch(`${baseUrl}/ExpireObject`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
@@ -58,10 +71,10 @@ async function batchExpireInAssetPlus(
         const text = await response.text();
         batch.forEach(fmGuid => failed.push({ fmGuid, error: `ExpireObject ${response.status}: ${text.slice(0, 200)}` }));
       }
+    } catch (batchErr) {
+      const msg = batchErr instanceof Error ? batchErr.message : "Batch request failed";
+      batch.forEach(fmGuid => failed.push({ fmGuid, error: msg }));
     }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Auth failed";
-    syncedFmGuids.filter(g => !expired.includes(g)).forEach(fmGuid => failed.push({ fmGuid, error: msg }));
   }
 
   return { expired, failed };
