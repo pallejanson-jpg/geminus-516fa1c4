@@ -2141,6 +2141,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_assets_by_category: {
+        Args: { building_guid?: string; cat: string }
+        Returns: Json
+      }
+      get_assets_by_system: {
+        Args: { building_guid?: string; system_query: string }
+        Returns: Json
+      }
+      get_assets_in_room: { Args: { room_guid: string }; Returns: Json }
+      get_viewer_entities: { Args: { asset_ids: string[] }; Returns: Json }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -2149,6 +2159,10 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      search_assets_rpc: {
+        Args: { building_guid?: string; search: string }
+        Returns: Json
+      }
     }
     Enums: {
       app_role: "admin" | "user"
