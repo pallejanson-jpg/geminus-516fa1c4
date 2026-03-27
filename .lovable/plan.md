@@ -1,79 +1,76 @@
 
 
-## Analysis of Issues
+## Analysis: IFC and ACC Asset/Property Handling
 
-### 1. Delete Building Error (Red Toast)
-The `asset-plus-delete` edge function's cleanup loop tries to delete from `bcf_issues`, `building_external_links`, and `fm_access_dou` tables. While these tables exist, the error likely comes from one of them failing silently or the edge function returning `success: false` when `expireErrors.length > 0` (line 231) — meaning the Asset+ ExpireObject API call fails for some objects. The `handleDeleteBuilding` in `CreateBuildingPanel.tsx` then shows a destructive toast with "Partially failed". Additionally, `geometry_entity_map` and `systems` table rows are not cleaned up during delete.
+### Current State
 
-**Fix**: Add missing cleanup tables (`geometry_entity_map`, `systems`) and make the delete function more resilient — catch errors per-table so one failure doesn't block others. Also handle the case where Asset+ credentials aren't configured (skip expiry gracefully).
+**IFC Import — Assets:**
+- The server-side `ifc-to-xkt` edge function DOES populate assets into the `assets` table via `populateAssetsFromMetaObjects()` — it creates storeys, spaces, AND instances (Pass 3, lines 402-422). All non-spatial, non-relationship IFC objects are inserted as `category: "Instance"` with their `asset_type` set to the IFC type (e.g. `IfcWall`, `IfcDoor`).
+- The browser-side path in `CreateBuildingPanel.tsx` only extracts levels/spaces and triggers a server fallback for hierarchy — it does NOT populate instances from the browser path. It relies on the server `ifc-to-xkt` function for that.
 
-### 2. Expired Buildings in Asset+ Sync
-The sync filter (`objectType = 1, 2, 3`) does **not** filter out expired objects from Asset+. The Asset+ API likely returns objects with an `expireDate` field. We need to add a filter condition like `["expireDate", "=", null]` to exclude expired buildings/objects.
+**IFC Import — Properties: GAP**
+- IFC property sets (`propertySets` on metaObjects) are **NOT mapped to the `attributes` column** on the `assets` table. The `populateAssetsFromMetaObjects` function only stores `fm_guid`, `name`, `common_name`, `category`, `asset_type`, and spatial references. No property data is persisted.
+- Systems are extracted from property sets (SystemName), but individual object properties (e.g. area, material, manufacturer, fire rating) are discarded.
 
-**Fix**: Add expireDate filter to the `fetchAssetPlusObjects` calls in the sync-structure and sync-assets actions.
+**ACC Import — Assets:**
+- `upsertBimAssets()` in `acc-sync` DOES populate levels, rooms (with properties like area), AND instances into the `assets` table. Room properties are stored in `attributes.bim_properties`. Instance properties are minimal — only `bim_category`, `bim_external_id`, etc.
 
-### 3. Property (Complex) Name in Building Selector
-The viewer's `BuildingSelector.tsx` already shows `complexCommonName - buildingName` format (line 278-281). This works when the data has `complexCommonName`. No change needed there. But the `CreateBuildingPanel.tsx` building list likely doesn't show the complex name. Need to verify and add it.
+**ACC Import — Properties: PARTIAL**
+- Room properties (area, perimeter, volume, department) are extracted and stored in `attributes.bim_properties`.
+- Instance properties beyond category/name are NOT extracted — the Model Properties API returns all fields but only `systemName`, `systemType`, `level`, `room`, `typeName` are used.
 
-### 4. Edit Building Properties Panel
-The `CreatePropertyDialog` (Properties page) edits building_settings with API credentials and location. But for editing building **names**, common names, Ivion site IDs, position, and other building-level settings, the existing panel is in `CreateBuildingPanel.tsx` (settings). The user wants a clear way to edit building names and settings. Currently `CreatePropertyDialog` handles this at the "Property" (Complex) level. We need to ensure building-level editing (name, position, Ivion site ID) is accessible — this is already partially in `useBuildingSettings.ts` and `CreateBuildingPanel.tsx`.
+**ACC Import — Missing Spaces:**
+- The `extractBimHierarchy` function correctly looks for categories `Revit Rooms`, `Rooms`, `IfcSpace`. If the Model Properties API returns rooms under a different category name (e.g. a Swedish locale), they would be missed. The `categoryCounts` debug log (line 1010-1015) would reveal what categories exist.
+- Another possibility: the Model Properties index isn't `FINISHED` yet (30s polling timeout), or the model version URN doesn't match. The code falls through silently with 0 rooms if the index isn't ready.
 
-### 5. IFC Import — Rooms Not Appearing in Navigator, No BIM Model in Viewer
-The logs show:
-- ✅ Hierarchy populated: 8 levels, 9 spaces (from server-side metadata-only extraction)
-- But browser conversion reported: "Hierarchy: 0 levels, 0 spaces"
-- XKT was generated (17.18 MB) and uploaded
-- `xkt_models` row was created
+### Plan
 
-**Root cause analysis**:
-- The XKT file was uploaded and a `xkt_models` record was created with `model_id: ifc-{timestamp}` 
-- The viewer fetches from `xkt_models` and loads via signed storage URL
-- Rooms ARE in the database (8 levels, 9 spaces from server extraction)
-- But the user says rooms don't show in Navigator — this could be a data refresh issue (AppContext not re-fetching after import)
-- No BIM model visible — the XKT was uploaded but the viewer might not find it if the `storage_path` or `model_id` format doesn't match expectations
+#### 1. IFC Import: Store IFC Property Sets in `attributes`
 
-**Key issue**: After IFC import, the app needs to refresh its data. The navigator reads from `AppContext.navigatorTreeData` which loads from the `assets` table. After import, this data isn't refreshed. Also, the viewer needs to find the XKT model via the `xkt_models` table.
+**File: `supabase/functions/ifc-to-xkt/index.ts`** — `populateAssetsFromMetaObjects()`
 
-## Plan
+- For each instance (and space), extract `propertySets` / `properties` from the metaObject
+- Store them in the `attributes` JSON column as structured data (matching ACC's `bim_properties` format)
+- For spaces: extract area, perimeter, volume if available and set `gross_area`
 
-### Task 1: Fix Delete Building Error
-**File: `supabase/functions/asset-plus-delete/index.ts`**
-- Add `geometry_entity_map` (column: `building_fm_guid`) and `systems` (column: `building_fm_guid`) to the cleanup tables list
-- Wrap each cleanup table deletion in individual try/catch so one failure doesn't affect others
-- If Asset+ credentials aren't configured, skip the expire step gracefully instead of failing
-- Log which specific table caused the error
+#### 2. IFC Browser Path: Populate Instances from Metadata
 
-### Task 2: Filter Expired Objects from Asset+ Sync
-**File: `supabase/functions/asset-plus-sync/index.ts`**
-- In the structure sync filter (line 818-822), add `["expireDate", "=", null]` condition to exclude expired buildings/floors/rooms
-- In the asset sync filter, add the same expireDate filter
-- In the orphan cleanup filter, also exclude expired objects from the remote set
-
-### Task 3: Show Complex (Property) Name in Building Selector Lists
-**File: `src/components/viewer/BuildingSelector.tsx`** — Already done (line 278-281)
-**File: `src/components/settings/CreateBuildingPanel.tsx`** — Update the building list to show `complexCommonName - buildingName` format. Currently fetches from `assets` table with `category = Building` but may not include `complex_common_name`.
-
-### Task 4: Ensure Building Editing Panel is Accessible
-The `CreatePropertyDialog` handles Complex/Property-level editing. For building-level settings (name, position, Ivion site ID, hero image, etc.), the functionality exists in `useBuildingSettings.ts` and is partially surfaced in `CreateBuildingPanel.tsx`. 
-- Add building name editing (common_name) to the building panel in `CreateBuildingPanel.tsx`
-- Ensure Ivion site ID, position, and other building settings are editable from the selected building's accordion section
-
-### Task 5: Fix IFC Import — Navigator Refresh + XKT Model Loading
 **File: `src/components/settings/CreateBuildingPanel.tsx`**
-- After successful IFC conversion, dispatch a custom event to trigger AppContext data refresh so Navigator shows the new levels/rooms
-- Verify the `xkt_models` upsert creates a record that the viewer can find and load
 
-**File: `src/context/AppContext.tsx`** (if needed)
-- Ensure it listens for a refresh event after IFC import
+- After browser conversion succeeds and metadata JSON is uploaded, the server fallback (`ifc-extract-systems`) already recovers storeys/spaces but does NOT populate instances
+- Add a step: after server metadata extraction, call `populateAssetsFromMetaObjects` (or the conversion-worker `populate-hierarchy` endpoint) with the full metadata to ensure instances are created
+- Alternatively, trigger the full `ifc-to-xkt` server function in metadata-only mode to populate all assets
 
-The core issue is likely that after IFC import completes, the Navigator tree isn't refreshed. The XKT model should load since it's stored correctly in `xkt_models` — but the viewer needs to be opened/refreshed after import.
+#### 3. ACC Import: Extract and Store Instance Properties
+
+**File: `supabase/functions/acc-sync/index.ts`** — `extractBimHierarchy()` + `upsertBimAssets()`
+
+- In the instance extraction loop (line 971-1007), collect ALL property fields from `obj.props` (not just category/name/level/room/system)
+- Store them in `attributes.bim_properties` on the instance asset, matching the room property format
+- Use `fieldsMap` to translate field keys to human-readable names
+
+#### 4. ACC Import: Fix Missing Spaces
+
+**File: `supabase/functions/acc-sync/index.ts`** — `extractBimHierarchy()`
+
+- Add broader category matching for rooms: include `'Spaces'`, `'Rum'`, `'IfcSpace'`, and any category containing "Room" or "Space" (case-insensitive)
+- Add diagnostic logging: log ALL category counts so we can see exactly what categories exist in the model
+- Increase the polling timeout from 30s to 45s to handle slower index builds
+- If rooms are still 0 after extraction, log a warning with available categories
+
+#### 5. Browser IFC: Ensure Server Fallback Populates All Assets
+
+**File: `supabase/functions/ifc-extract-systems/index.ts`**
+
+- This function is the server fallback for browser conversions. Currently it extracts storeys/spaces but the space detection heuristic was just fixed. Verify it also calls asset population for instances from the metadata JSON — currently it does NOT populate instances, only storeys and spaces.
+- Add instance population from the metadata objects (same logic as `populateAssetsFromMetaObjects` in `ifc-to-xkt`)
 
 ### Technical Details
 
 | File | Change |
 |---|---|
-| `supabase/functions/asset-plus-delete/index.ts` | Add missing cleanup tables, improve error resilience |
-| `supabase/functions/asset-plus-sync/index.ts` | Add `expireDate = null` filter to exclude expired objects |
-| `src/components/settings/CreateBuildingPanel.tsx` | Show complex name in list, add building name editing, trigger data refresh after IFC import |
-| `src/context/AppContext.tsx` | Listen for data refresh event (if not already present) |
+| `supabase/functions/ifc-to-xkt/index.ts` | Extract property sets from metaObjects, store in `attributes` column for instances and spaces |
+| `supabase/functions/ifc-extract-systems/index.ts` | Add instance population from metadata; ensure all assets (not just hierarchy) are created |
+| `supabase/functions/acc-sync/index.ts` | Broaden room category matching; extract full instance properties; increase poll timeout |
+| `src/components/settings/CreateBuildingPanel.tsx` | After browser conversion, ensure server fallback populates instances too (not just hierarchy) |
 
