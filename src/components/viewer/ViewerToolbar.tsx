@@ -84,7 +84,7 @@ const ALL_TOOLS: ToolDef[] = [
   { id: 'geminiAi', label: 'Geminus AI', icon: <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
 ];
 
-const DEFAULT_ENABLED = ['orbit', 'firstPerson', 'fitView', 'resetView', 'select', 'measure', 'section', 'viewMode'];
+const DEFAULT_ENABLED = ['orbit', 'firstPerson', 'fitView', 'resetView', 'select', 'measure', 'section', 'viewMode', 'geminiAi'];
 
 function getEnabledTools(): string[] {
   try {
