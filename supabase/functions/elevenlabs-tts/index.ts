@@ -19,7 +19,7 @@ serve(async (req) => {
       });
     }
 
-    const { text, voiceId } = await req.json();
+    const { text, voiceId, speed } = await req.json();
 
     if (!text || typeof text !== "string" || text.trim().length === 0) {
       return new Response(JSON.stringify({ error: "text is required" }), {
