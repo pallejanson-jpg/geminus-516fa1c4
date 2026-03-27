@@ -11,6 +11,7 @@ import ReactMarkdown from "react-markdown";
 import { useWebSpeechRecognition } from "@/hooks/useWebSpeechRecognition";
 import { getGunnarSettings, saveGunnarSettings } from "@/components/settings/GunnarSettings";
 import { dispatchAiViewerCommand } from "@/hooks/useAiViewerBridge";
+import { AI_SENSOR_DATA_EVENT } from "@/components/viewer/SensorDataOverlay";
 
 type Message = {
   role: "user" | "assistant";
