@@ -997,6 +997,16 @@ async function extractBimHierarchy(
                 instanceName = rawName.replace(/\s*\[[\d]+\]\s*$/, '').trim();
               }
 
+              // Collect ALL instance properties for attributes
+              const instanceProperties: Record<string, any> = {};
+              if (obj.props) {
+                for (const [propKey, propValue] of Object.entries(obj.props)) {
+                  if (propValue === undefined || propValue === null || propValue === '') continue;
+                  const fieldName = (fieldsMap as Record<string, string>)[propKey] || propKey;
+                  instanceProperties[fieldName] = propValue;
+                }
+              }
+
               allInstances.push({
                 externalId,
                 name: instanceName || null,
@@ -1007,6 +1017,7 @@ async function extractBimHierarchy(
                 versionUrn: idx.versionUrn,
                 systemName: sysName || sysAbbr || null,
                 systemType: sysType || sysClass || null,
+                properties: instanceProperties,
               });
             }
           }
