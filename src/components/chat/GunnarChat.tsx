@@ -322,18 +322,12 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
 
   const toggleVoiceOutput = useCallback(() => {
     if (voiceOutputEnabled) {
-      window.speechSynthesis?.cancel();
+      stopSpeaking();
       setVoiceOutputEnabled(false);
     } else {
-      if (!ttsUnlockedRef.current && 'speechSynthesis' in window) {
-        const unlock = new SpeechSynthesisUtterance('');
-        unlock.volume = 0;
-        window.speechSynthesis.speak(unlock);
-        ttsUnlockedRef.current = true;
-      }
       setVoiceOutputEnabled(true);
     }
-  }, [voiceOutputEnabled]);
+  }, [voiceOutputEnabled, stopSpeaking]);
 
   // Auto-start voice mode
   useEffect(() => {
