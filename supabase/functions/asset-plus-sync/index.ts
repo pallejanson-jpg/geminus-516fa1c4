@@ -908,13 +908,13 @@ serve(async (req) => {
       const localFmGuids = await fetchAllLocalFmGuids(supabase, ['Building', 'Building Storey', 'Space'], false, true);
       console.log(`Local non-is_local structure count (excl. ACC): ${localFmGuids.length}`);
 
-      const orphanFmGuids = localFmGuids.filter(guid => !remoteFmGuids.has(guid));
+      const orphanFmGuids = localFmGuids.filter(item => !remoteFmGuids.has(item.fm_guid));
       let orphansRemoved = 0;
       if (orphanFmGuids.length > 0) {
         console.log(`Found ${orphanFmGuids.length} orphan structure objects to remove`);
         const batchSize = 100;
         for (let i = 0; i < orphanFmGuids.length; i += batchSize) {
-          const batch = orphanFmGuids.slice(i, i + batchSize);
+          const batch = orphanFmGuids.slice(i, i + batchSize).map(item => item.fm_guid);
           const { error: deleteError } = await supabase
             .from('assets')
             .delete()
