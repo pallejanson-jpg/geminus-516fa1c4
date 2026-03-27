@@ -146,6 +146,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
   const [isXrayActive, setIsXrayActive] = useState(false);
   const [isOnHoverActive, setIsOnHoverActive] = useState(false);
   const [isCrosshairActive, setIsCrosshairActive] = useState(false);
+  const [isGunnarOpen, setIsGunnarOpen] = useState(false);
   const [enabledTools, setEnabledTools] = useState<string[]>(getEnabledTools);
   const [showConfig, setShowConfig] = useState(false);
   const [navSpeed, setNavSpeed] = useState(() => {
