@@ -88,44 +88,55 @@ const GunnarSettings: React.FC = () => {
     saveGunnarSettings({ speechLang, voiceName: null });
   };
 
-  const handleVoiceChange = (name: string) => {
-    const voiceName = name === '__default__' ? null : name;
+  const handleVoiceChange = (voiceId: string) => {
+    const voiceName = voiceId === '__default__' ? null : voiceId;
     setSettings(prev => ({ ...prev, voiceName }));
     saveGunnarSettings({ voiceName });
   };
 
-  const handleTestVoice = useCallback(() => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    
+  const [isTesting, setIsTesting] = useState(false);
+  const testAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handleTestVoice = useCallback(async () => {
+    if (isTesting) return;
+    setIsTesting(true);
+
+    // Stop any playing test audio
+    if (testAudioRef.current) {
+      testAudioRef.current.pause();
+      testAudioRef.current = null;
+    }
+
     const testText = settings.speechLang === 'sv-SE' 
       ? 'Hej! Jag är Geminus AI, din digitala fastighetsassistent.'
       : 'Hello! I am Geminus AI, your digital facility assistant.';
-    
-    const allVoices = window.speechSynthesis.getVoices();
-    const langPrefix = settings.speechLang.split('-')[0];
-    
-    let voice: SpeechSynthesisVoice | null = null;
-    if (settings.voiceName) {
-      voice = allVoices.find(v => v.name === settings.voiceName) || null;
+
+    try {
+      const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
+      const response = await fetch(TTS_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ text: testText, voiceId: settings.voiceName }),
+      });
+
+      if (!response.ok) throw new Error(`TTS failed: ${response.status}`);
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      testAudioRef.current = audio;
+      audio.onended = () => { setIsTesting(false); URL.revokeObjectURL(url); };
+      audio.onerror = () => { setIsTesting(false); URL.revokeObjectURL(url); };
+      await audio.play();
+    } catch (e) {
+      console.error('Test voice error:', e);
+      setIsTesting(false);
     }
-    if (!voice) {
-      // Pick best available
-      const langVoices = allVoices.filter(v => v.lang.startsWith(langPrefix));
-      const qualityKeywords = ['natural', 'premium', 'enhanced', 'google', 'microsoft'];
-      voice = langVoices.sort((a, b) => {
-        const scoreA = qualityKeywords.some(kw => a.name.toLowerCase().includes(kw)) ? 1 : 0;
-        const scoreB = qualityKeywords.some(kw => b.name.toLowerCase().includes(kw)) ? 1 : 0;
-        return scoreB - scoreA;
-      })[0] || null;
-    }
-    
-    const utterance = new SpeechSynthesisUtterance(testText);
-    utterance.lang = settings.speechLang;
-    utterance.rate = settings.speechLang === 'sv-SE' ? 0.95 : 1.0;
-    if (voice) utterance.voice = voice;
-    window.speechSynthesis.speak(utterance);
-  }, [settings.speechLang, settings.voiceName]);
+  }, [settings.speechLang, settings.voiceName, isTesting]);
 
   return (
     <div className="space-y-4">
