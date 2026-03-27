@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertTriangle, RefreshCw, X, Database } from 'lucide-react';
+import { AlertTriangle, RefreshCw, X, Database, Building2, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { SyncStatusLog, type SyncStep, type SyncOutcome } from '@/components/settings/SyncStatusLog';
 
 interface DeltaResult {
   localCount: number;
@@ -16,7 +17,7 @@ interface DeltaResult {
 
 const DISMISS_KEY = 'data-consistency-dismissed';
 const DEMO_MODE_KEY = 'geminus-demo-mode';
-const DISMISS_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const DISMISS_TTL_MS = 24 * 60 * 60 * 1000;
 
 function isDismissedInStorage(): boolean {
   try {
@@ -33,11 +34,15 @@ function isDismissedInStorage(): boolean {
 export const DataConsistencyBanner: React.FC = () => {
   const [deltaResult, setDeltaResult] = useState<DeltaResult | null>(null);
   const [isChecking, setIsChecking] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [isSyncingStructure, setIsSyncingStructure] = useState(false);
+  const [isSyncingAssets, setIsSyncingAssets] = useState(false);
   const [dismissed, setDismissed] = useState(() => isDismissedInStorage());
   const { toast } = useToast();
   const resumeRef = useRef(false);
-  const forceRef = useRef(false);
+
+  // Sync log state
+  const [syncSteps, setSyncSteps] = useState<SyncStep[]>([]);
+  const [syncOutcome, setSyncOutcome] = useState<SyncOutcome | null>(null);
 
   const dismiss = () => {
     setDismissed(true);
@@ -52,12 +57,8 @@ export const DataConsistencyBanner: React.FC = () => {
       const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
         body: { action: 'check-delta' }
       });
-      
       if (error) throw error;
-      
-      if (data?.success) {
-        setDeltaResult(data);
-      }
+      if (data?.success) setDeltaResult(data);
     } catch (error) {
       console.error('Failed to check data consistency:', error);
     } finally {
@@ -65,162 +66,145 @@ export const DataConsistencyBanner: React.FC = () => {
     }
   };
 
-  const syncWithCleanup = async (forceOverride?: boolean) => {
-    if (resumeRef.current) return;
+  const updateStep = (id: string, updates: Partial<SyncStep>) => {
+    setSyncSteps(prev => {
+      const existing = prev.find(s => s.id === id);
+      if (existing) return prev.map(s => s.id === id ? { ...s, ...updates } : s);
+      return [...prev, { id, label: id, status: 'pending' as const, ...updates }];
+    });
+  };
+
+  const syncStructure = async () => {
+    if (isSyncingStructure) return;
+    setIsSyncingStructure(true);
+    setSyncSteps([{ id: 'structure', label: 'Syncing buildings, floors & rooms', status: 'running', startedAt: Date.now() }]);
+    setSyncOutcome(null);
+    const startTime = Date.now();
+
+    const runLoop = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+          body: { action: 'sync-structure' }
+        });
+        if (error) throw error;
+
+        if (data?.interrupted) {
+          updateStep('structure', { count: data.totalSynced || 0, message: data.phase });
+          setTimeout(() => runLoop(), 2000);
+          return;
+        }
+
+        updateStep('structure', { status: 'done', count: data?.totalSynced || 0, completedAt: Date.now() });
+        setSyncOutcome({
+          success: true,
+          summary: `${(data?.totalSynced || 0).toLocaleString()} buildings/floors/rooms synced`,
+          durationMs: Date.now() - startTime,
+        });
+        setIsSyncingStructure(false);
+        setTimeout(checkDelta, 2000);
+      } catch (err: any) {
+        updateStep('structure', { status: 'error', message: err.message, completedAt: Date.now() });
+        setSyncOutcome({ success: false, summary: 'Structure sync failed', details: [err.message], durationMs: Date.now() - startTime });
+        setIsSyncingStructure(false);
+      }
+    };
+
+    runLoop();
+  };
+
+  const syncAssets = async () => {
+    if (isSyncingAssets || resumeRef.current) return;
     resumeRef.current = true;
-    forceRef.current = forceOverride || false;
-    setIsSyncing(true);
+    setIsSyncingAssets(true);
+    setSyncSteps([
+      { id: 'pull', label: 'Pulling assets from Asset+', status: 'running', startedAt: Date.now() },
+      { id: 'push', label: 'Pushing local objects to Asset+', status: 'pending' },
+    ]);
+    setSyncOutcome(null);
+    const startTime = Date.now();
+    let totalPulled = 0;
 
-    try {
-      toast({
-        title: 'Syncing...',
-        description: 'Step 1: Syncing building structure (buildings, floors, rooms)...',
-      });
+    const runLoop = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+          body: { action: 'sync-assets-resumable' }
+        });
 
-      // Step 1: Resumable structure sync loop
-      const runStructureLoop = async () => {
-        try {
-          const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
-            body: { action: 'sync-structure', force: forceRef.current }
-          });
-
-          if (error) {
-            console.error('Structure sync error:', error);
-            toast({ variant: 'destructive', title: 'Sync error', description: error.message });
-            setIsSyncing(false);
-            resumeRef.current = false;
+        if (error) {
+          const errorMsg = error.message || '';
+          if (errorMsg.includes('Sort exceeded memory limit')) {
+            setTimeout(() => runLoop(), 2000);
             return;
           }
-
-          // Handle skip guard response
-          if (data?.skipped) {
-            toast({
-              title: 'Already synced',
-              description: 'Structure was synced recently. Values may already be up to date.',
-              action: (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    forceRef.current = true;
-                    resumeRef.current = false;
-                    syncWithCleanup(true);
-                  }}
-                >
-                  Sync anyway
-                </Button>
-              ),
-            });
-            // Proceed to asset loop (user can force-restart via toast action)
-            runAssetLoop();
-            return;
-          }
-
-          if (data?.interrupted) {
-            toast({
-              title: 'Syncing structure...',
-              description: `${data.totalSynced || 0} items so far (${data.phase})...`,
-            });
-            setTimeout(() => runStructureLoop(), 2000);
-          } else {
-            // Structure done — start asset loop
-            toast({
-              title: 'Structure synced',
-              description: `${data?.totalSynced || 0} structural objects synced. Starting asset sync...`,
-            });
-            runAssetLoop();
-          }
-        } catch (err: any) {
-          console.error('Structure sync exception:', err);
-          toast({ variant: 'destructive', title: 'Sync error', description: err.message || 'Unknown error' });
-          setIsSyncing(false);
+          updateStep('pull', { status: 'error', message: error.message, completedAt: Date.now() });
+          setSyncOutcome({ success: false, summary: 'Asset sync failed', details: [error.message], durationMs: Date.now() - startTime });
+          setIsSyncingAssets(false);
           resumeRef.current = false;
+          return;
         }
-      };
 
-      // Step 2: Resumable asset sync loop
-      const runAssetLoop = async () => {
+        if (data?.interrupted) {
+          totalPulled = data.totalSynced || totalPulled;
+          updateStep('pull', { count: totalPulled });
+          setTimeout(() => runLoop(), 1000);
+          return;
+        }
+
+        totalPulled = data?.totalSynced || totalPulled;
+        updateStep('pull', { status: 'done', count: totalPulled, completedAt: Date.now() });
+
+        // Push local objects
+        updateStep('push', { status: 'running', startedAt: Date.now() });
         try {
-          const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
-            body: { action: 'sync-assets-resumable', force: forceRef.current }
+          const { data: pushData, error: pushError } = await supabase.functions.invoke('asset-plus-sync', {
+            body: { action: 'push-missing-to-assetplus' }
           });
-
-          if (error) {
-            console.error('Asset sync error:', error);
-            toast({ variant: 'destructive', title: 'Sync error', description: error.message });
-            setIsSyncing(false);
-            resumeRef.current = false;
-            return;
-          }
-
-          // Handle skip guard response
-          if (data?.skipped) {
-            toast({
-              title: 'Everything is up to date',
-              description: 'Both structure and assets were synced recently.',
-              action: (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    forceRef.current = true;
-                    resumeRef.current = false;
-                    syncWithCleanup(true);
-                  }}
-                >
-                  Sync anyway
-                </Button>
-              ),
-            });
-            setIsSyncing(false);
-            resumeRef.current = false;
-            return;
-          }
-
-          if (data?.interrupted) {
-            setTimeout(() => runAssetLoop(), 2000);
-          } else {
-            toast({
-              title: 'Sync complete',
-              description: `${data?.totalSynced || 0} assets synced.`,
-            });
-            setIsSyncing(false);
-            resumeRef.current = false;
-            setDeltaResult(null);
-            setDismissed(false);
-            try { localStorage.removeItem(DISMISS_KEY); } catch {}
-
-            window.dispatchEvent(new CustomEvent('asset-sync-completed', {
-              detail: { totalSynced: data?.totalSynced }
-            }));
-
-            setTimeout(checkDelta, 2000);
-          }
-        } catch (err: any) {
-          console.error('Asset sync exception:', err);
-          toast({ variant: 'destructive', title: 'Sync error', description: err.message || 'Unknown error' });
-          setIsSyncing(false);
-          resumeRef.current = false;
+          if (pushError) throw pushError;
+          const pushed = pushData?.created || 0;
+          updateStep('push', { status: 'done', count: pushed, completedAt: Date.now() });
+          setSyncOutcome({
+            success: true,
+            summary: 'Asset sync complete',
+            details: [
+              `${totalPulled.toLocaleString()} assets pulled`,
+              pushed > 0 ? `${pushed} local objects pushed to Asset+` : 'No local objects to push',
+            ],
+            durationMs: Date.now() - startTime,
+          });
+        } catch (pushErr: any) {
+          updateStep('push', { status: 'error', message: pushErr.message, completedAt: Date.now() });
+          setSyncOutcome({
+            success: true,
+            summary: 'Assets pulled, push failed',
+            details: [`${totalPulled.toLocaleString()} assets pulled`, `Push error: ${pushErr.message}`],
+            durationMs: Date.now() - startTime,
+          });
         }
-      };
 
-      runStructureLoop();
-    } catch (error) {
-      console.error('Sync failed:', error);
-      toast({
-        title: 'Sync failed',
-        description: error instanceof Error ? error.message : 'Unknown error',
-        variant: 'destructive',
-      });
-      setIsSyncing(false);
-      resumeRef.current = false;
-    }
+        setIsSyncingAssets(false);
+        resumeRef.current = false;
+        setDeltaResult(null);
+        setDismissed(false);
+        try { localStorage.removeItem(DISMISS_KEY); } catch {}
+        window.dispatchEvent(new CustomEvent('asset-sync-completed', { detail: { totalSynced: totalPulled } }));
+        setTimeout(checkDelta, 2000);
+      } catch (err: any) {
+        updateStep('pull', { status: 'error', message: err.message, completedAt: Date.now() });
+        setSyncOutcome({ success: false, summary: 'Asset sync failed', details: [err.message], durationMs: Date.now() - startTime });
+        setIsSyncingAssets(false);
+        resumeRef.current = false;
+      }
+    };
+
+    runLoop();
   };
 
   useEffect(() => {
     if (dismissed) return;
     checkDelta();
   }, [dismissed]);
+
+  const isSyncing = isSyncingStructure || isSyncingAssets;
 
   if (dismissed || deltaResult?.inSync || isChecking || !deltaResult) {
     return null;
@@ -252,12 +236,22 @@ export const DataConsistencyBanner: React.FC = () => {
           <div className="mt-2 flex gap-2">
             <Button
               size="sm"
-              onClick={() => syncWithCleanup(false)}
+              variant="outline"
+              onClick={syncStructure}
               disabled={isSyncing}
               className="gap-1.5"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              {isSyncing ? 'Syncing...' : 'Sync with Asset+'}
+              <Building2 className={`h-3.5 w-3.5 ${isSyncingStructure ? 'animate-spin' : ''}`} />
+              {isSyncingStructure ? 'Syncing...' : 'Sync Structure'}
+            </Button>
+            <Button
+              size="sm"
+              onClick={syncAssets}
+              disabled={isSyncing}
+              className="gap-1.5"
+            >
+              <Layers className={`h-3.5 w-3.5 ${isSyncingAssets ? 'animate-spin' : ''}`} />
+              {isSyncingAssets ? 'Syncing...' : 'Sync Assets'}
             </Button>
             <Button
               size="sm"
@@ -267,6 +261,13 @@ export const DataConsistencyBanner: React.FC = () => {
               Dismiss
             </Button>
           </div>
+
+          {/* Sync progress log */}
+          {(syncSteps.length > 0 || syncOutcome) && (
+            <div className="mt-3">
+              <SyncStatusLog steps={syncSteps} outcome={syncOutcome} />
+            </div>
+          )}
         </div>
         
         <Button
