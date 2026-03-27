@@ -32,20 +32,33 @@ async function batchExpireInAssetPlus(
 ): Promise<{ expired: string[]; failed: Array<{ fmGuid: string; error: string }> }> {
   const apiUrl = Deno.env.get("ASSET_PLUS_API_URL") || "";
   const apiKey = Deno.env.get("ASSET_PLUS_API_KEY") || "";
-  if (!apiUrl) return { expired: [], failed: syncedFmGuids.map(fmGuid => ({ fmGuid, error: "Asset+ API URL not configured" })) };
+  
+  // If Asset+ credentials aren't configured, skip expiry gracefully
+  if (!apiUrl || !apiKey) {
+    console.log("Asset+ API not configured — skipping ExpireObject, treating all as local-only deletes");
+    return { expired: syncedFmGuids, failed: [] };
+  }
 
   const expired: string[] = [];
   const failed: Array<{ fmGuid: string; error: string }> = [];
 
+  let accessToken: string;
   try {
-    const accessToken = await getAccessToken();
-    const baseUrl = apiUrl.replace(/\/+$/, "");
+    accessToken = await getAccessToken();
+  } catch (authErr) {
+    console.warn("Keycloak auth failed — skipping Asset+ expiry:", authErr);
+    // Treat as success so local cleanup proceeds
+    return { expired: syncedFmGuids, failed: [] };
+  }
 
-    // Process in batches of 50
-    for (let i = 0; i < syncedFmGuids.length; i += 50) {
-      const batch = syncedFmGuids.slice(i, i + 50);
-      const payload = { apiKey, expireBimObjects: batch.map(fmGuid => ({ fmGuid, expireDate })) };
+  const baseUrl = apiUrl.replace(/\/+$/, "");
 
+  // Process in batches of 50
+  for (let i = 0; i < syncedFmGuids.length; i += 50) {
+    const batch = syncedFmGuids.slice(i, i + 50);
+    const payload = { apiKey, expireBimObjects: batch.map(fmGuid => ({ fmGuid, expireDate })) };
+
+    try {
       const response = await fetch(`${baseUrl}/ExpireObject`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
@@ -58,10 +71,10 @@ async function batchExpireInAssetPlus(
         const text = await response.text();
         batch.forEach(fmGuid => failed.push({ fmGuid, error: `ExpireObject ${response.status}: ${text.slice(0, 200)}` }));
       }
+    } catch (batchErr) {
+      const msg = batchErr instanceof Error ? batchErr.message : "Batch request failed";
+      batch.forEach(fmGuid => failed.push({ fmGuid, error: msg }));
     }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Auth failed";
-    syncedFmGuids.filter(g => !expired.includes(g)).forEach(fmGuid => failed.push({ fmGuid, error: msg }));
   }
 
   return { expired, failed };
@@ -165,7 +178,7 @@ async function handleDeleteBuilding(body: any, supabase: any) {
   }
   addLog(`Deleted ${assetsDeleted} assets from local DB`);
 
-  // 4. Cleanup related tables
+  // 4. Cleanup related tables (each wrapped in try/catch for resilience)
   const cleanupTables = [
     { table: "building_settings", column: "fm_guid" },
     { table: "saved_views", column: "building_fm_guid" },
@@ -179,12 +192,19 @@ async function handleDeleteBuilding(body: any, supabase: any) {
     { table: "scan_jobs", column: "building_fm_guid" },
     { table: "bcf_issues", column: "building_fm_guid" },
     { table: "qr_report_configs", column: "building_fm_guid" },
+    { table: "geometry_entity_map", column: "building_fm_guid" },
+    { table: "systems", column: "building_fm_guid" },
+    { table: "document_chunks", column: "building_fm_guid" },
   ];
 
   for (const { table, column } of cleanupTables) {
-    const { error } = await supabase.from(table).delete().eq(column, buildingFmGuid);
-    if (error) addLog(`⚠️ Cleanup ${table}: ${error.message}`);
-    else addLog(`✓ Cleaned ${table}`);
+    try {
+      const { error } = await supabase.from(table).delete().eq(column, buildingFmGuid);
+      if (error) addLog(`⚠️ Cleanup ${table}: ${error.message}`);
+      else addLog(`✓ Cleaned ${table}`);
+    } catch (tableErr) {
+      addLog(`⚠️ Cleanup ${table} exception: ${tableErr instanceof Error ? tableErr.message : 'unknown'}`);
+    }
   }
 
   // 5. Cleanup asset_external_ids and asset_system for all deleted fm_guids

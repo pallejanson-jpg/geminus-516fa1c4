@@ -744,6 +744,19 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         refreshInitialData().catch((e) => {
             console.error('Failed to prefetch Asset+ data:', e);
         });
+
+        // Re-fetch when building data changes (e.g. after IFC import or sync)
+        const handler = () => {
+            refreshInitialData().catch((e) => {
+                console.error('Failed to refresh data after building-data-changed:', e);
+            });
+        };
+        window.addEventListener('building-data-changed', handler);
+        window.addEventListener('building-settings-changed', handler);
+        return () => {
+            window.removeEventListener('building-data-changed', handler);
+            window.removeEventListener('building-settings-changed', handler);
+        };
     }, [refreshInitialData]);
 
     return (
