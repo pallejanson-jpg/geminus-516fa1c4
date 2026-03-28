@@ -3,7 +3,7 @@ import { Mic, MicOff, HelpCircle, Move, X, GripHorizontal, Minimize2, Maximize2 
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { useWebSpeechRecognition } from '@/hooks/useWebSpeechRecognition';
+import { useDeepgramSpeechRecognition as useWebSpeechRecognition } from '@/hooks/useDeepgramSpeechRecognition';
 import { useVoiceCommands, VoiceCommandCallbacks } from '@/hooks/useVoiceCommands';
 import { toast } from 'sonner';
 
