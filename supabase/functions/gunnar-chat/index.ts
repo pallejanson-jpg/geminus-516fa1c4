@@ -1107,6 +1107,57 @@ function detectShortInput(messages: any[], context: any): ButtonActionIntent | n
   return null;
 }
 
+/** Strip noise words from a Swedish/English query to extract the core object term */
+function extractCoreTerm(raw: string): string {
+  return raw
+    .replace(/\b(har|finns|det|i|på|för|alla|samtliga|i byggnaden|in building|the|a|an|we|have|are|there|vi|den|denna|detta|rummet|byggnaden|huset)\b/gi, "")
+    .replace(/[?!.,]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Detect count/listing questions like "hur många rum", "vilka system finns", "antal dörrar" */
+function detectCountOrListQuestion(text: string, buildingGuid: string | null): ButtonActionIntent | null {
+  if (!buildingGuid) return null;
+
+  // "hur många X" / "how many X"
+  const countMatch = text.match(/^(hur\s+många|how\s+many|antal)\s+(.+)$/i);
+  if (countMatch) {
+    const core = extractCoreTerm(countMatch[2]);
+    const cat = matchCategory(core);
+    if (cat) return { action: "category_query", payload: { category: cat } };
+    if (KNOWN_SYSTEMS[core]) return { action: "system_query", payload: { system: KNOWN_SYSTEMS[core] } };
+    // Unknown object type → building summary shows all counts
+    return { action: "building_summary", payload: {} };
+  }
+
+  // "vilka X finns" / "which X exist" / "lista X" / "list X"
+  const listMatch = text.match(/^(vilka|which|lista|list)\s+(.+)$/i);
+  if (listMatch) {
+    const core = extractCoreTerm(listMatch[2]);
+    const cat = matchCategory(core);
+    if (cat) return { action: "category_query", payload: { category: cat } };
+    if (KNOWN_SYSTEMS[core]) return { action: "system_query", payload: { system: KNOWN_SYSTEMS[core] } };
+    // "vilka system finns" → building summary
+    if (/system/i.test(core)) return { action: "building_summary", payload: {} };
+    // Unknown → let AI handle it
+    return null;
+  }
+
+  // "finns det X" / "is there X" / "har vi X"
+  const existsMatch = text.match(/^(finns\s+det|is\s+there|har\s+vi|have\s+we)\s+(.+)$/i);
+  if (existsMatch) {
+    const core = extractCoreTerm(existsMatch[2]);
+    const cat = matchCategory(core);
+    if (cat) return { action: "category_query", payload: { category: cat } };
+    if (KNOWN_SYSTEMS[core]) return { action: "system_query", payload: { system: KNOWN_SYSTEMS[core] } };
+    // Unknown → let AI handle it
+    return null;
+  }
+
+  return null;
+}
+
 /** Detect viewer-centric intents that can be served via direct RPC */
 function detectViewerIntent(messages: any[], context: any): ButtonActionIntent | null {
   if (!messages.length) return null;
@@ -1114,6 +1165,10 @@ function detectViewerIntent(messages: any[], context: any): ButtonActionIntent |
   if (lastMsg.role !== "user") return null;
   const text = lastMsg.content.toLowerCase().trim();
   const buildingGuid = context?.currentBuilding?.fmGuid;
+
+  // 1) Count/list questions get priority (prevents broad regex from catching them)
+  const countIntent = detectCountOrListQuestion(text, buildingGuid);
+  if (countIntent) return countIntent;
 
   // Detect if user explicitly wants viewer action
   const viewerKeywords = /(visa\s+i\s+(viewern|3d)|markera|highlight|show\s+in\s+(viewer|3d)|färglägg|colorize)/i;
@@ -1129,14 +1184,14 @@ function detectViewerIntent(messages: any[], context: any): ButtonActionIntent |
     return { action: "room_query", payload: { room_guid: context.currentSpace.fmGuid, wantsViewer: wantsViewer ? "true" : "false" } };
   }
 
-  // "visa X" / "show X" / "filtrera X"  -- broader match
-  const systemMatch = text.match(/^(visa|show|markera|highlight|filtrera|filter|hur\s+många|how\s+many|vilka|which|finns\s+det)\s+(.+)$/i);
-  if (systemMatch && buildingGuid) {
-    const raw = systemMatch[2].replace(/\s*(i viewern|in viewer|i 3d|finns|finns det|har vi)\s*/gi, "").trim();
-    if (raw.length < 2 || raw.length > 50) return null;
+  // "visa X" / "show X" / "filtrera X" — only match explicit show/filter commands
+  const showMatch = text.match(/^(visa|show|filtrera|filter)\s+(.+)$/i);
+  if (showMatch && buildingGuid) {
+    const core = extractCoreTerm(showMatch[2]);
+    if (core.length < 2 || core.length > 40) return null;
 
     // Check known categories first
-    const catMatch = matchCategory(raw);
+    const catMatch = matchCategory(core);
     if (catMatch) {
       return wantsViewer
         ? { action: "viewer_highlight", payload: { category: catMatch } }
@@ -1144,16 +1199,33 @@ function detectViewerIntent(messages: any[], context: any): ButtonActionIntent |
     }
 
     // Check known systems
-    if (KNOWN_SYSTEMS[raw]) {
+    if (KNOWN_SYSTEMS[core]) {
       return wantsViewer
-        ? { action: "viewer_highlight", payload: { system: KNOWN_SYSTEMS[raw] } }
-        : { action: "system_query", payload: { system: KNOWN_SYSTEMS[raw] } };
+        ? { action: "viewer_highlight", payload: { system: KNOWN_SYSTEMS[core] } }
+        : { action: "system_query", payload: { system: KNOWN_SYSTEMS[core] } };
     }
 
-    // Generic — route to system_query (with search fallback built in)
-    return wantsViewer
-      ? { action: "viewer_highlight", payload: { system: raw } }
-      : { action: "system_query", payload: { system: raw } };
+    // If core is clean and short (likely a real object name), try system_query
+    if (core.split(/\s+/).length <= 3) {
+      return wantsViewer
+        ? { action: "viewer_highlight", payload: { system: core } }
+        : { action: "system_query", payload: { system: core } };
+    }
+
+    // Longer/complex → let AI handle it
+    return null;
+  }
+
+  // Explicit viewer commands (markera/highlight)
+  const highlightMatch = text.match(/^(markera|highlight)\s+(.+)$/i);
+  if (highlightMatch && buildingGuid) {
+    const core = extractCoreTerm(highlightMatch[2]);
+    if (core.length < 2) return null;
+    const catMatch = matchCategory(core);
+    if (catMatch) return { action: "viewer_highlight", payload: { category: catMatch } };
+    if (KNOWN_SYSTEMS[core]) return { action: "viewer_highlight", payload: { system: KNOWN_SYSTEMS[core] } };
+    if (core.split(/\s+/).length <= 3) return { action: "viewer_highlight", payload: { system: core } };
+    return null;
   }
 
   return null;
