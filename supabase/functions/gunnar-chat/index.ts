@@ -1322,7 +1322,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
 
       if (!sensorResult.available) {
         return {
-          message: `Inga live-sensordata tillgängliga för ${buildingName}. Senslinc/InUse är inte konfigurerat för denna byggnad.`,
+          message: `Inga sensordata tillgängliga för ${buildingName}.`,
           response_type: "answer", action: "none",
           buttons: makeButtons([{ label: "Byggnadsöversikt", action: "building_summary" }]),
           asset_ids: [], external_entity_ids: [], filters: {},
@@ -1330,54 +1330,66 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         };
       }
 
-      // Build response based on available data
+      // Build response — handle both Senslinc live format and DB fallback format
       let message = "";
       const sensorData: any[] = [];
       const colorMap: Record<string, [number, number, number]> = {};
+      const isDbSource = sensorResult.source?.includes("database");
 
-      if (sensorResult.rooms?.length) {
-        // Room-specific data
+      if (sensorResult.rooms?.length && !sensorResult.averages) {
+        // Room-specific live data (single room query)
         const room = sensorResult.rooms[0];
+        const roomName = room.machine_name || room.name || "Okänt rum";
         const parts: string[] = [];
-        if (room.temperature !== null) parts.push(`🌡️ ${room.temperature.toFixed(1)}°C`);
-        if (room.co2 !== null) parts.push(`💨 CO₂: ${Math.round(room.co2)} ppm`);
-        if (room.humidity !== null) parts.push(`💧 ${room.humidity.toFixed(1)}% RH`);
-        if (room.occupancy !== null) parts.push(`👥 ${Math.round(room.occupancy)}% beläggning`);
-        message = `**Live sensordata** för ${room.machine_name}:\n${parts.join(" · ")}`;
+        if (room.temperature !== null && room.temperature !== undefined) parts.push(`${room.temperature.toFixed(1)}°C`);
+        if (room.co2 !== null && room.co2 !== undefined) parts.push(`CO₂: ${Math.round(room.co2)} ppm`);
+        if (room.humidity !== null && room.humidity !== undefined) parts.push(`${room.humidity.toFixed(1)}% RH`);
+        if (room.occupancy !== null && room.occupancy !== undefined) parts.push(`${Math.round(room.occupancy)}% beläggning`);
+        message = `**Sensordata** för ${roomName}:\n${parts.join(" · ")}`;
       } else if (sensorResult.averages) {
-        // Building-level data
+        // Building-level data (both Senslinc and DB fallback)
         const avg = sensorResult.averages;
         const parts: string[] = [];
-        if (avg.temperature !== null) parts.push(`🌡️ Medeltemp: ${avg.temperature}°C`);
-        if (avg.co2 !== null) parts.push(`💨 CO₂: ${avg.co2} ppm`);
-        if (avg.humidity !== null) parts.push(`💧 Fuktighet: ${avg.humidity}%`);
+        if (avg.temperature !== null && avg.temperature !== undefined) parts.push(`Medeltemp: ${avg.temperature}°C`);
+        if (avg.co2 !== null && avg.co2 !== undefined) parts.push(`CO₂: ${avg.co2} ppm`);
+        if (avg.humidity !== null && avg.humidity !== undefined) parts.push(`Fuktighet: ${avg.humidity}%`);
+        if (avg.occupancy !== null && avg.occupancy !== undefined) parts.push(`Beläggning: ${avg.occupancy}%`);
 
-        const sampleNote = sensorResult.sampled ? ` (baserat på ${sensorResult.sample_size} av ${sensorResult.machine_count} rum)` : ` (${sensorResult.machine_count} sensorer)`;
-        message = `**Live sensordata** för ${buildingName}${sampleNote}:\n${parts.join(" · ")}`;
+        const roomCount = sensorResult.room_count || sensorResult.machine_count || 0;
+        message = `**Sensordata** för ${buildingName} (${roomCount} rum):\n${parts.join(" · ")}`;
 
         // Add highest/lowest info
         if (sensorResult.highest_temperature) {
-          message += `\n\n🔴 Varmast: **${sensorResult.highest_temperature.name}** (${sensorResult.highest_temperature.value}°C)`;
+          const ht = sensorResult.highest_temperature;
+          message += `\n\nVarmast: **${ht.name || "Okänt rum"}** (${ht.value}°C)`;
         }
         if (sensorResult.lowest_temperature) {
-          message += `\n🔵 Kallast: **${sensorResult.lowest_temperature.name}** (${sensorResult.lowest_temperature.value}°C)`;
+          const lt = sensorResult.lowest_temperature;
+          message += `\nKallast: **${lt.name || "Okänt rum"}** (${lt.value}°C)`;
         }
         if (sensorResult.highest_co2) {
-          message += `\n⚠️ Högst CO₂: **${sensorResult.highest_co2.name}** (${sensorResult.highest_co2.value} ppm)`;
+          const hc = sensorResult.highest_co2;
+          message += `\nHögst CO₂: **${hc.name || "Okänt rum"}** (${hc.value} ppm)`;
+        }
+        if (sensorResult.highest_humidity) {
+          const hh = sensorResult.highest_humidity;
+          message += `\nHögst fuktighet: **${hh.name || "Okänt rum"}** (${hh.value}%)`;
         }
 
-        // Build color map for temperature visualization
+        // Build color map for temperature visualization from rooms (DB) or machines (Senslinc)
+        const items = sensorResult.rooms || sensorResult.machines || [];
         if (sensorType === "all" || sensorType === "temperature") {
-          for (const m of sensorResult.machines || []) {
-            if (m.temperature !== null && m.code) {
-              const t = m.temperature;
+          for (const m of items) {
+            const id = m.fm_guid || m.code;
+            const t = m.temperature;
+            if (t !== null && t !== undefined && id) {
               let color: [number, number, number] = [0, 200, 0];
               if (t < 18) color = [0, 100, 255];
               else if (t < 20) color = [100, 200, 255];
               else if (t > 26) color = [255, 50, 50];
               else if (t > 24) color = [255, 150, 0];
               else if (t > 22) color = [255, 220, 0];
-              colorMap[m.code] = color;
+              colorMap[id] = color;
             }
           }
         }
@@ -1385,7 +1397,8 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
 
       // If message is still empty, provide a helpful fallback
       if (!message) {
-        message = `${buildingName} har ${sensorResult.machine_count || 0} kopplade sensorer via Senslinc/InUse, men inga aktuella mätvärden kunde hämtas just nu.`;
+        const count = sensorResult.room_count || sensorResult.machine_count || 0;
+        message = `${buildingName} har ${count} rum med sensordata, men inga aktuella mätvärden kunde hämtas just nu.`;
       }
 
       return {
