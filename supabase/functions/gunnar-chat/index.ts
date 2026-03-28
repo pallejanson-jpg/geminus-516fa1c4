@@ -953,6 +953,7 @@ serve(async (req) => {
           asset_ids: formatResponseResult.asset_ids || [],
           external_entity_ids: formatResponseResult.external_entity_ids || [],
           filters: formatResponseResult.filters || {},
+          suggestions: generateFallbackSuggestions(formatResponseResult, context),
         };
         if (formatResponseResult.sensor_data?.length) structured.sensor_data = formatResponseResult.sensor_data;
         if (formatResponseResult.color_map && Object.keys(formatResponseResult.color_map).length) structured.color_map = formatResponseResult.color_map;
