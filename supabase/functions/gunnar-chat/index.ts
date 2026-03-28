@@ -173,12 +173,15 @@ const tools = [
     type: "function",
     function: {
       name: "format_response",
-      description: "ALWAYS call this as your LAST tool call to format the final response. Default action is 'none' or 'list' — answer in chat text. Only use viewer actions (highlight/filter/colorize) when the user EXPLICITLY asks to show/highlight/mark in the viewer.",
+      description: "ALWAYS call this as your LAST tool call. The chat message is the PRIMARY output. Include 2-3 buttons (clickable actions) and 2-3 suggestions (follow-up questions). Default action is 'none'. Only use viewer actions when user EXPLICITLY asks.",
       parameters: {
         type: "object",
         properties: {
-          message: { type: "string", description: "Human-readable message to display in chat. This is the PRIMARY output — always give a complete, informative answer here." },
-          action: { type: "string", enum: ["highlight", "filter", "colorize", "list", "none"], description: "Default to 'none' or 'list'. Only use 'highlight'/'filter'/'colorize' when user explicitly asks to show/mark/highlight in the viewer/3D." },
+          message: { type: "string", description: "Short answer (max 2-3 sentences). Concrete, no fluff." },
+          response_type: { type: "string", enum: ["answer", "navigation", "data_query", "action"], description: "Type of response: answer=general info, navigation=movement in building, data_query=data retrieval, action=trigger function" },
+          action: { type: "string", enum: ["highlight", "filter", "colorize", "list", "none"], description: "Default 'none'. Only 'highlight'/'filter'/'colorize' when user explicitly asks." },
+          buttons: { type: "array", items: { type: "string" }, description: "2-3 clickable ACTION buttons like 'Visa i modell', 'Filtrera dörrar', 'Byggnadsöversikt'. Must be concrete actions, never vague." },
+          suggestions: { type: "array", items: { type: "string" }, description: "2-3 proactive follow-up questions like 'Vill du se våningar?', 'Ska vi filtrera på system?'" },
           asset_ids: { type: "array", items: { type: "string" }, description: "Asset fm_guids found" },
           external_entity_ids: { type: "array", items: { type: "string" }, description: "xeokit entity IDs for viewer (from get_viewer_entities)" },
           filters: {
@@ -214,7 +217,7 @@ const tools = [
             description: "Map of external_entity_id to RGB color for colorize action. Green=[0,0.8,0.2], Yellow=[1,0.9,0], Red=[1,0.2,0.1]",
           },
         },
-        required: ["message", "action"],
+        required: ["message", "action", "buttons", "suggestions"],
         additionalProperties: false,
       },
     },
