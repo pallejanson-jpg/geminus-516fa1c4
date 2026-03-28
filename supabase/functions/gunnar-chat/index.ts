@@ -520,7 +520,9 @@ async function saveConversation(supabase: any, userId: string, buildingFmGuid: s
 
 interface FastPathResult {
   message: string;
+  response_type: string;
   action: string;
+  buttons: string[];
   asset_ids: string[];
   external_entity_ids: string[];
   filters: Record<string, string>;
@@ -537,6 +539,78 @@ function detectSimpleIntent(messages: any[]): string | null {
   if (/^(hej|hallå|tja|tjena|hi|hello|hey|god\s*(morgon|kväll|dag)|good\s*(morning|evening|day))[\s!.]*$/i.test(text)) return "greeting";
   if (/^(tack|thanks|thank\s*you|tackar)[\s!.]*$/i.test(text)) return "thanks";
   if (/^(hjälp|help|vad kan du|what can you do)[\s?!.]*$/i.test(text)) return "help";
+  return null;
+}
+
+/** Known BIM object types and system names for short-input matching */
+const KNOWN_OBJECT_TYPES: Record<string, string> = {
+  "dörrar": "Door", "dörr": "Door", "doors": "Door", "door": "Door",
+  "fönster": "IfcWindow", "fönstren": "IfcWindow", "windows": "IfcWindow",
+  "väggar": "IfcWall", "vägg": "IfcWall", "walls": "IfcWall",
+  "pumpar": "pump", "pump": "pump", "pumps": "pump",
+  "rum": "Space", "rooms": "Space", "spaces": "Space",
+  "sensorer": "IfcSensor", "sensor": "IfcSensor", "sensors": "IfcSensor",
+  "brandlarm": "IfcAlarm", "larm": "IfcAlarm", "alarm": "IfcAlarm", "alarms": "IfcAlarm",
+  "armaturer": "IfcLightFixture", "armatur": "IfcLightFixture",
+  "rör": "IfcPipeSegment", "pipes": "IfcPipeSegment",
+  "ventiler": "IfcValve", "ventil": "IfcValve", "valves": "IfcValve",
+};
+const KNOWN_SYSTEMS: Record<string, string> = {
+  "ventilation": "ventilation", "hvac": "ventilation", "vvs": "ventilation",
+  "el": "IfcElectric", "electrical": "IfcElectric", "elektricitet": "IfcElectric",
+  "sprinkler": "sprinkler", "brand": "IfcAlarm", "fire": "IfcAlarm",
+  "vatten": "IfcPipe", "water": "IfcPipe", "avlopp": "IfcPipe",
+  "värme": "heating", "heating": "heating", "kyla": "cooling", "cooling": "cooling",
+};
+
+/** Detect short input: bare building name, object type, or system name */
+function detectShortInput(messages: any[], context: any): { type: string; params: Record<string, string>; wantsViewer: boolean } | null {
+  if (!messages.length) return null;
+  const lastMsg = messages[messages.length - 1];
+  if (lastMsg.role !== "user") return null;
+  const text = lastMsg.content.trim();
+  const lower = text.toLowerCase();
+  const buildingGuid = context?.currentBuilding?.fmGuid;
+  const buildingName = context?.currentBuilding?.name?.toLowerCase();
+
+  // Single word or very short input (1-3 words)
+  const wordCount = text.split(/\s+/).length;
+  if (wordCount > 4) return null;
+
+  // Match building name
+  if (buildingGuid && buildingName && (lower === buildingName || buildingName.includes(lower) || lower.includes(buildingName))) {
+    return { type: "building_summary", params: { fm_guid: buildingGuid }, wantsViewer: false };
+  }
+
+  // Match known object type
+  if (buildingGuid && KNOWN_OBJECT_TYPES[lower]) {
+    return { type: "show_system", params: { system: KNOWN_OBJECT_TYPES[lower], building_guid: buildingGuid }, wantsViewer: false };
+  }
+
+  // Match known system
+  if (buildingGuid && KNOWN_SYSTEMS[lower]) {
+    return { type: "show_system", params: { system: KNOWN_SYSTEMS[lower], building_guid: buildingGuid }, wantsViewer: false };
+  }
+
+  // "berätta om X" / "tell me about X" / "vad finns i X" / "sammanfatta X"
+  const aboutMatch = lower.match(/^(berätta\s+om|tell\s+me\s+about|vad\s+(finns|har)\s+(i|om)|sammanfatta|om)\s+(.+)$/);
+  if (aboutMatch && buildingGuid) {
+    const subject = aboutMatch[4]?.trim();
+    if (subject && buildingName && (subject === buildingName || buildingName.includes(subject))) {
+      return { type: "building_summary", params: { fm_guid: buildingGuid }, wantsViewer: false };
+    }
+    // Treat as system/object search
+    if (subject && subject.length >= 2) {
+      return { type: "show_system", params: { system: subject, building_guid: buildingGuid }, wantsViewer: false };
+    }
+  }
+
+  // "visa plan X" / "show floor X"
+  const floorMatch = lower.match(/^(visa\s+plan|show\s+floor|plan|floor|våning)\s*(\d+)/);
+  if (floorMatch && buildingGuid) {
+    return { type: "show_system", params: { system: `plan ${floorMatch[2]}`, building_guid: buildingGuid }, wantsViewer: false };
+  }
+
   return null;
 }
 
