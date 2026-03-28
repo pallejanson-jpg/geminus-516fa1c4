@@ -264,6 +264,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     setInput("");
     setIsLoading(true);
     setProactiveInsights([]);
+    setSuggestions([]);
 
     try {
       const apiMessages = trimHistory(newMessages.filter((_, i) => i > 0));
