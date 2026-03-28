@@ -68,6 +68,7 @@ import {
   ISSUE_ANNOTATIONS_TOGGLE_EVENT,
   ALARM_ANNOTATIONS_SHOW_EVENT,
   VIEWER_CREATE_ASSET_EVENT,
+  AI_VIEWER_FOCUS_EVENT,
   type ViewerToolChangedDetail,
 } from '@/lib/viewer-events';
 import {

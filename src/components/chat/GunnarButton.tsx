@@ -96,6 +96,18 @@ export default function GunnarButton() {
     return () => window.removeEventListener('GUNNAR_AUTO_OPEN_VOICE', handler);
   }, []);
 
+  // Auto-minimize on mobile when AI dispatches a viewer action
+  useEffect(() => {
+    if (!isMobile) return;
+    const handler = () => {
+      if (isOpen && !isMinimized) {
+        setIsMinimized(true);
+      }
+    };
+    window.addEventListener(AI_VIEWER_FOCUS_EVENT, handler);
+    return () => window.removeEventListener(AI_VIEWER_FOCUS_EVENT, handler);
+  }, [isMobile, isOpen, isMinimized]);
+
   // Clear viewer context when leaving viewer
   useEffect(() => {
     if (activeApp !== 'assetplus_viewer' && activeApp !== 'native_viewer') {
