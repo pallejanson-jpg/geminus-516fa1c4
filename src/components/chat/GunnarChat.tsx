@@ -215,14 +215,17 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       window.dispatchEvent(new CustomEvent(AI_FILTER_SYNC_EVENT, { detail: response.filters }));
     }
 
+    const isViewerAction = response.action === 'highlight' || response.action === 'filter' || response.action === 'colorize';
+
     if (response.action === 'colorize' && response.color_map && Object.keys(response.color_map).length > 0) {
       dispatchAiViewerCommand({ action: 'colorize', colorMap: response.color_map });
-      // Dispatch sensor data to overlay panel
       if (response.sensor_data?.length) {
         window.dispatchEvent(new CustomEvent(AI_SENSOR_DATA_EVENT, { detail: response.sensor_data }));
       }
       const sensorCount = response.sensor_data?.length || Object.keys(response.color_map).length;
       toast.success(`Visar sensordata för ${sensorCount} objekt`);
+      // Dispatch focus event for mobile
+      window.dispatchEvent(new CustomEvent(AI_VIEWER_FOCUS_EVENT));
       return;
     }
 
@@ -239,8 +242,12 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         break;
       case 'list':
       case 'none':
-        // No viewer action
         break;
+    }
+
+    // Dispatch focus event for mobile when viewer action was taken
+    if (isViewerAction) {
+      window.dispatchEvent(new CustomEvent(AI_VIEWER_FOCUS_EVENT));
     }
   }, []);
 
