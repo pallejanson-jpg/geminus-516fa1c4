@@ -173,12 +173,12 @@ const tools = [
     type: "function",
     function: {
       name: "format_response",
-      description: "ALWAYS call this as your LAST tool call to format the final response. This structures your answer for the viewer.",
+      description: "ALWAYS call this as your LAST tool call to format the final response. Default action is 'none' or 'list' — answer in chat text. Only use viewer actions (highlight/filter/colorize) when the user EXPLICITLY asks to show/highlight/mark in the viewer.",
       parameters: {
         type: "object",
         properties: {
-          message: { type: "string", description: "Human-readable message to display in chat" },
-          action: { type: "string", enum: ["highlight", "filter", "colorize", "list", "none"], description: "Viewer action to perform. Use 'colorize' when showing sensor data with color-coded values." },
+          message: { type: "string", description: "Human-readable message to display in chat. This is the PRIMARY output — always give a complete, informative answer here." },
+          action: { type: "string", enum: ["highlight", "filter", "colorize", "list", "none"], description: "Default to 'none' or 'list'. Only use 'highlight'/'filter'/'colorize' when user explicitly asks to show/mark/highlight in the viewer/3D." },
           asset_ids: { type: "array", items: { type: "string" }, description: "Asset fm_guids found" },
           external_entity_ids: { type: "array", items: { type: "string" }, description: "xeokit entity IDs for viewer (from get_viewer_entities)" },
           filters: {
@@ -538,37 +538,41 @@ function detectSimpleIntent(messages: any[]): string | null {
 }
 
 /** Detect viewer-centric intents that can be served via direct RPC */
-function detectViewerIntent(messages: any[], context: any): { type: string; params: Record<string, string> } | null {
+function detectViewerIntent(messages: any[], context: any): { type: string; params: Record<string, string>; wantsViewer: boolean } | null {
   if (!messages.length) return null;
   const lastMsg = messages[messages.length - 1];
   if (lastMsg.role !== "user") return null;
   const text = lastMsg.content.toLowerCase().trim();
   const buildingGuid = context?.currentBuilding?.fmGuid;
 
-  // "visa ventilation" / "show HVAC" / "highlight fire alarms"
-  const systemMatch = text.match(/^(visa|show|markera|highlight|filtrera|filter)\s+(.+)$/i);
+  // Detect if user explicitly wants viewer action
+  const viewerKeywords = /(visa\s+i\s+(viewern|3d)|markera|highlight|show\s+in\s+(viewer|3d)|färglägg|colorize)/i;
+  const wantsViewer = viewerKeywords.test(text);
+
+  // "visa ventilation" / "show HVAC" / "hur många ventilationsaggregat"
+  const systemMatch = text.match(/^(visa|show|markera|highlight|filtrera|filter|hur\s+många|how\s+many|vilka|which|finns\s+det)\s+(.+)$/i);
   if (systemMatch && buildingGuid) {
-    const systemQuery = systemMatch[2].replace(/\s*(i viewern|in viewer|i 3d)\s*/gi, "").trim();
+    const systemQuery = systemMatch[2].replace(/\s*(i viewern|in viewer|i 3d|finns|finns det|har vi)\s*/gi, "").trim();
     if (systemQuery.length >= 2 && systemQuery.length <= 50) {
-      return { type: "show_system", params: { system: systemQuery, building_guid: buildingGuid } };
+      return { type: "show_system", params: { system: systemQuery, building_guid: buildingGuid }, wantsViewer };
     }
   }
 
   // "vad finns i rummet" / "objekt i rummet"
   if (context?.currentSpace?.fmGuid && /^(vad finns|objekt|assets|utrustning)\s*(i|in)\s*(rummet|detta rum|this room|the room)/i.test(text)) {
-    return { type: "room_assets", params: { room_guid: context.currentSpace.fmGuid } };
+    return { type: "room_assets", params: { room_guid: context.currentSpace.fmGuid }, wantsViewer };
   }
 
   // "byggnadsöversikt" / "building overview"
   if (buildingGuid && /^(byggnadsöversikt|översikt|building overview|overview|sammanfattning|summary)/i.test(text)) {
-    return { type: "building_summary", params: { fm_guid: buildingGuid } };
+    return { type: "building_summary", params: { fm_guid: buildingGuid }, wantsViewer: false };
   }
 
   return null;
 }
 
-/** Execute fast-path viewer intent via direct RPC */
-async function executeFastPath(supabase: any, intent: { type: string; params: Record<string, string> }, context: any): Promise<FastPathResult | null> {
+/** Execute fast-path intent via direct RPC — chat-first, viewer only when explicitly requested */
+async function executeFastPath(supabase: any, intent: { type: string; params: Record<string, string>; wantsViewer: boolean }, context: any): Promise<FastPathResult | null> {
   const buildingName = context?.currentBuilding?.name || "byggnaden";
 
   switch (intent.type) {
@@ -581,22 +585,37 @@ async function executeFastPath(supabase: any, intent: { type: string; params: Re
       if (assetList.length === 0) {
         return {
           message: `Inga "${intent.params.system}"-objekt hittades i ${buildingName}.`,
-          action: "none", asset_ids: [], external_entity_ids: [], filters: { system: intent.params.system },
-          suggestions: [`Visa alla tillgångar i ${buildingName}`, `Sök efter annan utrustning`, `Byggnadsöversikt`],
+          action: "none", asset_ids: [], external_entity_ids: [], filters: {},
+          suggestions: [`Visa alla tillgångar`, `Sök efter annan utrustning`, `Byggnadsöversikt`],
         };
       }
       const assetIds = assetList.map((a: any) => a.fm_guid);
-      let entityIds: string[] = [];
-      try {
-        const { data: entities } = await supabase.rpc("get_viewer_entities", { asset_ids: assetIds });
-        entityIds = (entities || []).map((e: any) => e.external_entity_id).filter(Boolean);
-      } catch (_) {}
+
+      // Build informative text summary
+      const types: Record<string, number> = {};
+      assetList.forEach((a: any) => { const t = a.asset_type || a.common_name || "okänd"; types[t] = (types[t] || 0) + 1; });
+      const typeSummary = Object.entries(types).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t, n]) => `${n}× ${t}`).join(", ");
+
+      if (intent.wantsViewer) {
+        // User explicitly wants viewer action
+        let entityIds: string[] = [];
+        try {
+          const { data: entities } = await supabase.rpc("get_viewer_entities", { asset_ids: assetIds });
+          entityIds = (entities || []).map((e: any) => e.external_entity_id).filter(Boolean);
+        } catch (_) {}
+        return {
+          message: `Hittade **${assetList.length}** ${intent.params.system}-objekt i ${buildingName}: ${typeSummary}.${entityIds.length > 0 ? ` Markerar ${entityIds.length} i viewern.` : ""}`,
+          action: entityIds.length > 0 ? "highlight" : "list",
+          asset_ids: assetIds.slice(0, 50), external_entity_ids: entityIds,
+          filters: { system: intent.params.system },
+          suggestions: [`Hur många rum har ${intent.params.system}?`, `Byggnadsöversikt`, `Sök annan utrustning`],
+        };
+      }
+      // Chat-first: just answer the question
       return {
-        message: `Hittade **${assetList.length}** ${intent.params.system}-objekt i ${buildingName}.${entityIds.length > 0 ? ` Markerar ${entityIds.length} i viewern.` : ""}`,
-        action: entityIds.length > 0 ? "highlight" : "list",
-        asset_ids: assetIds.slice(0, 50), external_entity_ids: entityIds,
-        filters: { system: intent.params.system },
-        suggestions: [`Filtrera till bara ${intent.params.system}`, `Vilka rum har ${intent.params.system}?`, `Byggnadsöversikt`],
+        message: `Det finns **${assetList.length}** ${intent.params.system}-objekt i ${buildingName}.\n\nFördelning: ${typeSummary}.`,
+        action: "none", asset_ids: assetIds.slice(0, 50), external_entity_ids: [], filters: {},
+        suggestions: [`Markera ${intent.params.system} i viewern`, `Vilka rum har ${intent.params.system}?`, `Byggnadsöversikt`],
       };
     }
     case "room_assets": {
@@ -606,25 +625,33 @@ async function executeFastPath(supabase: any, intent: { type: string; params: Re
       if (assetList.length === 0) {
         return {
           message: `Inga tillgångar registrerade i ${roomName}.`,
-          action: "none", asset_ids: [], external_entity_ids: [], filters: { room: intent.params.room_guid },
+          action: "none", asset_ids: [], external_entity_ids: [], filters: {},
           suggestions: [`Visa ventilation i ${buildingName}`, `Byggnadsöversikt`, `Sök efter utrustning`],
         };
       }
       const assetIds = assetList.map((a: any) => a.fm_guid);
-      let entityIds: string[] = [];
-      try {
-        const { data: entities } = await supabase.rpc("get_viewer_entities", { asset_ids: assetIds });
-        entityIds = (entities || []).map((e: any) => e.external_entity_id).filter(Boolean);
-      } catch (_) {}
       const cats: Record<string, number> = {};
       assetList.forEach((a: any) => { cats[a.category] = (cats[a.category] || 0) + 1; });
       const catSummary = Object.entries(cats).map(([c, n]) => `${n} ${c}`).join(", ");
+
+      if (intent.wantsViewer) {
+        let entityIds: string[] = [];
+        try {
+          const { data: entities } = await supabase.rpc("get_viewer_entities", { asset_ids: assetIds });
+          entityIds = (entities || []).map((e: any) => e.external_entity_id).filter(Boolean);
+        } catch (_) {}
+        return {
+          message: `**${assetList.length}** objekt i ${roomName}: ${catSummary}.${entityIds.length > 0 ? ` Markerar ${entityIds.length} i viewern.` : ""}`,
+          action: entityIds.length > 0 ? "highlight" : "list",
+          asset_ids: assetIds.slice(0, 50), external_entity_ids: entityIds,
+          filters: { room: intent.params.room_guid },
+          suggestions: [`Visa ventilation i ${roomName}`, `Byggnadsöversikt`, `Visa alla rum`],
+        };
+      }
       return {
-        message: `**${assetList.length}** objekt i ${roomName}: ${catSummary}.${entityIds.length > 0 ? ` Markerar ${entityIds.length} i viewern.` : ""}`,
-        action: entityIds.length > 0 ? "highlight" : "list",
-        asset_ids: assetIds.slice(0, 50), external_entity_ids: entityIds,
-        filters: { room: intent.params.room_guid },
-        suggestions: [`Visa ventilation i ${roomName}`, `Filtrera till bara detta rum`, `Visa alla rum i ${buildingName}`],
+        message: `I ${roomName} finns **${assetList.length}** objekt: ${catSummary}.`,
+        action: "none", asset_ids: assetIds.slice(0, 50), external_entity_ids: [], filters: {},
+        suggestions: [`Markera objekten i viewern`, `Visa ventilation i ${roomName}`, `Byggnadsöversikt`],
       };
     }
     case "building_summary": {
@@ -706,57 +733,52 @@ async function buildSystemPrompt(supabase: any, context: any, userProfile: any, 
     memoryCtx = `\nPrevious conversation:\n${msgs}`;
   }
 
-  return `You are Geminus AI, a structured assistant for digital twin / BIM applications. You control a 3D xeokit viewer through structured data commands.
+  return `You are Geminus AI, a structured assistant for digital twin / BIM applications. You have access to building data and can optionally control a 3D xeokit viewer.
+
+CRITICAL — CHAT-FIRST PRINCIPLE:
+Your PRIMARY output is the chat message. Always give a complete, informative text answer.
+Viewer actions (highlight, filter, colorize) are SECONDARY and should ONLY be used when:
+- The user EXPLICITLY asks to "visa i viewern", "markera", "highlight", "show in 3D", "färglägg"
+- NOT by default. Most questions should be answered with action="none" or action="list".
 
 CORE RULES:
 1. ALWAYS use tools to get data — never guess or fabricate.
-2. For EVERY query, use the appropriate RPC tool: get_assets_by_system, get_assets_in_room, get_assets_by_category, or search_assets.
-3. You do NOT need to call get_viewer_entities separately — format_response automatically resolves asset fm_guids to xeokit entity IDs. Just pass asset_ids in format_response.
-4. ALWAYS end with format_response as your LAST tool call. This structures your answer for the viewer integration.
-5. If no results found, return empty arrays in format_response and explain in the message.
+2. Use the appropriate RPC tool: get_assets_by_system, get_assets_in_room, get_assets_by_category, or search_assets.
+3. You do NOT need to call get_viewer_entities separately — format_response auto-resolves.
+4. ALWAYS end with format_response as your LAST tool call.
+5. If no results found, explain in the message and return empty arrays.
 6. Respond in the SAME LANGUAGE as the user.
-7. Be concise — state what was found and what action will be taken in the viewer.
-8. NEVER show UUIDs/GUIDs to the user in the message text.
-9. Do NOT hallucinate system names, asset types, or relationships.
-10. Max 200 assets per query — this is enforced server-side.
-11. MINIMIZE tool rounds — combine data retrieval and call format_response immediately after getting results.
-
-TOOL USAGE FLOW (optimized — typically 2 rounds):
-1. Call the appropriate data tool (get_assets_by_system, get_assets_in_room, get_assets_by_category, search_assets)
-2. Call format_response with asset_ids from the results — entity IDs are resolved automatically
-
-BUILDING RESOLUTION:
-- When user mentions a building by name, call resolve_building_by_name first
-- When user asks "what buildings do I have", call list_buildings
-- For building overview, call get_building_summary
+7. NEVER show UUIDs/GUIDs to the user in the message text.
+8. Do NOT hallucinate system names, asset types, or relationships.
+9. Max 200 assets per query — enforced server-side.
+10. MINIMIZE tool rounds — call data tool AND format_response in the SAME round when possible.
 
 ACTION TYPES for format_response:
-- "highlight" — highlight specific objects in the viewer (requires external_entity_ids)
-- "filter" — filter the viewer to show only matching objects (requires external_entity_ids)
-- "list" — just display data in chat, no viewer action
-- "none" — simple response with no data
+- "none" — DEFAULT. Answer the question in chat text only.
+- "list" — Display data as a list in chat, no viewer action.
+- "highlight" — ONLY when user explicitly asks to show/mark in viewer.
+- "filter" — ONLY when user explicitly asks to filter in viewer.
+- "colorize" — ONLY when user explicitly asks to color-code in viewer.
+
+EXAMPLES:
+User: "hur många ventilationsaggregat finns?" → get_assets_by_system("ventilation") → format_response(action="none", message="Det finns 42 ventilationsaggregat...")
+User: "visa ventilation i viewern" → get_assets_by_system("ventilation") → format_response(action="highlight", asset_ids=[...])
+User: "markera alla brandlarm" → get_assets_by_system("IfcAlarm") → format_response(action="highlight", asset_ids=[...])
+User: "vilka pumpar finns?" → search_assets("pump") → format_response(action="list", message="Hittade 5 pumpar: ...")
+User: "vad är temperaturen i rummet?" → get_sensors_in_room → get_latest_sensor_values → format_response(action="none", message="Temperaturen är 22.3°C...")
+User: "visa temperaturen i viewern" → same sensors → format_response(action="colorize", color_map={...})
 
 IoT / SENSOR DATA:
-- When user asks about temperature, CO2, humidity, or environmental data:
-  1. Call get_sensors_in_room(sensor_type, room_guid) to find sensors
-  2. Call get_latest_sensor_values(sensor_ids) to get current readings
-  3. Call format_response with action="colorize", include asset_ids, sensor_data and color_map (entity IDs auto-resolved)
-- Color coding thresholds:
-  - Temperature: <20°C=blue [0.2,0.4,1], 20-26°C=green [0,0.8,0.2], >26°C=red [1,0.2,0.1]
-  - CO2: <800ppm=green, 800-1000ppm=yellow [1,0.9,0], >1000ppm=red
-  - Humidity: 30-60%=green, outside=yellow/red
-
-EXAMPLES (note: NO need for get_viewer_entities — format_response auto-resolves):
-User: "visa ventilation" → get_assets_by_system("ventilation") → format_response(action="highlight", asset_ids=[...])
-User: "vilka pumpar finns i rum A101" → search room A101 → get_assets_in_room(guid) → format_response(action="highlight", asset_ids=[...])
-User: "hitta AHU" → search_assets("AHU") → format_response(action="list", asset_ids=[...])
-User: "visa alla brandlarm" → get_assets_by_system("IfcAlarm") → format_response(action="highlight", asset_ids=[...])
+- When user asks about temperature, CO2, humidity:
+  1. get_sensors_in_room(sensor_type, room_guid)
+  2. get_latest_sensor_values(sensor_ids)
+  3. format_response — use action="none" by default, "colorize" only if user asks to show in viewer
 
 INTERACTION STYLE:
-1. Always suggest 2-3 clickable next steps after each answer, formatted as markdown bold links: **[Suggestion text]**
-2. Write concise, clear, and actionable responses so the user can act immediately.
-3. Maintain a friendly, pedagogical, and light tone but prioritize delivering concrete results.
-4. MINIMIZE rounds — try to call data tool AND format_response in the SAME round when possible.
+1. Give complete answers in the chat message — this is the primary output.
+2. Suggest 2-3 relevant follow-up questions.
+3. Be concise, friendly, and actionable.
+4. MINIMIZE rounds — combine data retrieval and format_response in the SAME round.
 ${userCtx}${ctx}${modelsCtx}${memoryCtx}`;
 }
 
