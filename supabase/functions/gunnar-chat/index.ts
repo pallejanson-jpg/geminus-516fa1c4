@@ -890,30 +890,27 @@ async function callAI(apiKey: string, messages: any[], options: { stream?: boole
   return resp;
 }
 
+/** Generate fallback buttons when AI doesn't provide them */
+function generateFallbackButtons(result: any, context: any): string[] {
+  const buildingName = context?.currentBuilding?.name;
+  const action = result?.action || "none";
+  if (action === "highlight" || action === "filter" || action === "colorize") {
+    return [buildingName ? `Byggnadsöversikt ${buildingName}` : "Byggnadsöversikt", "Visa ventilation", "Sök utrustning"];
+  }
+  return [buildingName ? `Byggnadsöversikt ${buildingName}` : "Byggnadsöversikt", "Visa ventilation", "Sök utrustning"];
+}
+
 /** Generate fallback suggestions when AI doesn't provide them */
 function generateFallbackSuggestions(result: any, context: any): string[] {
   const buildingName = context?.currentBuilding?.name;
-  const hasAssets = result?.asset_ids?.length > 0;
   const action = result?.action || "none";
-
-  if (action === "highlight" || action === "filter") {
-    return [
-      buildingName ? `Byggnadsöversikt för ${buildingName}` : "Byggnadsöversikt",
-      "Visa ventilation",
-      "Sök efter utrustning",
-    ];
-  }
   if (action === "colorize") {
-    return [
-      "Visa temperatur i fler rum",
-      "Byggnadsöversikt",
-      "Visa alla sensorer",
-    ];
+    return ["Visa temperatur i fler rum", "Vilka sensorer finns?", "Byggnadsöversikt"];
   }
   return [
-    buildingName ? `Visa ventilation i ${buildingName}` : "Visa ventilation",
-    "Byggnadsöversikt",
-    "Sök utrustning",
+    buildingName ? `Vilka system finns i ${buildingName}?` : "Vilka system finns?",
+    "Visa alla rum",
+    "Öppna ärenden",
   ];
 }
 
