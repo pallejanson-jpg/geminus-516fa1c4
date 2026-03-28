@@ -278,7 +278,10 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       const assistantContent = response.message || "Inga resultat hittades.";
       setMessages(prev => [...prev, { role: "assistant", content: assistantContent }]);
 
-      // Capture suggestions
+      // Capture buttons and suggestions
+      if (response.buttons?.length) {
+        setButtons(response.buttons);
+      }
       if (response.suggestions?.length) {
         setSuggestions(response.suggestions);
       }
