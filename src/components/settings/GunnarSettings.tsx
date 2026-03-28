@@ -6,6 +6,7 @@ import { Sparkles, RotateCcw, Eye, MapPin, Languages, Volume2, Gauge } from 'luc
 import { Slider } from '@/components/ui/slider';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { speakWithDeepgram, stopDeepgramAudio } from '@/lib/deepgram-tts';
 
 const GUNNAR_SETTINGS_KEY = 'gunnar-settings';
 export const GUNNAR_SETTINGS_CHANGED_EVENT = 'gunnar-settings-changed';
@@ -14,20 +15,20 @@ export interface GunnarSettingsData {
   visible: boolean;
   buttonPosition: { x: number; y: number } | null;
   speechLang: 'sv-SE' | 'en-US';
-  /** ElevenLabs voice ID */
+  /** Deepgram Aura voice model ID */
   voiceName: string | null;
   /** Speech rate 0.5–2.0 (default 1.0) */
   speechRate: number;
 }
 
-/** Preset ElevenLabs voices */
-export const ELEVENLABS_VOICES = [
-  { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel', description: 'Calm & authoritative' },
-  { id: 'Xb7hH8MSUJpSbSDYk0k2', name: 'Alice', description: 'Warm & friendly' },
-  { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', description: 'Soft & articulate' },
-  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', description: 'Clear & professional' },
-  { id: 'JBFqnCBsd6RMkjVDRZzb', name: 'George', description: 'Deep & confident' },
-  { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Liam', description: 'Energetic & engaging' },
+/** Preset Deepgram Aura voices */
+export const DEEPGRAM_VOICES = [
+  { id: 'aura-2-thalia-en', name: 'Thalia', description: 'Varm & balanserad' },
+  { id: 'aura-2-andromeda-en', name: 'Andromeda', description: 'Mjuk & lugn' },
+  { id: 'aura-2-asteria-en', name: 'Asteria', description: 'Klar & tydlig' },
+  { id: 'aura-2-apollo-en', name: 'Apollo', description: 'Självsäker & stadig' },
+  { id: 'aura-2-arcas-en', name: 'Arcas', description: 'Djup & manlig' },
+  { id: 'aura-2-athena-en', name: 'Athena', description: 'Professionell & vänlig' },
 ] as const;
 
 const DEFAULT_SETTINGS: GunnarSettingsData = {
@@ -112,6 +113,7 @@ const GunnarSettings: React.FC = () => {
     setIsTesting(true);
 
     // Stop any playing test audio
+    stopDeepgramAudio();
     if (testAudioRef.current) {
       testAudioRef.current.pause();
       testAudioRef.current = null;
@@ -122,17 +124,23 @@ const GunnarSettings: React.FC = () => {
       : 'Hello! I am Geminus AI, your digital facility assistant.';
 
     try {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-        throw new Error('Browser TTS not available');
+      const audio = await speakWithDeepgram(testText, {
+        model: settings.voiceName || 'aura-2-thalia-en',
+        lang: settings.speechLang || 'sv-SE',
+        rate: settings.speechRate ?? 1,
+      });
+      testAudioRef.current = audio;
+
+      if ((audio as any).__browserTTS) {
+        const utt = (audio as any).__utterance as SpeechSynthesisUtterance;
+        utt.onend = () => setIsTesting(false);
+        utt.onerror = () => setIsTesting(false);
+        return;
       }
-      const utterance = new SpeechSynthesisUtterance(testText);
-      utterance.lang = settings.speechLang || 'sv-SE';
-      utterance.rate = settings.speechRate ?? 1;
-      utterance.pitch = 1;
-      utterance.onend = () => setIsTesting(false);
-      utterance.onerror = () => setIsTesting(false);
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utterance);
+
+      audio.addEventListener('ended', () => setIsTesting(false), { once: true });
+      audio.addEventListener('error', () => setIsTesting(false), { once: true });
+      await audio.play();
     } catch (e) {
       console.error('Test voice error:', e);
       setIsTesting(false);
@@ -223,8 +231,8 @@ const GunnarSettings: React.FC = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__default__">Daniel (default)</SelectItem>
-                  {ELEVENLABS_VOICES.map(v => (
+                  <SelectItem value="__default__">Thalia (standard)</SelectItem>
+                  {DEEPGRAM_VOICES.map(v => (
                     <SelectItem key={v.id} value={v.id}>
                       {v.name} — {v.description}
                     </SelectItem>
@@ -232,7 +240,7 @@ const GunnarSettings: React.FC = () => {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                High-quality ElevenLabs voices (multilingual)
+                Deepgram Aura-röster (flerspråkigt stöd)
               </p>
             </div>
             <div className="space-y-1.5">

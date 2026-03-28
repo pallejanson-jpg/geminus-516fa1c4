@@ -13,6 +13,7 @@ import { getGunnarSettings, saveGunnarSettings } from "@/components/settings/Gun
 import { dispatchAiViewerCommand } from "@/hooks/useAiViewerBridge";
 import { AI_SENSOR_DATA_EVENT } from "@/components/viewer/SensorDataOverlay";
 import { preprocessForTTS } from "@/lib/tts-preprocess";
+import { speakWithDeepgram, stopDeepgramAudio } from "@/lib/deepgram-tts";
 import { AI_VIEWER_FOCUS_EVENT } from "@/lib/viewer-events";
 
 type Message = {
@@ -160,8 +161,9 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     if (open && inputRef.current) setTimeout(() => inputRef.current?.focus(), 100);
   }, [open]);
 
-  // ── Browser TTS helpers ──
+  // ── Deepgram TTS helpers ──
   const stopSpeaking = useCallback(() => {
+    stopDeepgramAudio();
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
@@ -175,20 +177,34 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
 
     stopSpeaking();
 
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      return;
-    }
-
     const settings = getGunnarSettings();
-    const utterance = new SpeechSynthesisUtterance(cleaned);
-    utterance.lang = settings.speechLang || 'sv-SE';
-    utterance.rate = settings.speechRate ?? 1;
-    utterance.pitch = 1;
-    utterance.onstart = () => { setIsSpeaking(true); if (msgIndex !== undefined) setSpeakingIndex(msgIndex); };
-    utterance.onend = () => { setIsSpeaking(false); setSpeakingIndex(null); };
-    utterance.onerror = () => { setIsSpeaking(false); setSpeakingIndex(null); };
 
-    window.speechSynthesis.speak(utterance);
+    try {
+      setIsSpeaking(true);
+      if (msgIndex !== undefined) setSpeakingIndex(msgIndex);
+
+      const audio = await speakWithDeepgram(cleaned, {
+        model: settings.voiceName || 'aura-2-thalia-en',
+        lang: settings.speechLang || 'sv-SE',
+        rate: settings.speechRate ?? 1,
+      });
+
+      // Check if it's a browser TTS fallback
+      if ((audio as any).__browserTTS) {
+        const utt = (audio as any).__utterance as SpeechSynthesisUtterance;
+        utt.onend = () => { setIsSpeaking(false); setSpeakingIndex(null); };
+        utt.onerror = () => { setIsSpeaking(false); setSpeakingIndex(null); };
+        return;
+      }
+
+      audio.addEventListener('ended', () => { setIsSpeaking(false); setSpeakingIndex(null); }, { once: true });
+      audio.addEventListener('error', () => { setIsSpeaking(false); setSpeakingIndex(null); }, { once: true });
+      await audio.play();
+    } catch (e) {
+      console.error('TTS error, falling back:', e);
+      setIsSpeaking(false);
+      setSpeakingIndex(null);
+    }
   }, [stopSpeaking]);
 
   const speakAssistant = useCallback(async (text: string) => {
