@@ -582,14 +582,81 @@ async function execLiveSensorData(supabase: any, args: any) {
         return buildSensorSummary(parsed, totalMachines, data.data.site);
       }
 
-      // latest_values is null — the senslinc-query get-building-sensor-data already tries
-      // machine detail fallback, but if still null, there's no data available
-      console.log(`[LiveSensor] latest_values all null after senslinc-query fallback, no sensor data available`);
-      return { available: false, error: "No sensor readings available for machines in this building. The Senslinc/InUse system may not have recent data." };
+      // latest_values is null — fall back to DB sensor attributes
+      console.log(`[LiveSensor] latest_values all null, falling back to DB room sensor data`);
+      return execRoomSensorData(supabase, { building_guid: buildingGuid });
     }
   } catch (err: any) {
     console.error("[LiveSensor] Error:", err);
-    return { available: false, error: err.message || "Failed to fetch live sensor data" };
+    // Fall back to DB sensor attributes on any error
+    console.log(`[LiveSensor] Falling back to DB room sensor data after error`);
+    return execRoomSensorData(supabase, { building_guid: args.building_guid });
+  }
+}
+
+/** Get sensor data from room attributes in the database */
+async function execRoomSensorData(supabase: any, args: any) {
+  const buildingGuid = args.building_guid;
+  if (!buildingGuid) return { error: "building_guid required" };
+
+  try {
+    const { data, error } = await supabase.rpc("get_room_sensor_data", {
+      p_building_guid: buildingGuid,
+      p_floor_guid: args.floor_guid || null,
+      p_metric: args.metric || "temperature",
+      p_sort_order: args.order || "desc",
+    });
+    if (error) throw error;
+
+    const rooms = data || [];
+    if (rooms.length === 0) {
+      return { available: false, source: "database", error: "No rooms with sensor data found for this building" };
+    }
+
+    // Filter rooms that have at least one sensor value
+    const withData = rooms.filter((r: any) => r.temperature !== null || r.co2 !== null || r.humidity !== null || r.occupancy !== null);
+    if (withData.length === 0) {
+      return { available: false, source: "database", error: "Rooms found but no sensor values available" };
+    }
+
+    // Calculate averages
+    const temps = withData.map((r: any) => r.temperature).filter((v: any) => v !== null) as number[];
+    const co2s = withData.map((r: any) => r.co2).filter((v: any) => v !== null) as number[];
+    const hums = withData.map((r: any) => r.humidity).filter((v: any) => v !== null) as number[];
+    const occs = withData.map((r: any) => r.occupancy).filter((v: any) => v !== null) as number[];
+
+    const byTemp = withData.filter((r: any) => r.temperature !== null).sort((a: any, b: any) => b.temperature - a.temperature);
+    const byCo2 = withData.filter((r: any) => r.co2 !== null).sort((a: any, b: any) => b.co2 - a.co2);
+    const byHum = withData.filter((r: any) => r.humidity !== null).sort((a: any, b: any) => b.humidity - a.humidity);
+
+    return {
+      available: true,
+      source: "database (cached sensor attributes)",
+      room_count: withData.length,
+      total_rooms: rooms.length,
+      rooms: withData.slice(0, 50).map((r: any) => ({
+        fm_guid: r.fm_guid,
+        name: r.common_name || r.name || r.fm_guid,
+        level_fm_guid: r.level_fm_guid,
+        temperature: r.temperature,
+        co2: r.co2,
+        humidity: r.humidity,
+        occupancy: r.occupancy,
+      })),
+      averages: {
+        temperature: temps.length > 0 ? Math.round((temps.reduce((a, b) => a + b, 0) / temps.length) * 10) / 10 : null,
+        co2: co2s.length > 0 ? Math.round(co2s.reduce((a, b) => a + b, 0) / co2s.length) : null,
+        humidity: hums.length > 0 ? Math.round((hums.reduce((a, b) => a + b, 0) / hums.length) * 10) / 10 : null,
+        occupancy: occs.length > 0 ? Math.round((occs.reduce((a, b) => a + b, 0) / occs.length) * 10) / 10 : null,
+      },
+      highest_temperature: byTemp.length > 0 ? { name: byTemp[0].common_name || byTemp[0].name, value: byTemp[0].temperature, fm_guid: byTemp[0].fm_guid } : null,
+      lowest_temperature: byTemp.length > 0 ? { name: byTemp[byTemp.length - 1].common_name || byTemp[byTemp.length - 1].name, value: byTemp[byTemp.length - 1].temperature, fm_guid: byTemp[byTemp.length - 1].fm_guid } : null,
+      highest_co2: byCo2.length > 0 ? { name: byCo2[0].common_name || byCo2[0].name, value: byCo2[0].co2, fm_guid: byCo2[0].fm_guid } : null,
+      highest_humidity: byHum.length > 0 ? { name: byHum[0].common_name || byHum[0].name, value: byHum[0].humidity, fm_guid: byHum[0].fm_guid } : null,
+    };
+  } catch (err: any) {
+    console.error("[RoomSensorData] Error:", err);
+    return { available: false, source: "database", error: err.message || "Failed to query room sensor data" };
   }
 }
 
