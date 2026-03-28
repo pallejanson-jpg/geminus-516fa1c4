@@ -1294,20 +1294,32 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         if (room.occupancy !== null) parts.push(`👥 ${Math.round(room.occupancy)}% beläggning`);
         message = `**Live sensordata** för ${room.machine_name}:\n${parts.join(" · ")}`;
       } else if (sensorResult.averages) {
-        // Building-level averages
+        // Building-level data
         const avg = sensorResult.averages;
         const parts: string[] = [];
         if (avg.temperature !== null) parts.push(`🌡️ Medeltemp: ${avg.temperature}°C`);
         if (avg.co2 !== null) parts.push(`💨 CO₂: ${avg.co2} ppm`);
         if (avg.humidity !== null) parts.push(`💧 Fuktighet: ${avg.humidity}%`);
-        message = `**Live sensordata** för ${buildingName} (${sensorResult.machine_count} sensorer):\n${parts.join(" · ")}`;
+
+        const sampleNote = sensorResult.sampled ? ` (baserat på ${sensorResult.sample_size} av ${sensorResult.machine_count} rum)` : ` (${sensorResult.machine_count} sensorer)`;
+        message = `**Live sensordata** för ${buildingName}${sampleNote}:\n${parts.join(" · ")}`;
+
+        // Add highest/lowest info
+        if (sensorResult.highest_temperature) {
+          message += `\n\n🔴 Varmast: **${sensorResult.highest_temperature.name}** (${sensorResult.highest_temperature.value}°C)`;
+        }
+        if (sensorResult.lowest_temperature) {
+          message += `\n🔵 Kallast: **${sensorResult.lowest_temperature.name}** (${sensorResult.lowest_temperature.value}°C)`;
+        }
+        if (sensorResult.highest_co2) {
+          message += `\n⚠️ Högst CO₂: **${sensorResult.highest_co2.name}** (${sensorResult.highest_co2.value} ppm)`;
+        }
 
         // Build color map for temperature visualization
         if (sensorType === "all" || sensorType === "temperature") {
           for (const m of sensorResult.machines || []) {
             if (m.temperature !== null && m.code) {
               const t = m.temperature;
-              // Green (20-22), Yellow (22-24), Orange (24-26), Red (>26), Blue (<18)
               let color: [number, number, number] = [0, 200, 0];
               if (t < 18) color = [0, 100, 255];
               else if (t < 20) color = [100, 200, 255];
