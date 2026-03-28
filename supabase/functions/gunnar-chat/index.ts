@@ -756,8 +756,8 @@ async function executeFastPath(supabase: any, intent: { type: string; params: Re
   }
 }
 
-function getSimpleIntentResponse(intent: string, text: string): any {
-  const isSv = /^(hej|hallå|tja|tjena|tack|hjälp|god)/i.test(text);
+function getSimpleIntentResponse(intent: string, text: string, previousConversation?: any): any {
+  const isSv = /^(hej|hallå|tja|tjena|tack|hjälp|god|ja|okej|ok|japp|jepp|visst|absolut|gärna|precis|exakt|stämmer|korrekt)/i.test(text);
   let message = "";
   let buttons: string[] = [];
   let suggestions: string[] = [];
@@ -779,6 +779,19 @@ function getSimpleIntentResponse(intent: string, text: string): any {
       buttons = isSv ? ["Byggnadsöversikt", "Visa ventilation", "Sök utrustning"] : ["Building overview", "Show HVAC", "Search equipment"];
       suggestions = isSv ? ["Vilka system finns?", "Visa alla rum", "Öppna ärenden"] : ["What systems exist?", "Show all rooms", "Open issues"];
       break;
+    case "confirmation": {
+      // Try to extract context from previous conversation to give a relevant follow-up
+      const prevMsgs = previousConversation?.messages || [];
+      const lastAssistant = [...prevMsgs].reverse().find((m: any) => m.role === "assistant");
+      if (lastAssistant?.content) {
+        message = isSv ? "Bra! Vad vill du göra härnäst?" : "Great! What would you like to do next?";
+      } else {
+        message = isSv ? "Vad kan jag hjälpa dig med?" : "What can I help you with?";
+      }
+      buttons = isSv ? ["Byggnadsöversikt", "Visa ventilation", "Sök utrustning"] : ["Building overview", "Show HVAC", "Search equipment"];
+      suggestions = isSv ? ["Vilka system finns?", "Visa alla rum", "Öppna ärenden"] : ["What systems exist?", "Show all rooms", "Open issues"];
+      break;
+    }
   }
   return { message, response_type: "answer", action: "none", buttons, asset_ids: [], external_entity_ids: [], filters: {}, suggestions };
 }
