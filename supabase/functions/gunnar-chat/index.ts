@@ -1044,10 +1044,19 @@ serve(async (req) => {
 
     const conversation: any[] = [{ role: "system", content: systemPrompt }, ...messages];
 
+    // Filter out resolve_building_by_name when building is already in context
+    const activeTools = context?.currentBuilding?.fmGuid
+      ? tools.filter((t: any) => t.function.name !== "resolve_building_by_name")
+      : tools;
+
     let formatResponseResult: any = null;
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const resp = await callAI(LOVABLE_API_KEY, conversation, { tools, tool_choice: "auto" });
+      const isLastRound = round === MAX_TOOL_ROUNDS - 1;
+      const toolChoice = isLastRound
+        ? { type: "function", function: { name: "format_response" } }
+        : "auto";
+      const resp = await callAI(LOVABLE_API_KEY, conversation, { tools: activeTools, tool_choice: toolChoice });
       const result = await resp.json();
       const choice = result.choices?.[0];
 
