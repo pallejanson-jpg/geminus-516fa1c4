@@ -1,74 +1,45 @@
 
 
-## Plan: Geminus AI — Interaktivt gränssnitt med knappar, smart tolkning och noll stopp-svar
+## Plan: Fix Gunnar AI — sluta fastna, ge riktiga svar
 
-### Problem idag
-1. Geminus AI svarar som en chatbot med fritext — inga klickbara knappar
-2. "Jag kunde inte slutföra sökningen" returneras vid max rounds
-3. Kort input som "Småviken", "Dörrar", "Ventilation" fångas inte av fast-path
-4. Suggestions är generiska fallbacks, inte kontextmedvetna
-5. Rad 1006 kastar alltid bort AI:ns egna suggestions
+### Rotorsak (från loggarna)
+**5 av 7 senaste anrop slutar med "max rounds reached"** och användaren får fallback-text istället för riktigt svar. Mönstret:
+- Round 1: AI anropar data-tool (t.ex. `list_buildings`, `get_assets_by_category`)
+- Round 2: AI anropar ÄNNU en data-tool (t.ex. `get_building_summary`, `get_viewer_entities`) istället för `format_response`
+- MAX_TOOL_ROUNDS=2 → loopen tar slut → fallback-svar
 
-### Åtgärder
+AI:n hinner aldrig kalla `format_response` eftersom den vill göra 2 data-anrop + 1 format_response = 3 rundor, men bara 2 är tillåtna.
 
-#### 1) Utöka svarsformatet med `buttons` och `type`-fält
-Lägg till `buttons: string[]` och `type: string` i:
-- `format_response` tool-definition (backend)
-- `AiStructuredResponse` interface (frontend)
-- `GunnarChat.tsx` rendering
+Dessutom: AI:n anropar fortfarande `resolve_building_by_name` trots att byggnaden redan finns i kontexten (logg 07:24:44).
 
-Buttons renderas som större, tydliga actionknappar (inte bara chips). Next-steps/suggestions renderas som mindre sekundära chips.
+### Åtgärder i `supabase/functions/gunnar-chat/index.ts`
 
-#### 2) Massivt bredda fast-path för kort input
-I `detectViewerIntent` / ny `detectShortIntent`:
-- **Enbart byggnadsnamn** → `building_summary` (matcha mot `context.currentBuilding.name`)
-- **Enbart objekttyp** som "Dörrar", "Fönster", "Pumpar" → `show_system`
-- **Enbart system** som "Ventilation", "El", "VVS" → `show_system`
-- **Kort action** som "Visa plan 2", "Öppna dokument" → dedicated fast-path
+#### 1) Tvinga `format_response` på sista rundan
+På sista tillåtna rundan, sätt `tool_choice` till `{ type: "function", function: { name: "format_response" } }` istället för `"auto"`. Detta garanterar att AI:n alltid avslutar med ett strukturerat svar.
 
-Regex-lista utökas kraftigt med svenska objekttyper och systemnamn.
-
-#### 3) Eliminera stopp-svar vid max rounds
-Rad 1020-1032: Istället för "Jag kunde inte slutföra sökningen":
-- Leta bakåt i `conversation` efter senaste `assistant`-meddelande med content
-- Om det finns, använd det + generera suggestions
-- Om inte, ge ett smart fallback: "Jag har begränsad information om detta. Här är vad du kan göra:" + knappar
-
-#### 4) Bevara AI:ns suggestions, fallback bara om tomma
-Rad 1006: Ändra till:
-```
-suggestions: formatResponseResult.suggestions?.length > 0
-  ? formatResponseResult.suggestions
-  : generateFallbackSuggestions(formatResponseResult, context)
+```text
+Round 1: tool_choice="auto" → AI väljer data-tool
+Round 2: tool_choice="auto" → AI väljer data-tool
+Round 3: tool_choice=format_response (tvingat) → strukturerat svar
 ```
 
-#### 5) Uppdatera systemprompt med nytt format
-Instruera AI:n att:
-- Alltid inkludera `buttons` med 2-3 klickbara handlingar
-- Alltid inkludera `suggestions` med 2-3 nästa steg
-- Använda `type`-fält: `answer`, `navigation`, `data_query`, `action`
-- Max 2-3 meningar i `message`
-- Aldrig skriva stopp-svar
+#### 2) Öka MAX_TOOL_ROUNDS till 3
+Med tvingad format_response på sista rundan blir mönstret:
+- 2 fria rundor för data
+- 1 tvingad runda för format_response
+- Totalt max 3 AI-anrop, men alltid ett riktigt svar
 
-#### 6) Rendera buttons som stora actionknappar i GunnarChat
-I `renderMessages()`:
-- Under varje assistant-svar: visa `buttons` som primärknappar med ikoner
-- Under knappar: visa `suggestions` som sekundära chips
-- Klick på button → skicka som ny fråga (samma som suggestions men visuellt tydligare)
+#### 3) Ta bort `resolve_building_by_name` från tools när byggnad redan finns i context
+Om `context.currentBuilding.fmGuid` finns, filtrera bort `resolve_building_by_name` från tools-arrayen som skickas till AI:n. Då kan den inte slösa rundor på det.
 
-#### 7) Smart fallback i fast-path
-Om data saknas, ge ändå ett informativt svar:
-- "Det finns inga ventilationsobjekt registrerade ännu. Du kan:"
-- Knappar: "Visa alla system", "Importera data", "Byggnadsöversikt"
-- Aldrig tomt svar
+#### 4) Fånga korta bekräftande svar i fast-path
+Lägg till matchning för "ja", "ja tack", "okej", "yes", "sure" i `detectSimpleIntent`. Dessa ska ge ett kontextmedvetet svar baserat på senaste konversationen, inte skickas till AI-loopen.
 
-### Filer som ändras
-- `supabase/functions/gunnar-chat/index.ts` — utökat format, bredare fast-path, borttagen stopp-text, bevarade suggestions
-- `src/components/chat/GunnarChat.tsx` — `buttons` i interface + rendering som actionknappar
+### Fil som ändras
+- `supabase/functions/gunnar-chat/index.ts`
 
-### Tekniska detaljer
-- `buttons` mappar till samma `sendMessage()` som suggestions
-- `type` sparas men används primärt för framtida routing (t.ex. navigationsknapp → dispatcha event)
-- Fast-path kort-input: matcha mot lista av kända svenska BIM-termer + fuzzy mot byggnadsnamn
-- Systemprompt kortas ned och fokuseras på det nya formatet
+### Förväntat resultat
+- **0 "max rounds reached"** — varje anrop avslutas med `format_response`
+- Snabbare svar (ingen bortkastad runda på `resolve_building_by_name`)
+- Korta svar som "ja tack" hanteras direkt
 
