@@ -68,6 +68,7 @@ import {
   ISSUE_ANNOTATIONS_TOGGLE_EVENT,
   ALARM_ANNOTATIONS_SHOW_EVENT,
   VIEWER_CREATE_ASSET_EVENT,
+  AI_VIEWER_FOCUS_EVENT,
   type ViewerToolChangedDetail,
 } from '@/lib/viewer-events';
 import {
@@ -291,7 +292,23 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
     return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler);
   }, []);
 
-  // Reset splitPlanReady when leaving split mode
+  // Auto-switch to 3D when AI dispatches a viewer focus event
+  useEffect(() => {
+    const handler = () => {
+      if (viewMode !== '3d') {
+        setViewMode('3d');
+        window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: false } }));
+        window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
+      }
+      // Close any open sheets
+      setSheetOpen(false);
+      setSubSheet(null);
+      setShowFilterPanel(false);
+    };
+    window.addEventListener(AI_VIEWER_FOCUS_EVENT, handler);
+    return () => window.removeEventListener(AI_VIEWER_FOCUS_EVENT, handler);
+  }, [viewMode, setViewMode]);
+
   useEffect(() => {
     if (!isSplit) setSplitPlanReady(false);
   }, [isSplit]);
