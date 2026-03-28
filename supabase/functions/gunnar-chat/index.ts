@@ -987,6 +987,26 @@ serve(async (req) => {
       });
     }
 
+    // ── FAST-PATH: detect short input (bare building name, object type, system) ──
+    const shortIntent = detectShortInput(messages, context);
+    if (shortIntent) {
+      try {
+        const fastResult = await executeFastPath(supabase, shortIntent, context);
+        if (fastResult) {
+          console.log(`Fast-path short input: ${shortIntent.type} (${Date.now() - startTime}ms)`);
+          const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
+          saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, [...userMsgs, { role: "assistant", content: fastResult.message }]).catch(e =>
+            console.error("Failed to save conversation:", e)
+          );
+          return new Response(JSON.stringify(fastResult), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } catch (e) {
+        console.error("Fast-path short input failed, falling back to AI:", e);
+      }
+    }
+
     // ── FAST-PATH: detect viewer intents (system/room/overview) ──
     const viewerIntent = detectViewerIntent(messages, context);
     if (viewerIntent) {
