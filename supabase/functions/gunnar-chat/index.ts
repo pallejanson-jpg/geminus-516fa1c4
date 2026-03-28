@@ -1430,6 +1430,14 @@ function detectViewerIntent(messages: any[], context: any): ButtonActionIntent |
   const countIntent = detectCountOrListQuestion(text, buildingGuid);
   if (countIntent) return countIntent;
 
+  // 2) IoT/sensor questions — route to live data
+  if (buildingGuid) {
+    const iotMatch = text.match(/\b(temperatur|temperature|temp|co2|koldioxid|fuktighet|humidity|luftkvalitet|air quality|inomhusklimat|indoor climate|beläggning|occupancy|sensordata|sensor data|hur varmt|how warm|hur kallt|how cold)\b/i);
+    if (iotMatch) {
+      return { action: "iot_query", payload: { sensor_type: "all" } };
+    }
+  }
+
   // Detect if user explicitly wants viewer action
   const viewerKeywords = /(visa\s+i\s+(viewern|3d)|markera|highlight|show\s+in\s+(viewer|3d)|färglägg|colorize)/i;
   const wantsViewer = viewerKeywords.test(text);
