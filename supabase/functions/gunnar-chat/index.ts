@@ -485,12 +485,23 @@ async function execBuildingSummary(supabase: any, args: any) {
 
 /* ── Live IoT sensor data via Senslinc ── */
 
+/** Extract sensor values from a machine data row (handles many field name variants) */
+function extractSensorValues(row: any): { temperature: number | null; co2: number | null; humidity: number | null; occupancy: number | null; light: number | null } {
+  if (!row) return { temperature: null, co2: null, humidity: null, occupancy: null, light: null };
+  return {
+    temperature: row.temperature_mean ?? row.temperature ?? row.temp ?? row.Temperature ?? null,
+    co2: row.co2_mean ?? row.co2 ?? row.CO2 ?? null,
+    humidity: row.humidity_mean ?? row.humidity ?? row.Humidity ?? row.rh ?? null,
+    occupancy: row.occupation_mean ?? row.occupancy ?? row.occupation ?? row.Occupancy ?? null,
+    light: row.light_mean ?? row.light ?? row.Light ?? row.lux ?? null,
+  };
+}
+
 async function execLiveSensorData(supabase: any, args: any) {
   const buildingGuid = args.building_guid;
   if (!buildingGuid) return { error: "building_guid required" };
 
   try {
-    // Get Senslinc credentials for this building
     const creds = await getSenslincCredentials(supabase, buildingGuid);
     if (!creds.apiUrl || !creds.email || !creds.password) {
       return { error: "No Senslinc/InUse credentials configured for this building", available: false };
@@ -503,79 +514,128 @@ async function execLiveSensorData(supabase: any, args: any) {
       const results: any[] = [];
       for (const roomGuid of roomGuids.slice(0, 10)) {
         try {
-          const { data, error } = await supabase.functions.invoke('senslinc-query', {
+          const { data } = await supabase.functions.invoke('senslinc-query', {
             body: { action: 'get-machine-data', fmGuid: roomGuid, buildingFmGuid: buildingGuid, days: 1 },
           });
           if (data?.success && data.data?.machine) {
             const m = data.data.machine;
             const latest = m.latest_values || (Array.isArray(data.data.machineData) && data.data.machineData.length > 0 ? data.data.machineData[data.data.machineData.length - 1] : null);
-            results.push({
-              room_fm_guid: roomGuid,
-              machine_name: m.name || m.label || roomGuid,
-              temperature: latest?.temperature_mean ?? latest?.temperature ?? null,
-              co2: latest?.co2_mean ?? latest?.co2 ?? null,
-              humidity: latest?.humidity_mean ?? latest?.humidity ?? null,
-              occupancy: latest?.occupation_mean ?? latest?.occupancy ?? latest?.occupation ?? null,
-              light: latest?.light_mean ?? latest?.light ?? null,
-              dashboard_url: data.data.dashboardUrl || '',
-            });
+            const vals = extractSensorValues(latest);
+            // Also try to resolve room name from assets
+            let roomName = m.name || m.label || roomGuid;
+            try {
+              const { data: asset } = await supabase.from("assets").select("common_name, name").eq("fm_guid", roomGuid).maybeSingle();
+              if (asset?.common_name || asset?.name) roomName = asset.common_name || asset.name;
+            } catch { /* ignore */ }
+            results.push({ room_fm_guid: roomGuid, machine_name: roomName, ...vals, dashboard_url: data.data.dashboardUrl || '' });
           }
         } catch (e) {
           console.warn(`[LiveSensor] Failed for room ${roomGuid}:`, e);
         }
       }
-      return {
-        available: true,
-        source: "Senslinc/InUse (live)",
-        rooms: results,
-        room_count: results.length,
-      };
+      return { available: results.length > 0, source: "Senslinc/InUse (live)", rooms: results, room_count: results.length };
     } else {
       // Building-level: get all machines for the site
-      const { data, error } = await supabase.functions.invoke('senslinc-query', {
+      const { data } = await supabase.functions.invoke('senslinc-query', {
         body: { action: 'get-building-sensor-data', fmGuid: buildingGuid },
       });
 
-      if (data?.success && data.data) {
-        const machines = data.data.machines || [];
-        const summary = {
-          site_name: data.data.site?.name || '',
-          dashboard_url: data.data.site?.dashboard_url || '',
-          machine_count: machines.length,
-          machines: machines.slice(0, 20).map((m: any) => ({
-            name: m.name || m.code,
-            code: m.code,
-            temperature: m.latest_values?.temperature_mean ?? m.latest_values?.temperature ?? null,
-            co2: m.latest_values?.co2_mean ?? m.latest_values?.co2 ?? null,
-            humidity: m.latest_values?.humidity_mean ?? m.latest_values?.humidity ?? null,
-            occupancy: m.latest_values?.occupation_mean ?? m.latest_values?.occupancy ?? null,
-            dashboard_url: m.dashboard_url || '',
-          })),
-        };
-
-        // Calculate averages
-        const temps = summary.machines.map((m: any) => m.temperature).filter((v: any) => v !== null);
-        const co2s = summary.machines.map((m: any) => m.co2).filter((v: any) => v !== null);
-        const hums = summary.machines.map((m: any) => m.humidity).filter((v: any) => v !== null);
-
-        return {
-          available: true,
-          source: "Senslinc/InUse (live)",
-          ...summary,
-          averages: {
-            temperature: temps.length > 0 ? Math.round((temps.reduce((a: number, b: number) => a + b, 0) / temps.length) * 10) / 10 : null,
-            co2: co2s.length > 0 ? Math.round(co2s.reduce((a: number, b: number) => a + b, 0) / co2s.length) : null,
-            humidity: hums.length > 0 ? Math.round((hums.reduce((a: number, b: number) => a + b, 0) / hums.length) * 10) / 10 : null,
-          },
-        };
+      if (!data?.success || !data.data) {
+        return { available: false, error: data?.error || "No sensor data available for this building" };
       }
 
-      return { available: false, error: data?.error || "No sensor data available for this building" };
+      const machines = data.data.machines || [];
+      const totalMachines = machines.length;
+      console.log(`[LiveSensor] Building has ${totalMachines} machines, checking latest_values...`);
+
+      // Check if latest_values are populated
+      const hasLatestValues = machines.some((m: any) => m.latest_values !== null && m.latest_values !== undefined);
+
+      if (hasLatestValues) {
+        // Direct extraction from latest_values
+        const parsed = machines.slice(0, 50).map((m: any) => ({
+          name: m.name || m.code, code: m.code,
+          ...extractSensorValues(m.latest_values),
+          dashboard_url: m.dashboard_url || '',
+        }));
+        return buildSensorSummary(parsed, totalMachines, data.data.site);
+      }
+
+      // latest_values is null — sample up to 10 machines and fetch actual data
+      console.log(`[LiveSensor] latest_values all null, sampling ${Math.min(10, totalMachines)} machines...`);
+      const sampleSize = Math.min(10, totalMachines);
+      // Pick evenly spaced machines from the list
+      const step = Math.max(1, Math.floor(totalMachines / sampleSize));
+      const sampleMachines = [];
+      for (let i = 0; i < totalMachines && sampleMachines.length < sampleSize; i += step) {
+        sampleMachines.push(machines[i]);
+      }
+
+      const sampleResults = await Promise.all(sampleMachines.map(async (m: any) => {
+        try {
+          const { data: mData } = await supabase.functions.invoke('senslinc-query', {
+            body: { action: 'get-machine-data', fmGuid: m.code, buildingFmGuid: buildingGuid, days: 1 },
+          });
+          if (mData?.success && mData.data) {
+            const latest = mData.data.machine?.latest_values
+              || (Array.isArray(mData.data.machineData) && mData.data.machineData.length > 0 ? mData.data.machineData[mData.data.machineData.length - 1] : null);
+            const vals = extractSensorValues(latest);
+            // Resolve room name
+            let name = m.name || m.code;
+            try {
+              const { data: asset } = await supabase.from("assets").select("common_name, name").eq("fm_guid", m.code).maybeSingle();
+              if (asset?.common_name || asset?.name) name = asset.common_name || asset.name;
+            } catch { /* ignore */ }
+            return { name, code: m.code, ...vals, dashboard_url: m.dashboard_url || '' };
+          }
+        } catch (e) {
+          console.warn(`[LiveSensor] Sample fetch failed for ${m.code}:`, e);
+        }
+        return null;
+      }));
+
+      const validSamples = sampleResults.filter(Boolean) as any[];
+      console.log(`[LiveSensor] Got ${validSamples.length} valid samples out of ${sampleSize}`);
+
+      if (validSamples.length === 0) {
+        return { available: false, error: "Could not fetch sensor data for any machines in this building" };
+      }
+
+      return buildSensorSummary(validSamples, totalMachines, data.data.site, true);
     }
   } catch (err: any) {
     console.error("[LiveSensor] Error:", err);
     return { available: false, error: err.message || "Failed to fetch live sensor data" };
   }
+}
+
+function buildSensorSummary(machines: any[], totalMachines: number, site: any, isSample = false) {
+  const temps = machines.map(m => m.temperature).filter((v: any) => v !== null) as number[];
+  const co2s = machines.map(m => m.co2).filter((v: any) => v !== null) as number[];
+  const hums = machines.map(m => m.humidity).filter((v: any) => v !== null) as number[];
+
+  // Sort to find highest/lowest
+  const byTemp = machines.filter(m => m.temperature !== null).sort((a, b) => b.temperature - a.temperature);
+  const byCo2 = machines.filter(m => m.co2 !== null).sort((a, b) => b.co2 - a.co2);
+
+  return {
+    available: true,
+    source: "Senslinc/InUse (live)",
+    site_name: site?.name || '',
+    dashboard_url: site?.dashboard_url || '',
+    machine_count: totalMachines,
+    sampled: isSample,
+    sample_size: machines.length,
+    machines,
+    averages: {
+      temperature: temps.length > 0 ? Math.round((temps.reduce((a, b) => a + b, 0) / temps.length) * 10) / 10 : null,
+      co2: co2s.length > 0 ? Math.round(co2s.reduce((a, b) => a + b, 0) / co2s.length) : null,
+      humidity: hums.length > 0 ? Math.round((hums.reduce((a, b) => a + b, 0) / hums.length) * 10) / 10 : null,
+    },
+    highest_temperature: byTemp.length > 0 ? { name: byTemp[0].name, value: byTemp[0].temperature, code: byTemp[0].code } : null,
+    lowest_temperature: byTemp.length > 0 ? { name: byTemp[byTemp.length - 1].name, value: byTemp[byTemp.length - 1].temperature, code: byTemp[byTemp.length - 1].code } : null,
+    highest_co2: byCo2.length > 0 ? { name: byCo2[0].name, value: byCo2[0].co2, code: byCo2[0].code } : null,
+  };
 }
 
 /* ── Adaptive Memory ── */
@@ -1234,20 +1294,32 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         if (room.occupancy !== null) parts.push(`👥 ${Math.round(room.occupancy)}% beläggning`);
         message = `**Live sensordata** för ${room.machine_name}:\n${parts.join(" · ")}`;
       } else if (sensorResult.averages) {
-        // Building-level averages
+        // Building-level data
         const avg = sensorResult.averages;
         const parts: string[] = [];
         if (avg.temperature !== null) parts.push(`🌡️ Medeltemp: ${avg.temperature}°C`);
         if (avg.co2 !== null) parts.push(`💨 CO₂: ${avg.co2} ppm`);
         if (avg.humidity !== null) parts.push(`💧 Fuktighet: ${avg.humidity}%`);
-        message = `**Live sensordata** för ${buildingName} (${sensorResult.machine_count} sensorer):\n${parts.join(" · ")}`;
+
+        const sampleNote = sensorResult.sampled ? ` (baserat på ${sensorResult.sample_size} av ${sensorResult.machine_count} rum)` : ` (${sensorResult.machine_count} sensorer)`;
+        message = `**Live sensordata** för ${buildingName}${sampleNote}:\n${parts.join(" · ")}`;
+
+        // Add highest/lowest info
+        if (sensorResult.highest_temperature) {
+          message += `\n\n🔴 Varmast: **${sensorResult.highest_temperature.name}** (${sensorResult.highest_temperature.value}°C)`;
+        }
+        if (sensorResult.lowest_temperature) {
+          message += `\n🔵 Kallast: **${sensorResult.lowest_temperature.name}** (${sensorResult.lowest_temperature.value}°C)`;
+        }
+        if (sensorResult.highest_co2) {
+          message += `\n⚠️ Högst CO₂: **${sensorResult.highest_co2.name}** (${sensorResult.highest_co2.value} ppm)`;
+        }
 
         // Build color map for temperature visualization
         if (sensorType === "all" || sensorType === "temperature") {
           for (const m of sensorResult.machines || []) {
             if (m.temperature !== null && m.code) {
               const t = m.temperature;
-              // Green (20-22), Yellow (22-24), Orange (24-26), Red (>26), Blue (<18)
               let color: [number, number, number] = [0, 200, 0];
               if (t < 18) color = [0, 100, 255];
               else if (t < 20) color = [100, 200, 255];
@@ -1258,6 +1330,11 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
             }
           }
         }
+      }
+
+      // If message is still empty, provide a helpful fallback
+      if (!message) {
+        message = `${buildingName} har ${sensorResult.machine_count || 0} kopplade sensorer via Senslinc/InUse, men inga aktuella mätvärden kunde hämtas just nu.`;
       }
 
       return {
@@ -1430,10 +1507,11 @@ function detectViewerIntent(messages: any[], context: any): ButtonActionIntent |
   const countIntent = detectCountOrListQuestion(text, buildingGuid);
   if (countIntent) return countIntent;
 
-  // 2) IoT/sensor questions — route to live data
+  // 2) IoT/sensor questions — route to live data (but NOT ranking/complex questions)
   if (buildingGuid) {
+    const isRankingQuestion = /\b(högst|lägst|highest|lowest|bäst|sämst|mest|minst|vilka rum|which rooms|topp|top|worst|best|varmast|kallast|warmest|coldest|jämför|compare)\b/i.test(text);
     const iotMatch = text.match(/\b(temperatur|temperature|temp|co2|koldioxid|fuktighet|humidity|luftkvalitet|air quality|inomhusklimat|indoor climate|beläggning|occupancy|sensordata|sensor data|hur varmt|how warm|hur kallt|how cold)\b/i);
-    if (iotMatch) {
+    if (iotMatch && !isRankingQuestion) {
       return { action: "iot_query", payload: { sensor_type: "all" } };
     }
   }
