@@ -47,7 +47,9 @@ interface GunnarChatProps {
 /** Structured AI response format */
 interface AiStructuredResponse {
   message: string;
+  response_type?: 'answer' | 'navigation' | 'data_query' | 'action';
   action: 'highlight' | 'filter' | 'colorize' | 'list' | 'none';
+  buttons?: string[];
   asset_ids: string[];
   external_entity_ids: string[];
   filters: {
@@ -85,6 +87,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
   const [isLoading, setIsLoading] = useState(false);
   const [proactiveInsights, setProactiveInsights] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [buttons, setButtons] = useState<string[]>([]);
   const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
@@ -265,6 +268,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     setIsLoading(true);
     setProactiveInsights([]);
     setSuggestions([]);
+    setButtons([]);
 
     try {
       const apiMessages = trimHistory(newMessages.filter((_, i) => i > 0));
@@ -274,7 +278,10 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       const assistantContent = response.message || "Inga resultat hittades.";
       setMessages(prev => [...prev, { role: "assistant", content: assistantContent }]);
 
-      // Capture suggestions
+      // Capture buttons and suggestions
+      if (response.buttons?.length) {
+        setButtons(response.buttons);
+      }
       if (response.suggestions?.length) {
         setSuggestions(response.suggestions);
       }
@@ -412,15 +419,31 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         </div>
       )}
 
+      {/* Action buttons */}
+      {buttons.length > 0 && !isLoading && messages[messages.length - 1]?.role === 'assistant' && (
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          {buttons.map((b, i) => (
+            <button
+              key={`btn-${i}`}
+              type="button"
+              className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/20 active:bg-primary/30 transition-colors"
+              onClick={() => { setButtons([]); setSuggestions([]); sendMessage(b); }}
+            >
+              {b}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Suggestion chips */}
       {suggestions.length > 0 && !isLoading && messages[messages.length - 1]?.role === 'assistant' && (
         <div className="flex flex-wrap gap-1.5 pt-1">
           {suggestions.map((s, i) => (
             <button
-              key={i}
+              key={`sug-${i}`}
               type="button"
-              className="rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 active:bg-primary/20 transition-colors"
-              onClick={() => { setSuggestions([]); sendMessage(s); }}
+              className="rounded-full border border-muted-foreground/30 bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              onClick={() => { setSuggestions([]); setButtons([]); sendMessage(s); }}
             >
               {s}
             </button>

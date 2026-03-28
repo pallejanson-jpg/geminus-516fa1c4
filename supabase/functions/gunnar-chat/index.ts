@@ -173,12 +173,15 @@ const tools = [
     type: "function",
     function: {
       name: "format_response",
-      description: "ALWAYS call this as your LAST tool call to format the final response. Default action is 'none' or 'list' — answer in chat text. Only use viewer actions (highlight/filter/colorize) when the user EXPLICITLY asks to show/highlight/mark in the viewer.",
+      description: "ALWAYS call this as your LAST tool call. The chat message is the PRIMARY output. Include 2-3 buttons (clickable actions) and 2-3 suggestions (follow-up questions). Default action is 'none'. Only use viewer actions when user EXPLICITLY asks.",
       parameters: {
         type: "object",
         properties: {
-          message: { type: "string", description: "Human-readable message to display in chat. This is the PRIMARY output — always give a complete, informative answer here." },
-          action: { type: "string", enum: ["highlight", "filter", "colorize", "list", "none"], description: "Default to 'none' or 'list'. Only use 'highlight'/'filter'/'colorize' when user explicitly asks to show/mark/highlight in the viewer/3D." },
+          message: { type: "string", description: "Short answer (max 2-3 sentences). Concrete, no fluff." },
+          response_type: { type: "string", enum: ["answer", "navigation", "data_query", "action"], description: "Type of response: answer=general info, navigation=movement in building, data_query=data retrieval, action=trigger function" },
+          action: { type: "string", enum: ["highlight", "filter", "colorize", "list", "none"], description: "Default 'none'. Only 'highlight'/'filter'/'colorize' when user explicitly asks." },
+          buttons: { type: "array", items: { type: "string" }, description: "2-3 clickable ACTION buttons like 'Visa i modell', 'Filtrera dörrar', 'Byggnadsöversikt'. Must be concrete actions, never vague." },
+          suggestions: { type: "array", items: { type: "string" }, description: "2-3 proactive follow-up questions like 'Vill du se våningar?', 'Ska vi filtrera på system?'" },
           asset_ids: { type: "array", items: { type: "string" }, description: "Asset fm_guids found" },
           external_entity_ids: { type: "array", items: { type: "string" }, description: "xeokit entity IDs for viewer (from get_viewer_entities)" },
           filters: {
@@ -214,7 +217,7 @@ const tools = [
             description: "Map of external_entity_id to RGB color for colorize action. Green=[0,0.8,0.2], Yellow=[1,0.9,0], Red=[1,0.2,0.1]",
           },
         },
-        required: ["message", "action"],
+        required: ["message", "action", "buttons", "suggestions"],
         additionalProperties: false,
       },
     },
@@ -517,7 +520,9 @@ async function saveConversation(supabase: any, userId: string, buildingFmGuid: s
 
 interface FastPathResult {
   message: string;
+  response_type: string;
   action: string;
+  buttons: string[];
   asset_ids: string[];
   external_entity_ids: string[];
   filters: Record<string, string>;
@@ -534,6 +539,78 @@ function detectSimpleIntent(messages: any[]): string | null {
   if (/^(hej|hallå|tja|tjena|hi|hello|hey|god\s*(morgon|kväll|dag)|good\s*(morning|evening|day))[\s!.]*$/i.test(text)) return "greeting";
   if (/^(tack|thanks|thank\s*you|tackar)[\s!.]*$/i.test(text)) return "thanks";
   if (/^(hjälp|help|vad kan du|what can you do)[\s?!.]*$/i.test(text)) return "help";
+  return null;
+}
+
+/** Known BIM object types and system names for short-input matching */
+const KNOWN_OBJECT_TYPES: Record<string, string> = {
+  "dörrar": "Door", "dörr": "Door", "doors": "Door", "door": "Door",
+  "fönster": "IfcWindow", "fönstren": "IfcWindow", "windows": "IfcWindow",
+  "väggar": "IfcWall", "vägg": "IfcWall", "walls": "IfcWall",
+  "pumpar": "pump", "pump": "pump", "pumps": "pump",
+  "rum": "Space", "rooms": "Space", "spaces": "Space",
+  "sensorer": "IfcSensor", "sensor": "IfcSensor", "sensors": "IfcSensor",
+  "brandlarm": "IfcAlarm", "larm": "IfcAlarm", "alarm": "IfcAlarm", "alarms": "IfcAlarm",
+  "armaturer": "IfcLightFixture", "armatur": "IfcLightFixture",
+  "rör": "IfcPipeSegment", "pipes": "IfcPipeSegment",
+  "ventiler": "IfcValve", "ventil": "IfcValve", "valves": "IfcValve",
+};
+const KNOWN_SYSTEMS: Record<string, string> = {
+  "ventilation": "ventilation", "hvac": "ventilation", "vvs": "ventilation",
+  "el": "IfcElectric", "electrical": "IfcElectric", "elektricitet": "IfcElectric",
+  "sprinkler": "sprinkler", "brand": "IfcAlarm", "fire": "IfcAlarm",
+  "vatten": "IfcPipe", "water": "IfcPipe", "avlopp": "IfcPipe",
+  "värme": "heating", "heating": "heating", "kyla": "cooling", "cooling": "cooling",
+};
+
+/** Detect short input: bare building name, object type, or system name */
+function detectShortInput(messages: any[], context: any): { type: string; params: Record<string, string>; wantsViewer: boolean } | null {
+  if (!messages.length) return null;
+  const lastMsg = messages[messages.length - 1];
+  if (lastMsg.role !== "user") return null;
+  const text = lastMsg.content.trim();
+  const lower = text.toLowerCase();
+  const buildingGuid = context?.currentBuilding?.fmGuid;
+  const buildingName = context?.currentBuilding?.name?.toLowerCase();
+
+  // Single word or very short input (1-3 words)
+  const wordCount = text.split(/\s+/).length;
+  if (wordCount > 4) return null;
+
+  // Match building name
+  if (buildingGuid && buildingName && (lower === buildingName || buildingName.includes(lower) || lower.includes(buildingName))) {
+    return { type: "building_summary", params: { fm_guid: buildingGuid }, wantsViewer: false };
+  }
+
+  // Match known object type
+  if (buildingGuid && KNOWN_OBJECT_TYPES[lower]) {
+    return { type: "show_system", params: { system: KNOWN_OBJECT_TYPES[lower], building_guid: buildingGuid }, wantsViewer: false };
+  }
+
+  // Match known system
+  if (buildingGuid && KNOWN_SYSTEMS[lower]) {
+    return { type: "show_system", params: { system: KNOWN_SYSTEMS[lower], building_guid: buildingGuid }, wantsViewer: false };
+  }
+
+  // "berätta om X" / "tell me about X" / "vad finns i X" / "sammanfatta X"
+  const aboutMatch = lower.match(/^(berätta\s+om|tell\s+me\s+about|vad\s+(finns|har)\s+(i|om)|sammanfatta|om)\s+(.+)$/);
+  if (aboutMatch && buildingGuid) {
+    const subject = aboutMatch[4]?.trim();
+    if (subject && buildingName && (subject === buildingName || buildingName.includes(subject))) {
+      return { type: "building_summary", params: { fm_guid: buildingGuid }, wantsViewer: false };
+    }
+    // Treat as system/object search
+    if (subject && subject.length >= 2) {
+      return { type: "show_system", params: { system: subject, building_guid: buildingGuid }, wantsViewer: false };
+    }
+  }
+
+  // "visa plan X" / "show floor X"
+  const floorMatch = lower.match(/^(visa\s+plan|show\s+floor|plan|floor|våning)\s*(\d+)/);
+  if (floorMatch && buildingGuid) {
+    return { type: "show_system", params: { system: `plan ${floorMatch[2]}`, building_guid: buildingGuid }, wantsViewer: false };
+  }
+
   return null;
 }
 
@@ -585,19 +662,18 @@ async function executeFastPath(supabase: any, intent: { type: string; params: Re
       if (assetList.length === 0) {
         return {
           message: `Inga "${intent.params.system}"-objekt hittades i ${buildingName}.`,
-          action: "none", asset_ids: [], external_entity_ids: [], filters: {},
-          suggestions: [`Visa alla tillgångar`, `Sök efter annan utrustning`, `Byggnadsöversikt`],
+          response_type: "data_query",
+          action: "none", buttons: ["Visa alla system", "Byggnadsöversikt", "Sök utrustning"],
+          asset_ids: [], external_entity_ids: [], filters: {},
+          suggestions: [`Finns det andra typer av utrustning?`, `Visa alla tillgångar`],
         };
       }
       const assetIds = assetList.map((a: any) => a.fm_guid);
-
-      // Build informative text summary
       const types: Record<string, number> = {};
       assetList.forEach((a: any) => { const t = a.asset_type || a.common_name || "okänd"; types[t] = (types[t] || 0) + 1; });
       const typeSummary = Object.entries(types).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t, n]) => `${n}× ${t}`).join(", ");
 
       if (intent.wantsViewer) {
-        // User explicitly wants viewer action
         let entityIds: string[] = [];
         try {
           const { data: entities } = await supabase.rpc("get_viewer_entities", { asset_ids: assetIds });
@@ -605,17 +681,20 @@ async function executeFastPath(supabase: any, intent: { type: string; params: Re
         } catch (_) {}
         return {
           message: `Hittade **${assetList.length}** ${intent.params.system}-objekt i ${buildingName}: ${typeSummary}.${entityIds.length > 0 ? ` Markerar ${entityIds.length} i viewern.` : ""}`,
+          response_type: "action",
           action: entityIds.length > 0 ? "highlight" : "list",
+          buttons: ["Filtrera per våning", "Visa detaljer", "Byggnadsöversikt"],
           asset_ids: assetIds.slice(0, 50), external_entity_ids: entityIds,
           filters: { system: intent.params.system },
-          suggestions: [`Hur många rum har ${intent.params.system}?`, `Byggnadsöversikt`, `Sök annan utrustning`],
+          suggestions: [`Hur många rum har ${intent.params.system}?`, `Visa annan utrustning`],
         };
       }
-      // Chat-first: just answer the question
       return {
         message: `Det finns **${assetList.length}** ${intent.params.system}-objekt i ${buildingName}.\n\nFördelning: ${typeSummary}.`,
-        action: "none", asset_ids: assetIds.slice(0, 50), external_entity_ids: [], filters: {},
-        suggestions: [`Markera ${intent.params.system} i viewern`, `Vilka rum har ${intent.params.system}?`, `Byggnadsöversikt`],
+        response_type: "data_query",
+        action: "none", buttons: [`Visa ${intent.params.system} i modell`, "Filtrera per våning", "Byggnadsöversikt"],
+        asset_ids: assetIds.slice(0, 50), external_entity_ids: [], filters: {},
+        suggestions: [`Vilka rum har ${intent.params.system}?`, `Visa annan utrustning`],
       };
     }
     case "room_assets": {
@@ -625,8 +704,10 @@ async function executeFastPath(supabase: any, intent: { type: string; params: Re
       if (assetList.length === 0) {
         return {
           message: `Inga tillgångar registrerade i ${roomName}.`,
-          action: "none", asset_ids: [], external_entity_ids: [], filters: {},
-          suggestions: [`Visa ventilation i ${buildingName}`, `Byggnadsöversikt`, `Sök efter utrustning`],
+          response_type: "data_query",
+          action: "none", buttons: ["Visa ventilation", "Byggnadsöversikt", "Sök utrustning"],
+          asset_ids: [], external_entity_ids: [], filters: {},
+          suggestions: [`Visa ${buildingName} istället`, `Finns det objekt på denna våning?`],
         };
       }
       const assetIds = assetList.map((a: any) => a.fm_guid);
@@ -642,24 +723,31 @@ async function executeFastPath(supabase: any, intent: { type: string; params: Re
         } catch (_) {}
         return {
           message: `**${assetList.length}** objekt i ${roomName}: ${catSummary}.${entityIds.length > 0 ? ` Markerar ${entityIds.length} i viewern.` : ""}`,
+          response_type: "action",
           action: entityIds.length > 0 ? "highlight" : "list",
+          buttons: ["Visa ventilation i rummet", "Visa detaljer", "Byggnadsöversikt"],
           asset_ids: assetIds.slice(0, 50), external_entity_ids: entityIds,
           filters: { room: intent.params.room_guid },
-          suggestions: [`Visa ventilation i ${roomName}`, `Byggnadsöversikt`, `Visa alla rum`],
+          suggestions: [`Visa ventilation i ${roomName}`, `Visa alla rum`],
         };
       }
       return {
         message: `I ${roomName} finns **${assetList.length}** objekt: ${catSummary}.`,
-        action: "none", asset_ids: assetIds.slice(0, 50), external_entity_ids: [], filters: {},
-        suggestions: [`Markera objekten i viewern`, `Visa ventilation i ${roomName}`, `Byggnadsöversikt`],
+        response_type: "data_query",
+        action: "none", buttons: ["Visa i modell", "Filtrera per typ", "Byggnadsöversikt"],
+        asset_ids: assetIds.slice(0, 50), external_entity_ids: [], filters: {},
+        suggestions: [`Markera objekten i viewern`, `Visa ventilation i ${roomName}`],
       };
     }
     case "building_summary": {
       const summary = await execBuildingSummary(supabase, { fm_guid: intent.params.fm_guid });
+      const topTypes = summary.top_asset_types?.slice(0, 3).map((t: any) => t.type).join(", ") || "";
       return {
         message: `**${summary.building_name}**\n\n• ${summary.floors_count} våningar, ${summary.rooms} rum, ${summary.assets} tillgångar\n• Total yta: ${summary.total_space_area_m2} m²\n• ${summary.total_issues} ärenden${summary.total_issues > 0 ? ` (${Object.entries(summary.issues_by_status).map(([s, n]) => `${n} ${s}`).join(", ")})` : ""}`,
-        action: "none", asset_ids: [], external_entity_ids: [], filters: {},
-        suggestions: [`Visa ventilation`, `Visa alla rum`, `Visa öppna ärenden`],
+        response_type: "answer",
+        action: "none", buttons: ["Visa ventilation", "Visa alla rum", "Visa öppna ärenden"],
+        asset_ids: [], external_entity_ids: [], filters: {},
+        suggestions: [`Vilka system finns?`, `Visa våningar`, topTypes ? `Berätta om ${topTypes}` : `Sök utrustning`],
       };
     }
     default:
@@ -670,24 +758,28 @@ async function executeFastPath(supabase: any, intent: { type: string; params: Re
 function getSimpleIntentResponse(intent: string, text: string): any {
   const isSv = /^(hej|hallå|tja|tjena|tack|hjälp|god)/i.test(text);
   let message = "";
+  let buttons: string[] = [];
   let suggestions: string[] = [];
   switch (intent) {
     case "greeting":
       message = isSv ? "Hej! Hur kan jag hjälpa dig idag?" : "Hello! How can I help you today?";
-      suggestions = isSv ? ["Visa ventilation", "Byggnadsöversikt", "Vad finns i rummet?"] : ["Show HVAC", "Building overview", "What's in this room?"];
+      buttons = isSv ? ["Byggnadsöversikt", "Visa ventilation", "Sök utrustning"] : ["Building overview", "Show HVAC", "Search equipment"];
+      suggestions = isSv ? ["Vilka system finns?", "Visa alla rum"] : ["What systems exist?", "Show all rooms"];
       break;
     case "thanks":
       message = isSv ? "Varsågod! Finns det något mer jag kan hjälpa dig med?" : "You're welcome! Is there anything else I can help with?";
-      suggestions = isSv ? ["Visa alla tillgångar", "Byggnadsöversikt", "Sök utrustning"] : ["Show all assets", "Building overview", "Search equipment"];
+      buttons = isSv ? ["Byggnadsöversikt", "Visa ventilation", "Sök utrustning"] : ["Building overview", "Show HVAC", "Search equipment"];
+      suggestions = isSv ? ["Visa alla tillgångar", "Öppna ärenden"] : ["Show all assets", "Open issues"];
       break;
     case "help":
       message = isSv
-        ? "Jag kan hjälpa dig med:\n\n• **Byggnadsdata** — våningar, rum, ytor, utrustning\n• **System** — ventilation, el, VVS\n• **3D-navigering** — visa och markera objekt i viewern\n• **Sökning** — hitta specifika tillgångar\n\nVad vill du veta mer om?"
-        : "I can help you with:\n\n• **Building data** — floors, rooms, areas, equipment\n• **Systems** — ventilation, electrical, HVAC\n• **3D navigation** — show and highlight objects in the viewer\n• **Search** — find specific assets\n\nWhat would you like to know?";
-      suggestions = isSv ? ["Visa ventilation", "Byggnadsöversikt", "Sök utrustning"] : ["Show HVAC", "Building overview", "Search equipment"];
+        ? "Jag kan hjälpa dig med byggnadsdata, system, 3D-navigering och sökning."
+        : "I can help with building data, systems, 3D navigation and search.";
+      buttons = isSv ? ["Byggnadsöversikt", "Visa ventilation", "Sök utrustning"] : ["Building overview", "Show HVAC", "Search equipment"];
+      suggestions = isSv ? ["Vilka system finns?", "Visa alla rum", "Öppna ärenden"] : ["What systems exist?", "Show all rooms", "Open issues"];
       break;
   }
-  return { message, action: "none", asset_ids: [], external_entity_ids: [], filters: {}, suggestions };
+  return { message, response_type: "answer", action: "none", buttons, asset_ids: [], external_entity_ids: [], filters: {}, suggestions };
 }
 
 /* ─────────────────────────────────────────────
@@ -733,52 +825,38 @@ async function buildSystemPrompt(supabase: any, context: any, userProfile: any, 
     memoryCtx = `\nPrevious conversation:\n${msgs}`;
   }
 
-  return `You are Geminus AI, a structured assistant for digital twin / BIM applications. You have access to building data and can optionally control a 3D xeokit viewer.
+  const buildingAlreadyResolved = context?.currentBuilding?.fmGuid
+    ? `\nIMPORTANT: The current building "${context.currentBuilding.name}" (fm_guid: ${context.currentBuilding.fmGuid}) is ALREADY resolved. Do NOT call resolve_building_by_name for it. Always pass building_guid="${context.currentBuilding.fmGuid}" to data tools.`
+    : "";
 
-CRITICAL — CHAT-FIRST PRINCIPLE:
-Your PRIMARY output is the chat message. Always give a complete, informative text answer.
-Viewer actions (highlight, filter, colorize) are SECONDARY and should ONLY be used when:
-- The user EXPLICITLY asks to "visa i viewern", "markera", "highlight", "show in 3D", "färglägg"
-- NOT by default. Most questions should be answered with action="none" or action="list".
+  return `You are Geminus AI — NOT a chatbot, but an interactive interface for digital twin / BIM applications.
 
-CORE RULES:
-1. ALWAYS use tools to get data — never guess or fabricate.
-2. Use the appropriate RPC tool: get_assets_by_system, get_assets_in_room, get_assets_by_category, or search_assets.
-3. You do NOT need to call get_viewer_entities separately — format_response auto-resolves.
-4. ALWAYS end with format_response as your LAST tool call.
-5. If no results found, explain in the message and return empty arrays.
-6. Respond in the SAME LANGUAGE as the user.
-7. NEVER show UUIDs/GUIDs to the user in the message text.
-8. Do NOT hallucinate system names, asset types, or relationships.
-9. Max 200 assets per query — enforced server-side.
-10. MINIMIZE tool rounds — call data tool AND format_response in the SAME round when possible.
+YOUR GOAL: Help the user forward. Minimize typing. Maximize clickable options. Always give next steps.
 
-ACTION TYPES for format_response:
-- "none" — DEFAULT. Answer the question in chat text only.
-- "list" — Display data as a list in chat, no viewer action.
-- "highlight" — ONLY when user explicitly asks to show/mark in viewer.
-- "filter" — ONLY when user explicitly asks to filter in viewer.
-- "colorize" — ONLY when user explicitly asks to color-code in viewer.
+RESPONSE FORMAT (MANDATORY via format_response):
+- message: Short, concrete answer (max 2-3 sentences). No fluff.
+- buttons: 2-3 clickable ACTION buttons (e.g. "Visa i modell", "Filtrera dörrar", "Byggnadsöversikt"). NEVER vague like "Vad vill du göra?".
+- suggestions: 2-3 proactive follow-up questions (e.g. "Vill du se våningar?", "Ska vi filtrera på system?").
+- response_type: "answer" | "navigation" | "data_query" | "action"
+- action: Default "none". Only "highlight"/"filter"/"colorize" when user EXPLICITLY asks for viewer.
+
+CRITICAL RULES:
+1. NEVER write stop-answers like "Jag kunde inte slutföra sökningen" or "Försök igen". If data is missing, make a reasonable interpretation and suggest alternatives.
+2. Every response MUST have buttons and suggestions.
+3. Understand SHORT INPUT: "Dörrar" → filter doors. "Ventilation" → show HVAC. Building name → building overview.
+4. ALWAYS use tools to get data — never fabricate.
+5. ALWAYS pass building_guid when available.
+6. ALWAYS end with format_response. Call data tool AND format_response in the SAME round.
+7. Respond in the SAME LANGUAGE as the user.
+8. NEVER show UUIDs/GUIDs in message text.
+9. Max 2-3 sentences in message. Be concrete.
+10. MINIMIZE tool rounds — max 1 data call + format_response.
+${buildingAlreadyResolved}
 
 EXAMPLES:
-User: "hur många ventilationsaggregat finns?" → get_assets_by_system("ventilation") → format_response(action="none", message="Det finns 42 ventilationsaggregat...")
-User: "visa ventilation i viewern" → get_assets_by_system("ventilation") → format_response(action="highlight", asset_ids=[...])
-User: "markera alla brandlarm" → get_assets_by_system("IfcAlarm") → format_response(action="highlight", asset_ids=[...])
-User: "vilka pumpar finns?" → search_assets("pump") → format_response(action="list", message="Hittade 5 pumpar: ...")
-User: "vad är temperaturen i rummet?" → get_sensors_in_room → get_latest_sensor_values → format_response(action="none", message="Temperaturen är 22.3°C...")
-User: "visa temperaturen i viewern" → same sensors → format_response(action="colorize", color_map={...})
-
-IoT / SENSOR DATA:
-- When user asks about temperature, CO2, humidity:
-  1. get_sensors_in_room(sensor_type, room_guid)
-  2. get_latest_sensor_values(sensor_ids)
-  3. format_response — use action="none" by default, "colorize" only if user asks to show in viewer
-
-INTERACTION STYLE:
-1. Give complete answers in the chat message — this is the primary output.
-2. Suggest 2-3 relevant follow-up questions.
-3. Be concise, friendly, and actionable.
-4. MINIMIZE rounds — combine data retrieval and format_response in the SAME round.
+User: "Dörrar" → get_assets_by_category("Door", building_guid) → format_response(message="Det finns 45 dörrar.", buttons=["Visa i modell","Filtrera våning","Visa detaljer"], suggestions=["Vill du filtrera per våning?","Ska vi visa närliggande rum?"])
+User: "Ventilation" → get_assets_by_system("ventilation", building_guid) → format_response(message="24 ventilationsenheter.", buttons=["Visa i modell","Filtrera ventilation","Visa komponenter"], suggestions=["Vill du se luftflöden?","Visa rum kopplade till systemet?"])
+User: "visa i viewern" → format_response(action="highlight", ...)
 ${userCtx}${ctx}${modelsCtx}${memoryCtx}`;
 }
 
@@ -812,30 +890,27 @@ async function callAI(apiKey: string, messages: any[], options: { stream?: boole
   return resp;
 }
 
+/** Generate fallback buttons when AI doesn't provide them */
+function generateFallbackButtons(result: any, context: any): string[] {
+  const buildingName = context?.currentBuilding?.name;
+  const action = result?.action || "none";
+  if (action === "highlight" || action === "filter" || action === "colorize") {
+    return [buildingName ? `Byggnadsöversikt ${buildingName}` : "Byggnadsöversikt", "Visa ventilation", "Sök utrustning"];
+  }
+  return [buildingName ? `Byggnadsöversikt ${buildingName}` : "Byggnadsöversikt", "Visa ventilation", "Sök utrustning"];
+}
+
 /** Generate fallback suggestions when AI doesn't provide them */
 function generateFallbackSuggestions(result: any, context: any): string[] {
   const buildingName = context?.currentBuilding?.name;
-  const hasAssets = result?.asset_ids?.length > 0;
   const action = result?.action || "none";
-
-  if (action === "highlight" || action === "filter") {
-    return [
-      buildingName ? `Byggnadsöversikt för ${buildingName}` : "Byggnadsöversikt",
-      "Visa ventilation",
-      "Sök efter utrustning",
-    ];
-  }
   if (action === "colorize") {
-    return [
-      "Visa temperatur i fler rum",
-      "Byggnadsöversikt",
-      "Visa alla sensorer",
-    ];
+    return ["Visa temperatur i fler rum", "Vilka sensorer finns?", "Byggnadsöversikt"];
   }
   return [
-    buildingName ? `Visa ventilation i ${buildingName}` : "Visa ventilation",
-    "Byggnadsöversikt",
-    "Sök utrustning",
+    buildingName ? `Vilka system finns i ${buildingName}?` : "Vilka system finns?",
+    "Visa alla rum",
+    "Öppna ärenden",
   ];
 }
 
@@ -909,6 +984,26 @@ serve(async (req) => {
       });
     }
 
+    // ── FAST-PATH: detect short input (bare building name, object type, system) ──
+    const shortIntent = detectShortInput(messages, context);
+    if (shortIntent) {
+      try {
+        const fastResult = await executeFastPath(supabase, shortIntent, context);
+        if (fastResult) {
+          console.log(`Fast-path short input: ${shortIntent.type} (${Date.now() - startTime}ms)`);
+          const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
+          saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, [...userMsgs, { role: "assistant", content: fastResult.message }]).catch(e =>
+            console.error("Failed to save conversation:", e)
+          );
+          return new Response(JSON.stringify(fastResult), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } catch (e) {
+        console.error("Fast-path short input failed, falling back to AI:", e);
+      }
+    }
+
     // ── FAST-PATH: detect viewer intents (system/room/overview) ──
     const viewerIntent = detectViewerIntent(messages, context);
     if (viewerIntent) {
@@ -949,7 +1044,9 @@ serve(async (req) => {
         // Wrap in structured format
         const structuredResponse = {
           message: content,
+          response_type: "answer" as const,
           action: "none" as const,
+          buttons: generateFallbackButtons({}, context),
           asset_ids: [],
           external_entity_ids: [],
           filters: {},
@@ -999,11 +1096,15 @@ serve(async (req) => {
         console.log(`Gunnar: format_response received (${Date.now() - startTime}ms, round ${round + 1})`);
         const structured: any = {
           message: formatResponseResult.message || "",
+          response_type: formatResponseResult.response_type || "answer",
           action: formatResponseResult.action || "none",
+          buttons: formatResponseResult.buttons?.length ? formatResponseResult.buttons : generateFallbackButtons(formatResponseResult, context),
           asset_ids: formatResponseResult.asset_ids || [],
           external_entity_ids: formatResponseResult.external_entity_ids || [],
           filters: formatResponseResult.filters || {},
-          suggestions: generateFallbackSuggestions(formatResponseResult, context),
+          suggestions: formatResponseResult.suggestions?.length
+            ? formatResponseResult.suggestions
+            : generateFallbackSuggestions(formatResponseResult, context),
         };
         if (formatResponseResult.sensor_data?.length) structured.sensor_data = formatResponseResult.sensor_data;
         if (formatResponseResult.color_map && Object.keys(formatResponseResult.color_map).length) structured.color_map = formatResponseResult.color_map;
@@ -1017,15 +1118,25 @@ serve(async (req) => {
       }
     }
 
-    // Max rounds — return last content
+    // Max rounds — try to extract last useful AI content instead of stop-answer
     console.log(`Gunnar: max rounds reached (${Date.now() - startTime}ms)`);
+    let lastAssistantText = "";
+    for (let i = conversation.length - 1; i >= 0; i--) {
+      if (conversation[i].role === "assistant" && typeof conversation[i].content === "string" && conversation[i].content.trim()) {
+        lastAssistantText = conversation[i].content.trim();
+        break;
+      }
+    }
+    const buildingName = context?.currentBuilding?.name || "byggnaden";
     const fallback = {
-      message: "Jag kunde inte slutföra sökningen. Försök med en mer specifik fråga.",
+      message: lastAssistantText || `Jag har begränsad information om detta just nu. Här är vad du kan göra:`,
+      response_type: "answer",
       action: "none",
+      buttons: [`Byggnadsöversikt${buildingName !== "byggnaden" ? ` ${buildingName}` : ""}`, "Visa ventilation", "Sök utrustning"],
       asset_ids: [],
       external_entity_ids: [],
       filters: {},
-      suggestions: ["Visa ventilation", "Byggnadsöversikt", "Sök utrustning"],
+      suggestions: ["Vilka system finns?", "Visa alla rum", "Öppna ärenden"],
     };
     return new Response(JSON.stringify(fallback), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
