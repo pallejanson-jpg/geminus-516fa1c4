@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyAuth, unauthorizedResponse, corsHeaders } from "../_shared/auth.ts";
+import { getSenslincCredentials } from "../_shared/credentials.ts";
 
 const MAX_TOOL_ROUNDS = 3;
 const AI_MODEL_PRIMARY = "google/gemini-3-flash-preview";
