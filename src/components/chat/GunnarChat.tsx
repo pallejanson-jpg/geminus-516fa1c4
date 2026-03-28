@@ -138,45 +138,13 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     if (open && inputRef.current) setTimeout(() => inputRef.current?.focus(), 100);
   }, [open]);
 
-  // ── ElevenLabs TTS helpers ──
+  // ── Browser TTS helpers ──
   const stopSpeaking = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = '';
-      audioRef.current = null;
-    }
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
     setIsSpeaking(false);
   }, []);
-
-  const speakWithBrowserFallback = useCallback(async (text: string) => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      toastHook({
-        title: 'TTS unavailable',
-        description: 'Voice playback is temporarily unavailable right now.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'sv-SE';
-    utterance.rate = 1;
-    utterance.pitch = 1;
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
-
-    toastHook({
-      title: 'Fallback voice enabled',
-      description: 'Using browser speech while the premium voice service is unavailable.',
-    });
-  }, [toastHook]);
 
   const speakText = useCallback(async (text: string) => {
     const cleaned = preprocessForTTS(text);
@@ -184,42 +152,20 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
 
     stopSpeaking();
 
-    const settings = getGunnarSettings();
-    try {
-      const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
-      const response = await fetch(TTS_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({ text: cleaned, voiceId: settings.voiceName, speed: 1.0 }),
-      });
-
-      if (!response.ok) {
-        const errorPayload = await response.json().catch(() => null);
-        console.error('TTS error:', response.status, errorPayload);
-        await speakWithBrowserFallback(cleaned);
-        return;
-      }
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-
-      audio.onplay = () => setIsSpeaking(true);
-      audio.onended = () => { setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; };
-      audio.onerror = () => { setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; };
-
-      await audio.play();
-    } catch (e) {
-      console.error('TTS playback error:', e);
-      await speakWithBrowserFallback(cleaned);
-      setIsSpeaking(false);
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      return;
     }
-  }, [speakWithBrowserFallback, stopSpeaking]);
+
+    const utterance = new SpeechSynthesisUtterance(cleaned);
+    utterance.lang = 'sv-SE';
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+
+    window.speechSynthesis.speak(utterance);
+  }, [stopSpeaking]);
 
   const speakAssistant = useCallback(async (text: string) => {
     if (!voiceOutputEnabled) return;
