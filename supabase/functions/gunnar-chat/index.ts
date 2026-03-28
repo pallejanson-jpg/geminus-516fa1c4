@@ -173,12 +173,12 @@ const tools = [
     type: "function",
     function: {
       name: "format_response",
-      description: "ALWAYS call this as your LAST tool call to format the final response. This structures your answer for the viewer.",
+      description: "ALWAYS call this as your LAST tool call to format the final response. Default action is 'none' or 'list' — answer in chat text. Only use viewer actions (highlight/filter/colorize) when the user EXPLICITLY asks to show/highlight/mark in the viewer.",
       parameters: {
         type: "object",
         properties: {
-          message: { type: "string", description: "Human-readable message to display in chat" },
-          action: { type: "string", enum: ["highlight", "filter", "colorize", "list", "none"], description: "Viewer action to perform. Use 'colorize' when showing sensor data with color-coded values." },
+          message: { type: "string", description: "Human-readable message to display in chat. This is the PRIMARY output — always give a complete, informative answer here." },
+          action: { type: "string", enum: ["highlight", "filter", "colorize", "list", "none"], description: "Default to 'none' or 'list'. Only use 'highlight'/'filter'/'colorize' when user explicitly asks to show/mark/highlight in the viewer/3D." },
           asset_ids: { type: "array", items: { type: "string" }, description: "Asset fm_guids found" },
           external_entity_ids: { type: "array", items: { type: "string" }, description: "xeokit entity IDs for viewer (from get_viewer_entities)" },
           filters: {
