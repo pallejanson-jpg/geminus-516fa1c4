@@ -662,19 +662,18 @@ async function executeFastPath(supabase: any, intent: { type: string; params: Re
       if (assetList.length === 0) {
         return {
           message: `Inga "${intent.params.system}"-objekt hittades i ${buildingName}.`,
-          action: "none", asset_ids: [], external_entity_ids: [], filters: {},
-          suggestions: [`Visa alla tillgångar`, `Sök efter annan utrustning`, `Byggnadsöversikt`],
+          response_type: "data_query",
+          action: "none", buttons: ["Visa alla system", "Byggnadsöversikt", "Sök utrustning"],
+          asset_ids: [], external_entity_ids: [], filters: {},
+          suggestions: [`Finns det andra typer av utrustning?`, `Visa alla tillgångar`],
         };
       }
       const assetIds = assetList.map((a: any) => a.fm_guid);
-
-      // Build informative text summary
       const types: Record<string, number> = {};
       assetList.forEach((a: any) => { const t = a.asset_type || a.common_name || "okänd"; types[t] = (types[t] || 0) + 1; });
       const typeSummary = Object.entries(types).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t, n]) => `${n}× ${t}`).join(", ");
 
       if (intent.wantsViewer) {
-        // User explicitly wants viewer action
         let entityIds: string[] = [];
         try {
           const { data: entities } = await supabase.rpc("get_viewer_entities", { asset_ids: assetIds });
@@ -682,17 +681,20 @@ async function executeFastPath(supabase: any, intent: { type: string; params: Re
         } catch (_) {}
         return {
           message: `Hittade **${assetList.length}** ${intent.params.system}-objekt i ${buildingName}: ${typeSummary}.${entityIds.length > 0 ? ` Markerar ${entityIds.length} i viewern.` : ""}`,
+          response_type: "action",
           action: entityIds.length > 0 ? "highlight" : "list",
+          buttons: ["Filtrera per våning", "Visa detaljer", "Byggnadsöversikt"],
           asset_ids: assetIds.slice(0, 50), external_entity_ids: entityIds,
           filters: { system: intent.params.system },
-          suggestions: [`Hur många rum har ${intent.params.system}?`, `Byggnadsöversikt`, `Sök annan utrustning`],
+          suggestions: [`Hur många rum har ${intent.params.system}?`, `Visa annan utrustning`],
         };
       }
-      // Chat-first: just answer the question
       return {
         message: `Det finns **${assetList.length}** ${intent.params.system}-objekt i ${buildingName}.\n\nFördelning: ${typeSummary}.`,
-        action: "none", asset_ids: assetIds.slice(0, 50), external_entity_ids: [], filters: {},
-        suggestions: [`Markera ${intent.params.system} i viewern`, `Vilka rum har ${intent.params.system}?`, `Byggnadsöversikt`],
+        response_type: "data_query",
+        action: "none", buttons: [`Visa ${intent.params.system} i modell`, "Filtrera per våning", "Byggnadsöversikt"],
+        asset_ids: assetIds.slice(0, 50), external_entity_ids: [], filters: {},
+        suggestions: [`Vilka rum har ${intent.params.system}?`, `Visa annan utrustning`],
       };
     }
     case "room_assets": {
@@ -702,8 +704,10 @@ async function executeFastPath(supabase: any, intent: { type: string; params: Re
       if (assetList.length === 0) {
         return {
           message: `Inga tillgångar registrerade i ${roomName}.`,
-          action: "none", asset_ids: [], external_entity_ids: [], filters: {},
-          suggestions: [`Visa ventilation i ${buildingName}`, `Byggnadsöversikt`, `Sök efter utrustning`],
+          response_type: "data_query",
+          action: "none", buttons: ["Visa ventilation", "Byggnadsöversikt", "Sök utrustning"],
+          asset_ids: [], external_entity_ids: [], filters: {},
+          suggestions: [`Visa ${buildingName} istället`, `Finns det objekt på denna våning?`],
         };
       }
       const assetIds = assetList.map((a: any) => a.fm_guid);
@@ -719,24 +723,31 @@ async function executeFastPath(supabase: any, intent: { type: string; params: Re
         } catch (_) {}
         return {
           message: `**${assetList.length}** objekt i ${roomName}: ${catSummary}.${entityIds.length > 0 ? ` Markerar ${entityIds.length} i viewern.` : ""}`,
+          response_type: "action",
           action: entityIds.length > 0 ? "highlight" : "list",
+          buttons: ["Visa ventilation i rummet", "Visa detaljer", "Byggnadsöversikt"],
           asset_ids: assetIds.slice(0, 50), external_entity_ids: entityIds,
           filters: { room: intent.params.room_guid },
-          suggestions: [`Visa ventilation i ${roomName}`, `Byggnadsöversikt`, `Visa alla rum`],
+          suggestions: [`Visa ventilation i ${roomName}`, `Visa alla rum`],
         };
       }
       return {
         message: `I ${roomName} finns **${assetList.length}** objekt: ${catSummary}.`,
-        action: "none", asset_ids: assetIds.slice(0, 50), external_entity_ids: [], filters: {},
-        suggestions: [`Markera objekten i viewern`, `Visa ventilation i ${roomName}`, `Byggnadsöversikt`],
+        response_type: "data_query",
+        action: "none", buttons: ["Visa i modell", "Filtrera per typ", "Byggnadsöversikt"],
+        asset_ids: assetIds.slice(0, 50), external_entity_ids: [], filters: {},
+        suggestions: [`Markera objekten i viewern`, `Visa ventilation i ${roomName}`],
       };
     }
     case "building_summary": {
       const summary = await execBuildingSummary(supabase, { fm_guid: intent.params.fm_guid });
+      const topTypes = summary.top_asset_types?.slice(0, 3).map((t: any) => t.type).join(", ") || "";
       return {
         message: `**${summary.building_name}**\n\n• ${summary.floors_count} våningar, ${summary.rooms} rum, ${summary.assets} tillgångar\n• Total yta: ${summary.total_space_area_m2} m²\n• ${summary.total_issues} ärenden${summary.total_issues > 0 ? ` (${Object.entries(summary.issues_by_status).map(([s, n]) => `${n} ${s}`).join(", ")})` : ""}`,
-        action: "none", asset_ids: [], external_entity_ids: [], filters: {},
-        suggestions: [`Visa ventilation`, `Visa alla rum`, `Visa öppna ärenden`],
+        response_type: "answer",
+        action: "none", buttons: ["Visa ventilation", "Visa alla rum", "Visa öppna ärenden"],
+        asset_ids: [], external_entity_ids: [], filters: {},
+        suggestions: [`Vilka system finns?`, `Visa våningar`, topTypes ? `Berätta om ${topTypes}` : `Sök utrustning`],
       };
     }
     default:
