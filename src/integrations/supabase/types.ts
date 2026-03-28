@@ -2154,6 +2154,15 @@ export type Database = {
         Args: { sensor_ids: string[] }
         Returns: Json
       }
+      get_room_sensor_data: {
+        Args: {
+          p_building_guid: string
+          p_floor_guid?: string
+          p_metric?: string
+          p_sort_order?: string
+        }
+        Returns: Json
+      }
       get_sensors_in_room: {
         Args: { room_guid: string; sensor_type: string }
         Returns: Json
