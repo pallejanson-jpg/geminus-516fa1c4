@@ -1558,11 +1558,10 @@ function detectViewerIntent(messages: any[], context: any): ButtonActionIntent |
   const countIntent = detectCountOrListQuestion(text, buildingGuid);
   if (countIntent) return countIntent;
 
-  // 2) IoT/sensor questions — route to live data (but NOT ranking/complex questions)
+  // 2) IoT/sensor questions — route to live data (ranking questions included now via DB fallback)
   if (buildingGuid) {
-    const isRankingQuestion = /\b(högst|lägst|highest|lowest|bäst|sämst|mest|minst|vilka rum|which rooms|topp|top|worst|best|varmast|kallast|warmest|coldest|jämför|compare)\b/i.test(text);
-    const iotMatch = text.match(/\b(temperatur|temperature|temp|co2|koldioxid|fuktighet|humidity|luftkvalitet|air quality|inomhusklimat|indoor climate|beläggning|occupancy|sensordata|sensor data|hur varmt|how warm|hur kallt|how cold)\b/i);
-    if (iotMatch && !isRankingQuestion) {
+    const iotMatch = text.match(/\b(temperatur|temperature|temp|co2|koldioxid|fuktighet|humidity|luftkvalitet|air quality|inomhusklimat|indoor climate|beläggning|occupancy|sensordata|sensor data|hur varmt|how warm|hur kallt|how cold|varmast|kallast|warmest|coldest)\b/i);
+    if (iotMatch) {
       return { action: "iot_query", payload: { sensor_type: "all" } };
     }
   }
