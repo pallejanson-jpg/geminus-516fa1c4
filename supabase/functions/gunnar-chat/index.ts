@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyAuth, unauthorizedResponse, corsHeaders } from "../_shared/auth.ts";
+import { getSenslincCredentials } from "../_shared/credentials.ts";
 
 const MAX_TOOL_ROUNDS = 3;
 const AI_MODEL_PRIMARY = "google/gemini-3-flash-preview";
@@ -178,6 +179,23 @@ const tools = [
       },
     },
   },
+  // ── Live IoT sensor data (via Senslinc) ──
+  {
+    type: "function",
+    function: {
+      name: "get_live_sensor_data",
+      description: "Get LIVE IoT sensor readings (temperature, CO2, humidity, occupancy, light) for the current building or a specific room. Data comes from the Senslinc/InUse platform. Use when user asks about temperature, air quality, indoor climate, CO2, humidity, occupancy.",
+      parameters: {
+        type: "object",
+        properties: {
+          building_guid: { type: "string", description: "Building fm_guid (required)" },
+          room_fm_guids: { type: "array", items: { type: "string" }, description: "Optional: specific room fm_guids to query. If omitted, returns building-level overview." },
+        },
+        required: ["building_guid"],
+        additionalProperties: false,
+      },
+    },
+  },
   // ── Final structured response tool ──
   {
     type: "function",
@@ -314,6 +332,8 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
       if (error) throw error;
       return data || [];
     }
+    case "get_live_sensor_data":
+      return execLiveSensorData(supabase, args);
     case "format_response": {
       // Auto-resolve viewer entities from asset_ids if external_entity_ids not provided
       if (args.asset_ids?.length && (!args.external_entity_ids || args.external_entity_ids.length === 0)) {
@@ -461,6 +481,101 @@ async function execBuildingSummary(supabase: any, args: any) {
     total_issues: (issues.data || []).length,
     top_asset_types: topAssetTypes,
   };
+}
+
+/* ── Live IoT sensor data via Senslinc ── */
+
+async function execLiveSensorData(supabase: any, args: any) {
+  const buildingGuid = args.building_guid;
+  if (!buildingGuid) return { error: "building_guid required" };
+
+  try {
+    // Get Senslinc credentials for this building
+    const creds = await getSenslincCredentials(supabase, buildingGuid);
+    if (!creds.apiUrl || !creds.email || !creds.password) {
+      return { error: "No Senslinc/InUse credentials configured for this building", available: false };
+    }
+
+    const roomGuids = args.room_fm_guids as string[] | undefined;
+
+    if (roomGuids?.length) {
+      // Fetch data for specific rooms
+      const results: any[] = [];
+      for (const roomGuid of roomGuids.slice(0, 10)) {
+        try {
+          const { data, error } = await supabase.functions.invoke('senslinc-query', {
+            body: { action: 'get-machine-data', fmGuid: roomGuid, buildingFmGuid: buildingGuid, days: 1 },
+          });
+          if (data?.success && data.data?.machine) {
+            const m = data.data.machine;
+            const latest = m.latest_values || (Array.isArray(data.data.machineData) && data.data.machineData.length > 0 ? data.data.machineData[data.data.machineData.length - 1] : null);
+            results.push({
+              room_fm_guid: roomGuid,
+              machine_name: m.name || m.label || roomGuid,
+              temperature: latest?.temperature_mean ?? latest?.temperature ?? null,
+              co2: latest?.co2_mean ?? latest?.co2 ?? null,
+              humidity: latest?.humidity_mean ?? latest?.humidity ?? null,
+              occupancy: latest?.occupation_mean ?? latest?.occupancy ?? latest?.occupation ?? null,
+              light: latest?.light_mean ?? latest?.light ?? null,
+              dashboard_url: data.data.dashboardUrl || '',
+            });
+          }
+        } catch (e) {
+          console.warn(`[LiveSensor] Failed for room ${roomGuid}:`, e);
+        }
+      }
+      return {
+        available: true,
+        source: "Senslinc/InUse (live)",
+        rooms: results,
+        room_count: results.length,
+      };
+    } else {
+      // Building-level: get all machines for the site
+      const { data, error } = await supabase.functions.invoke('senslinc-query', {
+        body: { action: 'get-building-sensor-data', fmGuid: buildingGuid },
+      });
+
+      if (data?.success && data.data) {
+        const machines = data.data.machines || [];
+        const summary = {
+          site_name: data.data.site?.name || '',
+          dashboard_url: data.data.site?.dashboard_url || '',
+          machine_count: machines.length,
+          machines: machines.slice(0, 20).map((m: any) => ({
+            name: m.name || m.code,
+            code: m.code,
+            temperature: m.latest_values?.temperature_mean ?? m.latest_values?.temperature ?? null,
+            co2: m.latest_values?.co2_mean ?? m.latest_values?.co2 ?? null,
+            humidity: m.latest_values?.humidity_mean ?? m.latest_values?.humidity ?? null,
+            occupancy: m.latest_values?.occupation_mean ?? m.latest_values?.occupancy ?? null,
+            dashboard_url: m.dashboard_url || '',
+          })),
+        };
+
+        // Calculate averages
+        const temps = summary.machines.map((m: any) => m.temperature).filter((v: any) => v !== null);
+        const co2s = summary.machines.map((m: any) => m.co2).filter((v: any) => v !== null);
+        const hums = summary.machines.map((m: any) => m.humidity).filter((v: any) => v !== null);
+
+        return {
+          available: true,
+          source: "Senslinc/InUse (live)",
+          ...summary,
+          averages: {
+            temperature: temps.length > 0 ? Math.round((temps.reduce((a: number, b: number) => a + b, 0) / temps.length) * 10) / 10 : null,
+            co2: co2s.length > 0 ? Math.round(co2s.reduce((a: number, b: number) => a + b, 0) / co2s.length) : null,
+            humidity: hums.length > 0 ? Math.round((hums.reduce((a: number, b: number) => a + b, 0) / hums.length) * 10) / 10 : null,
+          },
+        };
+      }
+
+      return { available: false, error: data?.error || "No sensor data available for this building" };
+    }
+  } catch (err: any) {
+    console.error("[LiveSensor] Error:", err);
+    return { available: false, error: err.message || "Failed to fetch live sensor data" };
+  }
 }
 
 /* ── Adaptive Memory ── */
@@ -1080,6 +1195,85 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
       };
     }
 
+    case "iot_query": {
+      if (!buildingGuid) {
+        return {
+          message: "Ingen byggnad är vald. Välj en byggnad först.",
+          response_type: "answer", action: "none",
+          buttons: makeButtons([{ label: "Visa alla byggnader", action: "list_buildings" }]),
+          asset_ids: [], external_entity_ids: [], filters: {},
+          suggestions: ["Vilka byggnader finns?"],
+        };
+      }
+      const sensorType = intent.payload.sensor_type || "all";
+      const roomGuids = intent.payload.room_guid ? [intent.payload.room_guid] : undefined;
+      const sensorResult = await execLiveSensorData(supabase, { building_guid: buildingGuid, room_fm_guids: roomGuids });
+
+      if (!sensorResult.available) {
+        return {
+          message: `Inga live-sensordata tillgängliga för ${buildingName}. Senslinc/InUse är inte konfigurerat för denna byggnad.`,
+          response_type: "answer", action: "none",
+          buttons: makeButtons([{ label: "Byggnadsöversikt", action: "building_summary" }]),
+          asset_ids: [], external_entity_ids: [], filters: {},
+          suggestions: ["Visa alla rum", "Byggnadsöversikt"],
+        };
+      }
+
+      // Build response based on available data
+      let message = "";
+      const sensorData: any[] = [];
+      const colorMap: Record<string, [number, number, number]> = {};
+
+      if (sensorResult.rooms?.length) {
+        // Room-specific data
+        const room = sensorResult.rooms[0];
+        const parts: string[] = [];
+        if (room.temperature !== null) parts.push(`🌡️ ${room.temperature.toFixed(1)}°C`);
+        if (room.co2 !== null) parts.push(`💨 CO₂: ${Math.round(room.co2)} ppm`);
+        if (room.humidity !== null) parts.push(`💧 ${room.humidity.toFixed(1)}% RH`);
+        if (room.occupancy !== null) parts.push(`👥 ${Math.round(room.occupancy)}% beläggning`);
+        message = `**Live sensordata** för ${room.machine_name}:\n${parts.join(" · ")}`;
+      } else if (sensorResult.averages) {
+        // Building-level averages
+        const avg = sensorResult.averages;
+        const parts: string[] = [];
+        if (avg.temperature !== null) parts.push(`🌡️ Medeltemp: ${avg.temperature}°C`);
+        if (avg.co2 !== null) parts.push(`💨 CO₂: ${avg.co2} ppm`);
+        if (avg.humidity !== null) parts.push(`💧 Fuktighet: ${avg.humidity}%`);
+        message = `**Live sensordata** för ${buildingName} (${sensorResult.machine_count} sensorer):\n${parts.join(" · ")}`;
+
+        // Build color map for temperature visualization
+        if (sensorType === "all" || sensorType === "temperature") {
+          for (const m of sensorResult.machines || []) {
+            if (m.temperature !== null && m.code) {
+              const t = m.temperature;
+              // Green (20-22), Yellow (22-24), Orange (24-26), Red (>26), Blue (<18)
+              let color: [number, number, number] = [0, 200, 0];
+              if (t < 18) color = [0, 100, 255];
+              else if (t < 20) color = [100, 200, 255];
+              else if (t > 26) color = [255, 50, 50];
+              else if (t > 24) color = [255, 150, 0];
+              else if (t > 22) color = [255, 220, 0];
+              colorMap[m.code] = color;
+            }
+          }
+        }
+      }
+
+      return {
+        message,
+        response_type: "data_query", action: Object.keys(colorMap).length > 0 ? "colorize" : "none",
+        buttons: makeButtons([
+          { label: "Byggnadsöversikt", action: "building_summary" },
+          { label: "Visa alla rum", action: "category_query", payload: { category: "Space" } },
+        ]),
+        asset_ids: [], external_entity_ids: [], filters: {},
+        suggestions: ["Visa temperatur i modell", "Vilka rum har hög CO2?", "Visa luftkvalitet"],
+        sensor_data: sensorData.length > 0 ? sensorData : undefined,
+        color_map: Object.keys(colorMap).length > 0 ? colorMap : undefined,
+      };
+    }
+
     default:
       return null;
   }
@@ -1110,6 +1304,18 @@ const KNOWN_SYSTEMS: Record<string, string> = {
   "rör": "IfcPipeSegment", "pipes": "IfcPipeSegment",
   "ventiler": "IfcValve", "ventil": "IfcValve", "valves": "IfcValve",
 };
+
+// IoT / sensor keywords that should trigger live sensor data lookup
+const IOT_KEYWORDS = new Set([
+  "temperatur", "temperature", "temp",
+  "co2", "koldioxid", "carbon dioxide",
+  "fuktighet", "humidity", "fukt",
+  "luftkvalitet", "air quality", "inomhusklimat", "indoor climate",
+  "beläggning", "occupancy", "beläggninsgrad",
+  "sensorer", "sensors", "iot", "sensordata", "sensor data",
+  "ljus", "light", "belysning",
+  "hur varmt", "how warm", "hur kallt", "how cold",
+]);
 
 /** Detect short input: bare building name, object type, or system name */
 function detectShortInput(messages: any[], context: any): ButtonActionIntent | null {
@@ -1223,6 +1429,14 @@ function detectViewerIntent(messages: any[], context: any): ButtonActionIntent |
   // 1) Count/list questions get priority (prevents broad regex from catching them)
   const countIntent = detectCountOrListQuestion(text, buildingGuid);
   if (countIntent) return countIntent;
+
+  // 2) IoT/sensor questions — route to live data
+  if (buildingGuid) {
+    const iotMatch = text.match(/\b(temperatur|temperature|temp|co2|koldioxid|fuktighet|humidity|luftkvalitet|air quality|inomhusklimat|indoor climate|beläggning|occupancy|sensordata|sensor data|hur varmt|how warm|hur kallt|how cold)\b/i);
+    if (iotMatch) {
+      return { action: "iot_query", payload: { sensor_type: "all" } };
+    }
+  }
 
   // Detect if user explicitly wants viewer action
   const viewerKeywords = /(visa\s+i\s+(viewern|3d)|markera|highlight|show\s+in\s+(viewer|3d)|färglägg|colorize)/i;
@@ -1395,6 +1609,11 @@ TOOL CALLING FLOW:
 - Round 2 (if needed): call ONE more data tool OR format_response.
 - Round 3: format_response is forced — always produce a structured answer.
 - PREFER calling just ONE data tool then format_response (2 rounds total).
+
+IoT / SENSOR DATA:
+- Use get_live_sensor_data when user asks about temperature, CO2, humidity, air quality, occupancy, or indoor climate.
+- This fetches LIVE data from Senslinc/InUse — not from the assets database.
+- If get_live_sensor_data returns available=false, tell user that live sensors are not configured for this building.
 
 CRITICAL RULES:
 1. NEVER write stop-answers like "Jag kunde inte slutföra sökningen". If data is missing, interpret and suggest alternatives.
