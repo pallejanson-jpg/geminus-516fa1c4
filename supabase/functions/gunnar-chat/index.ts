@@ -860,6 +860,26 @@ serve(async (req) => {
       });
     }
 
+    // ── FAST-PATH: detect viewer intents (system/room/overview) ──
+    const viewerIntent = detectViewerIntent(messages, context);
+    if (viewerIntent) {
+      try {
+        const fastResult = await executeFastPath(supabase, viewerIntent, context);
+        if (fastResult) {
+          console.log(`Fast-path viewer intent: ${viewerIntent.type} (${Date.now() - startTime}ms)`);
+          const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
+          saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, [...userMsgs, { role: "assistant", content: fastResult.message }]).catch(e =>
+            console.error("Failed to save conversation:", e)
+          );
+          return new Response(JSON.stringify(fastResult), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } catch (e) {
+        console.error("Fast-path viewer intent failed, falling back to AI:", e);
+      }
+    }
+
     // ── Full tool-calling loop ──
     let systemPrompt = await buildSystemPrompt(supabase, context, userProfile, previousConversation);
     if (userMemories) systemPrompt += userMemories;
