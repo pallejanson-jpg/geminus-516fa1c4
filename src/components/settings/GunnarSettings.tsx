@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Sparkles, RotateCcw, Eye, MapPin, Languages, Volume2 } from 'lucide-react';
+import { Sparkles, RotateCcw, Eye, MapPin, Languages, Volume2, Gauge } from 'lucide-react';
+import { Slider } from '@/components/ui/slider';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -15,6 +16,8 @@ export interface GunnarSettingsData {
   speechLang: 'sv-SE' | 'en-US';
   /** ElevenLabs voice ID */
   voiceName: string | null;
+  /** Speech rate 0.5–2.0 (default 1.0) */
+  speechRate: number;
 }
 
 /** Preset ElevenLabs voices */
@@ -32,6 +35,7 @@ const DEFAULT_SETTINGS: GunnarSettingsData = {
   buttonPosition: null,
   speechLang: 'sv-SE',
   voiceName: null,
+  speechRate: 1.0,
 };
 
 export function getGunnarSettings(): GunnarSettingsData {
@@ -94,6 +98,12 @@ const GunnarSettings: React.FC = () => {
     saveGunnarSettings({ voiceName });
   };
 
+  const handleSpeechRateChange = (value: number[]) => {
+    const speechRate = value[0];
+    setSettings(prev => ({ ...prev, speechRate }));
+    saveGunnarSettings({ speechRate });
+  };
+
   const [isTesting, setIsTesting] = useState(false);
   const testAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -117,7 +127,7 @@ const GunnarSettings: React.FC = () => {
       }
       const utterance = new SpeechSynthesisUtterance(testText);
       utterance.lang = settings.speechLang || 'sv-SE';
-      utterance.rate = 1;
+      utterance.rate = settings.speechRate ?? 1;
       utterance.pitch = 1;
       utterance.onend = () => setIsTesting(false);
       utterance.onerror = () => setIsTesting(false);
@@ -127,7 +137,7 @@ const GunnarSettings: React.FC = () => {
       console.error('Test voice error:', e);
       setIsTesting(false);
     }
-  }, [settings.speechLang, settings.voiceName, isTesting]);
+  }, [settings.speechLang, settings.voiceName, settings.speechRate, isTesting]);
 
   return (
     <div className="space-y-4">
@@ -225,6 +235,24 @@ const GunnarSettings: React.FC = () => {
                 High-quality ElevenLabs voices (multilingual)
               </p>
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Talhastighet</Label>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground w-8">Lång</span>
+                <Slider
+                  value={[settings.speechRate]}
+                  onValueChange={handleSpeechRateChange}
+                  min={0.5}
+                  max={2.0}
+                  step={0.1}
+                  className="flex-1"
+                />
+                <span className="text-xs text-muted-foreground w-8">Snabb</span>
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
+                {settings.speechRate.toFixed(1)}×
+              </p>
+            </div>
             <Button
               variant="outline"
               size="sm"
@@ -233,7 +261,7 @@ const GunnarSettings: React.FC = () => {
               className="gap-1.5 mt-2"
             >
               <Volume2 className="h-3.5 w-3.5" />
-              {isTesting ? 'Playing...' : 'Test voice'}
+              {isTesting ? 'Spelar...' : 'Testa röst'}
             </Button>
           </AccordionContent>
         </AccordionItem>

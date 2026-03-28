@@ -179,9 +179,10 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       return;
     }
 
+    const settings = getGunnarSettings();
     const utterance = new SpeechSynthesisUtterance(cleaned);
-    utterance.lang = 'sv-SE';
-    utterance.rate = 1;
+    utterance.lang = settings.speechLang || 'sv-SE';
+    utterance.rate = settings.speechRate ?? 1;
     utterance.pitch = 1;
     utterance.onstart = () => { setIsSpeaking(true); if (msgIndex !== undefined) setSpeakingIndex(msgIndex); };
     utterance.onend = () => { setIsSpeaking(false); setSpeakingIndex(null); };
