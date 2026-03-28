@@ -179,6 +179,23 @@ const tools = [
       },
     },
   },
+  // ── Live IoT sensor data (via Senslinc) ──
+  {
+    type: "function",
+    function: {
+      name: "get_live_sensor_data",
+      description: "Get LIVE IoT sensor readings (temperature, CO2, humidity, occupancy, light) for the current building or a specific room. Data comes from the Senslinc/InUse platform. Use when user asks about temperature, air quality, indoor climate, CO2, humidity, occupancy.",
+      parameters: {
+        type: "object",
+        properties: {
+          building_guid: { type: "string", description: "Building fm_guid (required)" },
+          room_fm_guids: { type: "array", items: { type: "string" }, description: "Optional: specific room fm_guids to query. If omitted, returns building-level overview." },
+        },
+        required: ["building_guid"],
+        additionalProperties: false,
+      },
+    },
+  },
   // ── Final structured response tool ──
   {
     type: "function",
