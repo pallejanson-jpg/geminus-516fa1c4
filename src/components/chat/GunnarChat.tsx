@@ -13,6 +13,7 @@ import { getGunnarSettings, saveGunnarSettings } from "@/components/settings/Gun
 import { dispatchAiViewerCommand } from "@/hooks/useAiViewerBridge";
 import { AI_SENSOR_DATA_EVENT } from "@/components/viewer/SensorDataOverlay";
 import { preprocessForTTS } from "@/lib/tts-preprocess";
+import { AI_VIEWER_FOCUS_EVENT } from "@/lib/viewer-events";
 
 type Message = {
   role: "user" | "assistant";
@@ -63,6 +64,7 @@ interface AiStructuredResponse {
   }>;
   color_map?: Record<string, [number, number, number]>;
   proactive_insights?: string[];
+  suggestions?: string[];
   error?: string;
 }
 
@@ -82,6 +84,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [proactiveInsights, setProactiveInsights] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
@@ -212,14 +215,17 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       window.dispatchEvent(new CustomEvent(AI_FILTER_SYNC_EVENT, { detail: response.filters }));
     }
 
+    const isViewerAction = response.action === 'highlight' || response.action === 'filter' || response.action === 'colorize';
+
     if (response.action === 'colorize' && response.color_map && Object.keys(response.color_map).length > 0) {
       dispatchAiViewerCommand({ action: 'colorize', colorMap: response.color_map });
-      // Dispatch sensor data to overlay panel
       if (response.sensor_data?.length) {
         window.dispatchEvent(new CustomEvent(AI_SENSOR_DATA_EVENT, { detail: response.sensor_data }));
       }
       const sensorCount = response.sensor_data?.length || Object.keys(response.color_map).length;
       toast.success(`Visar sensordata för ${sensorCount} objekt`);
+      // Dispatch focus event for mobile
+      window.dispatchEvent(new CustomEvent(AI_VIEWER_FOCUS_EVENT));
       return;
     }
 
@@ -236,8 +242,12 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         break;
       case 'list':
       case 'none':
-        // No viewer action
         break;
+    }
+
+    // Dispatch focus event for mobile when viewer action was taken
+    if (isViewerAction) {
+      window.dispatchEvent(new CustomEvent(AI_VIEWER_FOCUS_EVENT));
     }
   }, []);
 
@@ -254,6 +264,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     setInput("");
     setIsLoading(true);
     setProactiveInsights([]);
+    setSuggestions([]);
 
     try {
       const apiMessages = trimHistory(newMessages.filter((_, i) => i > 0));
@@ -262,6 +273,11 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       // Add assistant message
       const assistantContent = response.message || "Inga resultat hittades.";
       setMessages(prev => [...prev, { role: "assistant", content: assistantContent }]);
+
+      // Capture suggestions
+      if (response.suggestions?.length) {
+        setSuggestions(response.suggestions);
+      }
 
       // Execute viewer action
       executeViewerAction(response);
@@ -392,6 +408,22 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
           </div>
           {proactiveInsights.map((insight, i) => (
             <p key={i} className="text-sm text-foreground">{insight}</p>
+          ))}
+        </div>
+      )}
+
+      {/* Suggestion chips */}
+      {suggestions.length > 0 && !isLoading && messages[messages.length - 1]?.role === 'assistant' && (
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          {suggestions.map((s, i) => (
+            <button
+              key={i}
+              type="button"
+              className="rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 active:bg-primary/20 transition-colors"
+              onClick={() => { setSuggestions([]); sendMessage(s); }}
+            >
+              {s}
+            </button>
           ))}
         </div>
       )}

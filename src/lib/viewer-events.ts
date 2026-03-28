@@ -188,3 +188,6 @@ export const INVENTORY_POSITION_PICKED_EVENT = 'INVENTORY_POSITION_PICKED';
 
 /** Event dispatched to request annotation refresh after new asset saved */
 export const ANNOTATION_REFRESH_EVENT = 'ANNOTATION_REFRESH';
+
+/** Event dispatched when AI wants to focus the viewer (e.g. after colorize/highlight on mobile) */
+export const AI_VIEWER_FOCUS_EVENT = 'AI_VIEWER_FOCUS';

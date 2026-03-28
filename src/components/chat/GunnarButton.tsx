@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/comp
 import { useApp } from '@/context/AppContext';
 import GunnarChat from './GunnarChat';
 import { cn } from '@/lib/utils';
-import { VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail } from '@/lib/viewer-events';
+import { VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail, AI_VIEWER_FOCUS_EVENT } from '@/lib/viewer-events';
 import { getGunnarSettings, saveGunnarSettings, GUNNAR_SETTINGS_CHANGED_EVENT, type GunnarSettingsData } from '@/components/settings/GunnarSettings';
 
 const BUTTON_SIZE = 56; // h-14 w-14
@@ -95,6 +95,18 @@ export default function GunnarButton() {
     window.addEventListener('GUNNAR_AUTO_OPEN_VOICE', handler);
     return () => window.removeEventListener('GUNNAR_AUTO_OPEN_VOICE', handler);
   }, []);
+
+  // Auto-minimize on mobile when AI dispatches a viewer action
+  useEffect(() => {
+    if (!isMobile) return;
+    const handler = () => {
+      if (isOpen && !isMinimized) {
+        setIsMinimized(true);
+      }
+    };
+    window.addEventListener(AI_VIEWER_FOCUS_EVENT, handler);
+    return () => window.removeEventListener(AI_VIEWER_FOCUS_EVENT, handler);
+  }, [isMobile, isOpen, isMinimized]);
 
   // Clear viewer context when leaving viewer
   useEffect(() => {
