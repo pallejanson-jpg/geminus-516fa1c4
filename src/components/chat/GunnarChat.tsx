@@ -84,6 +84,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [proactiveInsights, setProactiveInsights] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
