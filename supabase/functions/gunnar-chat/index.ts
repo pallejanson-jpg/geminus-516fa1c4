@@ -878,7 +878,7 @@ ${userCtx}${ctx}${modelsCtx}${memoryCtx}`;
    AI API call helper with fallback
    ───────────────────────────────────────────── */
 
-async function callAI(apiKey: string, messages: any[], options: { stream?: boolean; tools?: any[]; tool_choice?: string; model?: string } = {}) {
+async function callAI(apiKey: string, messages: any[], options: { stream?: boolean; tools?: any[]; tool_choice?: string | object; model?: string } = {}) {
   const model = options.model || AI_MODEL_PRIMARY;
   const body: any = { model, messages, stream: options.stream ?? false };
   if (options.tools) {
