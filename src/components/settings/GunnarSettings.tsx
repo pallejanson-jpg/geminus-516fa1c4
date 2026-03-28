@@ -14,20 +14,20 @@ export interface GunnarSettingsData {
   visible: boolean;
   buttonPosition: { x: number; y: number } | null;
   speechLang: 'sv-SE' | 'en-US';
-  /** ElevenLabs voice ID */
+  /** Deepgram Aura voice model ID */
   voiceName: string | null;
   /** Speech rate 0.5–2.0 (default 1.0) */
   speechRate: number;
 }
 
-/** Preset ElevenLabs voices */
-export const ELEVENLABS_VOICES = [
-  { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel', description: 'Calm & authoritative' },
-  { id: 'Xb7hH8MSUJpSbSDYk0k2', name: 'Alice', description: 'Warm & friendly' },
-  { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', description: 'Soft & articulate' },
-  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', description: 'Clear & professional' },
-  { id: 'JBFqnCBsd6RMkjVDRZzb', name: 'George', description: 'Deep & confident' },
-  { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Liam', description: 'Energetic & engaging' },
+/** Preset Deepgram Aura voices */
+export const DEEPGRAM_VOICES = [
+  { id: 'aura-2-thalia-en', name: 'Thalia', description: 'Varm & balanserad' },
+  { id: 'aura-2-andromeda-en', name: 'Andromeda', description: 'Mjuk & lugn' },
+  { id: 'aura-2-asteria-en', name: 'Asteria', description: 'Klar & tydlig' },
+  { id: 'aura-2-apollo-en', name: 'Apollo', description: 'Självsäker & stadig' },
+  { id: 'aura-2-arcas-en', name: 'Arcas', description: 'Djup & manlig' },
+  { id: 'aura-2-athena-en', name: 'Athena', description: 'Professionell & vänlig' },
 ] as const;
 
 const DEFAULT_SETTINGS: GunnarSettingsData = {
