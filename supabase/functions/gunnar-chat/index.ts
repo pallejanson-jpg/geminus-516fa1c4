@@ -394,31 +394,68 @@ async function execListBuildings(supabase: any, args: any) {
 
 async function execBuildingSummary(supabase: any, args: any) {
   const fmGuid = args.fm_guid;
-  const [assets, issues, buildingRow, floors] = await Promise.all([
-    supabase.from("assets").select("category, gross_area, asset_type").eq("building_fm_guid", fmGuid),
+
+  // Use COUNT queries to avoid Supabase default 1000-row limit
+  const [
+    spaceCount, instanceCount, storeyCount, doorCount,
+    issues, buildingRow, floors, topAssetTypesResult, areaResult,
+  ] = await Promise.all([
+    supabase.from("assets").select("id", { count: "exact", head: true }).eq("building_fm_guid", fmGuid).eq("category", "Space"),
+    supabase.from("assets").select("id", { count: "exact", head: true }).eq("building_fm_guid", fmGuid).eq("category", "Instance"),
+    supabase.from("assets").select("id", { count: "exact", head: true }).eq("building_fm_guid", fmGuid).eq("category", "Building Storey"),
+    supabase.from("assets").select("id", { count: "exact", head: true }).eq("building_fm_guid", fmGuid).eq("category", "Door"),
     supabase.from("bcf_issues").select("status, priority").eq("building_fm_guid", fmGuid),
     supabase.from("assets").select("common_name, name, gross_area, attributes").eq("fm_guid", fmGuid).maybeSingle(),
     supabase.from("assets").select("fm_guid, common_name, name").eq("building_fm_guid", fmGuid).eq("category", "Building Storey").order("name"),
+    // Get top asset_types via a sample of instances
+    supabase.from("assets").select("asset_type").eq("building_fm_guid", fmGuid).eq("category", "Instance").limit(1000),
+    // Get spaces with attributes for area extraction
+    supabase.from("assets").select("gross_area, attributes").eq("building_fm_guid", fmGuid).eq("category", "Space").limit(1000),
   ]);
-  const cats: Record<string, number> = {};
-  const assetTypes: Record<string, number> = {};
+
+  // Calculate total area from attributes (NTA) or gross_area
   let totalArea = 0;
-  (assets.data || []).forEach((a: any) => {
-    cats[a.category] = (cats[a.category] || 0) + 1;
-    if (a.category === "Space" && a.gross_area) totalArea += Number(a.gross_area);
-    if (a.category === "Instance" && a.asset_type) assetTypes[a.asset_type] = (assetTypes[a.asset_type] || 0) + 1;
+  (areaResult.data || []).forEach((a: any) => {
+    // 1. gross_area column
+    if (a.gross_area && Number(a.gross_area) > 0) { totalArea += Number(a.gross_area); return; }
+    // 2. NTA attribute (key starts with 'nta', value is {value: N} or direct number)
+    if (a.attributes && typeof a.attributes === 'object') {
+      for (const key of Object.keys(a.attributes)) {
+        if (key.toLowerCase().startsWith('nta')) {
+          const ntaVal = a.attributes[key];
+          if (ntaVal && typeof ntaVal === 'object' && typeof ntaVal.value === 'number') {
+            totalArea += ntaVal.value; return;
+          }
+          const num = Number(ntaVal);
+          if (num > 0) { totalArea += num; return; }
+        }
+      }
+    }
   });
+
+  // Count asset types
+  const assetTypes: Record<string, number> = {};
+  (topAssetTypesResult.data || []).forEach((a: any) => {
+    if (a.asset_type) assetTypes[a.asset_type] = (assetTypes[a.asset_type] || 0) + 1;
+  });
+
   const issuesByStatus: Record<string, number> = {};
   (issues.data || []).forEach((i: any) => { issuesByStatus[i.status] = (issuesByStatus[i.status] || 0) + 1; });
   const topAssetTypes = Object.entries(assetTypes).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([type, count]) => ({ type, count }));
+
+  const rooms = spaceCount.count ?? 0;
+  const assets = instanceCount.count ?? 0;
+  const floorsCount = storeyCount.count ?? 0;
+  const doors = doorCount.count ?? 0;
+
   return {
     building_name: buildingRow.data?.common_name || buildingRow.data?.name || fmGuid,
     building_fm_guid: fmGuid,
-    floors_count: cats["Building Storey"] || 0,
+    floors_count: floorsCount,
     floors: (floors.data || []).map((f: any) => ({ fm_guid: f.fm_guid, name: f.common_name || f.name })),
-    rooms: cats["Space"] || 0,
-    assets: cats["Instance"] || 0,
-    doors: cats["Door"] || 0,
+    rooms,
+    assets,
+    doors,
     total_space_area_m2: Math.round(totalArea * 100) / 100,
     issues_by_status: issuesByStatus,
     total_issues: (issues.data || []).length,
@@ -749,12 +786,20 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
           suggestions: ["Vilka byggnader finns?"],
         };
       }
-      const { data: assets } = await supabase.rpc("get_assets_by_category", { cat: category, building_guid: buildingGuid });
-      const assetList = assets || [];
-      const assetIds = assetList.map((a: any) => a.fm_guid);
-      const categoryLabel = category === "Space" ? "rum" : category === "Instance" ? "tillgångar" : category === "Door" ? "dörrar" : category;
 
-      if (assetList.length === 0) {
+      // Use COUNT query for accurate total (RPC has LIMIT 200)
+      const [countResult, rpcResult] = await Promise.all([
+        supabase.from("assets").select("id", { count: "exact", head: true })
+          .eq("building_fm_guid", buildingGuid).eq("category", category),
+        supabase.rpc("get_assets_by_category", { cat: category, building_guid: buildingGuid }),
+      ]);
+
+      const totalCount = countResult.count ?? 0;
+      const assetList = rpcResult.data || [];
+      const assetIds = assetList.map((a: any) => a.fm_guid);
+      const categoryLabel = category === "Space" ? "rum" : category === "Instance" ? "tillgångar" : category === "Door" ? "dörrar" : category === "Building Storey" ? "våningar" : category;
+
+      if (totalCount === 0) {
         return {
           message: `Inga ${categoryLabel} hittades i ${buildingName}.`,
           response_type: "data_query", action: "none",
@@ -773,11 +818,11 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         const types: Record<string, number> = {};
         assetList.forEach((a: any) => { const t = a.asset_type || "okänd"; types[t] = (types[t] || 0) + 1; });
         const topTypes = Object.entries(types).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t, n]) => `${n}× ${t}`).join(", ");
-        summary = `\n\nFördelning: ${topTypes}`;
+        summary = `\n\nFördelning (topp): ${topTypes}`;
       }
 
       return {
-        message: `Det finns **${assetList.length}** ${categoryLabel} i ${buildingName}.${summary}`,
+        message: `Det finns **${totalCount}** ${categoryLabel} i ${buildingName}.${summary}`,
         response_type: "data_query", action: "none",
         buttons: makeButtons([
           { label: `Visa ${categoryLabel} i modell`, action: "viewer_highlight", payload: { category } },
