@@ -790,6 +790,33 @@ async function callAI(apiKey: string, messages: any[], options: { stream?: boole
   return resp;
 }
 
+/** Generate fallback suggestions when AI doesn't provide them */
+function generateFallbackSuggestions(result: any, context: any): string[] {
+  const buildingName = context?.currentBuilding?.name;
+  const hasAssets = result?.asset_ids?.length > 0;
+  const action = result?.action || "none";
+
+  if (action === "highlight" || action === "filter") {
+    return [
+      buildingName ? `Byggnadsöversikt för ${buildingName}` : "Byggnadsöversikt",
+      "Visa ventilation",
+      "Sök efter utrustning",
+    ];
+  }
+  if (action === "colorize") {
+    return [
+      "Visa temperatur i fler rum",
+      "Byggnadsöversikt",
+      "Visa alla sensorer",
+    ];
+  }
+  return [
+    buildingName ? `Visa ventilation i ${buildingName}` : "Visa ventilation",
+    "Byggnadsöversikt",
+    "Sök utrustning",
+  ];
+}
+
 /* ─────────────────────────────────────────────
    Main handler
    ───────────────────────────────────────────── */
