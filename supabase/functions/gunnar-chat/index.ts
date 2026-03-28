@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyAuth, unauthorizedResponse, corsHeaders } from "../_shared/auth.ts";
 
-const MAX_TOOL_ROUNDS = 2;
+const MAX_TOOL_ROUNDS = 3;
 const AI_MODEL_PRIMARY = "google/gemini-3-flash-preview";
 const AI_MODEL_FALLBACK = "google/gemini-2.5-flash-lite";
 const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
