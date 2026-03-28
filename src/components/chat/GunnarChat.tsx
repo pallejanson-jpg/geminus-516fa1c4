@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import ReactMarkdown from "react-markdown";
-import { useWebSpeechRecognition } from "@/hooks/useWebSpeechRecognition";
+import { useDeepgramSpeechRecognition as useWebSpeechRecognition } from "@/hooks/useDeepgramSpeechRecognition";
 import { getGunnarSettings, saveGunnarSettings } from "@/components/settings/GunnarSettings";
 import { dispatchAiViewerCommand } from "@/hooks/useAiViewerBridge";
 import { AI_SENSOR_DATA_EVENT } from "@/components/viewer/SensorDataOverlay";

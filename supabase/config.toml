@@ -101,3 +101,9 @@ verify_jwt = false
 
 [functions.get-streetview-key]
 verify_jwt = false
+
+[functions.deepgram-token]
+verify_jwt = false
+
+[functions.transcribe-audio]
+verify_jwt = false
