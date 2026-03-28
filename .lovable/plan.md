@@ -1,64 +1,59 @@
 
 
-## Plan: Fixa Geminus AI — Naturliga frågor tolkas fel av intent-routern
+## Problem
 
-### Vad som går fel
+Gunnar AI cannot answer sensor/temperature questions (e.g. "Vilket rum har högst temperatur?", "Genomsnittstemperatur i byggnaden?") because:
 
-**Rotorsaken**: `detectViewerIntent()` (rad 1133) har ett regex som fångar ALLT efter "hur många", "visa", "vilka", "finns det" som ett enda "system"-sökord:
+1. **The fast-path `iot_query`** calls `execLiveSensorData` which relies on Senslinc API `latest_values` — these are often null
+2. **Ranking/complex questions** (e.g. "vilka rum har högst temp") are excluded from fast-path and sent to the AI loop, but the AI loop's `get_live_sensor_data` tool has the same problem
+3. **Sensor data already exists in the database** as attributes on Space assets (`sensorTemperature`, `sensorCO2`, `sensorHumidity`, `sensorOccupancy`) — the same data used for room color visualization — but Gunnar never queries it
+
+## Solution
+
+Add a new tool and database RPC that lets Gunnar query sensor attributes directly from the `assets` table, with sorting/filtering/aggregation built in. This is the same data source the visualization panel uses.
+
+### 1. New database function: `get_room_sensor_data`
+
+Create an RPC function that:
+- Selects all Space assets for a building (or filtered by floor)
+- Extracts sensor values from the `attributes` JSONB column (keys: `sensorTemperature`, `sensorCO2`, `sensorHumidity`, `sensorOccupancy`, `Sensor Temperature`, etc.)
+- Returns: `fm_guid`, `common_name`, `name`, `level_fm_guid`, `temperature`, `co2`, `humidity`, `occupancy`
+- Ordered by a requested metric (for ranking questions)
+- Limited to 200 rows
+
+### 2. New tool in `gunnar-chat`: `get_room_sensor_data`
+
+Add a tool definition that the AI can call:
+- Parameters: `building_guid` (required), `floor_guid` (optional), `metric` (optional: temperature/co2/humidity/occupancy), `order` (optional: asc/desc)
+- Executes the RPC function
+- Returns structured data with averages, highest/lowest, and per-room values
+
+### 3. Update `execLiveSensorData` fallback
+
+When Senslinc API returns no data (`available: false`), fall back to the database RPC to get cached sensor attributes from spaces.
+
+### 4. Update fast-path IoT routing
+
+Remove the `isRankingQuestion` exclusion — ranking questions like "vilka rum har högst temperatur" should also go through the fast-path `iot_query`, which will now handle them via the database fallback.
+
+### 5. Update system prompt
+
+Add instruction: "For sensor/temperature/CO2/humidity questions, use `get_room_sensor_data` to query cached sensor attributes from rooms. Use `get_live_sensor_data` only when you need real-time data from the Senslinc platform."
+
+### Technical details
 
 ```text
-Fråga: "Hur många rum har Smedvig?"
-Regex matchar: group2 = "rum har smedvig?"
-→ system_query(system="rum har smedvig?")
-→ Inga resultat
+Data flow:
+  User question → fast-path iot_query OR AI loop
+    → Try get_live_sensor_data (Senslinc API)
+    → If unavailable, fall back to get_room_sensor_data (DB attributes)
+    → Build response with averages, rankings, per-room data
 ```
 
-Samma problem uppstår för:
-- "Hur många tillgångar finns?" → system_query("tillgångar finns?")
-- "Vilka rum finns i Smedvig?" → system_query("rum finns i smedvig?")
-- "Finns det ventilation i byggnaden?" → system_query("ventilation i byggnaden?")
+**Database RPC** extracts values using JSONB operators, handling key variants like `sensorTemperature`, `Sensor Temperature`, `temperature`, etc. — mirroring the `extractSensorValue` logic from `visualization-utils.ts`.
 
-**Dessa frågor borde gå till AI-loopen** (som har `get_building_summary` och `get_assets_by_category`), men fast-pathen fångar dem felaktigt och ger nonsens.
+### Files to change
 
-### Dessutom: `detectShortInput` (rad 1071) har `wordCount > 4` → alla normala meningar exkluderas, men det är korrekt — problemet är att `detectViewerIntent` sedan tar dem.
-
-### Lösning
-
-**Fil:** `supabase/functions/gunnar-chat/index.ts`
-
-#### 1) Lägg till specifika mönster för räknefrågor FÖRE det breda regexet
-
-Nya mönster i `detectViewerIntent()` (eller ny funktion `detectCountQuestion()`):
-
-| Mönster | Resultat |
-|---|---|
-| `hur många rum (har\|finns\|i)` | `category_query("Space")` |
-| `hur många tillgångar/assets` | `category_query("Instance")` |
-| `hur många dörrar` | `category_query("Door")` |
-| `hur många våningar` | `category_query("Building Storey")` |
-| `hur många X` (okänt X) | `building_summary` (visar alla typer) |
-| `vilka rum finns` | `category_query("Space")` |
-| `vilka system finns` | `building_summary` |
-| `antal rum\|antal tillgångar` | som ovan |
-
-#### 2) Gör det breda regexet smartare
-
-Ändra regexet på rad 1133 så att det **extraherar bara objekttypen**, inte hela meningen:
-- Strippa bort "har", "finns", "i byggnaden", "i smedvig", "det", "alla" etc från `raw`
-- Matcha det rensade resultatet mot `matchCategory()` och `KNOWN_SYSTEMS`
-
-#### 3) Låt naturliga frågor gå till AI-loopen
-
-Om det breda regexet inte kan matcha till en känd kategori eller system efter rensning → **returnera null** istället för att skicka hela meningen som `system_query`. Då går frågan vidare till AI-loopen som faktiskt kan förstå den.
-
-### Vad detta löser
-
-- "Hur många rum har Smedvig?" → `category_query("Space")` → "272 rum"
-- "Vilka system finns?" → `building_summary` → visar top_asset_types
-- "Finns det ventilation?" → `system_query("ventilation")` (korrekt)
-- "Berätta om byggnaden" → `building_summary`
-- Komplexa frågor som inte matchar → AI-loopen (som den ska)
-
-### Filer som ändras
-- `supabase/functions/gunnar-chat/index.ts`
+- **New migration**: Create `get_room_sensor_data` RPC function
+- **`supabase/functions/gunnar-chat/index.ts`**: Add tool definition, execution function, update fast-path routing and system prompt
 
