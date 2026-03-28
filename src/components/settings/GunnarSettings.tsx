@@ -15,6 +15,8 @@ export interface GunnarSettingsData {
   speechLang: 'sv-SE' | 'en-US';
   /** ElevenLabs voice ID */
   voiceName: string | null;
+  /** Speech rate 0.5–2.0 (default 1.0) */
+  speechRate: number;
 }
 
 /** Preset ElevenLabs voices */
