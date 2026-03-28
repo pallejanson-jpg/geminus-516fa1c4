@@ -332,6 +332,8 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
       if (error) throw error;
       return data || [];
     }
+    case "get_live_sensor_data":
+      return execLiveSensorData(supabase, args);
     case "format_response": {
       // Auto-resolve viewer entities from asset_ids if external_entity_ids not provided
       if (args.asset_ids?.length && (!args.external_entity_ids || args.external_entity_ids.length === 0)) {
