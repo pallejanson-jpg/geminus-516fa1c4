@@ -1195,6 +1195,85 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
       };
     }
 
+    case "iot_query": {
+      if (!buildingGuid) {
+        return {
+          message: "Ingen byggnad är vald. Välj en byggnad först.",
+          response_type: "answer", action: "none",
+          buttons: makeButtons([{ label: "Visa alla byggnader", action: "list_buildings" }]),
+          asset_ids: [], external_entity_ids: [], filters: {},
+          suggestions: ["Vilka byggnader finns?"],
+        };
+      }
+      const sensorType = intent.payload.sensor_type || "all";
+      const roomGuids = intent.payload.room_guid ? [intent.payload.room_guid] : undefined;
+      const sensorResult = await execLiveSensorData(supabase, { building_guid: buildingGuid, room_fm_guids: roomGuids });
+
+      if (!sensorResult.available) {
+        return {
+          message: `Inga live-sensordata tillgängliga för ${buildingName}. Senslinc/InUse är inte konfigurerat för denna byggnad.`,
+          response_type: "answer", action: "none",
+          buttons: makeButtons([{ label: "Byggnadsöversikt", action: "building_summary" }]),
+          asset_ids: [], external_entity_ids: [], filters: {},
+          suggestions: ["Visa alla rum", "Byggnadsöversikt"],
+        };
+      }
+
+      // Build response based on available data
+      let message = "";
+      const sensorData: any[] = [];
+      const colorMap: Record<string, [number, number, number]> = {};
+
+      if (sensorResult.rooms?.length) {
+        // Room-specific data
+        const room = sensorResult.rooms[0];
+        const parts: string[] = [];
+        if (room.temperature !== null) parts.push(`🌡️ ${room.temperature.toFixed(1)}°C`);
+        if (room.co2 !== null) parts.push(`💨 CO₂: ${Math.round(room.co2)} ppm`);
+        if (room.humidity !== null) parts.push(`💧 ${room.humidity.toFixed(1)}% RH`);
+        if (room.occupancy !== null) parts.push(`👥 ${Math.round(room.occupancy)}% beläggning`);
+        message = `**Live sensordata** för ${room.machine_name}:\n${parts.join(" · ")}`;
+      } else if (sensorResult.averages) {
+        // Building-level averages
+        const avg = sensorResult.averages;
+        const parts: string[] = [];
+        if (avg.temperature !== null) parts.push(`🌡️ Medeltemp: ${avg.temperature}°C`);
+        if (avg.co2 !== null) parts.push(`💨 CO₂: ${avg.co2} ppm`);
+        if (avg.humidity !== null) parts.push(`💧 Fuktighet: ${avg.humidity}%`);
+        message = `**Live sensordata** för ${buildingName} (${sensorResult.machine_count} sensorer):\n${parts.join(" · ")}`;
+
+        // Build color map for temperature visualization
+        if (sensorType === "all" || sensorType === "temperature") {
+          for (const m of sensorResult.machines || []) {
+            if (m.temperature !== null && m.code) {
+              const t = m.temperature;
+              // Green (20-22), Yellow (22-24), Orange (24-26), Red (>26), Blue (<18)
+              let color: [number, number, number] = [0, 200, 0];
+              if (t < 18) color = [0, 100, 255];
+              else if (t < 20) color = [100, 200, 255];
+              else if (t > 26) color = [255, 50, 50];
+              else if (t > 24) color = [255, 150, 0];
+              else if (t > 22) color = [255, 220, 0];
+              colorMap[m.code] = color;
+            }
+          }
+        }
+      }
+
+      return {
+        message,
+        response_type: "data_query", action: Object.keys(colorMap).length > 0 ? "colorize" : "none",
+        buttons: makeButtons([
+          { label: "Byggnadsöversikt", action: "building_summary" },
+          { label: "Visa alla rum", action: "category_query", payload: { category: "Space" } },
+        ]),
+        asset_ids: [], external_entity_ids: [], filters: {},
+        suggestions: ["Visa temperatur i modell", "Vilka rum har hög CO2?", "Visa luftkvalitet"],
+        sensor_data: sensorData.length > 0 ? sensorData : undefined,
+        color_map: Object.keys(colorMap).length > 0 ? colorMap : undefined,
+      };
+    }
+
     default:
       return null;
   }
