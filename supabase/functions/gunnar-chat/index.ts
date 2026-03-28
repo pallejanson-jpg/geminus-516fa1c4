@@ -515,6 +515,17 @@ async function saveConversation(supabase: any, userId: string, buildingFmGuid: s
    Intent router — fast-path for simple intents
    ───────────────────────────────────────────── */
 
+interface FastPathResult {
+  message: string;
+  action: string;
+  asset_ids: string[];
+  external_entity_ids: string[];
+  filters: Record<string, string>;
+  suggestions: string[];
+  sensor_data?: any[];
+  color_map?: Record<string, [number, number, number]>;
+}
+
 function detectSimpleIntent(messages: any[]): string | null {
   if (!messages.length) return null;
   const lastMsg = messages[messages.length - 1];
@@ -526,23 +537,130 @@ function detectSimpleIntent(messages: any[]): string | null {
   return null;
 }
 
+/** Detect viewer-centric intents that can be served via direct RPC */
+function detectViewerIntent(messages: any[], context: any): { type: string; params: Record<string, string> } | null {
+  if (!messages.length) return null;
+  const lastMsg = messages[messages.length - 1];
+  if (lastMsg.role !== "user") return null;
+  const text = lastMsg.content.toLowerCase().trim();
+  const buildingGuid = context?.currentBuilding?.fmGuid;
+
+  // "visa ventilation" / "show HVAC" / "highlight fire alarms"
+  const systemMatch = text.match(/^(visa|show|markera|highlight|filtrera|filter)\s+(.+)$/i);
+  if (systemMatch && buildingGuid) {
+    const systemQuery = systemMatch[2].replace(/\s*(i viewern|in viewer|i 3d)\s*/gi, "").trim();
+    if (systemQuery.length >= 2 && systemQuery.length <= 50) {
+      return { type: "show_system", params: { system: systemQuery, building_guid: buildingGuid } };
+    }
+  }
+
+  // "vad finns i rummet" / "objekt i rummet"
+  if (context?.currentSpace?.fmGuid && /^(vad finns|objekt|assets|utrustning)\s*(i|in)\s*(rummet|detta rum|this room|the room)/i.test(text)) {
+    return { type: "room_assets", params: { room_guid: context.currentSpace.fmGuid } };
+  }
+
+  // "byggnadsöversikt" / "building overview"
+  if (buildingGuid && /^(byggnadsöversikt|översikt|building overview|overview|sammanfattning|summary)/i.test(text)) {
+    return { type: "building_summary", params: { fm_guid: buildingGuid } };
+  }
+
+  return null;
+}
+
+/** Execute fast-path viewer intent via direct RPC */
+async function executeFastPath(supabase: any, intent: { type: string; params: Record<string, string> }, context: any): Promise<FastPathResult | null> {
+  const buildingName = context?.currentBuilding?.name || "byggnaden";
+
+  switch (intent.type) {
+    case "show_system": {
+      const { data: assets } = await supabase.rpc("get_assets_by_system", {
+        system_query: intent.params.system,
+        building_guid: intent.params.building_guid || null,
+      });
+      const assetList = assets || [];
+      if (assetList.length === 0) {
+        return {
+          message: `Inga "${intent.params.system}"-objekt hittades i ${buildingName}.`,
+          action: "none", asset_ids: [], external_entity_ids: [], filters: { system: intent.params.system },
+          suggestions: [`Visa alla tillgångar i ${buildingName}`, `Sök efter annan utrustning`, `Byggnadsöversikt`],
+        };
+      }
+      const assetIds = assetList.map((a: any) => a.fm_guid);
+      let entityIds: string[] = [];
+      try {
+        const { data: entities } = await supabase.rpc("get_viewer_entities", { asset_ids: assetIds });
+        entityIds = (entities || []).map((e: any) => e.external_entity_id).filter(Boolean);
+      } catch (_) {}
+      return {
+        message: `Hittade **${assetList.length}** ${intent.params.system}-objekt i ${buildingName}.${entityIds.length > 0 ? ` Markerar ${entityIds.length} i viewern.` : ""}`,
+        action: entityIds.length > 0 ? "highlight" : "list",
+        asset_ids: assetIds.slice(0, 50), external_entity_ids: entityIds,
+        filters: { system: intent.params.system },
+        suggestions: [`Filtrera till bara ${intent.params.system}`, `Vilka rum har ${intent.params.system}?`, `Byggnadsöversikt`],
+      };
+    }
+    case "room_assets": {
+      const { data: assets } = await supabase.rpc("get_assets_in_room", { room_guid: intent.params.room_guid });
+      const assetList = assets || [];
+      const roomName = context?.currentSpace?.name || "rummet";
+      if (assetList.length === 0) {
+        return {
+          message: `Inga tillgångar registrerade i ${roomName}.`,
+          action: "none", asset_ids: [], external_entity_ids: [], filters: { room: intent.params.room_guid },
+          suggestions: [`Visa ventilation i ${buildingName}`, `Byggnadsöversikt`, `Sök efter utrustning`],
+        };
+      }
+      const assetIds = assetList.map((a: any) => a.fm_guid);
+      let entityIds: string[] = [];
+      try {
+        const { data: entities } = await supabase.rpc("get_viewer_entities", { asset_ids: assetIds });
+        entityIds = (entities || []).map((e: any) => e.external_entity_id).filter(Boolean);
+      } catch (_) {}
+      const cats: Record<string, number> = {};
+      assetList.forEach((a: any) => { cats[a.category] = (cats[a.category] || 0) + 1; });
+      const catSummary = Object.entries(cats).map(([c, n]) => `${n} ${c}`).join(", ");
+      return {
+        message: `**${assetList.length}** objekt i ${roomName}: ${catSummary}.${entityIds.length > 0 ? ` Markerar ${entityIds.length} i viewern.` : ""}`,
+        action: entityIds.length > 0 ? "highlight" : "list",
+        asset_ids: assetIds.slice(0, 50), external_entity_ids: entityIds,
+        filters: { room: intent.params.room_guid },
+        suggestions: [`Visa ventilation i ${roomName}`, `Filtrera till bara detta rum`, `Visa alla rum i ${buildingName}`],
+      };
+    }
+    case "building_summary": {
+      const summary = await execBuildingSummary(supabase, { fm_guid: intent.params.fm_guid });
+      return {
+        message: `**${summary.building_name}**\n\n• ${summary.floors_count} våningar, ${summary.rooms} rum, ${summary.assets} tillgångar\n• Total yta: ${summary.total_space_area_m2} m²\n• ${summary.total_issues} ärenden${summary.total_issues > 0 ? ` (${Object.entries(summary.issues_by_status).map(([s, n]) => `${n} ${s}`).join(", ")})` : ""}`,
+        action: "none", asset_ids: [], external_entity_ids: [], filters: {},
+        suggestions: [`Visa ventilation`, `Visa alla rum`, `Visa öppna ärenden`],
+      };
+    }
+    default:
+      return null;
+  }
+}
+
 function getSimpleIntentResponse(intent: string, text: string): any {
   const isSv = /^(hej|hallå|tja|tjena|tack|hjälp|god)/i.test(text);
   let message = "";
+  let suggestions: string[] = [];
   switch (intent) {
     case "greeting":
       message = isSv ? "Hej! Hur kan jag hjälpa dig idag?" : "Hello! How can I help you today?";
+      suggestions = isSv ? ["Visa ventilation", "Byggnadsöversikt", "Vad finns i rummet?"] : ["Show HVAC", "Building overview", "What's in this room?"];
       break;
     case "thanks":
       message = isSv ? "Varsågod! Finns det något mer jag kan hjälpa dig med?" : "You're welcome! Is there anything else I can help with?";
+      suggestions = isSv ? ["Visa alla tillgångar", "Byggnadsöversikt", "Sök utrustning"] : ["Show all assets", "Building overview", "Search equipment"];
       break;
     case "help":
       message = isSv
         ? "Jag kan hjälpa dig med:\n\n• **Byggnadsdata** — våningar, rum, ytor, utrustning\n• **System** — ventilation, el, VVS\n• **3D-navigering** — visa och markera objekt i viewern\n• **Sökning** — hitta specifika tillgångar\n\nVad vill du veta mer om?"
         : "I can help you with:\n\n• **Building data** — floors, rooms, areas, equipment\n• **Systems** — ventilation, electrical, HVAC\n• **3D navigation** — show and highlight objects in the viewer\n• **Search** — find specific assets\n\nWhat would you like to know?";
+      suggestions = isSv ? ["Visa ventilation", "Byggnadsöversikt", "Sök utrustning"] : ["Show HVAC", "Building overview", "Search equipment"];
       break;
   }
-  return { message, action: "none", asset_ids: [], external_entity_ids: [], filters: {} };
+  return { message, action: "none", asset_ids: [], external_entity_ids: [], filters: {}, suggestions };
 }
 
 /* ─────────────────────────────────────────────
