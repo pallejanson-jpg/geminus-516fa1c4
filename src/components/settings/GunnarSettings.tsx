@@ -231,8 +231,8 @@ const GunnarSettings: React.FC = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__default__">Daniel (default)</SelectItem>
-                  {ELEVENLABS_VOICES.map(v => (
+                  <SelectItem value="__default__">Thalia (standard)</SelectItem>
+                  {DEEPGRAM_VOICES.map(v => (
                     <SelectItem key={v.id} value={v.id}>
                       {v.name} — {v.description}
                     </SelectItem>
@@ -240,7 +240,7 @@ const GunnarSettings: React.FC = () => {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                High-quality ElevenLabs voices (multilingual)
+                Deepgram Aura-röster (flerspråkigt stöd)
               </p>
             </div>
             <div className="space-y-1.5">
