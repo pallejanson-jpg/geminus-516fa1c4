@@ -787,12 +787,21 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         };
       }
 
+      // Door is stored as category="Instance" + asset_type="IfcDoor", not category="Door"
+      const isDoorQuery = category === "Door";
+
       // Use COUNT query for accurate total (RPC has LIMIT 200)
-      const [countResult, rpcResult] = await Promise.all([
-        supabase.from("assets").select("id", { count: "exact", head: true })
-          .eq("building_fm_guid", buildingGuid).eq("category", category),
-        supabase.rpc("get_assets_by_category", { cat: category, building_guid: buildingGuid }),
-      ]);
+      const countQuery = isDoorQuery
+        ? supabase.from("assets").select("id", { count: "exact", head: true })
+            .eq("building_fm_guid", buildingGuid).eq("category", "Instance").eq("asset_type", "IfcDoor")
+        : supabase.from("assets").select("id", { count: "exact", head: true })
+            .eq("building_fm_guid", buildingGuid).eq("category", category);
+
+      const rpcQuery = isDoorQuery
+        ? supabase.rpc("get_assets_by_system", { system_query: "IfcDoor", building_guid: buildingGuid })
+        : supabase.rpc("get_assets_by_category", { cat: category, building_guid: buildingGuid });
+
+      const [countResult, rpcResult] = await Promise.all([countQuery, rpcQuery]);
 
       const totalCount = countResult.count ?? 0;
       const assetList = rpcResult.data || [];
