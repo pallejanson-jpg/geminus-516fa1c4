@@ -60,6 +60,8 @@ function expandAbbreviations(text: string): string {
 /** Remove markdown formatting but preserve sentence structure */
 function cleanMarkdown(text: string): string {
   return text
+    // Remove emoji characters (common unicode ranges)
+    .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, '')
     // Remove bold/italic markers
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*([^*]+)\*/g, '$1')
@@ -78,7 +80,9 @@ function cleanMarkdown(text: string): string {
     // Remove block quotes
     .replace(/^>\s+/gm, '')
     // Remove horizontal rules
-    .replace(/^[-*_]{3,}$/gm, '...');
+    .replace(/^[-*_]{3,}$/gm, '...')
+    // Remove subscript notation like CO₂
+    .replace(/CO₂/g, 'CO2');
 }
 
 /** Add natural pauses at punctuation boundaries */
