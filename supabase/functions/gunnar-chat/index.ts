@@ -304,9 +304,18 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
       if (error) throw error;
       return data || [];
     }
-    case "format_response":
-      // Pass through — this is handled specially in the main loop
+    case "format_response": {
+      // Auto-resolve viewer entities from asset_ids if external_entity_ids not provided
+      if (args.asset_ids?.length && (!args.external_entity_ids || args.external_entity_ids.length === 0)) {
+        try {
+          const { data } = await supabase.rpc("get_viewer_entities", { asset_ids: args.asset_ids });
+          if (data?.length) {
+            args.external_entity_ids = data.map((e: any) => e.external_entity_id).filter(Boolean);
+          }
+        } catch (e) { console.error("Auto-resolve entities failed:", e); }
+      }
       return { formatted: true, ...args };
+    }
     case "save_memory":
       return execSaveMemory(supabase, args, (globalThis as any).__currentUserId);
     default:
@@ -584,7 +593,7 @@ async function buildSystemPrompt(supabase: any, context: any, userProfile: any, 
 CORE RULES:
 1. ALWAYS use tools to get data — never guess or fabricate.
 2. For EVERY query, use the appropriate RPC tool: get_assets_by_system, get_assets_in_room, get_assets_by_category, or search_assets.
-3. When the user wants to SEE/SHOW/HIGHLIGHT/VISUALIZE assets in the 3D viewer, you MUST call get_viewer_entities with the asset fm_guids BEFORE calling format_response. This resolves the xeokit entity IDs needed for viewer control.
+3. You do NOT need to call get_viewer_entities separately — format_response automatically resolves asset fm_guids to xeokit entity IDs. Just pass asset_ids in format_response.
 4. ALWAYS end with format_response as your LAST tool call. This structures your answer for the viewer integration.
 5. If no results found, return empty arrays in format_response and explain in the message.
 6. Respond in the SAME LANGUAGE as the user.
@@ -592,12 +601,11 @@ CORE RULES:
 8. NEVER show UUIDs/GUIDs to the user in the message text.
 9. Do NOT hallucinate system names, asset types, or relationships.
 10. Max 200 assets per query — this is enforced server-side.
+11. MINIMIZE tool rounds — combine data retrieval and call format_response immediately after getting results.
 
-TOOL USAGE FLOW:
-1. Understand user intent (what system/category/room/search?)
-2. Call the appropriate data tool (get_assets_by_system, get_assets_in_room, get_assets_by_category, search_assets)
-3. If visualization is requested → call get_viewer_entities(asset_fm_guids) 
-4. Call format_response with the results
+TOOL USAGE FLOW (optimized — typically 2 rounds):
+1. Call the appropriate data tool (get_assets_by_system, get_assets_in_room, get_assets_by_category, search_assets)
+2. Call format_response with asset_ids from the results — entity IDs are resolved automatically
 
 BUILDING RESOLUTION:
 - When user mentions a building by name, call resolve_building_by_name first
@@ -614,30 +622,23 @@ IoT / SENSOR DATA:
 - When user asks about temperature, CO2, humidity, or environmental data:
   1. Call get_sensors_in_room(sensor_type, room_guid) to find sensors
   2. Call get_latest_sensor_values(sensor_ids) to get current readings
-  3. Call get_viewer_entities(asset_ids) to resolve entity IDs
-  4. Call format_response with action="colorize", include sensor_data and color_map
+  3. Call format_response with action="colorize", include asset_ids, sensor_data and color_map (entity IDs auto-resolved)
 - Color coding thresholds:
   - Temperature: <20°C=blue [0.2,0.4,1], 20-26°C=green [0,0.8,0.2], >26°C=red [1,0.2,0.1]
   - CO2: <800ppm=green, 800-1000ppm=yellow [1,0.9,0], >1000ppm=red
   - Humidity: 30-60%=green, outside=yellow/red
-- For "show pumps with high temperature": search pumps → get sensors in same rooms → cross-reference → colorize
 
-EXAMPLES:
-User: "visa ventilation" → get_assets_by_system("ventilation") → get_viewer_entities(ids) → format_response(action="highlight")
-User: "vilka pumpar finns i rum A101" → search room A101 → get_assets_in_room(guid) → filter pumps → get_viewer_entities → format_response(action="highlight")
-User: "hitta AHU" → search_assets("AHU") → format_response(action="list")
-User: "visa alla brandlarm" → get_assets_by_system("IfcAlarm") → get_viewer_entities → format_response(action="highlight")
-User: "visa temperatur i rum A101" → get_sensors_in_room("temperature", room_guid) → get_latest_sensor_values(ids) → get_viewer_entities(ids) → format_response(action="colorize", sensor_data, color_map)
+EXAMPLES (note: NO need for get_viewer_entities — format_response auto-resolves):
+User: "visa ventilation" → get_assets_by_system("ventilation") → format_response(action="highlight", asset_ids=[...])
+User: "vilka pumpar finns i rum A101" → search room A101 → get_assets_in_room(guid) → format_response(action="highlight", asset_ids=[...])
+User: "hitta AHU" → search_assets("AHU") → format_response(action="list", asset_ids=[...])
+User: "visa alla brandlarm" → get_assets_by_system("IfcAlarm") → format_response(action="highlight", asset_ids=[...])
 
 INTERACTION STYLE:
 1. Always suggest 2-3 clickable next steps after each answer, formatted as markdown bold links: **[Suggestion text]**
-   - Adapt suggestions to the current conversation context, never generic.
-   - Example: **[Visa ventilationsschema]** **[Filtrera efter rum]** **[Sammanfatta byggnaden]**
 2. Write concise, clear, and actionable responses so the user can act immediately.
-3. When the user shares information, code, or files: analyze, suggest improvements, and give concrete next steps.
-4. Maintain a friendly, pedagogical, and light tone but prioritize delivering concrete results.
-5. Focus on indoor navigation and BIM models when relevant, but be flexible enough to handle all AI-related questions.
-6. For voice output via ElevenLabs: provide correct API usage instructions and suggest natural-sounding voices.
+3. Maintain a friendly, pedagogical, and light tone but prioritize delivering concrete results.
+4. MINIMIZE rounds — try to call data tool AND format_response in the SAME round when possible.
 ${userCtx}${ctx}${modelsCtx}${memoryCtx}`;
 }
 

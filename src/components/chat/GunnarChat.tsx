@@ -84,6 +84,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
   const [proactiveInsights, setProactiveInsights] = useState<string[]>([]);
   const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -143,9 +144,10 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       window.speechSynthesis.cancel();
     }
     setIsSpeaking(false);
+    setSpeakingIndex(null);
   }, []);
 
-  const speakText = useCallback(async (text: string) => {
+  const speakText = useCallback(async (text: string, msgIndex?: number) => {
     const cleaned = preprocessForTTS(text);
     if (!cleaned) return;
 
@@ -159,9 +161,9 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     utterance.lang = 'sv-SE';
     utterance.rate = 1;
     utterance.pitch = 1;
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
+    utterance.onstart = () => { setIsSpeaking(true); if (msgIndex !== undefined) setSpeakingIndex(msgIndex); };
+    utterance.onend = () => { setIsSpeaking(false); setSpeakingIndex(null); };
+    utterance.onerror = () => { setIsSpeaking(false); setSpeakingIndex(null); };
 
     window.speechSynthesis.speak(utterance);
   }, [stopSpeaking]);
@@ -355,18 +357,24 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
                 <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1">
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
                 </div>
-                <div className="flex justify-end mt-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 opacity-50 hover:opacity-100 transition-opacity"
-                    onClick={() => {
-                      if (isSpeaking) { stopSpeaking(); } else { speakText(msg.content); }
+                <div className="flex justify-end mt-1.5">
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                      "hover:bg-primary/10 active:bg-primary/20",
+                      speakingIndex === i
+                        ? "text-primary bg-primary/10"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (speakingIndex === i) { stopSpeaking(); } else { speakText(msg.content, i); }
                     }}
-                    title={isSpeaking ? "Stoppa uppläsning" : "Läs upp"}
                   >
-                    {isSpeaking ? <Square className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-                  </Button>
+                    {speakingIndex === i ? <Square className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                    {speakingIndex === i ? "Stoppa" : "Läs upp"}
+                  </button>
                 </div>
               </div>
             ) : (
