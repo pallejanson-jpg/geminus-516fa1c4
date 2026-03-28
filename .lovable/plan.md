@@ -1,63 +1,54 @@
 
 
-## Replace Browser Speech-to-Text with Deepgram
+## Byt TTS till Deepgram Aura (ta bort ElevenLabs)
 
-### Current State
-- STT uses browser's Web Speech API via `useWebSpeechRecognition.ts`
-- Used in two places: `GunnarChat.tsx` and `VoiceControlButton.tsx`
-- No Google Speech APIs exist in the codebase — the current implementation is browser-native
-- TTS (text-to-speech) is separate and unaffected by this change
+### Nuläge
+- TTS använder webbläsarens `speechSynthesis` i `GunnarChat.tsx`
+- Inställningarna refererar till ElevenLabs-röster men de används aldrig
+- Edge function `elevenlabs-tts` finns men anropas aldrig
+- `DEEPGRAM_API_KEY` finns redan som secret
 
-### What Changes
+### Vad som ändras
 
-#### 1. Add Deepgram API key as a secret
-- Store `DEEPGRAM_API_KEY` in backend secrets
+#### 1. Skapa edge function: `deepgram-tts`
+- POST med `{ text, model, speed }`
+- Anropar `https://api.deepgram.com/v1/speak?model={model}&encoding=mp3`
+- Använder `DEEPGRAM_API_KEY` (redan tillagd)
+- Returnerar rå MP3-bytes
+- Default-modell: `aura-2-thalia-en` (stöder flerspråkigt)
 
-#### 2. Create edge function: `deepgram-token`
-- Returns a short-lived Deepgram API key or proxy token for WebSocket connections
-- Frontend never sees the real API key
-- Used by the real-time microphone transcription flow
+#### 2. Skapa TTS-hjälpare: `src/lib/deepgram-tts.ts`
+- Funktion `speakWithDeepgram(text, model, speed)` som:
+  - Anropar `deepgram-tts` edge function via `fetch`
+  - Skapar `Audio`-objekt från blob
+  - Returnerar Audio-instans
+- Fallback till browser TTS vid fel
 
-#### 3. Create edge function: `transcribe-audio`
-- Accepts POST with base64-encoded audio
-- Sends to Deepgram prerecorded API (model: `nova-2`, language: `sv`, smart_format: true)
-- Returns transcript as JSON
-- Used for file upload transcription
+#### 3. Uppdatera `GunnarChat.tsx`
+- Byt `speakText` från `SpeechSynthesisUtterance` till `speakWithDeepgram`
+- Behåll play/stop per meddelande
 
-#### 4. Rewrite `useWebSpeechRecognition.ts` → `useDeepgramSpeechRecognition.ts`
-- New hook with same interface (`isListening`, `transcript`, `start`, `stop`, etc.)
-- On `start`: fetches token from `deepgram-token` edge function, opens WebSocket to `wss://api.deepgram.com/v1/listen`
-- Captures microphone via `navigator.mediaDevices.getUserMedia`
-- Sends 250ms audio chunks via MediaRecorder
-- Handles interim + final transcripts from Deepgram events
-- On `stop`: closes WebSocket + MediaRecorder
-- Keeps the same `UseWebSpeechRecognitionReturn` interface so consumers don't break
+#### 4. Uppdatera `GunnarSettings.tsx`
+- Byt ut ElevenLabs-röstlistan mot Deepgram Aura-röster:
+  - `aura-2-thalia-en` — Thalia (varm, balanserad)
+  - `aura-2-andromeda-en` — Andromeda (mjuk)
+  - `aura-2-arcas-en` — Arcas (djup, manlig)
+  - `aura-2-asteria-en` — Asteria (klar)
+  - `aura-2-apollo-en` — Apollo (självsäker)
+  - m.fl.
+- Testhastighet-knappen anropar Deepgram istället för browser TTS
+- Ta bort `ELEVENLABS_VOICES`-arrayen
 
-#### 5. Update consumers
-- `GunnarChat.tsx`: swap import to new hook
-- `VoiceControlButton.tsx`: swap import to new hook
-- Both keep working with no API changes since the hook interface stays the same
+#### 5. Ta bort `elevenlabs-tts` edge function (valfritt)
+- Kan tas bort eller behållas som oanvänd
 
-#### 6. Add file transcription support
-- New component or utility for drag-and-drop / file picker audio upload
-- Converts file to base64, POSTs to `transcribe-audio` edge function
-- Can be integrated into GunnarChat or VoiceControlButton as needed
+### Filer
+- **Ny**: `supabase/functions/deepgram-tts/index.ts`
+- **Ny**: `src/lib/deepgram-tts.ts`
+- **Edit**: `src/components/chat/GunnarChat.tsx` — byt speakText
+- **Edit**: `src/components/settings/GunnarSettings.tsx` — Deepgram-röster
 
-### Files to create/modify
-- **New**: `supabase/functions/deepgram-token/index.ts`
-- **New**: `supabase/functions/transcribe-audio/index.ts`
-- **New**: `src/hooks/useDeepgramSpeechRecognition.ts`
-- **Edit**: `src/components/chat/GunnarChat.tsx` — swap hook import
-- **Edit**: `src/components/voice/VoiceControlButton.tsx` — swap hook import
-- **Keep**: `src/hooks/useWebSpeechRecognition.ts` — keep as fallback, or delete
-
-### Security
-- API key stored in backend secrets only
-- Frontend uses short-lived token from edge function
-- No direct Deepgram API calls from browser
-
-### Technical notes
-- Deepgram WebSocket URL: `wss://api.deepgram.com/v1/listen?model=nova-2&language=sv&smart_format=true&interim_results=true`
-- MediaRecorder with 250ms `timeslice` for low-latency streaming
-- The hook interface stays identical so GunnarChat voice mode works unchanged
+### Säkerhet
+- API-nyckeln exponeras aldrig i frontend
+- All TTS-kommunikation via edge function
 
