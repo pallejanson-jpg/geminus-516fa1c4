@@ -1,59 +1,63 @@
 
 
-## Problem
+## Replace Browser Speech-to-Text with Deepgram
 
-Gunnar AI cannot answer sensor/temperature questions (e.g. "Vilket rum har högst temperatur?", "Genomsnittstemperatur i byggnaden?") because:
+### Current State
+- STT uses browser's Web Speech API via `useWebSpeechRecognition.ts`
+- Used in two places: `GunnarChat.tsx` and `VoiceControlButton.tsx`
+- No Google Speech APIs exist in the codebase — the current implementation is browser-native
+- TTS (text-to-speech) is separate and unaffected by this change
 
-1. **The fast-path `iot_query`** calls `execLiveSensorData` which relies on Senslinc API `latest_values` — these are often null
-2. **Ranking/complex questions** (e.g. "vilka rum har högst temp") are excluded from fast-path and sent to the AI loop, but the AI loop's `get_live_sensor_data` tool has the same problem
-3. **Sensor data already exists in the database** as attributes on Space assets (`sensorTemperature`, `sensorCO2`, `sensorHumidity`, `sensorOccupancy`) — the same data used for room color visualization — but Gunnar never queries it
+### What Changes
 
-## Solution
+#### 1. Add Deepgram API key as a secret
+- Store `DEEPGRAM_API_KEY` in backend secrets
 
-Add a new tool and database RPC that lets Gunnar query sensor attributes directly from the `assets` table, with sorting/filtering/aggregation built in. This is the same data source the visualization panel uses.
+#### 2. Create edge function: `deepgram-token`
+- Returns a short-lived Deepgram API key or proxy token for WebSocket connections
+- Frontend never sees the real API key
+- Used by the real-time microphone transcription flow
 
-### 1. New database function: `get_room_sensor_data`
+#### 3. Create edge function: `transcribe-audio`
+- Accepts POST with base64-encoded audio
+- Sends to Deepgram prerecorded API (model: `nova-2`, language: `sv`, smart_format: true)
+- Returns transcript as JSON
+- Used for file upload transcription
 
-Create an RPC function that:
-- Selects all Space assets for a building (or filtered by floor)
-- Extracts sensor values from the `attributes` JSONB column (keys: `sensorTemperature`, `sensorCO2`, `sensorHumidity`, `sensorOccupancy`, `Sensor Temperature`, etc.)
-- Returns: `fm_guid`, `common_name`, `name`, `level_fm_guid`, `temperature`, `co2`, `humidity`, `occupancy`
-- Ordered by a requested metric (for ranking questions)
-- Limited to 200 rows
+#### 4. Rewrite `useWebSpeechRecognition.ts` → `useDeepgramSpeechRecognition.ts`
+- New hook with same interface (`isListening`, `transcript`, `start`, `stop`, etc.)
+- On `start`: fetches token from `deepgram-token` edge function, opens WebSocket to `wss://api.deepgram.com/v1/listen`
+- Captures microphone via `navigator.mediaDevices.getUserMedia`
+- Sends 250ms audio chunks via MediaRecorder
+- Handles interim + final transcripts from Deepgram events
+- On `stop`: closes WebSocket + MediaRecorder
+- Keeps the same `UseWebSpeechRecognitionReturn` interface so consumers don't break
 
-### 2. New tool in `gunnar-chat`: `get_room_sensor_data`
+#### 5. Update consumers
+- `GunnarChat.tsx`: swap import to new hook
+- `VoiceControlButton.tsx`: swap import to new hook
+- Both keep working with no API changes since the hook interface stays the same
 
-Add a tool definition that the AI can call:
-- Parameters: `building_guid` (required), `floor_guid` (optional), `metric` (optional: temperature/co2/humidity/occupancy), `order` (optional: asc/desc)
-- Executes the RPC function
-- Returns structured data with averages, highest/lowest, and per-room values
+#### 6. Add file transcription support
+- New component or utility for drag-and-drop / file picker audio upload
+- Converts file to base64, POSTs to `transcribe-audio` edge function
+- Can be integrated into GunnarChat or VoiceControlButton as needed
 
-### 3. Update `execLiveSensorData` fallback
+### Files to create/modify
+- **New**: `supabase/functions/deepgram-token/index.ts`
+- **New**: `supabase/functions/transcribe-audio/index.ts`
+- **New**: `src/hooks/useDeepgramSpeechRecognition.ts`
+- **Edit**: `src/components/chat/GunnarChat.tsx` — swap hook import
+- **Edit**: `src/components/voice/VoiceControlButton.tsx` — swap hook import
+- **Keep**: `src/hooks/useWebSpeechRecognition.ts` — keep as fallback, or delete
 
-When Senslinc API returns no data (`available: false`), fall back to the database RPC to get cached sensor attributes from spaces.
+### Security
+- API key stored in backend secrets only
+- Frontend uses short-lived token from edge function
+- No direct Deepgram API calls from browser
 
-### 4. Update fast-path IoT routing
-
-Remove the `isRankingQuestion` exclusion — ranking questions like "vilka rum har högst temperatur" should also go through the fast-path `iot_query`, which will now handle them via the database fallback.
-
-### 5. Update system prompt
-
-Add instruction: "For sensor/temperature/CO2/humidity questions, use `get_room_sensor_data` to query cached sensor attributes from rooms. Use `get_live_sensor_data` only when you need real-time data from the Senslinc platform."
-
-### Technical details
-
-```text
-Data flow:
-  User question → fast-path iot_query OR AI loop
-    → Try get_live_sensor_data (Senslinc API)
-    → If unavailable, fall back to get_room_sensor_data (DB attributes)
-    → Build response with averages, rankings, per-room data
-```
-
-**Database RPC** extracts values using JSONB operators, handling key variants like `sensorTemperature`, `Sensor Temperature`, `temperature`, etc. — mirroring the `extractSensorValue` logic from `visualization-utils.ts`.
-
-### Files to change
-
-- **New migration**: Create `get_room_sensor_data` RPC function
-- **`supabase/functions/gunnar-chat/index.ts`**: Add tool definition, execution function, update fast-path routing and system prompt
+### Technical notes
+- Deepgram WebSocket URL: `wss://api.deepgram.com/v1/listen?model=nova-2&language=sv&smart_format=true&interim_results=true`
+- MediaRecorder with 250ms `timeslice` for low-latency streaming
+- The hook interface stays identical so GunnarChat voice mode works unchanged
 
