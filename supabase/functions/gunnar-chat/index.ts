@@ -403,7 +403,7 @@ async function execBuildingSummary(supabase: any, args: any) {
     supabase.from("assets").select("id", { count: "exact", head: true }).eq("building_fm_guid", fmGuid).eq("category", "Space"),
     supabase.from("assets").select("id", { count: "exact", head: true }).eq("building_fm_guid", fmGuid).eq("category", "Instance"),
     supabase.from("assets").select("id", { count: "exact", head: true }).eq("building_fm_guid", fmGuid).eq("category", "Building Storey"),
-    supabase.from("assets").select("id", { count: "exact", head: true }).eq("building_fm_guid", fmGuid).eq("category", "Door"),
+    supabase.from("assets").select("id", { count: "exact", head: true }).eq("building_fm_guid", fmGuid).eq("category", "Instance").eq("asset_type", "IfcDoor"),
     supabase.from("bcf_issues").select("status, priority").eq("building_fm_guid", fmGuid),
     supabase.from("assets").select("common_name, name, gross_area, attributes").eq("fm_guid", fmGuid).maybeSingle(),
     supabase.from("assets").select("fm_guid, common_name, name").eq("building_fm_guid", fmGuid).eq("category", "Building Storey").order("name"),
