@@ -63,6 +63,7 @@ interface AiStructuredResponse {
   }>;
   color_map?: Record<string, [number, number, number]>;
   proactive_insights?: string[];
+  suggestions?: string[];
   error?: string;
 }
 
