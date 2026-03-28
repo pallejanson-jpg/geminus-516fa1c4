@@ -651,7 +651,7 @@ serve(async (req) => {
         const machines = Array.isArray(machinesRaw) ? machinesRaw : (machinesRaw?.results ?? []);
 
         // Return slim machine list (code, pk, name, latest_values if available)
-        const machineSlim = machines.map((m: any) => ({
+        let machineSlim = machines.map((m: any) => ({
           pk: m.pk,
           code: m.code,
           name: m.name,
@@ -659,6 +659,32 @@ serve(async (req) => {
           latest_values: m.latest_values ?? null,
           indices: m.indices ?? [],
         }));
+
+        // If ALL latest_values are null, try fetching detail for a sample of machines
+        const hasAnyLatest = machineSlim.some((m: any) => m.latest_values !== null);
+        if (!hasAnyLatest && machineSlim.length > 0) {
+          console.log(`[Senslinc] All latest_values null, fetching detail for sample of ${Math.min(15, machineSlim.length)} machines...`);
+          const sampleSize = Math.min(15, machineSlim.length);
+          const step = Math.max(1, Math.floor(machineSlim.length / sampleSize));
+          const detailPromises: Promise<void>[] = [];
+
+          for (let i = 0; i < machineSlim.length && detailPromises.length < sampleSize; i += step) {
+            const m = machineSlim[i];
+            const idx = i; // capture index
+            detailPromises.push((async () => {
+              try {
+                const detail = await senslincFetchWithRetry(cleanApiUrl, `/api/machines/${m.pk}/`, authToken, tokenType) as any;
+                if (detail?.latest_values) {
+                  machineSlim[idx] = { ...machineSlim[idx], latest_values: detail.latest_values };
+                  console.log(`[Senslinc] Got latest_values from detail for machine ${m.pk} (${m.name})`);
+                }
+              } catch (e) {
+                console.warn(`[Senslinc] Detail fetch failed for machine ${m.pk}:`, (e as Error).message);
+              }
+            })());
+          }
+          await Promise.all(detailPromises);
+        }
 
         return jsonResponse({
           success: true,
