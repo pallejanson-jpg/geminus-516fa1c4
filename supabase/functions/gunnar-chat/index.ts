@@ -1610,6 +1610,11 @@ TOOL CALLING FLOW:
 - Round 3: format_response is forced — always produce a structured answer.
 - PREFER calling just ONE data tool then format_response (2 rounds total).
 
+IoT / SENSOR DATA:
+- Use get_live_sensor_data when user asks about temperature, CO2, humidity, air quality, occupancy, or indoor climate.
+- This fetches LIVE data from Senslinc/InUse — not from the assets database.
+- If get_live_sensor_data returns available=false, tell user that live sensors are not configured for this building.
+
 CRITICAL RULES:
 1. NEVER write stop-answers like "Jag kunde inte slutföra sökningen". If data is missing, interpret and suggest alternatives.
 2. Every response MUST have buttons and suggestions.
