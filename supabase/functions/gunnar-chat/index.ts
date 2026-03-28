@@ -758,24 +758,28 @@ async function executeFastPath(supabase: any, intent: { type: string; params: Re
 function getSimpleIntentResponse(intent: string, text: string): any {
   const isSv = /^(hej|hallå|tja|tjena|tack|hjälp|god)/i.test(text);
   let message = "";
+  let buttons: string[] = [];
   let suggestions: string[] = [];
   switch (intent) {
     case "greeting":
       message = isSv ? "Hej! Hur kan jag hjälpa dig idag?" : "Hello! How can I help you today?";
-      suggestions = isSv ? ["Visa ventilation", "Byggnadsöversikt", "Vad finns i rummet?"] : ["Show HVAC", "Building overview", "What's in this room?"];
+      buttons = isSv ? ["Byggnadsöversikt", "Visa ventilation", "Sök utrustning"] : ["Building overview", "Show HVAC", "Search equipment"];
+      suggestions = isSv ? ["Vilka system finns?", "Visa alla rum"] : ["What systems exist?", "Show all rooms"];
       break;
     case "thanks":
       message = isSv ? "Varsågod! Finns det något mer jag kan hjälpa dig med?" : "You're welcome! Is there anything else I can help with?";
-      suggestions = isSv ? ["Visa alla tillgångar", "Byggnadsöversikt", "Sök utrustning"] : ["Show all assets", "Building overview", "Search equipment"];
+      buttons = isSv ? ["Byggnadsöversikt", "Visa ventilation", "Sök utrustning"] : ["Building overview", "Show HVAC", "Search equipment"];
+      suggestions = isSv ? ["Visa alla tillgångar", "Öppna ärenden"] : ["Show all assets", "Open issues"];
       break;
     case "help":
       message = isSv
-        ? "Jag kan hjälpa dig med:\n\n• **Byggnadsdata** — våningar, rum, ytor, utrustning\n• **System** — ventilation, el, VVS\n• **3D-navigering** — visa och markera objekt i viewern\n• **Sökning** — hitta specifika tillgångar\n\nVad vill du veta mer om?"
-        : "I can help you with:\n\n• **Building data** — floors, rooms, areas, equipment\n• **Systems** — ventilation, electrical, HVAC\n• **3D navigation** — show and highlight objects in the viewer\n• **Search** — find specific assets\n\nWhat would you like to know?";
-      suggestions = isSv ? ["Visa ventilation", "Byggnadsöversikt", "Sök utrustning"] : ["Show HVAC", "Building overview", "Search equipment"];
+        ? "Jag kan hjälpa dig med byggnadsdata, system, 3D-navigering och sökning."
+        : "I can help with building data, systems, 3D navigation and search.";
+      buttons = isSv ? ["Byggnadsöversikt", "Visa ventilation", "Sök utrustning"] : ["Building overview", "Show HVAC", "Search equipment"];
+      suggestions = isSv ? ["Vilka system finns?", "Visa alla rum", "Öppna ärenden"] : ["What systems exist?", "Show all rooms", "Open issues"];
       break;
   }
-  return { message, action: "none", asset_ids: [], external_entity_ids: [], filters: {}, suggestions };
+  return { message, response_type: "answer", action: "none", buttons, asset_ids: [], external_entity_ids: [], filters: {}, suggestions };
 }
 
 /* ─────────────────────────────────────────────
