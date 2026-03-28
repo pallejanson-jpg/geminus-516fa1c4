@@ -987,7 +987,7 @@ serve(async (req) => {
     const simpleIntent = detectSimpleIntent(messages);
     if (simpleIntent) {
       const lastText = messages[messages.length - 1]?.content || "";
-      const response = getSimpleIntentResponse(simpleIntent, lastText);
+      const response = getSimpleIntentResponse(simpleIntent, lastText, previousConversation);
       console.log(`Fast-path intent: ${simpleIntent} (${Date.now() - startTime}ms)`);
       const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
       saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, [...userMsgs, { role: "assistant", content: response.message }]).catch(e =>
