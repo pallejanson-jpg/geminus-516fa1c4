@@ -144,9 +144,10 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       window.speechSynthesis.cancel();
     }
     setIsSpeaking(false);
+    setSpeakingIndex(null);
   }, []);
 
-  const speakText = useCallback(async (text: string) => {
+  const speakText = useCallback(async (text: string, msgIndex?: number) => {
     const cleaned = preprocessForTTS(text);
     if (!cleaned) return;
 
@@ -160,9 +161,9 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     utterance.lang = 'sv-SE';
     utterance.rate = 1;
     utterance.pitch = 1;
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
+    utterance.onstart = () => { setIsSpeaking(true); if (msgIndex !== undefined) setSpeakingIndex(msgIndex); };
+    utterance.onend = () => { setIsSpeaking(false); setSpeakingIndex(null); };
+    utterance.onerror = () => { setIsSpeaking(false); setSpeakingIndex(null); };
 
     window.speechSynthesis.speak(utterance);
   }, [stopSpeaking]);
