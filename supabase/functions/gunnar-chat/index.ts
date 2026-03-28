@@ -593,7 +593,7 @@ async function buildSystemPrompt(supabase: any, context: any, userProfile: any, 
 CORE RULES:
 1. ALWAYS use tools to get data — never guess or fabricate.
 2. For EVERY query, use the appropriate RPC tool: get_assets_by_system, get_assets_in_room, get_assets_by_category, or search_assets.
-3. When the user wants to SEE/SHOW/HIGHLIGHT/VISUALIZE assets in the 3D viewer, you MUST call get_viewer_entities with the asset fm_guids BEFORE calling format_response. This resolves the xeokit entity IDs needed for viewer control.
+3. You do NOT need to call get_viewer_entities separately — format_response automatically resolves asset fm_guids to xeokit entity IDs. Just pass asset_ids in format_response.
 4. ALWAYS end with format_response as your LAST tool call. This structures your answer for the viewer integration.
 5. If no results found, return empty arrays in format_response and explain in the message.
 6. Respond in the SAME LANGUAGE as the user.
@@ -601,12 +601,11 @@ CORE RULES:
 8. NEVER show UUIDs/GUIDs to the user in the message text.
 9. Do NOT hallucinate system names, asset types, or relationships.
 10. Max 200 assets per query — this is enforced server-side.
+11. MINIMIZE tool rounds — combine data retrieval and call format_response immediately after getting results.
 
-TOOL USAGE FLOW:
-1. Understand user intent (what system/category/room/search?)
-2. Call the appropriate data tool (get_assets_by_system, get_assets_in_room, get_assets_by_category, search_assets)
-3. If visualization is requested → call get_viewer_entities(asset_fm_guids) 
-4. Call format_response with the results
+TOOL USAGE FLOW (optimized — typically 2 rounds):
+1. Call the appropriate data tool (get_assets_by_system, get_assets_in_room, get_assets_by_category, search_assets)
+2. Call format_response with asset_ids from the results — entity IDs are resolved automatically
 
 BUILDING RESOLUTION:
 - When user mentions a building by name, call resolve_building_by_name first
