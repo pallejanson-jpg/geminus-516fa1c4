@@ -113,6 +113,7 @@ const GunnarSettings: React.FC = () => {
     setIsTesting(true);
 
     // Stop any playing test audio
+    stopDeepgramAudio();
     if (testAudioRef.current) {
       testAudioRef.current.pause();
       testAudioRef.current = null;
@@ -123,17 +124,23 @@ const GunnarSettings: React.FC = () => {
       : 'Hello! I am Geminus AI, your digital facility assistant.';
 
     try {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-        throw new Error('Browser TTS not available');
+      const audio = await speakWithDeepgram(testText, {
+        model: settings.voiceName || 'aura-2-thalia-en',
+        lang: settings.speechLang || 'sv-SE',
+        rate: settings.speechRate ?? 1,
+      });
+      testAudioRef.current = audio;
+
+      if ((audio as any).__browserTTS) {
+        const utt = (audio as any).__utterance as SpeechSynthesisUtterance;
+        utt.onend = () => setIsTesting(false);
+        utt.onerror = () => setIsTesting(false);
+        return;
       }
-      const utterance = new SpeechSynthesisUtterance(testText);
-      utterance.lang = settings.speechLang || 'sv-SE';
-      utterance.rate = settings.speechRate ?? 1;
-      utterance.pitch = 1;
-      utterance.onend = () => setIsTesting(false);
-      utterance.onerror = () => setIsTesting(false);
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utterance);
+
+      audio.addEventListener('ended', () => setIsTesting(false), { once: true });
+      audio.addEventListener('error', () => setIsTesting(false), { once: true });
+      await audio.play();
     } catch (e) {
       console.error('Test voice error:', e);
       setIsTesting(false);
