@@ -976,6 +976,7 @@ serve(async (req) => {
       asset_ids: [],
       external_entity_ids: [],
       filters: {},
+      suggestions: ["Visa ventilation", "Byggnadsöversikt", "Sök utrustning"],
     };
     return new Response(JSON.stringify(fallback), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
