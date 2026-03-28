@@ -304,9 +304,18 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
       if (error) throw error;
       return data || [];
     }
-    case "format_response":
-      // Pass through — this is handled specially in the main loop
+    case "format_response": {
+      // Auto-resolve viewer entities from asset_ids if external_entity_ids not provided
+      if (args.asset_ids?.length && (!args.external_entity_ids || args.external_entity_ids.length === 0)) {
+        try {
+          const { data } = await supabase.rpc("get_viewer_entities", { asset_ids: args.asset_ids });
+          if (data?.length) {
+            args.external_entity_ids = data.map((e: any) => e.external_entity_id).filter(Boolean);
+          }
+        } catch (e) { console.error("Auto-resolve entities failed:", e); }
+      }
       return { formatted: true, ...args };
+    }
     case "save_memory":
       return execSaveMemory(supabase, args, (globalThis as any).__currentUserId);
     default:
