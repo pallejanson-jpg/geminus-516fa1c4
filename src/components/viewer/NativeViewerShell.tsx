@@ -6,7 +6,7 @@
 import React, { useState, useCallback, useRef, useContext, useEffect } from 'react';
 import useSectionPlaneClipping from '@/hooks/useSectionPlaneClipping';
 import { OBJECT_MOVE_MODE_EVENT, OBJECT_DELETE_EVENT, useObjectMoveMode } from '@/hooks/useObjectMoveMode';
-import { useAiViewerBridge } from '@/hooks/useAiViewerBridge';
+import { useAiViewerBridge, dispatchAiViewerCommand } from '@/hooks/useAiViewerBridge';
 import NativeXeokitViewer from './NativeXeokitViewer';
 import MobileViewerOverlay from './mobile/MobileViewerOverlay';
 import FloatingFloorSwitcher from './FloatingFloorSwitcher';
@@ -338,6 +338,25 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const handleViewerReady = useCallback((viewer: any) => {
     setXeokitViewer(viewer);
     setIsViewerReady(true);
+
+    // Apply any pending AI viewer command saved from another page
+    try {
+      const pending = sessionStorage.getItem('pending_ai_viewer_command');
+      if (pending) {
+        sessionStorage.removeItem('pending_ai_viewer_command');
+        const cmd = JSON.parse(pending);
+        // Delay slightly to let models finish loading
+        setTimeout(() => {
+          dispatchAiViewerCommand(cmd);
+          if (cmd.sensorData?.length) {
+            window.dispatchEvent(new CustomEvent('AI_SENSOR_DATA', { detail: cmd.sensorData }));
+          }
+          console.log('[NativeViewerShell] Applied pending AI viewer command:', cmd.action);
+        }, 2000);
+      }
+    } catch (e) {
+      console.warn('[NativeViewerShell] Failed to apply pending AI viewer command', e);
+    }
 
     // Build comprehensive shim that mimics the Asset+ API for all toolbar/settings components
     const assetViewShim = {
