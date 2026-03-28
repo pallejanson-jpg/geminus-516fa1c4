@@ -1097,11 +1097,15 @@ serve(async (req) => {
         console.log(`Gunnar: format_response received (${Date.now() - startTime}ms, round ${round + 1})`);
         const structured: any = {
           message: formatResponseResult.message || "",
+          response_type: formatResponseResult.response_type || "answer",
           action: formatResponseResult.action || "none",
+          buttons: formatResponseResult.buttons?.length ? formatResponseResult.buttons : generateFallbackButtons(formatResponseResult, context),
           asset_ids: formatResponseResult.asset_ids || [],
           external_entity_ids: formatResponseResult.external_entity_ids || [],
           filters: formatResponseResult.filters || {},
-          suggestions: generateFallbackSuggestions(formatResponseResult, context),
+          suggestions: formatResponseResult.suggestions?.length
+            ? formatResponseResult.suggestions
+            : generateFallbackSuggestions(formatResponseResult, context),
         };
         if (formatResponseResult.sensor_data?.length) structured.sensor_data = formatResponseResult.sensor_data;
         if (formatResponseResult.color_map && Object.keys(formatResponseResult.color_map).length) structured.color_map = formatResponseResult.color_map;
