@@ -1119,15 +1119,25 @@ serve(async (req) => {
       }
     }
 
-    // Max rounds — return last content
+    // Max rounds — try to extract last useful AI content instead of stop-answer
     console.log(`Gunnar: max rounds reached (${Date.now() - startTime}ms)`);
+    let lastAssistantText = "";
+    for (let i = conversation.length - 1; i >= 0; i--) {
+      if (conversation[i].role === "assistant" && typeof conversation[i].content === "string" && conversation[i].content.trim()) {
+        lastAssistantText = conversation[i].content.trim();
+        break;
+      }
+    }
+    const buildingName = context?.currentBuilding?.name || "byggnaden";
     const fallback = {
-      message: "Jag kunde inte slutföra sökningen. Försök med en mer specifik fråga.",
+      message: lastAssistantText || `Jag har begränsad information om detta just nu. Här är vad du kan göra:`,
+      response_type: "answer",
       action: "none",
+      buttons: [`Byggnadsöversikt${buildingName !== "byggnaden" ? ` ${buildingName}` : ""}`, "Visa ventilation", "Sök utrustning"],
       asset_ids: [],
       external_entity_ids: [],
       filters: {},
-      suggestions: ["Visa ventilation", "Byggnadsöversikt", "Sök utrustning"],
+      suggestions: ["Vilka system finns?", "Visa alla rum", "Öppna ärenden"],
     };
     return new Response(JSON.stringify(fallback), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
