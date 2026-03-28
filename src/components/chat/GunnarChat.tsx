@@ -47,7 +47,9 @@ interface GunnarChatProps {
 /** Structured AI response format */
 interface AiStructuredResponse {
   message: string;
+  response_type?: 'answer' | 'navigation' | 'data_query' | 'action';
   action: 'highlight' | 'filter' | 'colorize' | 'list' | 'none';
+  buttons?: string[];
   asset_ids: string[];
   external_entity_ids: string[];
   filters: {
