@@ -235,6 +235,24 @@ const GunnarSettings: React.FC = () => {
                 High-quality ElevenLabs voices (multilingual)
               </p>
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Talhastighet</Label>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground w-8">Lång</span>
+                <Slider
+                  value={[settings.speechRate]}
+                  onValueChange={handleSpeechRateChange}
+                  min={0.5}
+                  max={2.0}
+                  step={0.1}
+                  className="flex-1"
+                />
+                <span className="text-xs text-muted-foreground w-8">Snabb</span>
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
+                {settings.speechRate.toFixed(1)}×
+              </p>
+            </div>
             <Button
               variant="outline"
               size="sm"
@@ -243,7 +261,7 @@ const GunnarSettings: React.FC = () => {
               className="gap-1.5 mt-2"
             >
               <Volume2 className="h-3.5 w-3.5" />
-              {isTesting ? 'Playing...' : 'Test voice'}
+              {isTesting ? 'Spelar...' : 'Testa röst'}
             </Button>
           </AccordionContent>
         </AccordionItem>
