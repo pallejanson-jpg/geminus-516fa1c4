@@ -1361,19 +1361,19 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         // Add highest/lowest info
         if (sensorResult.highest_temperature) {
           const ht = sensorResult.highest_temperature;
-          message += `\n\nVarmast: **${ht.name || "Okänt rum"}** (${ht.value}°C)`;
+          message += `\n\nVarmast: **${ht.name || "Okänt rum"}** (${Math.round(ht.value * 10) / 10}°C)`;
         }
         if (sensorResult.lowest_temperature) {
           const lt = sensorResult.lowest_temperature;
-          message += `\nKallast: **${lt.name || "Okänt rum"}** (${lt.value}°C)`;
+          message += `\nKallast: **${lt.name || "Okänt rum"}** (${Math.round(lt.value * 10) / 10}°C)`;
         }
         if (sensorResult.highest_co2) {
           const hc = sensorResult.highest_co2;
-          message += `\nHögst CO₂: **${hc.name || "Okänt rum"}** (${hc.value} ppm)`;
+          message += `\nHögst CO₂: **${hc.name || "Okänt rum"}** (${Math.round(hc.value)} ppm)`;
         }
         if (sensorResult.highest_humidity) {
           const hh = sensorResult.highest_humidity;
-          message += `\nHögst fuktighet: **${hh.name || "Okänt rum"}** (${hh.value}%)`;
+          message += `\nHögst fuktighet: **${hh.name || "Okänt rum"}** (${Math.round(hh.value * 10) / 10}%)`;
         }
 
         // Build color map for temperature visualization from rooms (DB) or machines (Senslinc)
