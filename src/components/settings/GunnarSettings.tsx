@@ -34,6 +34,7 @@ const DEFAULT_SETTINGS: GunnarSettingsData = {
   buttonPosition: null,
   speechLang: 'sv-SE',
   voiceName: null,
+  speechRate: 1.0,
 };
 
 export function getGunnarSettings(): GunnarSettingsData {
