@@ -904,6 +904,7 @@ serve(async (req) => {
           asset_ids: [],
           external_entity_ids: [],
           filters: {},
+          suggestions: generateFallbackSuggestions({}, context),
         };
         const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
         saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, [...userMsgs, { role: "assistant", content }]).catch(e =>
