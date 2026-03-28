@@ -412,7 +412,22 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         </div>
       )}
 
-      {isLoading && messages[messages.length - 1]?.role === "user" && (
+      {/* Suggestion chips */}
+      {suggestions.length > 0 && !isLoading && messages[messages.length - 1]?.role === 'assistant' && (
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          {suggestions.map((s, i) => (
+            <button
+              key={i}
+              type="button"
+              className="rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 active:bg-primary/20 transition-colors"
+              onClick={() => { setSuggestions([]); sendMessage(s); }}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+
         <div className="flex justify-start">
           <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
             <Loader2 className="h-4 w-4 animate-spin" />
