@@ -1,191 +1,64 @@
 
-## Reviderad plan: Djuplodande analys och stabilisering av Jenny AI
 
-### Vad den djupa analysen redan visar
-Det här är inte ett “lite sämre prompt”-problem. Det är ett arkitekturfel i hur AI:n tolkar input och hur knappar fungerar.
+## Plan: Fixa Geminus AI — Naturliga frågor tolkas fel av intent-routern
 
-#### 1) Knapparna är felkonstruerade
-I dag skickas knapptexten rakt tillbaka som ett nytt användarmeddelande via `sendMessage(b)`. Då tolkar backend texten bokstavligt:
-- `Visa alla system` blir system-sökning på `"alla system"`
-- `Visa alla tillgångar` blir system-sökning på `"alla tillgångar"`
-- `Finns det andra typer av utrustning?` blir system-sökning på `"andra typer av utrustning?"`
+### Vad som går fel
 
-Detta är huvudorsaken till de meningslösa svaren i senaste chatten om Småviken.
+**Rotorsaken**: `detectViewerIntent()` (rad 1133) har ett regex som fångar ALLT efter "hur många", "visa", "vilka", "finns det" som ett enda "system"-sökord:
 
-#### 2) Fast-pathen är för aggressiv och felroutar intent
-`detectViewerIntent()` fångar nästan allt som börjar med “visa”, “filtrera”, “finns det”, osv och skickar det till `show_system`. Det gör att många frågor aldrig får rätt handler.
-
-#### 3) Kort input mappas till fel dataverktyg
-`detectShortInput()` mappar objekt som `Dörrar` till `show_system`, som i sin tur använder `get_assets_by_system`. Men dörrar hör ofta hemma i `category`, inte `asset_type`. Samma problem finns för rum, våningar och vissa objekt.
-
-#### 4) Prompten säger något som koden inte kan uppfylla
-Prompten instruerar modellen att “call data tool AND format_response in the SAME round”, men själva loopen fungerar sekventiellt:
-- AI-anrop
-- tool calls
-- tool-resultat tillbaka
-- nytt AI-anrop
-
-Det betyder att modellen får instruktioner som är tekniskt omöjliga, vilket ökar risken för felbeteende och extra rundor.
-
-#### 5) Samma svarsknappar återkommer utan att ha riktig backend-logik
-Fallback-knappar som:
-- `Visa alla system`
-- `Sök utrustning`
-- `Visa alla tillgångar`
-saknar deterministisk serverlogik. AI:n genererar alltså ofta UI-val som systemet inte faktiskt kan utföra korrekt.
-
-#### 6) Konversationsminnet är för tunt för uppföljningar
-Bara kort text sparas i `gunnar_conversations`. Strukturerad state som senaste `response_type`, `buttons`, `filters`, vald intent och senaste resultat sparas inte. Därför blir “ja”, “visa den”, “öppna den där”, osv svaga uppföljningar.
-
-#### 7) Latensen är delvis självförvållad
-Senaste loggarna visar ett typiskt 3-stegsflöde:
-- round 1: `get_building_summary`
-- round 2: `get_assets_by_system`
-- round 3: `format_response`
-
-Det är bättre än tidigare, men fortfarande för långsamt för vanliga frågor som egentligen borde lösas helt utan AI-loop.
-
----
-
-## Vad jag föreslår att vi bygger nu
-
-### A. Byt från textknappar till strukturerade actions
-I stället för `buttons: string[]` ska backend returnera något i stil med:
 ```text
-buttons: [
-  { id: "building_overview", label: "Byggnadsöversikt", action: "building_summary" },
-  { id: "show_all_rooms", label: "Visa alla rum", action: "category_query", payload: { category: "Space" } }
-]
+Fråga: "Hur många rum har Smedvig?"
+Regex matchar: group2 = "rum har smedvig?"
+→ system_query(system="rum har smedvig?")
+→ Inga resultat
 ```
 
-Frontend ska skicka tillbaka knappens action/payload, inte etiketten som fritext.
+Samma problem uppstår för:
+- "Hur många tillgångar finns?" → system_query("tillgångar finns?")
+- "Vilka rum finns i Smedvig?" → system_query("rum finns i smedvig?")
+- "Finns det ventilation i byggnaden?" → system_query("ventilation i byggnaden?")
 
-Detta är den viktigaste fixen.
+**Dessa frågor borde gå till AI-loopen** (som har `get_building_summary` och `get_assets_by_category`), men fast-pathen fångar dem felaktigt och ger nonsens.
 
-### B. Inför en ny deterministisk intent-router före AI
-Ny prioritet:
-1. `detectSimpleIntent`
-2. `detectButtonAction`
-3. `detectShortInput`
-4. `detectViewerIntent`
-5. Full AI-loop
+### Dessutom: `detectShortInput` (rad 1071) har `wordCount > 4` → alla normala meningar exkluderas, men det är korrekt — problemet är att `detectViewerIntent` sedan tar dem.
 
-Målet är att vanliga flöden aldrig ska gå via modellen om de kan lösas deterministiskt.
+### Lösning
 
-### C. Dela upp fast-path i riktiga intents
-I stället för att nästan allt blir `show_system` ska vi ha separata intents:
-- `building_summary`
-- `category_query`
-- `system_query`
-- `room_query`
-- `floor_query`
-- `issue_query`
-- `search_prompt`
+**Fil:** `supabase/functions/gunnar-chat/index.ts`
 
-Exempel:
-- `Dörrar` → `category_query("Door")`
-- `Rum` → `category_query("Space")`
-- `Ventilation` → `system_query("ventilation")`
-- `Visa plan 2` → `floor_query("2")`
-- `Öppna ärenden` → `issue_query()`
+#### 1) Lägg till specifika mönster för räknefrågor FÖRE det breda regexet
 
-### D. Gör knapparna till förstklassiga handlingar i backend
-Lägg till `executeButtonAction()` med explicita handlers för minst:
-- Byggnadsöversikt
-- Visa alla rum
-- Visa alla tillgångar
-- Visa alla system
-- Visa ventilation
-- Öppna ärenden
-- Sök utrustning
-- Visa i modell
-- Filtrera per våning
-- Visa detaljer
+Nya mönster i `detectViewerIntent()` (eller ny funktion `detectCountQuestion()`):
 
-Då slutar systemet tolka sina egna knappar som fria frågor.
+| Mönster | Resultat |
+|---|---|
+| `hur många rum (har\|finns\|i)` | `category_query("Space")` |
+| `hur många tillgångar/assets` | `category_query("Instance")` |
+| `hur många dörrar` | `category_query("Door")` |
+| `hur många våningar` | `category_query("Building Storey")` |
+| `hur många X` (okänt X) | `building_summary` (visar alla typer) |
+| `vilka rum finns` | `category_query("Space")` |
+| `vilka system finns` | `building_summary` |
+| `antal rum\|antal tillgångar` | som ovan |
 
-### E. Rätta datamappningen per domän
-Backend ska välja rätt query beroende på typ:
-- kategoriobjekt → `get_assets_by_category`
-- system/teknik → `get_assets_by_system`
-- rumsinnehåll → `get_assets_in_room`
-- fri sökning → `search_assets`
-- viewer-highlight → `get_viewer_entities` efter att rätt datamängd hittats
+#### 2) Gör det breda regexet smartare
 
-Detta löser att `Door`, `Space`, plan och utrustning blandas ihop.
+Ändra regexet på rad 1133 så att det **extraherar bara objekttypen**, inte hela meningen:
+- Strippa bort "har", "finns", "i byggnaden", "i smedvig", "det", "alla" etc från `raw`
+- Matcha det rensade resultatet mot `matchCategory()` och `KNOWN_SYSTEMS`
 
-### F. Förenkla AI-loopens uppdrag kraftigt
-AI:n ska användas för:
-- tolkning av svårare frågor
-- formulering av svar
-- generering av nästa steg
+#### 3) Låt naturliga frågor gå till AI-loopen
 
-AI:n ska inte bära huvudansvaret för vanliga handlingsflöden som redan är kända.
+Om det breda regexet inte kan matcha till en känd kategori eller system efter rensning → **returnera null** istället för att skicka hela meningen som `system_query`. Då går frågan vidare till AI-loopen som faktiskt kan förstå den.
 
-Prompten ska därför justeras så att den inte lovar “same round”-beteende som koden inte stödjer.
+### Vad detta löser
 
-### G. Spara strukturerad samtalsstate
-Utöka sparad kontext för senaste svaret:
-- senaste intent
-- senaste building_guid
-- senaste action
-- senaste filters
-- senaste buttons/actions
-- senaste asset_ids
+- "Hur många rum har Smedvig?" → `category_query("Space")` → "272 rum"
+- "Vilka system finns?" → `building_summary` → visar top_asset_types
+- "Finns det ventilation?" → `system_query("ventilation")` (korrekt)
+- "Berätta om byggnaden" → `building_summary`
+- Komplexa frågor som inte matchar → AI-loopen (som den ska)
 
-Det gör att uppföljningar som “ja”, “visa dem”, “öppna den”, “nästa steg” kan fungera på riktigt.
-
-### H. Minska latens genom att flytta fler frågor från AI till kod
-Följande ska helst gå utan full AI-loop:
-- byggnadsöversikt
-- visa rum
-- visa system
-- visa objektkategori
-- öppna ärenden
-- frågor om aktuell byggnad
-- kort input med 1–4 ord
-
-Detta ger både snabbare svar och mycket högre träffsäkerhet.
-
----
-
-## Filer som bör ändras
+### Filer som ändras
 - `supabase/functions/gunnar-chat/index.ts`
-- `src/components/chat/GunnarChat.tsx`
 
----
-
-## Teknisk riktning
-### Backend
-- byt `buttons: string[]` till strukturerade knappobjekt
-- lägg till `detectButtonAction()` och `executeButtonAction()`
-- bryt ut `show_system` till flera tydliga intents
-- korrigera prompten så den matchar faktisk loop
-- spara mer strukturerad konversationsstate
-
-### Frontend
-- rendera knappobjekt i stället för textknappar
-- skicka action/payload tillbaka till backend
-- behåll suggestions som fritext endast när det verkligen är fria följdfrågor
-- koppla viewer-actions bara till explicita responsobjekt
-
----
-
-## Förväntat resultat
-Efter denna ombyggnad ska Jenny AI:
-- sluta svara med nonsens på egna knappar
-- ge rätt svar på kort input som `Småviken`, `Dörrar`, `Ventilation`
-- bli snabbare i vanliga frågor
-- fungera mer som ett interaktivt gränssnitt än en osäker chatbot
-- klara uppföljningar bättre tack vare sparad state
-
----
-
-## Viktig slutsats
-Det allvarliga felet är inte att AI:n “inte förstår dig”, utan att systemet runt AI:n just nu förstör intenten:
-- fel knappmodell
-- fel routning
-- fel query-val
-- för mycket ansvar lagt på modellen
-
-Det är därför du upplever att den fungerar “otroligt dåligt” trots att instruktionerna är tydliga. Problemet sitter främst i orkestreringen, inte i att du beskrivit fel.
