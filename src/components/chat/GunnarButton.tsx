@@ -96,11 +96,13 @@ export default function GunnarButton() {
     return () => window.removeEventListener('GUNNAR_AUTO_OPEN_VOICE', handler);
   }, []);
 
-  // Auto-minimize on mobile when AI dispatches a viewer action
+  // Auto-minimize on mobile when AI dispatches a viewer action — only if actually on a viewer page
   useEffect(() => {
     if (!isMobile) return;
     const handler = () => {
-      if (isOpen && !isMinimized) {
+      const p = window.location.pathname;
+      const onViewer = p.startsWith('/viewer') || p.startsWith('/native-viewer') || p.startsWith('/split-viewer') || p.startsWith('/unified-viewer');
+      if (onViewer && isOpen && !isMinimized) {
         setIsMinimized(true);
       }
     };
