@@ -419,15 +419,31 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         </div>
       )}
 
+      {/* Action buttons */}
+      {buttons.length > 0 && !isLoading && messages[messages.length - 1]?.role === 'assistant' && (
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          {buttons.map((b, i) => (
+            <button
+              key={`btn-${i}`}
+              type="button"
+              className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/20 active:bg-primary/30 transition-colors"
+              onClick={() => { setButtons([]); setSuggestions([]); sendMessage(b); }}
+            >
+              {b}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Suggestion chips */}
       {suggestions.length > 0 && !isLoading && messages[messages.length - 1]?.role === 'assistant' && (
         <div className="flex flex-wrap gap-1.5 pt-1">
           {suggestions.map((s, i) => (
             <button
-              key={i}
+              key={`sug-${i}`}
               type="button"
-              className="rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 active:bg-primary/20 transition-colors"
-              onClick={() => { setSuggestions([]); sendMessage(s); }}
+              className="rounded-full border border-muted-foreground/30 bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              onClick={() => { setSuggestions([]); setButtons([]); sendMessage(s); }}
             >
               {s}
             </button>
