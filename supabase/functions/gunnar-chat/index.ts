@@ -561,47 +561,10 @@ async function execLiveSensorData(supabase: any, args: any) {
         return buildSensorSummary(parsed, totalMachines, data.data.site);
       }
 
-      // latest_values is null — sample up to 10 machines and fetch actual data
-      console.log(`[LiveSensor] latest_values all null, sampling ${Math.min(10, totalMachines)} machines...`);
-      const sampleSize = Math.min(10, totalMachines);
-      // Pick evenly spaced machines from the list
-      const step = Math.max(1, Math.floor(totalMachines / sampleSize));
-      const sampleMachines = [];
-      for (let i = 0; i < totalMachines && sampleMachines.length < sampleSize; i += step) {
-        sampleMachines.push(machines[i]);
-      }
-
-      const sampleResults = await Promise.all(sampleMachines.map(async (m: any) => {
-        try {
-          const { data: mData } = await supabase.functions.invoke('senslinc-query', {
-            body: { action: 'get-machine-data', fmGuid: m.code, buildingFmGuid: buildingGuid, days: 1 },
-          });
-          if (mData?.success && mData.data) {
-            const latest = mData.data.machine?.latest_values
-              || (Array.isArray(mData.data.machineData) && mData.data.machineData.length > 0 ? mData.data.machineData[mData.data.machineData.length - 1] : null);
-            const vals = extractSensorValues(latest);
-            // Resolve room name
-            let name = m.name || m.code;
-            try {
-              const { data: asset } = await supabase.from("assets").select("common_name, name").eq("fm_guid", m.code).maybeSingle();
-              if (asset?.common_name || asset?.name) name = asset.common_name || asset.name;
-            } catch { /* ignore */ }
-            return { name, code: m.code, ...vals, dashboard_url: m.dashboard_url || '' };
-          }
-        } catch (e) {
-          console.warn(`[LiveSensor] Sample fetch failed for ${m.code}:`, e);
-        }
-        return null;
-      }));
-
-      const validSamples = sampleResults.filter(Boolean) as any[];
-      console.log(`[LiveSensor] Got ${validSamples.length} valid samples out of ${sampleSize}`);
-
-      if (validSamples.length === 0) {
-        return { available: false, error: "Could not fetch sensor data for any machines in this building" };
-      }
-
-      return buildSensorSummary(validSamples, totalMachines, data.data.site, true);
+      // latest_values is null — the senslinc-query get-building-sensor-data already tries
+      // machine detail fallback, but if still null, there's no data available
+      console.log(`[LiveSensor] latest_values all null after senslinc-query fallback, no sensor data available`);
+      return { available: false, error: "No sensor readings available for machines in this building. The Senslinc/InUse system may not have recent data." };
     }
   } catch (err: any) {
     console.error("[LiveSensor] Error:", err);
