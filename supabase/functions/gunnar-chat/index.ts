@@ -1332,6 +1332,11 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         }
       }
 
+      // If message is still empty, provide a helpful fallback
+      if (!message) {
+        message = `${buildingName} har ${sensorResult.machine_count || 0} kopplade sensorer via Senslinc/InUse, men inga aktuella mätvärden kunde hämtas just nu.`;
+      }
+
       return {
         message,
         response_type: "data_query", action: Object.keys(colorMap).length > 0 ? "colorize" : "none",
