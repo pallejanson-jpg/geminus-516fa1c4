@@ -2171,6 +2171,8 @@ export type Database = {
         Args: { building_guid?: string; search: string }
         Returns: Json
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       app_role: "admin" | "user"
