@@ -339,6 +339,26 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     setXeokitViewer(viewer);
     setIsViewerReady(true);
 
+    // Apply any pending AI viewer command saved from another page
+    try {
+      const pending = sessionStorage.getItem('pending_ai_viewer_command');
+      if (pending) {
+        sessionStorage.removeItem('pending_ai_viewer_command');
+        const cmd = JSON.parse(pending);
+        // Delay slightly to let models finish loading
+        setTimeout(() => {
+          const { dispatchAiViewerCommand } = require('@/hooks/useAiViewerBridge');
+          dispatchAiViewerCommand(cmd);
+          if (cmd.sensorData?.length) {
+            window.dispatchEvent(new CustomEvent('AI_SENSOR_DATA', { detail: cmd.sensorData }));
+          }
+          console.log('[NativeViewerShell] Applied pending AI viewer command:', cmd.action);
+        }, 2000);
+      }
+    } catch (e) {
+      console.warn('[NativeViewerShell] Failed to apply pending AI viewer command', e);
+    }
+
     // Build comprehensive shim that mimics the Asset+ API for all toolbar/settings components
     const assetViewShim = {
       viewer,

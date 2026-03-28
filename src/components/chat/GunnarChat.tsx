@@ -244,6 +244,12 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     }
   }, []);
 
+  // ── Helper: check if we're already on a viewer page ──
+  const isOnViewerPage = useCallback(() => {
+    const p = window.location.pathname;
+    return p.startsWith('/viewer') || p.startsWith('/native-viewer') || p.startsWith('/split-viewer') || p.startsWith('/unified-viewer');
+  }, []);
+
   // ── Execute viewer action from structured response ──
   const executeViewerAction = useCallback((response: AiStructuredResponse) => {
     // Dispatch filter sync if filters present
@@ -253,37 +259,47 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
 
     const isViewerAction = response.action === 'highlight' || response.action === 'filter' || response.action === 'colorize';
 
+    // Build the viewer command to dispatch (or save for later)
+    let viewerCommand: any = null;
+    let toastMsg = '';
+
     if (response.action === 'colorize' && response.color_map && Object.keys(response.color_map).length > 0) {
-      dispatchAiViewerCommand({ action: 'colorize', colorMap: response.color_map });
-      if (response.sensor_data?.length) {
-        window.dispatchEvent(new CustomEvent(AI_SENSOR_DATA_EVENT, { detail: response.sensor_data }));
-      }
+      viewerCommand = { action: 'colorize', colorMap: response.color_map, sensorData: response.sensor_data };
       const sensorCount = response.sensor_data?.length || Object.keys(response.color_map).length;
-      toast.success(`Visar sensordata för ${sensorCount} objekt`);
-      window.dispatchEvent(new CustomEvent(AI_VIEWER_FOCUS_EVENT));
-      return;
+      toastMsg = `Visar sensordata för ${sensorCount} objekt`;
+    } else if (response.external_entity_ids?.length) {
+      switch (response.action) {
+        case 'highlight':
+          viewerCommand = { action: 'highlight', entityIds: response.external_entity_ids };
+          toastMsg = `Markerar ${response.external_entity_ids.length} objekt i viewern`;
+          break;
+        case 'filter':
+          viewerCommand = { action: 'filter', entityIds: response.external_entity_ids };
+          toastMsg = `Filtrerar till ${response.external_entity_ids.length} objekt`;
+          break;
+      }
     }
 
-    if (!response.external_entity_ids?.length) return;
+    if (!viewerCommand) return;
 
-    switch (response.action) {
-      case 'highlight':
-        dispatchAiViewerCommand({ action: 'highlight', entityIds: response.external_entity_ids });
-        toast.success(`Markerar ${response.external_entity_ids.length} objekt i viewern`);
-        break;
-      case 'filter':
-        dispatchAiViewerCommand({ action: 'filter', entityIds: response.external_entity_ids });
-        toast.success(`Filtrerar till ${response.external_entity_ids.length} objekt`);
-        break;
-      case 'list':
-      case 'none':
-        break;
+    if (isOnViewerPage()) {
+      // Already in viewer — dispatch immediately
+      dispatchAiViewerCommand(viewerCommand);
+      if (viewerCommand.sensorData?.length) {
+        window.dispatchEvent(new CustomEvent(AI_SENSOR_DATA_EVENT, { detail: viewerCommand.sensorData }));
+      }
+      if (toastMsg) toast.success(toastMsg);
+      if (isViewerAction) {
+        window.dispatchEvent(new CustomEvent(AI_VIEWER_FOCUS_EVENT));
+      }
+    } else {
+      // Not in viewer — save command and navigate
+      sessionStorage.setItem('pending_ai_viewer_command', JSON.stringify(viewerCommand));
+      const buildingGuid = context?.currentBuilding?.fmGuid || context?.viewerState?.buildingFmGuid || '';
+      toast.info('Öppnar 3D-viewern…');
+      window.location.href = `/viewer${buildingGuid ? `?building=${buildingGuid}` : ''}`;
     }
-
-    if (isViewerAction) {
-      window.dispatchEvent(new CustomEvent(AI_VIEWER_FOCUS_EVENT));
-    }
-  }, []);
+  }, [context, isOnViewerPage]);
 
   /** Trim conversation history */
   const trimHistory = useCallback((msgs: Message[]): Message[] => {
