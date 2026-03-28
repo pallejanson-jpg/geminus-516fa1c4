@@ -1,105 +1,74 @@
 
-## Plan: Gör Geminus AI snabb, ge riktiga nästa-frågor och växla till Viewer på mobil
 
-### Vad som faktiskt orsakar problemet
-1. `gunnar-chat` är fortfarande långsam eftersom den kör flera AI-rundor innan svar:
-   - loggarna visar 3–4 rundor och ~22–27s total tid
-   - `search_assets` timeoutar ibland i databasen
-2. “2–3 nästa frågor” finns bara som instruktion i prompten idag, men inte som strukturerad data i svaret.
-3. På mobil färgar AI i viewern via events, men chatten ligger kvar ovanpå och appen växlar inte tydligt till 3D/viewer-läge.
+## Plan: Geminus AI — Interaktivt gränssnitt med knappar, smart tolkning och noll stopp-svar
 
-### Implementation
-#### 1) Snabba upp Gunnar med riktig fast-path
-Uppdatera `supabase/functions/gunnar-chat/index.ts` så att vanliga frågor inte går genom full AI-loop.
-- Lägg till en server-side intent-router för vanliga typer:
-  - visa/highlight/filter system eller kategori
-  - objekt i aktivt rum
-  - temperatur / CO2 / humidity i aktivt rum
-  - enkel byggnadsöversikt
-- Kör RPC direkt och bygg strukturerat svar direkt server-side.
-- Använd AI-fallback bara när frågan är mer fri/oklar.
+### Problem idag
+1. Geminus AI svarar som en chatbot med fritext — inga klickbara knappar
+2. "Jag kunde inte slutföra sökningen" returneras vid max rounds
+3. Kort input som "Småviken", "Dörrar", "Ventilation" fångas inte av fast-path
+4. Suggestions är generiska fallbacks, inte kontextmedvetna
+5. Rad 1006 kastar alltid bort AI:ns egna suggestions
 
-Effekt:
-- typiska viewer-frågor går från flera AI-rundor till 1 backend-runda
-- mindre risk för timeout
+### Åtgärder
 
-#### 2) Begränsa AI-loopen hårt för fallback
-I samma edge function:
-- sänk `MAX_TOOL_ROUNDS` från 4 till 2
-- korta ned prompten och conversation context
-- prioritera att AI ska göra exakt 1 dataverktyg + `format_response`
-- returnera fallback snabbare om verktyg inte leder framåt
+#### 1) Utöka svarsformatet med `buttons` och `type`-fält
+Lägg till `buttons: string[]` och `type: string` i:
+- `format_response` tool-definition (backend)
+- `AiStructuredResponse` interface (frontend)
+- `GunnarChat.tsx` rendering
 
-Effekt:
-- även svårare frågor blir snabbare och mer förutsägbara
+Buttons renderas som större, tydliga actionknappar (inte bara chips). Next-steps/suggestions renderas som mindre sekundära chips.
 
-#### 3) Optimera sökningen som timeoutar
-Skapa en databas-migration för att minska risken att `search_assets_rpc` timeoutar.
-- lägg till index för sökning i `assets`
-- justera sökfunktionen så den:
-  - prioriterar byggnadsscope när `building_guid` finns
-  - returnerar färre, bättre träffar först
-  - undviker breda dyra sökningar i onödan
+#### 2) Massivt bredda fast-path för kort input
+I `detectViewerIntent` / ny `detectShortIntent`:
+- **Enbart byggnadsnamn** → `building_summary` (matcha mot `context.currentBuilding.name`)
+- **Enbart objekttyp** som "Dörrar", "Fönster", "Pumpar" → `show_system`
+- **Enbart system** som "Ventilation", "El", "VVS" → `show_system`
+- **Kort action** som "Visa plan 2", "Öppna dokument" → dedicated fast-path
 
-Trolig riktning:
-- trigram-index eller motsvarande på `name`, `common_name`, `asset_type`
-- lägre standardlimit för AI-anrop
+Regex-lista utökas kraftigt med svenska objekttyper och systemnamn.
 
-#### 4) Gör “nästa frågor” till riktig UI-data
-Utöka `AiStructuredResponse` och `format_response` med t.ex.:
-- `suggestions: string[]`
+#### 3) Eliminera stopp-svar vid max rounds
+Rad 1020-1032: Istället för "Jag kunde inte slutföra sökningen":
+- Leta bakåt i `conversation` efter senaste `assistant`-meddelande med content
+- Om det finns, använd det + generera suggestions
+- Om inte, ge ett smart fallback: "Jag har begränsad information om detta. Här är vad du kan göra:" + knappar
 
-Ändringar:
-- `supabase/functions/gunnar-chat/index.ts`
-  - `format_response` ska alltid inkludera 2–3 förslag
-  - om AI inte ger förslag, skapa server-side fallback-förslag utifrån intent/resultat
-- `src/components/chat/GunnarChat.tsx`
-  - rendera förslagen som riktiga klickbara chips/knappar under senaste assistantsvaret
-  - klick på ett förslag skickar det direkt som ny fråga
+#### 4) Bevara AI:ns suggestions, fallback bara om tomma
+Rad 1006: Ändra till:
+```
+suggestions: formatResponseResult.suggestions?.length > 0
+  ? formatResponseResult.suggestions
+  : generateFallbackSuggestions(formatResponseResult, context)
+```
 
-Effekt:
-- användaren får alltid 2–3 tappbara nästa steg
-- inte beroende av markdown eller att modellen “råkar” följa prompten
+#### 5) Uppdatera systemprompt med nytt format
+Instruera AI:n att:
+- Alltid inkludera `buttons` med 2-3 klickbara handlingar
+- Alltid inkludera `suggestions` med 2-3 nästa steg
+- Använda `type`-fält: `answer`, `navigation`, `data_query`, `action`
+- Max 2-3 meningar i `message`
+- Aldrig skriva stopp-svar
 
-#### 5) Växla tydligt till Viewer på mobil när AI färgar/markerar
-Inför ett separat UI-event för mobil viewer-navigation, t.ex. `AI_VIEWER_FOCUS_EVENT`.
-- `GunnarChat.tsx`
-  - när action är `highlight`, `filter` eller `colorize`:
-    - dispatcha viewer-kommandot som idag
-    - dispatcha även “focus viewer”-event
-- `MobileViewerPage.tsx`
-  - lyssna på eventet
-  - växla till `3d` om användaren är i 2D/360/split
-  - stäng filter-sheet om det behövs
-- `GunnarButton.tsx`
-  - på mobil: minimera/stäng chatten automatiskt efter viewer-action
-  - behåll på desktop som flytande panel
+#### 6) Rendera buttons som stora actionknappar i GunnarChat
+I `renderMessages()`:
+- Under varje assistant-svar: visa `buttons` som primärknappar med ikoner
+- Under knappar: visa `suggestions` som sekundära chips
+- Klick på button → skicka som ny fråga (samma som suggestions men visuellt tydligare)
 
-Effekt:
-- när AI färgar in något ser användaren resultatet direkt
-- mindre känsla av att “inget hände”
+#### 7) Smart fallback i fast-path
+Om data saknas, ge ändå ett informativt svar:
+- "Det finns inga ventilationsobjekt registrerade ännu. Du kan:"
+- Knappar: "Visa alla system", "Importera data", "Byggnadsöversikt"
+- Aldrig tomt svar
 
-#### 6) Lägg till tydlig CTA i chatten
-I `GunnarChat.tsx`, för svar som påverkar viewern:
-- visa en liten knapprad, t.ex.
-  - “Visa i 3D”
-  - “Behåll chatten öppen” / “Stäng chatten”
-- på mobil ska “Visa i 3D” vara extra tydlig även om auto-switch redan sker
-
-### Filer som påverkas
-- `supabase/functions/gunnar-chat/index.ts`
-- `src/components/chat/GunnarChat.tsx`
-- `src/components/chat/GunnarButton.tsx`
-- `src/components/viewer/mobile/MobileViewerPage.tsx`
-- ny migration i `supabase/migrations/...`
+### Filer som ändras
+- `supabase/functions/gunnar-chat/index.ts` — utökat format, bredare fast-path, borttagen stopp-text, bevarade suggestions
+- `src/components/chat/GunnarChat.tsx` — `buttons` i interface + rendering som actionknappar
 
 ### Tekniska detaljer
-- Behåll nuvarande viewer-event för färgning/highlight; lägg bara till ett separat event för UI-fokus.
-- Gör suggestions strukturerade i JSON istället för markdown i `message`.
-- Server-side fast-path bör täcka de vanligaste svenska kommandona först, eftersom det är där största vinsten finns.
-- Databassökningen är en del av problemet; loggarna visar statement timeout i `search_assets`.
+- `buttons` mappar till samma `sendMessage()` som suggestions
+- `type` sparas men används primärt för framtida routing (t.ex. navigationsknapp → dispatcha event)
+- Fast-path kort-input: matcha mot lista av kända svenska BIM-termer + fuzzy mot byggnadsnamn
+- Systemprompt kortas ned och fokuseras på det nya formatet
 
-### Resultat efter implementation
-- Geminus AI svarar mycket snabbare på vanliga frågor
-- varje svar visar 2–3 klickbara nästa frågor
-- på mobil växlar appen automatiskt till rätt viewer-läge när AI färgar eller markerar objekt
