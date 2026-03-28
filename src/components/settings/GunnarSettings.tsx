@@ -6,6 +6,7 @@ import { Sparkles, RotateCcw, Eye, MapPin, Languages, Volume2, Gauge } from 'luc
 import { Slider } from '@/components/ui/slider';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { speakWithDeepgram, stopDeepgramAudio } from '@/lib/deepgram-tts';
 
 const GUNNAR_SETTINGS_KEY = 'gunnar-settings';
 export const GUNNAR_SETTINGS_CHANGED_EVENT = 'gunnar-settings-changed';
