@@ -571,8 +571,8 @@ function detectViewerIntent(messages: any[], context: any): { type: string; para
   return null;
 }
 
-/** Execute fast-path viewer intent via direct RPC */
-async function executeFastPath(supabase: any, intent: { type: string; params: Record<string, string> }, context: any): Promise<FastPathResult | null> {
+/** Execute fast-path intent via direct RPC — chat-first, viewer only when explicitly requested */
+async function executeFastPath(supabase: any, intent: { type: string; params: Record<string, string>; wantsViewer: boolean }, context: any): Promise<FastPathResult | null> {
   const buildingName = context?.currentBuilding?.name || "byggnaden";
 
   switch (intent.type) {
@@ -585,22 +585,37 @@ async function executeFastPath(supabase: any, intent: { type: string; params: Re
       if (assetList.length === 0) {
         return {
           message: `Inga "${intent.params.system}"-objekt hittades i ${buildingName}.`,
-          action: "none", asset_ids: [], external_entity_ids: [], filters: { system: intent.params.system },
-          suggestions: [`Visa alla tillgångar i ${buildingName}`, `Sök efter annan utrustning`, `Byggnadsöversikt`],
+          action: "none", asset_ids: [], external_entity_ids: [], filters: {},
+          suggestions: [`Visa alla tillgångar`, `Sök efter annan utrustning`, `Byggnadsöversikt`],
         };
       }
       const assetIds = assetList.map((a: any) => a.fm_guid);
-      let entityIds: string[] = [];
-      try {
-        const { data: entities } = await supabase.rpc("get_viewer_entities", { asset_ids: assetIds });
-        entityIds = (entities || []).map((e: any) => e.external_entity_id).filter(Boolean);
-      } catch (_) {}
+
+      // Build informative text summary
+      const types: Record<string, number> = {};
+      assetList.forEach((a: any) => { const t = a.asset_type || a.common_name || "okänd"; types[t] = (types[t] || 0) + 1; });
+      const typeSummary = Object.entries(types).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t, n]) => `${n}× ${t}`).join(", ");
+
+      if (intent.wantsViewer) {
+        // User explicitly wants viewer action
+        let entityIds: string[] = [];
+        try {
+          const { data: entities } = await supabase.rpc("get_viewer_entities", { asset_ids: assetIds });
+          entityIds = (entities || []).map((e: any) => e.external_entity_id).filter(Boolean);
+        } catch (_) {}
+        return {
+          message: `Hittade **${assetList.length}** ${intent.params.system}-objekt i ${buildingName}: ${typeSummary}.${entityIds.length > 0 ? ` Markerar ${entityIds.length} i viewern.` : ""}`,
+          action: entityIds.length > 0 ? "highlight" : "list",
+          asset_ids: assetIds.slice(0, 50), external_entity_ids: entityIds,
+          filters: { system: intent.params.system },
+          suggestions: [`Hur många rum har ${intent.params.system}?`, `Byggnadsöversikt`, `Sök annan utrustning`],
+        };
+      }
+      // Chat-first: just answer the question
       return {
-        message: `Hittade **${assetList.length}** ${intent.params.system}-objekt i ${buildingName}.${entityIds.length > 0 ? ` Markerar ${entityIds.length} i viewern.` : ""}`,
-        action: entityIds.length > 0 ? "highlight" : "list",
-        asset_ids: assetIds.slice(0, 50), external_entity_ids: entityIds,
-        filters: { system: intent.params.system },
-        suggestions: [`Filtrera till bara ${intent.params.system}`, `Vilka rum har ${intent.params.system}?`, `Byggnadsöversikt`],
+        message: `Det finns **${assetList.length}** ${intent.params.system}-objekt i ${buildingName}.\n\nFördelning: ${typeSummary}.`,
+        action: "none", asset_ids: assetIds.slice(0, 50), external_entity_ids: [], filters: {},
+        suggestions: [`Markera ${intent.params.system} i viewern`, `Vilka rum har ${intent.params.system}?`, `Byggnadsöversikt`],
       };
     }
     case "room_assets": {
@@ -610,25 +625,33 @@ async function executeFastPath(supabase: any, intent: { type: string; params: Re
       if (assetList.length === 0) {
         return {
           message: `Inga tillgångar registrerade i ${roomName}.`,
-          action: "none", asset_ids: [], external_entity_ids: [], filters: { room: intent.params.room_guid },
+          action: "none", asset_ids: [], external_entity_ids: [], filters: {},
           suggestions: [`Visa ventilation i ${buildingName}`, `Byggnadsöversikt`, `Sök efter utrustning`],
         };
       }
       const assetIds = assetList.map((a: any) => a.fm_guid);
-      let entityIds: string[] = [];
-      try {
-        const { data: entities } = await supabase.rpc("get_viewer_entities", { asset_ids: assetIds });
-        entityIds = (entities || []).map((e: any) => e.external_entity_id).filter(Boolean);
-      } catch (_) {}
       const cats: Record<string, number> = {};
       assetList.forEach((a: any) => { cats[a.category] = (cats[a.category] || 0) + 1; });
       const catSummary = Object.entries(cats).map(([c, n]) => `${n} ${c}`).join(", ");
+
+      if (intent.wantsViewer) {
+        let entityIds: string[] = [];
+        try {
+          const { data: entities } = await supabase.rpc("get_viewer_entities", { asset_ids: assetIds });
+          entityIds = (entities || []).map((e: any) => e.external_entity_id).filter(Boolean);
+        } catch (_) {}
+        return {
+          message: `**${assetList.length}** objekt i ${roomName}: ${catSummary}.${entityIds.length > 0 ? ` Markerar ${entityIds.length} i viewern.` : ""}`,
+          action: entityIds.length > 0 ? "highlight" : "list",
+          asset_ids: assetIds.slice(0, 50), external_entity_ids: entityIds,
+          filters: { room: intent.params.room_guid },
+          suggestions: [`Visa ventilation i ${roomName}`, `Byggnadsöversikt`, `Visa alla rum`],
+        };
+      }
       return {
-        message: `**${assetList.length}** objekt i ${roomName}: ${catSummary}.${entityIds.length > 0 ? ` Markerar ${entityIds.length} i viewern.` : ""}`,
-        action: entityIds.length > 0 ? "highlight" : "list",
-        asset_ids: assetIds.slice(0, 50), external_entity_ids: entityIds,
-        filters: { room: intent.params.room_guid },
-        suggestions: [`Visa ventilation i ${roomName}`, `Filtrera till bara detta rum`, `Visa alla rum i ${buildingName}`],
+        message: `I ${roomName} finns **${assetList.length}** objekt: ${catSummary}.`,
+        action: "none", asset_ids: assetIds.slice(0, 50), external_entity_ids: [], filters: {},
+        suggestions: [`Markera objekten i viewern`, `Visa ventilation i ${roomName}`, `Byggnadsöversikt`],
       };
     }
     case "building_summary": {
