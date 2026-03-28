@@ -483,6 +483,101 @@ async function execBuildingSummary(supabase: any, args: any) {
   };
 }
 
+/* ── Live IoT sensor data via Senslinc ── */
+
+async function execLiveSensorData(supabase: any, args: any) {
+  const buildingGuid = args.building_guid;
+  if (!buildingGuid) return { error: "building_guid required" };
+
+  try {
+    // Get Senslinc credentials for this building
+    const creds = await getSenslincCredentials(supabase, buildingGuid);
+    if (!creds.apiUrl || !creds.email || !creds.password) {
+      return { error: "No Senslinc/InUse credentials configured for this building", available: false };
+    }
+
+    const roomGuids = args.room_fm_guids as string[] | undefined;
+
+    if (roomGuids?.length) {
+      // Fetch data for specific rooms
+      const results: any[] = [];
+      for (const roomGuid of roomGuids.slice(0, 10)) {
+        try {
+          const { data, error } = await supabase.functions.invoke('senslinc-query', {
+            body: { action: 'get-machine-data', fmGuid: roomGuid, buildingFmGuid: buildingGuid, days: 1 },
+          });
+          if (data?.success && data.data?.machine) {
+            const m = data.data.machine;
+            const latest = m.latest_values || (Array.isArray(data.data.machineData) && data.data.machineData.length > 0 ? data.data.machineData[data.data.machineData.length - 1] : null);
+            results.push({
+              room_fm_guid: roomGuid,
+              machine_name: m.name || m.label || roomGuid,
+              temperature: latest?.temperature_mean ?? latest?.temperature ?? null,
+              co2: latest?.co2_mean ?? latest?.co2 ?? null,
+              humidity: latest?.humidity_mean ?? latest?.humidity ?? null,
+              occupancy: latest?.occupation_mean ?? latest?.occupancy ?? latest?.occupation ?? null,
+              light: latest?.light_mean ?? latest?.light ?? null,
+              dashboard_url: data.data.dashboardUrl || '',
+            });
+          }
+        } catch (e) {
+          console.warn(`[LiveSensor] Failed for room ${roomGuid}:`, e);
+        }
+      }
+      return {
+        available: true,
+        source: "Senslinc/InUse (live)",
+        rooms: results,
+        room_count: results.length,
+      };
+    } else {
+      // Building-level: get all machines for the site
+      const { data, error } = await supabase.functions.invoke('senslinc-query', {
+        body: { action: 'get-building-sensor-data', fmGuid: buildingGuid },
+      });
+
+      if (data?.success && data.data) {
+        const machines = data.data.machines || [];
+        const summary = {
+          site_name: data.data.site?.name || '',
+          dashboard_url: data.data.site?.dashboard_url || '',
+          machine_count: machines.length,
+          machines: machines.slice(0, 20).map((m: any) => ({
+            name: m.name || m.code,
+            code: m.code,
+            temperature: m.latest_values?.temperature_mean ?? m.latest_values?.temperature ?? null,
+            co2: m.latest_values?.co2_mean ?? m.latest_values?.co2 ?? null,
+            humidity: m.latest_values?.humidity_mean ?? m.latest_values?.humidity ?? null,
+            occupancy: m.latest_values?.occupation_mean ?? m.latest_values?.occupancy ?? null,
+            dashboard_url: m.dashboard_url || '',
+          })),
+        };
+
+        // Calculate averages
+        const temps = summary.machines.map((m: any) => m.temperature).filter((v: any) => v !== null);
+        const co2s = summary.machines.map((m: any) => m.co2).filter((v: any) => v !== null);
+        const hums = summary.machines.map((m: any) => m.humidity).filter((v: any) => v !== null);
+
+        return {
+          available: true,
+          source: "Senslinc/InUse (live)",
+          ...summary,
+          averages: {
+            temperature: temps.length > 0 ? Math.round((temps.reduce((a: number, b: number) => a + b, 0) / temps.length) * 10) / 10 : null,
+            co2: co2s.length > 0 ? Math.round(co2s.reduce((a: number, b: number) => a + b, 0) / co2s.length) : null,
+            humidity: hums.length > 0 ? Math.round((hums.reduce((a: number, b: number) => a + b, 0) / hums.length) * 10) / 10 : null,
+          },
+        };
+      }
+
+      return { available: false, error: data?.error || "No sensor data available for this building" };
+    }
+  } catch (err: any) {
+    console.error("[LiveSensor] Error:", err);
+    return { available: false, error: err.message || "Failed to fetch live sensor data" };
+  }
+}
+
 /* ── Adaptive Memory ── */
 
 async function execSaveMemory(supabase: any, args: any, userId: string) {
