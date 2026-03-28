@@ -107,3 +107,6 @@ verify_jwt = false
 
 [functions.transcribe-audio]
 verify_jwt = false
+
+[functions.deepgram-tts]
+verify_jwt = false
