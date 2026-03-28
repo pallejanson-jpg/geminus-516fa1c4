@@ -65,6 +65,76 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   // AI Viewer Bridge — listens for AI_VIEWER_COMMAND events
   useAiViewerBridge(xeokitViewer, isViewerReady);
   const pendingSavedViewRef = useRef<LoadSavedViewDetail | null>(null);
+  const startViewAppliedRef = useRef<string | null>(null);
+
+  // ─── Auto-apply start view when viewer models finish loading ───
+  useEffect(() => {
+    if (startViewAppliedRef.current === buildingFmGuid) return;
+
+    let cancelled = false;
+
+    // Fetch start view config from DB
+    const fetchAndApply = async () => {
+      try {
+        const { data: settings } = await supabase
+          .from('building_settings')
+          .select('start_view_id')
+          .eq('fm_guid', buildingFmGuid)
+          .maybeSingle();
+
+        if (cancelled || !settings?.start_view_id) return;
+
+        const { data: sv } = await supabase
+          .from('saved_views')
+          .select('camera_eye, camera_look, camera_up, camera_projection, view_mode, clip_height, show_spaces, show_annotations, visible_floor_ids, visible_model_ids')
+          .eq('id', settings.start_view_id)
+          .maybeSingle();
+
+        if (cancelled || !sv) return;
+
+        // Wait for VIEWER_MODELS_LOADED then dispatch
+        const handler = () => {
+          if (cancelled || startViewAppliedRef.current === buildingFmGuid) return;
+          startViewAppliedRef.current = buildingFmGuid;
+
+          window.dispatchEvent(new CustomEvent<LoadSavedViewDetail>(LOAD_SAVED_VIEW_EVENT, {
+            detail: {
+              viewId: 'start-view',
+              cameraEye: sv.camera_eye || [0, 0, 0],
+              cameraLook: sv.camera_look || [0, 0, 0],
+              cameraUp: sv.camera_up || [0, 1, 0],
+              cameraProjection: sv.camera_projection || 'perspective',
+              viewMode: (sv.view_mode as '2d' | '3d') || '3d',
+              clipHeight: sv.clip_height || 1.2,
+              visibleModelIds: sv.visible_model_ids || [],
+              visibleFloorIds: sv.visible_floor_ids || [],
+              showSpaces: sv.show_spaces || false,
+              showAnnotations: sv.show_annotations || false,
+              visualizationType: 'none',
+              visualizationMockData: false,
+            },
+          }));
+          console.log('[NativeViewerShell] Applied start view for', buildingFmGuid);
+        };
+
+        window.addEventListener('VIEWER_MODELS_LOADED', handler);
+        // Also check if models already loaded (viewer ready)
+        if (isViewerReady) handler();
+
+        return () => window.removeEventListener('VIEWER_MODELS_LOADED', handler);
+      } catch (e) {
+        console.warn('[NativeViewerShell] Failed to fetch start view:', e);
+      }
+    };
+
+    let cleanup: (() => void) | undefined;
+    fetchAndApply().then(c => { cleanup = c; });
+
+    return () => {
+      cancelled = true;
+      cleanup?.();
+    };
+  }, [buildingFmGuid, isViewerReady]);
 
   // Indoor route from navigation handoff
   const [pendingIndoorRoute, setPendingIndoorRoute] = useState<any>(null);
