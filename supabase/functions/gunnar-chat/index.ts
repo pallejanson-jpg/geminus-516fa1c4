@@ -538,30 +538,34 @@ function detectSimpleIntent(messages: any[]): string | null {
 }
 
 /** Detect viewer-centric intents that can be served via direct RPC */
-function detectViewerIntent(messages: any[], context: any): { type: string; params: Record<string, string> } | null {
+function detectViewerIntent(messages: any[], context: any): { type: string; params: Record<string, string>; wantsViewer: boolean } | null {
   if (!messages.length) return null;
   const lastMsg = messages[messages.length - 1];
   if (lastMsg.role !== "user") return null;
   const text = lastMsg.content.toLowerCase().trim();
   const buildingGuid = context?.currentBuilding?.fmGuid;
 
-  // "visa ventilation" / "show HVAC" / "highlight fire alarms"
-  const systemMatch = text.match(/^(visa|show|markera|highlight|filtrera|filter)\s+(.+)$/i);
+  // Detect if user explicitly wants viewer action
+  const viewerKeywords = /(visa\s+i\s+(viewern|3d)|markera|highlight|show\s+in\s+(viewer|3d)|färglägg|colorize)/i;
+  const wantsViewer = viewerKeywords.test(text);
+
+  // "visa ventilation" / "show HVAC" / "hur många ventilationsaggregat"
+  const systemMatch = text.match(/^(visa|show|markera|highlight|filtrera|filter|hur\s+många|how\s+many|vilka|which|finns\s+det)\s+(.+)$/i);
   if (systemMatch && buildingGuid) {
-    const systemQuery = systemMatch[2].replace(/\s*(i viewern|in viewer|i 3d)\s*/gi, "").trim();
+    const systemQuery = systemMatch[2].replace(/\s*(i viewern|in viewer|i 3d|finns|finns det|har vi)\s*/gi, "").trim();
     if (systemQuery.length >= 2 && systemQuery.length <= 50) {
-      return { type: "show_system", params: { system: systemQuery, building_guid: buildingGuid } };
+      return { type: "show_system", params: { system: systemQuery, building_guid: buildingGuid }, wantsViewer };
     }
   }
 
   // "vad finns i rummet" / "objekt i rummet"
   if (context?.currentSpace?.fmGuid && /^(vad finns|objekt|assets|utrustning)\s*(i|in)\s*(rummet|detta rum|this room|the room)/i.test(text)) {
-    return { type: "room_assets", params: { room_guid: context.currentSpace.fmGuid } };
+    return { type: "room_assets", params: { room_guid: context.currentSpace.fmGuid }, wantsViewer };
   }
 
   // "byggnadsöversikt" / "building overview"
   if (buildingGuid && /^(byggnadsöversikt|översikt|building overview|overview|sammanfattning|summary)/i.test(text)) {
-    return { type: "building_summary", params: { fm_guid: buildingGuid } };
+    return { type: "building_summary", params: { fm_guid: buildingGuid }, wantsViewer: false };
   }
 
   return null;
