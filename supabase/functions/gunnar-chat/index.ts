@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyAuth, unauthorizedResponse, corsHeaders } from "../_shared/auth.ts";
 
-const MAX_TOOL_ROUNDS = 2;
+const MAX_TOOL_ROUNDS = 3;
 const AI_MODEL_PRIMARY = "google/gemini-3-flash-preview";
 const AI_MODEL_FALLBACK = "google/gemini-2.5-flash-lite";
 const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
@@ -539,6 +539,7 @@ function detectSimpleIntent(messages: any[]): string | null {
   if (/^(hej|hallå|tja|tjena|hi|hello|hey|god\s*(morgon|kväll|dag)|good\s*(morning|evening|day))[\s!.]*$/i.test(text)) return "greeting";
   if (/^(tack|thanks|thank\s*you|tackar)[\s!.]*$/i.test(text)) return "thanks";
   if (/^(hjälp|help|vad kan du|what can you do)[\s?!.]*$/i.test(text)) return "help";
+  if (/^(ja|ja\s*tack|okej|ok|japp|jepp|yes|yeah|sure|absolut|gärna|visst|precis|exakt|stämmer|korrekt)[\s!.]*$/i.test(text)) return "confirmation";
   return null;
 }
 
@@ -755,8 +756,8 @@ async function executeFastPath(supabase: any, intent: { type: string; params: Re
   }
 }
 
-function getSimpleIntentResponse(intent: string, text: string): any {
-  const isSv = /^(hej|hallå|tja|tjena|tack|hjälp|god)/i.test(text);
+function getSimpleIntentResponse(intent: string, text: string, previousConversation?: any): any {
+  const isSv = /^(hej|hallå|tja|tjena|tack|hjälp|god|ja|okej|ok|japp|jepp|visst|absolut|gärna|precis|exakt|stämmer|korrekt)/i.test(text);
   let message = "";
   let buttons: string[] = [];
   let suggestions: string[] = [];
@@ -778,6 +779,19 @@ function getSimpleIntentResponse(intent: string, text: string): any {
       buttons = isSv ? ["Byggnadsöversikt", "Visa ventilation", "Sök utrustning"] : ["Building overview", "Show HVAC", "Search equipment"];
       suggestions = isSv ? ["Vilka system finns?", "Visa alla rum", "Öppna ärenden"] : ["What systems exist?", "Show all rooms", "Open issues"];
       break;
+    case "confirmation": {
+      // Try to extract context from previous conversation to give a relevant follow-up
+      const prevMsgs = previousConversation?.messages || [];
+      const lastAssistant = [...prevMsgs].reverse().find((m: any) => m.role === "assistant");
+      if (lastAssistant?.content) {
+        message = isSv ? "Bra! Vad vill du göra härnäst?" : "Great! What would you like to do next?";
+      } else {
+        message = isSv ? "Vad kan jag hjälpa dig med?" : "What can I help you with?";
+      }
+      buttons = isSv ? ["Byggnadsöversikt", "Visa ventilation", "Sök utrustning"] : ["Building overview", "Show HVAC", "Search equipment"];
+      suggestions = isSv ? ["Vilka system finns?", "Visa alla rum", "Öppna ärenden"] : ["What systems exist?", "Show all rooms", "Open issues"];
+      break;
+    }
   }
   return { message, response_type: "answer", action: "none", buttons, asset_ids: [], external_entity_ids: [], filters: {}, suggestions };
 }
@@ -864,7 +878,7 @@ ${userCtx}${ctx}${modelsCtx}${memoryCtx}`;
    AI API call helper with fallback
    ───────────────────────────────────────────── */
 
-async function callAI(apiKey: string, messages: any[], options: { stream?: boolean; tools?: any[]; tool_choice?: string; model?: string } = {}) {
+async function callAI(apiKey: string, messages: any[], options: { stream?: boolean; tools?: any[]; tool_choice?: string | object; model?: string } = {}) {
   const model = options.model || AI_MODEL_PRIMARY;
   const body: any = { model, messages, stream: options.stream ?? false };
   if (options.tools) {
@@ -973,7 +987,7 @@ serve(async (req) => {
     const simpleIntent = detectSimpleIntent(messages);
     if (simpleIntent) {
       const lastText = messages[messages.length - 1]?.content || "";
-      const response = getSimpleIntentResponse(simpleIntent, lastText);
+      const response = getSimpleIntentResponse(simpleIntent, lastText, previousConversation);
       console.log(`Fast-path intent: ${simpleIntent} (${Date.now() - startTime}ms)`);
       const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
       saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, [...userMsgs, { role: "assistant", content: response.message }]).catch(e =>
@@ -1030,10 +1044,19 @@ serve(async (req) => {
 
     const conversation: any[] = [{ role: "system", content: systemPrompt }, ...messages];
 
+    // Filter out resolve_building_by_name when building is already in context
+    const activeTools = context?.currentBuilding?.fmGuid
+      ? tools.filter((t: any) => t.function.name !== "resolve_building_by_name")
+      : tools;
+
     let formatResponseResult: any = null;
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const resp = await callAI(LOVABLE_API_KEY, conversation, { tools, tool_choice: "auto" });
+      const isLastRound = round === MAX_TOOL_ROUNDS - 1;
+      const toolChoice = isLastRound
+        ? { type: "function", function: { name: "format_response" } }
+        : "auto";
+      const resp = await callAI(LOVABLE_API_KEY, conversation, { tools: activeTools, tool_choice: toolChoice });
       const result = await resp.json();
       const choice = result.choices?.[0];
 
