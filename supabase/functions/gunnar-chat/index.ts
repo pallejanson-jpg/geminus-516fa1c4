@@ -786,12 +786,20 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
           suggestions: ["Vilka byggnader finns?"],
         };
       }
-      const { data: assets } = await supabase.rpc("get_assets_by_category", { cat: category, building_guid: buildingGuid });
-      const assetList = assets || [];
-      const assetIds = assetList.map((a: any) => a.fm_guid);
-      const categoryLabel = category === "Space" ? "rum" : category === "Instance" ? "tillgångar" : category === "Door" ? "dörrar" : category;
 
-      if (assetList.length === 0) {
+      // Use COUNT query for accurate total (RPC has LIMIT 200)
+      const [countResult, rpcResult] = await Promise.all([
+        supabase.from("assets").select("id", { count: "exact", head: true })
+          .eq("building_fm_guid", buildingGuid).eq("category", category),
+        supabase.rpc("get_assets_by_category", { cat: category, building_guid: buildingGuid }),
+      ]);
+
+      const totalCount = countResult.count ?? 0;
+      const assetList = rpcResult.data || [];
+      const assetIds = assetList.map((a: any) => a.fm_guid);
+      const categoryLabel = category === "Space" ? "rum" : category === "Instance" ? "tillgångar" : category === "Door" ? "dörrar" : category === "Building Storey" ? "våningar" : category;
+
+      if (totalCount === 0) {
         return {
           message: `Inga ${categoryLabel} hittades i ${buildingName}.`,
           response_type: "data_query", action: "none",
@@ -810,11 +818,11 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         const types: Record<string, number> = {};
         assetList.forEach((a: any) => { const t = a.asset_type || "okänd"; types[t] = (types[t] || 0) + 1; });
         const topTypes = Object.entries(types).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t, n]) => `${n}× ${t}`).join(", ");
-        summary = `\n\nFördelning: ${topTypes}`;
+        summary = `\n\nFördelning (topp): ${topTypes}`;
       }
 
       return {
-        message: `Det finns **${assetList.length}** ${categoryLabel} i ${buildingName}.${summary}`,
+        message: `Det finns **${totalCount}** ${categoryLabel} i ${buildingName}.${summary}`,
         response_type: "data_query", action: "none",
         buttons: makeButtons([
           { label: `Visa ${categoryLabel} i modell`, action: "viewer_highlight", payload: { category } },
