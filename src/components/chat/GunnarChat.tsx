@@ -13,6 +13,7 @@ import { getGunnarSettings, saveGunnarSettings } from "@/components/settings/Gun
 import { dispatchAiViewerCommand } from "@/hooks/useAiViewerBridge";
 import { AI_SENSOR_DATA_EVENT } from "@/components/viewer/SensorDataOverlay";
 import { preprocessForTTS } from "@/lib/tts-preprocess";
+import { speakWithDeepgram, stopDeepgramAudio } from "@/lib/deepgram-tts";
 import { AI_VIEWER_FOCUS_EVENT } from "@/lib/viewer-events";
 
 type Message = {
