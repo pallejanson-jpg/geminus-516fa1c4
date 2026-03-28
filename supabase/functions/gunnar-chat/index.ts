@@ -1044,7 +1044,9 @@ serve(async (req) => {
         // Wrap in structured format
         const structuredResponse = {
           message: content,
+          response_type: "answer" as const,
           action: "none" as const,
+          buttons: generateFallbackButtons({}, context),
           asset_ids: [],
           external_entity_ids: [],
           filters: {},
