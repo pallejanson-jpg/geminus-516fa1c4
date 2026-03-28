@@ -347,7 +347,6 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         const cmd = JSON.parse(pending);
         // Delay slightly to let models finish loading
         setTimeout(() => {
-          const { dispatchAiViewerCommand } = require('@/hooks/useAiViewerBridge');
           dispatchAiViewerCommand(cmd);
           if (cmd.sensorData?.length) {
             window.dispatchEvent(new CustomEvent('AI_SENSOR_DATA', { detail: cmd.sensorData }));
