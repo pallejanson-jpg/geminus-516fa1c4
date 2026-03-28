@@ -196,6 +196,25 @@ const tools = [
       },
     },
   },
+  // ── Room sensor data from DB attributes ──
+  {
+    type: "function",
+    function: {
+      name: "get_room_sensor_data",
+      description: "Get cached sensor data (temperature, CO2, humidity, occupancy) for rooms in a building. Data comes from room attributes in the database. Use for ranking questions like 'which room is warmest', 'average temperature', 'humidity in room X'. Prefer this over get_live_sensor_data for analytical/ranking questions.",
+      parameters: {
+        type: "object",
+        properties: {
+          building_guid: { type: "string", description: "Building fm_guid (required)" },
+          floor_guid: { type: "string", description: "Optional: filter by floor fm_guid" },
+          metric: { type: "string", enum: ["temperature", "co2", "humidity", "occupancy"], description: "Which metric to sort by (default: temperature)" },
+          order: { type: "string", enum: ["asc", "desc"], description: "Sort order (default: desc = highest first)" },
+        },
+        required: ["building_guid"],
+        additionalProperties: false,
+      },
+    },
+  },
   // ── Final structured response tool ──
   {
     type: "function",
