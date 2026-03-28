@@ -1226,6 +1226,18 @@ const KNOWN_SYSTEMS: Record<string, string> = {
   "ventiler": "IfcValve", "ventil": "IfcValve", "valves": "IfcValve",
 };
 
+// IoT / sensor keywords that should trigger live sensor data lookup
+const IOT_KEYWORDS = new Set([
+  "temperatur", "temperature", "temp",
+  "co2", "koldioxid", "carbon dioxide",
+  "fuktighet", "humidity", "fukt",
+  "luftkvalitet", "air quality", "inomhusklimat", "indoor climate",
+  "beläggning", "occupancy", "beläggninsgrad",
+  "sensorer", "sensors", "iot", "sensordata", "sensor data",
+  "ljus", "light", "belysning",
+  "hur varmt", "how warm", "hur kallt", "how cold",
+]);
+
 /** Detect short input: bare building name, object type, or system name */
 function detectShortInput(messages: any[], context: any): ButtonActionIntent | null {
   if (!messages.length) return null;
