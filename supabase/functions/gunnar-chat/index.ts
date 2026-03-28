@@ -539,6 +539,7 @@ function detectSimpleIntent(messages: any[]): string | null {
   if (/^(hej|hallå|tja|tjena|hi|hello|hey|god\s*(morgon|kväll|dag)|good\s*(morning|evening|day))[\s!.]*$/i.test(text)) return "greeting";
   if (/^(tack|thanks|thank\s*you|tackar)[\s!.]*$/i.test(text)) return "thanks";
   if (/^(hjälp|help|vad kan du|what can you do)[\s?!.]*$/i.test(text)) return "help";
+  if (/^(ja|ja\s*tack|okej|ok|japp|jepp|yes|yeah|sure|absolut|gärna|visst|precis|exakt|stämmer|korrekt)[\s!.]*$/i.test(text)) return "confirmation";
   return null;
 }
 
