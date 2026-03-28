@@ -112,26 +112,17 @@ const GunnarSettings: React.FC = () => {
       : 'Hello! I am Geminus AI, your digital facility assistant.';
 
     try {
-      const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
-      const response = await fetch(TTS_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({ text: testText, voiceId: settings.voiceName }),
-      });
-
-      if (!response.ok) throw new Error(`TTS failed: ${response.status}`);
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      testAudioRef.current = audio;
-      audio.onended = () => { setIsTesting(false); URL.revokeObjectURL(url); };
-      audio.onerror = () => { setIsTesting(false); URL.revokeObjectURL(url); };
-      await audio.play();
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+        throw new Error('Browser TTS not available');
+      }
+      const utterance = new SpeechSynthesisUtterance(testText);
+      utterance.lang = settings.speechLang || 'sv-SE';
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      utterance.onend = () => setIsTesting(false);
+      utterance.onerror = () => setIsTesting(false);
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
     } catch (e) {
       console.error('Test voice error:', e);
       setIsTesting(false);
