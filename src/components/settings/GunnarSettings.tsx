@@ -98,6 +98,12 @@ const GunnarSettings: React.FC = () => {
     saveGunnarSettings({ voiceName });
   };
 
+  const handleSpeechRateChange = (value: number[]) => {
+    const speechRate = value[0];
+    setSettings(prev => ({ ...prev, speechRate }));
+    saveGunnarSettings({ speechRate });
+  };
+
   const [isTesting, setIsTesting] = useState(false);
   const testAudioRef = useRef<HTMLAudioElement | null>(null);
 
