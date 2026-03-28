@@ -127,7 +127,7 @@ const GunnarSettings: React.FC = () => {
       }
       const utterance = new SpeechSynthesisUtterance(testText);
       utterance.lang = settings.speechLang || 'sv-SE';
-      utterance.rate = 1;
+      utterance.rate = settings.speechRate ?? 1;
       utterance.pitch = 1;
       utterance.onend = () => setIsTesting(false);
       utterance.onerror = () => setIsTesting(false);
@@ -137,7 +137,7 @@ const GunnarSettings: React.FC = () => {
       console.error('Test voice error:', e);
       setIsTesting(false);
     }
-  }, [settings.speechLang, settings.voiceName, isTesting]);
+  }, [settings.speechLang, settings.voiceName, settings.speechRate, isTesting]);
 
   return (
     <div className="space-y-4">
