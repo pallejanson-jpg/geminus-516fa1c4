@@ -1739,9 +1739,10 @@ TOOL CALLING FLOW:
 - PREFER calling just ONE data tool then format_response (2 rounds total).
 
 IoT / SENSOR DATA:
-- Use get_live_sensor_data when user asks about temperature, CO2, humidity, air quality, occupancy, or indoor climate.
-- This fetches LIVE data from Senslinc/InUse — not from the assets database.
-- If get_live_sensor_data returns available=false, tell user that live sensors are not configured for this building.
+- For analytical/ranking questions (e.g. "which room is warmest", "average temperature", "humidity in room 232"), use get_room_sensor_data. This queries cached sensor attributes stored on rooms in the database.
+- For real-time data, use get_live_sensor_data (fetches from Senslinc/InUse platform). It will automatically fall back to DB data if live data is unavailable.
+- get_room_sensor_data supports: temperature, co2, humidity, occupancy. You can sort by any metric and filter by floor.
+- ALWAYS prefer get_room_sensor_data for questions about rankings, averages, or specific room sensor values.
 
 CRITICAL RULES:
 1. NEVER write stop-answers like "Jag kunde inte slutföra sökningen". If data is missing, interpret and suggest alternatives.
