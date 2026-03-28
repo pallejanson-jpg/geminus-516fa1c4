@@ -44,12 +44,19 @@ interface GunnarChatProps {
   onAutoVoiceConsumed?: () => void;
 }
 
+/** Structured action button from backend */
+interface ActionButton {
+  label: string;
+  action: string;
+  payload?: Record<string, string>;
+}
+
 /** Structured AI response format */
 interface AiStructuredResponse {
   message: string;
   response_type?: 'answer' | 'navigation' | 'data_query' | 'action';
   action: 'highlight' | 'filter' | 'colorize' | 'list' | 'none';
-  buttons?: string[];
+  buttons?: ActionButton[] | string[];
   asset_ids: string[];
   external_entity_ids: string[];
   filters: {
@@ -79,6 +86,15 @@ function getContextualGreeting(context?: GunnarContext): string {
   return `Hej! Jag är Geminus AI, din assistent för digital twin-data. Jag kan:\n\n• Söka utrustning och system\n• Markera objekt i 3D-viewern\n• Ge byggnadsöversikter\n\nVad vill du veta?`;
 }
 
+/** Normalize buttons: backend may send ActionButton[] or string[] */
+function normalizeButtons(raw: ActionButton[] | string[] | undefined): ActionButton[] {
+  if (!raw?.length) return [];
+  if (typeof raw[0] === "string") {
+    return (raw as string[]).map(label => ({ label, action: "free_text" }));
+  }
+  return raw as ActionButton[];
+}
+
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gunnar-chat`;
 
 const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function GunnarChat({ open, onClose, context, embedded, autoVoice, onAutoVoiceConsumed }, _ref) {
@@ -87,7 +103,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
   const [isLoading, setIsLoading] = useState(false);
   const [proactiveInsights, setProactiveInsights] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [buttons, setButtons] = useState<string[]>([]);
+  const [buttons, setButtons] = useState<ActionButton[]>([]);
   const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
@@ -227,7 +243,6 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       }
       const sensorCount = response.sensor_data?.length || Object.keys(response.color_map).length;
       toast.success(`Visar sensordata för ${sensorCount} objekt`);
-      // Dispatch focus event for mobile
       window.dispatchEvent(new CustomEvent(AI_VIEWER_FOCUS_EVENT));
       return;
     }
@@ -248,7 +263,6 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         break;
     }
 
-    // Dispatch focus event for mobile when viewer action was taken
     if (isViewerAction) {
       window.dispatchEvent(new CustomEvent(AI_VIEWER_FOCUS_EVENT));
     }
@@ -259,6 +273,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     return msgs.slice(-12);
   }, []);
 
+  /** Send a message — either free text or a structured button action */
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
     const userMessage: Message = { role: "user", content: text.trim() };
@@ -274,19 +289,18 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       const apiMessages = trimHistory(newMessages.filter((_, i) => i > 0));
       const response = await callChat(apiMessages, context);
 
-      // Add assistant message
       const assistantContent = response.message || "Inga resultat hittades.";
       setMessages(prev => [...prev, { role: "assistant", content: assistantContent }]);
 
-      // Capture buttons and suggestions
-      if (response.buttons?.length) {
-        setButtons(response.buttons);
+      // Capture structured buttons
+      const normalizedButtons = normalizeButtons(response.buttons);
+      if (normalizedButtons.length) {
+        setButtons(normalizedButtons);
       }
       if (response.suggestions?.length) {
         setSuggestions(response.suggestions);
       }
 
-      // Execute viewer action
       executeViewerAction(response);
     } catch (error) {
       console.error("Chat error:", error);
@@ -298,6 +312,78 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       setIsLoading(false);
     }
   };
+
+  /** Handle clicking a structured action button */
+  const handleButtonClick = useCallback((btn: ActionButton) => {
+    setButtons([]);
+    setSuggestions([]);
+
+    if (btn.action === "free_text") {
+      // Legacy fallback: send label as free text
+      sendMessage(btn.label);
+      return;
+    }
+
+    // Send structured action as JSON so backend can parse it deterministically
+    const actionPayload = JSON.stringify({ action: btn.action, payload: btn.payload || {} });
+    
+    // Show the label to the user in chat, but send the action JSON to backend
+    const userMessage: Message = { role: "user", content: btn.label };
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
+    setInput("");
+    setIsLoading(true);
+    setProactiveInsights([]);
+
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) throw new Error("You must be logged in.");
+
+        const controller = new AbortController();
+        abortRef.current = controller;
+        const timeout = setTimeout(() => controller.abort(), 60000);
+
+        try {
+          // Send action JSON as the user message content so backend routes it correctly
+          const apiMessages = trimHistory(newMessages.filter((_, i) => i > 0));
+          // Replace the last user message content with the action JSON for backend
+          const backendMessages = [...apiMessages.slice(0, -1), { role: "user" as const, content: actionPayload }];
+
+          const resp = await fetch(CHAT_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({ messages: backendMessages, context }),
+            signal: controller.signal,
+          });
+
+          if (!resp.ok) {
+            const errorData = await resp.json().catch(() => ({}));
+            throw new Error(errorData.error || `Request failed (${resp.status})`);
+          }
+
+          const response: AiStructuredResponse = await resp.json();
+          const assistantContent = response.message || "Inga resultat hittades.";
+          setMessages(prev => [...prev, { role: "assistant", content: assistantContent }]);
+
+          const normalizedButtons = normalizeButtons(response.buttons);
+          if (normalizedButtons.length) setButtons(normalizedButtons);
+          if (response.suggestions?.length) setSuggestions(response.suggestions);
+
+          executeViewerAction(response);
+        } finally {
+          clearTimeout(timeout);
+          abortRef.current = null;
+        }
+      } catch (error) {
+        console.error("Button action error:", error);
+        const errMsg = (error as any)?.message || "Could not fetch response";
+        toastHook({ variant: "destructive", title: "Error", description: errMsg });
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, [messages, context, trimHistory, executeViewerAction, toastHook]);
 
   const handleSend = () => sendMessage(input);
 
@@ -419,23 +505,23 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         </div>
       )}
 
-      {/* Action buttons */}
+      {/* Action buttons — structured */}
       {buttons.length > 0 && !isLoading && messages[messages.length - 1]?.role === 'assistant' && (
         <div className="flex flex-wrap gap-1.5 pt-1">
-          {buttons.map((b, i) => (
+          {buttons.map((btn, i) => (
             <button
               key={`btn-${i}`}
               type="button"
               className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/20 active:bg-primary/30 transition-colors"
-              onClick={() => { setButtons([]); setSuggestions([]); sendMessage(b); }}
+              onClick={() => handleButtonClick(btn)}
             >
-              {b}
+              {btn.label}
             </button>
           ))}
         </div>
       )}
 
-      {/* Suggestion chips */}
+      {/* Suggestion chips — free text */}
       {suggestions.length > 0 && !isLoading && messages[messages.length - 1]?.role === 'assistant' && (
         <div className="flex flex-wrap gap-1.5 pt-1">
           {suggestions.map((s, i) => (
