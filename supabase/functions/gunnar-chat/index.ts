@@ -1102,7 +1102,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
               { label: "Byggnadsöversikt", action: "building_summary" },
             ]),
             asset_ids: searchResults.slice(0, 50).map((a: any) => a.fm_guid), external_entity_ids: [], filters: { system },
-            suggestions: ["Visa i modell", "Visa annan utrustning"],
+            suggestions: ["Visa i viewer", "Visa annan utrustning"],
           };
         }
         return {
