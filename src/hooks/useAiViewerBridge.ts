@@ -24,10 +24,31 @@ export function dispatchAiViewerCommand(command: AiViewerCommand) {
  * Call this in NativeViewerShell or similar viewer wrapper.
  */
 export function useAiViewerBridge(viewer: any, isReady: boolean) {
+  // Resolve entity IDs against the scene with fuzzy matching
+  const resolveIds = useCallback((entityIds: string[], scene: any): string[] => {
+    const sceneIds = Object.keys(scene.objects);
+    const sceneIdSet = new Set(sceneIds);
+    const sceneIdLower = new Map(sceneIds.map(id => [id.toLowerCase(), id]));
+
+    const resolved: string[] = [];
+    for (const id of entityIds) {
+      if (sceneIdSet.has(id)) { resolved.push(id); continue; }
+      // Try lowercase match
+      const lower = sceneIdLower.get(id.toLowerCase());
+      if (lower) { resolved.push(lower); continue; }
+      // Try stripping common prefixes (e.g. "modelId#entityId")
+      for (const sceneId of sceneIds) {
+        if (sceneId.endsWith(id) || sceneId.endsWith(`#${id}`)) {
+          resolved.push(sceneId); break;
+        }
+      }
+    }
+    return [...new Set(resolved)];
+  }, []);
+
   const highlightEntities = useCallback((entityIds: string[]) => {
     if (!viewer || !entityIds.length) return;
 
-    // Ghost everything first
     const scene = viewer.scene;
     if (!scene) return;
 
@@ -37,21 +58,28 @@ export function useAiViewerBridge(viewer: any, isReady: boolean) {
     scene.setObjectsXRayed(scene.xrayedObjectIds, false);
     scene.setObjectsSelected(scene.selectedObjectIds, false);
 
+    // Resolve IDs with fuzzy matching
+    const resolved = resolveIds(entityIds, scene);
+    if (!resolved.length) {
+      console.warn(`[AiViewerBridge] No matching entities found for ${entityIds.length} IDs`);
+      return;
+    }
+
     // X-ray all, then un-xray the target entities
     const allIds = Object.keys(scene.objects);
     scene.setObjectsXRayed(allIds, true);
-    scene.setObjectsXRayed(entityIds, false);
+    scene.setObjectsXRayed(resolved, false);
 
-    // Highlight the target entities with a color
-    scene.setObjectsHighlighted(entityIds, true);
+    // Colorize targets with a bold orange instead of subtle highlight
+    scene.setObjectsColorized(resolved, [1, 0.5, 0]);
 
-    // Fly to the highlighted entities
+    // Fly to the colorized entities
     if (viewer.cameraFlight) {
-      viewer.cameraFlight.flyTo({ aabb: scene.getAABB(entityIds), duration: 1.0 });
+      viewer.cameraFlight.flyTo({ aabb: scene.getAABB(resolved), duration: 1.0 });
     }
 
-    console.log(`[AiViewerBridge] Highlighted ${entityIds.length} entities`);
-  }, [viewer]);
+    console.log(`[AiViewerBridge] Highlighted ${resolved.length}/${entityIds.length} entities (colorized orange)`);
+  }, [viewer, resolveIds]);
 
   const filterToEntities = useCallback((entityIds: string[]) => {
     if (!viewer || !entityIds.length) return;

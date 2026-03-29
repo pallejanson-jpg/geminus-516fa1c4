@@ -186,19 +186,23 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         .eq('building_fm_guid', buildingFmGuid)
         .order('updated_at', { ascending: false });
 
-      const storagePromise = supabase.storage
-        .from('xkt-models')
-        .list(buildingFmGuid, { limit: 1000, sortBy: { column: 'name', order: 'asc' } });
-
       const storeyPromise = supabase
         .from('assets')
         .select('attributes')
         .eq('building_fm_guid', buildingFmGuid)
         .eq('category', 'Building Storey');
 
-      const [sdk, dbResult, storageResult, storeyResult] = await Promise.all([
-        sdkPromise, dbPromise, storagePromise, storeyPromise,
+      const [sdk, dbResult, storeyResult] = await Promise.all([
+        sdkPromise, dbPromise, storeyPromise,
       ]);
+
+      // Lazy storage list — only if DB has no models (fallback bootstrap)
+      let storageResult: { data: any[] | null; error: any } = { data: null, error: null };
+      if (!dbResult.data || dbResult.data.length === 0) {
+        storageResult = await supabase.storage
+          .from('xkt-models')
+          .list(buildingFmGuid, { limit: 1000, sortBy: { column: 'name', order: 'asc' } });
+      }
 
       if (!mountedRef.current) return;
       console.log(`[NativeViewer] SDK + metadata loaded in ${Math.round(performance.now() - t0)}ms`);
@@ -345,9 +349,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       const fastNavEnabled = (() => {
         try {
           const stored = localStorage.getItem('viewer-fastnav-enabled');
-          if (stored === null) return true; // default ON
+          if (stored === null) return false; // default OFF — respect user setting
           return stored === 'true';
-        } catch { return true; }
+        } catch { return false; }
       })();
       if (sdk.FastNavPlugin && fastNavEnabled) {
         new sdk.FastNavPlugin(viewer, {
@@ -365,7 +369,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       // XKT Loader
       const xktLoader = new sdk.XKTLoaderPlugin(viewer, {
-        reuseGeometries: false,  // Better for unique BIM geometry — fewer draw calls
+        reuseGeometries: true,  // Instansiate shared geometry — less memory
       });
 
       // GLTFLoaderPlugin for manifest-driven GLB chunk loading
