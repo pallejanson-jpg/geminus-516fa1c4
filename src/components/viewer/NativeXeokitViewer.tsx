@@ -365,7 +365,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       // XKT Loader
       const xktLoader = new sdk.XKTLoaderPlugin(viewer, {
-        reuseGeometries: false,  // Better for unique BIM geometry — fewer draw calls
+        reuseGeometries: true,  // Instansiate shared geometry — less memory
       });
 
       // GLTFLoaderPlugin for manifest-driven GLB chunk loading
