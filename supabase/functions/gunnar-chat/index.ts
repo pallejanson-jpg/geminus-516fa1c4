@@ -1098,7 +1098,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
             message: `Hittade **${searchResults.length}** objekt som matchar "${system}" i ${buildingName}: ${typeSummary}.`,
             response_type: "data_query", action: "none",
             buttons: makeButtons([
-              { label: `Visa ${system} i modell`, action: "viewer_highlight", payload: { system } },
+              { label: `Visa ${system} i viewer`, action: "viewer_highlight", payload: { system } },
               { label: "Byggnadsöversikt", action: "building_summary" },
             ]),
             asset_ids: searchResults.slice(0, 50).map((a: any) => a.fm_guid), external_entity_ids: [], filters: { system },
