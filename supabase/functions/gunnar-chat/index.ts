@@ -842,10 +842,10 @@ function buttonFromLabel(label: string, context: any): ActionButton {
     return { label, action: "search_prompt" };
   }
 
-  // "Visa X i modell" / "Show X in viewer"
+  // "Visa X i viewer" / "Show X in viewer" / "Visa X i modell"
   const viewerMatch = lower.match(/^visa\s+(.+?)\s+i\s+(modell|viewer|3d)/i);
   if (viewerMatch) {
-    return { label, action: "viewer_highlight", payload: { system: viewerMatch[1] } };
+    return { label: label.replace(/i modell/i, "i viewer"), action: "viewer_highlight", payload: { system: viewerMatch[1] } };
   }
 
   // "Visa ventilation" / "Visa dörrar" etc
