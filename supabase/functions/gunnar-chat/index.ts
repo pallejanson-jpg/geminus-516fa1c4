@@ -9,6 +9,35 @@ const AI_MODEL_FALLBACK = "google/gemini-2.5-flash-lite";
 const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 /* ─────────────────────────────────────────────
+   IFC type → user-friendly Swedish name map
+   ───────────────────────────────────────────── */
+const IFC_SWEDISH: Record<string, string> = {
+  IfcDoor: "dörrar", IfcWindow: "fönster", IfcWall: "väggar", IfcWallStandardCase: "väggar",
+  IfcSlab: "bjälklag", IfcBeam: "balkar", IfcColumn: "pelare", IfcRoof: "tak",
+  IfcStair: "trappor", IfcStairFlight: "trappor", IfcRailing: "räcken",
+  IfcCovering: "ytbeklädnad", IfcFurniture: "möbler", IfcCurtainWall: "curtainväggar",
+  IfcSensor: "sensorer", IfcAlarm: "larm", IfcActuator: "ställdon", IfcController: "styrenheter",
+  IfcPipeSegment: "rör", IfcPipeFitting: "rördelar", IfcDuctSegment: "ventilationskanaler",
+  IfcDuctFitting: "kanaldelar", IfcFlowTerminal: "don", IfcValve: "ventiler",
+  IfcPump: "pumpar", IfcBoiler: "pannor", IfcElectricAppliance: "elapparater",
+  IfcLightFixture: "belysning", IfcOutlet: "uttag", IfcSanitaryTerminal: "sanitetsporslin",
+  IfcFireSuppressionTerminal: "sprinkler", IfcFlowStorageDevice: "behållare",
+  IfcFlowTreatmentDevice: "reningsenheter", IfcEnergyConversionDevice: "energiomvandlare",
+  IfcDistributionFlowElement: "installationer", IfcDistributionElement: "installationer",
+  IfcBuildingElementProxy: "byggnadselement", IfcFurnishingElement: "inredning",
+  IfcTransportElement: "transportelement", IfcFlowSegment: "ledningssegment",
+  IfcFlowFitting: "kopplingar", IfcFlowController: "flödesregulatorer",
+  IfcSpaceHeater: "radiatorer", IfcUnitaryEquipment: "aggregat",
+  IfcCableCarrierSegment: "kabelstegar", IfcCableSegment: "kablar",
+  IfcElectricDistributionBoard: "elcentraler", IfcSwitchingDevice: "strömbrytare",
+  IfcProtectiveDevice: "skyddsenheter", IfcJunctionBox: "kopplingsdosor",
+};
+
+function translateIfcType(ifcType: string): string {
+  return IFC_SWEDISH[ifcType] || ifcType.replace(/^Ifc/, "").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+}
+
+/* ─────────────────────────────────────────────
    Structured button type — replaces plain strings
    ───────────────────────────────────────────── */
 
@@ -987,7 +1016,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         };
       }
       const summary = await execBuildingSummary(supabase, { fm_guid: buildingGuid });
-      const topTypes = summary.top_asset_types?.slice(0, 3).map((t: any) => `${t.count}× ${t.type}`).join(", ") || "";
+      const topTypes = summary.top_asset_types?.slice(0, 3).map((t: any) => `${t.count}× ${translateIfcType(t.type)}`).join(", ") || "";
       return {
         message: `**${summary.building_name}**\n\n• ${summary.floors_count} våningar, ${summary.rooms} rum, ${summary.assets} tillgångar\n• Total yta: ${summary.total_space_area_m2} m²\n• ${summary.total_issues} ärenden${summary.total_issues > 0 ? ` (${Object.entries(summary.issues_by_status).map(([s, n]) => `${n} ${s}`).join(", ")})` : ""}${topTypes ? `\n• Vanligaste typer: ${topTypes}` : ""}`,
         response_type: "answer", action: "none",
@@ -1052,7 +1081,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
       if (category === "Instance") {
         const types: Record<string, number> = {};
         assetList.forEach((a: any) => { const t = a.asset_type || "okänd"; types[t] = (types[t] || 0) + 1; });
-        const topTypes = Object.entries(types).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t, n]) => `${n}× ${t}`).join(", ");
+        const topTypes = Object.entries(types).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t, n]) => `${n}× ${translateIfcType(t)}`).join(", ");
         summary = `\n\nFördelning (topp): ${topTypes}`;
       }
 
