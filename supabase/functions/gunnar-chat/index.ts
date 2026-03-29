@@ -1412,7 +1412,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
           { label: "Visa alla rum", action: "category_query", payload: { category: "Space" } },
         ]),
         asset_ids: [], external_entity_ids: [], filters: {},
-        suggestions: ["Visa temperatur i modell", "Vilka rum har hög CO2?", "Visa luftkvalitet"],
+        suggestions: ["Visa temperatur i viewer", "Vilka rum har hög CO2?", "Visa luftkvalitet"],
         sensor_data: sensorData.length > 0 ? sensorData : undefined,
         color_map: Object.keys(colorMap).length > 0 ? colorMap : undefined,
       };
