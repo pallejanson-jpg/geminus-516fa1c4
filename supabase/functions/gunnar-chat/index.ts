@@ -1081,7 +1081,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
       if (category === "Instance") {
         const types: Record<string, number> = {};
         assetList.forEach((a: any) => { const t = a.asset_type || "okänd"; types[t] = (types[t] || 0) + 1; });
-        const topTypes = Object.entries(types).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t, n]) => `${n}× ${t}`).join(", ");
+        const topTypes = Object.entries(types).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t, n]) => `${n}× ${translateIfcType(t)}`).join(", ");
         summary = `\n\nFördelning (topp): ${topTypes}`;
       }
 
