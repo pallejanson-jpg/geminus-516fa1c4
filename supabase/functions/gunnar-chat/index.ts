@@ -842,10 +842,10 @@ function buttonFromLabel(label: string, context: any): ActionButton {
     return { label, action: "search_prompt" };
   }
 
-  // "Visa X i modell" / "Show X in viewer"
+  // "Visa X i viewer" / "Show X in viewer" / "Visa X i modell"
   const viewerMatch = lower.match(/^visa\s+(.+?)\s+i\s+(modell|viewer|3d)/i);
   if (viewerMatch) {
-    return { label, action: "viewer_highlight", payload: { system: viewerMatch[1] } };
+    return { label: label.replace(/i modell/i, "i viewer"), action: "viewer_highlight", payload: { system: viewerMatch[1] } };
   }
 
   // "Visa ventilation" / "Visa dörrar" etc
@@ -955,9 +955,9 @@ function detectButtonAction(messages: any[], context: any): ButtonActionIntent |
   if (/^filtrera per våning$/i.test(lower)) return { action: "floor_query", payload: {} };
   if (/^visa detaljer$/i.test(lower)) return { action: "detail_view", payload: {} };
 
-  // "Visa X i modell" pattern
-  const viewerMatch = lower.match(/^visa\s+(.+?)\s+i\s+(modell|viewer|3d)$/i);
-  if (viewerMatch) return { action: "viewer_highlight", payload: { system: viewerMatch[1] } };
+  // "Visa X i viewer/modell" pattern
+  const viewerMatch2 = lower.match(/^visa\s+(.+?)\s+i\s+(modell|viewer|3d)$/i);
+  if (viewerMatch2) return { action: "viewer_highlight", payload: { system: viewerMatch2[1] } };
 
   // "Finns det andra typer av utrustning?" — common AI-generated suggestion
   if (/^finns det (andra|fler|mer) typer/i.test(lower)) return { action: "building_summary", payload: {} };
@@ -1060,12 +1060,12 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         message: `Det finns **${totalCount}** ${categoryLabel} i ${buildingName}.${summary}`,
         response_type: "data_query", action: "none",
         buttons: makeButtons([
-          { label: `Visa ${categoryLabel} i modell`, action: "viewer_highlight", payload: { category } },
+          { label: `Visa ${categoryLabel} i viewer`, action: "viewer_highlight", payload: { category } },
           { label: "Filtrera per våning", action: "floor_query" },
           { label: "Byggnadsöversikt", action: "building_summary" },
         ]),
         asset_ids: assetIds.slice(0, 50), external_entity_ids: [], filters: { category },
-        suggestions: [`Visa ${categoryLabel} i modell`, "Visa annan utrustning", "Vilka våningar finns?"],
+        suggestions: [`Visa ${categoryLabel} i viewer`, "Visa annan utrustning", "Vilka våningar finns?"],
       };
     }
 
@@ -1098,11 +1098,11 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
             message: `Hittade **${searchResults.length}** objekt som matchar "${system}" i ${buildingName}: ${typeSummary}.`,
             response_type: "data_query", action: "none",
             buttons: makeButtons([
-              { label: `Visa ${system} i modell`, action: "viewer_highlight", payload: { system } },
+              { label: `Visa ${system} i viewer`, action: "viewer_highlight", payload: { system } },
               { label: "Byggnadsöversikt", action: "building_summary" },
             ]),
             asset_ids: searchResults.slice(0, 50).map((a: any) => a.fm_guid), external_entity_ids: [], filters: { system },
-            suggestions: ["Visa i modell", "Visa annan utrustning"],
+            suggestions: ["Visa i viewer", "Visa annan utrustning"],
           };
         }
         return {
@@ -1124,12 +1124,12 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         message: `Det finns **${assetList.length}** ${system}-objekt i ${buildingName}.\n\nFördelning: ${typeSummary}.`,
         response_type: "data_query", action: "none",
         buttons: makeButtons([
-          { label: `Visa ${system} i modell`, action: "viewer_highlight", payload: { system } },
+          { label: `Visa ${system} i viewer`, action: "viewer_highlight", payload: { system } },
           { label: "Filtrera per våning", action: "floor_query" },
           { label: "Byggnadsöversikt", action: "building_summary" },
         ]),
         asset_ids: assetIds.slice(0, 50), external_entity_ids: [], filters: { system },
-        suggestions: [`Visa ${system} i modell`, "Visa annan utrustning", "Vilka rum har detta system?"],
+        suggestions: [`Visa ${system} i viewer`, "Visa annan utrustning", "Vilka rum har detta system?"],
       };
     }
 
@@ -1162,8 +1162,10 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         } catch { /* ignore */ }
       }
       return {
-        message: `Markerar **${entityIds.length}** ${system}-objekt i viewern.`,
-        response_type: "action", action: entityIds.length > 0 ? "highlight" : "none",
+        message: entityIds.length > 0
+          ? `Markerar **${entityIds.length}** ${system}-objekt i viewern.`
+          : `Öppnar viewern för ${buildingName}. (Inga geometriobjekt hittades för ${system} att markera.)`,
+        response_type: "action", action: "highlight",
         buttons: makeButtons([
           { label: "Byggnadsöversikt", action: "building_summary" },
           { label: "Filtrera per våning", action: "floor_query" },
@@ -1171,6 +1173,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         asset_ids: assetIds.slice(0, 50), external_entity_ids: entityIds,
         filters: intent.payload.category ? { category: intent.payload.category } : { system: system },
         suggestions: ["Visa annan utrustning", "Filtrera per våning"],
+        navigate_to_viewer: true,
       };
     }
 
@@ -1409,7 +1412,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
           { label: "Visa alla rum", action: "category_query", payload: { category: "Space" } },
         ]),
         asset_ids: [], external_entity_ids: [], filters: {},
-        suggestions: ["Visa temperatur i modell", "Vilka rum har hög CO2?", "Visa luftkvalitet"],
+        suggestions: ["Visa temperatur i viewer", "Vilka rum har hög CO2?", "Visa luftkvalitet"],
         sensor_data: sensorData.length > 0 ? sensorData : undefined,
         color_map: Object.keys(colorMap).length > 0 ? colorMap : undefined,
       };
@@ -1580,7 +1583,7 @@ function detectViewerIntent(messages: any[], context: any): ButtonActionIntent |
   }
 
   // Detect if user explicitly wants viewer action
-  const viewerKeywords = /(visa\s+i\s+(viewern|3d)|markera|highlight|show\s+in\s+(viewer|3d)|färglägg|colorize)/i;
+  const viewerKeywords = /(visa\s+i\s+(viewern|3d|modell)|markera|highlight|show\s+in\s+(viewer|3d)|färglägg|colorize)/i;
   const wantsViewer = viewerKeywords.test(text);
 
   // "byggnadsöversikt" / "building overview"
@@ -1769,7 +1772,7 @@ LANGUAGE & TERMINOLOGY — CRITICAL:
 
 RESPONSE FORMAT (via format_response tool — call it LAST, after data tools):
 - message: Short, concrete (max 2-3 sentences). No fluff.
-- buttons: 2-3 clickable ACTION buttons (e.g. "Visa i modell", "Filtrera dörrar", "Byggnadsöversikt").
+- buttons: 2-3 clickable ACTION buttons (e.g. "Visa i viewer", "Filtrera dörrar", "Byggnadsöversikt").
 - suggestions: 2-3 proactive follow-up questions.
 - action: Default "none". Only "highlight"/"filter"/"colorize" when user EXPLICITLY asks to see things in the viewer/3D.
 
