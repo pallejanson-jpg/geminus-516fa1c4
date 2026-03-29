@@ -567,7 +567,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
             {msg.role === "assistant" ? (
               <div>
                 <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1">
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  <ReactMarkdown>{msg.content + (isStreaming && i === messages.length - 1 ? " ▍" : "")}</ReactMarkdown>
                 </div>
                 <div className="flex justify-end mt-1.5">
                   <button
