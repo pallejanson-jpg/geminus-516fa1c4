@@ -108,6 +108,8 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
   const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingStatus, setStreamingStatus] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -212,36 +214,73 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     await speakText(text);
   }, [voiceOutputEnabled, speakText]);
 
-  // ── Structured chat call (no streaming — JSON response) ──
-  const callChat = useCallback(async (userMessages: Message[], currentContext?: GunnarContext): Promise<AiStructuredResponse> => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) throw new Error("You must be logged in.");
+  // ── Process SSE streaming response ──
+  const processSSEResponse = useCallback(async (resp: Response): Promise<AiStructuredResponse> => {
+    const reader = resp.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let messageText = "";
+    let meta: any = {};
+    let assistantAdded = false;
 
-    const controller = new AbortController();
-    abortRef.current = controller;
-    const timeout = setTimeout(() => controller.abort(), 60000);
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
 
-    try {
-      const resp = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ messages: userMessages, context: currentContext }),
-        signal: controller.signal,
-      });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() || "";
 
-      if (!resp.ok) {
-        const errorData = await resp.json().catch(() => ({}));
-        if (resp.status === 429) throw { status: 429, message: "Too many requests. Please wait." };
-        if (resp.status === 402) throw { status: 402, message: "AI credits used up." };
-        if (resp.status === 401) throw { status: 401, message: "Not logged in." };
-        throw new Error(errorData.error || `Request failed (${resp.status})`);
+      for (const part of parts) {
+        for (const line of part.split("\n")) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(trimmed.slice(6));
+            if (data.type === "status") {
+              setStreamingStatus(data.message);
+            } else if (data.type === "delta") {
+              if (!assistantAdded) {
+                assistantAdded = true;
+                setIsStreaming(true);
+                setStreamingStatus("");
+                setMessages(prev => [...prev, { role: "assistant", content: data.content }]);
+              } else {
+                setMessages(prev => {
+                  const updated = [...prev];
+                  const last = updated[updated.length - 1];
+                  if (last?.role === "assistant") {
+                    updated[updated.length - 1] = { role: "assistant", content: last.content + data.content };
+                  }
+                  return updated;
+                });
+              }
+              messageText += data.content;
+            } else if (data.type === "meta") {
+              meta = data;
+            } else if (data.type === "error") {
+              throw new Error(data.message || "Stream error");
+            }
+          } catch (e) {
+            if (e instanceof Error && e.message.includes("Stream error")) throw e;
+          }
+        }
       }
-
-      return await resp.json();
-    } finally {
-      clearTimeout(timeout);
-      abortRef.current = null;
     }
+
+    setIsStreaming(false);
+    return {
+      message: messageText,
+      response_type: meta.response_type || "answer",
+      action: meta.action || "none",
+      buttons: meta.buttons || [],
+      asset_ids: meta.asset_ids || [],
+      external_entity_ids: meta.external_entity_ids || [],
+      filters: meta.filters || {},
+      suggestions: meta.suggestions || [],
+      sensor_data: meta.sensor_data,
+      color_map: meta.color_map,
+    };
   }, []);
 
   // ── Helper: check if we're already on a viewer page ──
@@ -314,27 +353,54 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     setMessages(newMessages);
     setInput("");
     setIsLoading(true);
+    setIsStreaming(false);
+    setStreamingStatus("");
     setProactiveInsights([]);
     setSuggestions([]);
     setButtons([]);
 
     try {
-      const apiMessages = trimHistory(newMessages.filter((_, i) => i > 0));
-      const response = await callChat(apiMessages, context);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("You must be logged in.");
 
-      const assistantContent = response.message || "Inga resultat hittades.";
-      setMessages(prev => [...prev, { role: "assistant", content: assistantContent }]);
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const timeout = setTimeout(() => controller.abort(), 60000);
 
-      // Capture structured buttons
-      const normalizedButtons = normalizeButtons(response.buttons);
-      if (normalizedButtons.length) {
-        setButtons(normalizedButtons);
+      try {
+        const apiMessages = trimHistory(newMessages.filter((_, i) => i > 0));
+        const resp = await fetch(CHAT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ messages: apiMessages, context }),
+          signal: controller.signal,
+        });
+
+        if (!resp.ok) {
+          const errorData = await resp.json().catch(() => ({}));
+          if (resp.status === 429) throw { status: 429, message: "Too many requests. Please wait." };
+          if (resp.status === 402) throw { status: 402, message: "AI credits used up." };
+          if (resp.status === 401) throw { status: 401, message: "Not logged in." };
+          throw new Error(errorData.error || `Request failed (${resp.status})`);
+        }
+
+        let response: AiStructuredResponse;
+        const ct = resp.headers.get("content-type") || "";
+        if (ct.includes("text/event-stream")) {
+          response = await processSSEResponse(resp);
+        } else {
+          response = await resp.json();
+          setMessages(prev => [...prev, { role: "assistant", content: response.message || "Inga resultat hittades." }]);
+        }
+
+        const normalizedButtons = normalizeButtons(response.buttons);
+        if (normalizedButtons.length) setButtons(normalizedButtons);
+        if (response.suggestions?.length) setSuggestions(response.suggestions);
+        executeViewerAction(response);
+      } finally {
+        clearTimeout(timeout);
+        abortRef.current = null;
       }
-      if (response.suggestions?.length) {
-        setSuggestions(response.suggestions);
-      }
-
-      executeViewerAction(response);
     } catch (error) {
       console.error("Chat error:", error);
       const isAbort = error instanceof DOMException && error.name === "AbortError";
@@ -343,6 +409,8 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       setMessages(messages); // revert
     } finally {
       setIsLoading(false);
+      setIsStreaming(false);
+      setStreamingStatus("");
     }
   };
 
@@ -352,20 +420,18 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     setSuggestions([]);
 
     if (btn.action === "free_text") {
-      // Legacy fallback: send label as free text
       sendMessage(btn.label);
       return;
     }
 
-    // Send structured action as JSON so backend can parse it deterministically
     const actionPayload = JSON.stringify({ action: btn.action, payload: btn.payload || {} });
-    
-    // Show the label to the user in chat, but send the action JSON to backend
     const userMessage: Message = { role: "user", content: btn.label };
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
     setInput("");
     setIsLoading(true);
+    setIsStreaming(false);
+    setStreamingStatus("");
     setProactiveInsights([]);
 
     (async () => {
@@ -378,9 +444,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         const timeout = setTimeout(() => controller.abort(), 60000);
 
         try {
-          // Send action JSON as the user message content so backend routes it correctly
           const apiMessages = trimHistory(newMessages.filter((_, i) => i > 0));
-          // Replace the last user message content with the action JSON for backend
           const backendMessages = [...apiMessages.slice(0, -1), { role: "user" as const, content: actionPayload }];
 
           const resp = await fetch(CHAT_URL, {
@@ -395,14 +459,18 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
             throw new Error(errorData.error || `Request failed (${resp.status})`);
           }
 
-          const response: AiStructuredResponse = await resp.json();
-          const assistantContent = response.message || "Inga resultat hittades.";
-          setMessages(prev => [...prev, { role: "assistant", content: assistantContent }]);
+          let response: AiStructuredResponse;
+          const ct = resp.headers.get("content-type") || "";
+          if (ct.includes("text/event-stream")) {
+            response = await processSSEResponse(resp);
+          } else {
+            response = await resp.json();
+            setMessages(prev => [...prev, { role: "assistant", content: response.message || "Inga resultat hittades." }]);
+          }
 
           const normalizedButtons = normalizeButtons(response.buttons);
           if (normalizedButtons.length) setButtons(normalizedButtons);
           if (response.suggestions?.length) setSuggestions(response.suggestions);
-
           executeViewerAction(response);
         } finally {
           clearTimeout(timeout);
@@ -414,9 +482,11 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         toastHook({ variant: "destructive", title: "Error", description: errMsg });
       } finally {
         setIsLoading(false);
+        setIsStreaming(false);
+        setStreamingStatus("");
       }
     })();
-  }, [messages, context, trimHistory, executeViewerAction, toastHook]);
+  }, [messages, context, trimHistory, executeViewerAction, toastHook, processSSEResponse]);
 
   const handleSend = () => sendMessage(input);
 
@@ -497,7 +567,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
             {msg.role === "assistant" ? (
               <div>
                 <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1">
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  <ReactMarkdown>{msg.content + (isStreaming && i === messages.length - 1 ? " ▍" : "")}</ReactMarkdown>
                 </div>
                 <div className="flex justify-end mt-1.5">
                   <button
@@ -570,11 +640,11 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         </div>
       )}
 
-      {isLoading && messages[messages.length - 1]?.role === "user" && (
+      {isLoading && !isStreaming && messages[messages.length - 1]?.role === "user" && (
         <div className="flex justify-start">
           <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
             <Loader2 className="h-4 w-4 animate-spin" />
-            <span>Tänker...</span>
+            <span>{streamingStatus || "Tänker..."}</span>
           </div>
         </div>
       )}
