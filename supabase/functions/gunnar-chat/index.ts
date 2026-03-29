@@ -1769,7 +1769,7 @@ LANGUAGE & TERMINOLOGY — CRITICAL:
 
 RESPONSE FORMAT (via format_response tool — call it LAST, after data tools):
 - message: Short, concrete (max 2-3 sentences). No fluff.
-- buttons: 2-3 clickable ACTION buttons (e.g. "Visa i modell", "Filtrera dörrar", "Byggnadsöversikt").
+- buttons: 2-3 clickable ACTION buttons (e.g. "Visa i viewer", "Filtrera dörrar", "Byggnadsöversikt").
 - suggestions: 2-3 proactive follow-up questions.
 - action: Default "none". Only "highlight"/"filter"/"colorize" when user EXPLICITLY asks to see things in the viewer/3D.
 
