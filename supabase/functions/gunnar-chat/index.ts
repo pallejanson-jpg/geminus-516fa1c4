@@ -1583,7 +1583,7 @@ function detectViewerIntent(messages: any[], context: any): ButtonActionIntent |
   }
 
   // Detect if user explicitly wants viewer action
-  const viewerKeywords = /(visa\s+i\s+(viewern|3d)|markera|highlight|show\s+in\s+(viewer|3d)|färglägg|colorize)/i;
+  const viewerKeywords = /(visa\s+i\s+(viewern|3d|modell)|markera|highlight|show\s+in\s+(viewer|3d)|färglägg|colorize)/i;
   const wantsViewer = viewerKeywords.test(text);
 
   // "byggnadsöversikt" / "building overview"
