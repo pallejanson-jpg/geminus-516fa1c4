@@ -345,9 +345,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       const fastNavEnabled = (() => {
         try {
           const stored = localStorage.getItem('viewer-fastnav-enabled');
-          if (stored === null) return true; // default ON
+          if (stored === null) return false; // default OFF — respect user setting
           return stored === 'true';
-        } catch { return true; }
+        } catch { return false; }
       })();
       if (sdk.FastNavPlugin && fastNavEnabled) {
         new sdk.FastNavPlugin(viewer, {
