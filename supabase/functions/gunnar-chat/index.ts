@@ -1124,7 +1124,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         message: `Det finns **${assetList.length}** ${system}-objekt i ${buildingName}.\n\nFördelning: ${typeSummary}.`,
         response_type: "data_query", action: "none",
         buttons: makeButtons([
-          { label: `Visa ${system} i modell`, action: "viewer_highlight", payload: { system } },
+          { label: `Visa ${system} i viewer`, action: "viewer_highlight", payload: { system } },
           { label: "Filtrera per våning", action: "floor_query" },
           { label: "Byggnadsöversikt", action: "building_summary" },
         ]),
