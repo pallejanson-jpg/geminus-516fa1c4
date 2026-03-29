@@ -1016,7 +1016,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         };
       }
       const summary = await execBuildingSummary(supabase, { fm_guid: buildingGuid });
-      const topTypes = summary.top_asset_types?.slice(0, 3).map((t: any) => `${t.count}× ${t.type}`).join(", ") || "";
+      const topTypes = summary.top_asset_types?.slice(0, 3).map((t: any) => `${t.count}× ${translateIfcType(t.type)}`).join(", ") || "";
       return {
         message: `**${summary.building_name}**\n\n• ${summary.floors_count} våningar, ${summary.rooms} rum, ${summary.assets} tillgångar\n• Total yta: ${summary.total_space_area_m2} m²\n• ${summary.total_issues} ärenden${summary.total_issues > 0 ? ` (${Object.entries(summary.issues_by_status).map(([s, n]) => `${n} ${s}`).join(", ")})` : ""}${topTypes ? `\n• Vanligaste typer: ${topTypes}` : ""}`,
         response_type: "answer", action: "none",
