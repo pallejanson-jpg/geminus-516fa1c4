@@ -1129,7 +1129,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
           { label: "Byggnadsöversikt", action: "building_summary" },
         ]),
         asset_ids: assetIds.slice(0, 50), external_entity_ids: [], filters: { system },
-        suggestions: [`Visa ${system} i modell`, "Visa annan utrustning", "Vilka rum har detta system?"],
+        suggestions: [`Visa ${system} i viewer`, "Visa annan utrustning", "Vilka rum har detta system?"],
       };
     }
 
