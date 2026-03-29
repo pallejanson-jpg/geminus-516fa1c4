@@ -1,60 +1,61 @@
 
 
-# Plan: Snabba upp Geminus AI (Gunnar) med streaming
+# Plan: Tre prestandaoptimeringar + AI highlight-fix + FastNav-fix
 
-## Problem
-Geminus AI väntar tills hela AI-svaret är klart innan det visas för användaren. ChatGPT och Copilot streamar token-för-token, vilket ger en upplevd svarstid på under 1 sekund. Nuvarande arkitektur:
+## Sammanfattning
+Tre ändringar i två filer för att snabba upp viewern och fixa buggar.
 
-1. **Frontend** (`GunnarChat.tsx`): Gör ett vanligt `fetch()` och väntar på `resp.json()` — inget stöd för streaming
-2. **Backend** (`gunnar-chat/index.ts`): Kör 1–3 AI-rundor sekventiellt (tool-calling loop), varje runda väntar på fullständigt svar. Streaming är avstängt (`stream: false`)
-3. **Resultat**: Användaren ser ingenting i 3–8 sekunder
+---
 
-## Lösning: Streaming av det sista AI-svaret
+## 1. FastNav default → false
 
-Hela tool-calling-loopen körs i bakgrunden som innan (den behöver fullständiga svar för att parsa tool calls), men det **sista steget** (format_response eller direkt svar) streamas token-för-token till klienten via SSE.
+**Fil:** `src/components/viewer/NativeXeokitViewer.tsx` rad 348
 
-### Steg 1: Backend — streama sista AI-anropet
+Ändra `if (stored === null) return true;` till `return false;` så att FastNav respekterar inställningen (som defaultar till false i VoiceSettings).
 
-I `supabase/functions/gunnar-chat/index.ts`:
+---
 
-- Lägg till en hjälpfunktion som streamar ett SSE-svar till klienten
-- När tool-loopen når sista rundan eller ett direkt svar: gör `callAI` med `stream: true`
-- Skriv varje SSE-chunk direkt till en `ReadableStream` som returneras som response
-- Fast-path-svar (hälsningar, knappar) returneras som vanligt JSON (de är redan snabba)
-- Skicka en sista `data: {"done": true, "structured": {...}}` rad med knappar, suggestions och action-data
+## 2. AI "Visa i viewer" — colorize istället för highlight
 
-### Steg 2: Frontend — ta emot och rendera stream
+**Fil:** `src/hooks/useAiViewerBridge.ts`
 
-I `src/components/chat/GunnarChat.tsx`:
+Problemet: `highlightEntities` använder `setObjectsHighlighted` som bara ger subtil outline — ser ut som xray utan infärgning.
 
-- Ändra `callChat` så den läser `response.body` som en SSE-stream om Content-Type är `text/event-stream`
-- Visa en "spinner" som omedelbart ersätts av de första orden som streamar in
-- Parsa varje `data:` rad, extrahera `delta.content`, och uppdatera meddelandet progressivt
-- När `done`-eventet kommer: parsa structured data (knappar, suggestions, action) och visa dem
+Fix i `highlightEntities`-funktionen:
+- Behåll xray-logiken (ghost allt, un-xray valda)
+- Ersätt `setObjectsHighlighted(entityIds, true)` med `setObjectsColorized(entityIds, [1, 0.5, 0])` (orange)
+- Lägg till fuzzy ID-matching: testa entity IDs mot scenen med lowercase + `.xkt`-prefix-stripping så att IDs från `geometry_entity_map` matchar viewerns interna format
 
-### Steg 3: Visuell förbättring
+---
 
-- Lägg till en blinkande cursor-effekt ("▍") i slutet av meddelandet medan det streamar
-- Visa knappar och suggestions först när streamen är klar
+## 3. Prestandaoptimering i NativeXeokitViewer
 
-## Tekniska detaljer
+**Fil:** `src/components/viewer/NativeXeokitViewer.tsx`
 
-```text
-┌─────────────┐     SSE stream      ┌──────────────────┐
-│  GunnarChat  │ ◄─────────────────  │  gunnar-chat fn  │
-│  (frontend)  │   token by token    │  (edge function) │
-└─────────────┘                      └──────────────────┘
-                                       │
-                                       ├─ Fast-path? → JSON (instant)
-                                       │
-                                       ├─ Tool round 1 → callAI(stream:false)
-                                       ├─ Tool round 2 → callAI(stream:false)
-                                       └─ Final answer → callAI(stream:true) → SSE
-```
+### 3a. Skippa storage.list() om DB har modeller
+Rad 189-191: `storagePromise` körs alltid men används bara som fallback om DB är tom. Ändra till att bara köra om DB-resultatet är tomt (sekventiell fallback istället för parallell).
 
-**Filer som ändras:**
-- `supabase/functions/gunnar-chat/index.ts` — streaming av sista svaret
-- `src/components/chat/GunnarChat.tsx` — SSE-parser och progressiv rendering
+**Approach:** Starta `storagePromise` parallellt men som en lazy promise — flytta den innanför `if (models.length === 0)`-blocket. Alternativt: behåll parallell men skippa processing om DB har data (redan delvis gjort men listningen kostar ~500ms).
 
-**Uppskattad förbättring:** Första token visas ~1–2s snabbare. Upplevd svarstid minskar drastiskt.
+Enklaste optimering: Gör `storagePromise` conditional — kör den bara om `dbResult` ger 0 modeller. Detta kräver att vi kör DB-query först, sedan storage vid behov.
+
+### 3b. reuseGeometries: true
+Rad 368: Ändra `reuseGeometries: false` till `reuseGeometries: true`. xeokit kan då instansiera identisk geometri och minska minnesfotavtrycket.
+
+### 3c. Skippa asset-plus-sync om DB har modeller
+Rad 454-482: Bootstrap-blocket med `asset-plus-sync` körs bara om `models.length === 0`, vilket redan är korrekt. Ingen ändring behövs här — det är redan optimerat.
+
+---
+
+## Teknisk sammanfattning
+
+| Fil | Ändring |
+|---|---|
+| `NativeXeokitViewer.tsx` | FastNav default false; conditional storage.list(); reuseGeometries: true |
+| `useAiViewerBridge.ts` | Colorize med orange istf highlight; fuzzy ID-matching |
+
+**Uppskattad effekt:**
+- FastNav: respekterar inställning korrekt
+- Highlight: tydlig orange infärgning i viewer vid "Visa i viewer"
+- Prestanda: ~300-500ms snabbare init (skippad storage.list()), potentiellt bättre minnesanvändning med reuseGeometries
 
