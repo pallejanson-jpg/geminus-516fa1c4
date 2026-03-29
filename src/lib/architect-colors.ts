@@ -144,11 +144,14 @@ export function recolorArchitectObjects(viewer: any): number {
   }
 
   // Restore subtle edges
-  if (scene.edgeMaterial) {
-    scene.edgeMaterial.edgeColor = [0.85, 0.84, 0.82];
-    scene.edgeMaterial.edgeAlpha = 0.15;
-    scene.edgeMaterial.edgeWidth = 1;
-  }
+  try {
+    const edgeMat = scene.edgeMaterial;
+    if (edgeMat) {
+      edgeMat.edgeColor = [0.85, 0.84, 0.82];
+      edgeMat.edgeAlpha = 0.15;
+      edgeMat.edgeWidth = 1;
+    }
+  } catch { /* edgeMaterial getter throws if scene is destroyed */ }
 
   return colorized;
 }
