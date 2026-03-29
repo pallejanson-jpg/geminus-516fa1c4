@@ -297,6 +297,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     }
 
     const isViewerAction = response.action === 'highlight' || response.action === 'filter' || response.action === 'colorize';
+    const shouldNavigateToViewer = (response as any).navigate_to_viewer === true;
 
     // Build the viewer command to dispatch (or save for later)
     let viewerCommand: any = null;
@@ -319,6 +320,16 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       }
     }
 
+    // If we should navigate to viewer even without a specific command
+    if (!viewerCommand && (shouldNavigateToViewer || isViewerAction)) {
+      const buildingGuid = context?.currentBuilding?.fmGuid || context?.viewerState?.buildingFmGuid || '';
+      if (buildingGuid && !isOnViewerPage()) {
+        toast.info('Öppnar viewern…');
+        window.location.href = `/viewer?building=${buildingGuid}`;
+        return;
+      }
+    }
+
     if (!viewerCommand) return;
 
     if (isOnViewerPage()) {
@@ -335,7 +346,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       // Not in viewer — save command and navigate
       sessionStorage.setItem('pending_ai_viewer_command', JSON.stringify(viewerCommand));
       const buildingGuid = context?.currentBuilding?.fmGuid || context?.viewerState?.buildingFmGuid || '';
-      toast.info('Öppnar 3D-viewern…');
+      toast.info('Öppnar viewern…');
       window.location.href = `/viewer${buildingGuid ? `?building=${buildingGuid}` : ''}`;
     }
   }, [context, isOnViewerPage]);
