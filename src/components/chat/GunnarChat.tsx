@@ -420,20 +420,18 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     setSuggestions([]);
 
     if (btn.action === "free_text") {
-      // Legacy fallback: send label as free text
       sendMessage(btn.label);
       return;
     }
 
-    // Send structured action as JSON so backend can parse it deterministically
     const actionPayload = JSON.stringify({ action: btn.action, payload: btn.payload || {} });
-    
-    // Show the label to the user in chat, but send the action JSON to backend
     const userMessage: Message = { role: "user", content: btn.label };
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
     setInput("");
     setIsLoading(true);
+    setIsStreaming(false);
+    setStreamingStatus("");
     setProactiveInsights([]);
 
     (async () => {
@@ -446,9 +444,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         const timeout = setTimeout(() => controller.abort(), 60000);
 
         try {
-          // Send action JSON as the user message content so backend routes it correctly
           const apiMessages = trimHistory(newMessages.filter((_, i) => i > 0));
-          // Replace the last user message content with the action JSON for backend
           const backendMessages = [...apiMessages.slice(0, -1), { role: "user" as const, content: actionPayload }];
 
           const resp = await fetch(CHAT_URL, {
@@ -463,14 +459,18 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
             throw new Error(errorData.error || `Request failed (${resp.status})`);
           }
 
-          const response: AiStructuredResponse = await resp.json();
-          const assistantContent = response.message || "Inga resultat hittades.";
-          setMessages(prev => [...prev, { role: "assistant", content: assistantContent }]);
+          let response: AiStructuredResponse;
+          const ct = resp.headers.get("content-type") || "";
+          if (ct.includes("text/event-stream")) {
+            response = await processSSEResponse(resp);
+          } else {
+            response = await resp.json();
+            setMessages(prev => [...prev, { role: "assistant", content: response.message || "Inga resultat hittades." }]);
+          }
 
           const normalizedButtons = normalizeButtons(response.buttons);
           if (normalizedButtons.length) setButtons(normalizedButtons);
           if (response.suggestions?.length) setSuggestions(response.suggestions);
-
           executeViewerAction(response);
         } finally {
           clearTimeout(timeout);
@@ -482,9 +482,11 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         toastHook({ variant: "destructive", title: "Error", description: errMsg });
       } finally {
         setIsLoading(false);
+        setIsStreaming(false);
+        setStreamingStatus("");
       }
     })();
-  }, [messages, context, trimHistory, executeViewerAction, toastHook]);
+  }, [messages, context, trimHistory, executeViewerAction, toastHook, processSSEResponse]);
 
   const handleSend = () => sendMessage(input);
 
