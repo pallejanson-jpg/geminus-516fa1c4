@@ -1978,128 +1978,128 @@ serve(async (req) => {
       }
     }
 
-    // ── Full tool-calling loop (complex questions only) ──
+    // ── Full tool-calling loop with SSE streaming ──
     let systemPrompt = await buildSystemPrompt(supabase, context, userProfile, previousConversation);
     if (userMemories) systemPrompt += userMemories;
 
     const conversation: any[] = [{ role: "system", content: systemPrompt }, ...messages];
 
-    // Filter out resolve_building_by_name when building is already in context
     const activeTools = context?.currentBuilding?.fmGuid
       ? tools.filter((t: any) => t.function.name !== "resolve_building_by_name")
       : tools;
 
-    let formatResponseResult: any = null;
+    const sseHeaders = { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" };
+    const encoder = new TextEncoder();
+    const sse = (data: any) => `data: ${JSON.stringify(data)}\n\n`;
 
-    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const isLastRound = round === MAX_TOOL_ROUNDS - 1;
-      const toolChoice = isLastRound
-        ? { type: "function", function: { name: "format_response" } }
-        : "auto";
-      const resp = await callAI(LOVABLE_API_KEY, conversation, { tools: activeTools, tool_choice: toolChoice });
-      const result = await resp.json();
-      const choice = result.choices?.[0];
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = (data: any) => { try { controller.enqueue(encoder.encode(sse(data))); } catch {} };
+        try {
+          send({ type: "status", message: "Analyserar frågan…" });
+          let formatResponseResult: any = null;
+          let responded = false;
 
-      if (!choice?.message?.tool_calls || choice.message.tool_calls.length === 0) {
-        const content = choice?.message?.content || "";
-        console.log(`Gunnar: direct answer (${Date.now() - startTime}ms, round ${round + 1})`);
-        const structuredResponse = {
-          message: content,
-          response_type: "answer" as const,
-          action: "none" as const,
-          buttons: generateFallbackButtons(context),
-          asset_ids: [],
-          external_entity_ids: [],
-          filters: {},
-          suggestions: generateFallbackSuggestions({}, context),
-        };
-        const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
-        saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, [...userMsgs, { role: "assistant", content }]).catch(e =>
-          console.error("Failed to save conversation:", e)
-        );
-        return new Response(JSON.stringify(structuredResponse), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+          for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+            const isLastRound = round === MAX_TOOL_ROUNDS - 1;
+            const toolChoice = isLastRound
+              ? { type: "function", function: { name: "format_response" } }
+              : "auto";
 
-      const toolCalls = choice.message.tool_calls;
-      console.log(`Gunnar round ${round + 1}: ${toolCalls.length} tool(s): ${toolCalls.map((tc: any) => tc.function.name).join(", ")} (${Date.now() - startTime}ms)`);
+            if (round > 0 && !formatResponseResult) send({ type: "status", message: "Bearbetar resultat…" });
 
-      conversation.push(choice.message);
+            const resp = await callAI(LOVABLE_API_KEY, conversation, { tools: activeTools, tool_choice: toolChoice });
+            const result = await resp.json();
+            const choice = result.choices?.[0];
 
-      const toolResults = await Promise.all(
-        toolCalls.map(async (tc: any) => {
-          let args: any;
-          try {
-            args = typeof tc.function.arguments === "string" ? JSON.parse(tc.function.arguments) : tc.function.arguments;
-          } catch (parseErr) {
-            console.error(`Tool ${tc.function.name} JSON parse error:`, parseErr);
-            return { role: "tool" as const, tool_call_id: tc.id, content: JSON.stringify({ error: `Invalid arguments` }) };
-          }
-          try {
-            const result = await executeTool(supabase, tc.function.name, args, LOVABLE_API_KEY);
-            if (tc.function.name === "format_response") {
-              formatResponseResult = result;
+            if (!choice?.message?.tool_calls || choice.message.tool_calls.length === 0) {
+              const content = choice?.message?.content || "";
+              console.log(`Gunnar: direct answer (${Date.now() - startTime}ms, round ${round + 1})`);
+              await streamText(controller, encoder, content);
+              send({ type: "meta", response_type: "answer", action: "none", buttons: generateFallbackButtons(context), asset_ids: [], external_entity_ids: [], filters: {}, suggestions: generateFallbackSuggestions({}, context) });
+              send({ type: "done" });
+              responded = true;
+              const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
+              saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, [...userMsgs, { role: "assistant", content }]).catch(() => {});
+              break;
             }
-            return { role: "tool" as const, tool_call_id: tc.id, content: JSON.stringify(result) };
-          } catch (err) {
-            console.error(`Tool ${tc.function.name} error:`, err);
-            return { role: "tool" as const, tool_call_id: tc.id, content: JSON.stringify({ error: String(err) }) };
+
+            const toolCalls = choice.message.tool_calls;
+            console.log(`Gunnar round ${round + 1}: ${toolCalls.length} tool(s): ${toolCalls.map((tc: any) => tc.function.name).join(", ")} (${Date.now() - startTime}ms)`);
+            conversation.push(choice.message);
+
+            const toolResults = await Promise.all(
+              toolCalls.map(async (tc: any) => {
+                let args: any;
+                try {
+                  args = typeof tc.function.arguments === "string" ? JSON.parse(tc.function.arguments) : tc.function.arguments;
+                } catch (parseErr) {
+                  console.error(`Tool ${tc.function.name} JSON parse error:`, parseErr);
+                  return { role: "tool" as const, tool_call_id: tc.id, content: JSON.stringify({ error: "Invalid arguments" }) };
+                }
+                try {
+                  const toolResult = await executeTool(supabase, tc.function.name, args, LOVABLE_API_KEY);
+                  if (tc.function.name === "format_response") formatResponseResult = toolResult;
+                  return { role: "tool" as const, tool_call_id: tc.id, content: JSON.stringify(toolResult) };
+                } catch (err) {
+                  console.error(`Tool ${tc.function.name} error:`, err);
+                  return { role: "tool" as const, tool_call_id: tc.id, content: JSON.stringify({ error: String(err) }) };
+                }
+              })
+            );
+            conversation.push(...toolResults);
+
+            if (formatResponseResult) {
+              console.log(`Gunnar: format_response received (${Date.now() - startTime}ms, round ${round + 1})`);
+              const structured: any = {
+                response_type: formatResponseResult.response_type || "answer",
+                action: formatResponseResult.action || "none",
+                buttons: convertAiButtons(formatResponseResult.buttons, context),
+                asset_ids: formatResponseResult.asset_ids || [],
+                external_entity_ids: formatResponseResult.external_entity_ids || [],
+                filters: formatResponseResult.filters || {},
+                suggestions: formatResponseResult.suggestions?.length ? formatResponseResult.suggestions : generateFallbackSuggestions(formatResponseResult, context),
+              };
+              if (formatResponseResult.sensor_data?.length) structured.sensor_data = formatResponseResult.sensor_data;
+              if (formatResponseResult.color_map && Object.keys(formatResponseResult.color_map).length) structured.color_map = formatResponseResult.color_map;
+
+              const messageText = formatResponseResult.message || "";
+              await streamText(controller, encoder, messageText);
+              send({ type: "meta", ...structured });
+              send({ type: "done" });
+              responded = true;
+
+              const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
+              saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, [...userMsgs, { role: "assistant", content: messageText }]).catch(() => {});
+              break;
+            }
           }
-        })
-      );
 
-      conversation.push(...toolResults);
-
-      if (formatResponseResult) {
-        console.log(`Gunnar: format_response received (${Date.now() - startTime}ms, round ${round + 1})`);
-        const structured: any = {
-          message: formatResponseResult.message || "",
-          response_type: formatResponseResult.response_type || "answer",
-          action: formatResponseResult.action || "none",
-          buttons: convertAiButtons(formatResponseResult.buttons, context),
-          asset_ids: formatResponseResult.asset_ids || [],
-          external_entity_ids: formatResponseResult.external_entity_ids || [],
-          filters: formatResponseResult.filters || {},
-          suggestions: formatResponseResult.suggestions?.length
-            ? formatResponseResult.suggestions
-            : generateFallbackSuggestions(formatResponseResult, context),
-        };
-        if (formatResponseResult.sensor_data?.length) structured.sensor_data = formatResponseResult.sensor_data;
-        if (formatResponseResult.color_map && Object.keys(formatResponseResult.color_map).length) structured.color_map = formatResponseResult.color_map;
-        const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
-        saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, [...userMsgs, { role: "assistant", content: structured.message }]).catch(e =>
-          console.error("Failed to save conversation:", e)
-        );
-        return new Response(JSON.stringify(structured), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+          if (!responded) {
+            console.log(`Gunnar: max rounds reached (${Date.now() - startTime}ms)`);
+            let lastAssistantText = "";
+            for (let i = conversation.length - 1; i >= 0; i--) {
+              if (conversation[i].role === "assistant" && typeof conversation[i].content === "string" && conversation[i].content.trim()) {
+                lastAssistantText = conversation[i].content.trim();
+                break;
+              }
+            }
+            const fallbackMsg = lastAssistantText || "Jag har begränsad information om detta just nu.";
+            await streamText(controller, encoder, fallbackMsg);
+            send({ type: "meta", action: "none", buttons: defaultButtons(context), asset_ids: [], external_entity_ids: [], filters: {}, suggestions: ["Vilka system finns?", "Visa alla rum", "Öppna ärenden"] });
+            send({ type: "done" });
+          }
+        } catch (err: any) {
+          console.error("SSE stream error:", err);
+          const send2 = (data: any) => { try { controller.enqueue(encoder.encode(sse(data))); } catch {} };
+          send2({ type: "error", message: err?.message || "Unknown error", status: err?.status });
+        } finally {
+          controller.close();
+        }
       }
-    }
-
-    // Max rounds — try to extract last useful AI content
-    console.log(`Gunnar: max rounds reached (${Date.now() - startTime}ms)`);
-    let lastAssistantText = "";
-    for (let i = conversation.length - 1; i >= 0; i--) {
-      if (conversation[i].role === "assistant" && typeof conversation[i].content === "string" && conversation[i].content.trim()) {
-        lastAssistantText = conversation[i].content.trim();
-        break;
-      }
-    }
-    const buildingName = context?.currentBuilding?.name || "byggnaden";
-    const fallback = {
-      message: lastAssistantText || `Jag har begränsad information om detta just nu. Här är vad du kan göra:`,
-      response_type: "answer",
-      action: "none",
-      buttons: defaultButtons(context),
-      asset_ids: [],
-      external_entity_ids: [],
-      filters: {},
-      suggestions: ["Vilka system finns?", "Visa alla rum", "Öppna ärenden"],
-    };
-    return new Response(JSON.stringify(fallback), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+
+    return new Response(stream, { headers: sseHeaders });
   } catch (e: any) {
     console.error("Gunnar chat error:", e);
     const status = e?.status || 500;
