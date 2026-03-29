@@ -1060,7 +1060,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         message: `Det finns **${totalCount}** ${categoryLabel} i ${buildingName}.${summary}`,
         response_type: "data_query", action: "none",
         buttons: makeButtons([
-          { label: `Visa ${categoryLabel} i modell`, action: "viewer_highlight", payload: { category } },
+          { label: `Visa ${categoryLabel} i viewer`, action: "viewer_highlight", payload: { category } },
           { label: "Filtrera per våning", action: "floor_query" },
           { label: "Byggnadsöversikt", action: "building_summary" },
         ]),
