@@ -1847,6 +1847,23 @@ function generateFallbackSuggestions(result: any, context: any): string[] {
   ];
 }
 
+/* ── SSE text streaming helper ── */
+
+async function streamText(controller: ReadableStreamDefaultController, encoder: TextEncoder, text: string) {
+  const words = text.split(/(\s+)/);
+  let batch = "";
+  for (let i = 0; i < words.length; i++) {
+    batch += words[i];
+    if (batch.length >= 8 || i === words.length - 1) {
+      try {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "delta", content: batch })}\n\n`));
+      } catch { break; }
+      batch = "";
+      if (i < words.length - 1) await new Promise(r => setTimeout(r, 20));
+    }
+  }
+}
+
 /* ─────────────────────────────────────────────
    Main handler
    ───────────────────────────────────────────── */
