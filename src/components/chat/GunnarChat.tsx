@@ -353,27 +353,54 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     setMessages(newMessages);
     setInput("");
     setIsLoading(true);
+    setIsStreaming(false);
+    setStreamingStatus("");
     setProactiveInsights([]);
     setSuggestions([]);
     setButtons([]);
 
     try {
-      const apiMessages = trimHistory(newMessages.filter((_, i) => i > 0));
-      const response = await callChat(apiMessages, context);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("You must be logged in.");
 
-      const assistantContent = response.message || "Inga resultat hittades.";
-      setMessages(prev => [...prev, { role: "assistant", content: assistantContent }]);
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const timeout = setTimeout(() => controller.abort(), 60000);
 
-      // Capture structured buttons
-      const normalizedButtons = normalizeButtons(response.buttons);
-      if (normalizedButtons.length) {
-        setButtons(normalizedButtons);
+      try {
+        const apiMessages = trimHistory(newMessages.filter((_, i) => i > 0));
+        const resp = await fetch(CHAT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ messages: apiMessages, context }),
+          signal: controller.signal,
+        });
+
+        if (!resp.ok) {
+          const errorData = await resp.json().catch(() => ({}));
+          if (resp.status === 429) throw { status: 429, message: "Too many requests. Please wait." };
+          if (resp.status === 402) throw { status: 402, message: "AI credits used up." };
+          if (resp.status === 401) throw { status: 401, message: "Not logged in." };
+          throw new Error(errorData.error || `Request failed (${resp.status})`);
+        }
+
+        let response: AiStructuredResponse;
+        const ct = resp.headers.get("content-type") || "";
+        if (ct.includes("text/event-stream")) {
+          response = await processSSEResponse(resp);
+        } else {
+          response = await resp.json();
+          setMessages(prev => [...prev, { role: "assistant", content: response.message || "Inga resultat hittades." }]);
+        }
+
+        const normalizedButtons = normalizeButtons(response.buttons);
+        if (normalizedButtons.length) setButtons(normalizedButtons);
+        if (response.suggestions?.length) setSuggestions(response.suggestions);
+        executeViewerAction(response);
+      } finally {
+        clearTimeout(timeout);
+        abortRef.current = null;
       }
-      if (response.suggestions?.length) {
-        setSuggestions(response.suggestions);
-      }
-
-      executeViewerAction(response);
     } catch (error) {
       console.error("Chat error:", error);
       const isAbort = error instanceof DOMException && error.name === "AbortError";
@@ -382,6 +409,8 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       setMessages(messages); // revert
     } finally {
       setIsLoading(false);
+      setIsStreaming(false);
+      setStreamingStatus("");
     }
   };
 
