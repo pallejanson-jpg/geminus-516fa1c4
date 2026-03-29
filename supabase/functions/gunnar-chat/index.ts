@@ -955,9 +955,9 @@ function detectButtonAction(messages: any[], context: any): ButtonActionIntent |
   if (/^filtrera per våning$/i.test(lower)) return { action: "floor_query", payload: {} };
   if (/^visa detaljer$/i.test(lower)) return { action: "detail_view", payload: {} };
 
-  // "Visa X i modell" pattern
-  const viewerMatch = lower.match(/^visa\s+(.+?)\s+i\s+(modell|viewer|3d)$/i);
-  if (viewerMatch) return { action: "viewer_highlight", payload: { system: viewerMatch[1] } };
+  // "Visa X i viewer/modell" pattern
+  const viewerMatch2 = lower.match(/^visa\s+(.+?)\s+i\s+(modell|viewer|3d)$/i);
+  if (viewerMatch2) return { action: "viewer_highlight", payload: { system: viewerMatch2[1] } };
 
   // "Finns det andra typer av utrustning?" — common AI-generated suggestion
   if (/^finns det (andra|fler|mer) typer/i.test(lower)) return { action: "building_summary", payload: {} };
