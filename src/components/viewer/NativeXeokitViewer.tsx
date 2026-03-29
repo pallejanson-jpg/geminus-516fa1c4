@@ -186,19 +186,23 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         .eq('building_fm_guid', buildingFmGuid)
         .order('updated_at', { ascending: false });
 
-      const storagePromise = supabase.storage
-        .from('xkt-models')
-        .list(buildingFmGuid, { limit: 1000, sortBy: { column: 'name', order: 'asc' } });
-
       const storeyPromise = supabase
         .from('assets')
         .select('attributes')
         .eq('building_fm_guid', buildingFmGuid)
         .eq('category', 'Building Storey');
 
-      const [sdk, dbResult, storageResult, storeyResult] = await Promise.all([
-        sdkPromise, dbPromise, storagePromise, storeyPromise,
+      const [sdk, dbResult, storeyResult] = await Promise.all([
+        sdkPromise, dbPromise, storeyPromise,
       ]);
+
+      // Lazy storage list — only if DB has no models (fallback bootstrap)
+      let storageResult: { data: any[] | null; error: any } = { data: null, error: null };
+      if (!dbResult.data || dbResult.data.length === 0) {
+        storageResult = await supabase.storage
+          .from('xkt-models')
+          .list(buildingFmGuid, { limit: 1000, sortBy: { column: 'name', order: 'asc' } });
+      }
 
       if (!mountedRef.current) return;
       console.log(`[NativeViewer] SDK + metadata loaded in ${Math.round(performance.now() - t0)}ms`);
