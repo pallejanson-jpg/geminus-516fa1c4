@@ -9,6 +9,35 @@ const AI_MODEL_FALLBACK = "google/gemini-2.5-flash-lite";
 const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 /* ─────────────────────────────────────────────
+   IFC type → user-friendly Swedish name map
+   ───────────────────────────────────────────── */
+const IFC_SWEDISH: Record<string, string> = {
+  IfcDoor: "dörrar", IfcWindow: "fönster", IfcWall: "väggar", IfcWallStandardCase: "väggar",
+  IfcSlab: "bjälklag", IfcBeam: "balkar", IfcColumn: "pelare", IfcRoof: "tak",
+  IfcStair: "trappor", IfcStairFlight: "trappor", IfcRailing: "räcken",
+  IfcCovering: "ytbeklädnad", IfcFurniture: "möbler", IfcCurtainWall: "curtainväggar",
+  IfcSensor: "sensorer", IfcAlarm: "larm", IfcActuator: "ställdon", IfcController: "styrenheter",
+  IfcPipeSegment: "rör", IfcPipeFitting: "rördelar", IfcDuctSegment: "ventilationskanaler",
+  IfcDuctFitting: "kanaldelar", IfcFlowTerminal: "don", IfcValve: "ventiler",
+  IfcPump: "pumpar", IfcBoiler: "pannor", IfcElectricAppliance: "elapparater",
+  IfcLightFixture: "belysning", IfcOutlet: "uttag", IfcSanitaryTerminal: "sanitetsporslin",
+  IfcFireSuppressionTerminal: "sprinkler", IfcFlowStorageDevice: "behållare",
+  IfcFlowTreatmentDevice: "reningsenheter", IfcEnergyConversionDevice: "energiomvandlare",
+  IfcDistributionFlowElement: "installationer", IfcDistributionElement: "installationer",
+  IfcBuildingElementProxy: "byggnadselement", IfcFurnishingElement: "inredning",
+  IfcTransportElement: "transportelement", IfcFlowSegment: "ledningssegment",
+  IfcFlowFitting: "kopplingar", IfcFlowController: "flödesregulatorer",
+  IfcSpaceHeater: "radiatorer", IfcUnitaryEquipment: "aggregat",
+  IfcCableCarrierSegment: "kabelstegar", IfcCableSegment: "kablar",
+  IfcElectricDistributionBoard: "elcentraler", IfcSwitchingDevice: "strömbrytare",
+  IfcProtectiveDevice: "skyddsenheter", IfcJunctionBox: "kopplingsdosor",
+};
+
+function translateIfcType(ifcType: string): string {
+  return IFC_SWEDISH[ifcType] || ifcType.replace(/^Ifc/, "").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+}
+
+/* ─────────────────────────────────────────────
    Structured button type — replaces plain strings
    ───────────────────────────────────────────── */
 
