@@ -1,35 +1,60 @@
 
 
+# Plan: Snabba upp Geminus AI (Gunnar) med streaming
+
 ## Problem
+Geminus AI väntar tills hela AI-svaret är klart innan det visas för användaren. ChatGPT och Copilot streamar token-för-token, vilket ger en upplevd svarstid på under 1 sekund. Nuvarande arkitektur:
 
-Du är på startsidan (`/index`) när du chattar med Gunnar. När AI:n returnerar viewer-kommandon (highlight, colorize, filter) dispatchar den events som `AI_VIEWER_COMMAND` och `AI_VIEWER_FOCUS_EVENT` — men dessa events lyssnas bara på av 3D-viewern (`NativeViewerShell`). Eftersom viewern inte är laddad på startsidan, händer ingenting visuellt. Toasten "Visar sensordata för 50 objekt" visas, men det finns ingen viewer att visa det i.
+1. **Frontend** (`GunnarChat.tsx`): Gör ett vanligt `fetch()` och väntar på `resp.json()` — inget stöd för streaming
+2. **Backend** (`gunnar-chat/index.ts`): Kör 1–3 AI-rundor sekventiellt (tool-calling loop), varje runda väntar på fullständigt svar. Streaming är avstängt (`stream: false`)
+3. **Resultat**: Användaren ser ingenting i 3–8 sekunder
 
-## Lösning: Auto-navigera till viewern vid viewer-actions
+## Lösning: Streaming av det sista AI-svaret
 
-När AI:n returnerar en viewer-action (highlight/filter/colorize) och användaren **inte redan är i viewern**, ska appen automatiskt navigera till viewern med rätt byggnad och spara viewer-kommandot så det kan tillämpas när viewern är redo.
+Hela tool-calling-loopen körs i bakgrunden som innan (den behöver fullständiga svar för att parsa tool calls), men det **sista steget** (format_response eller direkt svar) streamas token-för-token till klienten via SSE.
 
-### Ändringar
+### Steg 1: Backend — streama sista AI-anropet
 
-#### 1. `src/components/chat/GunnarChat.tsx` — Navigera till viewer vid behov
-- I `executeViewerAction`: kontrollera om `window.location.pathname` redan är `/viewer`
-- Om inte:
-  - Spara viewer-kommandot i `sessionStorage` (t.ex. `pending_ai_viewer_command`)
-  - Använda `window.location.href` eller React Router för att navigera till `/viewer?building={buildingFmGuid}` (hämta byggnads-GUID från chattkontexten)
-  - Visa toast: "Öppnar 3D-viewern..."
-- Om redan i viewern: kör som vanligt (dispatch event direkt)
+I `supabase/functions/gunnar-chat/index.ts`:
 
-#### 2. `src/components/viewer/NativeViewerShell.tsx` — Läs sparade kommandon vid uppstart
-- I `handleViewerReady` (redan befintlig callback):
-  - Kolla `sessionStorage.getItem('pending_ai_viewer_command')`
-  - Om det finns: parsa JSON och dispatcha `AI_VIEWER_COMMAND` efter en kort fördröjning (vänta på att modellen laddat)
-  - Ta bort från sessionStorage efter dispatch
+- Lägg till en hjälpfunktion som streamar ett SSE-svar till klienten
+- När tool-loopen når sista rundan eller ett direkt svar: gör `callAI` med `stream: true`
+- Skriv varje SSE-chunk direkt till en `ReadableStream` som returneras som response
+- Fast-path-svar (hälsningar, knappar) returneras som vanligt JSON (de är redan snabba)
+- Skicka en sista `data: {"done": true, "structured": {...}}` rad med knappar, suggestions och action-data
 
-#### 3. `src/components/chat/GunnarButton.tsx` — Sluta minimera chatten
-- Ta bort/ändra raden som auto-minimerar chatten vid `AI_VIEWER_FOCUS_EVENT` på mobil (rad 97-108)
-- Alternativ: minimera bara om viewern faktiskt är synlig (kolla pathname)
+### Steg 2: Frontend — ta emot och rendera stream
 
-### Filer
-- **Edit:** `src/components/chat/GunnarChat.tsx`
-- **Edit:** `src/components/viewer/NativeViewerShell.tsx`
-- **Edit:** `src/components/chat/GunnarButton.tsx`
+I `src/components/chat/GunnarChat.tsx`:
+
+- Ändra `callChat` så den läser `response.body` som en SSE-stream om Content-Type är `text/event-stream`
+- Visa en "spinner" som omedelbart ersätts av de första orden som streamar in
+- Parsa varje `data:` rad, extrahera `delta.content`, och uppdatera meddelandet progressivt
+- När `done`-eventet kommer: parsa structured data (knappar, suggestions, action) och visa dem
+
+### Steg 3: Visuell förbättring
+
+- Lägg till en blinkande cursor-effekt ("▍") i slutet av meddelandet medan det streamar
+- Visa knappar och suggestions först när streamen är klar
+
+## Tekniska detaljer
+
+```text
+┌─────────────┐     SSE stream      ┌──────────────────┐
+│  GunnarChat  │ ◄─────────────────  │  gunnar-chat fn  │
+│  (frontend)  │   token by token    │  (edge function) │
+└─────────────┘                      └──────────────────┘
+                                       │
+                                       ├─ Fast-path? → JSON (instant)
+                                       │
+                                       ├─ Tool round 1 → callAI(stream:false)
+                                       ├─ Tool round 2 → callAI(stream:false)
+                                       └─ Final answer → callAI(stream:true) → SSE
+```
+
+**Filer som ändras:**
+- `supabase/functions/gunnar-chat/index.ts` — streaming av sista svaret
+- `src/components/chat/GunnarChat.tsx` — SSE-parser och progressiv rendering
+
+**Uppskattad förbättring:** Första token visas ~1–2s snabbare. Upplevd svarstid minskar drastiskt.
 
