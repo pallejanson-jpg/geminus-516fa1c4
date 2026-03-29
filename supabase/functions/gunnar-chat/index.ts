@@ -1162,8 +1162,10 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         } catch { /* ignore */ }
       }
       return {
-        message: `Markerar **${entityIds.length}** ${system}-objekt i viewern.`,
-        response_type: "action", action: entityIds.length > 0 ? "highlight" : "none",
+        message: entityIds.length > 0
+          ? `Markerar **${entityIds.length}** ${system}-objekt i viewern.`
+          : `Öppnar viewern för ${buildingName}. (Inga geometriobjekt hittades för ${system} att markera.)`,
+        response_type: "action", action: "highlight",
         buttons: makeButtons([
           { label: "Byggnadsöversikt", action: "building_summary" },
           { label: "Filtrera per våning", action: "floor_query" },
@@ -1171,6 +1173,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         asset_ids: assetIds.slice(0, 50), external_entity_ids: entityIds,
         filters: intent.payload.category ? { category: intent.payload.category } : { system: system },
         suggestions: ["Visa annan utrustning", "Filtrera per våning"],
+        navigate_to_viewer: true,
       };
     }
 
