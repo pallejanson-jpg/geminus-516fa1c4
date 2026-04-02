@@ -202,7 +202,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         setPhase('ready');
         (window as any).__nativeXeokitViewer = viewer;
         onViewerReady?.(viewer);
-        window.dispatchEvent(new CustomEvent('VIEWER_MODELS_LOADED', { detail: { buildingFmGuid } }));
+        emit('VIEWER_MODELS_LOADED', { buildingFmGuid });
 
         // Wire up virtual chunk floor filtering
         if (chunkModels.length > 0 && !hasRealTiles) {
