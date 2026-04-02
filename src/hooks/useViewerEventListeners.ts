@@ -65,8 +65,7 @@ export function useViewerEventListeners({
 
   // ── MODEL_LOAD_REQUESTED (on-demand secondary model loading) ──
   useEffect(() => {
-    const handler = async (event: Event) => {
-      const detail = (event as CustomEvent<{ modelId?: string }>).detail;
+    const handler = async (detail: ModelLoadRequestedDetail) => {
       const requestedModelId = detail?.modelId?.replace(/\.xkt$/i, '');
       if (!requestedModelId) return;
       const sceneModels = viewerRef.current?.scene?.models || {};
