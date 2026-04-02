@@ -108,6 +108,7 @@ export async function getAssetPlusCredentials(
     clientSecret: Deno.env.get('ASSET_PLUS_CLIENT_SECRET') || '',
     username: Deno.env.get('ASSET_PLUS_USERNAME') || '',
     password: Deno.env.get('ASSET_PLUS_PASSWORD') || '',
+    audience: Deno.env.get('ASSET_PLUS_AUDIENCE') || 'asset-api',
   };
 }
 
