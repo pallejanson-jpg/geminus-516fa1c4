@@ -131,7 +131,7 @@ const BuildingMapPicker: React.FC<BuildingMapPickerProps> = ({
           value={addressQuery}
           onChange={(e) => { setAddressQuery(e.target.value); setSearchError(null); }}
           onKeyDown={(e) => { if (e.key === 'Enter') handleAddressSearch(); }}
-          placeholder="Sök adress..."
+          placeholder="Search address..."
           className="h-7 text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 px-1"
         />
         {addressQuery && (
