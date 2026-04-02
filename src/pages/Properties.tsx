@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Building2, MapPin, MoreVertical, Plus, Search, KeyRound, RefreshCw } from 'lucide-react';
+import { Building2, MapPin, MoreVertical, Plus, Search, KeyRound, RefreshCw, Network } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +20,7 @@ interface PropertyRow {
   latitude: number | null;
   longitude: number | null;
   isFavorite: boolean;
+  profileName: string | null;
   hasCustomAssetPlus: boolean;
   hasCustomSenslinc: boolean;
 }
@@ -34,14 +35,13 @@ export default function Properties() {
   const fetchProperties = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch building_settings with credential override indicators
       const { data: settings, error } = await supabase
         .from('building_settings')
-        .select('fm_guid, latitude, longitude, is_favorite, assetplus_api_url, senslinc_api_url');
+        .select('fm_guid, latitude, longitude, is_favorite, assetplus_api_url, senslinc_api_url, api_profile_id');
 
       if (error) throw error;
 
-      // Fetch building names from assets
+      // Fetch building names
       const fmGuids = (settings || []).map((s: any) => s.fm_guid);
       let nameMap: Record<string, string> = {};
       if (fmGuids.length > 0) {
@@ -50,9 +50,21 @@ export default function Properties() {
           .select('fm_guid, name')
           .eq('category', 'Building')
           .in('fm_guid', fmGuids);
-
         (buildings || []).forEach((b: any) => {
           nameMap[b.fm_guid] = b.name;
+        });
+      }
+
+      // Fetch profile names
+      const profileIds = [...new Set((settings || []).map((s: any) => s.api_profile_id).filter(Boolean))];
+      let profileMap: Record<string, string> = {};
+      if (profileIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('api_profiles' as any)
+          .select('id, name')
+          .in('id', profileIds);
+        (profiles || []).forEach((p: any) => {
+          profileMap[p.id] = p.name;
         });
       }
 
@@ -62,8 +74,9 @@ export default function Properties() {
         latitude: s.latitude,
         longitude: s.longitude,
         isFavorite: s.is_favorite,
-        hasCustomAssetPlus: !!(s as any).assetplus_api_url,
-        hasCustomSenslinc: !!(s as any).senslinc_api_url,
+        profileName: s.api_profile_id ? (profileMap[s.api_profile_id] || null) : null,
+        hasCustomAssetPlus: !!s.assetplus_api_url,
+        hasCustomSenslinc: !!s.senslinc_api_url,
       }));
 
       setProperties(rows);
@@ -102,7 +115,6 @@ export default function Properties() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Properties</h1>
@@ -121,7 +133,6 @@ export default function Properties() {
         </div>
       </div>
 
-      {/* Search */}
       <div className="flex gap-4">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -135,7 +146,6 @@ export default function Properties() {
         </div>
       </div>
 
-      {/* Properties Grid */}
       {loading ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
@@ -183,7 +193,7 @@ export default function Properties() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => openEdit(property.fmGuid)}>
-                      Redigera
+                      Edit
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -197,15 +207,21 @@ export default function Properties() {
                 )}
                 <div className="flex flex-wrap gap-1.5">
                   {property.isFavorite && (
-                    <Badge variant="default" className="text-[10px]">Favorit</Badge>
+                    <Badge variant="default" className="text-[10px]">Favorite</Badge>
                   )}
-                  {property.hasCustomAssetPlus && (
+                  {property.profileName && (
+                    <Badge variant="secondary" className="text-[10px]">
+                      <Network className="h-2.5 w-2.5 mr-1" />
+                      {property.profileName}
+                    </Badge>
+                  )}
+                  {property.hasCustomAssetPlus && !property.profileName && (
                     <Badge variant="secondary" className="text-[10px]">
                       <KeyRound className="h-2.5 w-2.5 mr-1" />
                       Asset+
                     </Badge>
                   )}
-                  {property.hasCustomSenslinc && (
+                  {property.hasCustomSenslinc && !property.profileName && (
                     <Badge variant="secondary" className="text-[10px]">
                       <KeyRound className="h-2.5 w-2.5 mr-1" />
                       Senslinc

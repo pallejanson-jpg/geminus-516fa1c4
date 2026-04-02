@@ -10,14 +10,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Eye, EyeOff, Save, TestTube } from 'lucide-react';
+import { Loader2, Save, Star } from 'lucide-react';
 
 interface CreatePropertyDialogProps {
   open: boolean;
@@ -26,23 +27,18 @@ interface CreatePropertyDialogProps {
   onSaved: () => void;
 }
 
+interface ProfileOption {
+  id: string;
+  name: string;
+  is_default: boolean;
+}
+
 interface FormData {
   fm_guid: string;
   name: string;
   latitude: string;
   longitude: string;
-  // Asset+ overrides
-  assetplus_api_url: string;
-  assetplus_api_key: string;
-  assetplus_keycloak_url: string;
-  assetplus_client_id: string;
-  assetplus_client_secret: string;
-  assetplus_username: string;
-  assetplus_password: string;
-  // Senslinc overrides
-  senslinc_api_url: string;
-  senslinc_email: string;
-  senslinc_password: string;
+  api_profile_id: string; // '' means default / none
 }
 
 const EMPTY_FORM: FormData = {
@@ -50,16 +46,7 @@ const EMPTY_FORM: FormData = {
   name: '',
   latitude: '',
   longitude: '',
-  assetplus_api_url: '',
-  assetplus_api_key: '',
-  assetplus_keycloak_url: '',
-  assetplus_client_id: '',
-  assetplus_client_secret: '',
-  assetplus_username: '',
-  assetplus_password: '',
-  senslinc_api_url: '',
-  senslinc_email: '',
-  senslinc_password: '',
+  api_profile_id: '',
 };
 
 export default function CreatePropertyDialog({
@@ -70,13 +57,12 @@ export default function CreatePropertyDialog({
 }: CreatePropertyDialogProps) {
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
-  const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
-  const [testingAp, setTestingAp] = useState(false);
-  const [testingSl, setTestingSl] = useState(false);
+  const [profiles, setProfiles] = useState<ProfileOption[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
     if (!open) return;
+    fetchProfiles();
     if (editFmGuid) {
       loadExisting(editFmGuid);
     } else {
@@ -84,16 +70,24 @@ export default function CreatePropertyDialog({
     }
   }, [open, editFmGuid]);
 
+  async function fetchProfiles() {
+    const { data } = await supabase
+      .from('api_profiles' as any)
+      .select('id, name, is_default')
+      .order('is_default', { ascending: false })
+      .order('name');
+    if (data) setProfiles(data as any[]);
+  }
+
   async function loadExisting(fmGuid: string) {
     const { data } = await supabase
       .from('building_settings')
-      .select('*')
+      .select('fm_guid, latitude, longitude, api_profile_id')
       .eq('fm_guid', fmGuid)
       .maybeSingle();
 
     if (!data) return;
 
-    // Get building name from assets table
     const { data: asset } = await supabase
       .from('assets')
       .select('name')
@@ -104,27 +98,14 @@ export default function CreatePropertyDialog({
     setForm({
       fm_guid: data.fm_guid,
       name: asset?.name || '',
-      latitude: data.latitude?.toString() || '',
-      longitude: data.longitude?.toString() || '',
-      assetplus_api_url: (data as any).assetplus_api_url || '',
-      assetplus_api_key: (data as any).assetplus_api_key || '',
-      assetplus_keycloak_url: (data as any).assetplus_keycloak_url || '',
-      assetplus_client_id: (data as any).assetplus_client_id || '',
-      assetplus_client_secret: (data as any).assetplus_client_secret || '',
-      assetplus_username: (data as any).assetplus_username || '',
-      assetplus_password: (data as any).assetplus_password || '',
-      senslinc_api_url: (data as any).senslinc_api_url || '',
-      senslinc_email: (data as any).senslinc_email || '',
-      senslinc_password: (data as any).senslinc_password || '',
+      latitude: (data as any).latitude?.toString() || '',
+      longitude: (data as any).longitude?.toString() || '',
+      api_profile_id: (data as any).api_profile_id || '',
     });
   }
 
   function set(field: keyof FormData, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
-  }
-
-  function toggleSecret(field: string) {
-    setShowSecrets((prev) => ({ ...prev, [field]: !prev[field] }));
   }
 
   async function handleSave() {
@@ -139,19 +120,9 @@ export default function CreatePropertyDialog({
         fm_guid: form.fm_guid.trim(),
         latitude: form.latitude ? parseFloat(form.latitude) : null,
         longitude: form.longitude ? parseFloat(form.longitude) : null,
-        assetplus_api_url: form.assetplus_api_url || null,
-        assetplus_api_key: form.assetplus_api_key || null,
-        assetplus_keycloak_url: form.assetplus_keycloak_url || null,
-        assetplus_client_id: form.assetplus_client_id || null,
-        assetplus_client_secret: form.assetplus_client_secret || null,
-        assetplus_username: form.assetplus_username || null,
-        assetplus_password: form.assetplus_password || null,
-        senslinc_api_url: form.senslinc_api_url || null,
-        senslinc_email: form.senslinc_email || null,
-        senslinc_password: form.senslinc_password || null,
+        api_profile_id: form.api_profile_id || null,
       };
 
-      // Check if row exists
       const { data: existing } = await supabase
         .from('building_settings')
         .select('id')
@@ -171,7 +142,6 @@ export default function CreatePropertyDialog({
         if (error) throw error;
       }
 
-      // Also upsert a Building asset row if name is provided
       if (form.name.trim()) {
         await supabase.from('assets').upsert(
           {
@@ -196,79 +166,7 @@ export default function CreatePropertyDialog({
     }
   }
 
-  async function testAssetPlus() {
-    setTestingAp(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('asset-plus-query', {
-        body: { action: 'getToken', buildingFmGuid: form.fm_guid || undefined },
-      });
-      if (error) throw error;
-      if (data?.accessToken) {
-        toast({ title: 'Asset+ connection OK ✓' });
-      } else {
-        toast({ title: 'Asset+ auth failed', variant: 'destructive' });
-      }
-    } catch (err: any) {
-      toast({ title: 'Asset+ test failed', description: err.message, variant: 'destructive' });
-    } finally {
-      setTestingAp(false);
-    }
-  }
-
-  async function testSenslinc() {
-    setTestingSl(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('senslinc-query', {
-        body: { action: 'test-connection', buildingFmGuid: form.fm_guid || undefined },
-      });
-      if (error) throw error;
-      if (data?.success) {
-        toast({ title: 'Senslinc connection OK ✓' });
-      } else {
-        toast({ title: 'Senslinc failed', description: data?.error, variant: 'destructive' });
-      }
-    } catch (err: any) {
-      toast({ title: 'Senslinc test failed', description: err.message, variant: 'destructive' });
-    } finally {
-      setTestingSl(false);
-    }
-  }
-
-  function SecretInput({
-    label,
-    field,
-    placeholder,
-  }: {
-    label: string;
-    field: keyof FormData;
-    placeholder?: string;
-  }) {
-    const isSecret = field.includes('password') || field.includes('secret') || field.includes('api_key');
-    const shown = showSecrets[field] || !isSecret;
-    return (
-      <div className="space-y-1">
-        <Label className="text-xs text-muted-foreground">{label}</Label>
-        <div className="relative">
-          <Input
-            type={shown ? 'text' : 'password'}
-            value={form[field]}
-            onChange={(e) => set(field, e.target.value)}
-            placeholder={placeholder}
-            className="pr-8 text-sm"
-          />
-          {isSecret && (
-            <button
-              type="button"
-              onClick={() => toggleSecret(field)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              {shown ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
+  const selectedProfile = profiles.find(p => p.id === form.api_profile_id);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -276,12 +174,12 @@ export default function CreatePropertyDialog({
         <SheetHeader>
           <SheetTitle>{editFmGuid ? 'Edit Property' : 'Add Property'}</SheetTitle>
           <SheetDescription>
-            Enter FM GUID and optional API credentials to fetch data from other instances.
+            Enter FM GUID and select an API Profile for credentials.
           </SheetDescription>
         </SheetHeader>
 
         <div className="space-y-6 mt-6">
-          {/* Section 1: Building Identity */}
+          {/* Building Identity */}
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-foreground">Building Identity</h3>
             <div className="space-y-1">
@@ -329,58 +227,34 @@ export default function CreatePropertyDialog({
             </div>
           </div>
 
-          {/* Section 2: Custom API Credentials */}
-          <Accordion type="multiple" className="w-full">
-            <AccordionItem value="assetplus">
-              <AccordionTrigger className="text-sm font-semibold">
-                Asset+ — Custom Credentials
-              </AccordionTrigger>
-              <AccordionContent className="space-y-3 pt-2">
-                <p className="text-xs text-muted-foreground">
-                  Leave empty to use global settings.
-                </p>
-                <SecretInput label="API URL" field="assetplus_api_url" placeholder="https://..." />
-                <SecretInput label="API Key" field="assetplus_api_key" />
-                <SecretInput label="Keycloak URL" field="assetplus_keycloak_url" placeholder="https://..." />
-                <SecretInput label="Client ID" field="assetplus_client_id" />
-                <SecretInput label="Client Secret" field="assetplus_client_secret" />
-                <SecretInput label="Username" field="assetplus_username" />
-                <SecretInput label="Password" field="assetplus_password" />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={testAssetPlus}
-                  disabled={testingAp || !form.fm_guid}
-                >
-                  {testingAp ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <TestTube className="mr-2 h-3 w-3" />}
-                  Test Connection
-                </Button>
-              </AccordionContent>
-            </AccordionItem>
-
-            <AccordionItem value="senslinc">
-              <AccordionTrigger className="text-sm font-semibold">
-                Senslinc — Custom Credentials
-              </AccordionTrigger>
-              <AccordionContent className="space-y-3 pt-2">
-                <p className="text-xs text-muted-foreground">
-                  Leave empty to use global settings.
-                </p>
-                <SecretInput label="API URL" field="senslinc_api_url" placeholder="https://..." />
-                <SecretInput label="Email" field="senslinc_email" />
-                <SecretInput label="Password" field="senslinc_password" />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={testSenslinc}
-                  disabled={testingSl || !form.fm_guid}
-                >
-                  {testingSl ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <TestTube className="mr-2 h-3 w-3" />}
-                  Test Connection
-                </Button>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
+          {/* API Profile Selector */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-foreground">API Profile</h3>
+            <p className="text-xs text-muted-foreground">
+              Select which credential set this building uses for Asset+, Senslinc, FM Access, and Ivion.
+            </p>
+            <Select
+              value={form.api_profile_id || 'default'}
+              onValueChange={(val) => set('api_profile_id', val === 'default' ? '' : val)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a profile" />
+              </SelectTrigger>
+              <SelectContent>
+                {profiles.map(p => (
+                  <SelectItem key={p.id} value={p.id}>
+                    <span className="flex items-center gap-2">
+                      {p.is_default && <Star className="h-3 w-3 text-amber-500 fill-amber-500" />}
+                      {p.name}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">
+              Manage profiles in Settings → API Profiles tab.
+            </p>
+          </div>
 
           {/* Save */}
           <div className="flex gap-3 pt-2">
