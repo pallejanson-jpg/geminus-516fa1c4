@@ -205,10 +205,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
   // ── Floor selection events ────────────────────────────────────────────────
   useEffect(() => {
-    const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
-      let { floorId, bounds, isAllFloorsVisible, visibleMetaFloorIds } = e.detail;
-      const visibleFloorFmGuids = (e.detail as any).visibleFloorFmGuids as string[] | undefined;
-      const skipClipping = !!(e.detail as any).skipClipping;
+    const handler = (detail: FloorSelectionEventDetail) => {
+      let { floorId, bounds, isAllFloorsVisible, visibleMetaFloorIds } = detail;
+      const visibleFloorFmGuids = (detail as any).visibleFloorFmGuids as string[] | undefined;
+      const skipClipping = !!(detail as any).skipClipping;
 
       if (!floorId && visibleFloorFmGuids?.length && !visibleMetaFloorIds?.length) {
         const metaObjects = viewer?.metaScene?.metaObjects || viewer?.scene?.metaScene?.metaObjects || {};
@@ -274,7 +274,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
   // ── Clip height events ────────────────────────────────────────────────────
   useEffect(() => {
-    const handler = (e: CustomEvent<ClipHeightEventDetail>) => updateFloorCutHeight(e.detail.height);
+    const handler = (detail: ClipHeightEventDetail) => updateFloorCutHeight(detail.height);
     const off = on('CLIP_HEIGHT_CHANGED', handler);
     return () => off();
   }, [updateFloorCutHeight]);
@@ -293,8 +293,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
   const handleViewModeChangeRef = useRef<((mode: ViewMode) => void) | null>(null);
 
   useEffect(() => {
-    const handler = (e: CustomEvent<ViewModeRequestedDetail>) => {
-      if (e.detail.mode === '2d' || e.detail.mode === '3d') handleViewModeChangeRef.current?.(e.detail.mode);
+    const handler = (detail: ViewModeRequestedDetail) => {
+      if (detail.mode === '2d' || detail.mode === '3d') handleViewModeChangeRef.current?.(detail.mode);
     };
     const off = on('VIEW_MODE_REQUESTED', handler);
     return () => off();
@@ -628,11 +628,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
   // Listen for external tool changes (e.g. from MobileViewerPage / navigation menu)
   useEffect(() => {
-    const handler = (e: CustomEvent<ViewerToolChangedDetail>) => {
+    const handler = (detail: ViewerToolChangedDetail) => {
       // Skip events we dispatched ourselves
       if (selfDispatchRef.current) return;
 
-      const tool = e.detail.tool as ViewerTool;
+      const tool = detail.tool as ViewerTool;
       const prev = activeToolRef2.current;
 
       // Deactivate previous

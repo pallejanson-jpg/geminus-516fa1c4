@@ -590,8 +590,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     const t0 = setTimeout(generateMap, 50);
 
     // Listen for floor changes from OTHER components (ignore our own)
-    const floorHandler = (detail: FloorSelectionEventDetail) => {
-      const detail = (event as CustomEvent<FloorSelectionEventDetail & { source?: string }>).detail;
+    const floorHandler = (detail: FloorSelectionEventDetail & { source?: string }) => {
       // CRITICAL: Ignore events we dispatched ourselves to break the loop
       if (detail?.source === SPLIT_PLAN_SOURCE) return;
 

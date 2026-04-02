@@ -132,8 +132,8 @@ const UnifiedViewerContent: React.FC<{
   useEffect(() => {
     if (viewMode !== 'split2d3d') return;
 
-    const handler = (e: Event) => {
-      const { worldPos } = (e as CustomEvent).detail || {};
+    const handler = (detail: any) => {
+      const { worldPos } = detail || {};
       if (!worldPos || worldPos.length < 3) return;
       // Validate coordinates before flying
       if (!worldPos.every((v: number) => Number.isFinite(v))) return;
@@ -377,8 +377,8 @@ const UnifiedViewerContent: React.FC<{
 
   // Track current floor fm_guid from floor selection events
   useEffect(() => {
-    const handler = (e: CustomEvent) => {
-      const guids = (e.detail as any)?.visibleFloorFmGuids;
+    const handler = (detail: any) => {
+      const guids = detail?.visibleFloorFmGuids;
       if (guids?.length) setNavFloorFmGuid(guids[0]);
     };
     const off = on('FLOOR_SELECTION_CHANGED', handler);
@@ -510,8 +510,8 @@ const UnifiedViewerContent: React.FC<{
   const [overlayInteractive, setOverlayInteractive] = useState(false);
 
   useEffect(() => {
-    const handleToolChanged = (e: CustomEvent<ViewerToolChangedDetail>) => {
-      setOverlayInteractive(e.detail.tool === 'select' || e.detail.tool === 'measure' || e.detail.tool === 'slicer');
+    const handleToolChanged = (detail: ViewerToolChangedDetail) => {
+      setOverlayInteractive(detail.tool === 'select' || detail.tool === 'measure' || detail.tool === 'slicer');
     };
     const off = on('VIEWER_TOOL_CHANGED', handleToolChanged);
     return () => off();

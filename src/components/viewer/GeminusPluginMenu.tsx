@@ -17,6 +17,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import type { FmAccessContextChangedDetail } from '@/lib/event-bus';
 
 import CreateIssueDialog from './CreateIssueDialog';
 import CreateWorkOrderDialog from './CreateWorkOrderDialog';
