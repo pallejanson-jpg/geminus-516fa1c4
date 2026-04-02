@@ -690,8 +690,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       if (existingContainer) existingContainer.remove();
     };
 
-    const handler = async (e: Event) => {
-      const detail = (e as CustomEvent<AlarmAnnotationsShowDetail>).detail;
+    const handler = async (detail: AlarmAnnotationsShowDetail) => {
       const visible = detail?.visible ?? true;
 
       if (!visible) {
