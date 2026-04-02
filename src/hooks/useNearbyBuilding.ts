@@ -76,7 +76,7 @@ export function useNearbyBuilding(thresholdMeters = 200): UseNearbyBuildingResul
     // Create a map of fmGuid -> name
     const nameMap = new Map<string, string>();
     buildingAssets?.forEach((a) => {
-      nameMap.set(a.fm_guid, a.common_name || a.name || 'Okänd byggnad');
+      nameMap.set(a.fm_guid, a.common_name || a.name || 'Unknown building');
     });
 
     // Combine data
