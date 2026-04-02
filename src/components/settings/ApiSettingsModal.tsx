@@ -36,6 +36,7 @@ import { SyncProgressCard } from './SyncProgressCard';
 import ConversionProgressOverlay from './ConversionProgressOverlay';
 import { SyncStatusLog, type SyncStep, type SyncOutcome } from './SyncStatusLog';
 import CreateBuildingPanel from './CreateBuildingPanel';
+import ApiProfilesManager from './ApiProfilesManager';
 import type { TranslationStatus } from '@/services/acc-xkt-converter';
 
 interface ApiSettingsModalProps {
