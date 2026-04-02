@@ -2315,6 +2315,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                             <Building2 className="h-3 w-3 sm:h-4 sm:w-4" />
                             Building
                         </TabsTrigger>
+                        <TabsTrigger value="api-profiles" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                            <Network className="h-3 w-3 sm:h-4 sm:w-4" />
+                            API Profiles
+                        </TabsTrigger>
                     </TabsList>
 
                     {/* Profile Settings Tab */}
