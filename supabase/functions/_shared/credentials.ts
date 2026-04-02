@@ -12,6 +12,7 @@ export interface AssetPlusCredentials {
   clientSecret: string;
   username: string;
   password: string;
+  audience: string;
 }
 
 export interface SenslincCredentials {
@@ -73,6 +74,7 @@ export async function getAssetPlusCredentials(
         clientSecret: profile.assetplus_client_secret || '',
         username: profile.assetplus_username || '',
         password: profile.assetplus_password || '',
+        audience: profile.assetplus_audience || 'asset-api',
       };
     }
 
@@ -92,6 +94,7 @@ export async function getAssetPlusCredentials(
         clientSecret: data.assetplus_client_secret || '',
         username: data.assetplus_username || '',
         password: data.assetplus_password || '',
+        audience: 'asset-api',
       };
     }
   }
@@ -105,6 +108,7 @@ export async function getAssetPlusCredentials(
     clientSecret: Deno.env.get('ASSET_PLUS_CLIENT_SECRET') || '',
     username: Deno.env.get('ASSET_PLUS_USERNAME') || '',
     password: Deno.env.get('ASSET_PLUS_PASSWORD') || '',
+    audience: Deno.env.get('ASSET_PLUS_AUDIENCE') || 'asset-api',
   };
 }
 

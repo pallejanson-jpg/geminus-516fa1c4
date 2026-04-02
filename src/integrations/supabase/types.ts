@@ -192,6 +192,7 @@ export type Database = {
         Row: {
           assetplus_api_key: string | null
           assetplus_api_url: string | null
+          assetplus_audience: string | null
           assetplus_client_id: string | null
           assetplus_client_secret: string | null
           assetplus_keycloak_url: string | null
@@ -215,6 +216,7 @@ export type Database = {
         Insert: {
           assetplus_api_key?: string | null
           assetplus_api_url?: string | null
+          assetplus_audience?: string | null
           assetplus_client_id?: string | null
           assetplus_client_secret?: string | null
           assetplus_keycloak_url?: string | null
@@ -238,6 +240,7 @@ export type Database = {
         Update: {
           assetplus_api_key?: string | null
           assetplus_api_url?: string | null
+          assetplus_audience?: string | null
           assetplus_client_id?: string | null
           assetplus_client_secret?: string | null
           assetplus_keycloak_url?: string | null
