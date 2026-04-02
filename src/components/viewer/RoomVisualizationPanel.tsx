@@ -259,11 +259,10 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
     // Dispatch event so the legend bar (rendered outside this component) can update
     emit('VISUALIZATION_STATE_CHANGED', {
-        visualizationType,
-        useMockData,
-        rooms: rooms.map(r => ({ fmGuid: r.fmGuid, name: r.name, attributes: r.attributes),
-      },
-    }));
+      visualizationType,
+      useMockData,
+      rooms: rooms.map(r => ({ fmGuid: r.fmGuid, name: r.name, attributes: r.attributes })),
+    });
   }, [visualizationType, useMockData, rooms]);
 
   // Cache invalidation is now handled by the event listener above
