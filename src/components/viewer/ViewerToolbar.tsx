@@ -274,7 +274,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
   // ── Clip height events ────────────────────────────────────────────────────
   useEffect(() => {
-    const handler = (e: CustomEvent<ClipHeightEventDetail>) => updateFloorCutHeight(e.detail.height);
+    const handler = (detail: ClipHeightEventDetail) => updateFloorCutHeight(detail.height);
     const off = on('CLIP_HEIGHT_CHANGED', handler);
     return () => off();
   }, [updateFloorCutHeight]);
