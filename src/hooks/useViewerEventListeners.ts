@@ -78,8 +78,8 @@ export function useViewerEventListeners({
       if (!requestedModel) return;
       try { await (window as any).__loadSecondaryModel?.(requestedModel); } catch {}
     };
-    window.addEventListener('MODEL_LOAD_REQUESTED', handler);
-    return () => window.removeEventListener('MODEL_LOAD_REQUESTED', handler);
+    const off = on('MODEL_LOAD_REQUESTED', handler);
+    return () => off();
   }, [viewerRef]);
 
   // ── FLOOR_TILE_SWITCH (dynamic tile loading for real per-storey tiles) ──
@@ -124,8 +124,8 @@ export function useViewerEventListeners({
         } catch {}
       }
     };
-    window.addEventListener('FLOOR_TILE_SWITCH', handler);
-    return () => window.removeEventListener('FLOOR_TILE_SWITCH', handler);
+    const off = on('FLOOR_TILE_SWITCH', handler);
+    return () => off();
   }, [viewerRef]);
 
   // ── INSIGHTS_COLOR_UPDATE (colorize entities by insights data) ──
@@ -246,8 +246,8 @@ export function useViewerEventListeners({
       }
       console.log('[ViewerEvents] INSIGHTS_COLOR_UPDATE:', mode, Object.keys(colorMap).length, 'entries,', matchCount, 'matched');
     };
-    window.addEventListener(INSIGHTS_COLOR_UPDATE_EVENT, handler);
-    return () => window.removeEventListener(INSIGHTS_COLOR_UPDATE_EVENT, handler);
+    const off = on('INSIGHTS_COLOR_UPDATE', handler);
+    return () => off();
   }, [viewerRef, pendingInsightsColorRef]);
 
   // ── FORCE_SHOW_SPACES ──
@@ -294,8 +294,8 @@ export function useViewerEventListeners({
         }
       });
     };
-    window.addEventListener(FORCE_SHOW_SPACES_EVENT, handler);
-    return () => window.removeEventListener(FORCE_SHOW_SPACES_EVENT, handler);
+    const off = on('FORCE_SHOW_SPACES', handler);
+    return () => off();
   }, [viewerRef]);
 
   // ── INSIGHTS_COLOR_RESET ──
@@ -306,8 +306,8 @@ export function useViewerEventListeners({
       viewer.scene.setObjectsXRayed(viewer.scene.objectIds, false);
       applyArchitectColors(viewer);
     };
-    window.addEventListener(INSIGHTS_COLOR_RESET_EVENT, handler);
-    return () => window.removeEventListener(INSIGHTS_COLOR_RESET_EVENT, handler);
+    const off = on('INSIGHTS_COLOR_RESET', handler);
+    return () => off();
   }, [viewerRef]);
 
   // ── ALARM_ANNOTATIONS_SHOW ──
@@ -356,8 +356,8 @@ export function useViewerEventListeners({
         viewer.cameraFlight?.flyTo({ aabb: scene.getAABB(matchedIds), duration: 1.0 });
       }
     };
-    window.addEventListener(ALARM_ANNOTATIONS_SHOW_EVENT, handler);
-    return () => window.removeEventListener(ALARM_ANNOTATIONS_SHOW_EVENT, handler);
+    const off = on('ALARM_ANNOTATIONS_SHOW', handler);
+    return () => off();
   }, [viewerRef]);
 
   // ── NAV_SPEED + FASTNAV ──
@@ -392,13 +392,13 @@ export function useViewerEventListeners({
       if (!viewer?.scene) return;
       viewer.scene.pbrEnabled = !enabled;
     };
-    window.addEventListener('NAV_SPEED_CHANGED', masterHandler);
-    window.addEventListener('NAV_SPEED_GRANULAR', granularHandler);
-    window.addEventListener('FASTNAV_TOGGLE', fastNavHandler);
+    const offMasterHandler = on('NAV_SPEED_CHANGED', masterHandler);
+    const offGranularHandler = on('NAV_SPEED_GRANULAR', granularHandler);
+    const offFastNavHandler = on('FASTNAV_TOGGLE', fastNavHandler);
     return () => {
-      window.removeEventListener('NAV_SPEED_CHANGED', masterHandler);
-      window.removeEventListener('NAV_SPEED_GRANULAR', granularHandler);
-      window.removeEventListener('FASTNAV_TOGGLE', fastNavHandler);
+      offMasterHandler();
+      offGranularHandler();
+      offFastNavHandler();
     };
   }, [viewerRef]);
 
@@ -436,7 +436,7 @@ export function useViewerEventListeners({
       }
       applyFloorFilter();
     };
-    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, floorHandler as EventListener);
+    const offFloorHandler = on('FLOOR_SELECTION_CHANGED', floorHandler);
 
     const handler = async (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -485,9 +485,7 @@ export function useViewerEventListeners({
           marker.dataset.category = ann.asset_type || 'Other';
           marker.addEventListener('click', (evt) => {
             evt.stopPropagation();
-            window.dispatchEvent(new CustomEvent('VIEWER_SELECT_ENTITY', {
-              detail: { entityId: ann.fm_guid, fmGuid: ann.fm_guid, entityName: ann.common_name || ann.name || null },
-            }));
+            emit('VIEWER_SELECT_ENTITY', { entityId: ann.fm_guid, fmGuid: ann.fm_guid, entityName: ann.common_name || ann.name || null },);
           });
           const markerCat = ann.asset_type || 'Other';
           if (catSet && !catSet.has(markerCat)) { marker.style.display = 'none'; marker.dataset.catHidden = 'true'; }
@@ -528,10 +526,10 @@ export function useViewerEventListeners({
       }
     };
 
-    window.addEventListener('TOGGLE_ANNOTATIONS', handler);
+    const offHandler = on('TOGGLE_ANNOTATIONS', handler);
     return () => {
-      window.removeEventListener('TOGGLE_ANNOTATIONS', handler);
-      window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, floorHandler as EventListener);
+      offHandler();
+      offFloorHandler();
       cameraUnsubs.forEach(fn => fn());
       markerContainer?.remove();
     };
@@ -563,7 +561,7 @@ export function useViewerEventListeners({
         viewer.cameraFlight?.flyTo({ aabb: scene.getAABB(matchedIds), duration: 1.0 });
       }
     };
-    window.addEventListener('VIEWER_SELECT_ENTITY', handler);
-    return () => window.removeEventListener('VIEWER_SELECT_ENTITY', handler);
+    const off = on('VIEWER_SELECT_ENTITY', handler);
+    return () => off();
   }, [viewerRef]);
 }

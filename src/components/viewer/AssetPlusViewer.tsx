@@ -38,6 +38,7 @@ import { useViewerCameraSync } from '@/hooks/useViewerCameraSync';
 import { useModelNames } from '@/hooks/useModelNames';
 import type { LocalCoords } from '@/context/ViewerSyncContext';
 import {
+import { emit, on } from '@/lib/event-bus';
   calculateHeadingFromCamera,
   calculatePitchFromCamera,
   calculateLookFromHeadingPitch,
@@ -330,9 +331,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
     // Dispatch event to activate room visualization via RoomVisualizationPanel
     console.log('[AssetPlusViewer] Auto-activating visualization:', initialVisualization);
-    window.dispatchEvent(new CustomEvent('INITIAL_VISUALIZATION_REQUESTED', {
-      detail: { type: initialVisualization },
-    }));
+    emit('INITIAL_VISUALIZATION_REQUESTED', { type: initialVisualization },);
   }, [initialVisualization, modelLoadState, initStep]);
 
   // ─── Insights color mode: apply visibility + colorization ───
@@ -672,8 +671,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       console.log('[AssetPlusViewer] Applied INSIGHTS_COLOR_UPDATE:', mode, Object.keys(colorMap).length, 'entries');
     };
 
-    window.addEventListener(INSIGHTS_COLOR_UPDATE_EVENT, handler);
-    return () => window.removeEventListener(INSIGHTS_COLOR_UPDATE_EVENT, handler);
+    const off = on('INSIGHTS_COLOR_UPDATE', handler);
+    return () => off();
   }, []);
 
   // Re-apply queued Insights coloring once viewer is ready
@@ -682,7 +681,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     const pending = insightsColorMapCacheRef.current;
     if (!pending) return;
     insightsColorMapCacheRef.current = null;
-    window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail: pending }));
+    emit('INSIGHTS_COLOR_UPDATE', pending);
   }, [modelLoadState, initStep]);
 
   // ─── Listen for ALARM_ANNOTATIONS_SHOW from InsightsDrawerPanel / panel toggles ───
@@ -828,9 +827,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       console.log('[AssetPlusViewer] ALARM_ANNOTATIONS_SHOW:', alarmsToRender.length, 'alarms, rooms found:', allRoomEntityIds.length);
     };
 
-    window.addEventListener(ALARM_ANNOTATIONS_SHOW_EVENT, handler);
+    const offHandler = on('ALARM_ANNOTATIONS_SHOW', handler);
     return () => {
-      window.removeEventListener(ALARM_ANNOTATIONS_SHOW_EVENT, handler);
+      offHandler();
       removeAlarmMarkerContainer();
     };
   }, [flashEntityById, fmGuid]);
@@ -845,7 +844,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       const parsed = JSON.parse(raw);
       // Dispatch the event with a small delay to ensure listeners are ready
       setTimeout(() => {
-        window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: parsed }));
+        emit('ALARM_ANNOTATIONS_SHOW', parsed);
       }, 500);
     } catch { /* ignore */ }
   }, [modelLoadState, initStep]);
@@ -1097,9 +1096,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   // Handler for 2D mode toggle from mobile overlay
   const handleToggle2DMode = useCallback((is2D: boolean) => {
     const mode = is2D ? '2d' : '3d';
-    window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, {
-      detail: { mode }
-    }));
+    emit('VIEW_MODE_REQUESTED', { mode });
   }, []);
 
   // Handler for room labels toggle
@@ -1113,8 +1110,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     const handleMinimapToggle = (e: CustomEvent) => {
       setShowMinimap(e.detail?.visible ?? false);
     };
-    window.addEventListener('MINIMAP_TOGGLE', handleMinimapToggle as EventListener);
-    return () => window.removeEventListener('MINIMAP_TOGGLE', handleMinimapToggle as EventListener);
+    const off = on('MINIMAP_TOGGLE', handleMinimapToggle);
+    return () => off();
   }, []);
 
   // Listen for view mode changes to update room label heights
@@ -1127,9 +1124,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       }
     };
     
-    window.addEventListener(VIEW_MODE_CHANGED_EVENT, handleViewModeChange as EventListener);
+    const offHandleViewModeChange = on('VIEW_MODE_CHANGED', handleViewModeChange);
     return () => {
-      window.removeEventListener(VIEW_MODE_CHANGED_EVENT, handleViewModeChange as EventListener);
+      offHandleViewModeChange();
     };
   }, [updateLabelsViewMode]);
 
@@ -1169,9 +1166,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       }
     };
     
-    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorSelectionChange as EventListener);
+    const offHandleFloorSelectionChange = on('FLOOR_SELECTION_CHANGED', handleFloorSelectionChange);
     return () => {
-      window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorSelectionChange as EventListener);
+      offHandleFloorSelectionChange();
     };
   }, [updateFloorFilter, showSpaces, filterSpacesToVisibleFloors]);
 
@@ -1281,8 +1278,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       });
       if (plugin.updatePositions) plugin.updatePositions();
     };
-    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler);
-    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler);
+    const off = on('FLOOR_SELECTION_CHANGED', handler);
+    return () => off();
   }, []);
 
   // Annotation category filtering from ViewerFilterPanel
@@ -1306,8 +1303,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       });
       if (plugin.updatePositions) plugin.updatePositions();
     };
-    window.addEventListener(ANNOTATION_FILTER_EVENT, handler);
-    return () => window.removeEventListener(ANNOTATION_FILTER_EVENT, handler);
+    const off = on('ANNOTATION_FILTER', handler);
+    return () => off();
   }, []);
 
   // Handler for individual model visibility toggle from mobile overlay
@@ -2258,9 +2255,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         // Click handler: dispatch event to open IssueDetailSheet
         marker.addEventListener('click', (e) => {
           e.stopPropagation();
-          window.dispatchEvent(new CustomEvent(ISSUE_MARKER_CLICKED_EVENT, {
-            detail: { issueId: issue.id },
-          }));
+          emit('ISSUE_MARKER_CLICKED', { issueId: issue.id },);
         });
 
         container!.appendChild(marker);
@@ -2347,8 +2342,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       mgr.updatePositions?.();
     };
-    window.addEventListener(SENSOR_ANNOTATIONS_TOGGLE_EVENT, handler);
-    return () => window.removeEventListener(SENSOR_ANNOTATIONS_TOGGLE_EVENT, handler);
+    const off = on('SENSOR_ANNOTATIONS_TOGGLE', handler);
+    return () => off();
   }, []);
 
   // Listen for ISSUE_ANNOTATIONS_TOGGLE_EVENT to lazy-load and show/hide issue markers
@@ -2377,8 +2372,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       mgr.updatePositions?.();
     };
 
-    window.addEventListener(ISSUE_ANNOTATIONS_TOGGLE_EVENT, handler);
-    return () => window.removeEventListener(ISSUE_ANNOTATIONS_TOGGLE_EVENT, handler);
+    const off = on('ISSUE_ANNOTATIONS_TOGGLE', handler);
+    return () => off();
   }, []);
 
 
@@ -3428,16 +3423,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       
       // 2. Set 2D/3D mode
       setTimeout(() => {
-        window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, {
-          detail: { mode: viewData.viewMode }
-        }));
+        emit('VIEW_MODE_REQUESTED', { mode: viewData.viewMode });
         
         // 3. Set clip height if in 2D mode
         if (viewData.viewMode === '2d' && viewData.clipHeight) {
           setTimeout(() => {
-            window.dispatchEvent(new CustomEvent(CLIP_HEIGHT_CHANGED_EVENT, {
-              detail: { height: viewData.clipHeight }
-            }));
+            emit('CLIP_HEIGHT_CHANGED', { height: viewData.clipHeight });
           }, 300);
         }
       }, 100);
@@ -3468,9 +3459,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       toast.success('Vy laddad', { duration: 2000 });
     };
     
-    window.addEventListener(LOAD_SAVED_VIEW_EVENT, handleLoadSavedView as EventListener);
+    const offHandleLoadSavedView = on('LOAD_SAVED_VIEW', handleLoadSavedView);
     return () => {
-      window.removeEventListener(LOAD_SAVED_VIEW_EVENT, handleLoadSavedView as EventListener);
+      offHandleLoadSavedView();
     };
   }, [state.isInitialized, modelLoadState]);
 
@@ -3486,11 +3477,11 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     const handleClipHeightChanged = (e: CustomEvent<{ height: number }>) => {
       setClipHeight(e.detail.height);
     };
-    window.addEventListener(VIEW_MODE_CHANGED_EVENT, handleViewModeChanged as EventListener);
-    window.addEventListener(CLIP_HEIGHT_CHANGED_EVENT, handleClipHeightChanged as EventListener);
+    const offHandleViewModeChanged = on('VIEW_MODE_CHANGED', handleViewModeChanged);
+    const offHandleClipHeightChanged = on('CLIP_HEIGHT_CHANGED', handleClipHeightChanged);
     return () => {
-      window.removeEventListener(VIEW_MODE_CHANGED_EVENT, handleViewModeChanged as EventListener);
-      window.removeEventListener(CLIP_HEIGHT_CHANGED_EVENT, handleClipHeightChanged as EventListener);
+      offHandleViewModeChanged();
+      offHandleClipHeightChanged();
     };
   }, []);
   
@@ -3508,9 +3499,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       clipHeight: clipHeight,
     };
     
-    window.dispatchEvent(new CustomEvent(VIEWER_CONTEXT_CHANGED_EVENT, {
-      detail: contextDetail
-    }));
+    emit('VIEWER_CONTEXT_CHANGED', contextDetail);
   }, [state.isInitialized, modelLoadState, buildingFmGuid, fmGuid, assetData, currentViewMode, visibleFloorFmGuids, availableModels, selectedFmGuids, clipHeight]);
 
   // Extract available models when viewer loads
@@ -3603,16 +3592,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       
       // Dispatch confirmation event
       if (success) {
-        window.dispatchEvent(new CustomEvent(ARCHITECT_MODE_CHANGED_EVENT, {
-          detail: { enabled: e.detail.enabled }
-        }));
+        emit('ARCHITECT_MODE_CHANGED', { enabled: e.detail.enabled });
         toast.info(e.detail.enabled ? 'Arkitektvy aktiverad' : 'Arkitektvy avaktiverad', { duration: 2000 });
       }
     };
     
-    window.addEventListener(ARCHITECT_MODE_REQUESTED_EVENT, handleArchitectModeRequest as EventListener);
+    const offHandleArchitectModeRequest = on('ARCHITECT_MODE_REQUESTED', handleArchitectModeRequest);
     return () => {
-      window.removeEventListener(ARCHITECT_MODE_REQUESTED_EVENT, handleArchitectModeRequest as EventListener);
+      offHandleArchitectModeRequest();
     };
   }, [toggleArchitectMode]);
 
@@ -3624,9 +3611,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       applyBackgroundPreset(e.detail.presetId);
     };
     
-    window.addEventListener(ARCHITECT_BACKGROUND_CHANGED_EVENT, handleBackgroundChange as EventListener);
+    const offHandleBackgroundChange = on('ARCHITECT_BACKGROUND_CHANGED', handleBackgroundChange);
     return () => {
-      window.removeEventListener(ARCHITECT_BACKGROUND_CHANGED_EVENT, handleBackgroundChange as EventListener);
+      offHandleBackgroundChange();
     };
   }, [applyBackgroundPreset]);
 
@@ -3637,9 +3624,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       setRoomLabelsEnabled(e.detail.enabled);
     };
     
-    window.addEventListener(ROOM_LABELS_TOGGLE_EVENT, handleRoomLabelsToggle as EventListener);
+    const offHandleRoomLabelsToggle = on('ROOM_LABELS_TOGGLE', handleRoomLabelsToggle);
     return () => {
-      window.removeEventListener(ROOM_LABELS_TOGGLE_EVENT, handleRoomLabelsToggle as EventListener);
+      offHandleRoomLabelsToggle();
     };
   }, [setRoomLabelsEnabled]);
 
@@ -3735,14 +3722,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         }
 
         // Dispatch floor selection event to sync room labels, ceiling clipping etc.
-        window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
-          detail: {
+        emit('FLOOR_SELECTION_CHANGED', {
             floorId: isSolo ? visibleFloors[0].id : null,
             visibleFloorFmGuids: visibleFloors.map(f => f.fmGuid),
             visibleMetaFloorIds: visibleFloors.map(f => f.id),
             isAllFloorsVisible: isAllVisible,
-          }
-        }));
+          });
 
         return newFloors;
       });
@@ -4492,15 +4477,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           // Delay to allow viewer to finish loading models
           setTimeout(() => {
             console.log('AssetPlusViewer: Dispatching initial floor selection for', floorFmGuid);
-            window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
-              detail: {
+            emit('FLOOR_SELECTION_CHANGED', {
                 visibleMetaFloorIds: [],
                 visibleFloorFmGuids: [floorFmGuid],
                 isAllFloorsVisible: false,
                 isSoloFloor: true,
                 soloFloorName: focusData.commonName || focusData.name || '',
-              }
-            }));
+              });
           }, 1500);
         }
       }
@@ -4748,9 +4731,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       }
     };
 
-    window.addEventListener('MODEL_LOAD_REQUESTED', handleModelLoadRequested as EventListener);
+    const offHandleModelLoadRequested = on('MODEL_LOAD_REQUESTED', handleModelLoadRequested);
     return () => {
-      window.removeEventListener('MODEL_LOAD_REQUESTED', handleModelLoadRequested as EventListener);
+      offHandleModelLoadRequested();
     };
   }, [buildingFmGuid]);
 
@@ -5131,12 +5114,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
               entityName={contextMenu.entityName}
               onClose={() => setContextMenu(null)}
               onShowLabels={() => {
-                window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', { detail: { show: true } }));
+                emit('TOGGLE_ANNOTATIONS', { show: true });
               }}
               onCreateIssue={() => {}}
               onViewIssues={() => {}}
               onShowRoomLabels={() => {
-                window.dispatchEvent(new CustomEvent('ROOM_LABELS_TOGGLE', { detail: { enabled: true } }));
+                emit('ROOM_LABELS_TOGGLE', { enabled: true });
               }}
             />
           )}

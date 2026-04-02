@@ -61,6 +61,7 @@ import { CSS } from '@dnd-kit/utilities';
 import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDialog';
 import { useToast } from '@/hooks/use-toast';
 
+import { emit } from '@/lib/event-bus';
 // Deterministic color palette for room name grouping
 const ROOM_NAME_COLORS = [
   'hsl(210, 70%, 55%)', 'hsl(142, 60%, 45%)', 'hsl(48, 85%, 50%)',
@@ -501,7 +502,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
       if (guids.length > 1) {
         setTimeout(() => {
           guids.slice(1).forEach(guid => {
-            window.dispatchEvent(new CustomEvent('VIEWER_ZOOM_TO_OBJECT', { detail: { fmGuid: guid, selectOnly: true } }));
+            emit('VIEWER_ZOOM_TO_OBJECT', { fmGuid: guid, selectOnly: true });
           });
         }, 3000);
       }

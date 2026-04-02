@@ -4,6 +4,7 @@
  */
 import { useEffect, useCallback } from 'react';
 
+import { emit, on } from '@/lib/event-bus';
 export const AI_VIEWER_COMMAND_EVENT = 'AI_VIEWER_COMMAND';
 
 export interface AiViewerCommand {
@@ -16,7 +17,7 @@ export interface AiViewerCommand {
  * Dispatch an AI viewer command from anywhere (e.g. the chat component).
  */
 export function dispatchAiViewerCommand(command: AiViewerCommand) {
-  window.dispatchEvent(new CustomEvent(AI_VIEWER_COMMAND_EVENT, { detail: command }));
+  emit('AI_VIEWER_COMMAND', command);
 }
 
 /**
@@ -171,8 +172,8 @@ export function useAiViewerBridge(viewer: any, isReady: boolean) {
       }
     };
 
-    window.addEventListener(AI_VIEWER_COMMAND_EVENT, handler);
-    return () => window.removeEventListener(AI_VIEWER_COMMAND_EVENT, handler);
+    const off = on('AI_VIEWER_COMMAND', handler);
+    return () => off();
   }, [isReady, highlightEntities, filterToEntities, colorizeEntities, resetView]);
 
   return { highlightEntities, resetView, filterToEntities, colorizeEntities };

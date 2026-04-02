@@ -32,6 +32,7 @@ import { useBuildingViewerData } from '@/hooks/useBuildingViewerData';
 import { useContext } from 'react';
 import { AppContext } from '@/context/AppContext';
 import {
+import { emit } from '@/lib/event-bus';
   VIEWER_TOOL_CHANGED_EVENT,
   VIEW_MODE_REQUESTED_EVENT,
   type ViewerToolChangedDetail,
@@ -112,18 +113,14 @@ const ViewerMockup: React.FC = () => {
           viewer.cameraControl.followPointer = false;
         }
         // Clear active tool
-        window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, {
-          detail: { tool: null } as ViewerToolChangedDetail,
-        }));
+        emit('VIEWER_TOOL_CHANGED', { tool: null } as ViewerToolChangedDetail,);
         break;
 
       case 'pan':
         if (viewer?.cameraControl) {
           viewer.cameraControl.navMode = 'planView';
         }
-        window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, {
-          detail: { tool: null } as ViewerToolChangedDetail,
-        }));
+        emit('VIEWER_TOOL_CHANGED', { tool: null } as ViewerToolChangedDetail,);
         break;
 
       case 'fit':
@@ -133,21 +130,15 @@ const ViewerMockup: React.FC = () => {
         break;
 
       case 'select':
-        window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, {
-          detail: { tool: 'select' } as ViewerToolChangedDetail,
-        }));
+        emit('VIEWER_TOOL_CHANGED', { tool: 'select' } as ViewerToolChangedDetail,);
         break;
 
       case 'measure':
-        window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, {
-          detail: { tool: 'measure' } as ViewerToolChangedDetail,
-        }));
+        emit('VIEWER_TOOL_CHANGED', { tool: 'measure' } as ViewerToolChangedDetail,);
         break;
 
       case 'section':
-        window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, {
-          detail: { tool: 'slicer' } as ViewerToolChangedDetail,
-        }));
+        emit('VIEWER_TOOL_CHANGED', { tool: 'slicer' } as ViewerToolChangedDetail,);
         break;
 
       case 'xray': {
@@ -166,9 +157,7 @@ const ViewerMockup: React.FC = () => {
           viewer.cameraControl.followPointer = true;
           viewer.cameraControl.constrainVertical = true;
         }
-        window.dispatchEvent(new CustomEvent(VIEWER_TOOL_CHANGED_EVENT, {
-          detail: { tool: null } as ViewerToolChangedDetail,
-        }));
+        emit('VIEWER_TOOL_CHANGED', { tool: null } as ViewerToolChangedDetail,);
         break;
 
       case 'navCube':
@@ -216,7 +205,7 @@ const ViewerMockup: React.FC = () => {
         setTimeout(() => {
           window.dispatchEvent(new Event('MOBILE_TOGGLE_VIZ_MENU'));
           setTimeout(() => {
-            window.dispatchEvent(new CustomEvent('OPEN_ISSUE_LIST'));
+            emit('OPEN_ISSUE_LIST');
           }, 300);
         }, 200);
         break;
@@ -254,9 +243,7 @@ const ViewerMockup: React.FC = () => {
     setViewMode(mode);
     // Dispatch to the real viewer
     if (mode === '2d' || mode === '3d') {
-      window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, {
-        detail: { mode },
-      }));
+      emit('VIEW_MODE_REQUESTED', { mode },);
     }
   }, []);
 
