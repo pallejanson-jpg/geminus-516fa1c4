@@ -525,7 +525,7 @@ const PortfolioView: React.FC = () => {
                   }
                 }}
               >
-                Öppna 3D
+                Open 3D
               </Button>
             </div>
           </div>
