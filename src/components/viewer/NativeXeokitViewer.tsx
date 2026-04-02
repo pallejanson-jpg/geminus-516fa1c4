@@ -16,7 +16,7 @@ import { AlertCircle } from 'lucide-react';
 import { getMemoryStats } from '@/hooks/useXktPreload';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { applyArchitectColors } from '@/lib/architect-colors';
-import { INSIGHTS_COLOR_UPDATE_EVENT } from '@/lib/viewer-events';
+import { emit, on, type InsightsColorUpdateDetail } from '@/lib/event-bus';
 import { useXeokitInstance } from '@/hooks/useXeokitInstance';
 import { useModelLoader, type ModelInfo } from '@/hooks/useModelLoader';
 import { useViewerEventListeners } from '@/hooks/useViewerEventListeners';
