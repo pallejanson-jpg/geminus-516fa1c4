@@ -21,7 +21,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
   DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
+import { on, emit, type FloorSelectionEventDetail } from '@/lib/event-bus';
 import { supabase } from '@/integrations/supabase/client';
 import {
   DndContext, closestCenter, PointerSensor, KeyboardSensor,
