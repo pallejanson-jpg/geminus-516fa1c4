@@ -494,7 +494,7 @@ const PortfolioView: React.FC = () => {
           <div className="absolute bottom-4 sm:bottom-8 left-4 sm:left-8 right-4 sm:right-8">
             <div className="flex items-center gap-2 mb-1">
               <span className="px-2 py-0.5 rounded bg-primary/90 text-primary-foreground text-[10px] sm:text-xs font-medium">
-                ★ Utvald
+                ★ Featured
               </span>
             </div>
             <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-white mb-1 sm:mb-2 truncate">
