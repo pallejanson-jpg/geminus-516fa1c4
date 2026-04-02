@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
-import { MODEL_LOAD_REQUESTED_EVENT, MODEL_VISIBILITY_CHANGED_EVENT } from '@/lib/viewer-events';
+import { emit } from '@/lib/event-bus';
 import { useModelData, ModelInfo } from '@/hooks/useModelData';
 
 // Re-export ModelInfo so existing imports keep working
