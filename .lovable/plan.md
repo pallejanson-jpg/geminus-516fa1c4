@@ -1,25 +1,39 @@
 
 
-# Fix API Profiles Form — Focus Loss and Scroll Issues
+# Sync API Profile fields with Asset+ tab
 
-## Two bugs identified
+## Problem
+The API Profiles form for Asset+ credentials is missing the **`audience`** field that exists in the main Asset+ settings tab. The Asset+ tab has 8 fields:
 
-### Bug 1: Input loses focus after one keystroke
-**Root cause**: `SecretInput` is defined as a **nested component inside** `ApiProfilesManager`. Every keystroke updates `form` state, which re-renders the parent. React sees `SecretInput` as a *new* component on each render (different function reference), so it unmounts and remounts the input — destroying focus.
+| Asset+ Tab (ConfigState) | API Profiles form | Match? |
+|---|---|---|
+| API URL | assetplus_api_url | Yes |
+| API Key | assetplus_api_key | Yes |
+| Keycloak URL | assetplus_keycloak_url | Yes |
+| Client ID | assetplus_client_id | Yes |
+| Client Secret | assetplus_client_secret | Yes |
+| Username | assetplus_username | Yes |
+| Password | assetplus_password | Yes |
+| **Audience** | — | **Missing** |
 
-**Fix**: Extract `SecretInput` out of `ApiProfilesManager` as a standalone component at module level. It needs `form`, `set`, `showSecrets`, and `toggleSecret` passed as props.
+## Fix
 
-### Bug 2: Unnecessary scrollbars
-The form content is constrained by the dialog/tab container. The accordion sections create vertical overflow and the inputs are narrow causing horizontal overflow.
+### 1. Database migration
+Add `assetplus_audience text` column to `api_profiles` table.
 
-**Fix**: Ensure the editing form uses `overflow-y-auto` properly and the inputs/accordion take full width without horizontal overflow.
+### 2. `ApiProfilesManager.tsx`
+- Add `assetplus_audience` to `ApiProfile` interface, `ProfileForm`, and `EMPTY_FORM`
+- Add the "Audience" input field in the Asset+ accordion section (default placeholder: `asset-api`)
 
-## Changes — single file
+### 3. `credentials.ts`
+- Add `audience` to `AssetPlusCredentials` interface
+- Resolve it from `profile.assetplus_audience` or fall back to env var / default `"asset-api"`
 
-**`src/components/settings/ApiProfilesManager.tsx`**:
+### 4. Verify edge functions
+Check that `getAccessToken()` in sync/query functions uses `audience` from credentials (currently most hardcode or use env vars — this ensures profile-level override works).
 
-1. Move `SecretInput` outside the component as a module-level `React.FC` that receives `value`, `onChange`, `isSecret`, `shown`, `onToggleSecret`, `label`, `placeholder` as props
-2. Remove the nested function definition from inside `ApiProfilesManager`
-3. Update all `<SecretInput>` usages to pass the required props explicitly
-4. Add `overflow-hidden` to the editing form container to prevent horizontal scroll
+## Technical details
+- Single migration: `ALTER TABLE api_profiles ADD COLUMN assetplus_audience text;`
+- Three files edited: `ApiProfilesManager.tsx`, `credentials.ts`, plus migration
+- No breaking changes — null audience falls back to existing default
 
