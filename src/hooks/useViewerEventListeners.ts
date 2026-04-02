@@ -85,8 +85,7 @@ export function useViewerEventListeners({
 
   // ── FLOOR_TILE_SWITCH (dynamic tile loading for real per-storey tiles) ──
   useEffect(() => {
-    const handler = async (e: Event) => {
-      const detail = (e as CustomEvent).detail;
+    const handler = async (detail: any) => {
       if (!detail?.tiles || !detail?.floorFmGuid) return;
       const viewer = viewerRef.current;
       if (!viewer?.scene) return;
