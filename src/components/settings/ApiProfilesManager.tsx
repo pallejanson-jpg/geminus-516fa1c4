@@ -324,9 +324,9 @@ export default function ApiProfilesManager() {
           <AccordionItem value="ivion">
             <AccordionTrigger className="text-xs font-semibold">Ivion Credentials</AccordionTrigger>
             <AccordionContent className="space-y-3 pt-2">
-              <SecretInput label="API URL" field="ivion_api_url" placeholder="https://..." />
-              <SecretInput label="Username" field="ivion_username" />
-              <SecretInput label="Password" field="ivion_password" />
+               <SI label="API URL" field="ivion_api_url" placeholder="https://..." />
+               <SI label="Username" field="ivion_username" />
+               <SI label="Password" field="ivion_password" />
             </AccordionContent>
           </AccordionItem>
         </Accordion>
