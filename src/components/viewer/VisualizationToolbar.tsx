@@ -431,8 +431,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
   // Listen for view mode changes to show/hide clipping slider
   useEffect(() => {
-    const handleViewModeChange = (e: CustomEvent) => {
-      const mode = e.detail?.mode;
+    const handleViewModeChange = (detail: any) => {
+      const mode = detail?.mode;
       setIs2DMode(mode === '2d');
       // In 2D mode, solo floor detection is handled differently
       if (mode === '2d') {
