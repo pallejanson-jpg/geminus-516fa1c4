@@ -1717,8 +1717,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             Number(asset.coordinate_y),
             Number(asset.coordinate_z)
           ],
-          category: asset.asset_type || 'Övrigt',
-          name: asset.name || 'Okänd',
+          category: asset.asset_type || 'Other',
+          name: asset.name || 'Unknown',
           color,
           iconUrl,
           markerShown: showAnnotations,
