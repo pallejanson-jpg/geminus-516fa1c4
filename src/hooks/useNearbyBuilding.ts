@@ -76,13 +76,13 @@ export function useNearbyBuilding(thresholdMeters = 200): UseNearbyBuildingResul
     // Create a map of fmGuid -> name
     const nameMap = new Map<string, string>();
     buildingAssets?.forEach((a) => {
-      nameMap.set(a.fm_guid, a.common_name || a.name || 'Okänd byggnad');
+      nameMap.set(a.fm_guid, a.common_name || a.name || 'Unknown building');
     });
 
     // Combine data
     return buildingSettings.map((bs) => ({
       fmGuid: bs.fm_guid,
-      commonName: nameMap.get(bs.fm_guid) || 'Okänd byggnad',
+      commonName: nameMap.get(bs.fm_guid) || 'Unknown building',
       latitude: Number(bs.latitude),
       longitude: Number(bs.longitude),
       distance: 0, // Will be calculated when we have user position

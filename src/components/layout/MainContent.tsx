@@ -4,6 +4,7 @@ import { THEMES } from "@/lib/constants";
 import { AppContext } from "@/context/AppContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Spinner } from "@/components/ui/spinner";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import PortfolioView from "@/components/portfolio/PortfolioView";
 import HomeLanding from "@/components/home/HomeLanding";
 import PlaceholderView from "@/components/layout/PlaceholderView";
@@ -41,8 +42,17 @@ const MainContent: React.FC = () => {
     const t = THEMES[theme];
     const [previousAppBefore360, setPreviousAppBefore360] = useState('portfolio');
 
+    // Route-level document title
+    const titleMap: Record<string, string> = {
+        home: 'Home', portfolio: 'Portfolio', map: 'Map', navigation: 'Navigator',
+        viewer: '3D Viewer', native_viewer: '3D Viewer', assetplus_viewer: '3D Viewer',
+        insights: 'Insights', entity_insights: 'Building Insights', inventory: 'Inventory',
+        globe: 'Globe', support: 'Support', fault_report: 'Fault Report',
+        ai_scan: 'AI Scan', radar: '360° View', fma_plus: 'FM Access', fma_native: 'FM Access',
+    };
+    useDocumentTitle(titleMap[activeApp] || null);
+
     useEffect(() => {
-        // Preload Cesium chunk to reduce first-open delay
         import('@/components/globe/CesiumGlobeView').catch(() => {});
     }, []);
 

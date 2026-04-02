@@ -88,10 +88,10 @@ const BuildingMapPicker: React.FC<BuildingMapPickerProps> = ({
         setViewState(prev => ({ ...prev, latitude: lat, longitude: lng, zoom: 16 }));
         setAddressQuery(json.features[0].place_name || addressQuery);
       } else {
-        setSearchError('Ingen plats hittades');
+        setSearchError('No location found');
       }
     } catch {
-      setSearchError('Sökningen misslyckades');
+      setSearchError('Search failed');
     } finally {
       setIsSearching(false);
     }
@@ -131,7 +131,7 @@ const BuildingMapPicker: React.FC<BuildingMapPickerProps> = ({
           value={addressQuery}
           onChange={(e) => { setAddressQuery(e.target.value); setSearchError(null); }}
           onKeyDown={(e) => { if (e.key === 'Enter') handleAddressSearch(); }}
-          placeholder="Sök adress..."
+          placeholder="Search address..."
           className="h-7 text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 px-1"
         />
         {addressQuery && (
@@ -151,7 +151,7 @@ const BuildingMapPicker: React.FC<BuildingMapPickerProps> = ({
           disabled={!addressQuery.trim() || isSearching}
           onClick={handleAddressSearch}
         >
-          {isSearching ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Sök'}
+          {isSearching ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Search'}
         </Button>
       </div>
 

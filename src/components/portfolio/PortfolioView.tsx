@@ -4,6 +4,7 @@ import { Search, LayoutGrid, List, Filter, Loader2, ChevronLeft, ChevronRight } 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
@@ -494,7 +495,7 @@ const PortfolioView: React.FC = () => {
           <div className="absolute bottom-4 sm:bottom-8 left-4 sm:left-8 right-4 sm:right-8">
             <div className="flex items-center gap-2 mb-1">
               <span className="px-2 py-0.5 rounded bg-primary/90 text-primary-foreground text-[10px] sm:text-xs font-medium">
-                ★ Utvald
+                ★ Featured
               </span>
             </div>
             <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-white mb-1 sm:mb-2 truncate">
@@ -502,7 +503,7 @@ const PortfolioView: React.FC = () => {
             </h2>
             <div className="flex items-center gap-4 text-white/70 text-xs sm:text-sm">
               <span>{heroBuilding.numberOfLevels || 0} floors</span>
-              <span>{heroBuilding.numberOfSpaces || 0} rum</span>
+              <span>{heroBuilding.numberOfSpaces || 0} rooms</span>
               <span>{heroBuilding.area ? `${heroBuilding.area.toLocaleString()} m²` : ''}</span>
             </div>
             <div className="flex gap-2 mt-3">
@@ -511,7 +512,7 @@ const PortfolioView: React.FC = () => {
                 className="h-8 gap-1.5 text-xs"
                 onClick={(e) => { e.stopPropagation(); navigateToFacility(heroBuilding); }}
               >
-                Visa detaljer
+                View details
               </Button>
               <Button 
                 size="sm" 
@@ -525,7 +526,7 @@ const PortfolioView: React.FC = () => {
                   }
                 }}
               >
-                Öppna 3D
+                Open 3D
               </Button>
             </div>
           </div>
@@ -584,9 +585,20 @@ const PortfolioView: React.FC = () => {
       {/* Stats Summary */}
       {/* Loading state */}
       {isLoadingData && (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <span className="ml-2 text-muted-foreground">Loading buildings...</span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-border bg-card overflow-hidden">
+              <Skeleton className="h-36 w-full" />
+              <div className="p-3 space-y-2">
+                <Skeleton className="h-4 w-3/4" />
+                <div className="flex gap-3">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-3 w-20" />
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -630,7 +642,7 @@ const PortfolioView: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-base sm:text-lg font-semibold flex items-center gap-2">
-                    ★ Mina favoriter
+                    ★ My favorites
                   </h2>
                   <p className="text-xs sm:text-sm text-muted-foreground">
                     {favoriteFacilities.length} {favoriteFacilities.length === 1 ? 'building' : 'buildings'}

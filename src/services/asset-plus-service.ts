@@ -317,7 +317,7 @@ export async function syncAssetToAssetPlus(assetFmGuid: string): Promise<{ succe
   // 4. Call edge function to create in Asset+
   const payload: CreateAssetPayload = {
     parentSpaceFmGuid: asset.in_room_fm_guid,
-    designation: asset.name || "Okänd",
+    designation: asset.name || "Unknown",
     commonName: asset.common_name || undefined,
     properties: properties.length > 0 ? properties : undefined,
   };
