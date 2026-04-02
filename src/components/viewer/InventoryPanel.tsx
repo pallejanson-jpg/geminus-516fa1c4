@@ -155,17 +155,15 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
 
   // Floor selection listener
   useEffect(() => {
-    const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
-      if (e.detail.isAllFloorsVisible) {
+    return on('FLOOR_SELECTION_CHANGED', (detail) => {
+      if (detail.isAllFloorsVisible) {
         setIsAllFloors(true);
         setVisibleFloorGuids([]);
-      } else if (e.detail.visibleFloorFmGuids?.length > 0) {
+      } else if (detail.visibleFloorFmGuids?.length > 0) {
         setIsAllFloors(false);
-        setVisibleFloorGuids(e.detail.visibleFloorFmGuids);
+        setVisibleFloorGuids(detail.visibleFloorFmGuids);
       }
-    };
-    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
-    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+    });
   }, []);
 
   // Close context menu on click elsewhere
