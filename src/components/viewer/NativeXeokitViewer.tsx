@@ -16,7 +16,7 @@ import { AlertCircle } from 'lucide-react';
 import { getMemoryStats } from '@/hooks/useXktPreload';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { applyArchitectColors } from '@/lib/architect-colors';
-import { INSIGHTS_COLOR_UPDATE_EVENT } from '@/lib/viewer-events';
+import { emit, on, type InsightsColorUpdateDetail } from '@/lib/event-bus';
 import { useXeokitInstance } from '@/hooks/useXeokitInstance';
 import { useModelLoader, type ModelInfo } from '@/hooks/useModelLoader';
 import { useViewerEventListeners } from '@/hooks/useViewerEventListeners';
@@ -46,6 +46,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
     return () => { mountedRef.current = false; };
   }, []);
 
+  // ── Hook: xeokit instance lifecycle ──
   // ── Hook: xeokit instance lifecycle ──
   const { viewerRef, createInstance, destroy } = useXeokitInstance({
     canvasRef,
@@ -201,7 +202,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         setPhase('ready');
         (window as any).__nativeXeokitViewer = viewer;
         onViewerReady?.(viewer);
-        window.dispatchEvent(new CustomEvent('VIEWER_MODELS_LOADED', { detail: { buildingFmGuid } }));
+        emit('VIEWER_MODELS_LOADED', { buildingFmGuid });
 
         // Wire up virtual chunk floor filtering
         if (chunkModels.length > 0 && !hasRealTiles) {
@@ -229,7 +230,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           const pending = pendingInsightsColorRef.current;
           (pendingInsightsColorRef as React.MutableRefObject<any>).current = null;
           setTimeout(() => {
-            window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail: pending }));
+            emit('INSIGHTS_COLOR_UPDATE', pending);
           }, 200);
         }
       }
@@ -281,10 +282,17 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
     }
   }, [buildingFmGuid, createInstance, fetchModelMetadata, bootstrapFromAssetPlus, loadAllModels, loadSingleModel, deferStalenessCheck, onViewerReady, pendingInsightsColorRef, viewerRef]);
 
+  // ── Stabilized effect: only re-run when buildingFmGuid changes ──
+  // Uses a ref to always call the latest initialize without it being a dependency,
+  // preventing the destroy→recreate flicker loop caused by unstable callback identities.
+  const initRef = useRef(initialize);
+  initRef.current = initialize;
+
   useEffect(() => {
-    initialize();
+    initRef.current();
     return () => { destroy(); };
-  }, [initialize, destroy]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildingFmGuid, destroy]);
 
   return (
     <div className="relative w-full h-full">

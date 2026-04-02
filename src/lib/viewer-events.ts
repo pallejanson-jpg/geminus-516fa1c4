@@ -1,193 +1,114 @@
 /**
  * Custom events for viewer communication between components.
- * Centralizes event names to avoid typos and enable easy discovery.
+ *
+ * ⚠️  MIGRATION NOTE: Prefer importing `emit` / `on` from '@/lib/event-bus'
+ * for type-safe dispatching and listening. The constants below are kept for
+ * backward compatibility — they resolve to the same string keys used by the
+ * event bus.
  */
 
+// Re-export all detail types from the canonical source
+export type {
+  ViewModeRequestedDetail,
+  FloorSelectionEventDetail,
+  ViewModeEventDetail,
+  ClipHeightEventDetail,
+  ViewerContextChangedDetail,
+  ViewerToolChangedDetail,
+  InsightsColorUpdateDetail,
+  AlarmAnnotationsShowDetail,
+  AnnotationFilterDetail,
+  ViewMode2DToggledDetail,
+  IssueMarkerClickedDetail,
+  LoadSavedViewDetail,
+  IssueAnnotationsToggleDetail,
+  SensorAnnotationsToggleDetail,
+  FmAccessContextChangedDetail,
+  SplitPlanNavigateDetail,
+  ViewerSelectEntityDetail,
+  ModelLoadRequestedDetail,
+  ModelVisibilityChangedDetail,
+} from '@/lib/event-bus';
+
+// ── String constants (backward compat) ──────────────────────────────────
+
 /** Event dispatched when a component wants to request a view mode change (2D/3D) */
-export const VIEW_MODE_REQUESTED_EVENT = 'VIEW_MODE_REQUESTED';
+export const VIEW_MODE_REQUESTED_EVENT = 'VIEW_MODE_REQUESTED' as const;
 
 /** Event dispatched when view mode has actually changed */
-export { VIEW_MODE_CHANGED_EVENT, FLOOR_SELECTION_CHANGED_EVENT, CLIP_HEIGHT_CHANGED_EVENT, CLIP_HEIGHT_3D_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
+export const VIEW_MODE_CHANGED_EVENT = 'VIEW_MODE_CHANGED' as const;
+
+/** Event dispatched when floor selection changes */
+export const FLOOR_SELECTION_CHANGED_EVENT = 'FLOOR_SELECTION_CHANGED' as const;
+
+/** Event dispatched when 2D clip height changes */
+export const CLIP_HEIGHT_CHANGED_EVENT = 'CLIP_HEIGHT_CHANGED' as const;
+
+/** Event dispatched when 3D clip height changes */
+export const CLIP_HEIGHT_3D_CHANGED_EVENT = 'CLIP_HEIGHT_3D_CHANGED' as const;
 
 /** Event dispatched when room visualization panel wants to force "Show Spaces" on */
-export { FORCE_SHOW_SPACES_EVENT } from '@/components/viewer/RoomVisualizationPanel';
+export const FORCE_SHOW_SPACES_EVENT = 'FORCE_SHOW_SPACES' as const;
 
 /** Event dispatched when a saved view should be loaded */
-export const LOAD_SAVED_VIEW_EVENT = 'LOAD_SAVED_VIEW';
+export const LOAD_SAVED_VIEW_EVENT = 'LOAD_SAVED_VIEW' as const;
 
 /** Event dispatched when 3D viewer context changes (for Gunnar AI) */
-export const VIEWER_CONTEXT_CHANGED_EVENT = 'VIEWER_CONTEXT_CHANGED';
+export const VIEWER_CONTEXT_CHANGED_EVENT = 'VIEWER_CONTEXT_CHANGED' as const;
 
 /** Event dispatched when the active viewer tool changes (select, measure, slicer, null) */
-export const VIEWER_TOOL_CHANGED_EVENT = 'VIEWER_TOOL_CHANGED';
-
-/** Type for view mode request event detail */
-export interface ViewModeRequestedDetail {
-  mode: '2d' | '3d';
-}
-
-/** Type for viewer context changes (for Gunnar AI integration) */
-export interface ViewerContextChangedDetail {
-  buildingFmGuid: string;
-  buildingName?: string;
-  viewMode: '2d' | '3d';
-  visibleFloorFmGuids: string[];
-  visibleModelIds: string[];
-  selectedFmGuids: string[];
-  clipHeight: number;
-}
-
-/** Type for viewer tool change event detail */
-export interface ViewerToolChangedDetail {
-  tool: 'select' | 'measure' | 'slicer' | null;
-}
+export const VIEWER_TOOL_CHANGED_EVENT = 'VIEWER_TOOL_CHANGED' as const;
 
 /** Event dispatched when minimap toggle is requested from the right panel */
-export const MINIMAP_TOGGLE_EVENT = 'MINIMAP_TOGGLE';
+export const MINIMAP_TOGGLE_EVENT = 'MINIMAP_TOGGLE' as const;
 
 /** Event dispatched when a deferred (non-A) model should be loaded on demand */
-export const MODEL_LOAD_REQUESTED_EVENT = 'MODEL_LOAD_REQUESTED';
+export const MODEL_LOAD_REQUESTED_EVENT = 'MODEL_LOAD_REQUESTED' as const;
 
 /** Event dispatched when visible BIM model selection changes */
-export const MODEL_VISIBILITY_CHANGED_EVENT = 'MODEL_VISIBILITY_CHANGED';
-
-/** Type for model load request event detail */
-export interface ModelLoadRequestedDetail {
-  modelId: string;
-}
-
-/** Type for model visibility change event detail */
-export interface ModelVisibilityChangedDetail {
-  buildingFmGuid?: string;
-  visibleModelIds: string[];
-}
+export const MODEL_VISIBILITY_CHANGED_EVENT = 'MODEL_VISIBILITY_CHANGED' as const;
 
 /** Event dispatched when Insights drawer wants to update room colorization in 3D */
-export const INSIGHTS_COLOR_UPDATE_EVENT = 'INSIGHTS_COLOR_UPDATE';
+export const INSIGHTS_COLOR_UPDATE_EVENT = 'INSIGHTS_COLOR_UPDATE' as const;
 
 /** Event dispatched when Insights drawer wants to show alarm annotations in 3D */
-export const ALARM_ANNOTATIONS_SHOW_EVENT = 'ALARM_ANNOTATIONS_SHOW';
-
-/** Type for insights color update event detail */
-export interface InsightsColorUpdateDetail {
-  mode: string;
-  colorMap: Record<string, [number, number, number]>;
-  /** Optional name-based lookup: maps a display name → color for fallback matching */
-  nameColorMap?: Record<string, [number, number, number]>;
-  /** When true, only match by GUID — skip name-based fallback to avoid coloring multiple rooms with same name */
-  strictGuidMode?: boolean;
-  /** Optional direct entity ID → color map — bypasses GUID matching entirely when provided */
-  entityColorMap?: Record<string, [number, number, number]>;
-}
-
-/** Type for alarm annotations show event detail */
-export interface AlarmAnnotationsShowDetail {
-  alarms: { fmGuid: string; roomFmGuid?: string }[];
-  flyTo?: boolean;
-  /** Used by panel toggles: false hides alarm markers, true shows them */
-  visible?: boolean;
-}
+export const ALARM_ANNOTATIONS_SHOW_EVENT = 'ALARM_ANNOTATIONS_SHOW' as const;
 
 /** Event dispatched when annotation category filter changes in ViewerFilterPanel */
-export const ANNOTATION_FILTER_EVENT = 'ANNOTATION_FILTER';
-
-/** Type for annotation filter event detail */
-export interface AnnotationFilterDetail {
-  visibleCategories: string[];
-}
+export const ANNOTATION_FILTER_EVENT = 'ANNOTATION_FILTER' as const;
 
 /** Event dispatched when external mode-switcher toggles xeokit 2D mode */
-export const VIEW_MODE_2D_TOGGLED_EVENT = 'VIEW_MODE_2D_TOGGLED';
-
-/** Type for view mode 2D toggle event detail */
-export interface ViewMode2DToggledDetail {
-  enabled: boolean;
-}
+export const VIEW_MODE_2D_TOGGLED_EVENT = 'VIEW_MODE_2D_TOGGLED' as const;
 
 /** Event dispatched when an issue annotation marker is clicked in the 3D viewer */
-export const ISSUE_MARKER_CLICKED_EVENT = 'ISSUE_MARKER_CLICKED';
-
-/** Type for issue marker click event detail */
-export interface IssueMarkerClickedDetail {
-  issueId: string;
-}
-
-/** Type for load saved view event detail */
-export interface LoadSavedViewDetail {
-  viewId: string;
-  cameraEye: number[];
-  cameraLook: number[];
-  cameraUp: number[];
-  cameraProjection: string;
-  viewMode: '2d' | '3d';
-  clipHeight: number;
-  visibleModelIds: string[];
-  visibleFloorIds: string[];
-  showSpaces: boolean;
-  showAnnotations: boolean;
-  visualizationType: string;
-  visualizationMockData: boolean;
-  sectionPlanes?: Array<{ pos: number[]; dir: number[] }>;
-}
+export const ISSUE_MARKER_CLICKED_EVENT = 'ISSUE_MARKER_CLICKED' as const;
 
 /** Event dispatched when issue annotations should be toggled on/off */
-export const ISSUE_ANNOTATIONS_TOGGLE_EVENT = 'ISSUE_ANNOTATIONS_TOGGLE';
-
-/** Type for issue annotations toggle event detail */
-export interface IssueAnnotationsToggleDetail {
-  visible: boolean;
-}
+export const ISSUE_ANNOTATIONS_TOGGLE_EVENT = 'ISSUE_ANNOTATIONS_TOGGLE' as const;
 
 /** Event dispatched when sensor annotations should be toggled on/off */
-export const SENSOR_ANNOTATIONS_TOGGLE_EVENT = 'SENSOR_ANNOTATIONS_TOGGLE';
-
-/** Type for sensor annotations toggle event detail */
-export interface SensorAnnotationsToggleDetail {
-  visible: boolean;
-}
+export const SENSOR_ANNOTATIONS_TOGGLE_EVENT = 'SENSOR_ANNOTATIONS_TOGGLE' as const;
 
 /** Event dispatched when FM Access context changes (building/floor/room navigation) */
-export const FM_ACCESS_CONTEXT_CHANGED_EVENT = 'FM_ACCESS_CONTEXT_CHANGED';
-
-/** Type for FM Access context change event detail */
-export interface FmAccessContextChangedDetail {
-  objectId?: string;
-  objectType?: string;
-  buildingGuid?: string;
-  floorGuid?: string;
-  roomGuid?: string;
-  raw?: any;
-}
+export const FM_ACCESS_CONTEXT_CHANGED_EVENT = 'FM_ACCESS_CONTEXT_CHANGED' as const;
 
 /** Event dispatched to reset 3D colorization (clear xray + restore architect colors) */
-export const INSIGHTS_COLOR_RESET_EVENT = 'INSIGHTS_COLOR_RESET';
+export const INSIGHTS_COLOR_RESET_EVENT = 'INSIGHTS_COLOR_RESET' as const;
 
 /** Event dispatched when 2D plan click wants to navigate 3D camera in split mode */
-export const SPLIT_PLAN_NAVIGATE_EVENT = 'SPLIT_PLAN_NAVIGATE';
-
-/** Type for split plan navigate event detail */
-export interface SplitPlanNavigateDetail {
-  worldPos: [number, number, number];
-}
+export const SPLIT_PLAN_NAVIGATE_EVENT = 'SPLIT_PLAN_NAVIGATE' as const;
 
 /** Event dispatched when an entity is selected in the 2D plan view */
-export const VIEWER_SELECT_ENTITY_EVENT = 'VIEWER_SELECT_ENTITY';
-
-/** Type for viewer select entity event detail */
-export interface ViewerSelectEntityDetail {
-  entityId: string;
-  fmGuid: string | null;
-  entityName: string | null;
-}
+export const VIEWER_SELECT_ENTITY_EVENT = 'VIEWER_SELECT_ENTITY' as const;
 
 /** Event dispatched when "Create Asset" is triggered from context menu or mobile button */
-export const VIEWER_CREATE_ASSET_EVENT = 'VIEWER_CREATE_ASSET';
+export const VIEWER_CREATE_ASSET_EVENT = 'VIEWER_CREATE_ASSET' as const;
 
 /** Event dispatched when asset position has been picked in 3D */
-export const INVENTORY_POSITION_PICKED_EVENT = 'INVENTORY_POSITION_PICKED';
+export const INVENTORY_POSITION_PICKED_EVENT = 'INVENTORY_POSITION_PICKED' as const;
 
 /** Event dispatched to request annotation refresh after new asset saved */
-export const ANNOTATION_REFRESH_EVENT = 'ANNOTATION_REFRESH';
+export const ANNOTATION_REFRESH_EVENT = 'ANNOTATION_REFRESH' as const;
 
 /** Event dispatched when AI wants to focus the viewer (e.g. after colorize/highlight on mobile) */
-export const AI_VIEWER_FOCUS_EVENT = 'AI_VIEWER_FOCUS';
+export const AI_VIEWER_FOCUS_EVENT = 'AI_VIEWER_FOCUS' as const;

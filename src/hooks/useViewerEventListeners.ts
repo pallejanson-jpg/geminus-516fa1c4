@@ -14,11 +14,14 @@ import {
   INSIGHTS_COLOR_UPDATE_EVENT,
   INSIGHTS_COLOR_RESET_EVENT,
   ALARM_ANNOTATIONS_SHOW_EVENT,
-  type InsightsColorUpdateDetail,
-  type AlarmAnnotationsShowDetail,
+  FORCE_SHOW_SPACES_EVENT,
+  FLOOR_SELECTION_CHANGED_EVENT,
 } from '@/lib/viewer-events';
-import { FORCE_SHOW_SPACES_EVENT } from '@/components/viewer/RoomVisualizationPanel';
-import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
+import type {
+  InsightsColorUpdateDetail,
+  AlarmAnnotationsShowDetail,
+  FloorSelectionEventDetail,
+} from '@/lib/event-bus';
 import type { ModelInfo } from '@/hooks/useModelLoader';
 
 /** Project a 3D world position to 2D canvas coordinates */
