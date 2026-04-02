@@ -3544,39 +3544,39 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
   // Listen for Gunnar commands
   useEffect(() => {
-    const handleGunnarShowFloor = (e: CustomEvent<{ floorFmGuid: string }>) => {
+    const handleGunnarShowFloor = (detail: { floorFmGuid: string }) => {
       const viewer = viewerInstanceRef.current;
-      if (viewer && e.detail.floorFmGuid) {
+      if (viewer && detail.floorFmGuid) {
         try {
-          viewer.cutOutFloorsByFmGuid(e.detail.floorFmGuid, true, { doViewFit: true });
+          viewer.cutOutFloorsByFmGuid(detail.floorFmGuid, true, { doViewFit: true });
         } catch (err) {
           console.debug('Could not cut to floor:', err);
         }
       }
     };
     
-    const handleGunnarHighlight = (e: CustomEvent<{ fmGuids: string[] }>) => {
-      if (e.detail.fmGuids && e.detail.fmGuids.length > 0) {
-        e.detail.fmGuids.forEach(guid => {
+    const handleGunnarHighlight = (detail: { fmGuids: string[] }) => {
+      if (detail.fmGuids && detail.fmGuids.length > 0) {
+        detail.fmGuids.forEach(guid => {
           flashEntityById(guid, viewerInstanceRef.current);
         });
       }
     };
     
-    const handleGunnarFlyTo = (e: CustomEvent<{ fmGuid: string }>) => {
-      if (e.detail.fmGuid) {
-        lookAtInstanceFromAngle(e.detail.fmGuid, defaultMinimumHeightAboveBase, defaultHeightAboveAABB);
+    const handleGunnarFlyTo = (detail: { fmGuid: string }) => {
+      if (detail.fmGuid) {
+        lookAtInstanceFromAngle(detail.fmGuid, defaultMinimumHeightAboveBase, defaultHeightAboveAABB);
       }
     };
     
-    window.addEventListener('GUNNAR_SHOW_FLOOR', handleGunnarShowFloor as EventListener);
-    window.addEventListener('GUNNAR_HIGHLIGHT', handleGunnarHighlight as EventListener);
-    window.addEventListener('GUNNAR_FLY_TO', handleGunnarFlyTo as EventListener);
+    const offShowFloor = on('GUNNAR_SHOW_FLOOR', handleGunnarShowFloor);
+    const offHighlight = on('GUNNAR_HIGHLIGHT', handleGunnarHighlight);
+    const offFlyTo = on('GUNNAR_FLY_TO', handleGunnarFlyTo);
     
     return () => {
-      window.removeEventListener('GUNNAR_SHOW_FLOOR', handleGunnarShowFloor as EventListener);
-      window.removeEventListener('GUNNAR_HIGHLIGHT', handleGunnarHighlight as EventListener);
-      window.removeEventListener('GUNNAR_FLY_TO', handleGunnarFlyTo as EventListener);
+      offShowFloor();
+      offHighlight();
+      offFlyTo();
     };
   }, [flashEntityById, lookAtInstanceFromAngle]);
 

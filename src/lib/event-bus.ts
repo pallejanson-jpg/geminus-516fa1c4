@@ -238,6 +238,9 @@ export interface EventMap {
 
   // Gunnar
   GUNNAR_AUTO_OPEN_VOICE: void;
+  GUNNAR_SHOW_FLOOR: { floorFmGuid: string };
+  GUNNAR_HIGHLIGHT: { fmGuids: string[] };
+  GUNNAR_FLY_TO: { fmGuid: string };
 
   // Architect mode
   ARCHITECT_MODE_REQUESTED: { enabled: boolean };
