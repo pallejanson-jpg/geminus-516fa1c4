@@ -47,6 +47,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   }, []);
 
   // ── Hook: xeokit instance lifecycle ──
+  // ── Hook: xeokit instance lifecycle ──
   const { viewerRef, createInstance, destroy } = useXeokitInstance({
     canvasRef,
     buildingFmGuid,
