@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
+import { emit, on, type FloorSelectionEventDetail } from '@/lib/event-bus';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useFloorData, FloorInfo } from '@/hooks/useFloorData';
 import { useFloorVisibility } from '@/hooks/useFloorVisibility';
@@ -20,6 +20,7 @@ interface FloatingFloorSwitcherProps {
   compact?: boolean;
 }
 
+/** @deprecated Use emit('FLOOR_PILLS_TOGGLE', ...) from event-bus */
 export const FLOOR_PILLS_TOGGLE_EVENT = 'FLOOR_PILLS_TOGGLE';
 
 const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
@@ -41,12 +42,10 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
 
   // Listen for visibility toggle
   useEffect(() => {
-    const handleToggle = (e: CustomEvent<{ visible: boolean }>) => {
-      setIsVisible(e.detail.visible);
-      localStorage.setItem('viewer-show-floor-pills', String(e.detail.visible));
-    };
-    window.addEventListener(FLOOR_PILLS_TOGGLE_EVENT, handleToggle as EventListener);
-    return () => window.removeEventListener(FLOOR_PILLS_TOGGLE_EVENT, handleToggle as EventListener);
+    return on('FLOOR_PILLS_TOGGLE', (detail) => {
+      setIsVisible(detail.visible);
+      localStorage.setItem('viewer-show-floor-pills', String(detail.visible));
+    });
   }, []);
 
   // Initialize once floors arrive — always start with "All floors"
@@ -60,9 +59,9 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
 
   // Listen for external floor selection
   useEffect(() => {
-    const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
-      const { visibleMetaFloorIds, isAllFloorsVisible } = e.detail;
-      const fromFilterPanel = !!(e.detail as any).fromFilterPanel;
+    return on('FLOOR_SELECTION_CHANGED', (detail) => {
+      const { visibleMetaFloorIds, isAllFloorsVisible } = detail;
+      const fromFilterPanel = !!(detail as any).fromFilterPanel;
       isReceivingExternalEvent.current = true;
 
       if (isAllFloorsVisible) {
@@ -72,17 +71,17 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
           .filter(f => visibleMetaFloorIds.some(metaId => f.id === metaId || f.metaObjectIds.includes(metaId)))
           .map(f => f.id);
         if (matching.length > 0) setVisibleFloorIds(new Set(matching));
-      } else if (e.detail.visibleFloorFmGuids?.length > 0) {
+      } else if (detail.visibleFloorFmGuids?.length > 0) {
         const matching = floors
           .filter(f => f.databaseLevelFmGuids.some(g =>
-            e.detail.visibleFloorFmGuids!.some((vg: string) => vg.toLowerCase() === g.toLowerCase())
+            detail.visibleFloorFmGuids!.some((vg: string) => vg.toLowerCase() === g.toLowerCase())
           ))
           .map(f => f.id);
         if (matching.length > 0) setVisibleFloorIds(new Set(matching));
-      } else if (e.detail.floorId === null) {
+      } else if (detail.floorId === null) {
         setVisibleFloorIds(new Set(floors.map(f => f.id)));
-      } else if (e.detail.floorId) {
-        const match = floors.find(f => f.id === e.detail.floorId || f.metaObjectIds.includes(e.detail.floorId!));
+      } else if (detail.floorId) {
+        const match = floors.find(f => f.id === detail.floorId || f.metaObjectIds.includes(detail.floorId!));
         if (match) setVisibleFloorIds(new Set([match.id]));
       }
 
@@ -92,9 +91,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
       }
 
       setTimeout(() => { isReceivingExternalEvent.current = false; }, 100);
-    };
-    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
-    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+    });
   }, [floors]);
 
   // Apply visibility + save + dispatch event helper
@@ -113,17 +110,15 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
     const floor = soloFloorId ? floors.find(f => f.id === soloFloorId) : null;
     const bounds = soloFloorId ? calculateFloorBounds(soloFloorId) : null;
 
-    window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
-      detail: {
-        floorId: soloFloorId,
-        floorName: floor?.name || null,
-        bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
-        visibleMetaFloorIds: allMetaIds,
-        visibleFloorFmGuids: allFmGuids,
-        isAllFloorsVisible: newVisibleIds.size === floors.length,
-        skipClipping: true,
-      } as FloorSelectionEventDetail,
-    }));
+    emit('FLOOR_SELECTION_CHANGED', {
+      floorId: soloFloorId,
+      floorName: floor?.name || null,
+      bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
+      visibleMetaFloorIds: allMetaIds,
+      visibleFloorFmGuids: allFmGuids,
+      isAllFloorsVisible: newVisibleIds.size === floors.length,
+      skipClipping: true,
+    } as FloorSelectionEventDetail);
   }, [floors, applyFloorVisibility, calculateFloorBounds, buildingFmGuid]);
 
   // Floor select handler

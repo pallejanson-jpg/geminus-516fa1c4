@@ -3,6 +3,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
+import { emit } from '@/lib/event-bus';
 
 interface AnnotationCategory {
   category: string;       // Internal key (asset_type)
@@ -17,11 +18,6 @@ interface AnnotationCategoryListProps {
   buildingFmGuid?: string;
 }
 
-/**
- * List component to toggle visibility of annotation categories in the 3D viewer.
- * Uses Swedish display names from annotation_symbols table.
- * Used inside SidePopPanel as a flyout from the main VisualizationToolbar.
- */
 const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
   viewerRef,
   buildingFmGuid,
@@ -29,19 +25,16 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
   const [categories, setCategories] = useState<AnnotationCategory[]>([]);
   const [allVisible, setAllVisible] = useState(true);
 
-  // Fetch asset categories with annotations for this building
   useEffect(() => {
     const fetchCategories = async () => {
       if (!buildingFmGuid) return;
 
-      // Get assets with placed annotations OR alarm types for this building
       const { data: assets } = await supabase
         .from('assets')
         .select('asset_type, symbol_id')
         .eq('building_fm_guid', buildingFmGuid)
         .or('annotation_placed.eq.true,asset_type.eq.IfcAlarm');
 
-      // Get all symbols for Swedish names and colors
       const { data: symbols } = await supabase
         .from('annotation_symbols')
         .select('id, name, color');
@@ -49,7 +42,6 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
       const symbolById = new Map(symbols?.map(s => [s.id, s]) || []);
 
       if (assets) {
-        // Group by asset_type and get Swedish names from symbols
         const typeInfo: Record<string, { count: number; displayName: string; color: string }> = {};
         
         assets.forEach(asset => {
@@ -59,7 +51,7 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
           if (!typeInfo[key]) {
             typeInfo[key] = {
               count: 0,
-              displayName: symbol?.name || key,  // Use Swedish name from symbol
+              displayName: symbol?.name || key,
               color: symbol?.color || '#3B82F6',
             };
           }
@@ -80,7 +72,6 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
     fetchCategories();
   }, [buildingFmGuid]);
 
-  // Toggle a specific category
   const handleToggleCategory = useCallback((category: string) => {
     setCategories(prev => {
       const updated = prev.map(c => {
@@ -90,13 +81,11 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
         return c;
       });
       
-      // Dispatch TOGGLE_ANNOTATIONS with updated visible categories for NativeXeokitViewer
       const visibleCats = updated.filter(c => c.visible).map(c => c.category);
-      window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', {
-        detail: { show: visibleCats.length > 0, visibleCategories: visibleCats },
-      }));
+      emit('TOGGLE_ANNOTATIONS', {
+        show: visibleCats.length > 0, visibleCategories: visibleCats,
+      });
       
-      // Also try legacy local annotations plugin
       try {
         const localPlugin = viewerRef.current?.localAnnotationsPlugin;
         if (localPlugin?.annotations) {
@@ -118,22 +107,19 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
     });
   }, [viewerRef]);
 
-  // Toggle all categories
   const handleToggleAll = useCallback(() => {
     const newVisible = !allVisible;
     setAllVisible(newVisible);
     
     setCategories(prev => {
       const updated = prev.map(c => ({ ...c, visible: newVisible }));
-      // Dispatch TOGGLE_ANNOTATIONS for NativeXeokitViewer
       const visibleCats = newVisible ? updated.map(c => c.category) : [];
-      window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', {
-        detail: { show: newVisible, visibleCategories: visibleCats },
-      }));
+      emit('TOGGLE_ANNOTATIONS', {
+        show: newVisible, visibleCategories: visibleCats,
+      });
       return updated;
     });
     
-    // Toggle all annotations in the LOCAL annotations manager
     try {
       const localPlugin = viewerRef.current?.localAnnotationsPlugin;
       if (localPlugin?.annotations) {
@@ -161,7 +147,6 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
 
   return (
     <div className="space-y-2">
-      {/* Show/Hide All button */}
       <div className="flex items-center justify-between pb-2 border-b">
         <span className="text-xs text-muted-foreground">
           {visibleCount}/{categories.length} visible
@@ -186,7 +171,6 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
         </Button>
       </div>
       
-      {/* Category list with Swedish display names */}
       {categories.map((cat) => (
         <div
           key={cat.category}
