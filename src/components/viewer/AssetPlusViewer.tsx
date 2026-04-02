@@ -37,8 +37,8 @@ import { useRoomLabels, ROOM_LABELS_TOGGLE_EVENT, type RoomLabelsToggleDetail } 
 import { useViewerCameraSync } from '@/hooks/useViewerCameraSync';
 import { useModelNames } from '@/hooks/useModelNames';
 import type { LocalCoords } from '@/context/ViewerSyncContext';
-import {
 import { emit, on } from '@/lib/event-bus';
+import {
   calculateHeadingFromCamera,
   calculatePitchFromCamera,
   calculateLookFromHeadingPitch,

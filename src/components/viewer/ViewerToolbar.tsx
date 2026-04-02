@@ -37,8 +37,8 @@ import {
   type FloorSelectionEventDetail,
   type ClipHeightEventDetail,
 } from '@/hooks/useSectionPlaneClipping';
-import {
 import { emit, on } from '@/lib/event-bus';
+import {
   VIEW_MODE_REQUESTED_EVENT,
   VIEWER_TOOL_CHANGED_EVENT,
   VIEW_MODE_2D_TOGGLED_EVENT,

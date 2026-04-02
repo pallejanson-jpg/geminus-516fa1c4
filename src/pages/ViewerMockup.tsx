@@ -31,8 +31,8 @@ import NativeViewerShell from '@/components/viewer/NativeViewerShell';
 import { useBuildingViewerData } from '@/hooks/useBuildingViewerData';
 import { useContext } from 'react';
 import { AppContext } from '@/context/AppContext';
-import {
 import { emit } from '@/lib/event-bus';
+import {
   VIEWER_TOOL_CHANGED_EVENT,
   VIEW_MODE_REQUESTED_EVENT,
   type ViewerToolChangedDetail,
