@@ -61,6 +61,35 @@ const EMPTY_FORM: ProfileForm = {
   ivion_api_url: '', ivion_username: '', ivion_password: '',
 };
 
+function SecretInput({ label, value, onChange, placeholder, isSecret, shown, onToggleSecret }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string;
+  isSecret: boolean; shown: boolean; onToggleSecret: () => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <div className="relative">
+        <Input
+          type={shown ? 'text' : 'password'}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="pr-8 text-sm"
+        />
+        {isSecret && (
+          <button
+            type="button"
+            onClick={onToggleSecret}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            {shown ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ApiProfilesManager() {
   const [profiles, setProfiles] = useState<ApiProfile[]>([]);
   const [loading, setLoading] = useState(true);
