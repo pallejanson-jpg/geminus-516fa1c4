@@ -388,7 +388,7 @@ const ApiDocs: React.FC = () => {
         {filteredSystems.length === 0 && (
           <div className="text-center py-12 text-muted-foreground">
             <Code className="h-12 w-12 mx-auto mb-3 opacity-30" />
-            <p className="text-sm">Inga endpoints matchar sökningen</p>
+            <p className="text-sm">No endpoints match your search</p>
           </div>
         )}
       </div>

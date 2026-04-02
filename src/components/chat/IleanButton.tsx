@@ -394,7 +394,7 @@ export default function IleanButton() {
                 <div className="flex justify-start">
                   <div className="flex items-center gap-2.5 rounded-xl bg-muted/70 border border-border/30 px-3.5 py-2.5 text-sm">
                     <Loader2 className="h-4 w-4 animate-spin text-cyan-500" />
-                    <span className="text-muted-foreground">Söker i dokument...</span>
+                    <span className="text-muted-foreground">Searching documents...</span>
                   </div>
                 </div>
               )}
