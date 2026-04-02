@@ -304,9 +304,8 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
   // Fly-to + select on row click
   const handleRowClick = useCallback((asset: AssetRow) => {
     setSelectedFmGuid(asset.fmGuid);
-    window.dispatchEvent(new CustomEvent('VIEWER_FLY_TO', { detail: { fmGuid: asset.fmGuid } }));
-    // Also select the entity in the viewer
-    window.dispatchEvent(new CustomEvent('VIEWER_SELECT_ENTITY', { detail: { entityId: asset.fmGuid } }));
+    emit('VIEWER_FLY_TO', { fmGuid: asset.fmGuid });
+    emit('VIEWER_SELECT_ENTITY', { entityId: asset.fmGuid, fmGuid: null, entityName: null });
   }, []);
 
   // Right-click handler
