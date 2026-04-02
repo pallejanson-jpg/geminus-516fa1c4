@@ -44,6 +44,7 @@ import { FLOOR_PILLS_TOGGLE_EVENT } from "./FloatingFloorSwitcher";
 
 import { Map } from "lucide-react";
 
+import { emit, on } from '@/lib/event-bus';
 interface ViewerRightPanelProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
@@ -177,7 +178,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
   const handleClipHeightChange = useCallback((value: number[]) => {
     const newHeight = value[0];
     setClipHeight(newHeight);
-    window.dispatchEvent(new CustomEvent(CLIP_HEIGHT_CHANGED_EVENT, { detail: { height: newHeight } }));
+    emit('CLIP_HEIGHT_CHANGED', { height: newHeight });
   }, []);
 
   const handleClipHeight3DChange = useCallback((value: number[]) => {
@@ -187,12 +188,12 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
   }, []);
 
   const handle2DModeToggle = useCallback((enabled: boolean) => {
-    window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: enabled ? '2d' : '3d' } }));
+    emit('VIEW_MODE_REQUESTED', { mode: enabled ? '2d' : '3d' });
   }, []);
 
   const handleBackgroundChange = useCallback((presetId: BackgroundPresetId) => {
     setArchitectBackground(presetId);
-    window.dispatchEvent(new CustomEvent(ARCHITECT_BACKGROUND_CHANGED_EVENT, { detail: { presetId } }));
+    emit('ARCHITECT_BACKGROUND_CHANGED', { presetId });
   }, []);
 
   const handleRoomLabelsToggle = useCallback((enabled: boolean, configId?: string) => {
@@ -201,8 +202,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
       setActiveRoomLabelConfigId(configId);
       const config = roomLabelConfigs.find(c => c.id === configId);
       if (config) {
-        window.dispatchEvent(new CustomEvent(ROOM_LABELS_CONFIG_EVENT, {
-          detail: {
+        emit('ROOM_LABELS_CONFIG', {
             fields: config.fields,
             heightOffset: config.height_offset,
             fontSize: config.font_size,
@@ -210,13 +210,12 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
             clickAction: config.click_action,
             occlusionEnabled: config.occlusion_enabled,
             flatOnFloor: config.flat_on_floor,
-          } as RoomLabelsConfigDetail
-        }));
+          } as RoomLabelsConfigDetail);
       }
     } else if (!enabled) {
       setActiveRoomLabelConfigId(null);
     }
-    window.dispatchEvent(new CustomEvent(ROOM_LABELS_TOGGLE_EVENT, { detail: { enabled } }));
+    emit('ROOM_LABELS_TOGGLE', { enabled });
   }, [roomLabelConfigs]);
 
   const handleRoomLabelConfigSelect = useCallback((configId: string) => {
@@ -244,7 +243,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
       setLocalShowAnnotations(newValue);
     }
     // Dispatch TOGGLE_ANNOTATIONS for NativeXeokitViewer marker management
-    window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', { detail: { show: newValue } }));
+    emit('TOGGLE_ANNOTATIONS', { show: newValue });
     try {
       viewerRef.current?.assetViewer?.onToggleAnnotation?.(newValue);
     } catch (e) { /* ignore */ }
@@ -487,8 +486,8 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
         handleSelectIssue(issue as BcfIssue);
       }
     };
-    window.addEventListener(ISSUE_MARKER_CLICKED_EVENT, handler);
-    return () => window.removeEventListener(ISSUE_MARKER_CLICKED_EVENT, handler);
+    const off = on('ISSUE_MARKER_CLICKED', handler);
+    return () => off();
   }, [handleSelectIssue]);
 
   return (
@@ -619,7 +618,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                     </div>
                     <Switch
                       onCheckedChange={(checked) => {
-                        window.dispatchEvent(new CustomEvent(MINIMAP_TOGGLE_EVENT, { detail: { visible: checked } }));
+                        emit('MINIMAP_TOGGLE', { visible: checked });
                       }}
                     />
                   </div>
@@ -736,7 +735,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                       checked={showIssues}
                       onCheckedChange={(checked) => {
                         setShowIssues(checked);
-                        window.dispatchEvent(new CustomEvent(ISSUE_ANNOTATIONS_TOGGLE_EVENT, { detail: { visible: checked } }));
+                        emit('ISSUE_ANNOTATIONS_TOGGLE', { visible: checked });
                       }}
                     />
                   </div>
@@ -753,7 +752,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                       checked={showAlarms}
                       onCheckedChange={(checked) => {
                         setShowAlarms(checked);
-                        window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: [], flyTo: false, visible: checked } }));
+                        emit('ALARM_ANNOTATIONS_SHOW', { alarms: [], flyTo: false, visible: checked });
                       }}
                     />
                   </div>
@@ -770,7 +769,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                       checked={showSensors}
                       onCheckedChange={(checked) => {
                         setShowSensors(checked);
-                        window.dispatchEvent(new CustomEvent(SENSOR_ANNOTATIONS_TOGGLE_EVENT, { detail: { visible: checked } }));
+                        emit('SENSOR_ANNOTATIONS_TOGGLE', { visible: checked });
                       }}
                     />
                   </div>
@@ -906,7 +905,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                       onCheckedChange={(checked) => {
                         setShowFloorPills(checked);
                         localStorage.setItem('viewer-show-floor-pills', String(checked));
-                        window.dispatchEvent(new CustomEvent(FLOOR_PILLS_TOGGLE_EVENT, { detail: { visible: checked } }));
+                        emit('FLOOR_PILLS_TOGGLE', { visible: checked });
                       }}
                     />
                   </div>

@@ -14,6 +14,7 @@ import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@
 import { AlertTriangle } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useFloorData } from '@/hooks/useFloorData';
+import { emit, on } from '@/lib/event-bus';
 import {
   Select,
   SelectContent,
@@ -217,12 +218,12 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       initAttemptRef.current = 0;
       tryInit();
     };
-    window.addEventListener('VIEWER_MODELS_LOADED', modelsHandler);
+    const offModelsHandler = on('VIEWER_MODELS_LOADED', modelsHandler);
 
     return () => {
       mounted = false;
       if (retryTimer) clearTimeout(retryTimer);
-      window.removeEventListener('VIEWER_MODELS_LOADED', modelsHandler);
+      offModelsHandler();
     };
   }, [getXeokitViewer]);
 
@@ -611,13 +612,13 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       setTimeout(generateMap, 200);
     };
 
-    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, floorHandler);
-    window.addEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
+    const offFloorHandler = on('FLOOR_SELECTION_CHANGED', floorHandler);
+    const offModelsLoadedHandler = on('VIEWER_MODELS_LOADED', modelsLoadedHandler);
 
     return () => {
       clearTimeout(t0);
-      window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, floorHandler);
-      window.removeEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
+      offFloorHandler();
+      offModelsLoadedHandler();
     };
   }, [storeyPlugin, generateMap]);
 
@@ -916,9 +917,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
             pickResult.entity.selected = true;
 
             // Dispatch selection event
-            window.dispatchEvent(new CustomEvent('VIEWER_SELECT_ENTITY', {
-              detail: { entityId: pickedEntityId, fmGuid: pickedFmGuid, entityName: pickedEntityName },
-            }));
+            emit('VIEWER_SELECT_ENTITY', { entityId: pickedEntityId, fmGuid: pickedFmGuid, entityName: pickedEntityName },);
 
             // Notify parent
             onEntityClick?.(pickedEntityId, pickedFmGuid, pickedEntityName);
@@ -967,9 +966,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
 
     if (isSplitMode) {
       // In split 2D/3D mode, dispatch event for 3D camera to follow
-      window.dispatchEvent(new CustomEvent('SPLIT_PLAN_NAVIGATE', {
-        detail: { worldPos },
-      }));
+      emit('SPLIT_PLAN_NAVIGATE', { worldPos },);
       return;
     }
 

@@ -37,6 +37,7 @@ import {
   type FloorSelectionEventDetail,
   type ClipHeightEventDetail,
 } from '@/hooks/useSectionPlaneClipping';
+import { emit, on } from '@/lib/event-bus';
 import {
   VIEW_MODE_REQUESTED_EVENT,
   VIEWER_TOOL_CHANGED_EVENT,
@@ -267,15 +268,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         }
       }
     };
-    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
-    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+    const off = on('FLOOR_SELECTION_CHANGED', handler);
+    return () => off();
   }, [viewer, applyFloorPlanClipping, applyGlobalFloorPlanClipping, applyCeilingClipping, remove3DClipping]);
 
   // ── Clip height events ────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: CustomEvent<ClipHeightEventDetail>) => updateFloorCutHeight(e.detail.height);
-    window.addEventListener(CLIP_HEIGHT_CHANGED_EVENT, handler as EventListener);
-    return () => window.removeEventListener(CLIP_HEIGHT_CHANGED_EVENT, handler as EventListener);
+    const off = on('CLIP_HEIGHT_CHANGED', handler);
+    return () => off();
   }, [updateFloorCutHeight]);
 
   useEffect(() => {
@@ -295,8 +296,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     const handler = (e: CustomEvent<ViewModeRequestedDetail>) => {
       if (e.detail.mode === '2d' || e.detail.mode === '3d') handleViewModeChangeRef.current?.(e.detail.mode);
     };
-    window.addEventListener(VIEW_MODE_REQUESTED_EVENT, handler as EventListener);
-    return () => window.removeEventListener(VIEW_MODE_REQUESTED_EVENT, handler as EventListener);
+    const off = on('VIEW_MODE_REQUESTED', handler);
+    return () => off();
   }, []);
 
   // ── External 2D toggle ───────────────────────────────────────────────────
@@ -492,7 +493,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     });
     // Re-apply modifications (deleted/moved objects) so they stay deleted
     requestAnimationFrame(() => {
-      window.dispatchEvent(new CustomEvent('REAPPLY_MODIFICATIONS'));
+      emit('REAPPLY_MODIFICATIONS');
     });
   }, [viewer, remove3DClipping, remove2DClipping]);
 
@@ -644,8 +645,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
       setActiveTool(tool);
     };
-    window.addEventListener(VIEWER_TOOL_CHANGED_EVENT, handler as EventListener);
-    return () => window.removeEventListener(VIEWER_TOOL_CHANGED_EVENT, handler as EventListener);
+    const off = on('VIEWER_TOOL_CHANGED', handler);
+    return () => off();
   }, [activateMeasure, deactivateMeasure, activateSection, deactivateSection]);
 
   const handleClearSlices = useCallback(() => {
@@ -724,7 +725,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
     setViewMode(mode);
     if (mode === '2d') mode2dTransitionRef.current = true;
-    window.dispatchEvent(new CustomEvent(VIEW_MODE_CHANGED_EVENT, { detail: { mode, floorId: currentFloorId } }));
+    emit('VIEW_MODE_CHANGED', { mode, floorId: currentFloorId });
 
     if (mode === '2d') {
       const canvas = scene.canvas?.canvas as HTMLCanvasElement | undefined;
@@ -739,7 +740,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         if (canvas && !isForceReapply) canvas.style.opacity = '0';
 
         // Set white background FIRST
-        window.dispatchEvent(new CustomEvent(ARCHITECT_BACKGROUND_CHANGED_EVENT, { detail: { presetId: 'white' } }));
+        emit('ARCHITECT_BACKGROUND_CHANGED', { presetId: 'white' });
 
         let targetFloorId = currentFloorId;
 
@@ -1017,7 +1018,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
       }
 
       // Restore default background when leaving 2D
-      window.dispatchEvent(new CustomEvent(ARCHITECT_BACKGROUND_CHANGED_EVENT, { detail: { presetId: 'light-gray' } }));
+      emit('ARCHITECT_BACKGROUND_CHANGED', { presetId: 'light-gray' });
     }
   }, [viewer, currentFloorId, currentFloorBounds, calculateFloorBounds, applyFloorPlanClipping, applyGlobalFloorPlanClipping, applyCeilingClipping, removeSectionPlane]);
 
@@ -1113,7 +1114,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
                 <ToolButton
                   icon={tool.icon}
                   label={tool.label}
-                  onClick={() => window.dispatchEvent(new CustomEvent('TOGGLE_NAVIGATION_PANEL'))}
+                  onClick={() => emit('TOGGLE_NAVIGATION_PANEL')}
                   disabled={!isReady}
                 />
               )}

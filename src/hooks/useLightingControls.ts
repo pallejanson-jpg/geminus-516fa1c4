@@ -10,6 +10,7 @@
 import { useCallback, useRef, useState } from 'react';
 import SunCalc from 'suncalc';
 
+import { emit } from '@/lib/event-bus';
 // Custom events for lighting changes
 export const LIGHTING_CHANGED_EVENT = 'LIGHTING_CHANGED';
 export const SUN_STUDY_CHANGED_EVENT = 'SUN_STUDY_CHANGED';
@@ -173,9 +174,7 @@ export function useLightingControls() {
 
     setLightingState(prev => ({ ...prev, enabled }));
     
-    window.dispatchEvent(new CustomEvent(LIGHTING_CHANGED_EVENT, {
-      detail: { enabled }
-    }));
+    emit('LIGHTING_CHANGED', { enabled });
   }, [getSceneLights]);
 
   /**
@@ -284,9 +283,7 @@ export function useLightingControls() {
 
     setSunStudyState(prev => ({ ...prev, enabled }));
     
-    window.dispatchEvent(new CustomEvent(SUN_STUDY_CHANGED_EVENT, {
-      detail: { enabled }
-    }));
+    emit('SUN_STUDY_CHANGED', { enabled });
   }, [sunStudyState, storeOriginalLights, restoreOriginalLights, calculateSunPosition, applySunPosition]);
 
   /**

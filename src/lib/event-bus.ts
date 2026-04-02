@@ -249,6 +249,13 @@ export interface EventMap {
 
   // Modifications
   REAPPLY_MODIFICATIONS: void;
+
+  // Object manipulation
+  OBJECT_MOVE_MODE: { entityId: string; fmGuid: string };
+  OBJECT_DELETE: { entityId: string; fmGuid: string };
+
+  // AI viewer bridge
+  AI_VIEWER_COMMAND: { action: 'highlight' | 'filter' | 'colorize' | 'reset'; entityIds?: string[]; colorMap?: Record<string, [number, number, number]> };
 }
 
 // ── emit / on / off ─────────────────────────────────────────────────────

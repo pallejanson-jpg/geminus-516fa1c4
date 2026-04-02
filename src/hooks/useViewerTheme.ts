@@ -8,6 +8,7 @@
 import { useCallback, useRef, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
+import { emit } from '@/lib/event-bus';
 // Types for color mappings stored in database
 export interface ThemeColorMapping {
   color: string;
@@ -167,9 +168,7 @@ export function useViewerTheme() {
       }
       state.activeThemeId = theme.id;
       setActiveTheme(theme);
-      window.dispatchEvent(new CustomEvent(VIEWER_THEME_CHANGED_EVENT, {
-        detail: { themeId: theme.id, themeName: theme.name }
-      }));
+      emit('VIEWER_THEME_CHANGED', { themeId: theme.id, themeName: theme.name });
       return true;
     }
 
@@ -222,9 +221,7 @@ export function useViewerTheme() {
     state.activeThemeId = theme.id;
     setActiveTheme(theme);
     
-    window.dispatchEvent(new CustomEvent(VIEWER_THEME_CHANGED_EVENT, {
-      detail: { themeId: theme.id, themeName: theme.name }
-    }));
+    emit('VIEWER_THEME_CHANGED', { themeId: theme.id, themeName: theme.name });
     
     return true;
   }, []);

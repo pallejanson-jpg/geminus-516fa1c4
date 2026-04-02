@@ -53,6 +53,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { toast } from 'sonner';
 import MobileViewerPage from '@/components/viewer/mobile/MobileViewerPage';
 
+import { emit, on } from '@/lib/event-bus';
 export type ViewMode = '2d' | '3d' | 'split' | 'split2d3d' | 'vt' | '360';
 
 interface UnifiedViewerProps {
@@ -102,8 +103,7 @@ const UnifiedViewerContent: React.FC<{
       // Use the floor from URL params if available
       const targetFloorGuid = floorFmGuid || null;
 
-      window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
-        detail: {
+      emit('FLOOR_SELECTION_CHANGED', {
           floorId: null,
           floorName: floorName || null,
           bounds: null,
@@ -111,8 +111,7 @@ const UnifiedViewerContent: React.FC<{
           visibleFloorFmGuids: targetFloorGuid ? [targetFloorGuid] : [],
           isAllFloorsVisible: !targetFloorGuid,
           isSoloFloor: !!targetFloorGuid,
-        },
-      }));
+        });
 
       // Set 3D camera to first-person mode for split view
       const viewer = (window as any).__nativeXeokitViewer;
@@ -181,8 +180,8 @@ const UnifiedViewerContent: React.FC<{
       });
     };
 
-    window.addEventListener('SPLIT_PLAN_NAVIGATE', handler);
-    return () => window.removeEventListener('SPLIT_PLAN_NAVIGATE', handler);
+    const off = on('SPLIT_PLAN_NAVIGATE', handler);
+    return () => off();
   }, [viewMode]);
 
   // ─── FM Access availability ────────────────────────────────────────
@@ -233,7 +232,7 @@ const UnifiedViewerContent: React.FC<{
 
     // Only dispatch when viewMode actually changed — not on floorFmGuid changes
     if (prev !== viewMode && (viewMode === '2d' || viewMode === '3d')) {
-      window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: viewMode } }));
+      emit('VIEW_MODE_REQUESTED', { mode: viewMode });
     }
 
     if (prev !== '__init__' && prev !== viewMode) {
@@ -244,8 +243,7 @@ const UnifiedViewerContent: React.FC<{
       window.dispatchEvent(new CustomEvent<ViewMode2DToggledDetail>(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } }));
       if (floorFmGuid) {
         setTimeout(() => {
-          window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
-            detail: {
+          emit('FLOOR_SELECTION_CHANGED', {
               floorId: null,
               floorName: null,
               bounds: null,
@@ -253,15 +251,13 @@ const UnifiedViewerContent: React.FC<{
               visibleFloorFmGuids: [floorFmGuid],
               isAllFloorsVisible: false,
               isSoloFloor: true,
-            },
-          }));
+            });
         }, 500);
       }
     } else if (viewMode === '3d' && floorFmGuid && (prev === '__init__' || prev !== '3d')) {
       // Also isolate floor in 3D mode when navigating from Portfolio/Navigator
       setTimeout(() => {
-        window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
-          detail: {
+        emit('FLOOR_SELECTION_CHANGED', {
             floorId: null,
             floorName: floorName || null,
             bounds: null,
@@ -269,13 +265,12 @@ const UnifiedViewerContent: React.FC<{
             visibleFloorFmGuids: [floorFmGuid],
             isAllFloorsVisible: false,
             isSoloFloor: true,
-          },
-        }));
+          });
       }, 500);
     } else if (viewMode === 'split2d3d' && prev !== 'split2d3d') {
       // Split 2D/3D uses a dedicated 2D panel, so keep xeokit pane explicitly in 3D mode.
       window.dispatchEvent(new CustomEvent<ViewMode2DToggledDetail>(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: false } }));
-      window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
+      emit('VIEW_MODE_REQUESTED', { mode: '3d' });
 
       // Carry over current floor selection from 2D mode into split mode
       // If we came from 2D with a floor selected, keep it; otherwise show all
@@ -285,8 +280,7 @@ const UnifiedViewerContent: React.FC<{
         setTimeout(() => {
           // Try to get current floor from URL param or from the floor switcher state
           const currentFloorGuid = floorFmGuid || null;
-          window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
-            detail: {
+          emit('FLOOR_SELECTION_CHANGED', {
               floorId: null,
               floorName: floorName || null,
               bounds: null,
@@ -294,8 +288,7 @@ const UnifiedViewerContent: React.FC<{
               visibleFloorFmGuids: currentFloorGuid ? [currentFloorGuid] : [],
               isAllFloorsVisible: !currentFloorGuid,
               isSoloFloor: !!currentFloorGuid,
-            },
-          }));
+            });
         }, 300);
       }
     } else if (viewMode !== '2d' && prev === '2d') {
@@ -378,8 +371,8 @@ const UnifiedViewerContent: React.FC<{
   // Listen for toolbar toggle event
   useEffect(() => {
     const handler = () => setNavPanelOpen(p => !p);
-    window.addEventListener('TOGGLE_NAVIGATION_PANEL', handler);
-    return () => window.removeEventListener('TOGGLE_NAVIGATION_PANEL', handler);
+    const off = on('TOGGLE_NAVIGATION_PANEL', handler);
+    return () => off();
   }, []);
 
   // Track current floor fm_guid from floor selection events
@@ -388,8 +381,8 @@ const UnifiedViewerContent: React.FC<{
       const guids = (e.detail as any)?.visibleFloorFmGuids;
       if (guids?.length) setNavFloorFmGuid(guids[0]);
     };
-    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
-    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+    const off = on('FLOOR_SELECTION_CHANGED', handler);
+    return () => off();
   }, []);
 
   useEffect(() => {
@@ -436,8 +429,8 @@ const UnifiedViewerContent: React.FC<{
       if (resolvedViewMode === '2d') setViewMode('2d');
     };
 
-    window.addEventListener('VIEWER_MODELS_LOADED', handler);
-    return () => window.removeEventListener('VIEWER_MODELS_LOADED', handler);
+    const off = on('VIEWER_MODELS_LOADED', handler);
+    return () => off();
   }, [buildingData]);
 
   // ─── Viewer instance ref (for xeokit) ──────────────────────────────
@@ -478,10 +471,9 @@ const UnifiedViewerContent: React.FC<{
       const dispatch2D = () => {
         if (cancelled) return;
         window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } }));
-        window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '2d' } }));
+        emit('VIEW_MODE_REQUESTED', { mode: '2d' });
         if (floorFmGuid) {
-          window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
-            detail: {
+          emit('FLOOR_SELECTION_CHANGED', {
               floorId: null,
               floorName: null,
               bounds: null,
@@ -489,8 +481,7 @@ const UnifiedViewerContent: React.FC<{
               visibleFloorFmGuids: [floorFmGuid],
               isAllFloorsVisible: false,
               isSoloFloor: true,
-            },
-          }));
+            });
         }
       };
 
@@ -505,12 +496,12 @@ const UnifiedViewerContent: React.FC<{
         if (pendingTimeout) clearTimeout(pendingTimeout);
         pendingTimeout = setTimeout(dispatch2D, 300);
       };
-      window.addEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
+      const offModelsLoadedHandler = on('VIEWER_MODELS_LOADED', modelsLoadedHandler);
 
       return () => {
         cancelled = true;
         if (pendingTimeout) clearTimeout(pendingTimeout);
-        window.removeEventListener('VIEWER_MODELS_LOADED', modelsLoadedHandler);
+        offModelsLoadedHandler();
       };
     }
   }, [viewerReady, viewMode, floorFmGuid]);
@@ -522,8 +513,8 @@ const UnifiedViewerContent: React.FC<{
     const handleToolChanged = (e: CustomEvent<ViewerToolChangedDetail>) => {
       setOverlayInteractive(e.detail.tool === 'select' || e.detail.tool === 'measure' || e.detail.tool === 'slicer');
     };
-    window.addEventListener(VIEWER_TOOL_CHANGED_EVENT, handleToolChanged as EventListener);
-    return () => window.removeEventListener(VIEWER_TOOL_CHANGED_EVENT, handleToolChanged as EventListener);
+    const off = on('VIEWER_TOOL_CHANGED', handleToolChanged);
+    return () => off();
   }, []);
 
   // ─── Camera sync (VT mode — one-directional) ──────────────────────
@@ -647,9 +638,7 @@ const UnifiedViewerContent: React.FC<{
   useEffect(() => {
     if (!entityFmGuid || !viewerReady || !shouldUseNative3D) return;
     const timer = setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('VIEWER_ZOOM_TO_OBJECT', {
-        detail: { fmGuid: entityFmGuid }
-      }));
+      emit('VIEWER_ZOOM_TO_OBJECT', { fmGuid: entityFmGuid });
     }, 1500);
     return () => clearTimeout(timer);
   }, [entityFmGuid, viewerReady, shouldUseNative3D]);
