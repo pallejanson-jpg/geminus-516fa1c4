@@ -382,7 +382,7 @@ const FloorCarousel: React.FC<FloorCarouselProps> = ({
                     visibleFloorFmGuids: floor.databaseLevelFmGuids || [floor.fmGuid],
                     isAllFloorsVisible: false,
                   };
-                  window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
+                  emit('FLOOR_SELECTION_CHANGED', eventDetail);
                 }}
                 className={cn(
                   "flex-shrink-0 rounded-md overflow-hidden transition-all",
