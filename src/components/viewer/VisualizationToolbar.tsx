@@ -171,8 +171,8 @@ const RoomVisualizationList: React.FC<{
 
   // Stay in sync with external changes
   React.useEffect(() => {
-    const handler = (e: CustomEvent) => {
-      setActiveViz(e.detail?.visualizationType ?? 'none');
+    const handler = (detail: any) => {
+      setActiveViz(detail?.visualizationType ?? 'none');
     };
     const off = on('VISUALIZATION_STATE_CHANGED', handler);
     return () => off();
