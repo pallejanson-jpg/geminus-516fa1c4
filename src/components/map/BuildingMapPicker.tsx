@@ -91,7 +91,7 @@ const BuildingMapPicker: React.FC<BuildingMapPickerProps> = ({
         setSearchError('No location found');
       }
     } catch {
-      setSearchError('Sökningen misslyckades');
+      setSearchError('Search failed');
     } finally {
       setIsSearching(false);
     }
