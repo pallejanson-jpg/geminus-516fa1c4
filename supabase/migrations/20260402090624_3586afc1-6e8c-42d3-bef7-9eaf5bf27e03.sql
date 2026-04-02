@@ -1,0 +1,1 @@
+ALTER TABLE public.api_profiles ADD COLUMN assetplus_audience text;
