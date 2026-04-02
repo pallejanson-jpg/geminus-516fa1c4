@@ -315,9 +315,9 @@ export default function ApiProfilesManager() {
           <AccordionItem value="fmaccess">
             <AccordionTrigger className="text-xs font-semibold">FM Access Credentials</AccordionTrigger>
             <AccordionContent className="space-y-3 pt-2">
-              <SecretInput label="API URL" field="fm_access_api_url" placeholder="https://..." />
-              <SecretInput label="Username" field="fm_access_username" />
-              <SecretInput label="Password" field="fm_access_password" />
+               <SI label="API URL" field="fm_access_api_url" placeholder="https://..." />
+               <SI label="Username" field="fm_access_username" />
+               <SI label="Password" field="fm_access_password" />
             </AccordionContent>
           </AccordionItem>
 
