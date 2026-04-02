@@ -282,10 +282,17 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
     }
   }, [buildingFmGuid, createInstance, fetchModelMetadata, bootstrapFromAssetPlus, loadAllModels, loadSingleModel, deferStalenessCheck, onViewerReady, pendingInsightsColorRef, viewerRef]);
 
+  // ── Stabilized effect: only re-run when buildingFmGuid changes ──
+  // Uses a ref to always call the latest initialize without it being a dependency,
+  // preventing the destroy→recreate flicker loop caused by unstable callback identities.
+  const initRef = useRef(initialize);
+  initRef.current = initialize;
+
   useEffect(() => {
-    initialize();
+    initRef.current();
     return () => { destroy(); };
-  }, [initialize, destroy]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildingFmGuid, destroy]);
 
   return (
     <div className="relative w-full h-full">
