@@ -10,6 +10,7 @@ import { useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeGuid } from '@/lib/utils';
 import { applyArchitectColors } from '@/lib/architect-colors';
+import { emit, on } from '@/lib/event-bus';
 import {
   INSIGHTS_COLOR_UPDATE_EVENT,
   INSIGHTS_COLOR_RESET_EVENT,
