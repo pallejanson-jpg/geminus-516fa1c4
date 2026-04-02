@@ -132,8 +132,8 @@ const UnifiedViewerContent: React.FC<{
   useEffect(() => {
     if (viewMode !== 'split2d3d') return;
 
-    const handler = (e: Event) => {
-      const { worldPos } = (e as CustomEvent).detail || {};
+    const handler = (detail: any) => {
+      const { worldPos } = detail || {};
       if (!worldPos || worldPos.length < 3) return;
       // Validate coordinates before flying
       if (!worldPos.every((v: number) => Number.isFinite(v))) return;
