@@ -434,8 +434,7 @@ export function useViewerEventListeners({
     };
     const offFloorHandler = on('FLOOR_SELECTION_CHANGED', floorHandler);
 
-    const handler = async (e: Event) => {
-      const detail = (e as CustomEvent).detail;
+    const handler = async (detail: any) => {
       const show = detail?.show ?? true;
       const visibleCategories: string[] | undefined = detail?.visibleCategories;
       const viewer = viewerRef.current;
