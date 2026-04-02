@@ -26,6 +26,7 @@ import CreateSupportCase from '@/components/support/CreateSupportCase';
 import IleanEmbeddedChat from './IleanEmbeddedChat';
 import InventoryPanel from './InventoryPanel';
 
+import { on } from '@/lib/event-bus';
 interface GeminusPluginMenuProps {
   buildingFmGuid?: string;
   buildingName?: string;
@@ -70,8 +71,8 @@ export default function GeminusPluginMenu({
       const detail = (e as CustomEvent).detail;
       if (detail) setFmaLiveContext(detail);
     };
-    window.addEventListener('FM_ACCESS_CONTEXT_CHANGED', handler);
-    return () => window.removeEventListener('FM_ACCESS_CONTEXT_CHANGED', handler);
+    const off = on('FM_ACCESS_CONTEXT_CHANGED', handler);
+    return () => off();
   }, [source]);
 
   // Auto-show tooltip on first render to help discoverability

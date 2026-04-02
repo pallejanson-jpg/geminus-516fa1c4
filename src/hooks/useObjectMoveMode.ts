@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { normalizeGuid } from '@/lib/utils';
 
+import { on } from '@/lib/event-bus';
 export const OBJECT_MOVE_MODE_EVENT = 'OBJECT_MOVE_MODE';
 export const OBJECT_DELETE_EVENT = 'OBJECT_DELETE';
 export const VIEWER_MODELS_LOADED_EVENT = 'VIEWER_MODELS_LOADED';
@@ -92,8 +93,8 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
       applyModifications();
     };
 
-    window.addEventListener(VIEWER_MODELS_LOADED_EVENT, handler);
-    window.addEventListener('REAPPLY_MODIFICATIONS', reapplyHandler);
+    const offHandler = on('VIEWER_MODELS_LOADED', handler);
+    const offReapplyHandler = on('REAPPLY_MODIFICATIONS', reapplyHandler);
 
     // Fallback: also apply if models are already loaded (viewer is ready)
     if (viewer.scene.numObjects > 0) {
@@ -101,8 +102,8 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
     }
 
     return () => {
-      window.removeEventListener(VIEWER_MODELS_LOADED_EVENT, handler);
-      window.removeEventListener('REAPPLY_MODIFICATIONS', reapplyHandler);
+      offHandler();
+      offReapplyHandler();
     };
   }, [viewer, applyModifications, buildingFmGuid]);
 
@@ -415,12 +416,12 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
       });
     };
 
-    window.addEventListener(OBJECT_MOVE_MODE_EVENT, handleMoveEvent as EventListener);
-    window.addEventListener(OBJECT_DELETE_EVENT, handleDeleteEvent as EventListener);
+    const offHandleMoveEvent = on('OBJECT_MOVE_MODE', handleMoveEvent);
+    const offHandleDeleteEvent = on('OBJECT_DELETE', handleDeleteEvent);
 
     return () => {
-      window.removeEventListener(OBJECT_MOVE_MODE_EVENT, handleMoveEvent as EventListener);
-      window.removeEventListener(OBJECT_DELETE_EVENT, handleDeleteEvent as EventListener);
+      offHandleMoveEvent();
+      offHandleDeleteEvent();
     };
   }, [viewer, buildingFmGuid, detectRoomAtPosition, undoMove, undoDelete]);
 

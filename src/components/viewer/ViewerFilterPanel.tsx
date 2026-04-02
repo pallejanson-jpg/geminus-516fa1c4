@@ -19,6 +19,7 @@ import { getDescendantIds, hideSpaceAndAreaObjects, calculateFloorBounds } from 
 import { applyArchitectColors, recolorArchitectObjects } from '@/lib/architect-colors';
 import { VIEWER_THEME_CHANGED_EVENT, VIEWER_THEME_REQUESTED_EVENT } from '@/hooks/useViewerTheme';
 
+import { emit, on } from '@/lib/event-bus';
 /** Safe accessor for scene.objectIds – the getter throws if internal maps are null */
 function safeObjectIds(scene: any): string[] {
   try { return scene.objectIds ?? []; } catch { return []; }
@@ -668,8 +669,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         }
       }
     };
-    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
-    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+    const off = on('FLOOR_SELECTION_CHANGED', handler);
+    return () => off();
   }, [levels]);
 
   // ── Build entity ID map (fmGuid → xeokit IDs) — runs ONCE ─────────────
@@ -967,14 +968,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   // Dispatch annotation filter + toggle events
   useEffect(() => {
     const categories = Array.from(checkedAnnotations);
-    window.dispatchEvent(new CustomEvent(ANNOTATION_FILTER_EVENT, {
-      detail: { visibleCategories: categories },
-    }));
+    emit('ANNOTATION_FILTER', { visibleCategories: categories },);
     // Also dispatch TOGGLE_ANNOTATIONS so the native viewer creates/shows markers
     const show = categories.length > 0;
-    window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', {
-      detail: { show, visibleCategories: categories },
-    }));
+    emit('TOGGLE_ANNOTATIONS', { show, visibleCategories: categories },);
   }, [checkedAnnotations]);
 
   // ── Apply filter + coloring (debounced, delta-based) ────────────────────
@@ -1052,13 +1049,11 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       // Do NOT force-hide non-A models here — ModelVisibilitySelector manages model-level visibility.
       // If non-A models are toggled on by the user, they should stay visible.
 
-      window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
-        detail: {
+      emit('FLOOR_SELECTION_CHANGED', {
           floorId: null, floorName: null, bounds: null,
           visibleMetaFloorIds: [], visibleFloorFmGuids: [],
           isAllFloorsVisible: true,
-        } as FloorSelectionEventDetail,
-      }));
+        } as FloorSelectionEventDetail);
       isApplyingRef.current = false;
       return;
     }
@@ -1137,7 +1132,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         const normalizedModelId = modelId.replace(/\.xkt$/i, '');
         if (!sceneModels2[normalizedModelId] && !sceneModels2[`${normalizedModelId}.xkt`]) {
           console.log(`[FilterPanel] Requesting deferred load for model: ${normalizedModelId}`);
-          window.dispatchEvent(new CustomEvent(MODEL_LOAD_REQUESTED_EVENT, { detail: { modelId: normalizedModelId } }));
+          emit('MODEL_LOAD_REQUESTED', { modelId: normalizedModelId });
         }
       });
       
@@ -1550,8 +1545,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       floorBounds = calculateFloorBounds(viewer, resolvedMetaIds[0]);
     }
 
-    window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
-      detail: {
+    emit('FLOOR_SELECTION_CHANGED', {
         floorId: visibleFmGuids.length === 1 ? visibleFmGuids[0] : null,
         floorName: null, bounds: floorBounds,
         visibleMetaFloorIds: resolvedMetaIds, visibleFloorFmGuids: visibleFmGuids,
@@ -1559,17 +1553,14 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         isSoloFloor: visibleFmGuids.length === 1,
         fromFilterPanel: true,
         skipClipping: true,
-      } as FloorSelectionEventDetail,
-    }));
+      } as FloorSelectionEventDetail);
 
     console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', safeObjectIds(scene).length, 'delta: show', toShow.length, 'hide', toHide.length);
 
     // Re-apply active theme after filter to prevent "native colors flash"
     // But skip if color filter is active — it takes precedence
     if (activeThemeIdRef.current && !(window as any).__colorFilterActive && !(window as any).__spacesForceVisible && checkedSpaces.size === 0) {
-      window.dispatchEvent(new CustomEvent(VIEWER_THEME_REQUESTED_EVENT, {
-        detail: { themeId: activeThemeIdRef.current }
-      }));
+      emit('VIEWER_THEME_REQUESTED', { themeId: activeThemeIdRef.current });
     }
 
     isApplyingRef.current = false;
@@ -1659,8 +1650,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       const detail = (e as CustomEvent).detail;
       activeThemeIdRef.current = detail?.themeId ?? null;
     };
-    window.addEventListener(VIEWER_THEME_CHANGED_EVENT, handler);
-    return () => window.removeEventListener(VIEWER_THEME_CHANGED_EVENT, handler);
+    const off = on('VIEWER_THEME_CHANGED', handler);
+    return () => off();
   }, []);
 
   // Cleanup when panel closes
@@ -1689,9 +1680,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     if (anyFiltersActive) {
       // Filters are active — preserve visibility state, only re-apply theme/colors on visible objects
       if (activeThemeIdRef.current) {
-        window.dispatchEvent(new CustomEvent(VIEWER_THEME_REQUESTED_EVENT, {
-          detail: { themeId: activeThemeIdRef.current }
-        }));
+        emit('VIEWER_THEME_REQUESTED', { themeId: activeThemeIdRef.current });
       } else {
         applyArchitectColors(viewer);
       }
@@ -1714,9 +1703,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       }
 
       if (activeThemeIdRef.current) {
-        window.dispatchEvent(new CustomEvent(VIEWER_THEME_REQUESTED_EVENT, {
-          detail: { themeId: activeThemeIdRef.current }
-        }));
+        emit('VIEWER_THEME_REQUESTED', { themeId: activeThemeIdRef.current });
       } else {
         applyArchitectColors(viewer);
       }
@@ -1829,7 +1816,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       case 'categories': setCheckedCategories(new Set()); break;
       case 'annotations': 
         setCheckedAnnotations(new Set());
-        window.dispatchEvent(new CustomEvent(ANNOTATION_FILTER_EVENT, { detail: { visibleCategories: [] } }));
+        emit('ANNOTATION_FILTER', { visibleCategories: [] });
         break;
       case 'modifications':
         setShowMovedAssets(false);
@@ -1846,7 +1833,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     setCheckedAnnotations(new Set());
     setShowMovedAssets(false);
     setShowDeletedAssets(false);
-    window.dispatchEvent(new CustomEvent(ANNOTATION_FILTER_EVENT, { detail: { visibleCategories: [] } }));
+    emit('ANNOTATION_FILTER', { visibleCategories: [] });
   }, []);
 
   // ── Fetch modified assets ────────────────────────────────────────────────
@@ -1869,8 +1856,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const handler = () => {
       setTimeout(() => fetchModifiedRef.current(), 500);
     };
-    window.addEventListener('OBJECT_DELETE', handler);
-    return () => window.removeEventListener('OBJECT_DELETE', handler);
+    const off = on('OBJECT_DELETE', handler);
+    return () => off();
   }, []);
 
   // ── Apply modification visualization ────────────────────────────────
@@ -1998,11 +1985,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
               const vizSet = (window as any).__vizColorizedEntityIds;
               if (vizSet instanceof Set) vizSet.clear();
               // Dispatch insights reset + restore theme or architect colors
-              window.dispatchEvent(new CustomEvent('INSIGHTS_COLOR_RESET'));
+              emit('INSIGHTS_COLOR_RESET');
               if (activeThemeIdRef.current) {
-                window.dispatchEvent(new CustomEvent(VIEWER_THEME_REQUESTED_EVENT, {
-                  detail: { themeId: activeThemeIdRef.current }
-                }));
+                emit('VIEWER_THEME_REQUESTED', { themeId: activeThemeIdRef.current });
               } else {
                 const viewer = getXeokitViewer();
                 if (viewer) applyArchitectColors(viewer);

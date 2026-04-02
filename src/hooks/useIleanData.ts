@@ -2,6 +2,7 @@ import { useState, useEffect, useContext, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { AppContext } from '@/context/AppContext';
 
+import { on } from '@/lib/event-bus';
 export interface IleanMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -53,11 +54,11 @@ export function useIleanData() {
       }
     };
 
-    window.addEventListener('FLOOR_SELECTION_CHANGED', handleFloorChange as EventListener);
-    window.addEventListener('VIEWER_CONTEXT_CHANGED', handleViewerContext as EventListener);
+    const offHandleFloorChange = on('FLOOR_SELECTION_CHANGED', handleFloorChange);
+    const offHandleViewerContext = on('VIEWER_CONTEXT_CHANGED', handleViewerContext);
     return () => {
-      window.removeEventListener('FLOOR_SELECTION_CHANGED', handleFloorChange as EventListener);
-      window.removeEventListener('VIEWER_CONTEXT_CHANGED', handleViewerContext as EventListener);
+      offHandleFloorChange();
+      offHandleViewerContext();
     };
   }, [selectedFacility]);
 

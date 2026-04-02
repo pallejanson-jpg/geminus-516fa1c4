@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail, AI_VIEWER_FOCUS_EVENT } from '@/lib/viewer-events';
 import { getGunnarSettings, saveGunnarSettings, GUNNAR_SETTINGS_CHANGED_EVENT, type GunnarSettingsData } from '@/components/settings/GunnarSettings';
 
+import { on } from '@/lib/event-bus';
 const BUTTON_SIZE = 56; // h-14 w-14
 
 /**
@@ -81,8 +82,8 @@ export default function GunnarButton() {
     const handler = (e: CustomEvent<ViewerContextChangedDetail>) => {
       setViewerContext(e.detail);
     };
-    window.addEventListener(VIEWER_CONTEXT_CHANGED_EVENT, handler as EventListener);
-    return () => window.removeEventListener(VIEWER_CONTEXT_CHANGED_EVENT, handler as EventListener);
+    const off = on('VIEWER_CONTEXT_CHANGED', handler);
+    return () => off();
   }, []);
 
   // Listen for auto-open voice deep link
@@ -92,8 +93,8 @@ export default function GunnarButton() {
       setIsOpen(true);
       setIsMinimized(false);
     };
-    window.addEventListener('GUNNAR_AUTO_OPEN_VOICE', handler);
-    return () => window.removeEventListener('GUNNAR_AUTO_OPEN_VOICE', handler);
+    const off = on('GUNNAR_AUTO_OPEN_VOICE', handler);
+    return () => off();
   }, []);
 
   // Auto-minimize on mobile when AI dispatches a viewer action — only if actually on a viewer page
@@ -106,8 +107,8 @@ export default function GunnarButton() {
         setIsMinimized(true);
       }
     };
-    window.addEventListener(AI_VIEWER_FOCUS_EVENT, handler);
-    return () => window.removeEventListener(AI_VIEWER_FOCUS_EVENT, handler);
+    const off = on('AI_VIEWER_FOCUS', handler);
+    return () => off();
   }, [isMobile, isOpen, isMinimized]);
 
   // Clear viewer context when leaving viewer

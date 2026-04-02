@@ -45,6 +45,7 @@ import { FLOOR_PILLS_TOGGLE_EVENT } from "./FloatingFloorSwitcher";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { VISUALIZATION_QUICK_SELECT_EVENT } from "./VisualizationQuickBar";
 import { VisualizationType, VISUALIZATION_CONFIGS } from "@/lib/visualization-utils";
+import { emit, on } from '@/lib/event-bus';
 // import { LEVEL_LABELS_TOGGLE_EVENT } from "@/hooks/useLevelLabels"; // disabled
 
 /** Navigation Speed slider sub-component */
@@ -76,7 +77,7 @@ const NavigationSpeedSlider: React.FC = () => {
   });
 
   const dispatchAll = React.useCallback((z: number, p: number, r: number) => {
-    window.dispatchEvent(new CustomEvent(NAV_SPEED_GRANULAR_EVENT, { detail: { zoom: z, pan: p, rotate: r } }));
+    emit('NAV_SPEED_GRANULAR', { zoom: z, pan: p, rotate: r });
   }, []);
 
   const handleMaster = React.useCallback((value: number[]) => {
@@ -87,7 +88,7 @@ const NavigationSpeedSlider: React.FC = () => {
     localStorage.setItem(SPEED_KEYS.zoom, String(v));
     localStorage.setItem(SPEED_KEYS.pan, String(v));
     localStorage.setItem(SPEED_KEYS.rotate, String(v));
-    window.dispatchEvent(new CustomEvent(NAV_SPEED_CHANGED_EVENT, { detail: { speed: v } }));
+    emit('NAV_SPEED_CHANGED', { speed: v });
   }, []);
 
   const handleAxis = React.useCallback((axis: 'zoom' | 'pan' | 'rotate', value: number[]) => {
@@ -103,7 +104,7 @@ const NavigationSpeedSlider: React.FC = () => {
   const handleFastNav = React.useCallback((checked: boolean) => {
     setFastNav(checked);
     localStorage.setItem('viewer-fastnav-enabled', String(checked));
-    window.dispatchEvent(new CustomEvent('FASTNAV_TOGGLE', { detail: { enabled: checked } }));
+    emit('FASTNAV_TOGGLE', { enabled: checked });
   }, []);
 
   return (
@@ -173,8 +174,8 @@ const RoomVisualizationList: React.FC<{
     const handler = (e: CustomEvent) => {
       setActiveViz(e.detail?.visualizationType ?? 'none');
     };
-    window.addEventListener('VISUALIZATION_STATE_CHANGED', handler as EventListener);
-    return () => window.removeEventListener('VISUALIZATION_STATE_CHANGED', handler as EventListener);
+    const off = on('VISUALIZATION_STATE_CHANGED', handler);
+    return () => off();
   }, []);
 
   const toggle = (type: VisualizationType) => {
@@ -187,11 +188,11 @@ const RoomVisualizationList: React.FC<{
     if (next !== 'none') {
       if (!showVisualization) onToggleVisualization(true);
       // Force show spaces
-      window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: true } }));
+      emit('FORCE_SHOW_SPACES', { show: true });
     } else {
       if (showVisualization) onToggleVisualization(false);
       // Turn off spaces when None is selected
-      window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: false } }));
+      emit('FORCE_SHOW_SPACES', { show: false });
     }
   };
 
@@ -421,10 +422,10 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
       setToolSettings(getVisualizationToolSettings());
     };
     window.addEventListener('storage', handleSettingsChange);
-    window.addEventListener(TOOLBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
+    const offHandleSettingsChange = on('TOOLBAR_SETTINGS_CHANGED', handleSettingsChange);
     return () => {
       window.removeEventListener('storage', handleSettingsChange);
-      window.removeEventListener(TOOLBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
+      offHandleSettingsChange();
     };
   }, []);
 
@@ -438,9 +439,9 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
         setIsSoloFloor(false);
       }
     };
-    window.addEventListener(VIEW_MODE_CHANGED_EVENT, handleViewModeChange as EventListener);
+    const offHandleViewModeChange = on('VIEW_MODE_CHANGED', handleViewModeChange);
     return () => {
-      window.removeEventListener(VIEW_MODE_CHANGED_EVENT, handleViewModeChange as EventListener);
+      offHandleViewModeChange();
     };
   }, []);
 
@@ -451,9 +452,9 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
       const solo = !isAllFloorsVisible && visibleMetaFloorIds && visibleMetaFloorIds.length === 1;
       setIsSoloFloor(solo);
     };
-    window.addEventListener('FLOOR_SELECTION_CHANGED', handleFloorChange as EventListener);
+    const offHandleFloorChange = on('FLOOR_SELECTION_CHANGED', handleFloorChange);
     return () => {
-      window.removeEventListener('FLOOR_SELECTION_CHANGED', handleFloorChange as EventListener);
+      offHandleFloorChange();
     };
   }, []);
 
@@ -477,17 +478,17 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
         }
       }
     };
-    window.addEventListener(FORCE_SHOW_SPACES_EVENT, handleForceShowSpaces as EventListener);
+    const offHandleForceShowSpaces = on('FORCE_SHOW_SPACES', handleForceShowSpaces);
     return () => {
-      window.removeEventListener(FORCE_SHOW_SPACES_EVENT, handleForceShowSpaces as EventListener);
+      offHandleForceShowSpaces();
     };
   }, [showSpaces, viewerRef, onShowSpacesChange]);
 
   // Listen for OPEN_ISSUE_LIST event (from context menu "Visa ärenden")
   useEffect(() => {
     const handler = () => setShowIssueList(true);
-    window.addEventListener('OPEN_ISSUE_LIST', handler);
-    return () => window.removeEventListener('OPEN_ISSUE_LIST', handler);
+    const off = on('OPEN_ISSUE_LIST', handler);
+    return () => off();
   }, []);
 
   // Handle clip height change
@@ -496,9 +497,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     setClipHeight(newHeight);
     
     // Emit event to update clipping in real-time
-    window.dispatchEvent(new CustomEvent(CLIP_HEIGHT_CHANGED_EVENT, {
-      detail: { height: newHeight }
-    }));
+    emit('CLIP_HEIGHT_CHANGED', { height: newHeight });
   }, []);
 
   // Handle 3D ceiling clip offset change
@@ -516,17 +515,13 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const handle2DModeToggle = useCallback((enabled: boolean) => {
     const mode = enabled ? '2d' : '3d';
     // Dispatch request event for ViewerToolbar to handle
-    window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, {
-      detail: { mode }
-    }));
+    emit('VIEW_MODE_REQUESTED', { mode });
   }, []);
 
   // Handle background preset change
   const handleBackgroundChange = useCallback((presetId: BackgroundPresetId) => {
     setArchitectBackground(presetId);
-    window.dispatchEvent(new CustomEvent(ARCHITECT_BACKGROUND_CHANGED_EVENT, {
-      detail: { presetId }
-    }));
+    emit('ARCHITECT_BACKGROUND_CHANGED', { presetId });
   }, []);
 
   // Handle room labels toggle with config
@@ -538,8 +533,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
       const config = roomLabelConfigs.find(c => c.id === configId);
       if (config) {
         // Dispatch config event first
-        window.dispatchEvent(new CustomEvent(ROOM_LABELS_CONFIG_EVENT, {
-          detail: {
+        emit('ROOM_LABELS_CONFIG', {
             fields: config.fields,
             heightOffset: config.height_offset,
             fontSize: config.font_size,
@@ -547,17 +541,14 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             clickAction: config.click_action,
             occlusionEnabled: config.occlusion_enabled,
             flatOnFloor: config.flat_on_floor,
-          } as RoomLabelsConfigDetail
-        }));
+          } as RoomLabelsConfigDetail);
       }
     } else if (!enabled) {
       setActiveRoomLabelConfigId(null);
     }
     
     // Then dispatch enable/disable event
-    window.dispatchEvent(new CustomEvent(ROOM_LABELS_TOGGLE_EVENT, {
-      detail: { enabled }
-    }));
+    emit('ROOM_LABELS_TOGGLE', { enabled });
   }, [roomLabelConfigs]);
 
   // Handle room label config selection
@@ -852,8 +843,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
         handleSelectIssue(issue as BcfIssue);
       }
     };
-    window.addEventListener(ISSUE_MARKER_CLICKED_EVENT, handler);
-    return () => window.removeEventListener(ISSUE_MARKER_CLICKED_EVENT, handler);
+    const off = on('ISSUE_MARKER_CLICKED', handler);
+    return () => off();
   }, [handleSelectIssue]);
 
   // isAdmin now provided by useAuth() above
@@ -1196,7 +1187,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               onCheckedChange={(checked) => {
                 setShowFloorPills(checked);
                 localStorage.setItem('viewer-show-floor-pills', String(checked));
-                window.dispatchEvent(new CustomEvent(FLOOR_PILLS_TOGGLE_EVENT, { detail: { visible: checked } }));
+                emit('FLOOR_PILLS_TOGGLE', { visible: checked });
               }}
             />
           </div>
@@ -1260,7 +1251,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           <Button
             variant="outline"
             className="w-full justify-between gap-2 sm:gap-3 h-9 sm:h-10"
-            onClick={() => window.dispatchEvent(new CustomEvent('TOGGLE_ASSET_PANEL'))}
+            onClick={() => emit('TOGGLE_ASSET_PANEL')}
           >
             <div className="flex items-center gap-2 sm:gap-3">
               <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
