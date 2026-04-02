@@ -198,8 +198,8 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
 
   // ── Move mode event handler ──────────────────────────────────────────
   useEffect(() => {
-    const handleMoveEvent = (e: CustomEvent) => {
-      const { entityId, fmGuid } = e.detail || {};
+    const handleMoveEvent = (detail: { entityId: string; fmGuid: string }) => {
+      const { entityId, fmGuid } = detail || {};
       if (!entityId || !fmGuid || !viewer?.scene) return;
 
       const entity = viewer.scene.objects?.[entityId];
