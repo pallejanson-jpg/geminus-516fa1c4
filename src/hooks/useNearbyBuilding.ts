@@ -82,7 +82,7 @@ export function useNearbyBuilding(thresholdMeters = 200): UseNearbyBuildingResul
     // Combine data
     return buildingSettings.map((bs) => ({
       fmGuid: bs.fm_guid,
-      commonName: nameMap.get(bs.fm_guid) || 'Okänd byggnad',
+      commonName: nameMap.get(bs.fm_guid) || 'Unknown building',
       latitude: Number(bs.latitude),
       longitude: Number(bs.longitude),
       distance: 0, // Will be calculated when we have user position
