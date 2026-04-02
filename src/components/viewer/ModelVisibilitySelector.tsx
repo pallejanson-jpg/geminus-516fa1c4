@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
-import { MODEL_LOAD_REQUESTED_EVENT, MODEL_VISIBILITY_CHANGED_EVENT } from '@/lib/viewer-events';
+import { emit } from '@/lib/event-bus';
 import { useModelData, ModelInfo } from '@/hooks/useModelData';
 
 // Re-export ModelInfo so existing imports keep working
@@ -93,19 +93,17 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
     // Broadcast model visibility changes so floor/filter hooks can react immediately
     useEffect(() => {
       if (!isInitialized) return;
-      window.dispatchEvent(new CustomEvent(MODEL_VISIBILITY_CHANGED_EVENT, {
-        detail: {
-          buildingFmGuid,
-          visibleModelIds: Array.from(visibleModelIds),
-        },
-      }));
+      emit('MODEL_VISIBILITY_CHANGED', {
+        buildingFmGuid,
+        visibleModelIds: Array.from(visibleModelIds),
+      });
     }, [visibleModelIds, isInitialized, buildingFmGuid]);
 
     const handleModelToggle = useCallback((modelId: string, checked: boolean) => {
       if (checked) {
         const model = modelsRef.current.find(m => m.id === modelId);
         if (model && !model.loaded) {
-          window.dispatchEvent(new CustomEvent(MODEL_LOAD_REQUESTED_EVENT, { detail: { modelId } }));
+          emit('MODEL_LOAD_REQUESTED', { modelId });
         }
       }
 

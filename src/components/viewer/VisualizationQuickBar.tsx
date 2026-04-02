@@ -3,8 +3,9 @@ import { Thermometer, Wind, Droplets, Users, Ruler } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { VisualizationType, VISUALIZATION_CONFIGS, rgbToHex } from '@/lib/visualization-utils';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { emit, on } from '@/lib/event-bus';
 
-/** Dispatched by QuickBar so RoomVisualizationPanel can sync */
+/** @deprecated Use emit('VISUALIZATION_QUICK_SELECT', ...) from event-bus */
 export const VISUALIZATION_QUICK_SELECT_EVENT = 'VISUALIZATION_QUICK_SELECT';
 
 const VIZ_ITEMS: { type: VisualizationType; icon: React.ElementType; label: string }[] = [
@@ -21,19 +22,15 @@ const VisualizationQuickBar: React.FC<{ className?: string }> = ({ className }) 
 
   // Listen for state changes from the panel so we stay in sync
   useEffect(() => {
-    const handler = (e: CustomEvent) => {
-      setActive(e.detail?.visualizationType ?? 'none');
-    };
-    window.addEventListener('VISUALIZATION_STATE_CHANGED', handler as EventListener);
-    return () => window.removeEventListener('VISUALIZATION_STATE_CHANGED', handler as EventListener);
+    return on('VISUALIZATION_STATE_CHANGED', (detail) => {
+      setActive((detail?.visualizationType ?? 'none') as VisualizationType);
+    });
   }, []);
 
   const toggle = (type: VisualizationType) => {
     const next = active === type ? 'none' : type;
     setActive(next);
-    window.dispatchEvent(
-      new CustomEvent(VISUALIZATION_QUICK_SELECT_EVENT, { detail: { type: next } })
-    );
+    emit('VISUALIZATION_QUICK_SELECT', { type: next });
   };
 
   return (
@@ -47,7 +44,6 @@ const VisualizationQuickBar: React.FC<{ className?: string }> = ({ className }) 
       {VIZ_ITEMS.map(({ type, icon: Icon, label }) => {
         const isActive = active === type;
         const config = VISUALIZATION_CONFIGS[type];
-        // Use middle color stop for active accent
         const accentColor = config?.colorStops?.[Math.floor(config.colorStops.length / 2)]?.color;
         const accentHex = accentColor ? rgbToHex(accentColor) : undefined;
 
