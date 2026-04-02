@@ -389,7 +389,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
 
     const buildNavigatorTree = useCallback((items: any[]): NavigatorNode[] => {
         // STRICT HIERARCHY: Building → Building Storey → Space → Instance
-        // With synthetic "Okänd våning" fallback for orphan spaces
+        // With synthetic "Unknown floor" fallback for orphan spaces
         // Include both standard and IFC category variants
         const buildings = items.filter(item => 
             item.category === 'Building' || item.category === 'IfcBuilding'
