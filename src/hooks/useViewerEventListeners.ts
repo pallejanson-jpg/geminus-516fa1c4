@@ -416,8 +416,7 @@ export function useViewerEventListeners({
       });
     };
 
-    const floorHandler = (e: Event) => {
-      const detail = (e as CustomEvent<FloorSelectionEventDetail>).detail;
+    const floorHandler = (detail: FloorSelectionEventDetail) => {
       if (detail?.isAllFloorsVisible || !detail?.floorId) {
         currentFloorFilter = null;
       } else {
