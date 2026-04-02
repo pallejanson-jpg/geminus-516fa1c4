@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import VisualizationLegendBar from './VisualizationLegendBar';
 import { VisualizationType } from '@/lib/visualization-utils';
+import { on } from '@/lib/event-bus';
 
 interface VisState {
   visualizationType: VisualizationType;
@@ -20,11 +21,9 @@ const VisualizationLegendOverlay: React.FC = () => {
   });
 
   useEffect(() => {
-    const handler = (e: CustomEvent<VisState>) => {
-      setVisState(e.detail);
-    };
-    window.addEventListener('VISUALIZATION_STATE_CHANGED', handler as EventListener);
-    return () => window.removeEventListener('VISUALIZATION_STATE_CHANGED', handler as EventListener);
+    return on('VISUALIZATION_STATE_CHANGED', (detail) => {
+      setVisState(detail as VisState);
+    });
   }, []);
 
   if (visState.visualizationType === 'none') return null;

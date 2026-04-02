@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { useViewerTheme, ViewerTheme, VIEWER_THEME_REQUESTED_EVENT } from '@/hooks/useViewerTheme';
+import { on } from '@/lib/event-bus';
 
 interface ViewerThemeSelectorProps {
   viewerRef: React.MutableRefObject<any>;
@@ -25,7 +26,6 @@ const ViewerThemeSelector: React.FC<ViewerThemeSelectorProps> = ({
   const { themes, activeTheme, isLoading, selectTheme } = useViewerTheme();
   const [selectedId, setSelectedId] = useState<string>('');
 
-  // Find Standard theme ID for default selection
   useEffect(() => {
     if (themes.length > 0 && !selectedId) {
       const standardTheme = themes.find(t => t.name === 'Standard' && t.is_system);
@@ -35,7 +35,6 @@ const ViewerThemeSelector: React.FC<ViewerThemeSelectorProps> = ({
     }
   }, [themes, selectedId]);
 
-  // Sync with active theme changes
   useEffect(() => {
     if (activeTheme) {
       setSelectedId(activeTheme.id);
@@ -44,17 +43,11 @@ const ViewerThemeSelector: React.FC<ViewerThemeSelectorProps> = ({
 
   // Listen for external theme change requests
   useEffect(() => {
-    const handleThemeRequest = (e: CustomEvent) => {
-      const { themeId } = e.detail || {};
-      if (themeId) {
-        handleThemeChange(themeId);
+    return on('VIEWER_THEME_REQUESTED', (detail) => {
+      if (detail.themeId) {
+        handleThemeChange(detail.themeId);
       }
-    };
-    
-    window.addEventListener(VIEWER_THEME_REQUESTED_EVENT, handleThemeRequest as EventListener);
-    return () => {
-      window.removeEventListener(VIEWER_THEME_REQUESTED_EVENT, handleThemeRequest as EventListener);
-    };
+    });
   }, [themes]);
 
   const handleThemeChange = (themeId: string) => {
