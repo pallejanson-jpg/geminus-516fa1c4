@@ -1107,8 +1107,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
   // Listen for minimap toggle from ViewerRightPanel
   useEffect(() => {
-    const handleMinimapToggle = (e: CustomEvent) => {
-      setShowMinimap(e.detail?.visible ?? false);
+    const handleMinimapToggle = () => {
+      setShowMinimap(prev => !prev);
     };
     const off = on('MINIMAP_TOGGLE', handleMinimapToggle);
     return () => off();
@@ -1116,8 +1116,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
   // Listen for view mode changes to update room label heights
   useEffect(() => {
-    const handleViewModeChange = (e: CustomEvent) => {
-      const mode = e.detail?.mode as '2d' | '3d';
+    const handleViewModeChange = (detail: ViewModeEventDetail) => {
+      const mode = detail?.mode as '2d' | '3d';
       if (mode && updateLabelsViewMode) {
         console.log('AssetPlusViewer: View mode changed to', mode, '- updating room labels');
         updateLabelsViewMode(mode);
@@ -1132,8 +1132,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
   // Listen for floor selection changes to update spaces, room labels, and visualization
   useEffect(() => {
-    const handleFloorSelectionChange = (e: CustomEvent<FloorSelectionEventDetail>) => {
-      const { visibleFloorFmGuids: newGuids, isAllFloorsVisible } = e.detail;
+    const handleFloorSelectionChange = (detail: FloorSelectionEventDetail) => {
+      const { visibleFloorFmGuids: newGuids, isAllFloorsVisible } = detail;
       
       console.log('AssetPlusViewer: Floor selection changed', {
         guids: newGuids?.length,
@@ -1254,13 +1254,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
   // Floor-aware annotation filtering: hide markers not on visible floor(s)
   useEffect(() => {
-    const handler = (e: Event) => {
+    const handler = (evDetail: FloorSelectionEventDetail) => {
       const plugin = localAnnotationsPluginRef.current;
       if (!plugin?.annotations) return;
-      const detail = (e as CustomEvent<FloorSelectionEventDetail>).detail;
-      const isAll = detail.isAllFloorsVisible;
-      const visibleGuids = detail.visibleFloorFmGuids || [];
-      const singleFloor = detail.floorId;
+      const isAll = evDetail.isAllFloorsVisible;
+      const visibleGuids = evDetail.visibleFloorFmGuids || [];
+      const singleFloor = evDetail.floorId;
 
       Object.values(plugin.annotations).forEach((ann: any) => {
         if (!ann.markerElement) return;
@@ -1284,10 +1283,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
   // Annotation category filtering from ViewerFilterPanel
   useEffect(() => {
-    const handler = (e: Event) => {
+    const handler = (detail: AnnotationFilterDetail) => {
       const plugin = localAnnotationsPluginRef.current;
       if (!plugin?.annotations) return;
-      const detail = (e as CustomEvent<AnnotationFilterDetail>).detail;
       const visibleCats = new Set(detail.visibleCategories);
 
       Object.values(plugin.annotations).forEach((ann: any) => {
@@ -2320,8 +2318,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
   // Listen for SENSOR_ANNOTATIONS_TOGGLE_EVENT to lazy-load and show/hide sensor markers
   useEffect(() => {
-    const handler = async (e: Event) => {
-      const { visible } = (e as CustomEvent<SensorAnnotationsToggleDetail>).detail;
+    const handler = async (detail: SensorAnnotationsToggleDetail) => {
+      const { visible } = detail;
       sensorAnnotationsVisibleRef.current = visible;
 
       // Lazy-load if not yet loaded and we're turning sensors on
@@ -2348,8 +2346,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
   // Listen for ISSUE_ANNOTATIONS_TOGGLE_EVENT to lazy-load and show/hide issue markers
   useEffect(() => {
-    const handler = async (e: Event) => {
-      const { visible } = (e as CustomEvent<IssueAnnotationsToggleDetail>).detail;
+    const handler = async (detail: IssueAnnotationsToggleDetail) => {
+      const { visible } = detail;
       issueAnnotationsVisibleRef.current = visible;
 
       // Lazy-load if not yet loaded and we're turning issues on
@@ -3374,7 +3372,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
   // Listen for saved view loading events
   useEffect(() => {
-    const handleLoadSavedView = (e: CustomEvent<LoadSavedViewDetail>) => {
+    const handleLoadSavedView = (viewData: LoadSavedViewDetail) => {
       const viewData = e.detail;
       console.log('LOAD_SAVED_VIEW_EVENT received:', viewData);
       
@@ -3471,11 +3469,11 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   
   // Listen for view mode changes
   useEffect(() => {
-    const handleViewModeChanged = (e: CustomEvent<{ mode: '2d' | '3d' }>) => {
-      setCurrentViewMode(e.detail.mode);
+    const handleViewModeChanged = (detail: ViewModeEventDetail) => {
+      setCurrentViewMode(detail.mode);
     };
-    const handleClipHeightChanged = (e: CustomEvent<{ height: number }>) => {
-      setClipHeight(e.detail.height);
+    const handleClipHeightChanged = (detail: ClipHeightEventDetail) => {
+      setClipHeight(detail.height);
     };
     const offHandleViewModeChanged = on('VIEW_MODE_CHANGED', handleViewModeChanged);
     const offHandleClipHeightChanged = on('CLIP_HEIGHT_CHANGED', handleClipHeightChanged);
@@ -3586,14 +3584,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
   // Listen for Architect View Mode requests
   useEffect(() => {
-    const handleArchitectModeRequest = (e: CustomEvent<{ enabled: boolean }>) => {
-      console.log('ARCHITECT_MODE_REQUESTED:', e.detail.enabled);
-      const success = toggleArchitectMode(viewerInstanceRef, e.detail.enabled);
+    const handleArchitectModeRequest = (detail: { enabled: boolean }) => {
+      console.log('ARCHITECT_MODE_REQUESTED:', detail.enabled);
+      const success = toggleArchitectMode(viewerInstanceRef, detail.enabled);
       
       // Dispatch confirmation event
       if (success) {
-        emit('ARCHITECT_MODE_CHANGED', { enabled: e.detail.enabled });
-        toast.info(e.detail.enabled ? 'Arkitektvy aktiverad' : 'Arkitektvy avaktiverad', { duration: 2000 });
+        emit('ARCHITECT_MODE_CHANGED', { enabled: detail.enabled });
+        toast.info(detail.enabled ? 'Arkitektvy aktiverad' : 'Arkitektvy avaktiverad', { duration: 2000 });
       }
     };
     
@@ -3605,10 +3603,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
   // Listen for architect background color changes
   useEffect(() => {
-    const handleBackgroundChange = (e: CustomEvent<{ presetId: BackgroundPresetId }>) => {
-      console.log('ARCHITECT_BACKGROUND_CHANGED:', e.detail.presetId);
+    const handleBackgroundChange = (detail: { presetId: string }) => {
+      console.log('ARCHITECT_BACKGROUND_CHANGED:', detail.presetId);
       // Directly apply background since we know architect mode is active (palette is visible)
-      applyBackgroundPreset(e.detail.presetId);
+      applyBackgroundPreset(detail.presetId as BackgroundPresetId);
     };
     
     const offHandleBackgroundChange = on('ARCHITECT_BACKGROUND_CHANGED', handleBackgroundChange);
@@ -3619,9 +3617,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
   // Listen for room labels toggle from VisualizationToolbar
   useEffect(() => {
-    const handleRoomLabelsToggle = (e: CustomEvent<RoomLabelsToggleDetail>) => {
-      console.log('ROOM_LABELS_TOGGLE:', e.detail.enabled);
-      setRoomLabelsEnabled(e.detail.enabled);
+    const handleRoomLabelsToggle = (detail: { enabled: boolean }) => {
+      console.log('ROOM_LABELS_TOGGLE:', detail.enabled);
+      setRoomLabelsEnabled(detail.enabled);
     };
     
     const offHandleRoomLabelsToggle = on('ROOM_LABELS_TOGGLE', handleRoomLabelsToggle);
@@ -4478,6 +4476,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           setTimeout(() => {
             console.log('AssetPlusViewer: Dispatching initial floor selection for', floorFmGuid);
             emit('FLOOR_SELECTION_CHANGED', {
+                floorId: floorFmGuid,
                 visibleMetaFloorIds: [],
                 visibleFloorFmGuids: [floorFmGuid],
                 isAllFloorsVisible: false,
@@ -4709,8 +4708,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   // On-demand model loading: when a user toggles a deferred (non-A) model in ModelVisibilitySelector,
   // add it to the whitelist and re-trigger the Asset+ model load so the interceptor allows it through.
   useEffect(() => {
-    const handleModelLoadRequested = (e: CustomEvent<{ modelId: string }>) => {
-      const { modelId } = e.detail;
+    const handleModelLoadRequested = (detail: ModelLoadRequestedDetail) => {
+      const { modelId } = detail;
       if (!modelId) return;
 
       console.log(`[AssetPlusViewer] On-demand model load requested: ${modelId}`);

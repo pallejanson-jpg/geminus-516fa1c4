@@ -98,8 +98,8 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
   // Listen for floor selection changes to get the latest floor state
   useEffect(() => {
-    const handleFloorChange = (e: CustomEvent<FloorSelectionEventDetail>) => {
-      const { visibleFloorFmGuids: guids, isAllFloorsVisible } = e.detail;
+    const handleFloorChange = (detail: FloorSelectionEventDetail) => {
+      const { visibleFloorFmGuids: guids, isAllFloorsVisible } = detail;
       setEventIsAllVisible(!!isAllFloorsVisible);
       if (isAllFloorsVisible && (!guids || guids.length === 0)) {
         setEventFloorGuids(null); // null = truly all floors visible, skip filtering

@@ -67,8 +67,7 @@ export default function GeminusPluginMenu({
   useEffect(() => {
     const isFma = source === 'fma_plus' || source === '2d_fm_access';
     if (!isFma) return;
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
+    const handler = (detail: FmAccessContextChangedDetail) => {
       if (detail) setFmaLiveContext(detail);
     };
     const off = on('FM_ACCESS_CONTEXT_CHANGED', handler);
