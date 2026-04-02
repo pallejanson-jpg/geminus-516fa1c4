@@ -460,8 +460,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
   // Listen for force show spaces from RoomVisualizationPanel
   useEffect(() => {
-    const handleForceShowSpaces = (e: CustomEvent) => {
-      const shouldShow = !!e.detail?.show;
+    const handleForceShowSpaces = (detail: any) => {
+      const shouldShow = !!detail?.show;
       // Respect user's explicit off — don't auto re-enable
       if (shouldShow && (window as any).__spacesUserExplicitOff) return;
       if (shouldShow !== showSpaces) {
