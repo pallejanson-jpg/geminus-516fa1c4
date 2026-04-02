@@ -1,83 +1,89 @@
 
 
-# Geminus Platform — Production Readiness Plan
+# Named API Profiles for Multi-Tenant Credential Management
 
-## Overview
-Three phases: Quick Wins, Strategic Improvements, and 10x Features.
+## Problem
+You have multiple Asset+ / Senslinc environments with different credentials. Currently, credentials are either global (env vars) or per-building (embedded in `building_settings`). You want to:
+1. Define named credential sets ("API Profile 1", "API Profile 2") once
+2. Assign any building to a profile instead of duplicating credentials per building
+3. Keep the current global credentials as the default profile
+4. Create buildings in Geminus first (with correct FMGUID) and link them to a profile
 
----
+## Solution: API Profiles Table + Profile Picker
 
-## Phase 1: Quick Wins ✅ DONE
+### New database table: `api_profiles`
 
-1. ✅ Replace all "Loading..." with branded `<FullPageSpinner />`
-2. ✅ Add `useDocumentTitle` hook + apply to all routes via MainContent
-3. ✅ Create `ViewerBreadcrumb` component (Building → Floor → Room)
-4. ✅ Create z-index scale constants (`src/lib/z-index.ts`)
-5. ✅ Cmd+K hint — already visible on desktop (no change needed)
-6. ✅ Portfolio loading skeletons (6 skeleton cards)
-7. ✅ Fix Swedish/English — standardized to English across ~15 files
+```text
+api_profiles
+├── id (uuid, PK)
+├── name (text) — e.g. "Production", "Customer X Environment"
+├── is_default (boolean) — one profile marked as default (uses env vars)
+├── assetplus_api_url, assetplus_api_key, assetplus_keycloak_url,
+│   assetplus_client_id, assetplus_client_secret,
+│   assetplus_username, assetplus_password
+├── senslinc_api_url, senslinc_email, senslinc_password
+├── fm_access_api_url, fm_access_username, fm_access_password
+├── ivion_api_url, ivion_username, ivion_password
+├── created_at, updated_at
+```
 
----
+### Link buildings to profiles
+Add `api_profile_id (uuid, nullable, FK → api_profiles.id)` column to `building_settings`. When null → use the default profile (current env vars).
 
-## Phase 2: Strategic Improvements
+### Credential resolution change
+Update `_shared/credentials.ts` to:
+1. Check `building_settings.api_profile_id`
+2. If set → fetch credentials from `api_profiles` row
+3. If not → fall back to env vars (same as today)
 
-### 8. Split AppContext into domain contexts ✅ DONE
+This replaces the current per-building credential columns in `building_settings` (which can be migrated/deprecated).
 
-**New files created:**
-- `src/context/ThemeContext.tsx` — theme, setTheme
-- `src/context/NavigationContext.tsx` — activeApp, viewMode, selectedFacility, sidebar, appConfigs, insights, 360, senslinc
-- `src/context/ViewerContext.tsx` — viewer3dFmGuid, registration, inventory, fault report, annotation, AI selection, diagnostics
-- `src/context/DataContext.tsx` — allData, navigatorTreeData, refreshInitialData, isLoadingData
+## Files to Change
 
-**Architecture:** AppContext is now a thin facade (AppContextBridge) that composes all 4 domain contexts. All 68 existing consumers continue to work without changes via `useContext(AppContext)`. New code can use domain-specific hooks (`useTheme`, `useNavigation`, `useViewer`, `useData`).
+| Action | File | What |
+|--------|------|------|
+| **Migration** | `supabase/migrations/` | Create `api_profiles` table + add `api_profile_id` to `building_settings` + seed default profile from env vars |
+| **Create** | `src/components/settings/ApiProfilesManager.tsx` | CRUD UI for named profiles — name, all credential fields, test buttons |
+| **Modify** | `src/components/properties/CreatePropertyDialog.tsx` | Replace inline credential fields with a profile dropdown selector |
+| **Modify** | `src/pages/Properties.tsx` | Show profile name badge instead of per-credential badges |
+| **Modify** | `supabase/functions/_shared/credentials.ts` | Resolve credentials via `api_profiles` table instead of `building_settings` columns |
+| **Modify** | `src/components/settings/ApiSettingsModal.tsx` | Add "API Profiles" tab to settings for managing profiles |
 
-### 9. Extract NativeXeokitViewer into composable hooks — NEXT
-Currently 2,044 lines in one component.
+## UI Flow
 
-**New hooks:**
-- `useXeokitInstance(canvasRef, options)` — creates/destroys viewer, returns ref
-- `useModelLoader(viewerRef, buildingFmGuid)` — handles model fetching, signed URLs, loading queue
-- `useViewerEventListeners(viewerRef)` — consolidates all CustomEvent listeners
+```text
+Settings → API Profiles tab
+┌────────────────────────────────────┐
+│ API Profiles                       │
+│                                    │
+│ ┌──────────────────────────────┐   │
+│ │ ★ Default (env vars)         │   │  ← auto-created, non-deletable
+│ │   Asset+: ✓  Senslinc: ✓    │   │
+│ └──────────────────────────────┘   │
+│ ┌──────────────────────────────┐   │
+│ │ Customer X                   │   │  ← user-created
+│ │   Asset+: ✓  Senslinc: ✗    │   │
+│ │   [Edit] [Test] [Delete]     │   │
+│ └──────────────────────────────┘   │
+│                                    │
+│ [+ New Profile]                    │
+└────────────────────────────────────┘
 
-**Result:** `NativeXeokitViewer.tsx` becomes ~200 lines of composition.
+Properties → Create/Edit Building
+┌────────────────────────────────────┐
+│ Building Identity                  │
+│   FM GUID: [____________]          │
+│   Name:    [____________]          │
+│                                    │
+│ API Profile: [▼ Default        ]   │  ← dropdown instead of credential fields
+│              • Default (env vars)  │
+│              • Customer X          │
+│              + New Profile...      │
+└────────────────────────────────────┘
+```
 
-### 10. Typed event system
-Replace `window.dispatchEvent(new CustomEvent(...))` with a typed event bus.
+## Key Design Decisions
+- The "Default" profile is a virtual row that reads from env vars — no secrets stored in DB for it
+- Per-building credential columns in `building_settings` are kept temporarily for backward compatibility but the UI stops writing to them
+- RLS: admin-only write, authenticated read (credentials are server-side only via edge functions; the frontend only sees profile names)
 
-**New file:** `src/lib/event-bus.ts`
-- Zustand store or typed EventEmitter with `on<EventName>(handler)` pattern
-- Compile-time type checking for event payloads
-- Automatic cleanup via React hooks
-
-### 11. Component tests
-Add Vitest + Testing Library tests for critical paths:
-- Viewer initialization flow
-- Portfolio search and filter
-- Command palette search
-- Breadcrumb navigation
-- Context state transitions
-
----
-
-## Phase 3: 10x Features (Roadmap)
-
-### 12. Real-time collaboration (co-presence)
-- Leverage existing Realtime Presence channels
-- Broadcast camera position, active floor, user avatar
-- Render other users as markers in 3D scene
-- "Fly to user" functionality
-
-### 13. Progressive model streaming
-- Implement chunked XKT loading showing geometry as chunks arrive
-- Use xeokit's streaming capabilities or split models into storey-level tiles
-- Show progressive rendering during download
-
-### 14. AI-driven onboarding
-- Gunnar auto-opens for first-time users (check onboarding_complete flag)
-- Guided walkthrough: "Click here to open a building" → "This is the 3D viewer" → "Try asking me a question"
-- Context-aware tips based on current view
-
-### 15. Embedded analytics
-- When selecting a room in 3D viewer, show a small card with energy/sensor data
-- Inline KPIs in portfolio building cards
-- Contextual insights in the properties dialog
