@@ -4,6 +4,7 @@ import { THEMES } from "@/lib/constants";
 import { AppContext } from "@/context/AppContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Spinner } from "@/components/ui/spinner";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import PortfolioView from "@/components/portfolio/PortfolioView";
 import HomeLanding from "@/components/home/HomeLanding";
 import PlaceholderView from "@/components/layout/PlaceholderView";

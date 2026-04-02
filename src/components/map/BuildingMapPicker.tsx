@@ -151,7 +151,7 @@ const BuildingMapPicker: React.FC<BuildingMapPickerProps> = ({
           disabled={!addressQuery.trim() || isSearching}
           onClick={handleAddressSearch}
         >
-          {isSearching ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Sök'}
+          {isSearching ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Search'}
         </Button>
       </div>
 
