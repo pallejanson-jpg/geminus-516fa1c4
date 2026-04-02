@@ -4,6 +4,7 @@ import { Search, LayoutGrid, List, Filter, Loader2, ChevronLeft, ChevronRight } 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
