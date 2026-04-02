@@ -295,6 +295,7 @@ export default function ApiProfilesManager() {
                {renderSecretField('Client Secret', 'assetplus_client_secret')}
                {renderSecretField('Username', 'assetplus_username')}
                {renderSecretField('Password', 'assetplus_password')}
+               {renderSecretField('Audience', 'assetplus_audience', 'asset-api')}
               <Button variant="outline" size="sm" onClick={testAssetPlus} disabled={testingAp}>
                 {testingAp ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <TestTube className="mr-2 h-3 w-3" />}
                 Validate
