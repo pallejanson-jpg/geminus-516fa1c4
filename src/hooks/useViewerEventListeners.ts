@@ -251,8 +251,7 @@ export function useViewerEventListeners({
 
   // ── FORCE_SHOW_SPACES ──
   useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
+    const handler = (detail: any) => {
       const show = detail?.show ?? true;
       const viewer = viewerRef.current;
       if (!viewer?.scene || !viewer?.metaScene?.metaObjects) return;
