@@ -1,74 +1,105 @@
 
 
-# Two-part implementation: Viewer flicker fix + Typed event system
+# Migrate remaining files to typed event bus (`emit`/`on`)
 
-## Part 1 — Viewer flicker fix (quick, high impact)
+## Scope
 
-### Problem
-`NativeXeokitViewer.tsx` line 284-287: the `useEffect` depends on `initialize` which has 10 dependencies. Any identity change triggers destroy→recreate loop, causing flicker and crashes.
+42 files currently use `window.dispatchEvent(new CustomEvent(...))` and/or `window.addEventListener` for app-specific events. 5 were already migrated. This plan covers the remaining **~37 files**, grouped by priority and complexity.
 
-### Fix — single file change
-**`src/components/viewer/NativeXeokitViewer.tsx`**:
-- Add `const initRef = useRef(initialize); initRef.current = initialize;` after the `initialize` callback
-- Change the effect to:
-```js
-useEffect(() => {
-  initRef.current();
-  return () => { destroy(); };
-}, [buildingFmGuid, destroy]);
-```
-This ensures initialization only re-runs when the building changes, not when callback references shift.
+## Approach
 
----
+The migration is mechanical — replace `window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail }))` with `emit('EVENT_NAME', detail)` and replace `window.addEventListener(EVENT_NAME, handler)` / `window.removeEventListener(...)` with `const off = on('EVENT_NAME', handler)` / `off()`. No behavioral changes.
 
-## Part 2 — Typed event system (904 dispatches across 41 files)
+### Pre-requisite: Expand `EventMap` with missing events
 
-Given the scale (41 files, 904 call sites), a full migration in one pass is impractical. Instead: **build the infrastructure first, then migrate incrementally**.
+Several events used across the codebase aren't yet in the `EventMap`. These need to be added first:
 
-### Step 1: Create `src/lib/event-bus.ts`
-A thin, type-safe wrapper around `window.CustomEvent`:
-
-```typescript
-type EventMap = {
-  INSIGHTS_COLOR_UPDATE: InsightsColorUpdateDetail;
-  FLOOR_SELECTION_CHANGED: FloorSelectionEventDetail;
-  VIEWER_SELECT_ENTITY: ViewerSelectEntityDetail;
-  // ... all existing event types from viewer-events.ts
-};
-
-function emit<K extends keyof EventMap>(event: K, detail: EventMap[K]) {
-  window.dispatchEvent(new CustomEvent(event, { detail }));
-}
-
-function on<K extends keyof EventMap>(event: K, handler: (detail: EventMap[K]) => void): () => void {
-  const listener = (e: Event) => handler((e as CustomEvent).detail);
-  window.addEventListener(event, listener);
-  return () => window.removeEventListener(event, listener);
-}
-```
-
-### Step 2: Consolidate all event types into `EventMap`
-Move all detail interfaces from `viewer-events.ts` and `useSectionPlaneClipping.ts` into the single `EventMap`. Keep the old constants as re-exports for backward compat.
-
-### Step 3: Migrate the 5 highest-traffic files first
-These files account for the most dispatches/listeners:
-1. `useViewerEventListeners.ts` — replace `addEventListener` with `on()`
-2. `NativeViewerShell.tsx` — replace dispatches with `emit()`
-3. `NativeXeokitViewer.tsx` — replace dispatches with `emit()`
-4. `RoomVisualizationPanel.tsx` — replace dispatches with `emit()`
-5. `FloorVisibilitySelector.tsx` — replace dispatches with `emit()`
-
-Remaining 36 files can be migrated in follow-up sessions. The old `window.CustomEvent` pattern still works because `emit()` dispatches the same underlying events.
-
-### Files created/modified
-
-| File | Action |
+| Event | Detail type |
 |---|---|
-| `src/lib/event-bus.ts` | **Create** — typed emit/on/off helpers + EventMap |
-| `src/lib/viewer-events.ts` | **Edit** — re-export from event-bus, deprecate raw constants |
-| `src/components/viewer/NativeXeokitViewer.tsx` | **Edit** — flicker fix + migrate to emit() |
-| `src/hooks/useViewerEventListeners.ts` | **Edit** — migrate to on() |
-| `src/components/viewer/NativeViewerShell.tsx` | **Edit** — migrate to emit()/on() |
-| `src/components/viewer/RoomVisualizationPanel.tsx` | **Edit** — migrate to emit() |
-| `src/components/viewer/FloorVisibilitySelector.tsx` | **Edit** — migrate to emit()/on() |
+| `VIEWER_THEME_CHANGED` | `{ themeId: string }` |
+| `LIGHTING_CHANGED` | `{ enabled: boolean }` |
+| `SUN_STUDY_CHANGED` | `{ enabled: boolean }` |
+| `REAPPLY_MODIFICATIONS` | `void` |
+| `FLOOR_PILLS_TOGGLE` | `{ visible: boolean }` |
+| `OPEN_ISSUE_LIST` | `void` |
+| `TOGGLE_NAVIGATION_PANEL` | `void` |
+| `VIEWER_FLY_TO` | `{ fmGuid: string }` |
+| `VOICE_FLOOR_SELECT` | `{ floorNumber: string }` |
+| `VOICE_CREATE_ISSUE` | `void` |
+| `VOICE_CLEAR_FILTERS` | `void` |
+| `INITIAL_VISUALIZATION_REQUESTED` | `{ type: string }` |
+| `GUNNAR_AUTO_OPEN_VOICE` | `void` |
+| `ARCHITECT_MODE_REQUESTED` | `{ enabled: boolean }` |
+| `ARCHITECT_MODE_CHANGED` | `{ enabled: boolean }` |
+
+### Batch 1 — High-traffic viewer components (~15 files)
+
+These are the core viewer UI files with the most dispatches/listeners:
+
+1. **`ViewerFilterPanel.tsx`** — ~20 dispatches, ~5 listeners
+2. **`AssetPlusViewer.tsx`** — ~15 dispatches, ~10 listeners (largest file)
+3. **`VisualizationToolbar.tsx`** — ~12 dispatches
+4. **`ViewerToolbar.tsx`** — ~5 dispatches, ~3 listeners
+5. **`ViewerRightPanel.tsx`** — ~8 dispatches, ~3 listeners
+6. **`SplitPlanView.tsx`** — ~5 dispatches, ~5 listeners
+7. **`FloatingFloorSwitcher.tsx`** — ~3 dispatches, ~2 listeners
+8. **`FloorCarousel.tsx`** — ~3 dispatches
+9. **`AnnotationCategoryList.tsx`** — ~3 dispatches
+10. **`AnnotationToggleMenu.tsx`** — dispatches
+11. **`ModelVisibilitySelector.tsx`** — ~2 dispatches, ~1 listener
+12. **`InventoryPanel.tsx`** — ~2 dispatches
+13. **`MobileViewerOverlay.tsx`** — ~2 dispatches
+14. **`ViewerThemeSelector.tsx`** — ~2 listeners
+15. **`VisualizationQuickBar.tsx`** — ~1 listener
+
+### Batch 2 — Hooks (~10 files)
+
+1. **`useSectionPlaneClipping.ts`** — ~5 listeners (also exports duplicate event constants to remove)
+2. **`useRoomLabels.ts`** — exports constants + ~3 dispatches/listeners
+3. **`useViewerTheme.ts`** — exports constants + ~3 dispatches/listeners
+4. **`useArchitectViewMode.ts`** — exports constants + ~4 dispatches/listeners
+5. **`useLightingControls.ts`** — exports constants + ~2 dispatches
+6. **`useObjectMoveMode.ts`** — ~3 listeners
+7. **`useVoiceCommands.ts`** — ~4 dispatches
+8. **`useAiViewerBridge.ts`** — ~2 dispatches/listeners
+9. **`useIleanData.ts`** — ~2 listeners
+10. **`useRoomLabelConfigs.ts`** — listeners
+
+### Batch 3 — Pages and other components (~12 files)
+
+1. **`UnifiedViewer.tsx`** — ~5 dispatches/listeners
+2. **`BuildingInsightsView.tsx`** — ~10 dispatches
+3. **`GeminusPluginMenu.tsx`** — ~3 dispatches/listeners
+4. **`ViewerMockup.tsx`** — ~3 dispatches
+5. **`InsightsDrawerPanel.tsx`** — ~2 dispatches
+6. **`ViewerContextMenu.tsx`** — dispatches
+7. **`IleanEmbeddedChat.tsx`** — listener
+8. **`SensorDataOverlay.tsx`** — listener
+9. **`GunnarButton.tsx`** — listener (only app events, skip mouse/resize)
+10. **`FmAccessNativeView.tsx`** — dispatches
+11. **`DataConsistencyBanner.tsx`** — ~1 dispatch
+12. **`SyncProgressBanner.tsx`** — listener
+
+### Cleanup after migration
+
+- Remove duplicate event constant exports from hooks (`useSectionPlaneClipping`, `useRoomLabels`, `useViewerTheme`, `useArchitectViewMode`, `useLightingControls`) — keep only in `event-bus.ts` and `viewer-events.ts` for backward compat
+- Remove `as EventListener` casts (no longer needed with typed `on()`)
+
+### What stays unchanged
+
+- Native browser events (`mousemove`, `mouseup`, `touchmove`, `resize`, `keydown`, etc.) — these are NOT app events and should NOT use the event bus
+- `unhandledrejection` and `error` handlers in `App.tsx`
+- Drag/resize handlers in `GunnarButton.tsx`, `UniversalPropertiesDialog.tsx`
+
+### Files modified
+
+| File | Changes |
+|---|---|
+| `src/lib/event-bus.ts` | Add ~15 missing events to `EventMap` |
+| ~37 component/hook/page files | Replace `window.dispatchEvent`→`emit`, `window.addEventListener`→`on` |
+| `src/lib/viewer-events.ts` | No change (kept for backward compat) |
+
+### Risk
+
+Zero behavioral change — `emit()` calls `window.dispatchEvent(new CustomEvent(...))` under the hood, and `on()` calls `window.addEventListener`. Existing code that hasn't been migrated yet will continue to work because both sides use the same underlying browser events.
 
