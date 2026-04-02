@@ -230,7 +230,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           const pending = pendingInsightsColorRef.current;
           (pendingInsightsColorRef as React.MutableRefObject<any>).current = null;
           setTimeout(() => {
-            window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail: pending }));
+            emit('INSIGHTS_COLOR_UPDATE', pending);
           }, 200);
         }
       }
