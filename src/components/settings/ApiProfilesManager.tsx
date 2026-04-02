@@ -55,7 +55,7 @@ const EMPTY_FORM: ProfileForm = {
   name: '',
   assetplus_api_url: '', assetplus_api_key: '', assetplus_keycloak_url: '',
   assetplus_client_id: '', assetplus_client_secret: '',
-  assetplus_username: '', assetplus_password: '',
+  assetplus_username: '', assetplus_password: '', assetplus_audience: '',
   senslinc_api_url: '', senslinc_email: '', senslinc_password: '',
   fm_access_api_url: '', fm_access_username: '', fm_access_password: '',
   ivion_api_url: '', ivion_username: '', ivion_password: '',
