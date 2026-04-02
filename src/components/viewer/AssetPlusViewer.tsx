@@ -512,8 +512,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
   // ─── Listen for INSIGHTS_COLOR_UPDATE from InsightsDrawerPanel (drawerMode) ───
   useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<InsightsColorUpdateDetail>).detail;
+    const handler = (detail: InsightsColorUpdateDetail) => {
       if (!detail?.colorMap) return;
 
       const viewer = viewerInstanceRef.current;
