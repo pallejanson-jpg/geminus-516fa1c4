@@ -135,6 +135,7 @@ export default function ApiProfilesManager() {
       assetplus_client_secret: profile.assetplus_client_secret || '',
       assetplus_username: profile.assetplus_username || '',
       assetplus_password: profile.assetplus_password || '',
+      assetplus_audience: profile.assetplus_audience || '',
       senslinc_api_url: profile.senslinc_api_url || '',
       senslinc_email: profile.senslinc_email || '',
       senslinc_password: profile.senslinc_password || '',
