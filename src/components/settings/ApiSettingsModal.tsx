@@ -36,6 +36,7 @@ import { SyncProgressCard } from './SyncProgressCard';
 import ConversionProgressOverlay from './ConversionProgressOverlay';
 import { SyncStatusLog, type SyncStep, type SyncOutcome } from './SyncStatusLog';
 import CreateBuildingPanel from './CreateBuildingPanel';
+import ApiProfilesManager from './ApiProfilesManager';
 import type { TranslationStatus } from '@/services/acc-xkt-converter';
 
 interface ApiSettingsModalProps {
@@ -2315,6 +2316,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                             <Building2 className="h-3 w-3 sm:h-4 sm:w-4" />
                             Building
                         </TabsTrigger>
+                        <TabsTrigger value="api-profiles" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                            <Network className="h-3 w-3 sm:h-4 sm:w-4" />
+                            API Profiles
+                        </TabsTrigger>
                     </TabsList>
 
                     {/* Profile Settings Tab */}
@@ -3679,6 +3684,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     {/* Create Building Tab */}
                     <TabsContent value="building" className="space-y-4 mt-4 flex-1 overflow-y-auto">
                         <CreateBuildingPanel onSwitchToAccTab={() => setActiveTab('apis')} />
+                    </TabsContent>
+
+                    {/* API Profiles Tab */}
+                    <TabsContent value="api-profiles" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                        <ApiProfilesManager />
                     </TabsContent>
                 </Tabs>
             </DialogContent>
