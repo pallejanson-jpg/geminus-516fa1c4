@@ -92,16 +92,16 @@ export function useSearchResults(
 }
 
 /**
- * Returns a human-readable category label in Swedish
+ * Returns a human-readable category label
  */
 export function getCategoryLabel(category: string): string {
   const labels: Record<string, string> = {
-    'Building': 'Byggnad',
-    'Building Storey': 'Våning',
-    'Space': 'Rum',
-    'Door': 'Dörr',
-    'Complex': 'Komplex',
-    'Unknown': 'Okänd',
+    'Building': 'Building',
+    'Building Storey': 'Floor',
+    'Space': 'Room',
+    'Door': 'Door',
+    'Complex': 'Complex',
+    'Unknown': 'Unknown',
   };
   return labels[category] || category;
 }
