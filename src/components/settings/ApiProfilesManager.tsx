@@ -38,6 +38,7 @@ interface ApiProfile {
   assetplus_client_secret: string | null;
   assetplus_username: string | null;
   assetplus_password: string | null;
+  assetplus_audience: string | null;
   senslinc_api_url: string | null;
   senslinc_email: string | null;
   senslinc_password: string | null;
