@@ -14,8 +14,8 @@ import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@
 import { AlertTriangle } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useFloorData } from '@/hooks/useFloorData';
-import {
 import { emit, on } from '@/lib/event-bus';
+import {
   Select,
   SelectContent,
   SelectItem,
