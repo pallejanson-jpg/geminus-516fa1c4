@@ -1,4 +1,5 @@
 import { useRef, useCallback, useEffect } from 'react';
+import { on } from '@/lib/event-bus';
 
 interface RoomLabel {
   fmGuid: string;
