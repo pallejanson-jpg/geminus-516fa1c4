@@ -674,9 +674,9 @@ export function useRoomLabels(
 
   // Listen for config change events
   useEffect(() => {
-    const handleConfigChange = (e: CustomEvent<RoomLabelsConfigDetail>) => {
-      console.log('Room labels: Config changed', e.detail);
-      updateConfig(e.detail);
+    const handleConfigChange = (detail: RoomLabelsConfigDetail) => {
+      console.log('Room labels: Config changed', detail);
+      updateConfig(detail);
     };
 
     const offHandleConfigChange = on('ROOM_LABELS_CONFIG', handleConfigChange);

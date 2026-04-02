@@ -82,8 +82,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
   useEffect(() => {
     if (!viewer?.scene) return;
 
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
+    const handler = (detail: { buildingFmGuid: string }) => {
       if (detail?.buildingFmGuid === buildingFmGuid) {
         applyModifications();
       }

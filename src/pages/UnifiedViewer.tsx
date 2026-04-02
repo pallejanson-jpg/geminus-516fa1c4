@@ -377,8 +377,8 @@ const UnifiedViewerContent: React.FC<{
 
   // Track current floor fm_guid from floor selection events
   useEffect(() => {
-    const handler = (e: CustomEvent) => {
-      const guids = (e.detail as any)?.visibleFloorFmGuids;
+    const handler = (detail: any) => {
+      const guids = detail?.visibleFloorFmGuids;
       if (guids?.length) setNavFloorFmGuid(guids[0]);
     };
     const off = on('FLOOR_SELECTION_CHANGED', handler);
