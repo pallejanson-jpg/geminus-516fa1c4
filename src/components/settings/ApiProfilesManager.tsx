@@ -242,6 +242,21 @@ export default function ApiProfilesManager() {
     }
   }
 
+  function SI({ label, field, placeholder }: { label: string; field: keyof ProfileForm; placeholder?: string }) {
+    const isSecret = field.includes('password') || field.includes('secret') || field.includes('api_key');
+    return (
+      <SecretInput
+        label={label}
+        value={form[field] || ''}
+        onChange={v => set(field, v)}
+        placeholder={placeholder}
+        isSecret={isSecret}
+        shown={showSecrets[field] || !isSecret}
+        onToggleSecret={() => toggleSecret(field)}
+      />
+    );
+  }
+
   const isEditing = !!editingId || creating;
 
   if (isEditing) {
