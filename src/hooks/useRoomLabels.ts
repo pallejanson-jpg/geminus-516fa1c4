@@ -678,9 +678,9 @@ export function useRoomLabels(
       updateConfig(e.detail);
     };
 
-    window.addEventListener(ROOM_LABELS_CONFIG_EVENT, handleConfigChange as EventListener);
+    const offHandleConfigChange = on('ROOM_LABELS_CONFIG', handleConfigChange);
     return () => {
-      window.removeEventListener(ROOM_LABELS_CONFIG_EVENT, handleConfigChange as EventListener);
+      offHandleConfigChange();
     };
   }, [updateConfig]);
 

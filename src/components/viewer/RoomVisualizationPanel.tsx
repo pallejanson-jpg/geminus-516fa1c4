@@ -110,9 +110,9 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       setCacheKey(`${buildingFmGuid}-${Date.now()}`);
     };
     
-    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange as EventListener);
+    const offHandleFloorChange = on('FLOOR_SELECTION_CHANGED', handleFloorChange);
     return () => {
-      window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange as EventListener);
+      offHandleFloorChange();
     };
   }, [buildingFmGuid]);
 
@@ -146,8 +146,8 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         setUseMockData(true);
       }
     };
-    window.addEventListener(VISUALIZATION_QUICK_SELECT_EVENT, handler as EventListener);
-    return () => window.removeEventListener(VISUALIZATION_QUICK_SELECT_EVENT, handler as EventListener);
+    const off = on('VISUALIZATION_QUICK_SELECT', handler);
+    return () => off();
   }, [hasRealData]);
 
   const [entityIdCache, setEntityIdCache] = useState<Map<string, string[]>>(new Map());
@@ -207,7 +207,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   // Auto-activate "Visa Rum" on mount and dispatch event
   useEffect(() => {
     // Dispatch event for VisualizationToolbar to listen to
-    window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: true } }));
+    emit('FORCE_SHOW_SPACES', { show: true });
     
     if (onShowSpaces) {
       onShowSpaces(true);
@@ -258,13 +258,11 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     } catch (e) { /* ignore */ }
 
     // Dispatch event so the legend bar (rendered outside this component) can update
-    window.dispatchEvent(new CustomEvent('VISUALIZATION_STATE_CHANGED', {
-      detail: {
-        visualizationType,
-        useMockData,
-        rooms: rooms.map(r => ({ fmGuid: r.fmGuid, name: r.name, attributes: r.attributes })),
-      },
-    }));
+    emit('VISUALIZATION_STATE_CHANGED', {
+      visualizationType,
+      useMockData,
+      rooms: rooms.map(r => ({ fmGuid: r.fmGuid, name: r.name, attributes: r.attributes })),
+    });
   }, [visualizationType, useMockData, rooms]);
 
   // Cache invalidation is now handled by the event listener above
@@ -556,7 +554,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       (window as any).__colorFilterActive = false;
       resetColors();
       // Also reset any x-ray state from previous visualization
-      window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_RESET_EVENT));
+      emit('INSIGHTS_COLOR_RESET');
       return;
     }
 
@@ -609,9 +607,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     });
 
     // Dispatch to NativeXeokitViewer's INSIGHTS_COLOR_UPDATE handler
-    window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, {
-      detail: { mode: 'room_spaces', colorMap, nameColorMap, entityColorMap },
-    }));
+    emit('INSIGHTS_COLOR_UPDATE', { mode: 'room_spaces', colorMap, nameColorMap, entityColorMap },);
 
     // Track colorized rooms
     (window as any).__colorFilterActive = Object.keys(colorMap).length > 0;
@@ -632,7 +628,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     }
 
     // Force show spaces when visualization is active
-    window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: true } }));
+    emit('FORCE_SHOW_SPACES', { show: true });
     if (onShowSpaces) onShowSpaces(true);
 
     // Retry mechanism - wait for cache and rooms to be ready
@@ -688,8 +684,8 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         setTimeout(() => applyVisualization(), 300);
       }
     };
-    window.addEventListener('FLOOR_VISIBILITY_APPLIED', handler);
-    return () => window.removeEventListener('FLOOR_VISIBILITY_APPLIED', handler);
+    const off = on('FLOOR_VISIBILITY_APPLIED', handler);
+    return () => off();
   }, [visualizationType, rooms.length, applyVisualization]);
 
   // Listen for legend bar selection events — select matching rooms in viewer

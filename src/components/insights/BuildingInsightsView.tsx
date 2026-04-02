@@ -37,6 +37,7 @@ import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@
 import { toast } from 'sonner';
 
 
+import { emit } from '@/lib/event-bus';
 const HIERARCHY_CATEGORIES = ['Building', 'Building Storey', 'Space', 'IfcBuilding', 'IfcBuildingStorey', 'IfcSpace'];
 
 // Floor colors — derived from Nordic Pro chart palette
@@ -193,7 +194,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
 
     // Reset 3D colorization when switching tabs (dispatch reset event, no full model reload)
     useEffect(() => {
-        window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_RESET_EVENT));
+        emit('INSIGHTS_COLOR_RESET');
         // Also reset inline viewer state
         setInlineInsightsMode(undefined);
         setInlineColorMap(undefined);
@@ -522,7 +523,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         if (drawerMode) {
             // Force spaces visible first, then apply coloring after a short delay
             // so NativeXeokitViewer has time to process the space visibility change
-            window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: true } }));
+            emit('FORCE_SHOW_SPACES', { show: true });
             setTimeout(() => {
                 window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail }));
             }, 150);
@@ -565,7 +566,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         // Include nameColorMap so name-based fallback works when GUID doesn't match BIM IDs
         const detail = { mode: 'room_spaces' as const, colorMap: roomColorMap, nameColorMap, strictGuidMode: guids.size <= 1 ? false : true };
         if (drawerMode) {
-            window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: true } }));
+            emit('FORCE_SHOW_SPACES', { show: true });
             setTimeout(() => {
                 window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail }));
             }, 150);
@@ -925,7 +926,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                   onClick={() => {
                                                       setSpaceFloorFilter(''); setSelectedRoomType('');
                                                       if (drawerMode) {
-                                                          window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: { floorId: null, isAllFloorsVisible: true } as FloorSelectionEventDetail }));
+                                                          emit('FLOOR_SELECTION_CHANGED', { floorId: null, isAllFloorsVisible: true } as FloorSelectionEventDetail);
                                                       }
                                                   }}
                                               >
@@ -946,9 +947,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                   .filter((s: any) => (s.commonName || '').replace(/\s*-\s*\d+$/, '') === opt.name)
                                                                   .map((s: any) => s.fmGuid)
                                                                   .filter(Boolean);
-                                                              window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
-                                                                  detail: { floorId: opt.guid, visibleFloorFmGuids: matchingFmGuids, isAllFloorsVisible: false } as FloorSelectionEventDetail
-                                                              }));
+                                                              emit('FLOOR_SELECTION_CHANGED', { floorId: opt.guid, visibleFloorFmGuids: matchingFmGuids, isAllFloorsVisible: false } as FloorSelectionEventDetail);
                                                           }
                                                       }}
                                                  >
@@ -1110,7 +1109,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                          setSelectedSensorRooms(new Set());
                                                          setSensorSheetRoom(null);
                                                          // Reset 3D colors
-                                                         window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_RESET_EVENT));
+                                                         emit('INSIGHTS_COLOR_RESET');
                                                      }}
                                                  >
                                                      <X className="h-3 w-3" />
@@ -1210,7 +1209,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                  onClick={() => {
                                                      setAssetFloorFilter('');
                                                      if (drawerMode) {
-                                                         window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: { floorId: null, isAllFloorsVisible: true } as FloorSelectionEventDetail }));
+                                                         emit('FLOOR_SELECTION_CHANGED', { floorId: null, isAllFloorsVisible: true } as FloorSelectionEventDetail);
                                                      }
                                                  }}
                                              >
@@ -1230,9 +1229,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                  .filter((s: any) => (s.commonName || '').replace(/\s*-\s*\d+$/, '') === opt.name)
                                                                  .map((s: any) => s.fmGuid)
                                                                  .filter(Boolean);
-                                                             window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
-                                                                 detail: { floorId: opt.guid, visibleFloorFmGuids: matchingFmGuids, isAllFloorsVisible: false } as FloorSelectionEventDetail
-                                                             }));
+                                                             emit('FLOOR_SELECTION_CHANGED', { floorId: opt.guid, visibleFloorFmGuids: matchingFmGuids, isAllFloorsVisible: false } as FloorSelectionEventDetail);
                                                          }
                                                      }}
                                                  >
@@ -1306,7 +1303,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                     const alarmsForViewer = alarmList
                                                         .slice(0, 50)
                                                         .map((a: any) => ({ fmGuid: a.fm_guid, roomFmGuid: a.in_room_fm_guid }));
-                                                    window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: alarmsForViewer, flyTo: true } }));
+                                                    emit('ALARM_ANNOTATIONS_SHOW', { alarms: alarmsForViewer, flyTo: true });
                                                 } else {
                                                     // Navigate to viewer
                                                     navigateTo3D({ visualization: 'alarms' });
@@ -1434,7 +1431,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                         sessionStorage.setItem('pending_alarm_annotations', JSON.stringify({ alarms: levelAlarms }));
                                                                         navigate(`/viewer?building=${facility.fmGuid}&mode=3d`);
                                                                     } else {
-                                                                        window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: levelAlarms, flyTo: true } }));
+                                                                        emit('ALARM_ANNOTATIONS_SHOW', { alarms: levelAlarms, flyTo: true });
                                                                     }
                                                                 }}
                                                             >
@@ -1512,7 +1509,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                                     sessionStorage.setItem('pending_alarm_annotations', JSON.stringify({ alarms, flyTo: true }));
                                                                                     navigate(`/viewer?building=${facility.fmGuid}&mode=3d`);
                                                                                 } else {
-                                                                                    window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms, flyTo: true } }));
+                                                                                    emit('ALARM_ANNOTATIONS_SHOW', { alarms, flyTo: true });
                                                                                 }
                                                                             }}
                                                                         >

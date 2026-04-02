@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useApp } from '@/context/AppContext';
 import { toast } from 'sonner';
 
+import { emit } from '@/lib/event-bus';
 interface VoiceCommand {
   patterns: RegExp[];
   action: (
@@ -203,7 +204,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
     ],
     action: (_ctx, match) => {
       const floorNumber = match[3];
-      window.dispatchEvent(new CustomEvent('VOICE_FLOOR_SELECT', { detail: { floorNumber } }));
+      emit('VOICE_FLOOR_SELECT', { floorNumber });
       toast.info(`Isolerar våning ${floorNumber}`);
     },
     description: 'Visa våning [nummer]',
@@ -245,7 +246,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
     action: (ctx) => {
       ctx.setActiveApp('native_viewer');
       // Dispatch event to open issue dialog
-      setTimeout(() => window.dispatchEvent(new CustomEvent('VOICE_CREATE_ISSUE')), 500);
+      setTimeout(() => emit('VOICE_CREATE_ISSUE'), 500);
     },
     description: 'Skapa ärende',
     category: 'navigation',
@@ -257,7 +258,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       /^(rensa|ta bort)\s+(filter|filtrering|alla filter)$/i,
     ],
     action: () => {
-      window.dispatchEvent(new CustomEvent('VOICE_CLEAR_FILTERS'));
+      emit('VOICE_CLEAR_FILTERS');
       toast.info('Filter rensade');
     },
     description: 'Rensa filter',
