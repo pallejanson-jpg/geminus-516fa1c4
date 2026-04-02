@@ -242,10 +242,11 @@ export default function ApiProfilesManager() {
     }
   }
 
-  function SI({ label, field, placeholder }: { label: string; field: keyof ProfileForm; placeholder?: string }) {
+  function renderSecretField(label: string, field: keyof ProfileForm, placeholder?: string) {
     const isSecret = field.includes('password') || field.includes('secret') || field.includes('api_key');
     return (
       <SecretInput
+        key={field}
         label={label}
         value={form[field] || ''}
         onChange={v => set(field, v)}
@@ -261,7 +262,7 @@ export default function ApiProfilesManager() {
 
   if (isEditing) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 min-w-0 overflow-x-hidden">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold">
             {creating ? 'New API Profile' : 'Edit API Profile'}
@@ -281,17 +282,17 @@ export default function ApiProfilesManager() {
           />
         </div>
 
-        <Accordion type="multiple" className="w-full">
+        <Accordion type="multiple" className="w-full min-w-0">
           <AccordionItem value="assetplus">
             <AccordionTrigger className="text-xs font-semibold">Asset+ Credentials</AccordionTrigger>
             <AccordionContent className="space-y-3 pt-2">
-               <SI label="API URL" field="assetplus_api_url" placeholder="https://..." />
-               <SI label="API Key" field="assetplus_api_key" />
-               <SI label="Keycloak URL" field="assetplus_keycloak_url" placeholder="https://..." />
-               <SI label="Client ID" field="assetplus_client_id" />
-               <SI label="Client Secret" field="assetplus_client_secret" />
-               <SI label="Username" field="assetplus_username" />
-               <SI label="Password" field="assetplus_password" />
+               {renderSecretField('API URL', 'assetplus_api_url', 'https://...')}
+               {renderSecretField('API Key', 'assetplus_api_key')}
+               {renderSecretField('Keycloak URL', 'assetplus_keycloak_url', 'https://...')}
+               {renderSecretField('Client ID', 'assetplus_client_id')}
+               {renderSecretField('Client Secret', 'assetplus_client_secret')}
+               {renderSecretField('Username', 'assetplus_username')}
+               {renderSecretField('Password', 'assetplus_password')}
               <Button variant="outline" size="sm" onClick={testAssetPlus} disabled={testingAp}>
                 {testingAp ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <TestTube className="mr-2 h-3 w-3" />}
                 Validate
@@ -302,9 +303,9 @@ export default function ApiProfilesManager() {
           <AccordionItem value="senslinc">
             <AccordionTrigger className="text-xs font-semibold">InUse/Senslinc Credentials</AccordionTrigger>
             <AccordionContent className="space-y-3 pt-2">
-               <SI label="API URL" field="senslinc_api_url" placeholder="https://..." />
-               <SI label="Email" field="senslinc_email" />
-               <SI label="Password" field="senslinc_password" />
+               {renderSecretField('API URL', 'senslinc_api_url', 'https://...')}
+               {renderSecretField('Email', 'senslinc_email')}
+               {renderSecretField('Password', 'senslinc_password')}
               <Button variant="outline" size="sm" onClick={testSenslinc} disabled={testingSl}>
                 {testingSl ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <TestTube className="mr-2 h-3 w-3" />}
                 Validate
@@ -315,18 +316,18 @@ export default function ApiProfilesManager() {
           <AccordionItem value="fmaccess">
             <AccordionTrigger className="text-xs font-semibold">FM Access Credentials</AccordionTrigger>
             <AccordionContent className="space-y-3 pt-2">
-               <SI label="API URL" field="fm_access_api_url" placeholder="https://..." />
-               <SI label="Username" field="fm_access_username" />
-               <SI label="Password" field="fm_access_password" />
+               {renderSecretField('API URL', 'fm_access_api_url', 'https://...')}
+               {renderSecretField('Username', 'fm_access_username')}
+               {renderSecretField('Password', 'fm_access_password')}
             </AccordionContent>
           </AccordionItem>
 
           <AccordionItem value="ivion">
             <AccordionTrigger className="text-xs font-semibold">Ivion Credentials</AccordionTrigger>
             <AccordionContent className="space-y-3 pt-2">
-               <SI label="API URL" field="ivion_api_url" placeholder="https://..." />
-               <SI label="Username" field="ivion_username" />
-               <SI label="Password" field="ivion_password" />
+               {renderSecretField('API URL', 'ivion_api_url', 'https://...')}
+               {renderSecretField('Username', 'ivion_username')}
+               {renderSecretField('Password', 'ivion_password')}
             </AccordionContent>
           </AccordionItem>
         </Accordion>
@@ -373,7 +374,7 @@ export default function ApiProfilesManager() {
                 <div className="flex items-start justify-between">
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2">
-                      {profile.is_default && <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />}
+                      {profile.is_default && <Star className="h-3.5 w-3.5 text-primary fill-primary" />}
                       <span className="text-sm font-medium">{profile.name}</span>
                     </div>
                     <div className="flex flex-wrap gap-1">
