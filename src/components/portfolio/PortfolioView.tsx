@@ -511,7 +511,7 @@ const PortfolioView: React.FC = () => {
                 className="h-8 gap-1.5 text-xs"
                 onClick={(e) => { e.stopPropagation(); navigateToFacility(heroBuilding); }}
               >
-                Visa detaljer
+                View details
               </Button>
               <Button 
                 size="sm" 
