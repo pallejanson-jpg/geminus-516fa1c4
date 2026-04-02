@@ -1,83 +1,94 @@
 
 
-# Migrate remaining ~27 files to typed event bus
+# Geminus Digital Twin — Re-Evaluation Report (April 2, 2026 — End of Day)
 
-## Already migrated (12 files)
-FloatingFloorSwitcher, AnnotationCategoryList, MobileViewerOverlay, InventoryPanel, ModelVisibilitySelector, FloorCarousel, VisualizationQuickBar, ViewerThemeSelector, VisualizationLegendOverlay, NativeViewerShell, NativeXeokitViewer, RoomVisualizationPanel.
+This is a re-run of the comprehensive review you requested at 05:33 today, now reflecting all work completed since then.
 
-## Remaining files (grouped into 4 batches)
+---
 
-### Batch A — Viewer components (8 files)
-1. `SplitPlanView.tsx` — ~5 dispatches, ~3 listeners
-2. `ViewerFilterPanel.tsx` — heavy dispatches + listeners
-3. `AssetPlusViewer.tsx` — largest file, ~15 dispatches, ~10 listeners
-4. `VisualizationToolbar.tsx` — ~12 dispatches
-5. `ViewerToolbar.tsx` — ~5 dispatches, ~3 listeners
-6. `ViewerRightPanel.tsx` — ~8 dispatches, ~3 listeners
-7. `AnnotationToggleMenu.tsx` — dispatches
-8. `ViewerContextMenu.tsx` — dispatches
+## Status of Original Top 10 Critical Issues
 
-### Batch B — Hooks (10 files)
-1. `useSectionPlaneClipping.ts` — ~5 listeners, remove duplicate constants
-2. `useRoomLabels.ts` — constants + dispatches/listeners
-3. `useViewerTheme.ts` — constants + dispatches/listeners
-4. `useArchitectViewMode.ts` — constants + dispatches/listeners
-5. `useLightingControls.ts` — constants + dispatches
-6. `useObjectMoveMode.ts` — ~3 listeners
-7. `useVoiceCommands.ts` — ~4 dispatches
-8. `useAiViewerBridge.ts` — ~2 dispatches/listeners
-9. `useIleanData.ts` — ~2 listeners
-10. `useRoomLabelConfigs.ts` — listeners
+| # | Original Issue | Status | Notes |
+|---|---|---|---|
+| 1 | **AppContext monolith (829 lines, 40+ vars)** | **FIXED** | Split into 4 domain contexts: `ThemeContext`, `NavigationContext`, `ViewerContext`, `DataContext`. AppContext is now a thin 267-line backward-compatible facade. |
+| 2 | **NativeXeokitViewer god component (2,044 lines)** | **FIXED** | Decomposed into 323 lines + 3 composable hooks: `useXeokitInstance`, `useModelLoader`, `useViewerEventListeners`. |
+| 3 | **`window.*` globals** | **PARTIALLY FIXED** | `__xeokitSdk` removed. But `__nativeXeokitViewer`, `__assetPlusViewerInstance`, `__xktTileChunks`, `__vizColorizedEntityIds`, `__spacesUserExplicitOff` etc. still used across ~25 files (388 matches). |
+| 4 | **Custom event bus sprawl** | **IN PROGRESS** | Typed `event-bus.ts` created with 40+ typed events and `emit()`/`on()` helpers. ~12 files migrated, ~29 files still use raw `window.dispatchEvent(new CustomEvent(...))` (435 matches remaining). **Currently broken — 25+ TypeScript errors from handler signature mismatches** (handlers still expect `CustomEvent` but `on()` passes `detail` directly). |
+| 5 | **`any` types everywhere** | **NOT ADDRESSED** | `allData: any[]`, `selectedFacility: any`, `appConfigs: Record<string, any>` still present in AppContext. |
+| 6 | **No error boundaries around 3D viewer** | **FIXED** | `ViewerErrorBoundary` wraps both `NativeViewerShell` and `AssetPlusViewer` in all viewer pages. |
+| 7 | **Mixed Swedish/English UI text** | **NOT ADDRESSED** | Still mixed across components. |
+| 8 | **Performance / Lighthouse** | **IMPROVED** | Context split reduces re-render cascades. Progressive model streaming implemented. |
+| 9 | **No automated tests** | **NOT ADDRESSED** | Still only `example.test.ts` with a single `expect(true).toBe(true)`. |
+| 10 | **LOD culling on setInterval** | **IMPROVED** | `usePerformancePlugins` hook extracted with `ViewCullPlugin` (frustum culling). |
 
-### Batch C — Pages and panels (6 files)
-1. `UnifiedViewer.tsx` — ~5 dispatches/listeners
-2. `ViewerMockup.tsx` — ~7 dispatches
-3. `BuildingInsightsView.tsx` — ~10 dispatches
-4. `InsightsDrawerPanel.tsx` — ~2 dispatches
-5. `GeminusPluginMenu.tsx` — ~3 dispatches/listeners
-6. `IleanEmbeddedChat.tsx` — listener
+---
 
-### Batch D — Misc components (3 files)
-1. `GunnarButton.tsx` — app event listeners only (skip native mouse/resize)
-2. `DataConsistencyBanner.tsx` — ~1 dispatch
-3. `SyncProgressBanner.tsx` — listener
+## What Was Accomplished Today
 
-### Also need event-bus.ts additions
-Some events found in code but missing from `EventMap`:
-- `OBJECT_MOVE_MODE` — detail with entityId, position, etc.
-- `OBJECT_DELETE` — detail with entityId
-- `VOICE_SETTINGS_CHANGED` — detail with settings object
-- `SIDEBAR_SETTINGS_CHANGED` — detail with items array
-- `LEVEL_LABELS_TOGGLE` — `{ enabled: boolean }`
-- `AI_VIEWER_COMMAND` — command detail object
-- `xeokit-pick` — pick event detail (if appropriate)
+### Architecture (completed)
+- **Context split**: AppContext → 4 domain contexts (ThemeContext, NavigationContext, ViewerContext, DataContext) with backward-compatible facade
+- **Viewer decomposition**: NativeXeokitViewer → 3 composable hooks
+- **Typed event bus**: `event-bus.ts` with 40+ typed events, `emit()`/`on()` helpers
+- **API Profiles system**: Full credential management UI + DB schema
+- **Progressive model streaming**: Models render as they download
+- **Z-index scale**: `z-index.ts` created as single source of truth (but not yet adopted — 218 matches of `z-[N]` hardcoded across 26 files)
 
-### Migration pattern (unchanged)
-```typescript
-// Before:
-window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail }));
-window.addEventListener(EVENT_NAME, handler as EventListener);
-window.removeEventListener(EVENT_NAME, handler as EventListener);
+### Documentation (completed)
+- **Technical report**: Word document comparing Asset+ viewer vs native xeokit implementation
 
-// After:
-emit('EVENT_NAME', detail);
-const off = on('EVENT_NAME', handler);
-// cleanup: off();
-```
+---
 
-### What stays unchanged
-- Native browser events (mousemove, mouseup, touchmove, resize, keydown, scroll, click)
-- `window.addEventListener('message', ...)` in ApiSettingsModal
-- `window.addEventListener('storage', ...)` in useSidebarOrder
-- Drag handlers in VoiceControlButton, MinimapPanel
+## Current Blockers
 
-### Execution order
-1. Add missing events to `EventMap` in `event-bus.ts`
-2. Migrate Batch A (8 viewer components)
-3. Migrate Batch B (10 hooks) — also remove duplicate exported constants
-4. Migrate Batch C (6 pages/panels)
-5. Migrate Batch D (3 misc components)
+### 1. Event bus migration is broken (CRITICAL)
+25+ TypeScript errors across `AssetPlusViewer.tsx`, `GunnarButton.tsx`, `RoomsView.tsx`, `ViewerFilterPanel.tsx`, `SplitPlanView.tsx`, `GeminusPluginMenu.tsx`, `RoomVisualizationPanel.tsx`. Root cause: handlers were converted to use `on()` but their signatures still expect `CustomEvent` objects instead of the unwrapped `detail`. Every handler needs its parameter changed from `(e: CustomEvent<T>) => ...` to `(detail: T) => ...`, updating all internal `e.detail.xxx` references to `detail.xxx`.
 
-### Risk
-Zero behavioral change — `emit()`/`on()` use the same `window.CustomEvent` mechanism under the hood.
+### 2. `RoomsView.tsx` has an invalid property
+Line 505: `selectOnly` does not exist in `VIEWER_FLY_TO` detail type `{ fmGuid: string }`.
+
+---
+
+## Remaining Items from Original Review (not yet done)
+
+### Quick Wins (still open)
+1. Replace remaining 9 "Loading..." strings with branded `<Spinner />` (in `MobileViewerPage`, `KnowledgeBaseSettings`, `VisualizationToolbar`, `ViewerRightPanel`, `ApiProfilesManager`, `AiAssetScan`)
+2. Adopt `z-index.ts` constants across 26 files (replace hardcoded `z-[N]` classes)
+3. Fix mixed Swedish/English — pick one language
+4. Add `Cmd+K` hint in header for command search
+
+### Strategic (still open)
+5. Remove `window.*` globals (~25 files, 388 matches) — expose via React context or hook returns instead
+6. Type the remaining `any` in AppContext facade (`allData`, `selectedFacility`, `appConfigs`)
+7. Add component tests (currently zero)
+8. Complete event bus migration (fix 25+ TS errors, migrate remaining 29 files)
+
+### 10x Features (still open / partially done)
+9. AI-driven onboarding — `generate-onboarding` edge function exists, but no guided first-use flow via Gunnar
+10. Embedded analytics — still tab-based, not contextual
+11. Real-time collaboration — not started
+
+---
+
+## Recommended Next Steps (Priority Order)
+
+1. **Fix the 25+ TypeScript errors** in the event bus migration — this is blocking the build right now
+2. **Complete the remaining ~29 file migrations** to `emit()`/`on()`
+3. **Replace hardcoded z-index values** with `z-index.ts` constants
+4. **Remove `window.*` globals** — biggest remaining architectural debt
+5. **Add basic tests** — at minimum for the 3 viewer hooks and the event bus
+
+---
+
+## Competitive Positioning Update
+
+| Area | Previous Rating | Current Rating | Change |
+|---|---|---|---|
+| Architecture | 4/10 | **7/10** | Context split, hook extraction, typed events |
+| Performance | 5/10 | **7/10** | Progressive streaming, caching, frustum culling |
+| UI Polish | 5/10 | **5/10** | No change (i18n, z-index, loading states still open) |
+| Test Coverage | 1/10 | **1/10** | No change |
+| Feature Depth | 8/10 | **8/10** | Already strong |
+| **Overall** | **5/10** | **6.5/10** | Significant architectural improvement |
+
+**Bottom line**: The architectural foundations are now solid. The remaining gap is polish (UI consistency, i18n, z-index), test coverage, and completing the in-progress event bus migration (which currently has build errors).
 
