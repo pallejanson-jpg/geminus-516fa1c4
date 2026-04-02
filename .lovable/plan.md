@@ -1,54 +1,83 @@
 
 
-# Generate Geminus 3D Viewer Technical Report (Word Document)
+# Migrate remaining ~27 files to typed event bus
 
-## What
-Create a professional Word document explaining the migration from the Asset+ embedded viewer to the native xeokit viewer implementation, suitable for presenting to product and development managers.
+## Already migrated (12 files)
+FloatingFloorSwitcher, AnnotationCategoryList, MobileViewerOverlay, InventoryPanel, ModelVisibilitySelector, FloorCarousel, VisualizationQuickBar, ViewerThemeSelector, VisualizationLegendOverlay, NativeViewerShell, NativeXeokitViewer, RoomVisualizationPanel.
 
-## Document Structure
+## Remaining files (grouped into 4 batches)
 
-### Title Page
-- "Geminus 3D Viewer — Technical Architecture Report"
-- Subtitle: "From Asset+ Embedded Viewer to Native xeokit Implementation"
+### Batch A — Viewer components (8 files)
+1. `SplitPlanView.tsx` — ~5 dispatches, ~3 listeners
+2. `ViewerFilterPanel.tsx` — heavy dispatches + listeners
+3. `AssetPlusViewer.tsx` — largest file, ~15 dispatches, ~10 listeners
+4. `VisualizationToolbar.tsx` — ~12 dispatches
+5. `ViewerToolbar.tsx` — ~5 dispatches, ~3 listeners
+6. `ViewerRightPanel.tsx` — ~8 dispatches, ~3 listeners
+7. `AnnotationToggleMenu.tsx` — dispatches
+8. `ViewerContextMenu.tsx` — dispatches
 
-### 1. Executive Summary
-- One-paragraph overview: we replaced the Asset+ Vue component with a direct xeokit integration, achieving 3–5× faster load times with full control over the rendering pipeline.
+### Batch B — Hooks (10 files)
+1. `useSectionPlaneClipping.ts` — ~5 listeners, remove duplicate constants
+2. `useRoomLabels.ts` — constants + dispatches/listeners
+3. `useViewerTheme.ts` — constants + dispatches/listeners
+4. `useArchitectViewMode.ts` — constants + dispatches/listeners
+5. `useLightingControls.ts` — constants + dispatches
+6. `useObjectMoveMode.ts` — ~3 listeners
+7. `useVoiceCommands.ts` — ~4 dispatches
+8. `useAiViewerBridge.ts` — ~2 dispatches/listeners
+9. `useIleanData.ts` — ~2 listeners
+10. `useRoomLabelConfigs.ts` — listeners
 
-### 2. The Starting Point: Asset+ Viewer
-- How it worked (Vue-in-React bridge, fetch interceptor hack, Asset+ CDN dependency)
-- Problems found:
-  - **Performance**: 2–5s latency per model, no caching, no progressive loading, random model order
-  - **Architecture**: Vue-in-React lifecycle conflicts, opaque pipeline, 5,160-line monolith, fetch monkey-patching
-  - **Features**: No floor-priority loading, no data visualization, no color themes, no IFC conversion
+### Batch C — Pages and panels (6 files)
+1. `UnifiedViewer.tsx` — ~5 dispatches/listeners
+2. `ViewerMockup.tsx` — ~7 dispatches
+3. `BuildingInsightsView.tsx` — ~10 dispatches
+4. `InsightsDrawerPanel.tsx` — ~2 dispatches
+5. `GeminusPluginMenu.tsx` — ~3 dispatches/listeners
+6. `IleanEmbeddedChat.tsx` — listener
 
-### 3. What We Built
-- **Modular architecture**: 8 composable hooks (useXeokitInstance, useModelLoader, useViewerEventListeners, useFloorPriorityLoading, usePerformancePlugins, useXktPreload, XktCacheService, AccXktConverter)
-- **Loading pipeline**: Memory cache → Cloud cache → Asset+ source, with progressive rendering and architectural priority
-- **IFC conversion**: Browser-based (WebAssembly) + server fallback, supporting IFC/RVT/GLB → XKT
-- **3-tier caching**: Memory (0ms, 200MB LRU), Cloud storage (200–500ms), Asset+ (2–5s, first-time only)
-- **Floor-priority loading**: Virtual chunks (Phase 1) and real per-storey tiles (Phase 2)
-- **Performance plugins**: Frustum culling, LOD distance culling, FastNav, SAO, geometry instancing
-- **Typed event system**: 40+ events with compile-time type safety
-- **UI components**: Full toolbar, floor switcher, filter panel, tree navigator, visualization overlays, context menu, mobile overlay, architect color themes
+### Batch D — Misc components (3 files)
+1. `GunnarButton.tsx` — app event listeners only (skip native mouse/resize)
+2. `DataConsistencyBanner.tsx` — ~1 dispatch
+3. `SyncProgressBanner.tsx` — listener
 
-### 4. Before vs. After Comparison Table
-14-row comparison covering load times, caching, features, architecture, and codebase size.
+### Also need event-bus.ts additions
+Some events found in code but missing from `EventMap`:
+- `OBJECT_MOVE_MODE` — detail with entityId, position, etc.
+- `OBJECT_DELETE` — detail with entityId
+- `VOICE_SETTINGS_CHANGED` — detail with settings object
+- `SIDEBAR_SETTINGS_CHANGED` — detail with items array
+- `LEVEL_LABELS_TOGGLE` — `{ enabled: boolean }`
+- `AI_VIEWER_COMMAND` — command detail object
+- `xeokit-pick` — pick event detail (if appropriate)
 
-### 5. Backend Services
-Table of 8 edge functions (ifc-to-xkt, xkt-cache, xkt-split, viewer-manifest, etc.)
+### Migration pattern (unchanged)
+```typescript
+// Before:
+window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail }));
+window.addEventListener(EVENT_NAME, handler as EventListener);
+window.removeEventListener(EVENT_NAME, handler as EventListener);
 
-### 6. Database Schema
-Key tables: xkt_models, geometry_entity_map, conversion_jobs, assets
+// After:
+emit('EVENT_NAME', detail);
+const off = on('EVENT_NAME', handler);
+// cleanup: off();
+```
 
-### 7. Why We Made This Change
-- Independence from Asset+ runtime dependency
-- 3–5× performance improvement
-- Feature velocity (ship without waiting for upstream)
+### What stays unchanged
+- Native browser events (mousemove, mouseup, touchmove, resize, keydown, scroll, click)
+- `window.addEventListener('message', ...)` in ApiSettingsModal
+- `window.addEventListener('storage', ...)` in useSidebarOrder
+- Drag handlers in VoiceControlButton, MinimapPanel
 
-### 8. Current Status & 9. Roadmap
+### Execution order
+1. Add missing events to `EventMap` in `event-bus.ts`
+2. Migrate Batch A (8 viewer components)
+3. Migrate Batch B (10 hooks) — also remove duplicate exported constants
+4. Migrate Batch C (6 pages/panels)
+5. Migrate Batch D (3 misc components)
 
-## Implementation
-- Single script using `docx` (npm) to generate a professional .docx with styled headings, tables, bullet lists, headers/footers, and page numbers
-- Output to `/mnt/documents/Geminus-3D-Viewer-Technical-Report.docx`
-- QA via LibreOffice PDF conversion + visual inspection
+### Risk
+Zero behavioral change — `emit()`/`on()` use the same `window.CustomEvent` mechanism under the hood.
 
