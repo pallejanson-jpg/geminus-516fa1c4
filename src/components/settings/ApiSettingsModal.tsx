@@ -2275,7 +2275,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="w-full max-w-full sm:max-w-3xl h-full sm:h-[85vh] max-h-dvh sm:max-h-[calc(100dvh-2rem)] rounded-none sm:rounded-lg flex flex-col fixed top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%]">
+            <DialogContent className="fixed left-[50%] top-[50%] flex h-full max-h-dvh w-full max-w-full translate-x-[-50%] translate-y-[-50%] flex-col overflow-hidden rounded-none sm:h-[90vh] sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:max-w-[88rem] sm:rounded-lg">
                 <DialogHeader className="flex-shrink-0 pr-8">
                     <DialogTitle className="flex items-center gap-2">
                         <Server className="h-5 w-5" />
@@ -2286,8 +2286,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     </DialogDescription>
                 </DialogHeader>
 
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 flex-1 flex flex-col min-h-0">
-                    <TabsList className="flex w-full overflow-x-auto flex-shrink-0 gap-0.5 h-auto flex-wrap sm:flex-nowrap">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 flex flex-1 min-h-0 flex-col overflow-hidden">
+                    <TabsList className="flex h-auto w-full flex-shrink-0 flex-nowrap gap-0.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-x-visible">
                         <TabsTrigger value="apps" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <LayoutGrid className="h-3 w-3 sm:h-4 sm:w-4" />
                             Apps
@@ -2323,12 +2323,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     </TabsList>
 
                     {/* Profile Settings Tab */}
-                    <TabsContent value="profile" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                    <TabsContent value="profile" className="mt-4 flex-1 min-h-0 space-y-4 overflow-y-auto overflow-x-hidden pr-1">
                         <ProfileSettings />
                     </TabsContent>
 
                     {/* Applications Settings Tab */}
-                    <TabsContent value="apps" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                    <TabsContent value="apps" className="mt-4 flex-1 min-h-0 space-y-4 overflow-y-auto overflow-x-hidden pr-1">
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
                                 <p className="text-sm text-muted-foreground">
@@ -2440,7 +2440,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                         </div>
                     </TabsContent>
 
-                    <TabsContent value="apis" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                    <TabsContent value="apis" className="mt-4 flex-1 min-h-0 space-y-4 overflow-y-auto overflow-x-hidden pr-1">
                         {isLoadingConfig ? (
                             <div className="flex items-center justify-center py-8">
                                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -3153,7 +3153,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                         )}
                     </TabsContent>
 
-                    <TabsContent value="sync" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                    <TabsContent value="sync" className="mt-4 flex-1 min-h-0 space-y-4 overflow-y-auto overflow-x-hidden pr-1">
                         <Accordion type="multiple" className="space-y-2">
                             {/* Asset+ Sync */}
                             <AccordionItem value="assetplus-sync" className="border rounded-lg px-4">
@@ -3571,12 +3571,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     </TabsContent>
 
                     {/* Symbols Settings Tab */}
-                    <TabsContent value="symbols" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                    <TabsContent value="symbols" className="mt-4 flex-1 min-h-0 space-y-4 overflow-y-auto overflow-x-hidden pr-1">
                         <SymbolSettings />
                     </TabsContent>
 
                     {/* Viewer Settings Tab (Themes + Room Labels + Performance) */}
-                    <TabsContent value="viewer" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                    <TabsContent value="viewer" className="mt-4 flex-1 min-h-0 space-y-4 overflow-y-auto overflow-x-hidden pr-1">
                         <Accordion type="multiple" className="space-y-2">
                             <AccordionItem value="themes" className="border rounded-lg px-4">
                                 <AccordionTrigger className="py-3">
@@ -3632,7 +3632,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     </TabsContent>
 
                     {/* AI Assistants Tab */}
-                    <TabsContent value="assistants" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                    <TabsContent value="assistants" className="mt-4 flex-1 min-h-0 space-y-4 overflow-y-auto overflow-x-hidden pr-1">
                         <Accordion type="multiple" className="space-y-2">
                             <AccordionItem value="gunnar" className="border rounded-lg px-4">
                                 <AccordionTrigger className="py-3">
@@ -3682,12 +3682,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     </TabsContent>
 
                     {/* Create Building Tab */}
-                    <TabsContent value="building" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                    <TabsContent value="building" className="mt-4 flex-1 min-h-0 space-y-4 overflow-y-auto overflow-x-hidden pr-1">
                         <CreateBuildingPanel onSwitchToAccTab={() => setActiveTab('apis')} />
                     </TabsContent>
 
                     {/* API Profiles Tab */}
-                    <TabsContent value="api-profiles" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                    <TabsContent value="api-profiles" className="mt-4 flex-1 min-h-0 space-y-4 overflow-y-auto overflow-x-hidden pr-1">
                         <ApiProfilesManager />
                     </TabsContent>
                 </Tabs>
