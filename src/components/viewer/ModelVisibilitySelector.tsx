@@ -93,12 +93,10 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
     // Broadcast model visibility changes so floor/filter hooks can react immediately
     useEffect(() => {
       if (!isInitialized) return;
-      window.dispatchEvent(new CustomEvent(MODEL_VISIBILITY_CHANGED_EVENT, {
-        detail: {
-          buildingFmGuid,
-          visibleModelIds: Array.from(visibleModelIds),
-        },
-      }));
+      emit('MODEL_VISIBILITY_CHANGED', {
+        buildingFmGuid,
+        visibleModelIds: Array.from(visibleModelIds),
+      });
     }, [visibleModelIds, isInitialized, buildingFmGuid]);
 
     const handleModelToggle = useCallback((modelId: string, checked: boolean) => {
