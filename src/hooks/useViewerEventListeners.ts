@@ -22,6 +22,7 @@ import type {
   InsightsColorUpdateDetail,
   AlarmAnnotationsShowDetail,
   FloorSelectionEventDetail,
+  ModelLoadRequestedDetail,
 } from '@/lib/event-bus';
 import type { ModelInfo } from '@/hooks/useModelLoader';
 
