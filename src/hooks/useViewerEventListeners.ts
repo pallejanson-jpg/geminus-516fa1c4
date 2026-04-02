@@ -11,10 +11,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { normalizeGuid } from '@/lib/utils';
 import { applyArchitectColors } from '@/lib/architect-colors';
 import {
-  on,
-  type InsightsColorUpdateDetail,
-  type AlarmAnnotationsShowDetail,
-  type FloorSelectionEventDetail,
+  INSIGHTS_COLOR_UPDATE_EVENT,
+  INSIGHTS_COLOR_RESET_EVENT,
+  ALARM_ANNOTATIONS_SHOW_EVENT,
+  FORCE_SHOW_SPACES_EVENT,
+  FLOOR_SELECTION_CHANGED_EVENT,
+} from '@/lib/viewer-events';
+import type {
+  InsightsColorUpdateDetail,
+  AlarmAnnotationsShowDetail,
+  FloorSelectionEventDetail,
 } from '@/lib/event-bus';
 import type { ModelInfo } from '@/hooks/useModelLoader';
 
