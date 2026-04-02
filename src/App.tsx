@@ -9,6 +9,7 @@ import AppLayout from "@/components/layout/AppLayout";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import Login from "@/pages/Login";
 import NotFound from "./pages/NotFound";
+import { FullPageSpinner } from "@/components/ui/FullPageSpinner";
 
 // Standalone page for Ivion integration (can be embedded in iframe)
 const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
@@ -55,25 +56,26 @@ const FmAccess2DStandalone = lazy(() => import("@/pages/FmAccess2DStandalone"));
 
 const queryClient = new QueryClient();
 
+const PresentationSpinner = () => (
+  <div className="flex items-center justify-center h-screen bg-black">
+    <FullPageSpinner />
+  </div>
+);
+
 const App = () => {
-  // Global handler for unhandled promise rejections from external libraries (e.g. Asset+ 3D viewer).
-  // Prevents the entire app from crashing on async errors we can't catch locally.
   useEffect(() => {
     const handleRejection = (event: PromiseRejectionEvent) => {
       console.error('[Global] Unhandled promise rejection:', event.reason);
-      event.preventDefault(); // Prevent crash / console uncaught error
+      event.preventDefault();
     };
     window.addEventListener('unhandledrejection', handleRejection);
     return () => window.removeEventListener('unhandledrejection', handleRejection);
   }, []);
 
-  // Global handler for uncaught synchronous errors from external libraries (e.g. Asset+ UMD bundle).
-  // Complements the unhandledrejection handler above – catches errors thrown outside React's
-  // render cycle that neither Error Boundaries nor the rejection handler can intercept.
   useEffect(() => {
     const handleError = (event: ErrorEvent) => {
       console.error('[Global] Uncaught error:', event.error);
-      event.preventDefault(); // Prevent default browser error reporting / crash
+      event.preventDefault();
     };
     window.addEventListener('error', handleError);
     return () => window.removeEventListener('error', handleError);
@@ -87,259 +89,31 @@ const App = () => {
         <Sonner />
         <BrowserRouter>
           <Routes>
-          {/* Public login page */}
           <Route path="/login" element={<Login />} />
           
-          {/* Standalone Ivion create page - accessible without app layout */}
-          <Route 
-            path="/ivion-create" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <ProtectedRoute>
-                  <IvionCreate />
-                </ProtectedRoute>
-              </Suspense>
-            } 
-          />
+          <Route path="/ivion-create" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><IvionCreate /></ProtectedRoute></Suspense>} />
+          <Route path="/ivion-inventory" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><IvionInventory /></ProtectedRoute></Suspense>} />
+          <Route path="/inventory/ai-scan" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><AiAssetScan /></ProtectedRoute></Suspense>} />
+          <Route path="/viewer" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><UnifiedViewerPage /></ProtectedRoute></Suspense>} />
+          <Route path="/viewer-mockup" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><ViewerMockup /></ProtectedRoute></Suspense>} />
+          <Route path="/onboarding" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><Onboarding /></ProtectedRoute></Suspense>} />
+          <Route path="/split-viewer" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><SplitViewer /></ProtectedRoute></Suspense>} />
+          <Route path="/virtual-twin" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><VirtualTwin /></ProtectedRoute></Suspense>} />
+          <Route path="/360-viewer" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><Mobile360Viewer /></ProtectedRoute></Suspense>} />
+          <Route path="/fault-report" element={<Suspense fallback={<FullPageSpinner />}><FaultReport /></Suspense>} />
+          <Route path="/auth/autodesk/callback" element={<Suspense fallback={<FullPageSpinner />}><AutodeskCallback /></Suspense>} />
+          <Route path="/presentation" element={<Suspense fallback={<PresentationSpinner />}><Presentation /></Suspense>} />
+          <Route path="/presentation2" element={<Suspense fallback={<PresentationSpinner />}><Presentation2 /></Suspense>} />
+          <Route path="/issue/:token" element={<Suspense fallback={<FullPageSpinner />}><IssueResolution /></Suspense>} />
+          <Route path="/fm-access" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><FmAccessDashboard /></ProtectedRoute></Suspense>} />
+          <Route path="/plugin" element={<Suspense fallback={<FullPageSpinner />}><PluginPage /></Suspense>} />
+          <Route path="/home-v2" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><HomeLandingV2 /></ProtectedRoute></Suspense>} />
+          <Route path="/api-docs" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><ApiDocs /></ProtectedRoute></Suspense>} />
+          <Route path="/ai" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><AiChat /></ProtectedRoute></Suspense>} />
+          <Route path="/view" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><GeminusView /></ProtectedRoute></Suspense>} />
+          <Route path="/fma-2d" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><FmAccess2DStandalone /></ProtectedRoute></Suspense>} />
           
-          {/* Ivion 360° Inventory page - fullscreen mode */}
-          <Route 
-            path="/ivion-inventory" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <ProtectedRoute>
-                  <IvionInventory />
-                </ProtectedRoute>
-              </Suspense>
-            } 
-          />
-          
-          {/* AI Asset Scan page - fullscreen mode */}
-          <Route 
-            path="/inventory/ai-scan" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <ProtectedRoute>
-                  <AiAssetScan />
-                </ProtectedRoute>
-              </Suspense>
-            } 
-          />
-          
-          {/* Viewer — UnifiedViewer (restored as primary) */}
-          <Route 
-            path="/viewer" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <ProtectedRoute>
-                  <UnifiedViewerPage />
-                </ProtectedRoute>
-              </Suspense>
-            } 
-          />
-
-          {/* Viewer Mockup — new mobile layout (saved as separate route) */}
-          <Route 
-            path="/viewer-mockup" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <ProtectedRoute>
-                  <ViewerMockup />
-                </ProtectedRoute>
-              </Suspense>
-            } 
-          />
-          
-          {/* AI Onboarding wizard */}
-          <Route 
-            path="/onboarding" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <ProtectedRoute>
-                  <Onboarding />
-                </ProtectedRoute>
-              </Suspense>
-            } 
-          />
-          
-          {/* Split Viewer - 3D + 360° side-by-side */}
-          <Route 
-            path="/split-viewer" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <ProtectedRoute>
-                  <SplitViewer />
-                </ProtectedRoute>
-              </Suspense>
-            } 
-          />
-          
-          {/* Virtual Twin - 3D overlay on 360° */}
-          <Route 
-            path="/virtual-twin" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <ProtectedRoute>
-                  <VirtualTwin />
-                </ProtectedRoute>
-              </Suspense>
-            } 
-          />
-          
-          {/* Mobile 360° Viewer - fullscreen mode */}
-          <Route 
-            path="/360-viewer" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <ProtectedRoute>
-                  <Mobile360Viewer />
-                </ProtectedRoute>
-              </Suspense>
-            } 
-          />
-          
-          {/* Public Fault Report page - accessible via QR code without auth */}
-          <Route 
-            path="/fault-report" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <FaultReport />
-              </Suspense>
-            } 
-          />
-          
-          {/* Autodesk OAuth callback - public, captures auth code */}
-          <Route 
-            path="/auth/autodesk/callback" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <AutodeskCallback />
-              </Suspense>
-            } 
-          />
-          
-          {/* Jury presentation - public, no auth */}
-          <Route 
-            path="/presentation" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen bg-black">Loading...</div>}>
-                <Presentation />
-              </Suspense>
-            } 
-          />
-          
-          {/* Internal showcase presentation - public, no auth */}
-          <Route 
-            path="/presentation2" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen bg-black">Loading...</div>}>
-                <Presentation2 />
-              </Suspense>
-            } 
-          />
-          
-          {/* Public Issue Resolution page - accessed via email token */}
-          <Route 
-            path="/issue/:token" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <IssueResolution />
-              </Suspense>
-            } 
-          />
-          
-          {/* FM Access Dashboard */}
-          <Route 
-            path="/fm-access" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <ProtectedRoute>
-                  <FmAccessDashboard />
-                </ProtectedRoute>
-              </Suspense>
-            } 
-          />
-          
-          {/* Standalone Plugin page — minimal chrome, for companion windows */}
-          <Route 
-            path="/plugin" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <PluginPage />
-              </Suspense>
-            } 
-          />
-          
-          {/* Homepage V2 test page — two-column desktop layout */}
-          <Route 
-            path="/home-v2" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <ProtectedRoute>
-                  <HomeLandingV2 />
-                </ProtectedRoute>
-              </Suspense>
-            } 
-          />
-          
-          {/* API Documentation page */}
-          <Route 
-            path="/api-docs" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <ProtectedRoute>
-                  <ApiDocs />
-                </ProtectedRoute>
-              </Suspense>
-            } 
-          />
-          
-          {/* Standalone AI Chat */}
-          <Route 
-            path="/ai" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <ProtectedRoute>
-                  <AiChat />
-                </ProtectedRoute>
-              </Suspense>
-            } 
-          />
-          
-          {/* Geminus View — standalone IFC viewer */}
-          <Route 
-            path="/view" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <ProtectedRoute>
-                  <GeminusView />
-                </ProtectedRoute>
-              </Suspense>
-            } 
-          />
-          
-          {/* FM Access 2D Standalone — test page for FMA iframe viewer */}
-          <Route 
-            path="/fma-2d" 
-            element={
-              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <ProtectedRoute>
-                  <FmAccess2DStandalone />
-                </ProtectedRoute>
-              </Suspense>
-            } 
-          />
-          
-          {/* Protected app routes */}
-          <Route 
-            path="/*" 
-            element={
-              <ProtectedRoute>
-                <AppLayout />
-              </ProtectedRoute>
-            } 
-          />
-          
+          <Route path="/*" element={<ProtectedRoute><AppLayout /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
