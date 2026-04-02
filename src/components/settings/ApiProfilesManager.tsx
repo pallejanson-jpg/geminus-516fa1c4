@@ -302,9 +302,9 @@ export default function ApiProfilesManager() {
           <AccordionItem value="senslinc">
             <AccordionTrigger className="text-xs font-semibold">InUse/Senslinc Credentials</AccordionTrigger>
             <AccordionContent className="space-y-3 pt-2">
-              <SecretInput label="API URL" field="senslinc_api_url" placeholder="https://..." />
-              <SecretInput label="Email" field="senslinc_email" />
-              <SecretInput label="Password" field="senslinc_password" />
+               <SI label="API URL" field="senslinc_api_url" placeholder="https://..." />
+               <SI label="Email" field="senslinc_email" />
+               <SI label="Password" field="senslinc_password" />
               <Button variant="outline" size="sm" onClick={testSenslinc} disabled={testingSl}>
                 {testingSl ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <TestTube className="mr-2 h-3 w-3" />}
                 Validate
