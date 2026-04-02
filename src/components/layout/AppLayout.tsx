@@ -116,7 +116,7 @@ const AppLayoutInner: React.FC = () => {
                 <button
                     onClick={() => setIsSidebarExpanded(true)}
                     className="fixed top-3 left-3 z-50 h-9 w-9 flex items-center justify-center rounded-lg bg-card/95 backdrop-blur-sm shadow-md border border-border hover:bg-accent transition-colors"
-                    title="Visa meny"
+                    title="Show menu"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
                 </button>

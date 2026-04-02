@@ -291,7 +291,7 @@ const ApiDocs: React.FC = () => {
           <div className="relative w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Sök endpoints..."
+              placeholder="Search endpoints..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9 h-9"
@@ -388,7 +388,7 @@ const ApiDocs: React.FC = () => {
         {filteredSystems.length === 0 && (
           <div className="text-center py-12 text-muted-foreground">
             <Code className="h-12 w-12 mx-auto mb-3 opacity-30" />
-            <p className="text-sm">Inga endpoints matchar sökningen</p>
+            <p className="text-sm">No endpoints match your search</p>
           </div>
         )}
       </div>
