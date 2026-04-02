@@ -74,6 +74,7 @@ export async function getAssetPlusCredentials(
         clientSecret: profile.assetplus_client_secret || '',
         username: profile.assetplus_username || '',
         password: profile.assetplus_password || '',
+        audience: profile.assetplus_audience || 'asset-api',
       };
     }
 
