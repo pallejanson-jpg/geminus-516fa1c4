@@ -12,6 +12,7 @@ export interface AssetPlusCredentials {
   clientSecret: string;
   username: string;
   password: string;
+  audience: string;
 }
 
 export interface SenslincCredentials {
