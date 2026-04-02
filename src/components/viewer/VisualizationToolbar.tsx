@@ -447,8 +447,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
   // Listen for floor selection changes to detect solo floor mode
   useEffect(() => {
-    const handleFloorChange = (e: CustomEvent) => {
-      const { isAllFloorsVisible, visibleMetaFloorIds } = e.detail || {};
+    const handleFloorChange = (detail: any) => {
+      const { isAllFloorsVisible, visibleMetaFloorIds } = detail || {};
       const solo = !isAllFloorsVisible && visibleMetaFloorIds && visibleMetaFloorIds.length === 1;
       setIsSoloFloor(solo);
     };
