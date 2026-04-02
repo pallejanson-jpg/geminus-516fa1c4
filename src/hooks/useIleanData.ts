@@ -35,8 +35,7 @@ export function useIleanData() {
 
   // Track floor/room selection from viewer events
   useEffect(() => {
-    const handleFloorChange = (e: CustomEvent) => {
-      const detail = e.detail;
+    const handleFloorChange = (detail: any) => {
       if (detail?.floorId && detail.isSoloFloor) {
         setContextFmGuid(detail.floorId);
         setContextLevel('floor');
@@ -46,8 +45,7 @@ export function useIleanData() {
       }
     };
 
-    const handleViewerContext = (e: CustomEvent) => {
-      const detail = e.detail;
+    const handleViewerContext = (detail: any) => {
       if (detail?.selectedFmGuids?.length > 0) {
         setContextFmGuid(detail.selectedFmGuids[0]);
         setContextLevel('room');

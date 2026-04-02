@@ -3371,7 +3371,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   // Listen for saved view loading events
   useEffect(() => {
     const handleLoadSavedView = (viewData: LoadSavedViewDetail) => {
-      const viewData = e.detail;
+      console.log('LOAD_SAVED_VIEW_EVENT received:', viewData);
       console.log('LOAD_SAVED_VIEW_EVENT received:', viewData);
       
       // Wait for viewer to be initialized and model loaded

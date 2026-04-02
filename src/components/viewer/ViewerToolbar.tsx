@@ -628,11 +628,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
   // Listen for external tool changes (e.g. from MobileViewerPage / navigation menu)
   useEffect(() => {
-    const handler = (e: CustomEvent<ViewerToolChangedDetail>) => {
+    const handler = (detail: ViewerToolChangedDetail) => {
       // Skip events we dispatched ourselves
       if (selfDispatchRef.current) return;
 
-      const tool = e.detail.tool as ViewerTool;
+      const tool = detail.tool as ViewerTool;
       const prev = activeToolRef2.current;
 
       // Deactivate previous

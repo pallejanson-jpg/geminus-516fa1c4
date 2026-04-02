@@ -220,7 +220,7 @@ export interface EventMap {
   FLOOR_PILLS_TOGGLE: { visible: boolean };
 
   // Theme
-  VIEWER_THEME_CHANGED: { themeId: string };
+  VIEWER_THEME_CHANGED: { themeId: string; themeName?: string };
 
   // Issue list
   OPEN_ISSUE_LIST: void;
