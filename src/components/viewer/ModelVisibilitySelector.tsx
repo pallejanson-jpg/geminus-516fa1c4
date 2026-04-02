@@ -103,7 +103,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
       if (checked) {
         const model = modelsRef.current.find(m => m.id === modelId);
         if (model && !model.loaded) {
-          window.dispatchEvent(new CustomEvent(MODEL_LOAD_REQUESTED_EVENT, { detail: { modelId } }));
+          emit('MODEL_LOAD_REQUESTED', { modelId });
         }
       }
 
