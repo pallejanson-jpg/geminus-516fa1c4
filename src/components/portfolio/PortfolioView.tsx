@@ -630,7 +630,7 @@ const PortfolioView: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-base sm:text-lg font-semibold flex items-center gap-2">
-                    ★ Mina favoriter
+                    ★ My favorites
                   </h2>
                   <p className="text-xs sm:text-sm text-muted-foreground">
                     {favoriteFacilities.length} {favoriteFacilities.length === 1 ? 'building' : 'buildings'}
