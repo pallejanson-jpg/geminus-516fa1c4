@@ -208,6 +208,47 @@ export interface EventMap {
 
   // Zoom
   VIEWER_ZOOM_TO_OBJECT: { fmGuid: string };
+  VIEWER_FLY_TO: { fmGuid: string };
+
+  // Visualization quick select
+  VISUALIZATION_QUICK_SELECT: { type: string };
+
+  // Toolbar settings
+  TOOLBAR_SETTINGS_CHANGED: void;
+
+  // Floor pills
+  FLOOR_PILLS_TOGGLE: { visible: boolean };
+
+  // Theme
+  VIEWER_THEME_CHANGED: { themeId: string };
+
+  // Issue list
+  OPEN_ISSUE_LIST: void;
+
+  // Navigation panel
+  TOGGLE_NAVIGATION_PANEL: void;
+
+  // Voice commands
+  VOICE_FLOOR_SELECT: { floorNumber: string };
+  VOICE_CREATE_ISSUE: void;
+  VOICE_CLEAR_FILTERS: void;
+
+  // Initial visualization
+  INITIAL_VISUALIZATION_REQUESTED: { type: string };
+
+  // Gunnar
+  GUNNAR_AUTO_OPEN_VOICE: void;
+
+  // Architect mode
+  ARCHITECT_MODE_REQUESTED: { enabled: boolean };
+  ARCHITECT_MODE_CHANGED: { enabled: boolean };
+
+  // Lighting
+  LIGHTING_CHANGED: { enabled: boolean };
+  SUN_STUDY_CHANGED: { enabled: boolean };
+
+  // Modifications
+  REAPPLY_MODIFICATIONS: void;
 }
 
 // ── emit / on / off ─────────────────────────────────────────────────────
