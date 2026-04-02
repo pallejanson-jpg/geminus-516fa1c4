@@ -88,7 +88,7 @@ const BuildingMapPicker: React.FC<BuildingMapPickerProps> = ({
         setViewState(prev => ({ ...prev, latitude: lat, longitude: lng, zoom: 16 }));
         setAddressQuery(json.features[0].place_name || addressQuery);
       } else {
-        setSearchError('Ingen plats hittades');
+        setSearchError('No location found');
       }
     } catch {
       setSearchError('Sökningen misslyckades');
