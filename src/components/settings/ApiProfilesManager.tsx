@@ -61,6 +61,35 @@ const EMPTY_FORM: ProfileForm = {
   ivion_api_url: '', ivion_username: '', ivion_password: '',
 };
 
+function SecretInput({ label, value, onChange, placeholder, isSecret, shown, onToggleSecret }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string;
+  isSecret: boolean; shown: boolean; onToggleSecret: () => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <div className="relative">
+        <Input
+          type={shown ? 'text' : 'password'}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="pr-8 text-sm"
+        />
+        {isSecret && (
+          <button
+            type="button"
+            onClick={onToggleSecret}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            {shown ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ApiProfilesManager() {
   const [profiles, setProfiles] = useState<ApiProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -213,31 +242,18 @@ export default function ApiProfilesManager() {
     }
   }
 
-  function SecretInput({ label, field, placeholder }: { label: string; field: keyof ProfileForm; placeholder?: string }) {
+  function SI({ label, field, placeholder }: { label: string; field: keyof ProfileForm; placeholder?: string }) {
     const isSecret = field.includes('password') || field.includes('secret') || field.includes('api_key');
-    const shown = showSecrets[field] || !isSecret;
     return (
-      <div className="space-y-1">
-        <Label className="text-xs text-muted-foreground">{label}</Label>
-        <div className="relative">
-          <Input
-            type={shown ? 'text' : 'password'}
-            value={form[field] || ''}
-            onChange={e => set(field, e.target.value)}
-            placeholder={placeholder}
-            className="pr-8 text-sm"
-          />
-          {isSecret && (
-            <button
-              type="button"
-              onClick={() => toggleSecret(field)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              {shown ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-            </button>
-          )}
-        </div>
-      </div>
+      <SecretInput
+        label={label}
+        value={form[field] || ''}
+        onChange={v => set(field, v)}
+        placeholder={placeholder}
+        isSecret={isSecret}
+        shown={showSecrets[field] || !isSecret}
+        onToggleSecret={() => toggleSecret(field)}
+      />
     );
   }
 
@@ -269,13 +285,13 @@ export default function ApiProfilesManager() {
           <AccordionItem value="assetplus">
             <AccordionTrigger className="text-xs font-semibold">Asset+ Credentials</AccordionTrigger>
             <AccordionContent className="space-y-3 pt-2">
-              <SecretInput label="API URL" field="assetplus_api_url" placeholder="https://..." />
-              <SecretInput label="API Key" field="assetplus_api_key" />
-              <SecretInput label="Keycloak URL" field="assetplus_keycloak_url" placeholder="https://..." />
-              <SecretInput label="Client ID" field="assetplus_client_id" />
-              <SecretInput label="Client Secret" field="assetplus_client_secret" />
-              <SecretInput label="Username" field="assetplus_username" />
-              <SecretInput label="Password" field="assetplus_password" />
+               <SI label="API URL" field="assetplus_api_url" placeholder="https://..." />
+               <SI label="API Key" field="assetplus_api_key" />
+               <SI label="Keycloak URL" field="assetplus_keycloak_url" placeholder="https://..." />
+               <SI label="Client ID" field="assetplus_client_id" />
+               <SI label="Client Secret" field="assetplus_client_secret" />
+               <SI label="Username" field="assetplus_username" />
+               <SI label="Password" field="assetplus_password" />
               <Button variant="outline" size="sm" onClick={testAssetPlus} disabled={testingAp}>
                 {testingAp ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <TestTube className="mr-2 h-3 w-3" />}
                 Validate
@@ -286,9 +302,9 @@ export default function ApiProfilesManager() {
           <AccordionItem value="senslinc">
             <AccordionTrigger className="text-xs font-semibold">InUse/Senslinc Credentials</AccordionTrigger>
             <AccordionContent className="space-y-3 pt-2">
-              <SecretInput label="API URL" field="senslinc_api_url" placeholder="https://..." />
-              <SecretInput label="Email" field="senslinc_email" />
-              <SecretInput label="Password" field="senslinc_password" />
+               <SI label="API URL" field="senslinc_api_url" placeholder="https://..." />
+               <SI label="Email" field="senslinc_email" />
+               <SI label="Password" field="senslinc_password" />
               <Button variant="outline" size="sm" onClick={testSenslinc} disabled={testingSl}>
                 {testingSl ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <TestTube className="mr-2 h-3 w-3" />}
                 Validate
@@ -299,18 +315,18 @@ export default function ApiProfilesManager() {
           <AccordionItem value="fmaccess">
             <AccordionTrigger className="text-xs font-semibold">FM Access Credentials</AccordionTrigger>
             <AccordionContent className="space-y-3 pt-2">
-              <SecretInput label="API URL" field="fm_access_api_url" placeholder="https://..." />
-              <SecretInput label="Username" field="fm_access_username" />
-              <SecretInput label="Password" field="fm_access_password" />
+               <SI label="API URL" field="fm_access_api_url" placeholder="https://..." />
+               <SI label="Username" field="fm_access_username" />
+               <SI label="Password" field="fm_access_password" />
             </AccordionContent>
           </AccordionItem>
 
           <AccordionItem value="ivion">
             <AccordionTrigger className="text-xs font-semibold">Ivion Credentials</AccordionTrigger>
             <AccordionContent className="space-y-3 pt-2">
-              <SecretInput label="API URL" field="ivion_api_url" placeholder="https://..." />
-              <SecretInput label="Username" field="ivion_username" />
-              <SecretInput label="Password" field="ivion_password" />
+               <SI label="API URL" field="ivion_api_url" placeholder="https://..." />
+               <SI label="Username" field="ivion_username" />
+               <SI label="Password" field="ivion_password" />
             </AccordionContent>
           </AccordionItem>
         </Accordion>
