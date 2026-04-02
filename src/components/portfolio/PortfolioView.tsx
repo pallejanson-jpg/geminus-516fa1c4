@@ -502,7 +502,7 @@ const PortfolioView: React.FC = () => {
             </h2>
             <div className="flex items-center gap-4 text-white/70 text-xs sm:text-sm">
               <span>{heroBuilding.numberOfLevels || 0} floors</span>
-              <span>{heroBuilding.numberOfSpaces || 0} rum</span>
+              <span>{heroBuilding.numberOfSpaces || 0} rooms</span>
               <span>{heroBuilding.area ? `${heroBuilding.area.toLocaleString()} m²` : ''}</span>
             </div>
             <div className="flex gap-2 mt-3">
