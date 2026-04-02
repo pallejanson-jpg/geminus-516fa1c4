@@ -502,7 +502,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
       if (guids.length > 1) {
         setTimeout(() => {
           guids.slice(1).forEach(guid => {
-            emit('VIEWER_ZOOM_TO_OBJECT', { fmGuid: guid, selectOnly: true });
+            emit('VIEWER_ZOOM_TO_OBJECT', { fmGuid: guid });
           });
         }, 3000);
       }

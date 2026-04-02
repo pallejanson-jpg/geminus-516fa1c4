@@ -79,8 +79,8 @@ export default function GunnarButton() {
 
   // Listen for viewer context changes
   useEffect(() => {
-    const handler = (e: CustomEvent<ViewerContextChangedDetail>) => {
-      setViewerContext(e.detail);
+    const handler = (detail: ViewerContextChangedDetail) => {
+      setViewerContext(detail);
     };
     const off = on('VIEWER_CONTEXT_CHANGED', handler);
     return () => off();

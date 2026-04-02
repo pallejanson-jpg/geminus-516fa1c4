@@ -649,14 +649,14 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   // ── Sync checkedLevels from external floor switcher ──────────────────
   useEffect(() => {
-    const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
-      if ((e.detail as any).fromFilterPanel) return;
+    const handler = (detail: FloorSelectionEventDetail) => {
+      if ((detail as any).fromFilterPanel) return;
 
-      if (e.detail.isAllFloorsVisible || e.detail.floorId === null) {
+      if (detail.isAllFloorsVisible || detail.floorId === null) {
         setCheckedLevels(new Set());
-      } else if (e.detail.visibleFloorFmGuids?.length > 0) {
+      } else if (detail.visibleFloorFmGuids?.length > 0) {
         const matchingLevelGuids = new Set<string>();
-        const normalizedVisibleGuids = e.detail.visibleFloorFmGuids.map((g: string) => normalizeGuid(g));
+        const normalizedVisibleGuids = detail.visibleFloorFmGuids.map((g: string) => normalizeGuid(g));
 
         levels.forEach(level => {
           if (level.allGuids.some(g => normalizedVisibleGuids.includes(g))) {
@@ -1646,8 +1646,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   // Track active viewer theme so cleanup can re-apply it
   const activeThemeIdRef = useRef<string | null>(null);
   useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
+    const handler = (detail: { themeId: string }) => {
       activeThemeIdRef.current = detail?.themeId ?? null;
     };
     const off = on('VIEWER_THEME_CHANGED', handler);
