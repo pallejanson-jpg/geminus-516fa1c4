@@ -179,7 +179,7 @@ export interface EventMap {
   LOAD_SAVED_VIEW: LoadSavedViewDetail;
 
   // Navigation
-  MINIMAP_TOGGLE: void;
+  MINIMAP_TOGGLE: { visible?: boolean } | void;
   SPLIT_PLAN_NAVIGATE: SplitPlanNavigateDetail;
   NAV_SPEED_CHANGED: { speed: number };
   NAV_SPEED_GRANULAR: { zoom?: number; pan?: number; rotate?: number };
