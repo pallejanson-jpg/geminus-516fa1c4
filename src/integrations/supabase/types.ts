@@ -188,6 +188,78 @@ export type Database = {
         }
         Relationships: []
       }
+      api_profiles: {
+        Row: {
+          assetplus_api_key: string | null
+          assetplus_api_url: string | null
+          assetplus_client_id: string | null
+          assetplus_client_secret: string | null
+          assetplus_keycloak_url: string | null
+          assetplus_password: string | null
+          assetplus_username: string | null
+          created_at: string
+          fm_access_api_url: string | null
+          fm_access_password: string | null
+          fm_access_username: string | null
+          id: string
+          is_default: boolean
+          ivion_api_url: string | null
+          ivion_password: string | null
+          ivion_username: string | null
+          name: string
+          senslinc_api_url: string | null
+          senslinc_email: string | null
+          senslinc_password: string | null
+          updated_at: string
+        }
+        Insert: {
+          assetplus_api_key?: string | null
+          assetplus_api_url?: string | null
+          assetplus_client_id?: string | null
+          assetplus_client_secret?: string | null
+          assetplus_keycloak_url?: string | null
+          assetplus_password?: string | null
+          assetplus_username?: string | null
+          created_at?: string
+          fm_access_api_url?: string | null
+          fm_access_password?: string | null
+          fm_access_username?: string | null
+          id?: string
+          is_default?: boolean
+          ivion_api_url?: string | null
+          ivion_password?: string | null
+          ivion_username?: string | null
+          name: string
+          senslinc_api_url?: string | null
+          senslinc_email?: string | null
+          senslinc_password?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assetplus_api_key?: string | null
+          assetplus_api_url?: string | null
+          assetplus_client_id?: string | null
+          assetplus_client_secret?: string | null
+          assetplus_keycloak_url?: string | null
+          assetplus_password?: string | null
+          assetplus_username?: string | null
+          created_at?: string
+          fm_access_api_url?: string | null
+          fm_access_password?: string | null
+          fm_access_username?: string | null
+          id?: string
+          is_default?: boolean
+          ivion_api_url?: string | null
+          ivion_password?: string | null
+          ivion_username?: string | null
+          name?: string
+          senslinc_api_url?: string | null
+          senslinc_email?: string | null
+          senslinc_password?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       asset_connections: {
         Row: {
           connection_type: string
@@ -726,6 +798,7 @@ export type Database = {
       }
       building_settings: {
         Row: {
+          api_profile_id: string | null
           assetplus_api_key: string | null
           assetplus_api_url: string | null
           assetplus_client_id: string | null
@@ -760,6 +833,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          api_profile_id?: string | null
           assetplus_api_key?: string | null
           assetplus_api_url?: string | null
           assetplus_client_id?: string | null
@@ -794,6 +868,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          api_profile_id?: string | null
           assetplus_api_key?: string | null
           assetplus_api_url?: string | null
           assetplus_client_id?: string | null
@@ -828,6 +903,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "building_settings_api_profile_id_fkey"
+            columns: ["api_profile_id"]
+            isOneToOne: false
+            referencedRelation: "api_profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "building_settings_start_view_id_fkey"
             columns: ["start_view_id"]
