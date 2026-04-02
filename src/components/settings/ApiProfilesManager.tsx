@@ -285,13 +285,13 @@ export default function ApiProfilesManager() {
           <AccordionItem value="assetplus">
             <AccordionTrigger className="text-xs font-semibold">Asset+ Credentials</AccordionTrigger>
             <AccordionContent className="space-y-3 pt-2">
-              <SecretInput label="API URL" field="assetplus_api_url" placeholder="https://..." />
-              <SecretInput label="API Key" field="assetplus_api_key" />
-              <SecretInput label="Keycloak URL" field="assetplus_keycloak_url" placeholder="https://..." />
-              <SecretInput label="Client ID" field="assetplus_client_id" />
-              <SecretInput label="Client Secret" field="assetplus_client_secret" />
-              <SecretInput label="Username" field="assetplus_username" />
-              <SecretInput label="Password" field="assetplus_password" />
+               <SI label="API URL" field="assetplus_api_url" placeholder="https://..." />
+               <SI label="API Key" field="assetplus_api_key" />
+               <SI label="Keycloak URL" field="assetplus_keycloak_url" placeholder="https://..." />
+               <SI label="Client ID" field="assetplus_client_id" />
+               <SI label="Client Secret" field="assetplus_client_secret" />
+               <SI label="Username" field="assetplus_username" />
+               <SI label="Password" field="assetplus_password" />
               <Button variant="outline" size="sm" onClick={testAssetPlus} disabled={testingAp}>
                 {testingAp ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <TestTube className="mr-2 h-3 w-3" />}
                 Validate
