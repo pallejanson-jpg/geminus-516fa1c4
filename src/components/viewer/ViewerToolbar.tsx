@@ -205,10 +205,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
   // ── Floor selection events ────────────────────────────────────────────────
   useEffect(() => {
-    const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
-      let { floorId, bounds, isAllFloorsVisible, visibleMetaFloorIds } = e.detail;
-      const visibleFloorFmGuids = (e.detail as any).visibleFloorFmGuids as string[] | undefined;
-      const skipClipping = !!(e.detail as any).skipClipping;
+    const handler = (detail: FloorSelectionEventDetail) => {
+      let { floorId, bounds, isAllFloorsVisible, visibleMetaFloorIds } = detail;
+      const visibleFloorFmGuids = (detail as any).visibleFloorFmGuids as string[] | undefined;
+      const skipClipping = !!(detail as any).skipClipping;
 
       if (!floorId && visibleFloorFmGuids?.length && !visibleMetaFloorIds?.length) {
         const metaObjects = viewer?.metaScene?.metaObjects || viewer?.scene?.metaScene?.metaObjects || {};

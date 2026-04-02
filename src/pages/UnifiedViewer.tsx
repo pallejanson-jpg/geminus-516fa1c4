@@ -510,8 +510,8 @@ const UnifiedViewerContent: React.FC<{
   const [overlayInteractive, setOverlayInteractive] = useState(false);
 
   useEffect(() => {
-    const handleToolChanged = (e: CustomEvent<ViewerToolChangedDetail>) => {
-      setOverlayInteractive(e.detail.tool === 'select' || e.detail.tool === 'measure' || e.detail.tool === 'slicer');
+    const handleToolChanged = (detail: ViewerToolChangedDetail) => {
+      setOverlayInteractive(detail.tool === 'select' || detail.tool === 'measure' || detail.tool === 'slicer');
     };
     const off = on('VIEWER_TOOL_CHANGED', handleToolChanged);
     return () => off();

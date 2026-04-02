@@ -378,8 +378,8 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
     };
 
     // ── Delete event handler ───────────────────────────────────────────
-    const handleDeleteEvent = async (e: CustomEvent) => {
-      const { entityId, fmGuid } = e.detail || {};
+    const handleDeleteEvent = async (detail: { entityId: string; fmGuid: string }) => {
+      const { entityId, fmGuid } = detail || {};
       if (!entityId || !fmGuid || !viewer?.scene) return;
 
       // Confirmation dialog

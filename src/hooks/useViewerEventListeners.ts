@@ -532,8 +532,7 @@ export function useViewerEventListeners({
 
   // ── VIEWER_SELECT_ENTITY (select + fly-to) ──
   useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
+    const handler = (detail: any) => {
       const fmGuid = detail?.fmGuid || detail?.entityId;
       if (!fmGuid) return;
       const viewer = viewerRef.current;
