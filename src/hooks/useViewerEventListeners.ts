@@ -310,8 +310,7 @@ export function useViewerEventListeners({
 
   // ── ALARM_ANNOTATIONS_SHOW ──
   useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<AlarmAnnotationsShowDetail>).detail;
+    const handler = (detail: AlarmAnnotationsShowDetail) => {
       if (!detail?.alarms?.length) return;
       const viewer = viewerRef.current;
       if (!viewer?.scene || !viewer?.metaScene) return;
