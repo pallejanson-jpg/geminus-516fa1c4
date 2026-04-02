@@ -171,8 +171,8 @@ const RoomVisualizationList: React.FC<{
 
   // Stay in sync with external changes
   React.useEffect(() => {
-    const handler = (e: CustomEvent) => {
-      setActiveViz(e.detail?.visualizationType ?? 'none');
+    const handler = (detail: any) => {
+      setActiveViz(detail?.visualizationType ?? 'none');
     };
     const off = on('VISUALIZATION_STATE_CHANGED', handler);
     return () => off();
@@ -431,8 +431,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
   // Listen for view mode changes to show/hide clipping slider
   useEffect(() => {
-    const handleViewModeChange = (e: CustomEvent) => {
-      const mode = e.detail?.mode;
+    const handleViewModeChange = (detail: any) => {
+      const mode = detail?.mode;
       setIs2DMode(mode === '2d');
       // In 2D mode, solo floor detection is handled differently
       if (mode === '2d') {
@@ -447,8 +447,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
   // Listen for floor selection changes to detect solo floor mode
   useEffect(() => {
-    const handleFloorChange = (e: CustomEvent) => {
-      const { isAllFloorsVisible, visibleMetaFloorIds } = e.detail || {};
+    const handleFloorChange = (detail: any) => {
+      const { isAllFloorsVisible, visibleMetaFloorIds } = detail || {};
       const solo = !isAllFloorsVisible && visibleMetaFloorIds && visibleMetaFloorIds.length === 1;
       setIsSoloFloor(solo);
     };
@@ -460,8 +460,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
   // Listen for force show spaces from RoomVisualizationPanel
   useEffect(() => {
-    const handleForceShowSpaces = (e: CustomEvent) => {
-      const shouldShow = !!e.detail?.show;
+    const handleForceShowSpaces = (detail: any) => {
+      const shouldShow = !!detail?.show;
       // Respect user's explicit off — don't auto re-enable
       if (shouldShow && (window as any).__spacesUserExplicitOff) return;
       if (shouldShow !== showSpaces) {
@@ -831,8 +831,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
   // Listen for issue marker clicks from 3D viewer annotations
   useEffect(() => {
-    const handler = async (e: Event) => {
-      const { issueId } = (e as CustomEvent<IssueMarkerClickedDetail>).detail;
+    const handler = async (detail: IssueMarkerClickedDetail) => {
+      const { issueId } = detail;
       // Fetch the full issue
       const { data: issue } = await supabase
         .from('bcf_issues')

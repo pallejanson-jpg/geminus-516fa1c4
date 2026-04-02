@@ -475,8 +475,8 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
 
   // Listen for issue marker clicks from 3D viewer annotations
   useEffect(() => {
-    const handler = async (e: Event) => {
-      const { issueId } = (e as CustomEvent<IssueMarkerClickedDetail>).detail;
+    const handler = async (detail: IssueMarkerClickedDetail) => {
+      const { issueId } = detail;
       const { data: issue } = await supabase
         .from('bcf_issues')
         .select('*')

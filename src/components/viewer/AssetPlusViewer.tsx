@@ -29,7 +29,7 @@ import { usePerformancePlugins } from '@/hooks/usePerformancePlugins';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { VisualizationType } from '@/lib/visualization-utils';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
-import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail, INSIGHTS_COLOR_UPDATE_EVENT, InsightsColorUpdateDetail, ALARM_ANNOTATIONS_SHOW_EVENT, AlarmAnnotationsShowDetail, ANNOTATION_FILTER_EVENT, AnnotationFilterDetail, ISSUE_MARKER_CLICKED_EVENT, SENSOR_ANNOTATIONS_TOGGLE_EVENT, ISSUE_ANNOTATIONS_TOGGLE_EVENT, type SensorAnnotationsToggleDetail, type IssueAnnotationsToggleDetail } from '@/lib/viewer-events';
+import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail, INSIGHTS_COLOR_UPDATE_EVENT, InsightsColorUpdateDetail, ALARM_ANNOTATIONS_SHOW_EVENT, AlarmAnnotationsShowDetail, ANNOTATION_FILTER_EVENT, AnnotationFilterDetail, ISSUE_MARKER_CLICKED_EVENT, SENSOR_ANNOTATIONS_TOGGLE_EVENT, ISSUE_ANNOTATIONS_TOGGLE_EVENT, type SensorAnnotationsToggleDetail, type IssueAnnotationsToggleDetail, type ViewModeEventDetail, type ClipHeightEventDetail, type ModelLoadRequestedDetail } from '@/lib/viewer-events';
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT, FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { useArchitectViewMode, ARCHITECT_MODE_REQUESTED_EVENT, ARCHITECT_MODE_CHANGED_EVENT, ARCHITECT_BACKGROUND_CHANGED_EVENT, type BackgroundPresetId } from '@/hooks/useArchitectViewMode';
 import { useRoomLabels, ROOM_LABELS_TOGGLE_EVENT, type RoomLabelsToggleDetail } from '@/hooks/useRoomLabels';
@@ -512,8 +512,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
   // ─── Listen for INSIGHTS_COLOR_UPDATE from InsightsDrawerPanel (drawerMode) ───
   useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<InsightsColorUpdateDetail>).detail;
+    const handler = (detail: InsightsColorUpdateDetail) => {
       if (!detail?.colorMap) return;
 
       const viewer = viewerInstanceRef.current;
@@ -691,8 +690,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       if (existingContainer) existingContainer.remove();
     };
 
-    const handler = async (e: Event) => {
-      const detail = (e as CustomEvent<AlarmAnnotationsShowDetail>).detail;
+    const handler = async (detail: AlarmAnnotationsShowDetail) => {
       const visible = detail?.visible ?? true;
 
       if (!visible) {
@@ -3373,7 +3371,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   // Listen for saved view loading events
   useEffect(() => {
     const handleLoadSavedView = (viewData: LoadSavedViewDetail) => {
-      const viewData = e.detail;
+      console.log('LOAD_SAVED_VIEW_EVENT received:', viewData);
       console.log('LOAD_SAVED_VIEW_EVENT received:', viewData);
       
       // Wait for viewer to be initialized and model loaded
@@ -3546,39 +3544,39 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
   // Listen for Gunnar commands
   useEffect(() => {
-    const handleGunnarShowFloor = (e: CustomEvent<{ floorFmGuid: string }>) => {
+    const handleGunnarShowFloor = (detail: { floorFmGuid: string }) => {
       const viewer = viewerInstanceRef.current;
-      if (viewer && e.detail.floorFmGuid) {
+      if (viewer && detail.floorFmGuid) {
         try {
-          viewer.cutOutFloorsByFmGuid(e.detail.floorFmGuid, true, { doViewFit: true });
+          viewer.cutOutFloorsByFmGuid(detail.floorFmGuid, true, { doViewFit: true });
         } catch (err) {
           console.debug('Could not cut to floor:', err);
         }
       }
     };
     
-    const handleGunnarHighlight = (e: CustomEvent<{ fmGuids: string[] }>) => {
-      if (e.detail.fmGuids && e.detail.fmGuids.length > 0) {
-        e.detail.fmGuids.forEach(guid => {
+    const handleGunnarHighlight = (detail: { fmGuids: string[] }) => {
+      if (detail.fmGuids && detail.fmGuids.length > 0) {
+        detail.fmGuids.forEach(guid => {
           flashEntityById(guid, viewerInstanceRef.current);
         });
       }
     };
     
-    const handleGunnarFlyTo = (e: CustomEvent<{ fmGuid: string }>) => {
-      if (e.detail.fmGuid) {
-        lookAtInstanceFromAngle(e.detail.fmGuid, defaultMinimumHeightAboveBase, defaultHeightAboveAABB);
+    const handleGunnarFlyTo = (detail: { fmGuid: string }) => {
+      if (detail.fmGuid) {
+        lookAtInstanceFromAngle(detail.fmGuid, defaultMinimumHeightAboveBase, defaultHeightAboveAABB);
       }
     };
     
-    window.addEventListener('GUNNAR_SHOW_FLOOR', handleGunnarShowFloor as EventListener);
-    window.addEventListener('GUNNAR_HIGHLIGHT', handleGunnarHighlight as EventListener);
-    window.addEventListener('GUNNAR_FLY_TO', handleGunnarFlyTo as EventListener);
+    const offShowFloor = on('GUNNAR_SHOW_FLOOR', handleGunnarShowFloor);
+    const offHighlight = on('GUNNAR_HIGHLIGHT', handleGunnarHighlight);
+    const offFlyTo = on('GUNNAR_FLY_TO', handleGunnarFlyTo);
     
     return () => {
-      window.removeEventListener('GUNNAR_SHOW_FLOOR', handleGunnarShowFloor as EventListener);
-      window.removeEventListener('GUNNAR_HIGHLIGHT', handleGunnarHighlight as EventListener);
-      window.removeEventListener('GUNNAR_FLY_TO', handleGunnarFlyTo as EventListener);
+      offShowFloor();
+      offHighlight();
+      offFlyTo();
     };
   }, [flashEntityById, lookAtInstanceFromAngle]);
 

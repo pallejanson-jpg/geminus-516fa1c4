@@ -10,6 +10,7 @@ import { useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeGuid } from '@/lib/utils';
 import { applyArchitectColors } from '@/lib/architect-colors';
+import { emit, on } from '@/lib/event-bus';
 import {
   INSIGHTS_COLOR_UPDATE_EVENT,
   INSIGHTS_COLOR_RESET_EVENT,
@@ -21,6 +22,7 @@ import type {
   InsightsColorUpdateDetail,
   AlarmAnnotationsShowDetail,
   FloorSelectionEventDetail,
+  ModelLoadRequestedDetail,
 } from '@/lib/event-bus';
 import type { ModelInfo } from '@/hooks/useModelLoader';
 
@@ -64,8 +66,7 @@ export function useViewerEventListeners({
 
   // ── MODEL_LOAD_REQUESTED (on-demand secondary model loading) ──
   useEffect(() => {
-    const handler = async (event: Event) => {
-      const detail = (event as CustomEvent<{ modelId?: string }>).detail;
+    const handler = async (detail: ModelLoadRequestedDetail) => {
       const requestedModelId = detail?.modelId?.replace(/\.xkt$/i, '');
       if (!requestedModelId) return;
       const sceneModels = viewerRef.current?.scene?.models || {};
@@ -84,8 +85,7 @@ export function useViewerEventListeners({
 
   // ── FLOOR_TILE_SWITCH (dynamic tile loading for real per-storey tiles) ──
   useEffect(() => {
-    const handler = async (e: Event) => {
-      const detail = (e as CustomEvent).detail;
+    const handler = async (detail: any) => {
       if (!detail?.tiles || !detail?.floorFmGuid) return;
       const viewer = viewerRef.current;
       if (!viewer?.scene) return;
@@ -130,8 +130,7 @@ export function useViewerEventListeners({
 
   // ── INSIGHTS_COLOR_UPDATE (colorize entities by insights data) ──
   useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<InsightsColorUpdateDetail>).detail;
+    const handler = (detail: InsightsColorUpdateDetail) => {
       if (!detail?.colorMap) return;
       const viewer = viewerRef.current;
       if (!viewer?.scene || !viewer?.metaScene) {
@@ -252,8 +251,7 @@ export function useViewerEventListeners({
 
   // ── FORCE_SHOW_SPACES ──
   useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
+    const handler = (detail: any) => {
       const show = detail?.show ?? true;
       const viewer = viewerRef.current;
       if (!viewer?.scene || !viewer?.metaScene?.metaObjects) return;
@@ -312,8 +310,7 @@ export function useViewerEventListeners({
 
   // ── ALARM_ANNOTATIONS_SHOW ──
   useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<AlarmAnnotationsShowDetail>).detail;
+    const handler = (detail: AlarmAnnotationsShowDetail) => {
       if (!detail?.alarms?.length) return;
       const viewer = viewerRef.current;
       if (!viewer?.scene || !viewer?.metaScene) return;
@@ -362,8 +359,8 @@ export function useViewerEventListeners({
 
   // ── NAV_SPEED + FASTNAV ──
   useEffect(() => {
-    const masterHandler = (e: Event) => {
-      const speed = (e as CustomEvent).detail?.speed ?? 100;
+    const masterHandler = (detail: { speed: number }) => {
+      const speed = detail?.speed ?? 100;
       const m = Math.max(0.25, Math.min(3, speed / 100));
       const cc = viewerRef.current?.cameraControl;
       if (!cc) return;
@@ -373,8 +370,7 @@ export function useViewerEventListeners({
       cc.touchDollyRate = (mob ? 0.09 : 0.15) * m;
       if (!mob) { cc.mouseWheelDollyRate = 50 * m; cc.keyboardDollyRate = 5 * m; }
     };
-    const granularHandler = (e: Event) => {
-      const d = (e as CustomEvent).detail;
+    const granularHandler = (d: any) => {
       const cc = viewerRef.current?.cameraControl;
       if (!cc) return;
       const mob = isMobileRef.current;
@@ -386,8 +382,8 @@ export function useViewerEventListeners({
       cc.touchDollyRate = (mob ? 0.09 : 0.15) * zM;
       if (!mob) { cc.mouseWheelDollyRate = 50 * zM; cc.keyboardDollyRate = 5 * zM; }
     };
-    const fastNavHandler = (e: Event) => {
-      const enabled = (e as CustomEvent).detail?.enabled ?? false;
+    const fastNavHandler = (detail: { enabled: boolean }) => {
+      const enabled = detail?.enabled ?? false;
       const viewer = viewerRef.current;
       if (!viewer?.scene) return;
       viewer.scene.pbrEnabled = !enabled;
@@ -421,8 +417,7 @@ export function useViewerEventListeners({
       });
     };
 
-    const floorHandler = (e: Event) => {
-      const detail = (e as CustomEvent<FloorSelectionEventDetail>).detail;
+    const floorHandler = (detail: FloorSelectionEventDetail) => {
       if (detail?.isAllFloorsVisible || !detail?.floorId) {
         currentFloorFilter = null;
       } else {
@@ -438,8 +433,7 @@ export function useViewerEventListeners({
     };
     const offFloorHandler = on('FLOOR_SELECTION_CHANGED', floorHandler);
 
-    const handler = async (e: Event) => {
-      const detail = (e as CustomEvent).detail;
+    const handler = async (detail: any) => {
       const show = detail?.show ?? true;
       const visibleCategories: string[] | undefined = detail?.visibleCategories;
       const viewer = viewerRef.current;
@@ -537,8 +531,7 @@ export function useViewerEventListeners({
 
   // ── VIEWER_SELECT_ENTITY (select + fly-to) ──
   useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
+    const handler = (detail: any) => {
       const fmGuid = detail?.fmGuid || detail?.entityId;
       if (!fmGuid) return;
       const viewer = viewerRef.current;

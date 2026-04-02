@@ -152,8 +152,7 @@ export function useAiViewerBridge(viewer: any, isReady: boolean) {
   useEffect(() => {
     if (!isReady) return;
 
-    const handler = (e: Event) => {
-      const command = (e as CustomEvent<AiViewerCommand>).detail;
+    const handler = (command: AiViewerCommand) => {
       if (!command) return;
 
       switch (command.action) {

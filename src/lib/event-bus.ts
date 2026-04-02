@@ -179,7 +179,7 @@ export interface EventMap {
   LOAD_SAVED_VIEW: LoadSavedViewDetail;
 
   // Navigation
-  MINIMAP_TOGGLE: void;
+  MINIMAP_TOGGLE: { visible?: boolean } | void;
   SPLIT_PLAN_NAVIGATE: SplitPlanNavigateDetail;
   NAV_SPEED_CHANGED: { speed: number };
   NAV_SPEED_GRANULAR: { zoom?: number; pan?: number; rotate?: number };
@@ -220,7 +220,7 @@ export interface EventMap {
   FLOOR_PILLS_TOGGLE: { visible: boolean };
 
   // Theme
-  VIEWER_THEME_CHANGED: { themeId: string };
+  VIEWER_THEME_CHANGED: { themeId: string; themeName?: string };
 
   // Issue list
   OPEN_ISSUE_LIST: void;
@@ -238,6 +238,9 @@ export interface EventMap {
 
   // Gunnar
   GUNNAR_AUTO_OPEN_VOICE: void;
+  GUNNAR_SHOW_FLOOR: { floorFmGuid: string };
+  GUNNAR_HIGHLIGHT: { fmGuids: string[] };
+  GUNNAR_FLY_TO: { fmGuid: string };
 
   // Architect mode
   ARCHITECT_MODE_REQUESTED: { enabled: boolean };
