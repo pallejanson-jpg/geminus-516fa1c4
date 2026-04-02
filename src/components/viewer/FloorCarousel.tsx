@@ -9,7 +9,7 @@ import {
   CarouselPrevious,
   CarouselNext,
 } from '@/components/ui/carousel';
-import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
+import { emit, on, type FloorSelectionEventDetail } from '@/lib/event-bus';
 
 export interface FloorInfo {
   id: string;
