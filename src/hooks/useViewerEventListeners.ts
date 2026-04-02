@@ -359,8 +359,8 @@ export function useViewerEventListeners({
 
   // ── NAV_SPEED + FASTNAV ──
   useEffect(() => {
-    const masterHandler = (e: Event) => {
-      const speed = (e as CustomEvent).detail?.speed ?? 100;
+    const masterHandler = (detail: { speed: number }) => {
+      const speed = detail?.speed ?? 100;
       const m = Math.max(0.25, Math.min(3, speed / 100));
       const cc = viewerRef.current?.cameraControl;
       if (!cc) return;
@@ -370,8 +370,7 @@ export function useViewerEventListeners({
       cc.touchDollyRate = (mob ? 0.09 : 0.15) * m;
       if (!mob) { cc.mouseWheelDollyRate = 50 * m; cc.keyboardDollyRate = 5 * m; }
     };
-    const granularHandler = (e: Event) => {
-      const d = (e as CustomEvent).detail;
+    const granularHandler = (d: any) => {
       const cc = viewerRef.current?.cameraControl;
       if (!cc) return;
       const mob = isMobileRef.current;
@@ -383,8 +382,8 @@ export function useViewerEventListeners({
       cc.touchDollyRate = (mob ? 0.09 : 0.15) * zM;
       if (!mob) { cc.mouseWheelDollyRate = 50 * zM; cc.keyboardDollyRate = 5 * zM; }
     };
-    const fastNavHandler = (e: Event) => {
-      const enabled = (e as CustomEvent).detail?.enabled ?? false;
+    const fastNavHandler = (detail: { enabled: boolean }) => {
+      const enabled = detail?.enabled ?? false;
       const viewer = viewerRef.current;
       if (!viewer?.scene) return;
       viewer.scene.pbrEnabled = !enabled;
