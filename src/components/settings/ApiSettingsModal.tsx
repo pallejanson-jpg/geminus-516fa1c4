@@ -3685,6 +3685,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     <TabsContent value="building" className="space-y-4 mt-4 flex-1 overflow-y-auto">
                         <CreateBuildingPanel onSwitchToAccTab={() => setActiveTab('apis')} />
                     </TabsContent>
+
+                    {/* API Profiles Tab */}
+                    <TabsContent value="api-profiles" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                        <ApiProfilesManager />
+                    </TabsContent>
                 </Tabs>
             </DialogContent>
             
