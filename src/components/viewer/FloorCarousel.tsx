@@ -9,7 +9,7 @@ import {
   CarouselPrevious,
   CarouselNext,
 } from '@/components/ui/carousel';
-import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
+import { emit, on, type FloorSelectionEventDetail } from '@/lib/event-bus';
 
 export interface FloorInfo {
   id: string;
@@ -52,31 +52,23 @@ const FloorCarousel: React.FC<FloorCarouselProps> = ({
 
   // Listen for floor selection events from other sources
   useEffect(() => {
-    const handleFloorChange = (e: CustomEvent<FloorSelectionEventDetail>) => {
-      const { floorId, visibleMetaFloorIds } = e.detail;
+    return on('FLOOR_SELECTION_CHANGED', (detail) => {
+      const { floorId, visibleMetaFloorIds } = detail;
       
       if (floorId) {
-        // Single floor selected - find matching floor in our list
         const matchingFloor = floors.find(f => f.id === floorId);
         if (matchingFloor) {
           setInternalSelectedId(matchingFloor.id);
         }
       } else if (visibleMetaFloorIds && visibleMetaFloorIds.length === 1) {
-        // Single floor via meta IDs
         const matchingFloor = floors.find(f => visibleMetaFloorIds.includes(f.id));
         if (matchingFloor) {
           setInternalSelectedId(matchingFloor.id);
         }
       } else {
-        // Multiple or all floors - clear selection
         setInternalSelectedId(undefined);
       }
-    };
-    
-    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange as EventListener);
-    return () => {
-      window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange as EventListener);
-    };
+    });
   }, [floors]);
 
   // Get XEOkit viewer
@@ -390,7 +382,7 @@ const FloorCarousel: React.FC<FloorCarouselProps> = ({
                     visibleFloorFmGuids: floor.databaseLevelFmGuids || [floor.fmGuid],
                     isAllFloorsVisible: false,
                   };
-                  window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
+                  emit('FLOOR_SELECTION_CHANGED', eventDetail);
                 }}
                 className={cn(
                   "flex-shrink-0 rounded-md overflow-hidden transition-all",

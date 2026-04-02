@@ -21,7 +21,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
   DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
+import { on, emit, type FloorSelectionEventDetail } from '@/lib/event-bus';
 import { supabase } from '@/integrations/supabase/client';
 import {
   DndContext, closestCenter, PointerSensor, KeyboardSensor,
@@ -155,17 +155,15 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
 
   // Floor selection listener
   useEffect(() => {
-    const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
-      if (e.detail.isAllFloorsVisible) {
+    return on('FLOOR_SELECTION_CHANGED', (detail) => {
+      if (detail.isAllFloorsVisible) {
         setIsAllFloors(true);
         setVisibleFloorGuids([]);
-      } else if (e.detail.visibleFloorFmGuids?.length > 0) {
+      } else if (detail.visibleFloorFmGuids?.length > 0) {
         setIsAllFloors(false);
-        setVisibleFloorGuids(e.detail.visibleFloorFmGuids);
+        setVisibleFloorGuids(detail.visibleFloorFmGuids);
       }
-    };
-    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
-    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+    });
   }, []);
 
   // Close context menu on click elsewhere
@@ -306,9 +304,8 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
   // Fly-to + select on row click
   const handleRowClick = useCallback((asset: AssetRow) => {
     setSelectedFmGuid(asset.fmGuid);
-    window.dispatchEvent(new CustomEvent('VIEWER_FLY_TO', { detail: { fmGuid: asset.fmGuid } }));
-    // Also select the entity in the viewer
-    window.dispatchEvent(new CustomEvent('VIEWER_SELECT_ENTITY', { detail: { entityId: asset.fmGuid } }));
+    emit('VIEWER_FLY_TO', { fmGuid: asset.fmGuid });
+    emit('VIEWER_SELECT_ENTITY', { entityId: asset.fmGuid, fmGuid: null, entityName: null });
   }, []);
 
   // Right-click handler
