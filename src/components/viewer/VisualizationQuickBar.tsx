@@ -23,7 +23,7 @@ const VisualizationQuickBar: React.FC<{ className?: string }> = ({ className }) 
   // Listen for state changes from the panel so we stay in sync
   useEffect(() => {
     return on('VISUALIZATION_STATE_CHANGED', (detail) => {
-      setActive(detail?.visualizationType ?? 'none');
+      setActive((detail?.visualizationType ?? 'none') as VisualizationType);
     });
   }, []);
 
