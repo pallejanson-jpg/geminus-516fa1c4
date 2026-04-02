@@ -130,8 +130,7 @@ export function useViewerEventListeners({
 
   // ── INSIGHTS_COLOR_UPDATE (colorize entities by insights data) ──
   useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<InsightsColorUpdateDetail>).detail;
+    const handler = (detail: InsightsColorUpdateDetail) => {
       if (!detail?.colorMap) return;
       const viewer = viewerRef.current;
       if (!viewer?.scene || !viewer?.metaScene) {
