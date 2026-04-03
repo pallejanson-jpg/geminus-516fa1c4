@@ -1429,6 +1429,10 @@ serve(async (req) => {
           }
 
           console.log(`Building ${buildingName}: Found ${models.length} models`);
+          if (models.length > 0) {
+            console.log(`First model keys: ${JSON.stringify(Object.keys(models[0]))}`);
+            console.log(`First model sample: ${JSON.stringify(models[0]).substring(0, 500)}`);
+          }
 
           // Process each model
           for (const model of models) {
@@ -1439,7 +1443,8 @@ serve(async (req) => {
             }
 
             // Extract modelId from BimModel (Asset+ GetAllRelatedModels response)
-            const modelId = model.modelId || model.id || model.ModelId || `model_${Date.now()}`;
+            // Try all possible field names from the API
+            const modelId = model.modelId || model.id || model.ModelId || model.bimObjectId || model.externalGuid || model.fmGuid || `model_${Date.now()}`;
             const modelName = model.name || model.modelName || model.Name || `Model ${modelId}`;
             const fileName = `${modelId}.xkt`;
             const storagePath = `${buildingFmGuid}/${fileName}`;
