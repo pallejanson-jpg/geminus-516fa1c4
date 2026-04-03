@@ -65,7 +65,6 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
     bootstrapFromAssetPlus,
     loadAllModels,
     loadSingleModel,
-    deferStalenessCheck,
     pendingInsightsColorRef,
     isArchitectural,
   } = useModelLoader({ buildingFmGuid, isMobile });
