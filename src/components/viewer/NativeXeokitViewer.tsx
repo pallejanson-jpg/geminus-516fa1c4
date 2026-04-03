@@ -65,7 +65,6 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
     bootstrapFromAssetPlus,
     loadAllModels,
     loadSingleModel,
-    deferStalenessCheck,
     pendingInsightsColorRef,
     isArchitectural,
   } = useModelLoader({ buildingFmGuid, isMobile });
@@ -294,8 +293,6 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }));
       }
 
-      // Deferred staleness check
-      deferStalenessCheck(models);
 
     } catch (e) {
       console.error('[NativeViewer] Init error:', e);
@@ -304,7 +301,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         setPhase('error');
       }
     }
-  }, [buildingFmGuid, createInstance, fetchModelMetadata, bootstrapFromAssetPlus, loadAllModels, loadSingleModel, deferStalenessCheck, onViewerReady, pendingInsightsColorRef, viewerRef]);
+  }, [buildingFmGuid, createInstance, fetchModelMetadata, bootstrapFromAssetPlus, loadAllModels, loadSingleModel, onViewerReady, pendingInsightsColorRef, viewerRef]);
 
   // ── Stabilized effect: only re-run when buildingFmGuid changes ──
   // Uses a ref to always call the latest initialize without it being a dependency,
