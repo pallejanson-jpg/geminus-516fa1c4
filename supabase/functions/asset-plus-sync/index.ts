@@ -1480,12 +1480,43 @@ serve(async (req) => {
 
             try {
               // Construct XKT download URL via GetXktData endpoint
-              // Always pass bimObjectId as "modelid" (required param) — Asset+ uses this as the model identifier
-              // Also include apiKey since this is a PublishedDataService endpoint
+              // Try multiple parameter combinations since the API behavior varies
               const apiKey = _creds.apiKey || Deno.env.get("ASSET_PLUS_API_KEY") || '';
               const downloadModelId = bimObjectId || actualModelId || modelId;
-              const xktDownloadUrl = `${discovery.url}/GetXktData?modelid=${downloadModelId}&context=Building&apiKey=${apiKey}`;
-              console.log(`Fetching XKT: ${xktDownloadUrl.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
+              
+              // Try approach 1: bimObjectId as modelid + apiKey
+              // Try approach 2: with explicit bimobjectid param
+              // Try approach 3: dummy modelid + bimobjectid
+              const urlAttempts = [
+                `${discovery.url}/GetXktData?modelid=${downloadModelId}&context=Building&apiKey=${apiKey}`,
+                `${discovery.url}/GetXktData?modelid=${downloadModelId}&bimobjectid=${downloadModelId}&context=Building&apiKey=${apiKey}`,
+                `${discovery.url}/GetXktData?modelid=00000000-0000-0000-0000-000000000000&bimobjectid=${downloadModelId}&context=Building&apiKey=${apiKey}`,
+              ];
+              
+              let xktRes: Response | null = null;
+              let xktDownloadUrl = '';
+              for (const url of urlAttempts) {
+                console.log(`Trying XKT: ${url.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 30000);
+                const res = await fetch(url, {
+                  headers: { "Authorization": `Bearer ${accessToken}` },
+                  signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                if (res.ok) {
+                  xktRes = res;
+                  xktDownloadUrl = url;
+                  break;
+                }
+                const errBody = await res.text().catch(() => '');
+                console.log(`  → ${res.status} ${errBody.substring(0, 200)}`);
+              }
+              
+              if (!xktRes) {
+                console.log(`All XKT download attempts failed for ${modelId}`);
+                continue;
+              }
               
               // Fetch with timeout
               const controller = new AbortController();
