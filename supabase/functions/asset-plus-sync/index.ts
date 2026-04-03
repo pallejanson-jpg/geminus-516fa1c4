@@ -1517,7 +1517,7 @@ serve(async (req) => {
               }
 
               // Insert into database
-              const { error: dbError } = await supabase
+               const { error: dbError } = await supabase
                 .from('xkt_models')
                 .upsert({
                   building_fm_guid: buildingFmGuid,
@@ -1529,6 +1529,7 @@ serve(async (req) => {
                   file_size: fileSize,
                   storage_path: storagePath,
                   source_url: xktDownloadUrl,
+                  source_updated_at: revisionId || new Date().toISOString(),
                   synced_at: new Date().toISOString(),
                 }, { onConflict: 'building_fm_guid,model_id' });
 
