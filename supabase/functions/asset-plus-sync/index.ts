@@ -1397,6 +1397,8 @@ serve(async (req) => {
       await updateSyncState(supabase, 'xkt', 'running', totalSynced);
       let interrupted = false;
       const errors: string[] = [];
+      let allRevisions: any[] = [];
+      let revisionsFetched = false;
 
       while (currentBuildingIndex < totalBuildings && !interrupted) {
         // Check timeout
