@@ -1438,15 +1438,10 @@ serve(async (req) => {
               break;
             }
 
-            // Accept multiple possible URL field names
-            const xktUrl = model.xktFileUrl || model.xkt_file_url || model.fileUrl || model.url;
-            if (!xktUrl) {
-              console.log(`Model ${model.id || 'unknown'}: No xkt URL found`);
-              continue;
-            }
-
-            const modelId = model.id || model.modelId || xktUrl.split('/').pop()?.replace('.xkt', '') || `model_${Date.now()}`;
-            const fileName = xktUrl.split('/').pop() || `${modelId}.xkt`;
+            // Extract modelId from BimModel (Asset+ GetAllRelatedModels response)
+            const modelId = model.modelId || model.id || model.ModelId || `model_${Date.now()}`;
+            const modelName = model.name || model.modelName || model.Name || `Model ${modelId}`;
+            const fileName = `${modelId}.xkt`;
             const storagePath = `${buildingFmGuid}/${fileName}`;
 
             // Check if already synced
@@ -1463,20 +1458,15 @@ serve(async (req) => {
             }
 
             try {
-              // Resolve relative URLs
-              let fullXktUrl = xktUrl;
-              if (xktUrl.startsWith('/')) {
-                const baseUrl = apiUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
-                fullXktUrl = baseUrl + xktUrl;
-              }
-
-              console.log(`Fetching XKT: ${fullXktUrl}`);
+              // Construct XKT download URL via GetXktData endpoint
+              const xktDownloadUrl = `${discovery.url}/GetXktData?modelid=${modelId}&context=Building`;
+              console.log(`Fetching XKT: ${xktDownloadUrl}`);
               
               // Fetch with timeout
               const controller = new AbortController();
               const timeoutId = setTimeout(() => controller.abort(), 30000);
               
-              const xktRes = await fetch(fullXktUrl, {
+              const xktRes = await fetch(xktDownloadUrl, {
                 headers: { "Authorization": `Bearer ${accessToken}` },
                 signal: controller.signal
               });
@@ -1523,12 +1513,12 @@ serve(async (req) => {
                   building_fm_guid: buildingFmGuid,
                   building_name: buildingName,
                   model_id: modelId,
-                  model_name: model.name || model.modelName || fileName,
+                  model_name: modelName,
                   file_name: fileName,
                   file_url: signedUrl,
                   file_size: fileSize,
                   storage_path: storagePath,
-                  source_url: fullXktUrl,
+                  source_url: xktDownloadUrl,
                   synced_at: new Date().toISOString(),
                 }, { onConflict: 'building_fm_guid,model_id' });
 
