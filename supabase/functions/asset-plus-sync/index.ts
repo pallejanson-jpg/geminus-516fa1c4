@@ -1544,7 +1544,7 @@ serve(async (req) => {
                   file_size: fileSize,
                   storage_path: storagePath,
                   source_url: xktDownloadUrl,
-                  source_updated_at: revisionId || new Date().toISOString(),
+                  source_updated_at: effectiveRevision || new Date().toISOString(),
                   synced_at: new Date().toISOString(),
                 }, { onConflict: 'building_fm_guid,model_id' });
 
