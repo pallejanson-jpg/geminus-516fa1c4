@@ -293,8 +293,6 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }));
       }
 
-      // Deferred staleness check
-      deferStalenessCheck(models);
 
     } catch (e) {
       console.error('[NativeViewer] Init error:', e);
