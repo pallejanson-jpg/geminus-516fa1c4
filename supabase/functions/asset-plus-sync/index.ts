@@ -2176,9 +2176,11 @@ serve(async (req) => {
       const categories = ['Building Storey', 'Space', 'Instance'];
       const allLocalObjects: any[] = [];
       
-      for (const category of categories) {
-        for (const isLocal of [false, true]) {
-          const PAGE = 1000;
+      // Only query objects belonging to known Asset+ buildings to avoid huge scans
+      const buildingGuidsArr = [...remoteBuildingGuids];
+      for (const bGuid of buildingGuidsArr) {
+        for (const category of categories) {
+          const PAGE = 500;
           let from = 0;
           let done = false;
           while (!done) {
@@ -2186,7 +2188,7 @@ serve(async (req) => {
               .from('assets')
               .select('fm_guid, building_fm_guid, level_fm_guid, in_room_fm_guid, category, name, common_name, is_local')
               .eq('category', category)
-              .eq('is_local', isLocal)
+              .eq('building_fm_guid', bGuid)
               .range(from, from + PAGE - 1);
             if (error) throw error;
             if (data && data.length > 0) {
