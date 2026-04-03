@@ -424,35 +424,11 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
     return { loaded, secondaryQueue, chunkModels, hasRealTiles };
   }, [buildingFmGuid, isMobile, loadSingleModel]);
 
-  /**
-   * Trigger a deferred staleness check — refreshes models older than 7 days.
-   */
-  const deferStalenessCheck = useCallback((models: ModelCandidate[]) => {
-    const STALE_MS = 7 * 24 * 60 * 60 * 1000;
-    const check = () => {
-      const oldestSync = models.reduce((oldest: string | null, m: any) => {
-        if (!oldest || (m.synced_at && m.synced_at < oldest)) return m.synced_at;
-        return oldest;
-      }, null as string | null);
-      if (oldestSync && (Date.now() - new Date(oldestSync).getTime()) > STALE_MS) {
-        supabase.functions.invoke('asset-plus-sync', {
-          body: { action: 'sync-xkt-building', buildingFmGuid, force: true }
-        }).catch(() => {});
-      }
-    };
-    if (typeof requestIdleCallback === 'function') {
-      requestIdleCallback(check, { timeout: 10000 });
-    } else {
-      setTimeout(check, 5000);
-    }
-  }, [buildingFmGuid]);
-
   return {
     fetchModelMetadata,
     bootstrapFromAssetPlus,
     loadAllModels,
     loadSingleModel,
-    deferStalenessCheck,
     pendingInsightsColorRef,
     isArchitectural,
   };
