@@ -2176,9 +2176,11 @@ serve(async (req) => {
       const categories = ['Building Storey', 'Space', 'Instance'];
       const allLocalObjects: any[] = [];
       
-      for (const category of categories) {
-        for (const isLocal of [false, true]) {
-          const PAGE = 1000;
+      // Only query objects belonging to known Asset+ buildings to avoid huge scans
+      const buildingGuidsArr = [...remoteBuildingGuids];
+      for (const bGuid of buildingGuidsArr) {
+        for (const category of categories) {
+          const PAGE = 500;
           let from = 0;
           let done = false;
           while (!done) {
@@ -2186,7 +2188,7 @@ serve(async (req) => {
               .from('assets')
               .select('fm_guid, building_fm_guid, level_fm_guid, in_room_fm_guid, category, name, common_name, is_local')
               .eq('category', category)
-              .eq('is_local', isLocal)
+              .eq('building_fm_guid', bGuid)
               .range(from, from + PAGE - 1);
             if (error) throw error;
             if (data && data.length > 0) {
@@ -2392,7 +2394,7 @@ serve(async (req) => {
         // Fetch all Instance assets for this building from local DB (they already have attributes from sync)
         const instances: any[] = [];
         let from = 0;
-        const PAGE = 1000;
+        const PAGE = 200;
         let fetchDone = false;
         while (!fetchDone) {
           const { data, error } = await supabase
@@ -2400,8 +2402,12 @@ serve(async (req) => {
             .select('fm_guid, common_name, name, asset_type, attributes, in_room_fm_guid, level_fm_guid')
             .eq('building_fm_guid', bFmGuid)
             .eq('category', 'Instance')
+            .order('fm_guid')
             .range(from, from + PAGE - 1);
-          if (error) throw error;
+          if (error) {
+            console.error(`  DB error fetching instances page ${from}: ${error.message}`);
+            throw error;
+          }
           if (data && data.length > 0) {
             instances.push(...data);
             from += PAGE;
