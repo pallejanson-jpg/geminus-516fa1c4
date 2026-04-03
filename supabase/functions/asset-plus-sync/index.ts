@@ -2394,7 +2394,7 @@ serve(async (req) => {
         // Fetch all Instance assets for this building from local DB (they already have attributes from sync)
         const instances: any[] = [];
         let from = 0;
-        const PAGE = 1000;
+        const PAGE = 200;
         let fetchDone = false;
         while (!fetchDone) {
           const { data, error } = await supabase
@@ -2402,8 +2402,12 @@ serve(async (req) => {
             .select('fm_guid, common_name, name, asset_type, attributes, in_room_fm_guid, level_fm_guid')
             .eq('building_fm_guid', bFmGuid)
             .eq('category', 'Instance')
+            .order('fm_guid')
             .range(from, from + PAGE - 1);
-          if (error) throw error;
+          if (error) {
+            console.error(`  DB error fetching instances page ${from}: ${error.message}`);
+            throw error;
+          }
           if (data && data.length > 0) {
             instances.push(...data);
             from += PAGE;
