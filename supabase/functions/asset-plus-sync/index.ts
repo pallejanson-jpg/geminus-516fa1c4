@@ -1664,11 +1664,10 @@ serve(async (req) => {
         let synced = 0;
 
         for (const model of models) {
-          const xktUrl = model.xktFileUrl || model.xkt_file_url || model.fileUrl || model.url;
-          if (!xktUrl) continue;
-
-          const modelId = model.id || model.modelId || xktUrl.split('/').pop()?.replace('.xkt', '') || `model_${Date.now()}`;
-          const fileName = xktUrl.split('/').pop() || `${modelId}.xkt`;
+          // Extract modelId from BimModel (Asset+ GetAllRelatedModels response)
+          const modelId = model.modelId || model.id || model.ModelId || `model_${Date.now()}`;
+          const modelName = model.name || model.modelName || model.Name || `Model ${modelId}`;
+          const fileName = `${modelId}.xkt`;
           const storagePath = `${buildingFmGuid}/${fileName}`;
 
           // Check if already synced (skip unless force=true)
@@ -1686,18 +1685,18 @@ serve(async (req) => {
           }
 
           try {
-            let fullXktUrl = xktUrl;
-            if (xktUrl.startsWith('/')) {
-              const baseUrl = apiUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
-              fullXktUrl = baseUrl + xktUrl;
-            }
-
-            console.log(`Fetching XKT: ${fullXktUrl}`);
-            const xktRes = await fetch(fullXktUrl, {
+            // Construct XKT download URL via GetXktData endpoint
+            const xktDownloadUrl = `${discovery.url}/GetXktData?modelid=${modelId}&context=Building`;
+            console.log(`Fetching XKT: ${xktDownloadUrl}`);
+            
+            const xktRes = await fetch(xktDownloadUrl, {
               headers: { "Authorization": `Bearer ${accessToken}` }
             });
 
-            if (!xktRes.ok) continue;
+            if (!xktRes.ok) {
+              console.log(`Failed to fetch model ${modelId}: ${xktRes.status}`);
+              continue;
+            }
 
             const xktData = await xktRes.arrayBuffer();
             const fileSize = xktData.byteLength;
@@ -1729,12 +1728,12 @@ serve(async (req) => {
                 building_fm_guid: buildingFmGuid,
                 building_name: buildingName,
                 model_id: modelId,
-                model_name: model.name || model.modelName || fileName,
+                model_name: modelName,
                 file_name: fileName,
                 file_url: signedUrl,
                 file_size: fileSize,
                 storage_path: storagePath,
-                source_url: fullXktUrl,
+                source_url: xktDownloadUrl,
                 synced_at: new Date().toISOString(),
               }, { onConflict: 'building_fm_guid,model_id' });
 
