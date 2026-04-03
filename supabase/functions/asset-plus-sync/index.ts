@@ -1444,17 +1444,27 @@ serve(async (req) => {
             const fileName = `${modelId}.xkt`;
             const storagePath = `${buildingFmGuid}/${fileName}`;
 
-            // Check if already synced
+            // Check if already synced — compare revisionId to detect updates
+            const revisionId = model.revisionId || model.RevisionId || model.revision_id || null;
             const { data: existingModel } = await supabase
               .from('xkt_models')
-              .select('id')
+              .select('id, source_updated_at')
               .eq('building_fm_guid', buildingFmGuid)
               .eq('model_id', modelId)
               .maybeSingle();
 
-            if (existingModel) {
-              console.log(`Model ${modelId} already synced`);
-              continue;
+            const forceSync = body?.force === true;
+            if (existingModel && !forceSync) {
+              // If we have a revisionId, compare it to detect updates
+              const storedRevision = existingModel.source_updated_at || '';
+              if (revisionId && storedRevision === revisionId) {
+                console.log(`Model ${modelId} unchanged (revision: ${revisionId})`);
+                continue;
+              } else if (!revisionId) {
+                console.log(`Model ${modelId} already synced (no revision to compare)`);
+                continue;
+              }
+              console.log(`Model ${modelId} has new revision: ${revisionId} (was: ${storedRevision}), re-downloading`);
             }
 
             try {
