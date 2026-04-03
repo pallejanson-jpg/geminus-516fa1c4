@@ -139,7 +139,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       // 4. Load models progressively
       setPhase('loading_models');
-      const { loaded, secondaryQueue, chunkModels, hasRealTiles } = await loadAllModels(
+      let { loaded, secondaryQueue, chunkModels, hasRealTiles } = await loadAllModels(
         viewer, xktLoader, models,
         (progress) => {
           if (mountedRef.current) setLoadProgress(prev => ({ ...prev, ...progress }));
