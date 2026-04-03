@@ -1530,11 +1530,11 @@ serve(async (req) => {
               const fileSize = xktData.byteLength;
               
               if (fileSize < 1024) { // Skip files < 1KB (likely invalid)
-                console.log(`Model ${modelId}: File too small (${fileSize} bytes), skipping`);
+                console.log(`Model ${revModelId}: File too small (${fileSize} bytes), skipping`);
                 continue;
               }
               
-              console.log(`Model ${modelId}: Downloaded ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
+              console.log(`Model ${revModelId} (${modelName}): Downloaded ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
 
               // Upload to storage
               const { error: uploadError } = await supabase.storage
@@ -1551,34 +1551,34 @@ serve(async (req) => {
                   .createSignedUrl(storagePath, 86400 * 365);
                 signedUrl = urlData?.signedUrl || null;
               } else {
-                console.log(`Storage upload failed for ${modelId}:`, uploadError.message);
+                console.log(`Storage upload failed for ${revModelId}:`, uploadError.message);
               }
 
               // Insert into database
-               const { error: dbError } = await supabase
+              const { error: dbError } = await supabase
                 .from('xkt_models')
                 .upsert({
                   building_fm_guid: buildingFmGuid,
                   building_name: buildingName,
-                  model_id: modelId,
+                  model_id: revModelId,
                   model_name: modelName,
                   file_name: fileName,
                   file_url: signedUrl,
                   file_size: fileSize,
                   storage_path: storagePath,
                   source_url: xktDownloadUrl,
-                  source_updated_at: effectiveRevision || new Date().toISOString(),
+                  source_updated_at: revisionId || new Date().toISOString(),
                   synced_at: new Date().toISOString(),
                 }, { onConflict: 'building_fm_guid,model_id' });
 
               if (dbError) {
-                console.log(`Database insert failed for ${modelId}:`, dbError.message);
-                errors.push(`${buildingName}/${modelId}: DB error`);
+                console.log(`Database insert failed for ${revModelId}:`, dbError.message);
+                errors.push(`${buildingName}/${revModelId}: DB error`);
                 continue;
               }
 
               totalSynced++;
-              console.log(`✅ Synced model ${modelId} for ${buildingName}`);
+              console.log(`✅ Synced model ${revModelId} (${modelName}) for ${buildingName}`);
             } catch (e) {
               const errMsg = e instanceof Error ? e.message : String(e);
               if (errMsg.includes('aborted')) {
