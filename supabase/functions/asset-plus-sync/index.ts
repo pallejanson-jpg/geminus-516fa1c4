@@ -1475,7 +1475,7 @@ serve(async (req) => {
             continue;
           }
 
-          const apiKey = _creds.apiKey || Deno.env.get("ASSET_PLUS_API_KEY") || '';
+          // apiKey already declared at top of sync-xkt action
 
           for (const rev of modelsToSync) {
             if (Date.now() - startTime > MAX_EXECUTION_TIME) {
