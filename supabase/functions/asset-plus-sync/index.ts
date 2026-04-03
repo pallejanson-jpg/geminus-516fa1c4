@@ -1480,12 +1480,12 @@ serve(async (req) => {
 
             try {
               // Construct XKT download URL via GetXktData endpoint
-              // Per OpenAPI spec: use modelid if available, otherwise bimobjectid
-              const idParams = actualModelId 
-                ? `modelid=${actualModelId}` 
-                : `bimobjectid=${bimObjectId}`;
-              const xktDownloadUrl = `${discovery.url}/GetXktData?${idParams}&context=Building`;
-              console.log(`Fetching XKT: ${xktDownloadUrl}`);
+              // Always pass bimObjectId as "modelid" (required param) — Asset+ uses this as the model identifier
+              // Also include apiKey since this is a PublishedDataService endpoint
+              const apiKey = _creds.apiKey || Deno.env.get("ASSET_PLUS_API_KEY") || '';
+              const downloadModelId = bimObjectId || actualModelId || modelId;
+              const xktDownloadUrl = `${discovery.url}/GetXktData?modelid=${downloadModelId}&context=Building&apiKey=${apiKey}`;
+              console.log(`Fetching XKT: ${xktDownloadUrl.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
               
               // Fetch with timeout
               const controller = new AbortController();
