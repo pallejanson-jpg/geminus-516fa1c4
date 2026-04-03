@@ -152,9 +152,25 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         if (viewer.scene.sao) viewer.scene.sao.enabled = false;
 
         const allIds = viewer.scene.objectIds || [];
-        if (allIds.length > 0) {
+        
+        // Check for empty scene — if A-model loaded but produced 0 entities,
+        // force-load secondary models (e.g. RIV) immediately
+        if (allIds.length === 0 && secondaryQueue.length > 0) {
+          console.warn(`[NativeViewer] A-model produced 0 entities — loading ${secondaryQueue.length} secondary models as fallback`);
+          const metadataFileSet = new Set<string>();
+          for (const model of secondaryQueue) {
+            if (!mountedRef.current) break;
+            const ok = await loadSingleModel(model, viewer, xktLoader, metadataFileSet);
+            if (ok) { applyArchitectColors(viewer); loaded++; }
+          }
+          secondaryQueue = []; // consumed
+        }
+
+        // Re-read allIds after potential secondary load
+        const finalIds = viewer.scene.objectIds || [];
+        if (finalIds.length > 0) {
           (window as any).__colorFilterActive = false;
-          viewer.scene.setObjectsXRayed(allIds, false);
+          viewer.scene.setObjectsXRayed(finalIds, false);
           try {
             const selected = viewer.scene.selectedObjectIds || [];
             if (selected.length > 0) viewer.scene.setObjectsSelected(selected, false);
@@ -168,7 +184,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         // Capture native model colors
         const nativeColors = new Map<string, { color: number[]; opacity: number; edges: boolean }>();
         if (viewer.scene.objects) {
-          for (const objId of allIds) {
+          for (const objId of finalIds) {
             const entity = viewer.scene.objects[objId];
             if (entity) {
               nativeColors.set(objId, {
@@ -183,7 +199,14 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
         // Apply architect colors + saved theme
         const colorResult = applyArchitectColors(viewer);
-        console.log(`[NativeViewer] Architect colors: ${colorResult.colorized} colorized, ${colorResult.hiddenSpaces} spaces hidden, ${allIds.length} total entities`);
+        console.log(`[NativeViewer] Architect colors: ${colorResult.colorized} colorized, ${colorResult.hiddenSpaces} spaces hidden, ${finalIds.length} total entities`);
+        
+        // Log AABB for diagnostics
+        try {
+          const aabb = viewer.scene.aabb;
+          console.log(`[NativeViewer] Scene AABB: [${aabb?.map((v: number) => v.toFixed(1)).join(', ')}]`);
+        } catch {}
+        
         try {
           const savedThemeId = localStorage.getItem('viewer-active-theme-id');
           if (savedThemeId) {
@@ -195,7 +218,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       }
 
       const totalTime = Math.round(performance.now() - t0);
-      console.log(`%c[NativeViewer] 🎉 All ${loaded} A-models loaded in ${totalTime}ms`, 'color:#22c55e;font-weight:bold;font-size:14px');
+      console.log(`%c[NativeViewer] 🎉 All ${loaded} models loaded in ${totalTime}ms`, 'color:#22c55e;font-weight:bold;font-size:14px');
       const memStats = getMemoryStats();
       console.log(`[NativeViewer] Memory: ${memStats.modelCount} models, ${(memStats.usedBytes / 1024 / 1024).toFixed(1)} MB / ${(memStats.maxBytes / 1024 / 1024).toFixed(0)} MB`);
 
