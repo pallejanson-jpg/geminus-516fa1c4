@@ -1,19 +1,53 @@
 
 
-# Remove automatic XKT staleness check from viewer startup
+# Fix Asset+ 3D endpoint discovery to use correct API paths
 
-## What and why
-You want the viewer to start as fast as possible. The current `deferStalenessCheck` runs a background sync call to Asset+ after every viewer open if models are older than 7 days. This adds unnecessary network overhead on startup. Instead, XKT sync should only happen when the user explicitly triggers it in Settings (which already has a "Sync XKT" button via `ApiSettingsModal`).
+## Background
+XKT sync fails because `discover3dModelsEndpoint` tries paths like `/threed/GetModels` which do not exist in the Asset+ API. According to the OpenAPI specification, the correct endpoints are:
 
-## Changes
+1. **`/GetAllRelatedModels?fmguid={buildingFmGuid}`** — returns `BimModel[]` with `modelId`, `name`, `revisionId`, etc.
+2. **`/GetXktData?modelid={modelId}&context=Building`** — returns XKT binary data for a specific model
 
-### 1. Remove `deferStalenessCheck` from `useModelLoader.ts`
-- Delete the `deferStalenessCheck` callback (lines 430-448)
-- Remove it from the hook's return object
+The current code expects model objects with `xktFileUrl` fields, but Asset+ separates model listing from XKT download.
 
-### 2. Remove the call in `NativeXeokitViewer.tsx`
-- Delete the `deferStalenessCheck(models)` call at the end of the `initialize` function
-- Remove `deferStalenessCheck` from the destructured hook imports
+## Plan
 
-That's it — two small deletions. The existing "Sync XKT" button in Settings already calls `sync-xkt-resumable` and handles per-building sync, so users retain full control over when to pull fresh models from Asset+.
+### 1. Rewrite `discover3dModelsEndpoint` in `asset-plus-sync/index.ts`
+Replace the 6 wrong candidate paths with the correct Asset+ endpoint:
+- Try `{assetDbUrl}/GetAllRelatedModels?fmguid={buildingFmGuid}` (the API key goes in header or body, auth via Bearer token)
+- Also try `{baseUrl}/asset/GetAllRelatedModels?fmguid={buildingFmGuid}` as fallback
+- Response is a direct `BimModel[]` array
+- Cache the working base path as before
+
+### 2. Update model processing loop (lines ~1474-1590)
+Currently expects `model.xktFileUrl` or `model.fileUrl`. Change to:
+- Extract `modelId` from each `BimModel` object (`model.modelId`)
+- Construct XKT download URL: `{assetDbUrl}/GetXktData?modelid={modelId}&context=Building`
+- Fetch XKT binary from that URL with Bearer token auth
+- Use `model.name` for `model_name` in the DB record
+
+### 3. Update `sync-xkt-building` action (lines ~1662-1800)
+Same changes as #2 — use `GetXktData` for downloading individual models after discovery.
+
+### 4. Update endpoint cache key
+Change from `getmodels_url` to `getallrelatedmodels_url` to avoid using stale cached wrong paths.
+
+## Technical details
+
+```text
+Current (broken):
+  GET {base}/threed/GetModels?fmGuid=X&apiKey=Y  →  404 / HTML
+
+Fixed:
+  Step 1: GET {assetDbUrl}/GetAllRelatedModels?fmguid=X
+          Headers: Authorization: Bearer {token}
+          Response: BimModel[] with { modelId, name, revisionId, ... }
+
+  Step 2: GET {assetDbUrl}/GetXktData?modelid={modelId}&context=Building
+          Headers: Authorization: Bearer {token}
+          Response: XKT binary (application/octet-stream)
+```
+
+### Files changed
+- `supabase/functions/asset-plus-sync/index.ts` — rewrite discovery + download logic
 
