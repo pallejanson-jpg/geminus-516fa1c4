@@ -1444,13 +1444,20 @@ serve(async (req) => {
 
             // Extract modelId from BimModel (Asset+ GetAllRelatedModels response)
             // Try all possible field names from the API
-            const modelId = model.modelId || model.id || model.ModelId || model.bimObjectId || model.externalGuid || model.fmGuid || `model_${Date.now()}`;
+            // Per OpenAPI: modelId can be null, bimObjectId is the reliable identifier
+            const actualModelId = model.modelId || null;
+            const bimObjectId = model.bimObjectId || null;
+            const modelId = actualModelId || bimObjectId || model.id || model.ModelId || model.externalGuid || model.fmGuid || `model_${Date.now()}`;
             const modelName = model.name || model.modelName || model.Name || `Model ${modelId}`;
+            const revisionId = model.revisionId || model.RevisionId || model.revision_id || null;
+            // Skip zero-guid revisions for comparison
+            const effectiveRevision = (revisionId && revisionId !== '00000000-0000-0000-0000-000000000000') 
+              ? revisionId 
+              : model.dateModified || null;
             const fileName = `${modelId}.xkt`;
             const storagePath = `${buildingFmGuid}/${fileName}`;
 
-            // Check if already synced — compare revisionId to detect updates
-            const revisionId = model.revisionId || model.RevisionId || model.revision_id || null;
+            // Check if already synced — compare revision/dateModified to detect updates
             const { data: existingModel } = await supabase
               .from('xkt_models')
               .select('id, source_updated_at')
@@ -1460,21 +1467,24 @@ serve(async (req) => {
 
             const forceSync = body?.force === true;
             if (existingModel && !forceSync) {
-              // If we have a revisionId, compare it to detect updates
               const storedRevision = existingModel.source_updated_at || '';
-              if (revisionId && storedRevision === revisionId) {
-                console.log(`Model ${modelId} unchanged (revision: ${revisionId})`);
+              if (effectiveRevision && storedRevision === effectiveRevision) {
+                console.log(`Model ${modelId} unchanged (revision: ${effectiveRevision})`);
                 continue;
-              } else if (!revisionId) {
+              } else if (!effectiveRevision) {
                 console.log(`Model ${modelId} already synced (no revision to compare)`);
                 continue;
               }
-              console.log(`Model ${modelId} has new revision: ${revisionId} (was: ${storedRevision}), re-downloading`);
+              console.log(`Model ${modelId} has new revision: ${effectiveRevision} (was: ${storedRevision}), re-downloading`);
             }
 
             try {
               // Construct XKT download URL via GetXktData endpoint
-              const xktDownloadUrl = `${discovery.url}/GetXktData?modelid=${modelId}&context=Building`;
+              // Per OpenAPI spec: use modelid if available, otherwise bimobjectid
+              const idParams = actualModelId 
+                ? `modelid=${actualModelId}` 
+                : `bimobjectid=${bimObjectId}`;
+              const xktDownloadUrl = `${discovery.url}/GetXktData?${idParams}&context=Building`;
               console.log(`Fetching XKT: ${xktDownloadUrl}`);
               
               // Fetch with timeout
