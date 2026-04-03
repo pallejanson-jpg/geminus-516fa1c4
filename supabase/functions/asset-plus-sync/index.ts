@@ -76,6 +76,9 @@ async function getAccessToken(): Promise<string> {
 }
 
 // ============ ROBUST 3D ENDPOINT DISCOVERY ============
+// Uses Asset+ OpenAPI endpoints:
+//   GET /GetAllRelatedModels?fmguid={buildingFmGuid}  → BimModel[]
+//   GET /GetXktData?modelid={modelId}&context=Building → XKT binary
 interface EndpointDiscoveryResult {
   url: string | null;
   fromCache: boolean;
@@ -86,11 +89,39 @@ async function discover3dModelsEndpoint(
   supabase: any,
   accessToken: string,
   apiUrl: string,
-  apiKey: string,
+  _apiKey: string,
   buildingFmGuid: string
 ): Promise<EndpointDiscoveryResult> {
-  const CACHE_KEY = 'getmodels_url';
+  const CACHE_KEY = 'getallrelatedmodels_url';
   const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+  // Helper: try a base URL and return models if successful
+  async function tryBase(base: string): Promise<{ url: string; models: any[] } | null> {
+    const endpoint = `${base}/GetAllRelatedModels`;
+    const fullUrl = `${endpoint}?fmguid=${buildingFmGuid}`;
+    try {
+      console.log(`Trying: ${fullUrl}`);
+      const res = await fetch(fullUrl, {
+        headers: { "Authorization": `Bearer ${accessToken}` }
+      });
+      if (!res.ok) return null;
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('json')) return null;
+      const data = await res.json();
+      const modelArray = Array.isArray(data) ? data
+        : Array.isArray(data?.models) ? data.models
+        : Array.isArray(data?.items) ? data.items
+        : Array.isArray(data?.data) ? data.data
+        : null;
+      if (modelArray) {
+        console.log(`✅ Found working 3D endpoint: ${base} (${modelArray.length} models)`);
+        return { url: base, models: modelArray };
+      }
+    } catch (e) {
+      console.debug(`Endpoint failed: ${fullUrl}`, e);
+    }
+    return null;
+  }
 
   // Check cache first
   const { data: cached } = await supabase
@@ -102,115 +133,44 @@ async function discover3dModelsEndpoint(
   if (cached?.value) {
     const cacheAge = Date.now() - new Date(cached.updated_at).getTime();
     if (cacheAge < CACHE_TTL_MS) {
-      // Use cached endpoint
-      const cachedUrl = `${cached.value}?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
-      console.log(`Using cached 3D endpoint: ${cached.value}`);
-      
-      try {
-        const res = await fetch(cachedUrl, {
-          headers: { "Authorization": `Bearer ${accessToken}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          const modelArray = Array.isArray(data) ? data
-            : Array.isArray(data?.models) ? data.models
-            : Array.isArray(data?.items) ? data.items
-            : Array.isArray(data?.data) ? data.data
-            : null;
-          if (modelArray) {
-            return { url: cached.value, fromCache: true, models: modelArray };
-          }
-        }
-      } catch (e) {
-        console.log('Cached endpoint failed, will re-discover');
+      console.log(`Using cached 3D base: ${cached.value}`);
+      const result = await tryBase(cached.value);
+      if (result) {
+        return { url: result.url, fromCache: true, models: result.models };
       }
+      console.log('Cached endpoint failed, will re-discover');
     }
   }
 
-  // Build candidate URLs to try
-  const baseUrl = apiUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
+  // Invalidate old getmodels_url cache key from previous logic
+  await supabase.from('asset_plus_endpoint_cache').delete().eq('key', 'getmodels_url');
+
+  // Build candidate base URLs to try
   const assetDbUrl = apiUrl.replace(/\/+$/, '');
-  
-  const candidatePaths = [
-    `${baseUrl}/api/threed/GetModels`,
-    `${baseUrl}/threed/GetModels`,
-    `${assetDbUrl}/api/threed/GetModels`,
-    `${assetDbUrl}/threed/GetModels`,
-    `${assetDbUrl}/GetModels`,
-    `${baseUrl}/api/v1/threed/GetModels`,
+  const baseUrl = apiUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
+
+  const candidateBases = [
+    assetDbUrl,                          // e.g. https://host/api/v1/AssetDB
+    `${baseUrl}/asset`,                  // e.g. https://host/asset
+    baseUrl,                             // e.g. https://host
+    `${baseUrl}/api/v1/AssetDB`,         // explicit
   ];
+  // Deduplicate
+  const unique = [...new Set(candidateBases)];
 
-  // Try each candidate with different parameter styles
-  for (const basePath of candidatePaths) {
-    // Try with apiKey in query
-    const urlWithQuery = `${basePath}?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
-    
-    try {
-      console.log(`Trying: ${basePath}`);
-      const res = await fetch(urlWithQuery, {
-        headers: { "Authorization": `Bearer ${accessToken}` }
-      });
-      
-      if (res.ok) {
-        const data = await res.json();
-        // Accept multiple response shapes: direct array, or {models/items/data} wrapper
-        const modelArray = Array.isArray(data) ? data
-          : Array.isArray(data?.models) ? data.models
-          : Array.isArray(data?.items) ? data.items
-          : Array.isArray(data?.data) ? data.data
-          : null;
-        if (modelArray) {
-          console.log(`✅ Found working 3D endpoint: ${basePath} (shape: ${Array.isArray(data) ? 'array' : Object.keys(data).join(',')})`);
-          
-          // Cache the working base path
-          await supabase
-            .from('asset_plus_endpoint_cache')
-            .upsert({ 
-              key: CACHE_KEY, 
-              value: basePath,
-              updated_at: new Date().toISOString()
-            }, { onConflict: 'key' });
-          
-          return { url: basePath, fromCache: false, models: modelArray };
-        }
-      }
-    } catch (e) {
-      console.debug(`Endpoint failed: ${basePath}`, e);
-    }
+  for (const base of unique) {
+    const result = await tryBase(base);
+    if (result) {
+      // Cache the working base
+      await supabase
+        .from('asset_plus_endpoint_cache')
+        .upsert({
+          key: CACHE_KEY,
+          value: result.url,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'key' });
 
-    // Try with x-api-key header instead
-    try {
-      const urlWithFmGuid = `${basePath}?fmGuid=${buildingFmGuid}`;
-      const res = await fetch(urlWithFmGuid, {
-        headers: { 
-          "Authorization": `Bearer ${accessToken}`,
-          "x-api-key": apiKey
-        }
-      });
-      
-      if (res.ok) {
-        const data = await res.json();
-        const modelArray = Array.isArray(data) ? data
-          : Array.isArray(data?.models) ? data.models
-          : Array.isArray(data?.items) ? data.items
-          : Array.isArray(data?.data) ? data.data
-          : null;
-        if (modelArray) {
-          console.log(`✅ Found working 3D endpoint (header auth): ${basePath}`);
-          
-          await supabase
-            .from('asset_plus_endpoint_cache')
-            .upsert({ 
-              key: CACHE_KEY, 
-              value: basePath,
-              updated_at: new Date().toISOString()
-            }, { onConflict: 'key' });
-          
-          return { url: basePath, fromCache: false, models: modelArray };
-        }
-      }
-    } catch (e) {
-      // Continue to next candidate
+      return { url: result.url, fromCache: false, models: result.models };
     }
   }
 
