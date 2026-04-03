@@ -1518,22 +1518,6 @@ serve(async (req) => {
                 continue;
               }
               
-              // Fetch with timeout
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 30000);
-              
-              const xktRes = await fetch(xktDownloadUrl, {
-                headers: { "Authorization": `Bearer ${accessToken}` },
-                signal: controller.signal
-              });
-              
-              clearTimeout(timeoutId);
-
-              if (!xktRes.ok) {
-                const errBody = await xktRes.text().catch(() => '');
-                console.log(`Failed to fetch model ${modelId}: ${xktRes.status} - ${errBody.substring(0, 500)}`);
-                continue;
-              }
 
               const xktData = await xktRes.arrayBuffer();
               const fileSize = xktData.byteLength;
