@@ -1428,10 +1428,38 @@ serve(async (req) => {
             continue;
           }
 
-          console.log(`Building ${buildingName}: Found ${models.length} models`);
-          if (models.length > 0) {
-            console.log(`First model keys: ${JSON.stringify(Object.keys(models[0]))}`);
-            console.log(`First model sample: ${JSON.stringify(models[0]).substring(0, 500)}`);
+          console.log(`Building ${buildingName}: Found ${models.length} models from GetAllRelatedModels`);
+
+          // Also fetch model revisions to get actual modelId for GetXktData
+          const revisionsUrl = `${discovery.url}/GetAllModelRevisions`;
+          console.log(`Fetching revisions: ${revisionsUrl}`);
+          let revisions: any[] = [];
+          try {
+            const revRes = await fetch(revisionsUrl, {
+              headers: { "Authorization": `Bearer ${accessToken}` }
+            });
+            if (revRes.ok) {
+              const revData = await revRes.json();
+              revisions = revData?.modelRevisions || (Array.isArray(revData) ? revData : []);
+              console.log(`Found ${revisions.length} model revisions`);
+              if (revisions.length > 0) {
+                console.log(`First revision keys: ${JSON.stringify(Object.keys(revisions[0]))}`);
+                console.log(`First revision sample: ${JSON.stringify(revisions[0]).substring(0, 500)}`);
+              }
+            } else {
+              console.log(`GetAllModelRevisions failed: ${revRes.status}`);
+            }
+          } catch (e) {
+            console.log(`GetAllModelRevisions error: ${e}`);
+          }
+
+          // Build a map from bimObjectId → modelId using revisions
+          const bimToModelMap = new Map<string, { modelId: string; revisionId: string }>();
+          for (const rev of revisions) {
+            if (rev.modelId) {
+              // Try to match revisions to models — revision might reference models by name or other field
+              bimToModelMap.set(rev.modelId, { modelId: rev.modelId, revisionId: rev.revisionId || '' });
+            }
           }
 
           // Process each model
