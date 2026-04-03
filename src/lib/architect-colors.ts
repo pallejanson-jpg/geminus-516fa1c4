@@ -95,6 +95,35 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
     }
   } catch { /* edgeMaterial getter throws if scene is destroyed */ }
 
+  // Safety fallback: if ALL visible entities were hidden (e.g. model only has IfcSpace),
+  // make spaces visible so the user sees something instead of an empty viewport
+  const totalEntities = allIds.length;
+  if (hiddenSpaces > 0 && colorized === 0 && hiddenSpaces >= totalEntities) {
+    console.warn('[ArchitectColors] All entities are IfcSpace — making spaces visible as fallback');
+    if (metaScene?.metaObjects) {
+      for (const [id, metaObj] of Object.entries(metaScene.metaObjects as Record<string, any>)) {
+        const ifcType = ((metaObj as any).type || '').toLowerCase();
+        const isSpace = ifcType.includes('ifcspace') || ifcType === 'ifc_space' || ifcType === 'space';
+        if (isSpace) {
+          const entity = scene.objects?.[id];
+          if (entity) {
+            entity.visible = true;
+            entity.pickable = true;
+            entity.opacity = 0.6;
+          }
+        }
+      }
+    }
+    // Also make visible any entities without metaObject that were hidden
+    for (const id of allIds) {
+      const entity = scene.objects?.[id];
+      if (entity && !entity.visible) {
+        entity.visible = true;
+        entity.opacity = 0.6;
+      }
+    }
+  }
+
   return { colorized, hiddenSpaces };
 }
 
