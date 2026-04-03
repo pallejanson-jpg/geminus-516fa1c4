@@ -1397,6 +1397,8 @@ serve(async (req) => {
       await updateSyncState(supabase, 'xkt', 'running', totalSynced);
       let interrupted = false;
       const errors: string[] = [];
+      let allRevisions: any[] = [];
+      let revisionsFetched = false;
 
       while (currentBuildingIndex < totalBuildings && !interrupted) {
         // Check timeout
@@ -1428,65 +1430,111 @@ serve(async (req) => {
             continue;
           }
 
-          console.log(`Building ${buildingName}: Found ${models.length} models`);
+          console.log(`Building ${buildingName}: Found ${models.length} models from GetAllRelatedModels`);
 
-          // Process each model
-          for (const model of models) {
-            // Check timeout between models
+          // Fetch model revisions to get actual modelId for GetXktData
+          // GetAllModelRevisions returns {modelId, revisionId, entityName, modelName, status}
+          // The revision's modelId is what GetXktData needs
+          if (!revisionsFetched) {
+            const revisionsUrl = `${discovery.url}/GetAllModelRevisions`;
+            try {
+              const revRes = await fetch(revisionsUrl, {
+                headers: { "Authorization": `Bearer ${accessToken}` }
+              });
+              if (revRes.ok) {
+                const revData = await revRes.json();
+                allRevisions = revData?.modelRevisions || (Array.isArray(revData) ? revData : []);
+                console.log(`Loaded ${allRevisions.length} model revisions`);
+              } else {
+                console.log(`GetAllModelRevisions failed: ${revRes.status}`);
+              }
+            } catch (e) {
+              console.log(`GetAllModelRevisions error: ${e}`);
+            }
+            revisionsFetched = true;
+          }
+
+          // Match revisions to this building by entityName or model name
+          // Models from GetAllRelatedModels have name like "A-modell", revisions have modelName like "Ark"
+          // We match by building: revision.entityName matches building common_name
+          const buildingRevisions = allRevisions.filter((rev: any) => {
+            const eName = (rev.entityName || '').toLowerCase();
+            const bName2 = buildingName.toLowerCase();
+            // Match if entityName contains building name or vice versa
+            return eName === bName2 || eName.includes(bName2) || bName2.includes(eName);
+          });
+          
+          console.log(`Building ${buildingName}: ${buildingRevisions.length} matching revisions (of ${allRevisions.length} total)`);
+
+          // Use revisions as the source — they have the actual modelId for GetXktData
+          const modelsToSync = buildingRevisions.length > 0 ? buildingRevisions : [];
+          
+          if (modelsToSync.length === 0) {
+            console.log(`No revisions matched for ${buildingName}, skipping XKT download`);
+            currentBuildingIndex++;
+            continue;
+          }
+
+          // apiKey already declared at top of sync-xkt action
+
+          for (const rev of modelsToSync) {
             if (Date.now() - startTime > MAX_EXECUTION_TIME) {
               interrupted = true;
               break;
             }
 
-            // Extract modelId from BimModel (Asset+ GetAllRelatedModels response)
-            const modelId = model.modelId || model.id || model.ModelId || `model_${Date.now()}`;
-            const modelName = model.name || model.modelName || model.Name || `Model ${modelId}`;
-            const fileName = `${modelId}.xkt`;
+            const revModelId = rev.modelId;
+            const revisionId = rev.revisionId || '';
+            const modelName = rev.modelName || rev.entityName || `Model ${revModelId}`;
+            const fileName = `${revModelId}.xkt`;
             const storagePath = `${buildingFmGuid}/${fileName}`;
 
             // Check if already synced
             const { data: existingModel } = await supabase
               .from('xkt_models')
-              .select('id')
+              .select('id, source_updated_at')
               .eq('building_fm_guid', buildingFmGuid)
-              .eq('model_id', modelId)
+              .eq('model_id', revModelId)
               .maybeSingle();
 
-            if (existingModel) {
-              console.log(`Model ${modelId} already synced`);
-              continue;
+            const forceSync = body?.force === true;
+            if (existingModel && !forceSync) {
+              const storedRevision = existingModel.source_updated_at || '';
+              if (storedRevision === revisionId) {
+                console.log(`Model ${revModelId} (${modelName}) unchanged`);
+                continue;
+              }
+              console.log(`Model ${revModelId} (${modelName}) has new revision, re-downloading`);
             }
 
             try {
-              // Construct XKT download URL via GetXktData endpoint
-              const xktDownloadUrl = `${discovery.url}/GetXktData?modelid=${modelId}&context=Building`;
-              console.log(`Fetching XKT: ${xktDownloadUrl}`);
+              const xktDownloadUrl = `${discovery.url}/GetXktData?modelid=${revModelId}&context=Building&apiKey=${apiKey}`;
+              console.log(`Fetching XKT: ${xktDownloadUrl.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
               
-              // Fetch with timeout
               const controller = new AbortController();
               const timeoutId = setTimeout(() => controller.abort(), 30000);
-              
               const xktRes = await fetch(xktDownloadUrl, {
                 headers: { "Authorization": `Bearer ${accessToken}` },
                 signal: controller.signal
               });
-              
               clearTimeout(timeoutId);
 
               if (!xktRes.ok) {
-                console.log(`Failed to fetch model ${modelId}: ${xktRes.status}`);
+                const errBody = await xktRes.text().catch(() => '');
+                console.log(`Failed to fetch ${modelName} (${revModelId}): ${xktRes.status} ${errBody.substring(0, 200)}`);
                 continue;
               }
+              
 
               const xktData = await xktRes.arrayBuffer();
               const fileSize = xktData.byteLength;
               
               if (fileSize < 1024) { // Skip files < 1KB (likely invalid)
-                console.log(`Model ${modelId}: File too small (${fileSize} bytes), skipping`);
+                console.log(`Model ${revModelId}: File too small (${fileSize} bytes), skipping`);
                 continue;
               }
               
-              console.log(`Model ${modelId}: Downloaded ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
+              console.log(`Model ${revModelId} (${modelName}): Downloaded ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
 
               // Upload to storage
               const { error: uploadError } = await supabase.storage
@@ -1503,7 +1551,7 @@ serve(async (req) => {
                   .createSignedUrl(storagePath, 86400 * 365);
                 signedUrl = urlData?.signedUrl || null;
               } else {
-                console.log(`Storage upload failed for ${modelId}:`, uploadError.message);
+                console.log(`Storage upload failed for ${revModelId}:`, uploadError.message);
               }
 
               // Insert into database
@@ -1512,24 +1560,25 @@ serve(async (req) => {
                 .upsert({
                   building_fm_guid: buildingFmGuid,
                   building_name: buildingName,
-                  model_id: modelId,
+                  model_id: revModelId,
                   model_name: modelName,
                   file_name: fileName,
                   file_url: signedUrl,
                   file_size: fileSize,
                   storage_path: storagePath,
                   source_url: xktDownloadUrl,
+                  source_updated_at: revisionId || new Date().toISOString(),
                   synced_at: new Date().toISOString(),
                 }, { onConflict: 'building_fm_guid,model_id' });
 
               if (dbError) {
-                console.log(`Database insert failed for ${modelId}:`, dbError.message);
-                errors.push(`${buildingName}/${modelId}: DB error`);
+                console.log(`Database insert failed for ${revModelId}:`, dbError.message);
+                errors.push(`${buildingName}/${revModelId}: DB error`);
                 continue;
               }
 
               totalSynced++;
-              console.log(`✅ Synced model ${modelId} for ${buildingName}`);
+              console.log(`✅ Synced model ${revModelId} (${modelName}) for ${buildingName}`);
             } catch (e) {
               const errMsg = e instanceof Error ? e.message : String(e);
               if (errMsg.includes('aborted')) {
