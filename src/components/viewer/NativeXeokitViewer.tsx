@@ -182,7 +182,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         (window as any).__xeokitNativeColors = nativeColors;
 
         // Apply architect colors + saved theme
-        applyArchitectColors(viewer);
+        const colorResult = applyArchitectColors(viewer);
+        console.log(`[NativeViewer] Architect colors: ${colorResult.colorized} colorized, ${colorResult.hiddenSpaces} spaces hidden, ${allIds.length} total entities`);
         try {
           const savedThemeId = localStorage.getItem('viewer-active-theme-id');
           if (savedThemeId) {
