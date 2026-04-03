@@ -1430,119 +1430,96 @@ serve(async (req) => {
 
           console.log(`Building ${buildingName}: Found ${models.length} models from GetAllRelatedModels`);
 
-          // Also fetch model revisions to get actual modelId for GetXktData
-          const revisionsUrl = `${discovery.url}/GetAllModelRevisions`;
-          console.log(`Fetching revisions: ${revisionsUrl}`);
-          let revisions: any[] = [];
-          try {
-            const revRes = await fetch(revisionsUrl, {
-              headers: { "Authorization": `Bearer ${accessToken}` }
-            });
-            if (revRes.ok) {
-              const revData = await revRes.json();
-              revisions = revData?.modelRevisions || (Array.isArray(revData) ? revData : []);
-              console.log(`Found ${revisions.length} model revisions`);
-              if (revisions.length > 0) {
-                console.log(`First revision keys: ${JSON.stringify(Object.keys(revisions[0]))}`);
-                console.log(`First revision sample: ${JSON.stringify(revisions[0]).substring(0, 500)}`);
+          // Fetch model revisions to get actual modelId for GetXktData
+          // GetAllModelRevisions returns {modelId, revisionId, entityName, modelName, status}
+          // The revision's modelId is what GetXktData needs
+          if (!revisionsFetched) {
+            const revisionsUrl = `${discovery.url}/GetAllModelRevisions`;
+            try {
+              const revRes = await fetch(revisionsUrl, {
+                headers: { "Authorization": `Bearer ${accessToken}` }
+              });
+              if (revRes.ok) {
+                const revData = await revRes.json();
+                allRevisions = revData?.modelRevisions || (Array.isArray(revData) ? revData : []);
+                console.log(`Loaded ${allRevisions.length} model revisions`);
+              } else {
+                console.log(`GetAllModelRevisions failed: ${revRes.status}`);
               }
-            } else {
-              console.log(`GetAllModelRevisions failed: ${revRes.status}`);
+            } catch (e) {
+              console.log(`GetAllModelRevisions error: ${e}`);
             }
-          } catch (e) {
-            console.log(`GetAllModelRevisions error: ${e}`);
+            revisionsFetched = true;
           }
 
-          // Build a map from bimObjectId → modelId using revisions
-          const bimToModelMap = new Map<string, { modelId: string; revisionId: string }>();
-          for (const rev of revisions) {
-            if (rev.modelId) {
-              // Try to match revisions to models — revision might reference models by name or other field
-              bimToModelMap.set(rev.modelId, { modelId: rev.modelId, revisionId: rev.revisionId || '' });
-            }
+          // Match revisions to this building by entityName or model name
+          // Models from GetAllRelatedModels have name like "A-modell", revisions have modelName like "Ark"
+          // We match by building: revision.entityName matches building common_name
+          const buildingRevisions = allRevisions.filter((rev: any) => {
+            const eName = (rev.entityName || '').toLowerCase();
+            const bName2 = buildingName.toLowerCase();
+            // Match if entityName contains building name or vice versa
+            return eName === bName2 || eName.includes(bName2) || bName2.includes(eName);
+          });
+          
+          console.log(`Building ${buildingName}: ${buildingRevisions.length} matching revisions (of ${allRevisions.length} total)`);
+
+          // Use revisions as the source — they have the actual modelId for GetXktData
+          const modelsToSync = buildingRevisions.length > 0 ? buildingRevisions : [];
+          
+          if (modelsToSync.length === 0) {
+            console.log(`No revisions matched for ${buildingName}, skipping XKT download`);
+            currentBuildingIndex++;
+            continue;
           }
 
-          // Process each model
-          for (const model of models) {
-            // Check timeout between models
+          const apiKey = _creds.apiKey || Deno.env.get("ASSET_PLUS_API_KEY") || '';
+
+          for (const rev of modelsToSync) {
             if (Date.now() - startTime > MAX_EXECUTION_TIME) {
               interrupted = true;
               break;
             }
 
-            // Extract modelId from BimModel (Asset+ GetAllRelatedModels response)
-            // Try all possible field names from the API
-            // Per OpenAPI: modelId can be null, bimObjectId is the reliable identifier
-            const actualModelId = model.modelId || null;
-            const bimObjectId = model.bimObjectId || null;
-            const modelId = actualModelId || bimObjectId || model.id || model.ModelId || model.externalGuid || model.fmGuid || `model_${Date.now()}`;
-            const modelName = model.name || model.modelName || model.Name || `Model ${modelId}`;
-            const revisionId = model.revisionId || model.RevisionId || model.revision_id || null;
-            // Skip zero-guid revisions for comparison
-            const effectiveRevision = (revisionId && revisionId !== '00000000-0000-0000-0000-000000000000') 
-              ? revisionId 
-              : model.dateModified || null;
-            const fileName = `${modelId}.xkt`;
+            const revModelId = rev.modelId;
+            const revisionId = rev.revisionId || '';
+            const modelName = rev.modelName || rev.entityName || `Model ${revModelId}`;
+            const fileName = `${revModelId}.xkt`;
             const storagePath = `${buildingFmGuid}/${fileName}`;
 
-            // Check if already synced — compare revision/dateModified to detect updates
+            // Check if already synced
             const { data: existingModel } = await supabase
               .from('xkt_models')
               .select('id, source_updated_at')
               .eq('building_fm_guid', buildingFmGuid)
-              .eq('model_id', modelId)
+              .eq('model_id', revModelId)
               .maybeSingle();
 
             const forceSync = body?.force === true;
             if (existingModel && !forceSync) {
               const storedRevision = existingModel.source_updated_at || '';
-              if (effectiveRevision && storedRevision === effectiveRevision) {
-                console.log(`Model ${modelId} unchanged (revision: ${effectiveRevision})`);
-                continue;
-              } else if (!effectiveRevision) {
-                console.log(`Model ${modelId} already synced (no revision to compare)`);
+              if (storedRevision === revisionId) {
+                console.log(`Model ${revModelId} (${modelName}) unchanged`);
                 continue;
               }
-              console.log(`Model ${modelId} has new revision: ${effectiveRevision} (was: ${storedRevision}), re-downloading`);
+              console.log(`Model ${revModelId} (${modelName}) has new revision, re-downloading`);
             }
 
             try {
-              // Construct XKT download URL via GetXktData endpoint
-              // Try multiple parameter combinations since the API behavior varies
-              const apiKey = _creds.apiKey || Deno.env.get("ASSET_PLUS_API_KEY") || '';
-              const downloadModelId = bimObjectId || actualModelId || modelId;
+              const xktDownloadUrl = `${discovery.url}/GetXktData?modelid=${revModelId}&context=Building&apiKey=${apiKey}`;
+              console.log(`Fetching XKT: ${xktDownloadUrl.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
               
-              // Try approach 1: bimObjectId as modelid + apiKey
-              // Try approach 2: with explicit bimobjectid param
-              // Try approach 3: dummy modelid + bimobjectid
-              const urlAttempts = [
-                `${discovery.url}/GetXktData?modelid=${downloadModelId}&context=Building&apiKey=${apiKey}`,
-                `${discovery.url}/GetXktData?modelid=${downloadModelId}&bimobjectid=${downloadModelId}&context=Building&apiKey=${apiKey}`,
-                `${discovery.url}/GetXktData?modelid=00000000-0000-0000-0000-000000000000&bimobjectid=${downloadModelId}&context=Building&apiKey=${apiKey}`,
-              ];
-              
-              let xktRes: Response | null = null;
-              let xktDownloadUrl = '';
-              for (const url of urlAttempts) {
-                console.log(`Trying XKT: ${url.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 30000);
-                const res = await fetch(url, {
-                  headers: { "Authorization": `Bearer ${accessToken}` },
-                  signal: controller.signal
-                });
-                clearTimeout(timeoutId);
-                if (res.ok) {
-                  xktRes = res;
-                  xktDownloadUrl = url;
-                  break;
-                }
-                const errBody = await res.text().catch(() => '');
-                console.log(`  → ${res.status} ${errBody.substring(0, 200)}`);
-              }
-              
-              if (!xktRes) {
-                console.log(`All XKT download attempts failed for ${modelId}`);
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 30000);
+              const xktRes = await fetch(xktDownloadUrl, {
+                headers: { "Authorization": `Bearer ${accessToken}` },
+                signal: controller.signal
+              });
+              clearTimeout(timeoutId);
+
+              if (!xktRes.ok) {
+                const errBody = await xktRes.text().catch(() => '');
+                console.log(`Failed to fetch ${modelName} (${revModelId}): ${xktRes.status} ${errBody.substring(0, 200)}`);
                 continue;
               }
               
