@@ -1558,6 +1558,8 @@ serve(async (req) => {
                 { param: 'externalguid', value: modelFmGuid, label: 'externalguid(model.fmGuid)' },
                 { param: 'externalguid', value: buildingFmGuid, label: 'externalguid(buildingFmGuid)' },
               ];
+              const availableIds = idCombos.filter(c => c.value).map(c => c.label);
+              console.log(`  ${modelName} (${revModelId}): trying ${availableIds.length} identifiers: ${availableIds.join(', ')}`);
               
               for (const combo of idCombos) {
                 if (!combo.value) continue;
