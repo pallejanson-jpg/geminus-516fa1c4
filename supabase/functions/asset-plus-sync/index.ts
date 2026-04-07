@@ -1432,6 +1432,14 @@ serve(async (req) => {
 
           console.log(`Building ${buildingName}: Found ${models.length} models from GetAllRelatedModels`);
 
+          // Build bimObjectId lookup from GetAllRelatedModels models
+          const bimObjectIdMap = new Map<string, string>();
+          for (const m of models) {
+            const mId = m.modelId || m.id || m.ModelId;
+            const bimObjId = m.bimObjectId || m.BimObjectId || m.fmGuid || m.FmGuid;
+            if (mId && bimObjId) bimObjectIdMap.set(String(mId), String(bimObjId));
+          }
+
           // Fetch model revisions to get actual modelId for GetXktData
           // GetAllModelRevisions returns {modelId, revisionId, entityName, modelName, status}
           // The revision's modelId is what GetXktData needs
@@ -1455,22 +1463,25 @@ serve(async (req) => {
           }
 
           // Match revisions to this building by entityName or model name
-          // Models from GetAllRelatedModels have name like "A-modell", revisions have modelName like "Ark"
-          // We match by building: revision.entityName matches building common_name
           const buildingRevisions = allRevisions.filter((rev: any) => {
             const eName = (rev.entityName || '').toLowerCase();
             const bName2 = buildingName.toLowerCase();
-            // Match if entityName contains building name or vice versa
             return eName === bName2 || eName.includes(bName2) || bName2.includes(eName);
           });
           
           console.log(`Building ${buildingName}: ${buildingRevisions.length} matching revisions (of ${allRevisions.length} total)`);
 
-          // Use revisions as the source — they have the actual modelId for GetXktData
-          const modelsToSync = buildingRevisions.length > 0 ? buildingRevisions : [];
+          // If no revisions matched, fall back to using models directly from GetAllRelatedModels
+          const modelsToSync = buildingRevisions.length > 0 ? buildingRevisions : models.map((m: any) => ({
+            modelId: m.modelId || m.id || m.ModelId,
+            revisionId: '',
+            modelName: m.name || m.modelName || m.Name || `Model`,
+            entityName: buildingName,
+            _bimObjectId: m.bimObjectId || m.BimObjectId || m.fmGuid || m.FmGuid,
+          }));
           
           if (modelsToSync.length === 0) {
-            console.log(`No revisions matched for ${buildingName}, skipping XKT download`);
+            console.log(`No models to sync for ${buildingName}, skipping`);
             currentBuildingIndex++;
             continue;
           }
@@ -1508,7 +1519,10 @@ serve(async (req) => {
             }
 
             try {
-              const xktDownloadUrl = `${discovery.url}/GetXktData?modelid=${revModelId}&context=Building&apiKey=${apiKey}`;
+              // Resolve bimObjectId: from the revision itself, from the map, or use buildingFmGuid as externalguid
+              const bimObjId = rev._bimObjectId || bimObjectIdMap.get(String(revModelId)) || '';
+              const bimParam = bimObjId ? `&bimobjectid=${encodeURIComponent(bimObjId)}` : `&externalguid=${encodeURIComponent(buildingFmGuid)}`;
+              const xktDownloadUrl = `${discovery.url}/GetXktData?modelid=${revModelId}${bimParam}&context=Building&apiKey=${apiKey}`;
               console.log(`Fetching XKT: ${xktDownloadUrl.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
               
               const controller = new AbortController();
