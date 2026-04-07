@@ -1510,7 +1510,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       if (entity) { entity.visible = false; entity.pickable = false; }
     });
 
-    // ── 2D mode pickability & clipping override ──────────────────────────────
+    // ── 2D mode pickability override ──────────────────────────────
     if (is2DModeRef.current) {
       // Structural types that should NOT be pickable (slabs, columns, beams, etc.)
       // Walls ARE pickable in 2D so users can click them
@@ -1530,29 +1530,13 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           if (NON_PICKABLE_STRUCTURAL_2D.has(typeLower)) {
             entity.pickable = false;
           } else if (typeLower === 'ifcspace') {
-            // Spaces are pickable background — make them non-clippable
-            // so they render as a thin floor fill regardless of section plane height
+            // Spaces are pickable background, clipped normally by section plane
             entity.pickable = true;
-            entity.clippable = false;
           } else if (typeLower.includes('ifcwall')) {
-            // Walls are pickable and clippable (cut by section plane)
+            // Walls are pickable in 2D
             entity.pickable = true;
-            entity.clippable = true;
           }
-          // Doors, windows, furniture etc. keep default pickable=true, clippable=true
-        });
-      }
-    } else {
-      // When exiting 2D mode, restore clippable on all entities
-      const metaObjects = viewer.metaScene?.metaObjects;
-      if (metaObjects) {
-        Object.values(metaObjects).forEach((mo: any) => {
-          const entity = scene.objects?.[mo.id];
-          if (!entity) return;
-          const typeLower = (mo.type || '').toLowerCase();
-          if (typeLower === 'ifcspace') {
-            entity.clippable = true;
-          }
+          // Doors, windows, furniture etc. keep default pickable=true
         });
       }
     }
