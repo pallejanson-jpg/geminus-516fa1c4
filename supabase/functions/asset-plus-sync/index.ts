@@ -1726,38 +1726,70 @@ serve(async (req) => {
         console.log(`Building ${buildingName}: Found ${models.length} models`);
         let synced = 0;
 
+        // Fetch revisions for update detection
+        let revisions: any[] = [];
+        try {
+          const revUrl = `${discovery.url}/GetAllModelRevisions`;
+          const revRes = await fetch(revUrl, { headers: { "Authorization": `Bearer ${accessToken}` } });
+          if (revRes.ok) {
+            const revData = await revRes.json();
+            revisions = revData?.modelRevisions || (Array.isArray(revData) ? revData : []);
+            console.log(`Loaded ${revisions.length} revisions for update detection`);
+          }
+        } catch (e) { console.log(`GetAllModelRevisions error: ${e}`); }
+
+        // Build revision lookup: modelId → revisionId
+        const revisionMap = new Map<string, string>();
+        for (const rev of revisions) {
+          if (rev.modelId) revisionMap.set(String(rev.modelId), rev.revisionId || '');
+        }
+
         for (const model of models) {
-          // Extract modelId from BimModel (Asset+ GetAllRelatedModels response)
+          // Extract modelId and bimObjectId from BimModel (Asset+ GetAllRelatedModels response)
           const modelId = model.modelId || model.id || model.ModelId || `model_${Date.now()}`;
           const modelName = model.name || model.modelName || model.Name || `Model ${modelId}`;
+          const bimObjectId = model.bimObjectId || model.BimObjectId || model.fmGuid || model.FmGuid || '';
           const fileName = `${modelId}.xkt`;
           const storagePath = `${buildingFmGuid}/${fileName}`;
 
-          // Check if already synced (skip unless force=true)
+          // Revision-based update detection
           const forceSync = body?.force === true;
+          const revisionId = revisionMap.get(String(modelId)) || '';
           const { data: existingModel } = await supabase
             .from('xkt_models')
-            .select('id')
+            .select('id, source_updated_at')
             .eq('building_fm_guid', buildingFmGuid)
             .eq('model_id', modelId)
             .maybeSingle();
 
           if (existingModel && !forceSync) {
-            console.log(`Model ${modelId} already synced (use force:true to re-sync)`);
-            continue;
+            const storedRevision = existingModel.source_updated_at || '';
+            if (revisionId && storedRevision === revisionId) {
+              console.log(`Model ${modelId} (${modelName}) unchanged (revision ${revisionId})`);
+              continue;
+            }
+            if (!revisionId && storedRevision) {
+              console.log(`Model ${modelId} already synced, no revision info to compare`);
+              continue;
+            }
+            console.log(`Model ${modelId} (${modelName}) has new revision, re-downloading`);
           }
 
           try {
-            // Construct XKT download URL via GetXktData endpoint
-            const xktDownloadUrl = `${discovery.url}/GetXktData?modelid=${modelId}&context=Building`;
-            console.log(`Fetching XKT: ${xktDownloadUrl}`);
+            // Construct XKT download URL with bimobjectid parameter
+            const bimParam = bimObjectId 
+              ? `&bimobjectid=${encodeURIComponent(bimObjectId)}` 
+              : `&externalguid=${encodeURIComponent(buildingFmGuid)}`;
+            const xktDownloadUrl = `${discovery.url}/GetXktData?modelid=${modelId}${bimParam}&context=Building&apiKey=${apiKey}`;
+            console.log(`Fetching XKT: ${xktDownloadUrl.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
             
             const xktRes = await fetch(xktDownloadUrl, {
               headers: { "Authorization": `Bearer ${accessToken}` }
             });
 
             if (!xktRes.ok) {
-              console.log(`Failed to fetch model ${modelId}: ${xktRes.status}`);
+              const errBody = await xktRes.text().catch(() => '');
+              console.log(`Failed to fetch model ${modelId}: ${xktRes.status} ${errBody.substring(0, 200)}`);
               continue;
             }
 
@@ -1784,7 +1816,7 @@ serve(async (req) => {
               signedUrl = urlData?.signedUrl || null;
             }
 
-            // Insert into database
+            // Insert into database with revision tracking
             await supabase
               .from('xkt_models')
               .upsert({
@@ -1796,7 +1828,8 @@ serve(async (req) => {
                 file_url: signedUrl,
                 file_size: fileSize,
                 storage_path: storagePath,
-                source_url: xktDownloadUrl,
+                source_url: xktDownloadUrl.replace(/apiKey=[^&]+/, 'apiKey=***'),
+                source_updated_at: revisionId || new Date().toISOString(),
                 synced_at: new Date().toISOString(),
               }, { onConflict: 'building_fm_guid,model_id' });
 
