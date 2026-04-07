@@ -637,6 +637,7 @@ serve(async (req) => {
 
     // ============ CHECK SYNC STATUS ============
     if (action === 'check-sync-status') {
+      try {
       // Auto-mark stale syncs
       await markStaleRunningAsInterrupted(supabase);
       
