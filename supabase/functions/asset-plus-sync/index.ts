@@ -1495,27 +1495,28 @@ serve(async (req) => {
           }
 
           // Always build sync list from GetAllRelatedModels (which carries bimObjectId).
-          // Enrich with revisionId from GetAllModelRevisions when available.
+          // Enrich with revisionId and missing modelId from GetAllModelRevisions when available.
           const modelsToSync = models.map((m: any) => {
-            const mId = String(m.modelId || m.id || m.ModelId || '');
+            const rawModelId = m.modelId || m.id || m.ModelId || '';
             const mName = m.name || m.modelName || m.Name || `Model`;
-            // Try to find a matching revision by modelId or name
+            const modelNameLower = String(mName).toLowerCase();
             const matchedRev = allRevisions.find((rev: any) => {
-              if (String(rev.modelId) === mId) return true;
-              const revName = (rev.modelName || '').toLowerCase();
-              const modelNameLower = mName.toLowerCase();
-              return revName && modelNameLower && (revName === modelNameLower || revName.includes(modelNameLower));
+              const revModelId = String(rev.modelId || '');
+              if (rawModelId && revModelId === String(rawModelId)) return true;
+              const revName = String(rev.modelName || '').toLowerCase();
+              return !!(revName && modelNameLower && (revName === modelNameLower || revName.includes(modelNameLower) || modelNameLower.includes(revName)));
             });
+            const resolvedModelId = String(rawModelId || matchedRev?.modelId || '');
             return {
-              modelId: mId,
-              revisionId: matchedRev?.revisionId || '',
+              modelId: resolvedModelId,
+              revisionId: matchedRev?.revisionId || m.revisionId || m.RevisionId || '',
               modelName: mName,
               entityName: buildingName,
               _bimObjectId: m.bimObjectId || m.BimObjectId || m.fmGuid || m.FmGuid || '',
               fmGuid: m.fmGuid || m.FmGuid || '',
               externalGuid: m.externalGuid || m.ExternalGuid || '',
             };
-          });
+          }).filter((m: any) => !!m.modelId);
           
           console.log(`Building ${buildingName}: ${modelsToSync.length} models to sync (from GetAllRelatedModels, ${allRevisions.length} total revisions)`);
           
@@ -1840,8 +1841,14 @@ serve(async (req) => {
         }
 
         for (const model of models) {
-          const modelId = model.modelId || model.id || model.ModelId || `model_${Date.now()}`;
-          const modelName = model.name || model.modelName || model.Name || `Model ${modelId}`;
+          const rawModelId = model.modelId || model.id || model.ModelId || '';
+          const modelName = model.name || model.modelName || model.Name || `Model`;
+          const matchedRevisionId = revisions.find((rev: any) => {
+            const revName = String(rev.modelName || '').toLowerCase();
+            const modelNameLower = String(modelName).toLowerCase();
+            return (rawModelId && String(rev.modelId || '') === String(rawModelId)) || (!!revName && !!modelNameLower && (revName === modelNameLower || revName.includes(modelNameLower) || modelNameLower.includes(revName)));
+          })?.modelId || '';
+          const modelId = rawModelId || matchedRevisionId || `model_${Date.now()}`;
           const bimObjectId = model.bimObjectId || model.BimObjectId || '';
           const modelFmGuid = model.fmGuid || model.FmGuid || '';
           const externalGuid = model.externalGuid || model.ExternalGuid || '';
