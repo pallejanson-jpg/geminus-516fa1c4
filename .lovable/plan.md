@@ -1,44 +1,54 @@
 
-Goal: make Småviken / the small vehicle building load the newest XKT from Asset+, not the old backend copy.
+Goal: make the Settings XKT sync actually update Småviken/current viewer building and stop reporting false success when nothing was refreshed.
 
-What I found
-- The manual/global XKT sync UI uses `sync-xkt-resumable`, not the single-building path.
-- The earlier freshness fix was applied in the single-building branch, but the resumable branch in `supabase/functions/asset-plus-sync/index.ts` still has the old skip behavior. That means a model can still be treated as “unchanged” when revision metadata is missing.
-- The viewer does not re-check Asset+ if `xkt_models` already has files; it just signs and loads the cached storage files.
-- Even after a backend refresh, stale XKT can still be shown because the app also keeps per-building XKT data in memory/preload caches.
+What I verified
+- The backend did run an XKT sync at 17:29, but it finished as `completed` with `total_assets = 0`.
+- For Småviken (`a8fe5835-e293-4ba3-92c6-c7e36f675f23`), logs show `Found 4 models from GetAllRelatedModels`, then every `GetXktData` request returned `404`.
+- The database rows in `xkt_models` for Småviken are still old (`updated_at` 2026-03-06), so no fresh XKT was uploaded.
+- The force-refresh UI currently uses `favoriteBuildings[0]`, not the building currently open in the viewer, so it is not guaranteed to refresh the building the user is looking at.
 
-Plan
-1. Fix the remaining stale-skip logic
-- Update the `sync-xkt-resumable` branch so it only skips when both revision values exist and match.
-- Keep `force: true` as a hard override that always re-downloads and overwrites the XKT.
+Implementation plan
+1. Bind force refresh to the active viewer building
+- In `ApiSettingsModal.tsx`, stop defaulting to `favoriteBuildings[0]`.
+- Use the active viewer building/context first (`viewer3dFmGuid` or selected facility), with favorites only as fallback.
+- Show the exact building being refreshed in the UI so the target is explicit.
 
-2. Add a real building-specific force refresh
-- Add a “Force refresh 3D models” action for the selected building in settings.
-- Make it call `asset-plus-sync` with:
-  - `action: 'sync-xkt-building'`
-  - `buildingFmGuid`
-  - `force: true`
-- This gives a deterministic refresh for Småviken instead of relying on the global resumable sync.
+2. Fix the XKT download identifier logic
+- In `supabase/functions/asset-plus-sync/index.ts`, extract the XKT fetch logic into one shared helper for `sync-xkt-building` and `sync-xkt-resumable`.
+- Do not rely on one identifier combination.
+- Try `GetXktData` with a fallback chain based on available metadata:
+  - `bimobjectid = model.bimObjectId`
+  - `externalguid = model.externalGuid`
+  - `bimobjectid = building asset attributes.parentBimObjectId / buildingBimObjectId`
+  - `externalguid = model.fmGuid`
+  - `externalguid = buildingFmGuid` only as last fallback
+- In the resumable path, stop name-matching revisions across all revisions. Instead:
+  - start from `GetAllRelatedModels` for the current building
+  - map revision info by `modelId`
+  - sync only the model IDs actually returned for that building
 
-3. Clear stale local caches before reloading the viewer
-- Extend the XKT cache/preload layer to fully reset one building:
-  - clear in-memory XKT blobs
-  - remove the building from the preload guard
-  - stop reusing stale signed-url/memory paths
-- After successful force sync, trigger a viewer remount/reload for the active building so it fetches the fresh backend files immediately.
+3. Make sync status honest
+- If all downloads return 404 or no file is written, mark the sync as failed/partial instead of `completed`.
+- Return per-model error details in the response/status log.
+- Do not present “force refresh complete” when `synced = 0`.
 
-4. Harden overwrite freshness
-- Set low/no-cache behavior on XKT uploads in the sync/save paths so overwritten files are not served stale.
-- Keep the same storage keys, but ensure the overwrite path is followed by cache invalidation + viewer reload.
+4. Only reload the viewer after a real refresh
+- In `ApiSettingsModal.tsx`, only clear caches and dispatch `XKT_FORCE_RELOAD` when at least one model was actually re-downloaded and stored.
+- If no model was refreshed, show a clear error toast explaining that the backend download failed, instead of reloading stale files.
+
+5. Keep the freshness pipeline once downloads work
+- Keep the existing no-cache upload behavior and viewer remount logic.
+- After a successful overwrite, continue clearing `useXktPreload` memory/preload state so the viewer fetches fresh signed URLs immediately.
 
 Files to update
 - `supabase/functions/asset-plus-sync/index.ts`
-- `src/components/settings/ApiSettingsModal.tsx` and/or `src/components/settings/CreateBuildingPanel.tsx`
-- `src/services/xkt-cache-service.ts`
-- `src/hooks/useXktPreload.ts`
-- `src/components/viewer/NativeViewerShell.tsx` or `src/components/viewer/NativeXeokitViewer.tsx`
+- `src/components/settings/ApiSettingsModal.tsx`
+- `src/hooks/useXktPreload.ts` only if a helper/API adjustment is needed
+- `src/components/viewer/NativeViewerShell.tsx` only if reload signaling needs a small guard
 
-Technical details
-- The current viewer is still loading signed storage XKT files for Småviken, so this is a freshness pipeline issue, not a rendering issue.
+Technical notes
+- This is a real backend sync failure, not only a viewer cache problem.
+- The API docs show `GetXktData` requires `modelid` plus one of `bimobjectid`, `externalguid`, or `externalid`.
+- Current Småviken sync attempts are reaching `GetXktData` and getting `404`, which is why the viewer keeps showing the old stored XKT.
+- Småviken’s building asset already has a `parentBimObjectId` in the database, and that identifier is not currently part of the fallback chain used by the sync.
 - No database schema changes are needed.
-- The implementation will make the forced path do 3 things in order: overwrite backend XKT, clear frontend building caches, then reload the viewer so native colors and newly added objects prove the model is actually updated.
