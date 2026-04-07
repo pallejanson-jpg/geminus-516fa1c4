@@ -461,6 +461,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isSyncingStructure, setIsSyncingStructure] = useState(false);
     const [isSyncingAssets, setIsSyncingAssets] = useState(false);
     const [isSyncingXkt, setIsSyncingXkt] = useState(false);
+    const [forceXkt, setForceXkt] = useState(false);
     const [syncStatuses, setSyncStatuses] = useState<SyncStatus[]>([]);
     const [assetCount, setAssetCount] = useState<number>(0);
     const [syncCheck, setSyncCheck] = useState<NewSyncCheckResult | null>(null);
@@ -1512,12 +1513,14 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
     // Sync all XKT models with loop-until-complete behavior
     const handleSyncXkt = async () => {
+        const isForce = forceXkt;
         setIsSyncingXkt(true);
+        let totalSyncedOverall = 0;
         
         const runResumableSync = async (): Promise<void> => {
             try {
                 const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
-                    body: { action: 'sync-xkt-resumable' }
+                    body: { action: 'sync-xkt-resumable', force: isForce }
                 });
 
                 if (error) {
@@ -1533,23 +1536,37 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                 // Update status display
                 await fetchSyncStatus();
+                totalSyncedOverall += (data?.synced || 0);
 
                 if (data?.interrupted) {
                     // Continue syncing - call again after a short delay
                     console.log(`XKT sync progress: ${data.synced} synced, continuing...`);
                     toast({
                         title: "Syncing XKT Models",
-                        description: `${data.synced} models synced. Continuing...`,
+                        description: `${totalSyncedOverall} models synced. Continuing...`,
                     });
                     
                     setTimeout(() => runResumableSync(), 1000);
                 } else {
                     // Completed
-                    console.log(`XKT sync completed: ${data?.synced} total`);
-                    toast({
-                        title: "XKT Sync Complete",
-                        description: `${data?.synced || 0} 3D models synced successfully.`,
-                    });
+                    console.log(`XKT sync completed: ${totalSyncedOverall} total`);
+
+                    if (totalSyncedOverall > 0) {
+                        // Clear all building caches and reload viewer
+                        const { clearBuildingFromMemory } = await import('@/hooks/useXktPreload');
+                        // Clear active viewer building if available
+                        if (viewer3dFmGuid) clearBuildingFromMemory(viewer3dFmGuid);
+                        window.dispatchEvent(new CustomEvent('XKT_FORCE_RELOAD', { detail: {} }));
+                        toast({
+                            title: "XKT Sync Complete",
+                            description: `${totalSyncedOverall} 3D models synced. Viewer will reload.`,
+                        });
+                    } else {
+                        toast({
+                            title: "XKT Sync Complete",
+                            description: `No new models were downloaded.`,
+                        });
+                    }
                     setIsSyncingXkt(false);
                     await checkSyncStatus();
                 }
@@ -1565,8 +1582,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         };
 
         toast({
-            title: "Starting XKT Sync",
-            description: "Syncing 3D models for all buildings. This will complete automatically.",
+            title: isForce ? "Force-syncing XKT Models" : "Starting XKT Sync",
+            description: isForce
+                ? "Re-downloading all 3D models regardless of revision..."
+                : "Syncing 3D models for all buildings. This will complete automatically.",
         });
 
         runResumableSync();
@@ -3316,33 +3335,17 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             syncCompletedAt={syncCheck?.xkt?.syncState?.last_sync_completed_at}
                                             syncStatus={syncCheck?.xkt?.syncState?.sync_status}
                                             errorMessage={syncCheck?.xkt?.syncState?.error_message}
+                                            extraActions={
+                                                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none" title="Tvinga om-nedladdning av alla modeller oavsett revision">
+                                                    <Switch
+                                                        checked={forceXkt}
+                                                        onCheckedChange={setForceXkt}
+                                                        className="h-4 w-8 [&>span]:h-3 [&>span]:w-3 data-[state=checked]:[&>span]:translate-x-4"
+                                                    />
+                                                    Force
+                                                </label>
+                                            }
                                         />
-
-                                        {/* Force Refresh XKT for selected building */}
-                                        <div className="flex items-center gap-2 rounded-lg border p-3 bg-muted/20">
-                                            <Cuboid className="h-4 w-4 text-primary" />
-                                            <div className="flex-1">
-                                                <span className="text-sm font-medium">Force Refresh 3D Models</span>
-                                                <p className="text-xs text-muted-foreground">
-                                                    Re-download XKT for {
-                                                        (viewer3dFmGuid && favoriteBuildings.find((b: any) => b.fm_guid === viewer3dFmGuid)?.common_name)
-                                                        || selectedFacility?.common_name
-                                                        || favoriteBuildings[0]?.common_name
-                                                        || 'selected building'
-                                                    } from Asset+
-                                                </p>
-                                            </div>
-                                            <Button
-                                                onClick={() => handleForceRefreshXkt()}
-                                                size="sm"
-                                                variant="outline"
-                                                className="gap-1"
-                                                disabled={!(viewer3dFmGuid || selectedFacility?.fm_guid || favoriteBuildings[0]?.fm_guid) || isSyncingXkt}
-                                            >
-                                                {isSyncingXkt ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                                                Force Refresh
-                                            </Button>
-                                        </div>
 
                                         <div className="flex items-center gap-2 rounded-lg border p-3 bg-muted/20">
                                             <Database className="h-4 w-4 text-primary" />
