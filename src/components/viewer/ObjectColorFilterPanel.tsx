@@ -181,6 +181,7 @@ const ObjectColorFilterPanel: React.FC<ObjectColorFilterPanelProps> = ({ viewerR
     const metaObjects = xv.metaScene.metaObjects;
     const scene = xv.scene;
     let count = 0;
+    let hasSpaceMatch = false;
 
     // Reset all first
     const allIds = scene.objectIds || [];
@@ -191,9 +192,30 @@ const ObjectColorFilterPanel: React.FC<ObjectColorFilterPanelProps> = ({ viewerR
 
     if (enabledRules.length === 0) {
       setMatchCount(0);
-      // Clear the global color filter flag
       (window as any).__colorFilterActive = false;
+      (window as any).__spacesForceVisible = false;
+      emit('FORCE_SHOW_SPACES', { show: false });
       return;
+    }
+
+    // First pass: check if any rule could match IfcSpace (to force spaces visible before colorizing)
+    const couldMatchSpaces = enabledRules.some(r =>
+      r.conditions.some(c =>
+        c.target === 'category' && c.field.toLowerCase() === 'ifcspace'
+      ) || r.conditions.some(c => c.target === 'property')
+    );
+
+    if (couldMatchSpaces) {
+      // Force spaces visible so they can be colorized
+      (window as any).__spacesForceVisible = true;
+      emit('FORCE_SHOW_SPACES', { show: true });
+      // Make all IfcSpace entities visible immediately
+      Object.values(metaObjects).forEach((mo: any) => {
+        if ((mo.type || '').toLowerCase() === 'ifcspace') {
+          const entity = scene.objects?.[mo.id];
+          if (entity) { entity.visible = true; entity.pickable = true; }
+        }
+      });
     }
 
     Object.values(metaObjects).forEach((metaObj: any) => {
@@ -203,16 +225,16 @@ const ObjectColorFilterPanel: React.FC<ObjectColorFilterPanelProps> = ({ viewerR
       for (const rule of enabledRules) {
         const results = rule.conditions.map(c => evalCondition(c, metaObj, attrs));
         const match = rule.logic === 'AND' ? results.every(Boolean) : results.some(Boolean);
-          if (match) {
+        if (match) {
           const entity = scene.objects?.[metaObj.id];
           if (entity) {
             entity.colorize = rgbToFloat(hexToRgb(rule.color));
             entity.opacity = 0.85;
-            // If it's an IfcSpace, make it visible so the color actually shows
             const objType = (metaObj.type || '').toLowerCase();
             if (objType === 'ifcspace') {
               entity.visible = true;
               entity.pickable = true;
+              hasSpaceMatch = true;
             }
             count++;
           }
@@ -220,6 +242,12 @@ const ObjectColorFilterPanel: React.FC<ObjectColorFilterPanelProps> = ({ viewerR
         }
       }
     });
+
+    // If we forced spaces visible but none matched, undo the force
+    if (couldMatchSpaces && !hasSpaceMatch) {
+      (window as any).__spacesForceVisible = false;
+      emit('FORCE_SHOW_SPACES', { show: false });
+    }
 
     // Set global flag so other systems (architect colors, space toggle) don't overwrite
     (window as any).__colorFilterActive = count > 0;
