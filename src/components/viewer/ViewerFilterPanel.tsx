@@ -10,7 +10,7 @@ import { cn, normalizeGuid } from '@/lib/utils';
 import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
-import { ANNOTATION_FILTER_EVENT, MODEL_LOAD_REQUESTED_EVENT } from '@/lib/viewer-events';
+import { ANNOTATION_FILTER_EVENT, MODEL_LOAD_REQUESTED_EVENT, VIEW_MODE_2D_TOGGLED_EVENT } from '@/lib/viewer-events';
 import { useFloorData, isArchitecturalModel } from '@/hooks/useFloorData';
 import { useModelData } from '@/hooks/useModelData';
 import { isAModelName, getAModelStoreyGuids } from '@/lib/building-utils';
