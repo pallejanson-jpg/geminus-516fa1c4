@@ -618,44 +618,13 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     return () => window.removeEventListener(LOAD_SAVED_VIEW_EVENT, handler);
   }, [applySavedView]);
 
-  // ── 2D mode: adjust pickability per entity type ──────────────
+  // ── 2D mode: switch camera nav mode ──────────────
   useEffect(() => {
-    const STRUCTURAL_TYPES = new Set([
-      'ifcwall', 'ifcwallstandardcase', 'ifcwallelementedcase',
-      'ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase',
-      'ifcplate', 'ifccolumn', 'ifccolumnstandardcase',
-      'ifcbeam', 'ifcbeamstandardcase', 'ifcroof', 'ifccovering',
-      'ifccurtainwall', 'ifcmember', 'ifcmemberstandardcase',
-      'ifcrailing', 'ifcrailingstandardcase',
-    ]);
-
     const handler = (e: Event) => {
       const { enabled } = (e as CustomEvent<ViewMode2DToggledDetail>).detail || {};
       const viewer = (window as any).__nativeXeokitViewer;
       if (!viewer?.scene || !viewer?.cameraControl) return;
-
       viewer.cameraControl.navMode = enabled ? 'planView' : 'orbit';
-
-      const metaObjects = viewer.metaScene?.metaObjects;
-      if (!metaObjects) return;
-
-      Object.values(metaObjects).forEach((mo: any) => {
-        const entity = viewer.scene.objects?.[mo.id];
-        if (!entity) return;
-        const typeLower = (mo.type || '').toLowerCase();
-
-        if (enabled) {
-          // Structural → unpickable so doors/windows in walls are reachable
-          if (STRUCTURAL_TYPES.has(typeLower)) {
-            entity.pickable = false;
-          }
-          // IfcSpace (rooms) stay pickable as background catch-all
-          // Doors, windows, furniture remain pickable by default
-        } else {
-          // Restore all to pickable
-          entity.pickable = true;
-        }
-      });
     };
     window.addEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler);
     return () => window.removeEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler);

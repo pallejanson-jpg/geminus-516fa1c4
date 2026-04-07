@@ -10,7 +10,7 @@ import { cn, normalizeGuid } from '@/lib/utils';
 import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
-import { ANNOTATION_FILTER_EVENT, MODEL_LOAD_REQUESTED_EVENT } from '@/lib/viewer-events';
+import { ANNOTATION_FILTER_EVENT, MODEL_LOAD_REQUESTED_EVENT, VIEW_MODE_2D_TOGGLED_EVENT } from '@/lib/viewer-events';
 import { useFloorData, isArchitecturalModel } from '@/hooks/useFloorData';
 import { useModelData } from '@/hooks/useModelData';
 import { isAModelName, getAModelStoreyGuids } from '@/lib/building-utils';
@@ -979,6 +979,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   const rafRef = useRef<number>(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const isApplyingRef = useRef(false);
+  const is2DModeRef = useRef(false);
 
   const applyFilterVisibility = useCallback(() => {
     clearTimeout(debounceRef.current);
@@ -1509,6 +1510,32 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       if (entity) { entity.visible = false; entity.pickable = false; }
     });
 
+    // ── 2D mode pickability override ──────────────────────────────
+    if (is2DModeRef.current) {
+      const STRUCTURAL_TYPES_2D = new Set([
+        'ifcwall', 'ifcwallstandardcase', 'ifcwallelementedcase',
+        'ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase',
+        'ifcplate', 'ifccolumn', 'ifccolumnstandardcase',
+        'ifcbeam', 'ifcbeamstandardcase', 'ifcroof', 'ifccovering',
+        'ifccurtainwall', 'ifcmember', 'ifcmemberstandardcase',
+        'ifcrailing', 'ifcrailingstandardcase',
+      ]);
+      const metaObjects = viewer.metaScene?.metaObjects;
+      if (metaObjects) {
+        Object.values(metaObjects).forEach((mo: any) => {
+          const entity = scene.objects?.[mo.id];
+          if (!entity) return;
+          const typeLower = (mo.type || '').toLowerCase();
+          if (STRUCTURAL_TYPES_2D.has(typeLower)) {
+            entity.pickable = false;
+          } else if (typeLower === 'ifcspace') {
+            entity.pickable = true;
+          }
+          // Everything else keeps its current pickable state (true by default)
+        });
+      }
+    }
+
     prevVisibleRef.current = newVisibleSet;
 
     // Floor/space visibility event for labels and clipping
@@ -1633,7 +1660,18 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     applyFilterVisibility();
   }, [checkedSources, checkedLevels, checkedSpaces, checkedCategories, xrayMode, applyFilterVisibility, isVisible, entityMapVersion]);
 
-  // Apply coloring separately when color settings change
+  // Track 2D mode and re-apply filter when toggled
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const enabled = detail?.enabled ?? false;
+      is2DModeRef.current = enabled;
+      applyFilterVisibility();
+    };
+    window.addEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler);
+    return () => window.removeEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler);
+  }, [applyFilterVisibility]);
+
   useEffect(() => {
     if (!isVisible) return;
     if (autoColorEnabled || autoColorSpaces || autoColorCategories) {
