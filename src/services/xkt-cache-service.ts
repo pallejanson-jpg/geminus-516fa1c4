@@ -275,7 +275,7 @@ export class XktCacheService {
       const blob = new Blob([xktData], { type: 'application/octet-stream' });
       const { error: uploadError } = await supabase.storage
         .from('xkt-models')
-        .upload(storagePath, blob, { upsert: true, contentType: 'application/octet-stream' });
+        .upload(storagePath, blob, { upsert: true, contentType: 'application/octet-stream', cacheControl: '0' });
 
       if (uploadError) {
         console.warn('XKT save: Direct storage upload failed', uploadError);
