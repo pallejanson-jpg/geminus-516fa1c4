@@ -59,6 +59,23 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   // Viewer instance
   const [xeokitViewer, setXeokitViewer] = useState<any>(null);
   const [isViewerReady, setIsViewerReady] = useState(false);
+  const [viewerReloadKey, setViewerReloadKey] = useState(0);
+
+  // Listen for XKT_FORCE_RELOAD to remount the viewer with fresh data
+  useEffect(() => {
+    const handler = (e: CustomEvent) => {
+      const targetGuid = e.detail?.buildingFmGuid;
+      if (!targetGuid || targetGuid === buildingFmGuid) {
+        console.log('[NativeViewerShell] Force reloading viewer for fresh XKT');
+        setXeokitViewer(null);
+        setIsViewerReady(false);
+        startViewAppliedRef.current = null;
+        setViewerReloadKey(k => k + 1);
+      }
+    };
+    window.addEventListener('XKT_FORCE_RELOAD', handler as EventListener);
+    return () => window.removeEventListener('XKT_FORCE_RELOAD', handler as EventListener);
+  }, [buildingFmGuid]);
 
   // AI Viewer Bridge — listens for AI_VIEWER_COMMAND events
   useAiViewerBridge(xeokitViewer, isViewerReady);
@@ -1060,6 +1077,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
       {/* Canvas layer */}
       <NativeXeokitViewer
+        key={viewerReloadKey}
         buildingFmGuid={buildingFmGuid}
         onClose={onClose}
         onViewerReady={handleViewerReady}
