@@ -1,53 +1,41 @@
 
 
-# Fix Asset+ 3D endpoint discovery to use correct API paths
+# Fix XKT sync: GetXktData needs bimobjectid parameter
 
-## Background
-XKT sync fails because `discover3dModelsEndpoint` tries paths like `/threed/GetModels` which do not exist in the Asset+ API. According to the OpenAPI specification, the correct endpoints are:
+## Problem
+`GetXktData` returns 400 because the API requires **two** identifiers: `modelid` AND one of `bimobjectid`, `externalguid`, or `externalid`. We're only passing `modelid` + `context`.
 
-1. **`/GetAllRelatedModels?fmguid={buildingFmGuid}`** — returns `BimModel[]` with `modelId`, `name`, `revisionId`, etc.
-2. **`/GetXktData?modelid={modelId}&context=Building`** — returns XKT binary data for a specific model
+The `BimModel` objects returned by `GetAllRelatedModels` contain `bimObjectId` — we just need to pass it through.
 
-The current code expects model objects with `xktFileUrl` fields, but Asset+ separates model listing from XKT download.
+## Root cause (from OpenAPI spec)
+```text
+/GetXktData parameters:
+  - modelid     (required)
+  - bimobjectid (one of three must be set)  ← MISSING
+  - externalguid
+  - externalid
+  - context     (required: Default|Asset|Space|Level|Building)
+```
 
 ## Plan
 
-### 1. Rewrite `discover3dModelsEndpoint` in `asset-plus-sync/index.ts`
-Replace the 6 wrong candidate paths with the correct Asset+ endpoint:
-- Try `{assetDbUrl}/GetAllRelatedModels?fmguid={buildingFmGuid}` (the API key goes in header or body, auth via Bearer token)
-- Also try `{baseUrl}/asset/GetAllRelatedModels?fmguid={buildingFmGuid}` as fallback
-- Response is a direct `BimModel[]` array
-- Cache the working base path as before
-
-### 2. Update model processing loop (lines ~1474-1590)
-Currently expects `model.xktFileUrl` or `model.fileUrl`. Change to:
-- Extract `modelId` from each `BimModel` object (`model.modelId`)
-- Construct XKT download URL: `{assetDbUrl}/GetXktData?modelid={modelId}&context=Building`
-- Fetch XKT binary from that URL with Bearer token auth
-- Use `model.name` for `model_name` in the DB record
-
-### 3. Update `sync-xkt-building` action (lines ~1662-1800)
-Same changes as #2 — use `GetXktData` for downloading individual models after discovery.
-
-### 4. Update endpoint cache key
-Change from `getmodels_url` to `getallrelatedmodels_url` to avoid using stale cached wrong paths.
-
-## Technical details
-
-```text
-Current (broken):
-  GET {base}/threed/GetModels?fmGuid=X&apiKey=Y  →  404 / HTML
-
-Fixed:
-  Step 1: GET {assetDbUrl}/GetAllRelatedModels?fmguid=X
-          Headers: Authorization: Bearer {token}
-          Response: BimModel[] with { modelId, name, revisionId, ... }
-
-  Step 2: GET {assetDbUrl}/GetXktData?modelid={modelId}&context=Building
-          Headers: Authorization: Bearer {token}
-          Response: XKT binary (application/octet-stream)
+### 1. Fix `sync-xkt-building` action (~line 1738)
+Add `bimobjectid` from the model metadata to the `GetXktData` URL:
 ```
+{base}/GetXktData?modelid={modelId}&bimobjectid={bimObjectId}&context=Building
+```
+The `bimObjectId` comes directly from each `BimModel` in the `GetAllRelatedModels` response.
 
-### Files changed
-- `supabase/functions/asset-plus-sync/index.ts` — rewrite discovery + download logic
+### 2. Fix `sync-xkt` resumable action (~line 1511)
+Same fix — when downloading via revisions, pass `bimobjectid`. For revisions, we may need to cross-reference back to the `GetAllRelatedModels` models to get `bimObjectId`, or use `fmguid` as `externalguid`.
+
+### 3. Fix client-side bootstrap in `useModelLoader.ts` (~line 183-225)
+Update the candidate paths to also try `GetAllRelatedModels` + `GetXktData` with `bimobjectid`, matching the server-side logic. This ensures the client fallback also works with the correct API.
+
+### 4. Add revision-based update detection
+In `sync-xkt-building`, after fetching models via `GetAllRelatedModels`, compare each model's `revisionId` against the stored `source_updated_at` in `xkt_models`. Only re-download if the revision has changed. This avoids re-downloading unchanged models and detects updates during sync.
+
+## Files changed
+- `supabase/functions/asset-plus-sync/index.ts` — add `bimobjectid` to GetXktData calls, add revision comparison
+- `src/hooks/useModelLoader.ts` — update client bootstrap to use correct API paths
 
