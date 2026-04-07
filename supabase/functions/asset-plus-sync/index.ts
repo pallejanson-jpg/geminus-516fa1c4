@@ -1536,36 +1536,52 @@ serve(async (req) => {
             }
 
             try {
-              // Resolve bimObjectId: from the revision itself, from the map, or use buildingFmGuid as externalguid
+              // Build identifier fallback chain for XKT download
               const bimObjId = rev._bimObjectId || bimObjectIdMap.get(String(revModelId)) || '';
-              const bimParam = bimObjId ? `&bimobjectid=${encodeURIComponent(bimObjId)}` : `&externalguid=${encodeURIComponent(buildingFmGuid)}`;
-              const xktDownloadUrl = `${discovery.url}/GetXktData?modelid=${revModelId}${bimParam}&context=Building&apiKey=${apiKey}`;
-              console.log(`Fetching XKT: ${xktDownloadUrl.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
+              const modelFmGuid = rev.fmGuid || rev.FmGuid || '';
+              const externalGuid = rev.externalGuid || rev.ExternalGuid || '';
               
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 30000);
-              const xktRes = await fetch(xktDownloadUrl, {
-                headers: { "Authorization": `Bearer ${accessToken}` },
-                signal: controller.signal
-              });
-              clearTimeout(timeoutId);
+              // Try multiple identifier combinations
+              let xktData: ArrayBuffer | null = null;
+              let usedIdentifier = '';
+              const idCombos: { param: string; value: string; label: string }[] = [
+                { param: 'bimobjectid', value: bimObjId, label: 'bimobjectid(model)' },
+                { param: 'externalguid', value: externalGuid, label: 'externalguid(model)' },
+                { param: 'bimobjectid', value: buildingParentBimObjId, label: 'bimobjectid(building.parent)' },
+                { param: 'externalguid', value: modelFmGuid, label: 'externalguid(model.fmGuid)' },
+                { param: 'externalguid', value: buildingFmGuid, label: 'externalguid(buildingFmGuid)' },
+              ];
+              
+              for (const combo of idCombos) {
+                if (!combo.value) continue;
+                const url = `${discovery.url}/GetXktData?modelid=${revModelId}&${combo.param}=${encodeURIComponent(combo.value)}&context=Building&apiKey=${apiKey}`;
+                try {
+                  const controller = new AbortController();
+                  const timeoutId = setTimeout(() => controller.abort(), 30000);
+                  const res = await fetch(url, {
+                    headers: { "Authorization": `Bearer ${accessToken}` },
+                    signal: controller.signal
+                  });
+                  clearTimeout(timeoutId);
+                  if (res.ok) {
+                    const data = await res.arrayBuffer();
+                    if (data.byteLength >= 1024) {
+                      xktData = data;
+                      usedIdentifier = combo.label;
+                      break;
+                    }
+                  }
+                } catch {}
+              }
 
-              if (!xktRes.ok) {
-                const errBody = await xktRes.text().catch(() => '');
-                console.log(`Failed to fetch ${modelName} (${revModelId}): ${xktRes.status} ${errBody.substring(0, 200)}`);
+              if (!xktData) {
+                console.log(`Failed to fetch ${modelName} (${revModelId}): all identifier combos returned 404`);
+                errors.push(`${buildingName}/${revModelId}: 404 all combos`);
                 continue;
               }
-              
 
-              const xktData = await xktRes.arrayBuffer();
               const fileSize = xktData.byteLength;
-              
-              if (fileSize < 1024) { // Skip files < 1KB (likely invalid)
-                console.log(`Model ${revModelId}: File too small (${fileSize} bytes), skipping`);
-                continue;
-              }
-              
-              console.log(`Model ${revModelId} (${modelName}): Downloaded ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
+              console.log(`Model ${revModelId} (${modelName}): Downloaded ${(fileSize / 1024 / 1024).toFixed(2)} MB via ${usedIdentifier}`);
 
               // Upload to storage with no-cache to prevent stale CDN delivery
               const { error: uploadError } = await supabase.storage
@@ -1598,7 +1614,7 @@ serve(async (req) => {
                   file_url: signedUrl,
                   file_size: fileSize,
                   storage_path: storagePath,
-                  source_url: xktDownloadUrl,
+                  source_url: `GetXktData via ${usedIdentifier}`,
                   source_updated_at: revisionId || new Date().toISOString(),
                   synced_at: new Date().toISOString(),
                 }, { onConflict: 'building_fm_guid,model_id' });
