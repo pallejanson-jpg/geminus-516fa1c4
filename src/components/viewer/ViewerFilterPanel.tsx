@@ -979,6 +979,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   const rafRef = useRef<number>(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const isApplyingRef = useRef(false);
+  const is2DModeRef = useRef(false);
 
   const applyFilterVisibility = useCallback(() => {
     clearTimeout(debounceRef.current);
@@ -1508,6 +1509,32 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       const entity = scene.objects?.[id];
       if (entity) { entity.visible = false; entity.pickable = false; }
     });
+
+    // ── 2D mode pickability override ──────────────────────────────
+    if (is2DModeRef.current) {
+      const STRUCTURAL_TYPES_2D = new Set([
+        'ifcwall', 'ifcwallstandardcase', 'ifcwallelementedcase',
+        'ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase',
+        'ifcplate', 'ifccolumn', 'ifccolumnstandardcase',
+        'ifcbeam', 'ifcbeamstandardcase', 'ifcroof', 'ifccovering',
+        'ifccurtainwall', 'ifcmember', 'ifcmemberstandardcase',
+        'ifcrailing', 'ifcrailingstandardcase',
+      ]);
+      const metaObjects = viewer.metaScene?.metaObjects;
+      if (metaObjects) {
+        Object.values(metaObjects).forEach((mo: any) => {
+          const entity = scene.objects?.[mo.id];
+          if (!entity) return;
+          const typeLower = (mo.type || '').toLowerCase();
+          if (STRUCTURAL_TYPES_2D.has(typeLower)) {
+            entity.pickable = false;
+          } else if (typeLower === 'ifcspace') {
+            entity.pickable = true;
+          }
+          // Everything else keeps its current pickable state (true by default)
+        });
+      }
+    }
 
     prevVisibleRef.current = newVisibleSet;
 
