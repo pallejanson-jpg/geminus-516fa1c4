@@ -1511,11 +1511,13 @@ serve(async (req) => {
             const forceSync = body?.force === true;
             if (existingModel && !forceSync) {
               const storedRevision = existingModel.source_updated_at || '';
-              if (storedRevision === revisionId) {
-                console.log(`Model ${revModelId} (${modelName}) unchanged`);
+              // Only skip if BOTH revision values are non-empty and match
+              if (revisionId && storedRevision && storedRevision === revisionId) {
+                console.log(`Model ${revModelId} (${modelName}) unchanged (revision ${revisionId})`);
                 continue;
               }
-              console.log(`Model ${revModelId} (${modelName}) has new revision, re-downloading`);
+              // Missing revision info → always re-download to ensure freshness
+              console.log(`Model ${revModelId} (${modelName}) revision mismatch or missing, re-downloading`);
             }
 
             try {
@@ -1550,12 +1552,13 @@ serve(async (req) => {
               
               console.log(`Model ${revModelId} (${modelName}): Downloaded ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
 
-              // Upload to storage
+              // Upload to storage with no-cache to prevent stale CDN delivery
               const { error: uploadError } = await supabase.storage
                 .from('xkt-models')
                 .upload(storagePath, new Uint8Array(xktData), {
                   contentType: 'application/octet-stream',
-                  upsert: true
+                  upsert: true,
+                  cacheControl: '0',
                 });
 
               let signedUrl: string | null = null;
@@ -1797,12 +1800,13 @@ serve(async (req) => {
             
             console.log(`Model ${modelId}: Downloaded ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
 
-            // Upload to storage
+            // Upload to storage with no-cache to prevent stale CDN delivery
             const { error: uploadError } = await supabase.storage
               .from('xkt-models')
               .upload(storagePath, new Uint8Array(xktData), {
                 contentType: 'application/octet-stream',
-                upsert: true
+                upsert: true,
+                cacheControl: '0',
               });
 
             let signedUrl: string | null = null;

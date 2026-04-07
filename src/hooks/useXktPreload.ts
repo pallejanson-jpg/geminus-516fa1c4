@@ -75,7 +75,9 @@ export function clearBuildingFromMemory(buildingFmGuid: string): void {
     }
   });
   keysToDelete.forEach(key => xktMemoryCache.delete(key));
-  console.log(`XKT Memory: Cleared ${keysToDelete.length} models for building ${buildingFmGuid.substring(0, 8)}...`);
+  // Also remove from the preload guard so next preload fetches fresh data
+  globalPreloadedBuildings.delete(buildingFmGuid);
+  console.log(`XKT Memory: Cleared ${keysToDelete.length} models for building ${buildingFmGuid.substring(0, 8)}... (preload guard reset)`);
 }
 
 /**
