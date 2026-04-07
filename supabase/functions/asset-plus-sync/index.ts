@@ -1768,10 +1768,7 @@ serve(async (req) => {
               console.log(`Model ${modelId} (${modelName}) unchanged (revision ${revisionId})`);
               continue;
             }
-            if (!revisionId && storedRevision) {
-              console.log(`Model ${modelId} already synced, no revision info to compare`);
-              continue;
-            }
+            // No revisionId from API → always re-download to ensure freshness
             console.log(`Model ${modelId} (${modelName}) has new revision, re-downloading`);
           }
 
