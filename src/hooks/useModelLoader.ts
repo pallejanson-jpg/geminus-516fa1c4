@@ -202,34 +202,66 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
 
       if (!discoveredModels?.length || !workingBase) return [];
       
-      // Step 2: Download each model via GetXktData with bimobjectid
+      // Step 2: Download each model via GetXktData with full identifier fallback chain
       const bootstrapped: ModelCandidate[] = [];
+      
+      // Get building parentBimObjectId from assets table for fallback
+      let buildingParentBimObjId = '';
+      try {
+        const { data: buildingAsset } = await supabase
+          .from('assets')
+          .select('attributes')
+          .eq('fm_guid', buildingFmGuid)
+          .eq('category', 'Building')
+          .maybeSingle();
+        if (buildingAsset?.attributes) {
+          const attrs = typeof buildingAsset.attributes === 'string' ? JSON.parse(buildingAsset.attributes) : buildingAsset.attributes;
+          buildingParentBimObjId = (attrs as any)?.parentBimObjectId || (attrs as any)?.buildingBimObjectId || '';
+        }
+      } catch {}
+
       for (const model of discoveredModels) {
         const modelId = model.modelId || model.id || model.ModelId;
-        const bimObjectId = model.bimObjectId || model.BimObjectId || model.fmGuid || model.FmGuid || '';
+        const bimObjectId = model.bimObjectId || model.BimObjectId || '';
+        const modelFmGuid = model.fmGuid || model.FmGuid || '';
+        const externalGuid = model.externalGuid || model.ExternalGuid || '';
         if (!modelId) continue;
         
-        const bimParam = bimObjectId 
-          ? `&bimobjectid=${encodeURIComponent(bimObjectId)}` 
-          : `&externalguid=${encodeURIComponent(buildingFmGuid)}`;
-        const xktUrl = `${workingBase}/GetXktData?modelid=${modelId}${bimParam}&context=Building&apiKey=${apiKey}`;
+        // Build full identifier fallback chain (same as server-side sync)
+        const idCombos: { param: string; value: string }[] = [
+          { param: 'bimobjectid', value: bimObjectId },
+          { param: 'externalguid', value: externalGuid },
+          { param: 'bimobjectid', value: buildingParentBimObjId },
+          { param: 'externalguid', value: modelFmGuid },
+          { param: 'externalguid', value: buildingFmGuid },
+        ];
         
-        try {
-          const xktRes = await fetch(xktUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
-          if (!xktRes.ok) continue;
-          const xktData = await xktRes.arrayBuffer();
-          if (xktData.byteLength < 1024) continue;
-          const firstByte = String.fromCharCode(new Uint8Array(xktData)[0]);
-          if (firstByte === '<' || firstByte === '{') continue;
-          storeModelInMemory(modelId, buildingFmGuid, xktData);
-          const modelName = model.name || model.modelName || model.Name || modelId;
-          xktCacheService.saveModelFromViewer(modelId, xktData, buildingFmGuid, modelName).catch(() => {});
-          bootstrapped.push({
-            model_id: modelId, model_name: modelName,
-            storage_path: `${buildingFmGuid}/${modelId}.xkt`,
-            file_size: xktData.byteLength, storey_fm_guid: null, source: 'db',
-          });
-        } catch {}
+        let xktData: ArrayBuffer | null = null;
+        for (const combo of idCombos) {
+          if (!combo.value) continue;
+          const xktUrl = `${workingBase}/GetXktData?modelid=${modelId}&${combo.param}=${encodeURIComponent(combo.value)}&context=Building&apiKey=${apiKey}`;
+          try {
+            const xktRes = await fetch(xktUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+            if (!xktRes.ok) continue;
+            const data = await xktRes.arrayBuffer();
+            if (data.byteLength < 1024) continue;
+            const firstByte = String.fromCharCode(new Uint8Array(data)[0]);
+            if (firstByte === '<' || firstByte === '{') continue;
+            xktData = data;
+            break;
+          } catch {}
+        }
+        
+        if (!xktData) continue;
+        
+        storeModelInMemory(modelId, buildingFmGuid, xktData);
+        const modelName = model.name || model.modelName || model.Name || modelId;
+        xktCacheService.saveModelFromViewer(modelId, xktData, buildingFmGuid, modelName).catch(() => {});
+        bootstrapped.push({
+          model_id: modelId, model_name: modelName,
+          storage_path: `${buildingFmGuid}/${modelId}.xkt`,
+          file_size: xktData.byteLength, storey_fm_guid: null, source: 'db',
+        });
       }
       return bootstrapped;
     } catch (e) {
