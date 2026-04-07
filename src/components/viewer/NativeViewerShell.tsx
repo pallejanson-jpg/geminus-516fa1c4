@@ -625,6 +625,27 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       const viewer = (window as any).__nativeXeokitViewer;
       if (!viewer?.scene || !viewer?.cameraControl) return;
       viewer.cameraControl.navMode = enabled ? 'planView' : 'orbit';
+
+      // Enforce orthographic top-down camera when entering 2D mode
+      if (enabled && viewer.camera) {
+        const camera = viewer.camera;
+        const lookX = camera.look[0], lookY = camera.look[1], lookZ = camera.look[2];
+        const dx = camera.eye[0] - lookX, dy = camera.eye[1] - lookY, dz = camera.eye[2] - lookZ;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+        camera.projection = 'ortho';
+        if (camera.ortho) camera.ortho.scale = dist * 1.2;
+        // Snap to top-down instantly
+        camera.eye = [lookX, lookY + dist, lookZ];
+        camera.look = [lookX, lookY, lookZ];
+        camera.up = [0, 0, -1];
+
+        // Disable rotation
+        viewer.cameraControl.followPointer = false;
+      } else if (!enabled && viewer.camera) {
+        // Restore perspective when exiting 2D
+        viewer.camera.projection = 'perspective';
+      }
     };
     window.addEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler);
     return () => window.removeEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler);
