@@ -1454,6 +1454,42 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
+    // Force refresh XKT models for a single building
+    const handleForceRefreshXkt = async (bFmGuid?: string) => {
+        const targetGuid = bFmGuid || favoriteBuildings[0]?.fm_guid;
+        if (!targetGuid) {
+            toast({ variant: 'destructive', title: 'No building selected' });
+            return;
+        }
+        setIsSyncingXkt(true);
+        try {
+            toast({ title: 'Force refreshing 3D models...', description: 'Downloading latest XKT from Asset+' });
+            
+            // 1. Call backend with force: true
+            const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+                body: { action: 'sync-xkt-building', buildingFmGuid: targetGuid, force: true }
+            });
+            if (error) throw error;
+
+            // 2. Clear frontend caches
+            const { clearBuildingFromMemory } = await import('@/hooks/useXktPreload');
+            clearBuildingFromMemory(targetGuid);
+
+            // 3. Signal the viewer to reload
+            window.dispatchEvent(new CustomEvent('XKT_FORCE_RELOAD', { detail: { buildingFmGuid: targetGuid } }));
+
+            toast({
+                title: 'XKT Force Refresh Complete',
+                description: data?.message || `${data?.synced || 0} models refreshed. Viewer will reload.`,
+            });
+            await checkSyncStatus();
+        } catch (err: any) {
+            toast({ variant: 'destructive', title: 'Force refresh failed', description: err.message });
+        } finally {
+            setIsSyncingXkt(false);
+        }
+    };
+
     // Sync all XKT models with loop-until-complete behavior
     const handleSyncXkt = async () => {
         setIsSyncingXkt(true);
@@ -3262,7 +3298,27 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             errorMessage={syncCheck?.xkt?.syncState?.error_message}
                                         />
 
-                                        {/* Rebuild Geometry Mappings */}
+                                        {/* Force Refresh XKT for selected building */}
+                                        <div className="flex items-center gap-2 rounded-lg border p-3 bg-muted/20">
+                                            <Cuboid className="h-4 w-4 text-primary" />
+                                            <div className="flex-1">
+                                                <span className="text-sm font-medium">Force Refresh 3D Models</span>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Re-download XKT for {favoriteBuildings[0]?.common_name || 'selected building'} from Asset+
+                                                </p>
+                                            </div>
+                                            <Button
+                                                onClick={() => handleForceRefreshXkt()}
+                                                size="sm"
+                                                variant="outline"
+                                                className="gap-1"
+                                                disabled={!favoriteBuildings[0]?.fm_guid || isSyncingXkt}
+                                            >
+                                                {isSyncingXkt ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                                Force Refresh
+                                            </Button>
+                                        </div>
+
                                         <div className="flex items-center gap-2 rounded-lg border p-3 bg-muted/20">
                                             <Database className="h-4 w-4 text-primary" />
                                             <div className="flex-1">
