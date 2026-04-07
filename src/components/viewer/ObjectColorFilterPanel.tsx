@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { AppContext } from '@/context/AppContext';
 import { resolveXeokitViewer } from './RoomVisualizationPanel';
 import { rgbToFloat } from '@/lib/visualization-utils';
+import { emit } from '@/lib/event-bus';
 
 // ─── Data model ───────────────────────────────────────────────
 export interface ColorFilterCondition {
