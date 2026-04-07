@@ -79,11 +79,14 @@ export function usePerformancePlugins({ viewerRef, ready, isMobile }: UsePerform
 
         if (sao && enableSao) {
           sao.enabled = true;
-          sao.intensity = 0.15;
+          sao.intensity = 0.12;
           sao.bias = 0.5;
-          sao.scale = 1000;
-          sao.kernelRadius = 100;
+          sao.scale = 500;
+          sao.kernelRadius = 50;
           sao.minResolution = 0;
+          sao.numSamples = 32;
+          sao.blendFactor = 1.0;
+          sao.blur = true;
           console.log('[perf-plugins] SAO enabled (desktop)', { objectCount: sceneObjectCount });
         } else if (sao) {
           sao.enabled = false;
