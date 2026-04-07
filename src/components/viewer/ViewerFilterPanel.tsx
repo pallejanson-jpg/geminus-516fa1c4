@@ -2001,54 +2001,57 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       style={{ bottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b">
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-primary" />
-          <span className="font-semibold text-sm text-foreground">Filter</span>
+      <div className="flex items-center justify-between px-3 py-2 border-b gap-1" style={{ paddingTop: 'max(0.5rem, env(safe-area-inset-top, 0px))' }}>
+        <div className="flex items-center gap-1.5 min-w-0 shrink">
+          <Filter className="h-4 w-4 text-primary shrink-0" />
+          <span className="font-semibold text-sm text-foreground shrink-0">Filter</span>
           {totalFilters > 0 && (
-            <Badge variant="default" className="text-[10px] px-1.5 py-0 h-5">{totalFilters}</Badge>
+            <Badge variant="default" className="text-[10px] px-1.5 py-0 h-5 shrink-0">{totalFilters}</Badge>
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5 shrink-0">
           <Button
             variant="ghost"
-            size="sm"
-            className="h-7 text-xs px-2 gap-1 text-foreground"
+            size="icon"
+            className="h-7 w-7 text-foreground"
             onClick={() => {
-              // Reset all colors: level, space, category colorization + insights
               setLevelColors(new Map());
               setSpaceColors(new Map());
               setCategoryColors(new Map());
               setAutoColorEnabled(false);
               setAutoColorSpaces(false);
               setAutoColorCategories(false);
-              // Clear global viz flags
               (window as any).__colorFilterActive = false;
               const vizSet = (window as any).__vizColorizedEntityIds;
               if (vizSet instanceof Set) vizSet.clear();
-              // Dispatch insights reset + restore theme or architect colors
               emit('INSIGHTS_COLOR_RESET');
               if (activeThemeIdRef.current) {
                 emit('VIEWER_THEME_REQUESTED', { themeId: activeThemeIdRef.current });
               } else {
                 const viewer = getXeokitViewer();
-                if (viewer) applyArchitectColors(viewer);
+                if (viewer) {
+                  const nativeColors = (window as any).__xeokitNativeColors as Map<string, { color: number[]; opacity: number; edges: boolean }> | undefined;
+                  if (nativeColors) {
+                    for (const [objId, props] of nativeColors) {
+                      const entity = viewer.scene.objects?.[objId];
+                      if (entity) { entity.colorize = props.color; entity.opacity = props.opacity; }
+                    }
+                  }
+                }
               }
             }}
             title="Reset all colors to default"
           >
             <Paintbrush className="h-3.5 w-3.5" />
-            Reset colors
           </Button>
           <Button
             variant="ghost"
-            size="sm"
-            className="h-7 text-xs px-2 gap-1 text-foreground"
+            size="icon"
+            className="h-7 w-7 text-foreground"
             onClick={handleResetAll}
             title="Show all objects"
           >
             <Eye className="h-3.5 w-3.5" />
-            Show all
           </Button>
           <Button
             variant={xrayMode ? "default" : "ghost"}
