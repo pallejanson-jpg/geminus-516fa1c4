@@ -60,6 +60,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const [xeokitViewer, setXeokitViewer] = useState<any>(null);
   const [isViewerReady, setIsViewerReady] = useState(false);
   const [viewerReloadKey, setViewerReloadKey] = useState(0);
+  const [forceBootstrap, setForceBootstrap] = useState(false);
 
   // Listen for XKT_FORCE_RELOAD to remount the viewer with fresh data
   useEffect(() => {
@@ -70,6 +71,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         setXeokitViewer(null);
         setIsViewerReady(false);
         startViewAppliedRef.current = null;
+        setForceBootstrap(true);
         setViewerReloadKey(k => k + 1);
       }
     };
@@ -1081,6 +1083,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         buildingFmGuid={buildingFmGuid}
         onClose={onClose}
         onViewerReady={handleViewerReady}
+        forceBootstrap={forceBootstrap}
       />
 
       {/* Bottom toolbar — always mounted for event handling, hidden visually when hideToolbar */}
