@@ -564,7 +564,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             }
         });
         // Include nameColorMap so name-based fallback works when GUID doesn't match BIM IDs
-        const detail = { mode: 'room_spaces' as const, colorMap: roomColorMap, nameColorMap, strictGuidMode: guids.size <= 1 ? false : true };
+        const detail = { mode: 'room_spaces' as const, colorMap: roomColorMap, nameColorMap, strictGuidMode: true };
         if (drawerMode) {
             emit('FORCE_SHOW_SPACES', { show: true });
             setTimeout(() => {
