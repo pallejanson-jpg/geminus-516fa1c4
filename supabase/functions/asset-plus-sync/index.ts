@@ -1477,23 +1477,30 @@ serve(async (req) => {
             revisionsFetched = true;
           }
 
-          // Match revisions to this building by entityName or model name
-          const buildingRevisions = allRevisions.filter((rev: any) => {
-            const eName = (rev.entityName || '').toLowerCase();
-            const bName2 = buildingName.toLowerCase();
-            return eName === bName2 || eName.includes(bName2) || bName2.includes(eName);
+          // Always build sync list from GetAllRelatedModels (which carries bimObjectId).
+          // Enrich with revisionId from GetAllModelRevisions when available.
+          const modelsToSync = models.map((m: any) => {
+            const mId = String(m.modelId || m.id || m.ModelId || '');
+            const mName = m.name || m.modelName || m.Name || `Model`;
+            // Try to find a matching revision by modelId or name
+            const matchedRev = allRevisions.find((rev: any) => {
+              if (String(rev.modelId) === mId) return true;
+              const revName = (rev.modelName || '').toLowerCase();
+              const modelNameLower = mName.toLowerCase();
+              return revName && modelNameLower && (revName === modelNameLower || revName.includes(modelNameLower));
+            });
+            return {
+              modelId: mId,
+              revisionId: matchedRev?.revisionId || '',
+              modelName: mName,
+              entityName: buildingName,
+              _bimObjectId: m.bimObjectId || m.BimObjectId || m.fmGuid || m.FmGuid || '',
+              fmGuid: m.fmGuid || m.FmGuid || '',
+              externalGuid: m.externalGuid || m.ExternalGuid || '',
+            };
           });
           
-          console.log(`Building ${buildingName}: ${buildingRevisions.length} matching revisions (of ${allRevisions.length} total)`);
-
-          // If no revisions matched, fall back to using models directly from GetAllRelatedModels
-          const modelsToSync = buildingRevisions.length > 0 ? buildingRevisions : models.map((m: any) => ({
-            modelId: m.modelId || m.id || m.ModelId,
-            revisionId: '',
-            modelName: m.name || m.modelName || m.Name || `Model`,
-            entityName: buildingName,
-            _bimObjectId: m.bimObjectId || m.BimObjectId || m.fmGuid || m.FmGuid,
-          }));
+          console.log(`Building ${buildingName}: ${modelsToSync.length} models to sync (from GetAllRelatedModels, ${allRevisions.length} total revisions)`);
           
           if (modelsToSync.length === 0) {
             console.log(`No models to sync for ${buildingName}, skipping`);
@@ -1551,6 +1558,8 @@ serve(async (req) => {
                 { param: 'externalguid', value: modelFmGuid, label: 'externalguid(model.fmGuid)' },
                 { param: 'externalguid', value: buildingFmGuid, label: 'externalguid(buildingFmGuid)' },
               ];
+              const availableIds = idCombos.filter(c => c.value).map(c => c.label);
+              console.log(`  ${modelName} (${revModelId}): trying ${availableIds.length} identifiers: ${availableIds.join(', ')}`);
               
               for (const combo of idCombos) {
                 if (!combo.value) continue;
