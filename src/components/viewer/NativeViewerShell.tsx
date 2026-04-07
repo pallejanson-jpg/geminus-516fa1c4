@@ -618,22 +618,12 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     return () => window.removeEventListener(LOAD_SAVED_VIEW_EVENT, handler);
   }, [applySavedView]);
 
-  // ── 2D mode: adjust pickability per entity type ──────────────
+  // ── 2D mode: switch camera nav mode ──────────────
   useEffect(() => {
-    const STRUCTURAL_TYPES = new Set([
-      'ifcwall', 'ifcwallstandardcase', 'ifcwallelementedcase',
-      'ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase',
-      'ifcplate', 'ifccolumn', 'ifccolumnstandardcase',
-      'ifcbeam', 'ifcbeamstandardcase', 'ifcroof', 'ifccovering',
-      'ifccurtainwall', 'ifcmember', 'ifcmemberstandardcase',
-      'ifcrailing', 'ifcrailingstandardcase',
-    ]);
-
     const handler = (e: Event) => {
       const { enabled } = (e as CustomEvent<ViewMode2DToggledDetail>).detail || {};
       const viewer = (window as any).__nativeXeokitViewer;
       if (!viewer?.scene || !viewer?.cameraControl) return;
-
       viewer.cameraControl.navMode = enabled ? 'planView' : 'orbit';
     };
     window.addEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler);
