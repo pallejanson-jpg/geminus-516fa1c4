@@ -487,9 +487,18 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
     // Reset x-ray
     setIsXrayActive(false);
-    // Re-apply architect color palette asynchronously to avoid blocking interaction
+    // Restore native model colors (architect palette is opt-in via theme selector)
     requestAnimationFrame(() => {
-      applyArchitectColors(viewer);
+      const nativeColors = (window as any).__xeokitNativeColors as Map<string, { color: number[]; opacity: number; edges: boolean }> | undefined;
+      if (nativeColors) {
+        for (const [objId, props] of nativeColors) {
+          const entity = viewer.scene.objects?.[objId];
+          if (entity) {
+            entity.colorize = props.color;
+            entity.opacity = props.opacity;
+          }
+        }
+      }
     });
     // Re-apply modifications (deleted/moved objects) so they stay deleted
     requestAnimationFrame(() => {

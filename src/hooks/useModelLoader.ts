@@ -396,10 +396,6 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
 
       let promise: Promise<void>;
       promise = loadSingleModel(model, viewer, xktLoader, metadataFileSet).then((ok) => {
-        if (ok) {
-          // Progressive: apply architect colors immediately so each model is visible with correct colors
-          applyArchitectColors(viewer);
-        }
         loaded++;
         if (mountedRef.current) onProgress({ loaded, total: loadList.length });
       }).finally(() => active.delete(promise));
@@ -418,7 +414,6 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
         if (!mountedRef.current) break;
         let p: Promise<void>;
         p = loadSingleModel(model, viewer, xktLoader, metadataFileSet).then((ok) => {
-          if (ok) applyArchitectColors(viewer);
           loaded++;
           if (mountedRef.current) onProgress({ loaded, total: secondaryQueue.length });
         }).finally(() => active2.delete(p));

@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useModelNames } from '@/hooks/useModelNames';
+import { on } from '@/lib/event-bus';
 
 export interface FloorInfo {
   id: string;           // Representative metaObject ID for this floor group
@@ -289,6 +290,37 @@ export function useFloorData(
       setFloors(updated);
     }
   }, [floorNamesMap, extractFloors]);
+
+  // ── Re-extract when models stream in (progressive loading) ──────────────
+  useEffect(() => {
+    // Listen for the global VIEWER_MODELS_LOADED event
+    const offModelsLoaded = on('VIEWER_MODELS_LOADED', () => {
+      const updated = extractFloors();
+      if (updated.length > 0) {
+        setFloors(updated);
+        setIsLoading(false);
+      }
+    });
+
+    // Also listen for individual xeokit scene modelLoaded events
+    const viewer = getXeokitViewer();
+    let sceneUnsub: (() => void) | null = null;
+    if (viewer?.scene) {
+      const handler = () => {
+        const updated = extractFloors();
+        if (updated.length > 0) setFloors(updated);
+      };
+      viewer.scene.on('modelLoaded', handler);
+      sceneUnsub = () => {
+        try { viewer.scene?.off?.('modelLoaded', handler); } catch {}
+      };
+    }
+
+    return () => {
+      offModelsLoaded();
+      sceneUnsub?.();
+    };
+  }, [extractFloors, getXeokitViewer]);
 
   return { floors, floorNamesMap, isLoading };
 }
