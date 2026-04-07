@@ -1,41 +1,64 @@
 
 
-# Fix XKT sync: GetXktData needs bimobjectid parameter
+# Part B: 2D Mode Clickability Layering
 
-## Problem
-`GetXktData` returns 400 because the API requires **two** identifiers: `modelid` AND one of `bimobjectid`, `externalguid`, or `externalid`. We're only passing `modelid` + `context`.
+## What changes
+When 2D mode is toggled on, we update the existing `useEffect` handler in `NativeViewerShell.tsx` (lines 621–643) to set pickability per IFC type category:
 
-The `BimModel` objects returned by `GetAllRelatedModels` contain `bimObjectId` — we just need to pass it through.
+- **IfcSpace (rooms)** → `pickable = true` (reversed from current `false`) — acts as background catch-all so clicking empty floor selects the room
+- **IfcWall, IfcWallStandardCase, IfcSlab, IfcSlabStandardCase, IfcPlate, IfcColumn, IfcBeam, IfcRoof, IfcCovering** → `pickable = false` — structural elements should not intercept clicks
+- **IfcDoor, IfcWindow, IfcFurnishingElement, IfcFlowTerminal, etc.** → `pickable = true` (default, no change needed)
 
-## Root cause (from OpenAPI spec)
-```text
-/GetXktData parameters:
-  - modelid     (required)
-  - bimobjectid (one of three must be set)  ← MISSING
-  - externalguid
-  - externalid
-  - context     (required: Default|Asset|Space|Level|Building)
+When 2D is toggled off, all entities revert to `pickable = true`.
+
+## File: `src/components/viewer/NativeViewerShell.tsx`
+
+Replace lines 621–643 with an expanded handler:
+
+```typescript
+// ── 2D mode: adjust pickability per entity type ──────────────
+useEffect(() => {
+  const STRUCTURAL_TYPES = new Set([
+    'ifcwall', 'ifcwallstandardcase', 'ifcwallelementedcase',
+    'ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase',
+    'ifcplate', 'ifccolumn', 'ifccolumnstandardcase',
+    'ifcbeam', 'ifcbeamstandardcase', 'ifcroof', 'ifccovering',
+    'ifccurtainwall', 'ifcmember', 'ifcmemberstandardcase',
+    'ifcrailing', 'ifcrailingstandardcase',
+  ]);
+
+  const handler = (e: Event) => {
+    const { enabled } = (e as CustomEvent<ViewMode2DToggledDetail>).detail || {};
+    const viewer = (window as any).__nativeXeokitViewer;
+    if (!viewer?.scene || !viewer?.cameraControl) return;
+
+    viewer.cameraControl.navMode = enabled ? 'planView' : 'orbit';
+
+    const metaObjects = viewer.metaScene?.metaObjects;
+    if (!metaObjects) return;
+
+    Object.values(metaObjects).forEach((mo: any) => {
+      const entity = viewer.scene.objects?.[mo.id];
+      if (!entity) return;
+      const typeLower = (mo.type || '').toLowerCase();
+
+      if (enabled) {
+        // Structural → unpickable; Rooms → pickable (background); everything else stays pickable
+        if (STRUCTURAL_TYPES.has(typeLower)) {
+          entity.pickable = false;
+        }
+        // IfcSpace: keep pickable (background catch-all for room clicks)
+        // Doors, windows, furniture: remain pickable by default
+      } else {
+        // Restore all to pickable
+        entity.pickable = true;
+      }
+    });
+  };
+  window.addEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler);
+  return () => window.removeEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler);
+}, []);
 ```
 
-## Plan
-
-### 1. Fix `sync-xkt-building` action (~line 1738)
-Add `bimobjectid` from the model metadata to the `GetXktData` URL:
-```
-{base}/GetXktData?modelid={modelId}&bimobjectid={bimObjectId}&context=Building
-```
-The `bimObjectId` comes directly from each `BimModel` in the `GetAllRelatedModels` response.
-
-### 2. Fix `sync-xkt` resumable action (~line 1511)
-Same fix — when downloading via revisions, pass `bimobjectid`. For revisions, we may need to cross-reference back to the `GetAllRelatedModels` models to get `bimObjectId`, or use `fmguid` as `externalguid`.
-
-### 3. Fix client-side bootstrap in `useModelLoader.ts` (~line 183-225)
-Update the candidate paths to also try `GetAllRelatedModels` + `GetXktData` with `bimobjectid`, matching the server-side logic. This ensures the client fallback also works with the correct API.
-
-### 4. Add revision-based update detection
-In `sync-xkt-building`, after fetching models via `GetAllRelatedModels`, compare each model's `revisionId` against the stored `source_updated_at` in `xkt_models`. Only re-download if the revision has changed. This avoids re-downloading unchanged models and detects updates during sync.
-
-## Files changed
-- `supabase/functions/asset-plus-sync/index.ts` — add `bimobjectid` to GetXktData calls, add revision comparison
-- `src/hooks/useModelLoader.ts` — update client bootstrap to use correct API paths
+This is the only file that needs to change. The orthographic top-down view naturally handles Z-ordering: furniture and doors sit above room polygons, so they get picked first. Rooms cover the floor area and catch any click that doesn't hit an object above.
 
