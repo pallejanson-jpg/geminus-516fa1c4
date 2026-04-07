@@ -731,6 +731,22 @@ serve(async (req) => {
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+      } catch (statusErr) {
+        console.error('check-sync-status error:', statusErr);
+        // Return partial data so the UI doesn't break
+        const { data: syncStates } = await supabase.from('asset_sync_state').select('*').catch(() => ({ data: null }));
+        return new Response(
+          JSON.stringify({
+            success: true,
+            error: 'Timeout fetching full sync status',
+            structure: { localCount: -1, remoteCount: -1, inSync: false, syncState: syncStates?.find((s: any) => s.subtree_id === 'structure') },
+            assets: { localCount: -1, remoteCount: -1, inSync: false, syncState: syncStates?.find((s: any) => s.subtree_id === 'assets') },
+            xkt: { localCount: -1, buildingCount: -1, syncState: syncStates?.find((s: any) => s.subtree_id === 'xkt') },
+            total: { localCount: -1, remoteCount: -1 },
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // ============ SYNC STRUCTURE — RESUMABLE (Buildings, Storeys, Spaces) ============
