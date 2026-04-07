@@ -455,7 +455,7 @@ const ImdfExportPanel: React.FC<{ allBuildings: any[] }> = ({ allBuildings }) =>
 const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) => {
 
     const { toast } = useToast();
-    const { appConfigs, setAppConfigs } = useContext(AppContext);
+    const { appConfigs, setAppConfigs, viewer3dFmGuid, selectedFacility } = useContext(AppContext);
     const [activeTab, setActiveTab] = useState('apps');
     // Separate syncing states for each sync type
     const [isSyncingStructure, setIsSyncingStructure] = useState(false);
@@ -1456,14 +1456,22 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
     // Force refresh XKT models for a single building
     const handleForceRefreshXkt = async (bFmGuid?: string) => {
-        const targetGuid = bFmGuid || favoriteBuildings[0]?.fm_guid;
+        // Priority: explicit arg > active viewer building > selected facility > first favorite
+        const targetGuid = bFmGuid
+            || viewer3dFmGuid
+            || selectedFacility?.fm_guid
+            || favoriteBuildings[0]?.fm_guid;
         if (!targetGuid) {
             toast({ variant: 'destructive', title: 'No building selected' });
             return;
         }
+        // Resolve building name for UI
+        const targetName = favoriteBuildings.find((b: any) => b.fm_guid === targetGuid)?.common_name
+            || selectedFacility?.common_name
+            || targetGuid.substring(0, 8) + '...';
         setIsSyncingXkt(true);
         try {
-            toast({ title: 'Force refreshing 3D models...', description: 'Downloading latest XKT from Asset+' });
+            toast({ title: `Force refreshing 3D models for ${targetName}...`, description: 'Downloading latest XKT from Asset+' });
             
             // 1. Call backend with force: true
             const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
@@ -1471,17 +1479,29 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             });
             if (error) throw error;
 
-            // 2. Clear frontend caches
-            const { clearBuildingFromMemory } = await import('@/hooks/useXktPreload');
-            clearBuildingFromMemory(targetGuid);
+            const syncedCount = data?.synced || 0;
 
-            // 3. Signal the viewer to reload
-            window.dispatchEvent(new CustomEvent('XKT_FORCE_RELOAD', { detail: { buildingFmGuid: targetGuid } }));
+            if (syncedCount > 0) {
+                // 2. Clear frontend caches only if something was actually refreshed
+                const { clearBuildingFromMemory } = await import('@/hooks/useXktPreload');
+                clearBuildingFromMemory(targetGuid);
 
-            toast({
-                title: 'XKT Force Refresh Complete',
-                description: data?.message || `${data?.synced || 0} models refreshed. Viewer will reload.`,
-            });
+                // 3. Signal the viewer to reload
+                window.dispatchEvent(new CustomEvent('XKT_FORCE_RELOAD', { detail: { buildingFmGuid: targetGuid } }));
+
+                toast({
+                    title: 'XKT Force Refresh Complete',
+                    description: `${syncedCount} models refreshed for ${targetName}. Viewer will reload.`,
+                });
+            } else {
+                // No models refreshed — show error details
+                const errDetails = data?.errors?.join('; ') || data?.message || 'No models were downloaded.';
+                toast({
+                    variant: 'destructive',
+                    title: 'Force refresh: no models updated',
+                    description: errDetails.substring(0, 200),
+                });
+            }
             await checkSyncStatus();
         } catch (err: any) {
             toast({ variant: 'destructive', title: 'Force refresh failed', description: err.message });
@@ -3304,7 +3324,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             <div className="flex-1">
                                                 <span className="text-sm font-medium">Force Refresh 3D Models</span>
                                                 <p className="text-xs text-muted-foreground">
-                                                    Re-download XKT for {favoriteBuildings[0]?.common_name || 'selected building'} from Asset+
+                                                    Re-download XKT for {
+                                                        (viewer3dFmGuid && favoriteBuildings.find((b: any) => b.fm_guid === viewer3dFmGuid)?.common_name)
+                                                        || selectedFacility?.common_name
+                                                        || favoriteBuildings[0]?.common_name
+                                                        || 'selected building'
+                                                    } from Asset+
                                                 </p>
                                             </div>
                                             <Button
@@ -3312,7 +3337,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 size="sm"
                                                 variant="outline"
                                                 className="gap-1"
-                                                disabled={!favoriteBuildings[0]?.fm_guid || isSyncingXkt}
+                                                disabled={!(viewer3dFmGuid || selectedFacility?.fm_guid || favoriteBuildings[0]?.fm_guid) || isSyncingXkt}
                                             >
                                                 {isSyncingXkt ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                                                 Force Refresh
