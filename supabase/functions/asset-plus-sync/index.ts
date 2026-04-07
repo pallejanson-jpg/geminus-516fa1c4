@@ -1412,6 +1412,21 @@ serve(async (req) => {
         const buildingFmGuid = building.fm_guid;
         const buildingName = building.common_name || buildingFmGuid;
 
+        // Fetch building asset attributes for parentBimObjectId fallback
+        let buildingParentBimObjId = '';
+        try {
+          const { data: bldgAsset } = await supabase
+            .from('assets')
+            .select('attributes')
+            .eq('fm_guid', buildingFmGuid)
+            .eq('category', 'Building')
+            .maybeSingle();
+          if (bldgAsset?.attributes) {
+            const attrs = typeof bldgAsset.attributes === 'string' ? JSON.parse(bldgAsset.attributes) : bldgAsset.attributes;
+            buildingParentBimObjId = attrs.parentBimObjectId || attrs.buildingBimObjectId || '';
+          }
+        } catch {}
+
         try {
           // Use robust endpoint discovery
           const discovery = await discover3dModelsEndpoint(supabase, accessToken, apiUrl, apiKey, buildingFmGuid);
