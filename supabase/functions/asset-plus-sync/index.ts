@@ -1689,29 +1689,32 @@ serve(async (req) => {
       
       console.log(`Starting sync-xkt-building for: ${buildingFmGuid}`);
 
-      // Get building name
+      // Get building name AND attributes (for parentBimObjectId fallback)
       const { data: building } = await supabase
         .from('assets')
-        .select('common_name')
+        .select('common_name, attributes')
         .eq('fm_guid', buildingFmGuid)
         .eq('category', 'Building')
         .maybeSingle();
 
       const buildingName = building?.common_name || buildingFmGuid;
+      const buildingAttrs = typeof building?.attributes === 'string'
+        ? JSON.parse(building.attributes)
+        : (building?.attributes || {});
+      const buildingParentBimObjectId = buildingAttrs.parentBimObjectId || buildingAttrs.buildingBimObjectId || '';
 
       try {
         // Use robust endpoint discovery
         const discovery = await discover3dModelsEndpoint(supabase, accessToken, apiUrl, apiKey, buildingFmGuid);
         
         if (!discovery.url) {
-          // 3D API not accessible from Edge Function environment
-          // This is expected - models will be cached via Cache-on-Load in the viewer instead
           return new Response(
             JSON.stringify({ 
               success: true, 
               message: '3D API ej tillgänglig från servern. Modeller cachas automatiskt när du öppnar 3D-viewern.',
               hint: 'cache-on-load',
-              modelCount: 0 
+              modelCount: 0,
+              synced: 0
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
@@ -1721,13 +1724,14 @@ serve(async (req) => {
         
         if (models.length === 0) {
           return new Response(
-            JSON.stringify({ success: true, message: 'No models found', modelCount: 0 }),
+            JSON.stringify({ success: true, message: 'No models found', modelCount: 0, synced: 0 }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
         console.log(`Building ${buildingName}: Found ${models.length} models`);
         let synced = 0;
+        const modelErrors: string[] = [];
 
         // Fetch revisions for update detection
         let revisions: any[] = [];
@@ -1747,11 +1751,43 @@ serve(async (req) => {
           if (rev.modelId) revisionMap.set(String(rev.modelId), rev.revisionId || '');
         }
 
+        // Helper: try fetching XKT with multiple identifier combinations
+        async function tryFetchXkt(
+          baseUrl: string,
+          modelId: string,
+          identifiers: { param: string; value: string; label: string }[],
+          token: string,
+          key: string
+        ): Promise<{ data: ArrayBuffer; usedIdentifier: string } | null> {
+          for (const id of identifiers) {
+            if (!id.value) continue;
+            const url = `${baseUrl}/GetXktData?modelid=${modelId}&${id.param}=${encodeURIComponent(id.value)}&context=Building&apiKey=${key}`;
+            console.log(`Trying XKT: ${id.label} → ${url.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
+            try {
+              const res = await fetch(url, { headers: { "Authorization": `Bearer ${token}` } });
+              if (res.ok) {
+                const data = await res.arrayBuffer();
+                if (data.byteLength >= 1024) {
+                  console.log(`✓ XKT download succeeded with ${id.label} (${(data.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+                  return { data, usedIdentifier: id.label };
+                }
+                console.log(`XKT too small with ${id.label} (${data.byteLength} bytes), trying next`);
+              } else {
+                console.log(`XKT ${res.status} with ${id.label}, trying next`);
+              }
+            } catch (e) {
+              console.log(`XKT fetch error with ${id.label}: ${e}`);
+            }
+          }
+          return null;
+        }
+
         for (const model of models) {
-          // Extract modelId and bimObjectId from BimModel (Asset+ GetAllRelatedModels response)
           const modelId = model.modelId || model.id || model.ModelId || `model_${Date.now()}`;
           const modelName = model.name || model.modelName || model.Name || `Model ${modelId}`;
-          const bimObjectId = model.bimObjectId || model.BimObjectId || model.fmGuid || model.FmGuid || '';
+          const bimObjectId = model.bimObjectId || model.BimObjectId || '';
+          const modelFmGuid = model.fmGuid || model.FmGuid || '';
+          const externalGuid = model.externalGuid || model.ExternalGuid || '';
           const fileName = `${modelId}.xkt`;
           const storagePath = `${buildingFmGuid}/${fileName}`;
 
@@ -1771,36 +1807,33 @@ serve(async (req) => {
               console.log(`Model ${modelId} (${modelName}) unchanged (revision ${revisionId})`);
               continue;
             }
-            // No revisionId from API → always re-download to ensure freshness
             console.log(`Model ${modelId} (${modelName}) has new revision, re-downloading`);
           }
 
           try {
-            // Construct XKT download URL with bimobjectid parameter
-            const bimParam = bimObjectId 
-              ? `&bimobjectid=${encodeURIComponent(bimObjectId)}` 
-              : `&externalguid=${encodeURIComponent(buildingFmGuid)}`;
-            const xktDownloadUrl = `${discovery.url}/GetXktData?modelid=${modelId}${bimParam}&context=Building&apiKey=${apiKey}`;
-            console.log(`Fetching XKT: ${xktDownloadUrl.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
-            
-            const xktRes = await fetch(xktDownloadUrl, {
-              headers: { "Authorization": `Bearer ${accessToken}` }
-            });
+            // Build identifier fallback chain
+            const identifiers = [
+              { param: 'bimobjectid', value: bimObjectId, label: `bimobjectid=${bimObjectId.substring(0,8)}` },
+              { param: 'externalguid', value: externalGuid, label: `externalguid(model)=${externalGuid.substring(0,8)}` },
+              { param: 'bimobjectid', value: buildingParentBimObjectId, label: `bimobjectid(building.parentBimObjectId)=${buildingParentBimObjectId.substring(0,8)}` },
+              { param: 'externalguid', value: modelFmGuid, label: `externalguid(model.fmGuid)=${modelFmGuid.substring(0,8)}` },
+              { param: 'externalguid', value: buildingFmGuid, label: `externalguid(buildingFmGuid)=${buildingFmGuid.substring(0,8)}` },
+            ];
 
-            if (!xktRes.ok) {
-              const errBody = await xktRes.text().catch(() => '');
-              console.log(`Failed to fetch model ${modelId}: ${xktRes.status} ${errBody.substring(0, 200)}`);
+            const result = await tryFetchXkt(discovery.url!, modelId, identifiers, accessToken, apiKey);
+
+            if (!result) {
+              const errMsg = `Model ${modelId} (${modelName}): All identifier combinations returned 404`;
+              console.log(errMsg);
+              modelErrors.push(errMsg);
               continue;
             }
 
-            const xktData = await xktRes.arrayBuffer();
+            const xktData = result.data;
             const fileSize = xktData.byteLength;
-            
-            if (fileSize < 1024) continue;
-            
-            console.log(`Model ${modelId}: Downloaded ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
+            console.log(`Model ${modelId} (${modelName}): Downloaded ${(fileSize / 1024 / 1024).toFixed(2)} MB via ${result.usedIdentifier}`);
 
-            // Upload to storage with no-cache to prevent stale CDN delivery
+            // Upload to storage with no-cache
             const { error: uploadError } = await supabase.storage
               .from('xkt-models')
               .upload(storagePath, new Uint8Array(xktData), {
@@ -1829,7 +1862,7 @@ serve(async (req) => {
                 file_url: signedUrl,
                 file_size: fileSize,
                 storage_path: storagePath,
-                source_url: xktDownloadUrl.replace(/apiKey=[^&]+/, 'apiKey=***'),
+                source_url: `GetXktData via ${result.usedIdentifier}`,
                 source_updated_at: revisionId || new Date().toISOString(),
                 synced_at: new Date().toISOString(),
               }, { onConflict: 'building_fm_guid,model_id' });
@@ -1839,17 +1872,27 @@ serve(async (req) => {
           } catch (e) {
             const errMsg = e instanceof Error ? e.message : String(e);
             console.log(`Failed to sync model ${modelId}: ${errMsg}`);
+            modelErrors.push(`${modelId}: ${errMsg}`);
           }
         }
 
+        const allFailed = synced === 0 && modelErrors.length > 0;
         return new Response(
-          JSON.stringify({ success: true, message: `Synced ${synced} models`, synced, buildingFmGuid }),
+          JSON.stringify({
+            success: !allFailed,
+            message: allFailed
+              ? `Failed to download any models. ${modelErrors.length} errors.`
+              : `Synced ${synced} models`,
+            synced,
+            buildingFmGuid,
+            errors: modelErrors.length > 0 ? modelErrors : undefined,
+          }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);
         return new Response(
-          JSON.stringify({ success: false, error: errMsg }),
+          JSON.stringify({ success: false, error: errMsg, synced: 0 }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
