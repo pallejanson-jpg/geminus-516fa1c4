@@ -1,23 +1,28 @@
 
 
-# Fix: 2D Pickability Overridden by Filter Panel
-
 ## Problem
-The pickability rules set in `NativeViewerShell.tsx` on 2D toggle get immediately overridden when `ViewerFilterPanel.tsx` runs `applyFilterVisibility` — which happens on every filter state change, including the initial render. The filter panel is the final authority on pickability, so the 2D rules must live there.
 
-## Changes
+The XKT model sync from Asset+ skips re-downloading models due to overly aggressive cache logic on lines 1765-1776 of `asset-plus-sync/index.ts`:
 
-### 1. `src/components/viewer/ViewerFilterPanel.tsx`
-- Add a `useRef<boolean>` (`is2DModeRef`) that tracks 2D state via `VIEW_MODE_2D_TOGGLED_EVENT` listener
-- At the **end** of `applyFilterVisibility` (after line ~1510, before `prevVisibleRef.current = newVisibleSet`), add a 2D override block:
-  - If `is2DModeRef.current` is true, iterate all scene objects using metaScene metadata
-  - Structural types (walls, slabs, columns, beams, roofs, coverings, curtain walls, members, railings, plates) → `pickable = false`
-  - IfcSpace (rooms, non-area) → `pickable = true`, `visible = true`
-  - Everything else visible → `pickable = true` (no change needed, already default)
-- When the 2D event fires, also call `applyFilterVisibility()` to re-run with the new mode
+1. **Line 1767-1769**: If the stored `source_updated_at` matches the `revisionId`, it skips -- this is correct behavior.
+2. **Line 1771-1773**: If there's NO `revisionId` from the API but the model was previously synced (`storedRevision` exists), it skips with "no revision info to compare". **This is the bug.** When the revision API returns empty or incomplete data, every previously-synced model gets skipped permanently, even if the actual XKT file has been updated on the server.
 
-### 2. `src/components/viewer/NativeViewerShell.tsx`
-- Remove the pickability iteration from the 2D handler (lines 639-657) — keep only `navMode` switch (`planView` / `orbit`)
+## Fix
 
-This ensures the 2D pickability is always the last thing applied, never overridden by filter logic.
+**File: `supabase/functions/asset-plus-sync/index.ts`** (lines 1765-1776)
+
+Remove the fallback skip on line 1771-1774. When there's no revision info available from the API, the sync should always re-download the model to ensure freshness. The only valid skip condition is when both revisionIds exist and match.
+
+Updated logic:
+```
+if (existingModel && !forceSync) {
+  if (revisionId && storedRevision === revisionId) {
+    // Both sides have revision IDs and they match → skip
+    continue;
+  }
+  // Otherwise: no revision info OR mismatch → always re-download
+}
+```
+
+This is a single-line deletion (remove the `if (!revisionId && storedRevision)` block). No other files need changes.
 
