@@ -1660,7 +1660,18 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     applyFilterVisibility();
   }, [checkedSources, checkedLevels, checkedSpaces, checkedCategories, xrayMode, applyFilterVisibility, isVisible, entityMapVersion]);
 
-  // Apply coloring separately when color settings change
+  // Track 2D mode and re-apply filter when toggled
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const enabled = detail?.enabled ?? false;
+      is2DModeRef.current = enabled;
+      applyFilterVisibility();
+    };
+    window.addEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler);
+    return () => window.removeEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler);
+  }, [applyFilterVisibility]);
+
   useEffect(() => {
     if (!isVisible) return;
     if (autoColorEnabled || autoColorSpaces || autoColorCategories) {
