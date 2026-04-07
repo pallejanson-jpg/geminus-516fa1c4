@@ -27,12 +27,15 @@ interface NativeXeokitViewerProps {
   buildingFmGuid: string;
   onClose?: () => void;
   onViewerReady?: (viewer: any) => void;
+  /** When true, forces a re-download of XKT models from Asset+ before loading */
+  forceBootstrap?: boolean;
 }
 
 const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   buildingFmGuid,
   onClose,
   onViewerReady,
+  forceBootstrap = false,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isMobile = useIsMobile();
@@ -122,16 +125,19 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       let { models, dbError } = await fetchModelMetadata();
       if (!mountedRef.current) return;
 
-      // 3. Bootstrap if no models
-      if (dbError || !models || models.length === 0) {
+      // 3. Bootstrap from Asset+ (always if forceBootstrap, or if no models)
+      if (forceBootstrap || dbError || !models || models.length === 0) {
         setPhase('syncing');
+        console.log(`[NativeViewer] ${forceBootstrap ? 'Force bootstrap' : 'No models found'} — downloading from Asset+`);
         const bootstrapped = await bootstrapFromAssetPlus();
         if (bootstrapped.length > 0) {
           models = bootstrapped;
-        } else {
+        } else if (!models || models.length === 0) {
           setErrorMsg('No 3D models found for this building. Sync XKT models via Settings → Buildings, or upload an IFC file.');
           setPhase('error');
           return;
+        } else {
+          console.log('[NativeViewer] Force bootstrap returned 0 new models — using existing cached models');
         }
         if (!mountedRef.current) return;
       }
@@ -299,7 +305,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         setPhase('error');
       }
     }
-  }, [buildingFmGuid, createInstance, fetchModelMetadata, bootstrapFromAssetPlus, loadAllModels, loadSingleModel, onViewerReady, pendingInsightsColorRef, viewerRef]);
+  }, [buildingFmGuid, forceBootstrap, createInstance, fetchModelMetadata, bootstrapFromAssetPlus, loadAllModels, loadSingleModel, onViewerReady, pendingInsightsColorRef, viewerRef]);
 
   // ── Stabilized effect: only re-run when buildingFmGuid changes ──
   // Uses a ref to always call the latest initialize without it being a dependency,
