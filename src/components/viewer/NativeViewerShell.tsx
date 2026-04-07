@@ -1077,6 +1077,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
       {/* Canvas layer */}
       <NativeXeokitViewer
+        key={viewerReloadKey}
         buildingFmGuid={buildingFmGuid}
         onClose={onClose}
         onViewerReady={handleViewerReady}
