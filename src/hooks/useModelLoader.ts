@@ -180,41 +180,49 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
 
       const baseUrl = apiUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
       const assetDbUrl = apiUrl.replace(/\/+$/, '');
-      const candidatePaths = [
-        `${baseUrl}/api/threed/GetModels`, `${baseUrl}/threed/GetModels`,
-        `${assetDbUrl}/api/threed/GetModels`, `${assetDbUrl}/threed/GetModels`,
-        `${assetDbUrl}/GetModels`, `${baseUrl}/api/v1/threed/GetModels`,
+      
+      // Step 1: Discover models via GetAllRelatedModels (same as server-side)
+      const candidateBases = [
+        assetDbUrl, `${baseUrl}/asset`, baseUrl, `${baseUrl}/api/v1/AssetDB`,
       ];
 
       let discoveredModels: any[] | null = null;
-      for (const basePath of candidatePaths) {
+      let workingBase: string | null = null;
+      for (const base of [...new Set(candidateBases)]) {
         try {
-          const url = `${basePath}?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
+          const url = `${base}/GetAllRelatedModels?fmguid=${buildingFmGuid}`;
           const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
           if (res.ok) {
             const data = await res.json();
             const arr = Array.isArray(data) ? data : data?.models ?? data?.items ?? data?.data ?? null;
-            if (arr?.length) { discoveredModels = arr; break; }
+            if (arr?.length) { discoveredModels = arr; workingBase = base; break; }
           }
         } catch {}
       }
 
-      if (!discoveredModels?.length) return [];
+      if (!discoveredModels?.length || !workingBase) return [];
+      
+      // Step 2: Download each model via GetXktData with bimobjectid
       const bootstrapped: ModelCandidate[] = [];
       for (const model of discoveredModels) {
-        const xktUrl = model.xktFileUrl || model.xkt_file_url || model.fileUrl || model.url;
-        if (!xktUrl) continue;
-        const modelId = model.id || model.modelId || xktUrl.split('/').pop()?.replace('.xkt', '') || `model_${Date.now()}`;
-        const fullXktUrl = xktUrl.startsWith('/') ? baseUrl + xktUrl : xktUrl;
+        const modelId = model.modelId || model.id || model.ModelId;
+        const bimObjectId = model.bimObjectId || model.BimObjectId || model.fmGuid || model.FmGuid || '';
+        if (!modelId) continue;
+        
+        const bimParam = bimObjectId 
+          ? `&bimobjectid=${encodeURIComponent(bimObjectId)}` 
+          : `&externalguid=${encodeURIComponent(buildingFmGuid)}`;
+        const xktUrl = `${workingBase}/GetXktData?modelid=${modelId}${bimParam}&context=Building&apiKey=${apiKey}`;
+        
         try {
-          const xktRes = await fetch(fullXktUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+          const xktRes = await fetch(xktUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
           if (!xktRes.ok) continue;
           const xktData = await xktRes.arrayBuffer();
           if (xktData.byteLength < 1024) continue;
           const firstByte = String.fromCharCode(new Uint8Array(xktData)[0]);
           if (firstByte === '<' || firstByte === '{') continue;
           storeModelInMemory(modelId, buildingFmGuid, xktData);
-          const modelName = model.name || model.modelName || modelId;
+          const modelName = model.name || model.modelName || model.Name || modelId;
           xktCacheService.saveModelFromViewer(modelId, xktData, buildingFmGuid, modelName).catch(() => {});
           bootstrapped.push({
             model_id: modelId, model_name: modelName,
