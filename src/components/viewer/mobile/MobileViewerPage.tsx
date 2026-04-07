@@ -1106,7 +1106,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
               <DrawerHeader className="pb-2">
                 <div className="flex items-center gap-2"><BackButton /><DrawerTitle className="text-base">Settings</DrawerTitle></div>
               </DrawerHeader>
-              <div className="px-4 pb-6 space-y-5 overflow-y-auto max-h-[75dvh]">
+              <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] space-y-5" style={{ overscrollBehavior: 'contain' }}>
                 {/* Clip height */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
