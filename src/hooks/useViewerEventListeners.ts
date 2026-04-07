@@ -119,7 +119,6 @@ export function useViewerEventListeners({
               setTimeout(resolve, 60000);
             });
             loadedIds.add(tile.modelId);
-            applyArchitectColors(viewer);
           }
         } catch {}
       }
@@ -302,7 +301,17 @@ export function useViewerEventListeners({
       const viewer = viewerRef.current;
       if (!viewer?.scene) return;
       viewer.scene.setObjectsXRayed(viewer.scene.objectIds, false);
-      applyArchitectColors(viewer);
+      // Restore native model colors (no automatic architect palette)
+      const nativeColors = (window as any).__xeokitNativeColors as Map<string, { color: number[]; opacity: number; edges: boolean }> | undefined;
+      if (nativeColors) {
+        for (const [objId, props] of nativeColors) {
+          const entity = viewer.scene.objects?.[objId];
+          if (entity) {
+            entity.colorize = props.color;
+            entity.opacity = props.opacity;
+          }
+        }
+      }
     };
     const off = on('INSIGHTS_COLOR_RESET', handler);
     return () => off();
@@ -365,10 +374,11 @@ export function useViewerEventListeners({
       const cc = viewerRef.current?.cameraControl;
       if (!cc) return;
       const mob = isMobileRef.current;
-      cc.dragRotationRate = (mob ? 70 : 120) * m;
-      cc.touchPanRate = (mob ? 0.14 : 0.3) * m;
-      cc.touchDollyRate = (mob ? 0.09 : 0.15) * m;
+      cc.dragRotationRate = (mob ? 45 : 120) * m;
+      cc.touchPanRate = (mob ? 0.08 : 0.3) * m;
+      cc.touchDollyRate = (mob ? 0.06 : 0.15) * m;
       if (!mob) { cc.mouseWheelDollyRate = 50 * m; cc.keyboardDollyRate = 5 * m; }
+      else { cc.mouseWheelDollyRate = 15 * m; cc.keyboardDollyRate = 2 * m; }
     };
     const granularHandler = (d: any) => {
       const cc = viewerRef.current?.cameraControl;
@@ -377,10 +387,11 @@ export function useViewerEventListeners({
       const zM = Math.max(0.25, Math.min(3, (d?.zoom ?? 100) / 100));
       const pM = Math.max(0.25, Math.min(3, (d?.pan ?? 100) / 100));
       const rM = Math.max(0.25, Math.min(3, (d?.rotate ?? 100) / 100));
-      cc.dragRotationRate = (mob ? 70 : 120) * rM;
-      cc.touchPanRate = (mob ? 0.14 : 0.3) * pM;
-      cc.touchDollyRate = (mob ? 0.09 : 0.15) * zM;
+      cc.dragRotationRate = (mob ? 45 : 120) * rM;
+      cc.touchPanRate = (mob ? 0.08 : 0.3) * pM;
+      cc.touchDollyRate = (mob ? 0.06 : 0.15) * zM;
       if (!mob) { cc.mouseWheelDollyRate = 50 * zM; cc.keyboardDollyRate = 5 * zM; }
+      else { cc.mouseWheelDollyRate = 15 * zM; cc.keyboardDollyRate = 2 * zM; }
     };
     const fastNavHandler = (detail: { enabled: boolean }) => {
       const enabled = detail?.enabled ?? false;

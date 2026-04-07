@@ -160,7 +160,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           for (const model of secondaryQueue) {
             if (!mountedRef.current) break;
             const ok = await loadSingleModel(model, viewer, xktLoader, metadataFileSet);
-            if (ok) { applyArchitectColors(viewer); loaded++; }
+            if (ok) { loaded++; }
           }
           secondaryQueue = []; // consumed
         }
@@ -196,9 +196,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }
         (window as any).__xeokitNativeColors = nativeColors;
 
-        // Apply architect colors + saved theme
-        const colorResult = applyArchitectColors(viewer);
-        console.log(`[NativeViewer] Architect colors: ${colorResult.colorized} colorized, ${colorResult.hiddenSpaces} spaces hidden, ${finalIds.length} total entities`);
+        // Native model colors are preserved by default — architect palette is opt-in via theme selector
+        console.log(`[NativeViewer] Native model colors preserved. ${finalIds.length} total entities`);
         
         // Log AABB for diagnostics
         try {
@@ -269,7 +268,6 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
             const metadataFileSet = new Set<string>(); // secondary models skip metadata
             const ok = await loadSingleModel(modelInfo, viewerRef.current, xktLoader, metadataFileSet);
             if (ok && mountedRef.current && viewerRef.current?.scene) {
-              applyArchitectColors(viewerRef.current);
               // Hide IfcSpace from non-A models
               const v = viewerRef.current;
               const metaObjs = v.metaScene?.metaObjects;
