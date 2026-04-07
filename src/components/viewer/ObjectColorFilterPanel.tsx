@@ -263,6 +263,8 @@ const ObjectColorFilterPanel: React.FC<ObjectColorFilterPanelProps> = ({ viewerR
       if (entity) { entity.colorize = null; entity.opacity = 1.0; }
     });
     (window as any).__colorFilterActive = false;
+    (window as any).__spacesForceVisible = false;
+    emit('FORCE_SHOW_SPACES', { show: false });
     setMatchCount(null);
   }, [viewerRef]);
 
