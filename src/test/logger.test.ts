@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
+import { logger } from "@/lib/logger";
 
 describe("logger", () => {
-  it("exports log, debug, info, warn, error functions", async () => {
-    const { logger } = await import("@/lib/logger");
+  it("exports log, debug, info, warn, error functions", () => {
     expect(typeof logger.log).toBe("function");
     expect(typeof logger.debug).toBe("function");
     expect(typeof logger.info).toBe("function");
@@ -10,9 +10,8 @@ describe("logger", () => {
     expect(typeof logger.error).toBe("function");
   });
 
-  it("error always calls console.error", async () => {
+  it("error always calls console.error", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const { logger } = await import("@/lib/logger");
     logger.error("test error");
     expect(spy).toHaveBeenCalledWith("test error");
     spy.mockRestore();
