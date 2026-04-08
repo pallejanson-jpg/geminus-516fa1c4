@@ -1,4 +1,5 @@
 import { BarChart2, Building2, Box, Zap, Archive, Radar, Scan, Globe } from 'lucide-react';
+import type { AppConfig } from '@/lib/types';
 
 export const IVION_DEFAULT_BASE_URL = 'https://swg.iv.navvis.com';
 
@@ -43,49 +44,13 @@ export const FLOOR_IMAGES = [
     "https://images.unsplash.com/photo-1517502884422-41eaead166d4?q=80&w=600&auto=format&fit=crop",
 ];
 
-export const THEMES: Record<string, Record<string, string>> = {
-    dark: {
-        bg: 'bg-background', 
-        bgSec: 'bg-card', 
-        border: 'border-border',
-        text: 'text-foreground', 
-        textSec: 'text-muted-foreground', 
-        accent: 'text-primary',
-        card: 'bg-card', 
-        input: 'bg-input', 
-        hover: 'hover:bg-muted'
-    },
-    light: {
-        bg: 'bg-background', 
-        bgSec: 'bg-card', 
-        border: 'border-border',
-        text: 'text-foreground', 
-        textSec: 'text-muted-foreground', 
-        accent: 'text-primary',
-        card: 'bg-card', 
-        input: 'bg-input', 
-        hover: 'hover:bg-muted'
-    },
-    swg: {
-        bg: 'bg-background', 
-        bgSec: 'bg-card', 
-        border: 'border-border',
-        text: 'text-foreground', 
-        textSec: 'text-muted-foreground', 
-        accent: 'text-primary',
-        card: 'bg-card', 
-        input: 'bg-input', 
-        hover: 'hover:bg-muted'
-    }
-};
-
 export const THEME_OPTIONS = [
     { value: 'dark', label: 'Dark', colors: ['#000000', '#a78bfa', '#818cf8'] },
     { value: 'light', label: 'Light', colors: ['#f5f3ff', '#7c3aed', '#6366f1'] },
     { value: 'swg', label: 'SWG', colors: ['#141414', '#39a5b5', '#39a5b5'] },
 ] as const;
 
-export const DEFAULT_APP_CONFIGS: Record<string, any> = {
+export const DEFAULT_APP_CONFIGS: Record<string, AppConfig> = {
     insights: { label: 'Insights', url: '', icon: BarChart2, openMode: 'internal', username: '', password: '' },
     fma_plus: { label: 'FMA+', url: 'https://swg-demo.bim.cloud/', icon: Building2, openMode: 'internal', username: '', password: '' },
     asset_plus: { label: 'Asset+', url: '', icon: Box, openMode: 'internal', username: '', password: '' },
@@ -121,10 +86,10 @@ export const SIDEBAR_ORDER_STORAGE_KEY = 'sidebar-app-order';
 export const SIDEBAR_SETTINGS_CHANGED_EVENT = 'sidebar-settings-changed';
 
 export const SENSLINC_POLL_OPTIONS = [
-    { value: 1, label: '1 timme' },
-    { value: 6, label: '6 timmar' },
-    { value: 12, label: '12 timmar' },
-    { value: 24, label: '24 timmar (rekommenderat)' },
-    { value: 48, label: '48 timmar' },
-    { value: 0, label: 'Manuellt (ingen automatisk polling)' },
+    { value: 1, label: '1 hour' },
+    { value: 6, label: '6 hours' },
+    { value: 12, label: '12 hours' },
+    { value: 24, label: '24 hours (recommended)' },
+    { value: 48, label: '48 hours' },
+    { value: 0, label: 'Manual (no automatic polling)' },
 ];
