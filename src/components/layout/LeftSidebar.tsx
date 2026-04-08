@@ -1,7 +1,7 @@
 import React, { useContext, useCallback } from 'react';
 import { Menu as MenuIcon, Home } from 'lucide-react';
 import { AppButton } from '@/components/common/AppButton';
-import { THEMES } from '@/lib/constants';
+
 import { AppContext } from '@/context/AppContext';
 import { useSidebarOrder } from '@/hooks/useSidebarOrder';
 import { supabase } from '@/integrations/supabase/client';
@@ -9,7 +9,6 @@ import { SIDEBAR_ITEM_META, getCurrentContext } from '@/lib/sidebar-config';
 
 const LeftSidebar: React.FC = () => {
     const { 
-        theme, 
         activeApp, 
         setActiveApp, 
         appConfigs, 
@@ -21,7 +20,6 @@ const LeftSidebar: React.FC = () => {
         open360WithContext,
     } = useContext(AppContext);
     
-    const t = THEMES[theme];
     const sidebarOrder = useSidebarOrder();
     const currentContext = getCurrentContext(activeApp, selectedFacility);
 
@@ -36,8 +34,8 @@ const LeftSidebar: React.FC = () => {
 
         // Special handling for radar (360°): try to set context from selectedFacility
         if (id === 'radar') {
-            const radarConfig = appConfigs?.radar || {};
-            const ivionUrl = radarConfig.url || 'https://swg.iv.navvis.com';
+            const radarConfig = appConfigs?.radar;
+            const ivionUrl = radarConfig?.url || 'https://swg.iv.navvis.com';
 
             if (selectedFacility?.fmGuid) {
                 try {
@@ -68,8 +66,8 @@ const LeftSidebar: React.FC = () => {
         }
 
         if (meta.type === 'config') {
-            const currentAppConfig = appConfigs[id] || {};
-            if (currentAppConfig.openMode === 'external' && currentAppConfig.url) {
+            const currentAppConfig = appConfigs[id];
+            if (currentAppConfig?.openMode === 'external' && currentAppConfig?.url) {
                 window.open(currentAppConfig.url, '_blank');
             } else {
                 setActiveApp(id);
@@ -85,11 +83,11 @@ const LeftSidebar: React.FC = () => {
                 fixed md:static inset-y-0 left-0 z-40 
                 transition-all duration-300 
                 ${isSidebarExpanded ? 'translate-x-0 w-44 sm:w-48' : '-translate-x-full md:translate-x-0 md:w-14 lg:w-16'} 
-                ${t.bgSec} border-r ${t.border} 
+                bg-card border-r border-border 
                 flex flex-col shadow-lg md:shadow-none
             `}
         >
-            <div className={`p-1.5 sm:p-2 flex h-14 sm:h-16 border-b ${t.border} items-center justify-center`}>
+            <div className="p-1.5 sm:p-2 flex h-14 sm:h-16 border-b border-border items-center justify-center">
                 <AppButton 
                     onClick={() => setIsSidebarExpanded(!isSidebarExpanded)} 
                     variant="ghost" 

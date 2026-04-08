@@ -1,5 +1,6 @@
 import React, { createContext, useState, useCallback, useContext, ReactNode } from 'react';
 import { DEFAULT_APP_CONFIGS } from '@/lib/constants';
+import type { Facility, AppConfig } from '@/lib/types';
 
 // 360+ viewer context for context-aware inventory tools
 export interface Ivion360Context {
@@ -21,19 +22,19 @@ interface NavigationContextType {
   setActiveApp: (app: string) => void;
   viewMode: string;
   setViewMode: (mode: string) => void;
-  selectedFacility: any;
-  setSelectedFacility: (facility: any) => void;
+  selectedFacility: Facility | null;
+  setSelectedFacility: (facility: Facility | null) => void;
   isSidebarExpanded: boolean;
   setIsSidebarExpanded: (expanded: boolean) => void;
   isRightSidebarVisible: boolean;
   toggleRightSidebar: () => void;
-  appConfigs: Record<string, any>;
-  setAppConfigs: (configs: Record<string, any>) => void;
+  appConfigs: Record<string, AppConfig>;
+  setAppConfigs: (configs: Record<string, AppConfig>) => void;
 
   // Entity insights
-  insightsFacility: any | null;
-  setInsightsFacility: (facility: any | null) => void;
-  openEntityInsights: (facility: any) => void;
+  insightsFacility: Facility | null;
+  setInsightsFacility: (facility: Facility | null) => void;
+  openEntityInsights: (facility: Facility) => void;
 
   // 360+ viewer context
   ivion360Context: Ivion360Context | null;
@@ -75,19 +76,19 @@ export const useNavigation = () => useContext(NavigationContext);
 export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [activeApp, setActiveApp] = useState('home');
   const [viewMode, setViewMode] = useState('grid');
-  const [selectedFacility, setSelectedFacility] = useState<any>(null);
+  const [selectedFacility, setSelectedFacility] = useState<Facility | null>(null);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [isRightSidebarVisible, setIsRightSidebarVisible] = useState(false);
-  const [insightsFacility, setInsightsFacility] = useState<any | null>(null);
+  const [insightsFacility, setInsightsFacility] = useState<Facility | null>(null);
   const [ivion360Context, setIvion360Context] = useState<Ivion360Context | null>(null);
   const [senslincDashboardContext, setSenslincDashboardContext] = useState<SenslincDashboardContext | null>(null);
 
-  const [appConfigs, setAppConfigs] = useState(() => {
+  const [appConfigs, setAppConfigs] = useState<Record<string, AppConfig>>(() => {
     const stored = typeof window !== 'undefined' ? window.localStorage.getItem('appConfigs') : null;
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        const merged: Record<string, any> = {};
+        const merged: Record<string, AppConfig> = {};
         for (const key of Object.keys(DEFAULT_APP_CONFIGS)) {
           merged[key] = { ...DEFAULT_APP_CONFIGS[key], ...(parsed[key] || {}) };
         }
@@ -116,7 +117,7 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children
     setIsRightSidebarVisible(prev => !prev);
   }, []);
 
-  const openEntityInsights = useCallback((facility: any) => {
+  const openEntityInsights = useCallback((facility: Facility) => {
     setInsightsFacility(facility);
     setActiveApp('entity_insights');
   }, []);

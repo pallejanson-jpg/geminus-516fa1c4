@@ -1,4 +1,4 @@
-import type { NavigatorNode } from './TreeNode';
+import type { NavigatorNode } from '@/lib/types';
 
 /**
  * A flat representation of a tree node for virtualization.

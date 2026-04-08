@@ -27,7 +27,7 @@ const FmAccessNativeView: React.FC = () => {
   const [manualFmGuid, setManualFmGuid] = useState<string | null>(null);
   const [buildingSearch, setBuildingSearch] = useState('');
 
-  const buildingFmGuid = manualFmGuid || selectedFacility?.fm_guid || selectedFacility?.fm_access_building_guid;
+  const buildingFmGuid = manualFmGuid || selectedFacility?.fmGuid || (selectedFacility as any)?.fm_access_building_guid;
   const buildingName = buildingFmGuid ? (selectedFacility?.name || 'Building') : 'FM Access 2.0';
 
   // Building list for empty state selector

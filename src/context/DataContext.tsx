@@ -1,19 +1,19 @@
 import React, { createContext, useState, useCallback, useContext, useEffect, ReactNode } from 'react';
 import { fetchLocalAssets } from '@/services/asset-plus-service';
 import { isModelName, isAModelName } from '@/lib/building-utils';
-
-type NavigatorNode = {
-  fmGuid: string;
-  category?: string;
-  commonName?: string;
-  name?: string;
-  children?: NavigatorNode[];
-  [key: string]: any;
-};
+import type { Facility, NavigatorNode } from '@/lib/types';
 
 interface DataContextType {
-  allData: any[];
-  setAllData: (data: any[]) => void;
+  allData: Facility[];
+  setAllData: (data: Facility[]) => void;
+  isLoadingData: boolean;
+  navigatorTreeData: NavigatorNode[];
+  refreshInitialData: () => Promise<void>;
+}
+
+interface DataContextType {
+  allData: Facility[];
+  setAllData: (data: Facility[]) => void;
   isLoadingData: boolean;
   navigatorTreeData: NavigatorNode[];
   refreshInitialData: () => Promise<void>;
@@ -30,11 +30,11 @@ export const DataContext = createContext<DataContextType>({
 export const useData = () => useContext(DataContext);
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [allData, setAllData] = useState<any[]>([]);
+  const [allData, setAllData] = useState<Facility[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [navigatorTreeData, setNavigatorTreeData] = useState<NavigatorNode[]>([]);
 
-  const buildNavigatorTree = useCallback((items: any[]): NavigatorNode[] => {
+  const buildNavigatorTree = useCallback((items: Facility[]): NavigatorNode[] => {
     // STRICT HIERARCHY: Building → Building Storey → Space → Instance
     // With synthetic "Unknown floor" fallback for orphan spaces
     const buildings = items.filter(item =>

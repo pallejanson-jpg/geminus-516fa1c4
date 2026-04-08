@@ -1460,15 +1460,15 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         // Priority: explicit arg > active viewer building > selected facility > first favorite
         const targetGuid = bFmGuid
             || viewer3dFmGuid
-            || selectedFacility?.fm_guid
-            || favoriteBuildings[0]?.fm_guid;
+            || selectedFacility?.fmGuid
+            || favoriteBuildings[0]?.fmGuid;
         if (!targetGuid) {
             toast({ variant: 'destructive', title: 'No building selected' });
             return;
         }
         // Resolve building name for UI
-        const targetName = favoriteBuildings.find((b: any) => b.fm_guid === targetGuid)?.common_name
-            || selectedFacility?.common_name
+        const targetName = favoriteBuildings.find((b: any) => b.fmGuid === targetGuid)?.commonName
+            || selectedFacility?.commonName
             || targetGuid.substring(0, 8) + '...';
         setIsSyncingXkt(true);
         try {
