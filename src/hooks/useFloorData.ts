@@ -29,6 +29,10 @@ export function isArchitecturalModel(name: string | null): boolean {
   return false;
 }
 
+function normalizeGuid(value: string | null | undefined): string {
+  return (value || '').toLowerCase().replace(/-/g, '');
+}
+
 interface DbStorey {
   fm_guid: string;
   common_name: string | null;
@@ -173,12 +177,12 @@ export function useFloorData(
       Object.values(metaObjects).forEach((metaObject: any) => {
         if (metaObject?.type?.toLowerCase() !== 'ifcbuildingstorey') return;
 
-        const fmGuid = metaObject.originalSystemId || metaObject.id;
+        const fmGuid = normalizeGuid(metaObject.originalSystemId || metaObject.id);
 
         const floorValues = Array.from(floorMap.values());
         for (const floor of floorValues) {
           const guidMatch = floor.databaseLevelFmGuids.some(g =>
-            g.toLowerCase() === fmGuid.toLowerCase()
+            normalizeGuid(g) === fmGuid
           );
 
           if (guidMatch) {

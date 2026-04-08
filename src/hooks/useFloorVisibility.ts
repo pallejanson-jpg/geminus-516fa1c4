@@ -4,9 +4,13 @@ import { FloorInfo } from '@/hooks/useFloorData';
 // ── Shared xeokit viewer accessor ─────────────────────────────────────────
 export function getXeokitViewerFromRef(viewerRef: React.MutableRefObject<any>) {
   try {
-    return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer
+      ?? viewerRef.current?.assetViewer?.$refs?.assetView?.viewer
+      ?? viewerRef.current?.$refs?.assetView?.viewer
+      ?? (window as any).__nativeXeokitViewer
+      ?? null;
   } catch {
-    return null;
+    return (window as any).__nativeXeokitViewer ?? null;
   }
 }
 
