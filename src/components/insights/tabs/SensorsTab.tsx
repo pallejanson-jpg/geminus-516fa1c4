@@ -1,5 +1,6 @@
 import React, { useContext, useState, useMemo } from 'react';
 import { AppContext } from '@/context/AppContext';
+import type { NavigatorNode } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -182,7 +183,7 @@ export default function SensorsTab() {
   const rooms = useMemo(() => {
     if (!building) return [];
     const result: Array<{ fmGuid: string; commonName?: string; name?: string }> = [];
-    building.children?.forEach((storey: NavigatorNode) => {
+    (building as NavigatorNode).children?.forEach((storey: NavigatorNode) => {
       storey.children?.forEach((space: NavigatorNode) => {
         result.push({ fmGuid: space.fmGuid, commonName: space.commonName, name: space.name });
       });
