@@ -10,7 +10,7 @@ import { useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeGuid } from '@/lib/utils';
 import { xktCacheService } from '@/services/xkt-cache-service';
-import { getModelFromMemory, storeModelInMemory, getMemoryStats } from '@/hooks/useXktPreload';
+import { clearBuildingFromMemory, getModelFromMemory, storeModelInMemory, getMemoryStats } from '@/hooks/useXktPreload';
 import { applyArchitectColors } from '@/lib/architect-colors';
 import { isRealTiling, getTilesToLoad } from '@/hooks/useFloorPriorityLoading';
 import { INSIGHTS_COLOR_UPDATE_EVENT, type InsightsColorUpdateDetail } from '@/lib/viewer-events';
@@ -147,14 +147,18 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
   }, [buildingFmGuid]);
 
   /**
-   * Bootstrap models from Asset+ API when no local models exist.
+   * Bootstrap models from Asset+ API and aggressively refresh stale local XKT data.
    */
   const bootstrapFromAssetPlus = useCallback(async (): Promise<ModelCandidate[]> => {
+    clearBuildingFromMemory(buildingFmGuid);
+
     // Step 1: Server-side sync
     try {
-      const { data: syncResult } = await supabase.functions.invoke('asset-plus-sync', {
-        body: { action: 'sync-xkt-building', buildingFmGuid }
+      const { data: syncResult, error: syncError } = await supabase.functions.invoke('asset-plus-sync', {
+        body: { action: 'sync-xkt-building', buildingFmGuid, force: true }
       });
+      if (syncError) throw syncError;
+
       if (syncResult?.synced > 0) {
         const { data: freshModels } = await supabase
           .from('xkt_models')
@@ -201,6 +205,19 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
       }
 
       if (!discoveredModels?.length || !workingBase) return [];
+
+      let revisions: any[] = [];
+      try {
+        const revRes = await fetch(`${workingBase}/GetAllModelRevisions`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (revRes.ok) {
+          const revData = await revRes.json();
+          revisions = revData?.modelRevisions || (Array.isArray(revData) ? revData : []);
+        }
+      } catch {}
+
+      const normalizeName = (value: unknown) => String(value || '').trim().toLowerCase();
       
       // Step 2: Download each model via GetXktData with full identifier fallback chain
       const bootstrapped: ModelCandidate[] = [];
@@ -221,11 +238,26 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
       } catch {}
 
       for (const model of discoveredModels) {
-        const modelId = model.modelId || model.id || model.ModelId;
+        const rawModelId = model.modelId || model.id || model.ModelId || '';
+        const rawModelName = model.name || model.modelName || model.Name || '';
+        const matchedRevision = revisions.find((rev: any) => {
+          const revModelId = String(rev.modelId || '');
+          if (rawModelId && revModelId === String(rawModelId)) return true;
+
+          const revName = normalizeName(rev.modelName || rev.entityName);
+          const modelName = normalizeName(rawModelName);
+          return !!revName && !!modelName && (revName === modelName || revName.includes(modelName) || modelName.includes(revName));
+        });
+
+        const modelId = String(rawModelId || matchedRevision?.modelId || '');
+        const revisionId = String(matchedRevision?.revisionId || model.revisionId || model.RevisionId || '');
         const bimObjectId = model.bimObjectId || model.BimObjectId || '';
         const modelFmGuid = model.fmGuid || model.FmGuid || '';
         const externalGuid = model.externalGuid || model.ExternalGuid || '';
-        if (!modelId) continue;
+        if (!modelId) {
+          console.warn('[ModelLoader] Skipping model with unresolved modelId:', rawModelName || modelFmGuid || buildingFmGuid);
+          continue;
+        }
         
         // Build full identifier fallback chain (same as server-side sync)
         const idCombos: { param: string; value: string }[] = [
@@ -254,9 +286,9 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
         
         if (!xktData) continue;
         
+        const modelName = rawModelName || matchedRevision?.modelName || matchedRevision?.entityName || modelId;
         storeModelInMemory(modelId, buildingFmGuid, xktData);
-        const modelName = model.name || model.modelName || model.Name || modelId;
-        xktCacheService.saveModelFromViewer(modelId, xktData, buildingFmGuid, modelName).catch(() => {});
+        xktCacheService.saveModelFromViewer(modelId, xktData, buildingFmGuid, modelName, revisionId || undefined).catch(() => {});
         bootstrapped.push({
           model_id: modelId, model_name: modelName,
           storage_path: `${buildingFmGuid}/${modelId}.xkt`,
