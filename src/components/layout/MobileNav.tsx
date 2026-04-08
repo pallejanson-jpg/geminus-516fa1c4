@@ -36,8 +36,8 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
   const handleAppClick = useCallback((id: string) => {
     // Special handling for 360/radar — pass building context
     if (id === 'radar') {
-      const radarConfig = appConfigs?.radar || {};
-      const ivionUrl = radarConfig.url || IVION_DEFAULT_BASE_URL;
+      const radarConfig = appConfigs?.radar;
+      const ivionUrl = radarConfig?.url || IVION_DEFAULT_BASE_URL;
       if (selectedFacility?.fmGuid) {
         open360WithContext({
           buildingFmGuid: selectedFacility.fmGuid,
@@ -56,8 +56,8 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
     if (!meta) return;
 
     if (meta.type === 'config') {
-      const cfg = appConfigs[id] || {};
-      if (cfg.openMode === 'external' && cfg.url) {
+      const cfg = appConfigs[id];
+      if (cfg?.openMode === 'external' && cfg?.url) {
         window.open(cfg.url, '_blank');
       } else {
         setActiveApp(id);

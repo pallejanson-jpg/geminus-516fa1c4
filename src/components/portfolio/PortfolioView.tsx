@@ -329,8 +329,8 @@ const PortfolioView: React.FC = () => {
   // Handle opening 3D viewer for a room/asset
   const handleOpen3DRoom = (fmGuid: string, levelFmGuid?: string) => {
     // Resolve building GUID: for assets/rooms the fmGuid may not be a building
-    const item = allData.find((a: any) => a.fmGuid === fmGuid || a.fm_guid === fmGuid);
-    const buildingGuid = item?.buildingFmGuid || item?.building_fm_guid || showAssetsFor?.fmGuid || showRoomsFor?.fmGuid || fmGuid;
+    const item = allData.find((a) => a.fmGuid === fmGuid);
+    const buildingGuid = item?.buildingFmGuid || showAssetsFor?.fmGuid || showRoomsFor?.fmGuid || fmGuid;
     setViewer3dFmGuid(buildingGuid);
     setActiveApp('native_viewer');
     setShowRoomsFor(null);
@@ -363,15 +363,15 @@ const PortfolioView: React.FC = () => {
 
   // Handle selecting an asset to show its landing page
   const handleSelectAsset = (fmGuid: string) => {
-    const asset = allData.find((a: any) => a.fmGuid === fmGuid || a.fm_guid === fmGuid);
+    const asset = allData.find((a) => a.fmGuid === fmGuid);
     if (asset) {
       navigateToFacility({
-        fmGuid: asset.fmGuid || asset.fm_guid,
+        fmGuid: asset.fmGuid,
         name: asset.name,
-        commonName: asset.commonName || asset.common_name,
+        commonName: asset.commonName,
         category: asset.category || 'Instance',
-        levelFmGuid: asset.levelFmGuid || asset.level_fm_guid,
-        buildingFmGuid: asset.buildingFmGuid || asset.building_fm_guid,
+        levelFmGuid: asset.levelFmGuid,
+        buildingFmGuid: asset.buildingFmGuid,
         attributes: asset.attributes,
       });
       setShowAssetsFor(null);

@@ -95,7 +95,7 @@ const MainContent: React.FC = () => {
                 return <InsightsView />;
             case 'fma_plus': {
                 const fmaUrl = appConfigs?.fma_plus?.url || 'https://swg-demo.bim.cloud/';
-                const buildingFmGuid = selectedFacility?.fm_guid || selectedFacility?.fmGuid;
+                const buildingFmGuid = selectedFacility?.fmGuid;
                 const buildingName = selectedFacility?.commonName || selectedFacility?.name;
                 return (
                     <Suspense fallback={<LazyFallback />}>
@@ -164,7 +164,7 @@ const MainContent: React.FC = () => {
             case 'ai_scan':
                 return (
                     <Suspense fallback={<LazyFallback />}>
-                        <AiAssetScan preselectedBuildingGuid={selectedFacility?.fm_guid} />
+                        <AiAssetScan preselectedBuildingGuid={selectedFacility?.fmGuid} />
                     </Suspense>
                 );
             case 'globe':

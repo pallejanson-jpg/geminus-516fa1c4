@@ -182,8 +182,8 @@ export default function SensorsTab() {
   const rooms = useMemo(() => {
     if (!building) return [];
     const result: Array<{ fmGuid: string; commonName?: string; name?: string }> = [];
-    building.children?.forEach((storey: any) => {
-      storey.children?.forEach((space: any) => {
+    building.children?.forEach((storey: NavigatorNode) => {
+      storey.children?.forEach((space: NavigatorNode) => {
         result.push({ fmGuid: space.fmGuid, commonName: space.commonName, name: space.name });
       });
     });
