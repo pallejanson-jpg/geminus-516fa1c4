@@ -637,84 +637,67 @@ serve(async (req) => {
 
     // ============ CHECK SYNC STATUS ============
     if (action === 'check-sync-status') {
-      try {
       // Auto-mark stale syncs
       await markStaleRunningAsInterrupted(supabase);
-      
-      const accessToken = await getAccessToken();
-      
-      // Get remote counts
-      const remoteStructureCount = await getRemoteCountByTypes(accessToken, [1, 2, 3]);
-      const remoteAssetsCount = await getRemoteCountByTypes(accessToken, [4]);
-      const remoteTotalCount = remoteStructureCount + remoteAssetsCount;
 
-      // Get remote building GUIDs to scope local counts
-      const remoteBuildingGuids = new Set<string>();
-      let rSkip = 0;
-      const rTake = 500;
-      let rMore = true;
-      while (rMore) {
-        const result = await fetchAssetPlusObjects(accessToken, [["objectType", "=", 1]], rSkip, rTake);
-        result.data.forEach((item: any) => remoteBuildingGuids.add(item.fmGuid));
-        rMore = result.hasMore;
-        rSkip += rTake;
+      // --- Phase 1: Fast DB-only counts (no API dependency) ---
+      const [
+        { count: localStructureCount },
+        { count: localAssetCount },
+        { count: xktCount },
+        { count: buildingCount },
+        { data: syncStates },
+      ] = await Promise.all([
+        supabase.from('assets').select('*', { count: 'exact', head: true }).in('category', ['Building', 'Building Storey', 'Space']),
+        supabase.from('assets').select('*', { count: 'exact', head: true }).in('category', ['Instance']),
+        supabase.from('xkt_models' as any).select('*', { count: 'exact', head: true }),
+        supabase.from('assets').select('*', { count: 'exact', head: true }).eq('category', 'Building'),
+        supabase.from('asset_sync_state').select('*'),
+      ]);
+
+      const localTotal = (localStructureCount || 0) + (localAssetCount || 0);
+
+      // --- Phase 2: Try remote counts (with timeout) ---
+      let remoteStructureCount = -1;
+      let remoteAssetsCount = -1;
+      let remoteTotalCount = -1;
+      let remoteError: string | null = null;
+
+      try {
+        const accessToken = await getAccessToken();
+        const timeoutMs = 12000;
+        const withTimeout = <T>(p: Promise<T>): Promise<T> =>
+          Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs))]);
+
+        const [rStructure, rAssets] = await Promise.all([
+          withTimeout(getRemoteCountByTypes(accessToken, [1, 2, 3])),
+          withTimeout(getRemoteCountByTypes(accessToken, [4])),
+        ]);
+        remoteStructureCount = rStructure;
+        remoteAssetsCount = rAssets;
+        remoteTotalCount = rStructure + rAssets;
+      } catch (remoteErr: any) {
+        remoteError = remoteErr.message || 'Failed to fetch remote counts';
+        console.warn('check-sync-status: remote counts unavailable:', remoteError);
       }
 
-      // Scoped local structure counts (only objects belonging to Asset+ buildings, excl ACC)
-      const allLocalStructure = await fetchAllLocalFmGuids(supabase, ['Building', 'Building Storey', 'Space'], false, true);
-      const localStructureIsLocal = await fetchAllLocalFmGuids(supabase, ['Building', 'Building Storey', 'Space'], true, true);
-      const allStructure = [...allLocalStructure, ...localStructureIsLocal];
-      const scopedStructure = allStructure.filter(item => {
-        if (item.building_fm_guid) return remoteBuildingGuids.has(item.building_fm_guid);
-        return remoteBuildingGuids.has(item.fm_guid);
-      });
-      const accStructureCount = allStructure.length - scopedStructure.length;
-
-      // Scoped local asset counts
-      const allLocalAssets = await fetchAllLocalFmGuids(supabase, ['Instance'], false, true);
-      const localAssetsIsLocal = await fetchAllLocalFmGuids(supabase, ['Instance'], true, true);
-      const allAssets = [...allLocalAssets, ...localAssetsIsLocal];
-      const scopedAssets = allAssets.filter(item => {
-        if (item.building_fm_guid) return remoteBuildingGuids.has(item.building_fm_guid);
-        return false; // instances always have building_fm_guid
-      });
-      const accAssetsCount = allAssets.length - scopedAssets.length;
-
-      const scopedStructureCount = scopedStructure.length;
-      const scopedAssetsCount = scopedAssets.length;
-      const scopedTotalCount = scopedStructureCount + scopedAssetsCount;
-      const totalLocalCount = allStructure.length + allAssets.length;
-
-      // Get XKT models count
-      const { count: xktCount } = await supabase
-        .from('xkt_models')
-        .select('*', { count: 'exact', head: true });
-
-      const { count: buildingCount } = await supabase
-        .from('assets')
-        .select('*', { count: 'exact', head: true })
-        .eq('category', 'Building');
-
-      // Get sync states
-      const { data: syncStates } = await supabase
-        .from('asset_sync_state')
-        .select('*');
+      const structureInSync = remoteStructureCount >= 0 ? (localStructureCount || 0) === remoteStructureCount : null;
+      const assetsInSync = remoteAssetsCount >= 0 ? (localAssetCount || 0) === remoteAssetsCount : null;
 
       return new Response(
         JSON.stringify({
           success: true,
+          ...(remoteError ? { remoteError } : {}),
           structure: {
-            localCount: scopedStructureCount,
-            remoteCount: remoteStructureCount,
-            accLocalCount: accStructureCount,
-            inSync: scopedStructureCount === remoteStructureCount,
+            localCount: localStructureCount || 0,
+            remoteCount: remoteStructureCount >= 0 ? remoteStructureCount : null,
+            inSync: structureInSync,
             syncState: syncStates?.find((s: any) => s.subtree_id === 'structure'),
           },
           assets: {
-            localCount: scopedAssetsCount,
-            remoteCount: remoteAssetsCount,
-            accLocalCount: accAssetsCount,
-            inSync: scopedAssetsCount === remoteAssetsCount,
+            localCount: localAssetCount || 0,
+            remoteCount: remoteAssetsCount >= 0 ? remoteAssetsCount : null,
+            inSync: assetsInSync,
             syncState: syncStates?.find((s: any) => s.subtree_id === 'assets'),
           },
           xkt: {
@@ -723,30 +706,12 @@ serve(async (req) => {
             syncState: syncStates?.find((s: any) => s.subtree_id === 'xkt'),
           },
           total: {
-            localCount: scopedTotalCount,
-            remoteCount: remoteTotalCount,
-            totalWithAcc: totalLocalCount,
-            accExcluded: accStructureCount + accAssetsCount,
+            localCount: localTotal,
+            remoteCount: remoteTotalCount >= 0 ? remoteTotalCount : null,
           },
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
-      } catch (statusErr) {
-        console.error('check-sync-status error:', statusErr);
-        // Return partial data so the UI doesn't break
-        const { data: syncStates } = await supabase.from('asset_sync_state').select('*').catch(() => ({ data: null }));
-        return new Response(
-          JSON.stringify({
-            success: true,
-            error: 'Timeout fetching full sync status',
-            structure: { localCount: -1, remoteCount: -1, inSync: false, syncState: syncStates?.find((s: any) => s.subtree_id === 'structure') },
-            assets: { localCount: -1, remoteCount: -1, inSync: false, syncState: syncStates?.find((s: any) => s.subtree_id === 'assets') },
-            xkt: { localCount: -1, buildingCount: -1, syncState: syncStates?.find((s: any) => s.subtree_id === 'xkt') },
-            total: { localCount: -1, remoteCount: -1 },
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
     }
 
     // ============ SYNC STRUCTURE — RESUMABLE (Buildings, Storeys, Spaces) ============
