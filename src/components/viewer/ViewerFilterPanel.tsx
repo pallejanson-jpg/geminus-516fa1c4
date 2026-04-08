@@ -37,6 +37,8 @@ interface LevelItem {
   fmGuid: string;
   /** All known GUIDs for this level (xeokit originalSystemId + Asset+ fm_guid variants) */
   allGuids: string[];
+  /** Matched xeokit storey meta IDs for this level when available */
+  metaObjectIds: string[];
   name: string;
   sourceGuid: string;
   spaceCount: number;
@@ -318,6 +320,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         return {
           fmGuid: floor.databaseLevelFmGuids[0] || floor.id,
           allGuids: Array.from(allGuids),
+          metaObjectIds: floor.metaObjectIds,
           name: floor.name,
           sourceGuid,
           spaceCount,
@@ -342,6 +345,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         return {
           fmGuid: storey.fmGuid,
           allGuids: Array.from(allGuids),
+          metaObjectIds: [],
           name: storey.name,
           sourceGuid: storey.sourceGuid,
           spaceCount,
@@ -374,6 +378,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         result.push({
           fmGuid: storey.fmGuid,
           allGuids: [norm],
+          metaObjectIds: [],
           name: storey.name,
           sourceGuid: storey.sourceGuid,
           spaceCount: 0,
@@ -789,6 +794,22 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     levels.forEach(level => {
       const levelGuidSet = new Set(level.allGuids.map(g => normalizeGuid(g)));
       const nameLower = level.name.toLowerCase().trim();
+
+      const directMetaIds = (level.metaObjectIds || []).filter(id => !!metaObjects[id]);
+      if (directMetaIds.length > 0) {
+        const descendants = Array.from(new Set(
+          directMetaIds.flatMap(metaId => getDescendantIds(viewer, metaId))
+        ));
+
+        if (descendants.length > 0) {
+          directMetaIds.forEach(id => usedStoreyIds.add(id));
+          map.set(level.fmGuid, descendants);
+          level.allGuids.forEach(g => {
+            map.set(g, descendants);
+          });
+          return;
+        }
+      }
 
       let matched = eligibleStoreys.find(xs =>
         !usedStoreyIds.has(xs.id) && levelGuidSet.has(normalizeGuid(xs.sysId))
@@ -1561,24 +1582,41 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
     // Resolve xeokit meta storey IDs for proper ceiling clipping
     const resolvedMetaIds: string[] = [];
+    let representativeMetaFloorId: string | null = null;
+
+    if (visibleFmGuids.length === 1) {
+      const soloGuid = normalizeGuid(visibleFmGuids[0]);
+      const sharedFloor = sharedFloors.find((floor) =>
+        floor.databaseLevelFmGuids.some((guid) => normalizeGuid(guid) === soloGuid)
+      );
+
+      if (sharedFloor) {
+        representativeMetaFloorId = sharedFloor.id || sharedFloor.metaObjectIds[0] || null;
+        sharedFloor.metaObjectIds.forEach((id) => {
+          if (id) resolvedMetaIds.push(id);
+        });
+      }
+    }
+
     if (visibleFmGuids.length > 0) {
       const metaObjects = viewer.metaScene?.metaObjects || {};
       const normalizedFmGuids = new Set(visibleFmGuids.map((g: string) => g.toLowerCase().replace(/-/g, '')));
       Object.values(metaObjects).forEach((mo: any) => {
         if (mo.type?.toLowerCase() !== 'ifcbuildingstorey') return;
         const sysId = (mo.originalSystemId || mo.id || '').toLowerCase().replace(/-/g, '');
-        if (normalizedFmGuids.has(sysId)) resolvedMetaIds.push(mo.id);
+        if (normalizedFmGuids.has(sysId) && !resolvedMetaIds.includes(mo.id)) resolvedMetaIds.push(mo.id);
       });
     }
 
     // Compute floor bounds for proper ceiling clipping (matching floor switcher behavior)
     let floorBounds: { minY: number; maxY: number } | null = null;
-    if (resolvedMetaIds.length === 1) {
-      floorBounds = calculateFloorBounds(viewer, resolvedMetaIds[0]);
+    const clipFloorId = representativeMetaFloorId || resolvedMetaIds[0] || null;
+    if (clipFloorId) {
+      floorBounds = calculateFloorBounds(viewer, clipFloorId);
     }
 
     emit('FLOOR_SELECTION_CHANGED', {
-        floorId: visibleFmGuids.length === 1 ? visibleFmGuids[0] : null,
+        floorId: visibleFmGuids.length === 1 ? (clipFloorId || visibleFmGuids[0]) : null,
         floorName: null, bounds: floorBounds,
         visibleMetaFloorIds: resolvedMetaIds, visibleFloorFmGuids: visibleFmGuids,
         isAllFloorsVisible: !hasAnyFilter,
@@ -1599,7 +1637,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }); // end requestAnimationFrame
     }, 500); // debounce 500ms
   }, [getXeokitViewer, checkedSources, checkedLevels, checkedSpaces, checkedCategories,
-    levels, spaces, sources, sharedModels, xrayMode]);
+    levels, spaces, sources, sharedModels, sharedFloors, xrayMode]);
 
   // ── Apply coloring separately (does NOT trigger visibility recalc) ──────
   const applyColoring = useCallback(() => {
