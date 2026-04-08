@@ -1,7 +1,7 @@
 import React, { useContext, useCallback } from 'react';
 import { Menu as MenuIcon, Home } from 'lucide-react';
 import { AppButton } from '@/components/common/AppButton';
-import { THEMES } from '@/lib/constants';
+
 import { AppContext } from '@/context/AppContext';
 import { useSidebarOrder } from '@/hooks/useSidebarOrder';
 import { supabase } from '@/integrations/supabase/client';

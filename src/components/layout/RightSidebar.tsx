@@ -5,7 +5,7 @@ import {
   ExternalLink, Bot, FileText, Code, ChevronRight, Loader2,
   Send
 } from 'lucide-react';
-import { THEMES } from '@/lib/constants';
+
 import { AppContext } from '@/context/AppContext';
 import { AppButton } from '@/components/common/AppButton';
 import { Input } from '@/components/ui/input';
