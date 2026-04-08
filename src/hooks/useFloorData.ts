@@ -175,7 +175,8 @@ export function useFloorData(
 
         const fmGuid = metaObject.originalSystemId || metaObject.id;
 
-        for (const floor of floorMap.values()) {
+        const floorValues = Array.from(floorMap.values());
+        for (const floor of floorValues) {
           const guidMatch = floor.databaseLevelFmGuids.some(g =>
             g.toLowerCase() === fmGuid.toLowerCase()
           );
