@@ -1584,7 +1584,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         isAllFloorsVisible: !hasAnyFilter,
         isSoloFloor: visibleFmGuids.length === 1,
         fromFilterPanel: true,
-        skipClipping: true,
+        skipClipping: visibleFmGuids.length !== 1,
       } as FloorSelectionEventDetail);
 
     console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', safeObjectIds(scene).length, 'delta: show', toShow.length, 'hide', toHide.length);
