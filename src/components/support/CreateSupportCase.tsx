@@ -70,8 +70,8 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
   const [locationDescription, setLocationDescription] = useState('');
   const [installationNumber, setInstallationNumber] = useState('');
   const [desiredDate, setDesiredDate] = useState<Date | undefined>(undefined);
-  const [buildingGuid, setBuildingGuid] = useState(prefill?.building_fm_guid || selectedFacility?.fm_guid || '');
-  const [buildingName, setBuildingName] = useState(prefill?.building_name || selectedFacility?.name || '');
+  const [buildingGuid, setBuildingGuid] = useState(prefill?.building_fm_guid || selectedFacility?.fmGuid || '');
+  const [buildingName, setBuildingName] = useState(prefill?.building_name || selectedFacility?.name || selectedFacility?.commonName || '');
   const [buildings, setBuildings] = useState<BuildingOption[]>([]);
   const [submitting, setSubmitting] = useState(false);
 

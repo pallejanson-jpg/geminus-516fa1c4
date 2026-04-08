@@ -34,8 +34,8 @@ const LeftSidebar: React.FC = () => {
 
         // Special handling for radar (360°): try to set context from selectedFacility
         if (id === 'radar') {
-            const radarConfig = appConfigs?.radar || {};
-            const ivionUrl = radarConfig.url || 'https://swg.iv.navvis.com';
+            const radarConfig = appConfigs?.radar;
+            const ivionUrl = radarConfig?.url || 'https://swg.iv.navvis.com';
 
             if (selectedFacility?.fmGuid) {
                 try {
@@ -66,8 +66,8 @@ const LeftSidebar: React.FC = () => {
         }
 
         if (meta.type === 'config') {
-            const currentAppConfig = appConfigs[id] || {};
-            if (currentAppConfig.openMode === 'external' && currentAppConfig.url) {
+            const currentAppConfig = appConfigs[id];
+            if (currentAppConfig?.openMode === 'external' && currentAppConfig?.url) {
                 window.open(currentAppConfig.url, '_blank');
             } else {
                 setActiveApp(id);

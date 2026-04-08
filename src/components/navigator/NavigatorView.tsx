@@ -227,18 +227,18 @@ export default function NavigatorView() {
       ctx.buildingName = node.commonName || node.name;
     } else if (node.category === 'Building Storey') {
       ctx.buildingFmGuid = assetData?.buildingFmGuid || node.buildingFmGuid;
-      ctx.buildingName = assetData?.buildingName;
+      ctx.buildingName = assetData?.commonName;
       ctx.levelFmGuid = node.fmGuid;
       ctx.levelName = node.commonName || node.name;
     } else if (node.category === 'Space') {
       ctx.buildingFmGuid = assetData?.buildingFmGuid || node.buildingFmGuid;
-      ctx.buildingName = assetData?.buildingName;
+      ctx.buildingName = assetData?.commonName;
       ctx.levelFmGuid = assetData?.levelFmGuid || node.levelFmGuid;
       ctx.roomFmGuid = node.fmGuid;
       ctx.roomName = node.commonName || node.name;
     } else if (node.category === 'Instance') {
       ctx.buildingFmGuid = assetData?.buildingFmGuid || node.buildingFmGuid;
-      ctx.buildingName = assetData?.buildingName;
+      ctx.buildingName = assetData?.commonName;
       ctx.levelFmGuid = assetData?.levelFmGuid || node.levelFmGuid;
       ctx.roomFmGuid = assetData?.inRoomFmGuid;
       ctx.assetFmGuid = node.fmGuid;
