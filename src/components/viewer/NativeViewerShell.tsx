@@ -60,7 +60,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const [xeokitViewer, setXeokitViewer] = useState<any>(null);
   const [isViewerReady, setIsViewerReady] = useState(false);
   const [viewerReloadKey, setViewerReloadKey] = useState(0);
-  const [forceBootstrap, setForceBootstrap] = useState(false);
+  const [forceBootstrap, setForceBootstrap] = useState(true);
 
   // Listen for XKT_FORCE_RELOAD to remount the viewer with fresh data
   useEffect(() => {
