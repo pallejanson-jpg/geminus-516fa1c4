@@ -151,27 +151,37 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
    */
   const bootstrapFromAssetPlus = useCallback(async (): Promise<ModelCandidate[]> => {
     clearBuildingFromMemory(buildingFmGuid);
+    console.log(`[ModelLoader] bootstrapFromAssetPlus started for ${buildingFmGuid}`);
 
-    // Step 1: Server-side sync
+    // Step 1: Server-side sync (with force)
     try {
+      console.log('[ModelLoader] Trying server-side sync with force=true...');
       const { data: syncResult, error: syncError } = await supabase.functions.invoke('asset-plus-sync', {
         body: { action: 'sync-xkt-building', buildingFmGuid, force: true }
       });
-      if (syncError) throw syncError;
+      if (syncError) {
+        console.warn('[ModelLoader] Server sync error:', syncError);
+        throw syncError;
+      }
+      console.log('[ModelLoader] Server sync result:', JSON.stringify(syncResult));
 
       if (syncResult?.synced > 0) {
+        console.log(`[ModelLoader] Server synced ${syncResult.synced} models — reading fresh DB records`);
         const { data: freshModels } = await supabase
           .from('xkt_models')
           .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at, is_chunk, chunk_order, parent_model_id')
           .eq('building_fm_guid', buildingFmGuid)
           .order('file_size', { ascending: true });
         if (freshModels?.length) return freshModels.map((m: any) => ({ ...m, source: 'db' as const }));
+      } else {
+        console.log(`[ModelLoader] Server sync returned 0 synced (hint: ${syncResult?.hint || 'none'})`);
       }
     } catch (e) {
       console.warn('[ModelLoader] Server sync failed:', e);
     }
 
-    // Step 2: Client-side bootstrap
+    // Step 2: Client-side bootstrap (direct download from Asset+ API)
+    console.log('[ModelLoader] Starting client-side bootstrap...');
     try {
       const [tokenRes, configRes] = await Promise.all([
         supabase.functions.invoke('asset-plus-query', { body: { action: 'getToken', buildingFmGuid } }),

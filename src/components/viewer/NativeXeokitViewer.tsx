@@ -121,25 +121,28 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       setPhase('creating_viewer');
       console.log(`[NativeViewer] SDK + viewer created in ${Math.round(performance.now() - t0)}ms`);
 
-      // 2. Fetch model metadata
-      let { models, dbError } = await fetchModelMetadata();
+      // 2. Always force-download from Asset+ first (bypass stale DB/storage cache)
+      let models: any[] = [];
+      setPhase('syncing');
+      console.log(`[NativeViewer] Force-downloading XKT from Asset+ (forceBootstrap=${forceBootstrap})`);
+      const bootstrapped = await bootstrapFromAssetPlus();
       if (!mountedRef.current) return;
 
-      // 3. Bootstrap from Asset+ (always if forceBootstrap, or if no models)
-      if (forceBootstrap || dbError || !models || models.length === 0) {
-        setPhase('syncing');
-        console.log(`[NativeViewer] ${forceBootstrap ? 'Force bootstrap' : 'No models found'} — downloading from Asset+`);
-        const bootstrapped = await bootstrapFromAssetPlus();
-        if (bootstrapped.length > 0) {
-          models = bootstrapped;
-        } else if (!models || models.length === 0) {
+      if (bootstrapped.length > 0) {
+        models = bootstrapped;
+        console.log(`[NativeViewer] ✅ Got ${bootstrapped.length} fresh models from Asset+`);
+      } else {
+        // Fallback: try DB/storage only if Asset+ returned nothing
+        console.warn('[NativeViewer] Asset+ returned 0 models — falling back to local cache');
+        const { models: dbModels, dbError } = await fetchModelMetadata();
+        if (!mountedRef.current) return;
+        if (dbModels && dbModels.length > 0) {
+          models = dbModels;
+        } else {
           setErrorMsg('No 3D models found for this building. Sync XKT models via Settings → Buildings, or upload an IFC file.');
           setPhase('error');
           return;
-        } else {
-          console.log('[NativeViewer] Force bootstrap returned 0 new models — using existing cached models');
         }
-        if (!mountedRef.current) return;
       }
 
       // 4. Load models progressively
@@ -211,14 +214,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           console.log(`[NativeViewer] Scene AABB: [${aabb?.map((v: number) => v.toFixed(1)).join(', ')}]`);
         } catch {}
         
-        try {
-          const savedThemeId = localStorage.getItem('viewer-active-theme-id');
-          if (savedThemeId) {
-            setTimeout(() => {
-              window.dispatchEvent(new CustomEvent('VIEWER_THEME_REQUESTED', { detail: { themeId: savedThemeId } }));
-            }, 50);
-          }
-        } catch {}
+        // Native model colors are the default — do NOT restore saved theme on startup
       }
 
       const totalTime = Math.round(performance.now() - t0);
