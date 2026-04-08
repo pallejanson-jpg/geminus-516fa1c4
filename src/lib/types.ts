@@ -1,5 +1,5 @@
 export type GroupedFacilities = {
-    [key: string]: any[];
+    [key: string]: Facility[];
 };
 
 // ── Geometry manifest types (ACC pipeline) ──
@@ -32,8 +32,10 @@ export interface GeometryIndexEntry {
   fm_guid: string | null;
 }
 
+// ── Core domain types ──
+
 export interface Facility {
-    fmGuid?: string;
+    fmGuid: string;
     name?: string;
     commonName?: string;
     buildingCommonName?: string;
@@ -50,6 +52,29 @@ export interface Facility {
     siteId?: string;
     buildingFmGuid?: string;
     levelFmGuid?: string;
+    inRoomFmGuid?: string;
+    attributes?: Record<string, any>;
+    isLocal?: boolean;
+    assetType?: string;
+    createdInModel?: boolean;
+    isSynthetic?: boolean;
+    modificationDate?: string;
+    sourceUpdatedAt?: string;
+}
+
+export interface NavigatorNode {
+    fmGuid: string;
+    category?: string;
+    commonName?: string;
+    name?: string;
+    children?: NavigatorNode[];
+    buildingFmGuid?: string;
+    levelFmGuid?: string;
+    inRoomFmGuid?: string;
+    createdInModel?: boolean;
+    isLocal?: boolean;
+    isSynthetic?: boolean;
+    complexCommonName?: string;
     attributes?: Record<string, any>;
 }
 
@@ -60,4 +85,5 @@ export interface AppConfig {
     openMode: 'internal' | 'external';
     username?: string;
     password?: string;
+    pollIntervalHours?: number;
 }
