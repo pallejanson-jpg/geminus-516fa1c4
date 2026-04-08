@@ -11,6 +11,7 @@
 
 import React, { createContext, ReactNode, useContext } from 'react';
 import { DEFAULT_APP_CONFIGS } from '@/lib/constants';
+import type { Facility, NavigatorNode, AppConfig } from '@/lib/types';
 import { ThemeProvider, ThemeContext, type ThemeType } from './ThemeContext';
 import { NavigationProvider, NavigationContext, type Ivion360Context, type SenslincDashboardContext } from './NavigationContext';
 import { ViewerProvider, ViewerContext, type AssetRegistrationContext, type InventoryPrefill, type FaultReportPrefill, type AnnotationPlacementContext, type ViewerDiagnostics } from './ViewerContext';
@@ -21,30 +22,23 @@ export type { ThemeType } from './ThemeContext';
 export type { AssetRegistrationContext, InventoryPrefill, FaultReportPrefill, AnnotationPlacementContext } from './ViewerContext';
 export type { Ivion360Context, SenslincDashboardContext } from './NavigationContext';
 
-type NavigatorNode = {
-    fmGuid: string;
-    category?: string;
-    commonName?: string;
-    name?: string;
-    children?: NavigatorNode[];
-    [key: string]: any;
-};
+// Use the shared NavigatorNode type from types.ts
 
 interface AppContextType {
     theme: ThemeType;
     setTheme: (theme: ThemeType) => void;
-    allData: any[];
-    setAllData: (data: any[]) => void;
-    appConfigs: Record<string, any>;
-    setAppConfigs: (configs: Record<string, any>) => void;
+    allData: Facility[];
+    setAllData: (data: Facility[]) => void;
+    appConfigs: Record<string, AppConfig>;
+    setAppConfigs: (configs: Record<string, AppConfig>) => void;
     activeApp: string;
     setActiveApp: (app: string) => void;
     viewMode: string;
     setViewMode: (mode: string) => void;
     isRightSidebarVisible: boolean;
     toggleRightSidebar: () => void;
-    selectedFacility: any;
-    setSelectedFacility: (facility: any) => void;
+    selectedFacility: Facility | null;
+    setSelectedFacility: (facility: Facility | null) => void;
     isSidebarExpanded: boolean;
     setIsSidebarExpanded: (expanded: boolean) => void;
 
@@ -72,13 +66,13 @@ interface AppContextType {
     clearFaultReportPrefill: () => void;
 
     annotationPlacementContext: AnnotationPlacementContext | null;
-    startAnnotationPlacement: (asset: any, buildingFmGuid: string) => void;
+    startAnnotationPlacement: (asset: Facility, buildingFmGuid: string) => void;
     completeAnnotationPlacement: (coordinates: { x: number; y: number; z: number }) => void;
     cancelAnnotationPlacement: () => void;
 
-    insightsFacility: any | null;
-    setInsightsFacility: (facility: any | null) => void;
-    openEntityInsights: (facility: any) => void;
+    insightsFacility: Facility | null;
+    setInsightsFacility: (facility: Facility | null) => void;
+    openEntityInsights: (facility: Facility) => void;
 
     ivion360Context: Ivion360Context | null;
     setIvion360Context: (context: Ivion360Context | null) => void;
