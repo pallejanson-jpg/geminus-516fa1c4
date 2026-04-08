@@ -9,7 +9,6 @@ import { SIDEBAR_ITEM_META, getCurrentContext } from '@/lib/sidebar-config';
 
 const LeftSidebar: React.FC = () => {
     const { 
-        theme, 
         activeApp, 
         setActiveApp, 
         appConfigs, 
