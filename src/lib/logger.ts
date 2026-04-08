@@ -13,12 +13,12 @@ const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV;
 function noop() {}
 
 export const logger = {
-  log: isDev ? console.log.bind(console) : noop,
-  debug: isDev ? console.debug.bind(console) : noop,
-  info: isDev ? console.info.bind(console) : noop,
-  warn: isDev ? console.warn.bind(console) : noop,
+  log: isDev ? (...args: unknown[]) => console.log(...args) : noop,
+  debug: isDev ? (...args: unknown[]) => console.debug(...args) : noop,
+  info: isDev ? (...args: unknown[]) => console.info(...args) : noop,
+  warn: isDev ? (...args: unknown[]) => console.warn(...args) : noop,
   // Errors always print — they indicate real problems
-  error: console.error.bind(console),
+  error: (...args: unknown[]) => console.error(...args),
 };
 
 export default logger;
