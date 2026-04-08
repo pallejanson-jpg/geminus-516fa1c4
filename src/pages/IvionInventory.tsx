@@ -514,7 +514,7 @@ const IvionInventory: React.FC = () => {
           <div className="text-center space-y-4">
             <Building2 className="h-12 w-12 text-muted-foreground mx-auto" />
             <p className="text-muted-foreground">
-              Välj en byggnad för att öppna 360°-vyn
+              Select a building to open the 360° view
             </p>
           </div>
         </div>
