@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
+import GlobalErrorBoundary from "./components/common/GlobalErrorBoundary.tsx";
 import "./index.css";
 
 // Auto-recovery for stale chunk / module import failures (max 2 retries)
@@ -52,4 +53,8 @@ if ('serviceWorker' in navigator) {
 }
 
 // v3
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <GlobalErrorBoundary>
+    <App />
+  </GlobalErrorBoundary>
+);

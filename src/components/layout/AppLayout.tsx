@@ -101,6 +101,13 @@ const AppLayoutInner: React.FC = () => {
 
     return (
         <div className="flex h-screen w-full overflow-hidden font-sans relative">
+            {/* Skip to main content — accessibility */}
+            <a
+              href="#main-content"
+              className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:text-sm focus:font-medium"
+            >
+              Skip to main content
+            </a>
             {/* Left sidebar: hidden on mobile immersive, hidden on desktop viewer unless expanded */}
             {!isImmersive && (
                 <div className={`
@@ -131,9 +138,9 @@ const AppLayoutInner: React.FC = () => {
                 )}
                 {!isImmersive && <SyncProgressBanner />}
                 {!isImmersive && <DataConsistencyBanner />}
-                <div className="flex-1 min-h-0 relative">
+                <main id="main-content" className="flex-1 min-h-0 relative" role="main">
                     <MainContent />
-                </div>
+                </main>
             </div>
             
             {!isImmersive && <RightSidebar />}
