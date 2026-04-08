@@ -414,7 +414,7 @@ async function upsertGeometryMappings(supabase: any, items: any[]): Promise<void
       storey_fm_guid: item.levelFmGuid || null,
       source_model_guid: parentModelGuid,
       source_model_name: parentModelName,
-      source_storey_name: entityType === 'storey' ? (item.commonName || item.designation || null) : null,
+      source_storey_name: entityType === 'storey' ? (item.levelName || item.commonName || item.designation || null) : null,
       metadata: {},
       last_seen_at: now,
     };
