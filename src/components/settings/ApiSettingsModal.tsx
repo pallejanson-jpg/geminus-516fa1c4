@@ -845,14 +845,14 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             setAccToApResult(data);
             if (data?.success) {
                 toast({ 
-                    title: 'Synk till Asset+ klar', 
-                    description: `${data.summary?.buildingsSynced || 0} byggnader synkade` 
+                    title: 'Sync to Asset+ complete', 
+                    description: `${data.summary?.buildingsSynced || 0} buildings synced` 
                 });
             } else {
                 toast({ 
                     variant: 'destructive', 
-                    title: 'Synk delvis misslyckad', 
-                    description: `${data?.summary?.totalErrors || 0} fel uppstod` 
+                    title: 'Sync partially failed', 
+                    description: `${data?.summary?.totalErrors || 0} errors occurred` 
                 });
             }
             // Refresh status
@@ -1747,8 +1747,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             }
 
             toast({
-                title: "Synk startad",
-                description: `Synkar dokument för ${linkedBuildings.length} byggnader.`,
+                title: "Sync started",
+                description: `Syncing documents for ${linkedBuildings.length} buildings.`,
             });
 
             // Refetch document count
@@ -1756,7 +1756,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         } catch (error: any) {
             toast({
                 variant: "destructive",
-                title: "Synk misslyckades",
+                title: "Sync failed",
                 description: error.message,
             });
         } finally {
@@ -1775,8 +1775,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             });
 
             toast({
-                title: "Synkar alla byggnader",
-                description: "Hämtar alla byggnader från Asset+. Detta kan ta en stund.",
+                title: "Syncing all buildings",
+                description: "Fetching all buildings from Asset+. This may take a while.",
             });
 
             const pollInterval = setInterval(async () => {
@@ -1788,8 +1788,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     checkSyncStatus();
                     if (latestStatus.sync_status === 'completed') {
                         toast({
-                            title: "Synk klar!",
-                            description: `${latestStatus.total_assets} byggnader synkade.`,
+                            title: "Sync complete!",
+                            description: `${latestStatus.total_assets} buildings synced.`,
                         });
                     }
                 }
@@ -1805,7 +1805,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         } catch (error: any) {
             toast({
                 variant: "destructive",
-                title: "Synk misslyckades",
+                title: "Sync failed",
                 description: error.message,
             });
             setIsSyncingStructure(false);
@@ -1817,8 +1817,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         if (favoriteBuildings.length === 0) {
             toast({
                 variant: "destructive",
-                title: "Ingen byggnad",
-                description: "Kunde inte hitta någon byggnad att synkronisera.",
+                title: "No building",
+                description: "Could not find a building to synchronize.",
             });
             return;
         }
@@ -1835,8 +1835,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             });
 
             toast({
-                title: "Byggnadssynk startad",
-                description: `Synkar ${buildingName} med byggnadsplan och rum.`,
+                title: "Building sync started",
+                description: `Syncing ${buildingName} with floor plans and rooms.`,
             });
 
             const pollInterval = setInterval(async () => {
@@ -2155,12 +2155,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             setFmAccessSyncResult({ success: created + updated + pulled + hierarchyCreated, failed, lastSync: now });
 
             const parts: string[] = [];
-            if (hierarchyCreated > 0) parts.push(`${hierarchyCreated} byggnader skapade`);
-            if (created > 0) parts.push(`${created} objekt skapade`);
-            if (updated > 0) parts.push(`${updated} uppdaterade (push)`);
-            if (pulled > 0) parts.push(`${pulled} uppdaterade (pull)`);
-            if (skipped > 0) parts.push(`${skipped} redan synkade`);
-            if (failed > 0) parts.push(`${failed} misslyckades`);
+            if (hierarchyCreated > 0) parts.push(`${hierarchyCreated} buildings created`);
+            if (created > 0) parts.push(`${created} objects created`);
+            if (updated > 0) parts.push(`${updated} updated (push)`);
+            if (pulled > 0) parts.push(`${pulled} updated (pull)`);
+            if (skipped > 0) parts.push(`${skipped} already synced`);
+            if (failed > 0) parts.push(`${failed} failed`);
 
             toast({
                 title: 'FM Access-synk klar',
