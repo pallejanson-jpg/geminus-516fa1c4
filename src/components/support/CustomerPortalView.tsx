@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
+import PageHeader from '@/components/common/PageHeader';
 import SupportCaseList from './SupportCaseList';
 import CreateSupportCase from './CreateSupportCase';
 import FeedbackView from './FeedbackView';
@@ -17,16 +18,16 @@ const CustomerPortalView: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Support</h1>
-          <p className="text-sm text-muted-foreground">Cases, feedback and contact with SWG</p>
-        </div>
-        <Button onClick={() => setShowCreate(true)} size="sm">
-          <Plus className="h-4 w-4 mr-1" />
-          New case
-        </Button>
-      </div>
+      <PageHeader
+        title="Support"
+        description="Cases, feedback and contact with SWG"
+        actions={
+          <Button onClick={() => setShowCreate(true)} size="sm">
+            <Plus className="h-4 w-4 mr-1" />
+            New case
+          </Button>
+        }
+      />
 
       <Tabs defaultValue="cases">
         <TabsList>

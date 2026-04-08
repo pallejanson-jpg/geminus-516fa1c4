@@ -82,9 +82,9 @@ export const AI_FILTER_SYNC_EVENT = 'AI_FILTER_SYNC';
 
 function getContextualGreeting(context?: GunnarContext): string {
   if (context?.currentBuilding?.name) {
-    return `Hej! Jag ser att du tittar på **${context.currentBuilding.name}**. Fråga mig om utrustning, system, rum eller be mig markera objekt i 3D-viewern!`;
+    return `Hi! I see you're looking at **${context.currentBuilding.name}**. Ask me about equipment, systems, rooms or ask me to highlight objects in the 3D viewer!`;
   }
-  return `Hej! Jag är Geminus AI, din assistent för digital twin-data. Jag kan:\n\n• Söka utrustning och system\n• Markera objekt i 3D-viewern\n• Ge byggnadsöversikter\n\nVad vill du veta?`;
+  return `Hi! I'm Geminus AI, your digital twin assistant. I can:\n\n• Search equipment and systems\n• Highlight objects in the 3D viewer\n• Provide building overviews\n\nWhat would you like to know?`;
 }
 
 /** Normalize buttons: backend may send ActionButton[] or string[] */

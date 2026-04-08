@@ -272,7 +272,7 @@ const CesiumGlobeView: React.FC = () => {
         if (!convertData?.glbUrl) throw new Error(convertData?.error || 'No GLB URL returned');
         glbUrl = convertData.glbUrl;
       } else {
-        toast.warning('Ingen BIM-källa hittades (IFC/XKT) för denna byggnad');
+        toast.warning('No BIM source found (IFC/XKT) for this building');
         setBimLoading(false);
         return;
       }
@@ -483,10 +483,10 @@ const CesiumGlobeView: React.FC = () => {
         facilities={sidebarItems}
         selectedId={selectedFmGuid}
         onSelect={handleSidebarSelect}
-        title="Byggnader"
-        searchPlaceholder="Sök byggnader..."
-        emptyLabel="Inga byggnader"
-        noMatchLabel="Inga matchningar"
+        title="Buildings"
+        searchPlaceholder="Search buildings..."
+        emptyLabel="No buildings"
+        noMatchLabel="No matches"
       />
 
       {/* Top-right controls */}
@@ -571,7 +571,7 @@ const CesiumGlobeView: React.FC = () => {
           <Card className="bg-card/90 backdrop-blur-sm">
             <CardContent className="p-4 flex flex-col items-center gap-2">
               <Building2 size={24} className="text-muted-foreground" />
-              <p className="text-sm text-muted-foreground text-center">Inga byggnader laddade.<br />Synkronisera data i Inställningar.</p>
+              <p className="text-sm text-muted-foreground text-center">No buildings loaded.<br />Sync data in Settings.</p>
             </CardContent>
           </Card>
         </div>

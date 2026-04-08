@@ -339,7 +339,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
           {has360 && (
             <Button variant="secondary" size="sm" className="h-7 text-xs gap-1" onClick={handleEnterBuilding}>
               <DoorOpen size={12} />
-              Gå in i byggnaden
+              Enter building
             </Button>
           )}
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>

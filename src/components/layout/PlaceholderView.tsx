@@ -20,7 +20,7 @@ export default function PlaceholderView({ title, icon, description }: Placeholde
           <CardDescription className="text-sm">{description}</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-xs sm:text-sm text-muted-foreground">This view will be migrated from the Firebase project.</p>
+          <p className="text-xs sm:text-sm text-muted-foreground">This feature is coming soon.</p>
         </CardContent>
       </Card>
     </div>
