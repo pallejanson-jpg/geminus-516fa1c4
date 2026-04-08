@@ -397,6 +397,38 @@ export function useSectionPlaneClipping(
     return { id: floorId, name: floorMeta.name || 'Floor', minY, maxY, metaObjectIds: childIds };
   }, [getXeokitViewer]);
 
+  /**
+   * Find the bottom of slab entities (IfcSlab etc.) on a given storey.
+   * Returns the lowest AABB minY among all slab-type children, or null if none found.
+   */
+  const findSlabBottomY = useCallback((storeyId: string): number | null => {
+    const viewer = getXeokitViewer();
+    if (!viewer?.metaScene?.metaObjects || !viewer?.scene?.objects) return null;
+
+    const SLAB_TYPES = new Set(['ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase', 'ifcplate']);
+    const storeyMeta = viewer.metaScene.metaObjects[storeyId];
+    if (!storeyMeta) return null;
+
+    const scene = viewer.scene;
+    let slabMinY = Infinity;
+    let found = false;
+
+    const walkChildren = (metaObj: any) => {
+      if (SLAB_TYPES.has((metaObj.type || '').toLowerCase())) {
+        const entity = scene.objects[metaObj.id];
+        if (entity?.aabb) {
+          const entityMinY = entity.aabb[1]; // AABB minY = bottom of slab
+          if (entityMinY < slabMinY) slabMinY = entityMinY;
+          found = true;
+        }
+      }
+      (metaObj.children || []).forEach((child: any) => walkChildren(child));
+    };
+
+    (storeyMeta.children || []).forEach((child: any) => walkChildren(child));
+    return found ? slabMinY : null;
+  }, [getXeokitViewer]);
+
   const calculateClipHeightFromFloorBoundary = useCallback((floorId: string): { clipHeight: number; nextFloorMinY: number | null } | null => {
     const viewer = getXeokitViewer();
     if (!viewer?.metaScene?.metaObjects) return null;
@@ -443,12 +475,23 @@ export function useSectionPlaneClipping(
     const currentFloor = storeys[currentIndex];
     if (currentIndex < storeys.length - 1) {
       const nextFloor = storeys[currentIndex + 1];
+
+      // Try to find the bottom of slab entities on the next storey
+      const slabBottomY = findSlabBottomY(nextFloor.id);
+      if (slabBottomY !== null) {
+        const clipHeight = slabBottomY - 0.02;
+        console.log(`[SectionPlane] Clip at next-floor slab bottom: ${slabBottomY.toFixed(3)} → clipHeight=${clipHeight.toFixed(3)} (floor: ${nextFloor.name})`);
+        return { clipHeight, nextFloorMinY: slabBottomY };
+      }
+
+      // Fallback: use next floor overall minY
       const clipHeight = nextFloor.minY + 0.05;
+      console.log(`[SectionPlane] No slabs found on next floor "${nextFloor.name}", falling back to minY=${nextFloor.minY.toFixed(3)}`);
       return { clipHeight, nextFloorMinY: nextFloor.minY };
     } else {
       return { clipHeight: currentFloor.maxY + 0.1, nextFloorMinY: null };
     }
-  }, [getXeokitViewer, calculateFloorBounds]);
+  }, [getXeokitViewer, calculateFloorBounds, findSlabBottomY]);
 
   /**
    * Apply 3D ceiling clipping (solo floor mode)
