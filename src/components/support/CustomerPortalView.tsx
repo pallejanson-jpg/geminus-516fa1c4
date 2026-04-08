@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
+import PageHeader from '@/components/common/PageHeader';
 import SupportCaseList from './SupportCaseList';
 import CreateSupportCase from './CreateSupportCase';
 import FeedbackView from './FeedbackView';
