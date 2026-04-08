@@ -7,18 +7,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { NavigatorNode } from '@/lib/types';
 
-export type NavigatorNode = {
-  fmGuid: string;
-  category?: string;
-  commonName?: string;
-  name?: string;
-  children?: NavigatorNode[];
-  buildingFmGuid?: string;
-  levelFmGuid?: string;
-  createdInModel?: boolean;
-  [key: string]: any;
-};
+export type { NavigatorNode } from '@/lib/types';
 
 type Props = {
   node: NavigatorNode;
