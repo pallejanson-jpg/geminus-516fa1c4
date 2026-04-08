@@ -21,7 +21,6 @@ const LeftSidebar: React.FC = () => {
         open360WithContext,
     } = useContext(AppContext);
     
-    const t = THEMES[theme];
     const sidebarOrder = useSidebarOrder();
     const currentContext = getCurrentContext(activeApp, selectedFacility);
 
@@ -85,11 +84,11 @@ const LeftSidebar: React.FC = () => {
                 fixed md:static inset-y-0 left-0 z-40 
                 transition-all duration-300 
                 ${isSidebarExpanded ? 'translate-x-0 w-44 sm:w-48' : '-translate-x-full md:translate-x-0 md:w-14 lg:w-16'} 
-                ${t.bgSec} border-r ${t.border} 
+                bg-card border-r border-border 
                 flex flex-col shadow-lg md:shadow-none
             `}
         >
-            <div className={`p-1.5 sm:p-2 flex h-14 sm:h-16 border-b ${t.border} items-center justify-center`}>
+            <div className="p-1.5 sm:p-2 flex h-14 sm:h-16 border-b border-border items-center justify-center">
                 <AppButton 
                     onClick={() => setIsSidebarExpanded(!isSidebarExpanded)} 
                     variant="ghost" 

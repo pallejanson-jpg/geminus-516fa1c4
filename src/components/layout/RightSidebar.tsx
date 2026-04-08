@@ -186,8 +186,7 @@ const API_CATEGORIES = [
 ];
 
 const RightSidebar: React.FC = () => {
-  const { theme, isRightSidebarVisible, toggleRightSidebar, activeApp, viewer3dFmGuid, viewerDiagnostics } = useContext(AppContext);
-  const t = THEMES[theme];
+  const { isRightSidebarVisible, toggleRightSidebar, activeApp, viewer3dFmGuid, viewerDiagnostics } = useContext(AppContext);
   
   const [helpSearch, setHelpSearch] = useState('');
   const [chatMessage, setChatMessage] = useState('');
@@ -230,9 +229,9 @@ const RightSidebar: React.FC = () => {
   }
 
   return (
-    <aside className={`fixed top-0 bottom-0 right-0 z-50 w-80 sm:w-96 animate-in slide-in-from-right duration-300 border-l ${t.border} ${t.bgSec} flex flex-col overflow-hidden`}>
+    <aside className="fixed top-0 bottom-0 right-0 z-50 w-80 sm:w-96 animate-in slide-in-from-right duration-300 border-l border-border bg-card flex flex-col overflow-hidden">
       {/* Header */}
-      <div className={`p-3 sm:p-4 ${t.bg} flex justify-between items-center border-b ${t.border} shrink-0`}>
+      <div className="p-3 sm:p-4 bg-background flex justify-between items-center border-b border-border shrink-0">
         <h2 className="font-bold text-base sm:text-lg flex items-center gap-2">
           <HelpCircle size={18} className="text-primary" />
           Help Center
@@ -442,7 +441,7 @@ const RightSidebar: React.FC = () => {
 
       {/* 3D Diagnostics (shown when in viewer) */}
       {(activeApp === 'assetplus_viewer' || activeApp === 'viewer') && viewer3dFmGuid && viewerDiagnostics && (
-        <div className={`border-t ${t.border} shrink-0`}>
+        <div className="border-t border-border shrink-0">
           <Accordion type="single" collapsible>
             <AccordionItem value="diagnostics" className="border-0">
               <AccordionTrigger className="px-3 py-2 text-xs hover:no-underline">
