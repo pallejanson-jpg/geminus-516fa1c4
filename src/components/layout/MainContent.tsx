@@ -36,9 +36,8 @@ const LazyFallback = () => (
 );
 
 const MainContent: React.FC = () => {
-    const { theme, activeApp, insightsFacility, setInsightsFacility, setActiveApp, setIvion360Context, setSenslincDashboardContext, selectedFacility, appConfigs } = useContext(AppContext);
+    const { activeApp, insightsFacility, setInsightsFacility, setActiveApp, setIvion360Context, setSenslincDashboardContext, selectedFacility, appConfigs } = useContext(AppContext);
     const isMobile = useIsMobile();
-    const t = THEMES[theme];
     const [previousAppBefore360, setPreviousAppBefore360] = useState('portfolio');
 
     // Route-level document title
@@ -191,7 +190,7 @@ const MainContent: React.FC = () => {
 
     return (
         <main 
-            className={`absolute inset-0 ${isViewerApp ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden'} ${t.bg}`}
+            className={`absolute inset-0 ${isViewerApp ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden'} bg-background`}
             style={isMobileViewer ? { touchAction: 'none' } : undefined}
         >
             <div className={needsHFull ? "w-full h-full" : "w-full"}>

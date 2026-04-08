@@ -59,7 +59,6 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     const [isAppMenuOpen, setIsAppMenuOpen] = useState(false);
     const [isCommandOpen, setIsCommandOpen] = useState(false);
     const searchRef = useRef<HTMLDivElement>(null);
-    const t = THEMES[theme];
 
     // User display info
     const displayName = profile?.displayName || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
@@ -133,7 +132,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
 
     return (
         <header
-            className={`sticky top-0 z-30 ${t.bgSec} border-b ${t.border} flex items-center justify-between px-2 sm:px-4 gap-1 sm:gap-4 overflow-hidden`}
+            className="sticky top-0 z-30 bg-card border-b border-border flex items-center justify-between px-2 sm:px-4 gap-1 sm:gap-4 overflow-hidden"
             style={{
                 height: 'calc(env(safe-area-inset-top, 0px) + 3.5rem)',
                 paddingTop: 'env(safe-area-inset-top, 0px)',
