@@ -30,11 +30,11 @@ export const DataContext = createContext<DataContextType>({
 export const useData = () => useContext(DataContext);
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [allData, setAllData] = useState<any[]>([]);
+  const [allData, setAllData] = useState<Facility[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [navigatorTreeData, setNavigatorTreeData] = useState<NavigatorNode[]>([]);
 
-  const buildNavigatorTree = useCallback((items: any[]): NavigatorNode[] => {
+  const buildNavigatorTree = useCallback((items: Facility[]): NavigatorNode[] => {
     // STRICT HIERARCHY: Building → Building Storey → Space → Instance
     // With synthetic "Unknown floor" fallback for orphan spaces
     const buildings = items.filter(item =>
