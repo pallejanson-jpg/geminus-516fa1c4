@@ -180,7 +180,8 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
       console.warn('[ModelLoader] Server sync failed:', e);
     }
 
-    // Step 2: Client-side bootstrap
+    // Step 2: Client-side bootstrap (direct download from Asset+ API)
+    console.log('[ModelLoader] Starting client-side bootstrap...');
     try {
       const [tokenRes, configRes] = await Promise.all([
         supabase.functions.invoke('asset-plus-query', { body: { action: 'getToken', buildingFmGuid } }),
