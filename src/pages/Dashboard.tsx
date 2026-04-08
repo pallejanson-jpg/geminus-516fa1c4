@@ -42,13 +42,7 @@ const recentActivities = [
 export default function Dashboard() {
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Overview</h1>
-        <p className="text-muted-foreground">
-          Overview of your property portfolio
-        </p>
-      </div>
+      <PageHeader title="Overview" description="Overview of your property portfolio" />
 
       {/* Stats Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
