@@ -1,19 +1,19 @@
 import React, { createContext, useState, useCallback, useContext, useEffect, ReactNode } from 'react';
 import { fetchLocalAssets } from '@/services/asset-plus-service';
 import { isModelName, isAModelName } from '@/lib/building-utils';
-
-type NavigatorNode = {
-  fmGuid: string;
-  category?: string;
-  commonName?: string;
-  name?: string;
-  children?: NavigatorNode[];
-  [key: string]: any;
-};
+import type { Facility, NavigatorNode } from '@/lib/types';
 
 interface DataContextType {
-  allData: any[];
-  setAllData: (data: any[]) => void;
+  allData: Facility[];
+  setAllData: (data: Facility[]) => void;
+  isLoadingData: boolean;
+  navigatorTreeData: NavigatorNode[];
+  refreshInitialData: () => Promise<void>;
+}
+
+interface DataContextType {
+  allData: Facility[];
+  setAllData: (data: Facility[]) => void;
   isLoadingData: boolean;
   navigatorTreeData: NavigatorNode[];
   refreshInitialData: () => Promise<void>;
