@@ -39,7 +39,7 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { cn } from '@/lib/utils';
+import { cn, normalizeGuid } from '@/lib/utils';
 import NativeViewerShell from '@/components/viewer/NativeViewerShell';
 import SplitPlanView from '@/components/viewer/SplitPlanView';
 import InsightsDrawerPanel from '@/components/viewer/InsightsDrawerPanel';
@@ -292,6 +292,51 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
     return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler);
   }, []);
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<FloorSelectionEventDetail>).detail;
+
+      if (detail.isAllFloorsVisible || detail.floorId === null) {
+        setSoloFloorId(null);
+        return;
+      }
+
+      if (detail.visibleMetaFloorIds?.length) {
+        const matchedByMeta = floors.find((floor) =>
+          detail.visibleMetaFloorIds!.some((metaId) => floor.id === metaId || floor.metaObjectIds.includes(metaId))
+        );
+        if (matchedByMeta) {
+          setSoloFloorId(matchedByMeta.id);
+          return;
+        }
+      }
+
+      if (detail.visibleFloorFmGuids?.length) {
+        const targetGuids = new Set(detail.visibleFloorFmGuids.map((guid) => normalizeGuid(guid)));
+        const matchedByGuid = floors.find((floor) =>
+          floor.databaseLevelFmGuids.some((guid) => targetGuids.has(normalizeGuid(guid)))
+        );
+        if (matchedByGuid) {
+          setSoloFloorId(matchedByGuid.id);
+          return;
+        }
+      }
+
+      if (detail.floorId) {
+        const normalizedFloorId = normalizeGuid(detail.floorId);
+        const matchedFloor = floors.find((floor) =>
+          floor.id === detail.floorId ||
+          floor.metaObjectIds.includes(detail.floorId) ||
+          floor.databaseLevelFmGuids.some((guid) => normalizeGuid(guid) === normalizedFloorId)
+        );
+        if (matchedFloor) setSoloFloorId(matchedFloor.id);
+      }
+    };
+
+    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler);
+  }, [floors]);
+
   // Auto-switch to 3D when AI dispatches a viewer focus event
   useEffect(() => {
     const handler = () => {
@@ -510,6 +555,25 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
       }));
     }
   }, [soloFloorId]);
+
+  const handleShowAllFloors = useCallback(() => {
+    const viewer = getViewer();
+    setSoloFloorId(null);
+
+    if (viewer?.scene) {
+      viewer.scene.setObjectsVisible(viewer.scene.objectIds, true);
+    }
+
+    window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+      detail: {
+        floorId: null,
+        visibleMetaFloorIds: floors.flatMap((floor) => floor.metaObjectIds),
+        visibleFloorFmGuids: floors.flatMap((floor) => floor.databaseLevelFmGuids),
+        isAllFloorsVisible: true,
+        isSoloFloor: false,
+      } as FloorSelectionEventDetail,
+    }));
+  }, [floors]);
 
   /* ── Display toggle handlers ── */
   const handleToggleSpaces = useCallback(() => {
@@ -829,6 +893,16 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
                     {floor.name}
                   </button>
                 ))}
+                <div className="my-1 border-t border-border" />
+                <button
+                  onClick={handleShowAllFloors}
+                  className={cn(
+                    'w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors',
+                    soloFloorId === null ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-muted'
+                  )}
+                >
+                  All floors
+                </button>
               </div>
             </PopoverContent>
           </Popover>
