@@ -106,8 +106,9 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
     const allFmGuids = visibleFloors.flatMap(f => f.databaseLevelFmGuids);
     const allMetaIds = visibleFloors.flatMap(f => f.metaObjectIds);
     const isSolo = newVisibleIds.size === 1;
-    const soloFloorId = isSolo ? Array.from(newVisibleIds)[0] : null;
-    const floor = soloFloorId ? floors.find(f => f.id === soloFloorId) : null;
+    const selectedFloorId = isSolo ? Array.from(newVisibleIds)[0] : null;
+    const soloFloorId = isSolo ? (allMetaIds[0] ?? selectedFloorId) : null;
+    const floor = selectedFloorId ? floors.find(f => f.id === selectedFloorId) : null;
     const bounds = soloFloorId ? calculateFloorBounds(soloFloorId) : null;
 
     emit('FLOOR_SELECTION_CHANGED', {
@@ -117,7 +118,8 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
       visibleMetaFloorIds: allMetaIds,
       visibleFloorFmGuids: allFmGuids,
       isAllFloorsVisible: newVisibleIds.size === floors.length,
-      skipClipping: true,
+      isSoloFloor: isSolo,
+      skipClipping: !isSolo,
     } as FloorSelectionEventDetail);
   }, [floors, applyFloorVisibility, calculateFloorBounds, buildingFmGuid]);
 
