@@ -237,7 +237,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         }
       }
 
-      setCurrentFloorId(floorId);
+      const resolvedFloorId = visibleMetaFloorIds?.length === 1 ? visibleMetaFloorIds[0] : floorId;
+
+      setCurrentFloorId(resolvedFloorId);
       setCurrentFloorBounds(bounds || null);
 
       // When skipClipping is set (e.g. from FloatingFloorSwitcher which already
@@ -250,11 +252,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         return;
       }
 
-      const isSolo = floorId !== null && !isAllFloorsVisible;
-      const soloId = isSolo ? (floorId || visibleMetaFloorIds?.[0]) : null;
+      const isSolo = resolvedFloorId !== null && !isAllFloorsVisible;
+      const soloId = isSolo ? resolvedFloorId : null;
 
       if (viewModeRef.current === '2d') {
-        if (floorId) applyFloorPlanClipping(floorId);
+        if (resolvedFloorId) applyFloorPlanClipping(resolvedFloorId);
         else {
           const sceneAABB = viewer?.scene?.getAABB?.();
           if (sceneAABB) applyGlobalFloorPlanClipping(sceneAABB[1]);
