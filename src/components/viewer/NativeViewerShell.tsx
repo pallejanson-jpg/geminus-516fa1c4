@@ -372,7 +372,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   // Wire floor selection → section plane clipping (3D ceiling clip)
   useEffect(() => {
     const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
-      const { visibleMetaFloorIds, visibleFloorFmGuids, isAllFloorsVisible, skipClipping, isSoloFloor } = e.detail;
+      const { floorId, visibleMetaFloorIds, visibleFloorFmGuids, isAllFloorsVisible, skipClipping, isSoloFloor } = e.detail;
       if (skipClipping) return;
 
       if (isAllFloorsVisible) {
@@ -382,12 +382,18 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
       // Resolve meta IDs: prefer explicit metaFloorIds, fallback to resolving fmGuids
       let metaIds = visibleMetaFloorIds?.length ? visibleMetaFloorIds : [];
+      const viewer = (window as any).__nativeXeokitViewer;
+      if (floorId && viewer?.metaScene?.metaObjects?.[floorId]?.type?.toLowerCase() === 'ifcbuildingstorey') {
+        metaIds = [floorId, ...metaIds.filter(id => id !== floorId)];
+      }
       if (!metaIds.length && visibleFloorFmGuids?.length) {
         metaIds = resolveMetaFloorIds(visibleFloorFmGuids);
       }
 
-      if (metaIds.length === 1 && isSoloFloor) {
-        applyCeilingClipping(metaIds[0]);
+      const soloMetaId = isSoloFloor ? metaIds[0] : null;
+
+      if (soloMetaId) {
+        applyCeilingClipping(soloMetaId);
       } else if (!metaIds.length && !visibleFloorFmGuids?.length) {
         removeSectionPlane();
       }

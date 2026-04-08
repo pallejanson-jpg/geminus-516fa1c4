@@ -1637,7 +1637,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }); // end requestAnimationFrame
     }, 500); // debounce 500ms
   }, [getXeokitViewer, checkedSources, checkedLevels, checkedSpaces, checkedCategories,
-    levels, spaces, sources, sharedModels, xrayMode]);
+    levels, spaces, sources, sharedModels, sharedFloors, xrayMode]);
 
   // ── Apply coloring separately (does NOT trigger visibility recalc) ──────
   const applyColoring = useCallback(() => {
