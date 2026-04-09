@@ -59,6 +59,13 @@ export function useXeokitInstance({ canvasRef, buildingFmGuid, onContextLost }: 
       pbrEnabled: false,
     });
 
+    // Tune edge rendering to avoid rastered/striped appearance on dense geometry
+    if (viewer.scene?.edgeMaterial) {
+      viewer.scene.edgeMaterial.edgeAlpha = 0.25;
+      viewer.scene.edgeMaterial.edgeWidth = 1;
+      viewer.scene.edgeMaterial.edgeColor = [0.3, 0.3, 0.3];
+    }
+
     // WebGL context loss handling
     const canvas = canvasRef.current;
     canvas.addEventListener('webglcontextlost', (e: Event) => {
