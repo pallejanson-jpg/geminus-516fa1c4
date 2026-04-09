@@ -16,7 +16,7 @@ import { useModelData } from '@/hooks/useModelData';
 import { isAModelName, getAModelStoreyGuids } from '@/lib/building-utils';
 
 import { getDescendantIds, hideSpaceAndAreaObjects, calculateFloorBounds } from '@/hooks/useFloorVisibility';
-import { applyArchitectColors, recolorArchitectObjects } from '@/lib/architect-colors';
+import { recolorArchitectObjects } from '@/lib/architect-colors';
 import { VIEWER_THEME_CHANGED_EVENT, VIEWER_THEME_REQUESTED_EVENT } from '@/hooks/useViewerTheme';
 
 import { emit, on } from '@/lib/event-bus';
@@ -1251,11 +1251,11 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const slabTypes = new Set(['IfcSlab', 'IfcSlabStandardCase', 'IfcPlate']);
     const areaSet = new Set(areaSpaceIdsRef.current);
 
-    // Only hide roofs/coverings when drilling into spaces — 
-    // when only a level filter (or source filter) is active, show the full model including roof/slabs
-    // This matches the behavior of the floor switcher (FloatingFloorSwitcher)
+    // Hide roofs/coverings when filtering to specific levels or spaces (solo floor mode)
+    // This matches the FloatingFloorSwitcher behavior (hideCoveringObjects in solo mode)
     const hasSpaceFilter = checkedSpaces.size > 0;
-    const hasLevelOrSpaceFilter = hasSpaceFilter;
+    const isSoloLevelFilter = checkedLevels.size === 1 && !hasSpaceFilter;
+    const hasLevelOrSpaceFilter = hasSpaceFilter || isSoloLevelFilter;
 
     // Use typeIndex for slab collection (fast)
     const allSlabIds: string[] = [];
@@ -1761,9 +1761,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       // Filters are active — preserve visibility state, only re-apply theme/colors on visible objects
       if (activeThemeIdRef.current) {
         emit('VIEWER_THEME_REQUESTED', { themeId: activeThemeIdRef.current });
-      } else {
-        applyArchitectColors(viewer);
       }
+      // When no theme is active, keep native model colors — do NOT apply architect colors
     } else {
       // No filters active — full cleanup: restore everything
       const sceneModels = scene.models || {};
@@ -1784,8 +1783,16 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
       if (activeThemeIdRef.current) {
         emit('VIEWER_THEME_REQUESTED', { themeId: activeThemeIdRef.current });
-      } else {
-        applyArchitectColors(viewer);
+      }
+      // When no theme is active, restore native model colors instead of architect palette
+      if (!activeThemeIdRef.current && !(window as any).__colorFilterActive) {
+        const nativeColors = (window as any).__xeokitNativeColors as Map<string, { color: number[]; opacity: number; edges: boolean }> | undefined;
+        if (nativeColors && nativeColors.size > 0) {
+          try {
+            const colorized = scene.colorizedObjectIds || [];
+            if (colorized.length > 0) scene.setObjectsColorized(colorized, false);
+          } catch {}
+        }
       }
       if (!(window as any).__spacesForceVisible) {
         hideSpaceAndAreaObjects(viewer);
