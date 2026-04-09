@@ -137,30 +137,52 @@ export function useViewerTheme() {
       bgContainer.style.background = theme.background_color || DEFAULT_VIEWER_THEME_BACKGROUND;
     }
 
-    // "Model Native Colour" — clear all colorization in one batch call
+    // "Model Native Colour" — clear all colorization and restore native XKT colors
     if (isNativeColour) {
       // Use batch API to clear colorize on all objects at once
       const colorizedIds = scene.colorizedObjectIds;
       if (colorizedIds?.length > 0) {
         scene.setObjectsColorized(colorizedIds, false);
       }
-      // Reset opacity for spaces that were made transparent
+      // Clear xrayed state too — previous themes may have set it
+      try {
+        const xrayedIds = scene.xrayedObjectIds;
+        if (xrayedIds?.length > 0) scene.setObjectsXRayed(xrayedIds, false);
+      } catch {}
+
+      // Restore native model colors from captured snapshot
+      const nativeColors = (window as any).__xeokitNativeColors as Map<string, { color: number[]; opacity: number; edges: boolean }> | undefined;
+      const objects = scene.objects;
       const metaScene = xeokitViewer.metaScene;
-      if (metaScene) {
-        const objects = scene.objects;
-        for (const objectId in objects) {
-          const entity = objects[objectId];
-          const mo = metaScene.metaObjects?.[objectId];
-          if (entity && mo) {
-            const ifcType = (mo.type || '').toLowerCase();
-            if (ifcType === 'ifcspace') {
-              entity.opacity = 1;
-              entity.visible = false;
-              entity.pickable = false;
-            }
-          }
+      
+      for (const objectId in objects) {
+        const entity = objects[objectId];
+        if (!entity) continue;
+        
+        const mo = metaScene?.metaObjects?.[objectId];
+        const ifcType = (mo?.type || '').toLowerCase();
+        
+        if (ifcType === 'ifcspace') {
+          entity.opacity = 1;
+          entity.visible = false;
+          entity.pickable = false;
+          continue;
         }
+        
+        // Restore captured native color if available
+        const native = nativeColors?.get(objectId);
+        if (native) {
+          entity.colorize = native.color;
+          entity.opacity = native.opacity;
+          entity.edges = native.edges;
+        } else {
+          // No captured color — clear colorize to use model default
+          entity.colorize = null;
+          entity.opacity = 1;
+        }
+        entity.xrayed = false;
       }
+
       // Restore original edge settings
       if (scene.edgeMaterial && state.originalEdge) {
         scene.edgeMaterial.edgeColor = state.originalEdge.edgeColor;
