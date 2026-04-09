@@ -332,8 +332,8 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
   // Wire floor selection → room label floor filter + track current selection
   useEffect(() => {
-    const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
-      const { visibleFloorFmGuids, isAllFloorsVisible } = e.detail;
+    const off = on('FLOOR_SELECTION_CHANGED', (detail: FloorSelectionEventDetail) => {
+      const { visibleFloorFmGuids, isAllFloorsVisible } = detail;
       if (isAllFloorsVisible) {
         currentFloorGuidsRef.current = [];
         updateFloorFilter([]);
@@ -341,9 +341,8 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         currentFloorGuidsRef.current = visibleFloorFmGuids;
         updateFloorFilter(visibleFloorFmGuids);
       }
-    };
-    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
-    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+    });
+    return off;
   }, [updateFloorFilter]);
 
   // ── Section plane clipping hook ──────────────────────────────────────────
@@ -371,8 +370,8 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
   // Wire floor selection → section plane clipping (3D ceiling clip)
   useEffect(() => {
-    const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
-      const { floorId, visibleMetaFloorIds, visibleFloorFmGuids, isAllFloorsVisible, skipClipping, isSoloFloor } = e.detail;
+    const off = on('FLOOR_SELECTION_CHANGED', (detail: FloorSelectionEventDetail) => {
+      const { floorId, visibleMetaFloorIds, visibleFloorFmGuids, isAllFloorsVisible, skipClipping, isSoloFloor } = detail;
       if (skipClipping) return;
 
       if (isAllFloorsVisible) {
@@ -397,9 +396,8 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       } else if (!metaIds.length && !visibleFloorFmGuids?.length) {
         removeSectionPlane();
       }
-    };
-    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
-    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+    });
+    return off;
   }, [applyCeilingClipping, removeSectionPlane, resolveMetaFloorIds]);
 
   const buildingName = React.useMemo(() => {
