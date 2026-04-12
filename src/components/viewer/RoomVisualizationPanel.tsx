@@ -733,10 +733,10 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         const xrayMaterial = scene?.xrayMaterial;
         if (xrayMaterial) {
           xrayMaterial.fill = true;
-          xrayMaterial.fillAlpha = 0.1;
+          xrayMaterial.fillAlpha = 0.08;
           xrayMaterial.fillColor = [0.5, 0.5, 0.5];
           xrayMaterial.edges = true;
-          xrayMaterial.edgeAlpha = 0.2;
+          xrayMaterial.edgeAlpha = 0.15;
           xrayMaterial.edgeColor = [0.3, 0.3, 0.3];
         }
         scene.alphaDepthMask = false;
