@@ -806,8 +806,9 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                         <Bar dataKey="kwhPerSqm" name="kWh/m²" radius={[0, 4, 4, 0]} style={{ cursor: 'pointer' }}>
                                                             {energyByFloor.map((entry, index) => (
                                                                 <Cell key={`cell-${index}`} fill={entry.color} onClick={() => {
-                                                                     // Resolve storey to child rooms STRICTLY for this floor only
-                                                                     const floorColor = hslStringToRgbFloat(entry.color);
+                                                                     if (!entry) return;
+                                                                      // Resolve storey to child rooms STRICTLY for this floor only
+                                                                      const floorColor = hslStringToRgbFloat(entry.color);
                                                                      const roomColorMap: Record<string, [number, number, number]> = {};
                                                                      // Find ALL storey fmGuids that share this base name (across model copies)
                                                                      const baseName = entry.name;
