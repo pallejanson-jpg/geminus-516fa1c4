@@ -865,8 +865,9 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                     <Pie data={energyDistribution} cx="50%" cy="50%" innerRadius={isMobile ? 40 : 45} outerRadius={isMobile ? 65 : 75} paddingAngle={2} dataKey="value" label={renderEnergyPieLabel} labelLine={!isMobile}>
                                                         {energyDistribution.map((entry, index) => (
                                                             <Cell key={`cell-${index}`} fill={entry.color} style={{ cursor: 'pointer' }} onClick={() => {
-                                                                // Resolve all floors to child rooms for reliable 3D matching
-                                                                const categoryColor = hslStringToRgbFloat(entry.color);
+                                                                if (!entry) return;
+                                                                 // Resolve all floors to child rooms for reliable 3D matching
+                                                                 const categoryColor = hslStringToRgbFloat(entry.color);
                                                                 const roomColorMap: Record<string, [number, number, number]> = {};
                                                                 energyByFloor.forEach(f => {
                                                                     buildingSpaces.forEach((space: any) => {
