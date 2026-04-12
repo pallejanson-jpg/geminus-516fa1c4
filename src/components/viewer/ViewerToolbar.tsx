@@ -462,7 +462,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
       scene.setObjectsVisible(allIds, true);
       scene.setObjectsXRayed(allIds, false);
       scene.setObjectsPickable(allIds, true);
+      scene.setObjectsColorized(allIds, false);
     }
+    // Reset alphaDepthMask (xray sets it to false, causing white artifacts)
+    scene.alphaDepthMask = true;
+
+    // Clear global flags set by insights / visualization systems
+    (window as any).__colorFilterActive = false;
+    const vizSet = (window as any).__vizColorizedEntityIds;
+    if (vizSet instanceof Set) vizSet.clear();
 
     // Respect current view mode — don't jump to 3D from 2D
     if (viewModeRef.current === '2d') {
