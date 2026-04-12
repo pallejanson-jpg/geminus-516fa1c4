@@ -40,10 +40,10 @@ const XrayToggle: React.FC<XrayToggleProps> = ({ viewerRef, initialEnabled = fal
       const xrayMaterial = scene?.xrayMaterial;
       if (xrayMaterial) {
         xrayMaterial.fill = true;
-        xrayMaterial.fillAlpha = 0.15;
+        xrayMaterial.fillAlpha = 0.08;
         xrayMaterial.fillColor = [0.55, 0.55, 0.6];
         xrayMaterial.edges = true;
-        xrayMaterial.edgeAlpha = 0.35;
+        xrayMaterial.edgeAlpha = 0.15;
         xrayMaterial.edgeColor = [0.4, 0.4, 0.45];
       }
       scene.alphaDepthMask = false;

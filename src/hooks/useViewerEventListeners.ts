@@ -147,8 +147,8 @@ export function useViewerEventListeners({
       // X-ray everything first
       const xrayMat = scene.xrayMaterial;
       if (xrayMat) {
-        xrayMat.fill = true; xrayMat.fillAlpha = 0.15; xrayMat.fillColor = [0.55, 0.55, 0.6];
-        xrayMat.edges = true; xrayMat.edgeAlpha = 0.3;
+        xrayMat.fill = true; xrayMat.fillAlpha = 0.08; xrayMat.fillColor = [0.55, 0.55, 0.6];
+        xrayMat.edges = true; xrayMat.edgeAlpha = 0.15;
       }
       scene.setObjectsXRayed(scene.objectIds, true);
       (window as any).__colorFilterActive = true;
@@ -160,7 +160,7 @@ export function useViewerEventListeners({
         const entity = scene.objects?.[mo.id];
         if (entity) {
           entity.xrayed = false; entity.visible = true;
-          entity.colorize = rgb; entity.opacity = 0.85;
+          entity.colorize = rgb; entity.opacity = 1.0;
           alreadyColored.add(mo.id);
           matchCount++;
         }
@@ -233,7 +233,7 @@ export function useViewerEventListeners({
               const colorizeChildren = (obj: any) => {
                 obj.children?.forEach((child: any) => {
                   const e = scene.objects?.[child.id];
-                  if (e) { e.xrayed = false; e.visible = true; e.colorize = rgb!; e.opacity = 0.85; matchCount++; }
+                  if (e) { e.xrayed = false; e.visible = true; e.colorize = rgb!; e.opacity = 1.0; matchCount++; }
                   colorizeChildren(child);
                 });
               };

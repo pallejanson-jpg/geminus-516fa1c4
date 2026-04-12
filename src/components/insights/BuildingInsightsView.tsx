@@ -564,7 +564,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             }
         });
         // Include nameColorMap so name-based fallback works when GUID doesn't match BIM IDs
-        const detail = { mode: 'room_spaces' as const, colorMap: roomColorMap, nameColorMap, strictGuidMode: false };
+        const detail = { mode: 'room_spaces' as const, colorMap: roomColorMap, nameColorMap, strictGuidMode: true };
         if (drawerMode) {
             emit('FORCE_SHOW_SPACES', { show: true });
             setTimeout(() => {
@@ -806,8 +806,9 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                         <Bar dataKey="kwhPerSqm" name="kWh/m²" radius={[0, 4, 4, 0]} style={{ cursor: 'pointer' }}>
                                                             {energyByFloor.map((entry, index) => (
                                                                 <Cell key={`cell-${index}`} fill={entry.color} onClick={() => {
-                                                                     // Resolve storey to child rooms STRICTLY for this floor only
-                                                                     const floorColor = hslStringToRgbFloat(entry.color);
+                                                                     if (!entry) return;
+                                                                      // Resolve storey to child rooms STRICTLY for this floor only
+                                                                      const floorColor = hslStringToRgbFloat(entry.color);
                                                                      const roomColorMap: Record<string, [number, number, number]> = {};
                                                                      // Find ALL storey fmGuids that share this base name (across model copies)
                                                                      const baseName = entry.name;
@@ -864,8 +865,9 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                     <Pie data={energyDistribution} cx="50%" cy="50%" innerRadius={isMobile ? 40 : 45} outerRadius={isMobile ? 65 : 75} paddingAngle={2} dataKey="value" label={renderEnergyPieLabel} labelLine={!isMobile}>
                                                         {energyDistribution.map((entry, index) => (
                                                             <Cell key={`cell-${index}`} fill={entry.color} style={{ cursor: 'pointer' }} onClick={() => {
-                                                                // Resolve all floors to child rooms for reliable 3D matching
-                                                                const categoryColor = hslStringToRgbFloat(entry.color);
+                                                                if (!entry) return;
+                                                                 // Resolve all floors to child rooms for reliable 3D matching
+                                                                 const categoryColor = hslStringToRgbFloat(entry.color);
                                                                 const roomColorMap: Record<string, [number, number, number]> = {};
                                                                 energyByFloor.forEach(f => {
                                                                     buildingSpaces.forEach((space: any) => {
