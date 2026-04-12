@@ -300,12 +300,17 @@ export function useViewerEventListeners({
     const handler = () => {
       const viewer = viewerRef.current;
       if (!viewer?.scene) return;
-      viewer.scene.setObjectsXRayed(viewer.scene.objectIds, false);
+      const scene = viewer.scene;
+      scene.setObjectsXRayed(scene.objectIds, false);
+      scene.alphaDepthMask = true;
+      (window as any).__colorFilterActive = false;
+      const vizSet = (window as any).__vizColorizedEntityIds;
+      if (vizSet instanceof Set) vizSet.clear();
       // Restore native model colors (no automatic architect palette)
       const nativeColors = (window as any).__xeokitNativeColors as Map<string, { color: number[]; opacity: number; edges: boolean }> | undefined;
       if (nativeColors) {
         for (const [objId, props] of nativeColors) {
-          const entity = viewer.scene.objects?.[objId];
+          const entity = scene.objects?.[objId];
           if (entity) {
             entity.colorize = props.color;
             entity.opacity = props.opacity;
