@@ -1454,6 +1454,10 @@ serve(async (req) => {
                 const revData = await revRes.json();
                 allRevisions = revData?.modelRevisions || (Array.isArray(revData) ? revData : []);
                 console.log(`Loaded ${allRevisions.length} model revisions`);
+                // Log first 5 revisions for debugging
+                for (let ri = 0; ri < Math.min(5, allRevisions.length); ri++) {
+                  console.log(`  Revision[${ri}]: ${JSON.stringify(allRevisions[ri])}`);
+                }
               } else {
                 console.log(`GetAllModelRevisions failed: ${revRes.status}`);
               }
