@@ -1428,6 +1428,10 @@ serve(async (req) => {
           }
 
           console.log(`Building ${buildingName}: Found ${models.length} models from GetAllRelatedModels`);
+          // Log full model data for debugging identifier issues
+          for (const m of models) {
+            console.log(`  Model detail: ${JSON.stringify({ modelId: m.modelId || m.id || m.ModelId, name: m.name || m.modelName, bimObjectId: m.bimObjectId || m.BimObjectId, fmGuid: m.fmGuid || m.FmGuid, externalGuid: m.externalGuid || m.ExternalGuid })}`);
+          }
 
           // Build bimObjectId lookup from GetAllRelatedModels models
           const bimObjectIdMap = new Map<string, string>();
