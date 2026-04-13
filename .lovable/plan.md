@@ -1,37 +1,48 @@
 
 
-# Fix: Room Heatmap Single Selection, Brighter Colors, and TypeError
+# Fix XKT Model ID Resolution for Småviken
 
-## Issues Identified
+## Problem
+The `GetXktData` endpoint requires a valid `modelid` parameter (UUID). Currently:
+1. `GetAllRelatedModels` returns models with `modelId: null` for Småviken
+2. The fallback tries `bimObjectId` as `modelid`, which returns 404
+3. Name-based matching against `GetAllModelRevisions` picks wrong models from other buildings (same discipline names like "A-modell" exist across buildings)
 
-### 1. Room Heatmap: Single selection colors multiple rooms
-**Root cause**: `colorizeSelectedSensorRooms` (line 553-577) uses `strictGuidMode: false` and builds a `nameColorMap` that includes the selected room's `commonName`. The INSIGHTS_COLOR_UPDATE handler in `useViewerEventListeners.ts` (line 225) then matches **all rooms with the same name** via the name-based fallback — so selecting one "KORR" room colors all "KORR" rooms.
+## Root Cause
+The `modelRevision` object from `GetAllModelRevisions` contains the correct `modelId`. But the current matching logic (line 1477-1483) uses fuzzy name matching (`revName.includes(modelNameLower)`), which is unreliable when multiple buildings have identically-named models.
 
-**Fix**: Set `strictGuidMode: true` in `colorizeSelectedSensorRooms` since the user is selecting a specific room by GUID, not by type. The `nameColorMap` should only be used as a last resort when GUID matching fails for the **specific selected room**, not as a broad fallback.
+## Solution
 
-### 2. Insights colorization too dim in xray mode
-**Root cause**: In `useViewerEventListeners.ts` line 163, colorized entities get `opacity: 0.85`. Combined with xray ghosting (fillAlpha 0.15), the colored spaces appear washed out against the transparent building.
+### 1. Fix revision matching in `asset-plus-sync/index.ts` (sync-xkt action)
 
-**Fix**: Increase colorized entity opacity to `1.0` and boost the xray material contrast:
-- `fillAlpha: 0.08` (down from 0.15) — dimmer ghost
-- `edgeAlpha: 0.15` (down from 0.3) — less edge noise
-- Entity opacity: `1.0` (up from 0.85) — full brightness
+**Replace the current name-based matching** with a two-step approach:
+- **Step A**: Match revision to model by `bimObjectId` (exact match — the `BimModel` from `GetAllRelatedModels` has `bimObjectId`, and revisions also carry a `bimObjectId` or can be matched via the model's own `modelId`)
+- **Step B**: If no `bimObjectId` match, filter revisions by `entityName` matching the building name first, THEN match by `modelName` — this scopes name matching to the correct building
 
-### 3. TypeError: Cannot read 'type' of undefined
-**Root cause**: The error stack shows it originates from an `onClick` handler in the bundled `useBuildingViewerData` chunk. This is the pie chart `Cell` click in BuildingInsightsView where `hslStringToRgbFloat(entry.color)` processes an HSL color. The error occurs when recharts passes an undefined entry to the click handler. Adding a guard for undefined entries will prevent the crash.
+### 2. Store `modelId` from revisions in the `assets` table attributes
+
+During structure sync (when we upsert Building Storey objects), persist the `modelId` from the matched revision into the storey's `attributes` JSON. This makes the `modelId` available for XKT sync without re-querying `GetAllModelRevisions`.
+
+### 3. Use stored `modelId` as primary identifier for GetXktData
+
+In the XKT sync download logic, check the `assets` table for a stored `modelId` before falling back to the current identifier chain.
 
 ## Files to Edit
 
-### `src/components/insights/BuildingInsightsView.tsx`
-- Change `colorizeSelectedSensorRooms` to use `strictGuidMode: true` (line 567)
-- Add null guard on pie chart Cell click handlers for undefined entries
+### `supabase/functions/asset-plus-sync/index.ts`
 
-### `src/hooks/useViewerEventListeners.ts`
-- Increase colorized entity `opacity` from `0.85` to `1.0` (line 163 and line 236)
-- Reduce xray material `fillAlpha` from `0.15` to `0.08` (line 150)
-- Reduce xray `edgeAlpha` from `0.3` to `0.15` (line 151)
-- Also update the legend select handler in `RoomVisualizationPanel.tsx` (line 737-739) to match
+**Revision matching (lines ~1470-1496)**:
+- Match revisions to models using `bimObjectId` first (exact)
+- Filter by `entityName` (building name) before name matching
+- Log matched `modelId` clearly
 
-### `src/components/viewer/RoomVisualizationPanel.tsx`
-- Update legend xray material settings to match the dimmer values
+**XKT download (lines ~1540-1580)**:
+- Add Strategy 0: look up `modelId` from `assets` table (Building Storey attributes) for the building
+- Use this stored `modelId` as the primary `modelid` parameter in the `GetXktData` call
+
+**Structure sync (upsert flow)**:
+- When processing Model/Building Storey objects from Asset+, also query `GetAllModelRevisions` filtered to that building and store the `modelId` in attributes
+
+### Estimated scope
+~80 lines changed in `asset-plus-sync/index.ts`. No database migration needed (using existing `attributes` jsonb column).
 
