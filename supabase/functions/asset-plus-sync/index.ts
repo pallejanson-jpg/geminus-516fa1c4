@@ -1659,6 +1659,7 @@ serve(async (req) => {
                       usedIdentifier = 'bimobjectid-as-modelid';
                     }
                   }
+                } catch {}
               }
 
               if (!xktData) {
