@@ -1467,21 +1467,25 @@ serve(async (req) => {
           // Enrich with revisionId and missing modelId from GetAllModelRevisions when available.
           const modelsToSync = models.map((m: any) => {
             const rawModelId = m.modelId || m.id || m.ModelId || '';
+            const bimObjId = m.bimObjectId || m.BimObjectId || '';
             const mName = m.name || m.modelName || m.Name || `Model`;
             const modelNameLower = String(mName).toLowerCase();
             const matchedRev = allRevisions.find((rev: any) => {
               const revModelId = String(rev.modelId || '');
               if (rawModelId && revModelId === String(rawModelId)) return true;
+              // Also match by bimObjectId
+              if (bimObjId && String(rev.bimObjectId || rev.BimObjectId || '') === bimObjId) return true;
               const revName = String(rev.modelName || '').toLowerCase();
               return !!(revName && modelNameLower && (revName === modelNameLower || revName.includes(modelNameLower) || modelNameLower.includes(revName)));
             });
-            const resolvedModelId = String(rawModelId || matchedRev?.modelId || '');
+            // Use bimObjectId as fallback modelId — Asset+ GetXktData accepts it
+            const resolvedModelId = String(rawModelId || matchedRev?.modelId || bimObjId || '');
             return {
               modelId: resolvedModelId,
               revisionId: matchedRev?.revisionId || m.revisionId || m.RevisionId || '',
               modelName: mName,
               entityName: buildingName,
-              _bimObjectId: m.bimObjectId || m.BimObjectId || m.fmGuid || m.FmGuid || '',
+              _bimObjectId: bimObjId || m.fmGuid || m.FmGuid || '',
               fmGuid: m.fmGuid || m.FmGuid || '',
               externalGuid: m.externalGuid || m.ExternalGuid || '',
             };
