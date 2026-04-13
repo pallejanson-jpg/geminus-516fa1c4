@@ -1428,6 +1428,10 @@ serve(async (req) => {
           }
 
           console.log(`Building ${buildingName}: Found ${models.length} models from GetAllRelatedModels`);
+          // Log ALL fields for debugging
+          for (const m of models) {
+            console.log(`  Model FULL: ${JSON.stringify(m)}`);
+          }
 
           // Build bimObjectId lookup from GetAllRelatedModels models
           const bimObjectIdMap = new Map<string, string>();
@@ -1450,6 +1454,10 @@ serve(async (req) => {
                 const revData = await revRes.json();
                 allRevisions = revData?.modelRevisions || (Array.isArray(revData) ? revData : []);
                 console.log(`Loaded ${allRevisions.length} model revisions`);
+                // Log first 5 revisions for debugging
+                for (let ri = 0; ri < Math.min(5, allRevisions.length); ri++) {
+                  console.log(`  Revision[${ri}]: ${JSON.stringify(allRevisions[ri])}`);
+                }
               } else {
                 console.log(`GetAllModelRevisions failed: ${revRes.status}`);
               }
@@ -1463,21 +1471,25 @@ serve(async (req) => {
           // Enrich with revisionId and missing modelId from GetAllModelRevisions when available.
           const modelsToSync = models.map((m: any) => {
             const rawModelId = m.modelId || m.id || m.ModelId || '';
+            const bimObjId = m.bimObjectId || m.BimObjectId || '';
             const mName = m.name || m.modelName || m.Name || `Model`;
             const modelNameLower = String(mName).toLowerCase();
             const matchedRev = allRevisions.find((rev: any) => {
               const revModelId = String(rev.modelId || '');
               if (rawModelId && revModelId === String(rawModelId)) return true;
+              // Also match by bimObjectId
+              if (bimObjId && String(rev.bimObjectId || rev.BimObjectId || '') === bimObjId) return true;
               const revName = String(rev.modelName || '').toLowerCase();
               return !!(revName && modelNameLower && (revName === modelNameLower || revName.includes(modelNameLower) || modelNameLower.includes(revName)));
             });
-            const resolvedModelId = String(rawModelId || matchedRev?.modelId || '');
+            // Use bimObjectId as fallback modelId — Asset+ GetXktData accepts it
+            const resolvedModelId = String(rawModelId || matchedRev?.modelId || bimObjId || '');
             return {
               modelId: resolvedModelId,
               revisionId: matchedRev?.revisionId || m.revisionId || m.RevisionId || '',
               modelName: mName,
               entityName: buildingName,
-              _bimObjectId: m.bimObjectId || m.BimObjectId || m.fmGuid || m.FmGuid || '',
+              _bimObjectId: bimObjId || m.fmGuid || m.FmGuid || '',
               fmGuid: m.fmGuid || m.FmGuid || '',
               externalGuid: m.externalGuid || m.ExternalGuid || '',
             };
@@ -1534,18 +1546,37 @@ serve(async (req) => {
               // Try multiple identifier combinations
               let xktData: ArrayBuffer | null = null;
               let usedIdentifier = '';
+              
+              // Find matched revision for additional identifiers
+              const matchedRev = allRevisions.find((r: any) => String(r.modelId || '') === String(revModelId));
+              const revBimObjId = matchedRev?.bimObjectId || matchedRev?.BimObjectId || '';
+              const revEntityId = matchedRev?.entityId || matchedRev?.EntityId || '';
+              
               const idCombos: { param: string; value: string; label: string }[] = [
                 { param: 'bimobjectid', value: bimObjId, label: 'bimobjectid(model)' },
+                { param: 'bimobjectid', value: revBimObjId, label: 'bimobjectid(revision)' },
                 { param: 'externalguid', value: externalGuid, label: 'externalguid(model)' },
                 { param: 'bimobjectid', value: buildingParentBimObjId, label: 'bimobjectid(building.parent)' },
                 { param: 'externalguid', value: modelFmGuid, label: 'externalguid(model.fmGuid)' },
+                { param: 'bimobjectid', value: buildingFmGuid, label: 'bimobjectid(buildingFmGuid)' },
                 { param: 'externalguid', value: buildingFmGuid, label: 'externalguid(buildingFmGuid)' },
+                { param: 'bimobjectid', value: revEntityId, label: 'bimobjectid(revision.entityId)' },
               ];
-              const availableIds = idCombos.filter(c => c.value).map(c => c.label);
+              // Deduplicate by value
+              const seen = new Set<string>();
+              const dedupCombos = idCombos.filter(c => {
+                if (!c.value) return false;
+                const key = `${c.param}=${c.value}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+              });
+              
+              const availableIds = dedupCombos.map(c => c.label);
               console.log(`  ${modelName} (${revModelId}): trying ${availableIds.length} identifiers: ${availableIds.join(', ')}`);
               
-              for (const combo of idCombos) {
-                if (!combo.value) continue;
+              // Strategy 1: Try with modelid + secondary param combos
+              for (const combo of dedupCombos) {
                 const url = `${discovery.url}/GetXktData?modelid=${revModelId}&${combo.param}=${encodeURIComponent(combo.value)}&context=Building&apiKey=${apiKey}`;
                 try {
                   const controller = new AbortController();
@@ -1561,6 +1592,71 @@ serve(async (req) => {
                       xktData = data;
                       usedIdentifier = combo.label;
                       break;
+                    }
+                  }
+                } catch {}
+              }
+              
+              // Strategy 2: Try bimobjectid-only (no modelid param at all)
+              if (!xktData) {
+                const bimOnlyUrl = `${discovery.url}/GetXktData?bimobjectid=${bimObjId}&context=Building&apiKey=${apiKey}`;
+                console.log(`  Strategy 2: bimobjectid-only → ${bimOnlyUrl}`);
+                try {
+                  const controller = new AbortController();
+                  const timeoutId = setTimeout(() => controller.abort(), 15000);
+                  const res = await fetch(bimOnlyUrl, {
+                    headers: { "Authorization": `Bearer ${accessToken}` },
+                    signal: controller.signal
+                  });
+                  clearTimeout(timeoutId);
+                  console.log(`  Strategy 2 response: ${res.status}`);
+                  if (res.ok) {
+                    const data = await res.arrayBuffer();
+                    if (data.byteLength >= 1024) {
+                      xktData = data;
+                      usedIdentifier = 'bimobjectid-only';
+                    }
+                  }
+                } catch (e) { console.log(`  Strategy 2 error: ${e}`); }
+              }
+              
+              // Strategy 3: Try modelid-only (no secondary identifier)
+              if (!xktData) {
+                const url = `${discovery.url}/GetXktData?modelid=${revModelId}&context=Building&apiKey=${apiKey}`;
+                try {
+                  const controller = new AbortController();
+                  const timeoutId = setTimeout(() => controller.abort(), 15000);
+                  const res = await fetch(url, {
+                    headers: { "Authorization": `Bearer ${accessToken}` },
+                    signal: controller.signal
+                  });
+                  clearTimeout(timeoutId);
+                  if (res.ok) {
+                    const data = await res.arrayBuffer();
+                    if (data.byteLength >= 1024) {
+                      xktData = data;
+                      usedIdentifier = 'modelid-only';
+                    }
+                  }
+                } catch {}
+              }
+              
+              // Strategy 4: Try with bimobjectid as the modelid value
+              if (!xktData) {
+                const url = `${discovery.url}/GetXktData?modelid=${bimObjId}&bimobjectid=${bimObjId}&context=Building&apiKey=${apiKey}`;
+                try {
+                  const controller = new AbortController();
+                  const timeoutId = setTimeout(() => controller.abort(), 15000);
+                  const res = await fetch(url, {
+                    headers: { "Authorization": `Bearer ${accessToken}` },
+                    signal: controller.signal
+                  });
+                  clearTimeout(timeoutId);
+                  if (res.ok) {
+                    const data = await res.arrayBuffer();
+                    if (data.byteLength >= 1024) {
+                      xktData = data;
+                      usedIdentifier = 'bimobjectid-as-modelid';
                     }
                   }
                 } catch {}
