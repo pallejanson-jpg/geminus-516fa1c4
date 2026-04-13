@@ -1597,7 +1597,30 @@ serve(async (req) => {
                 } catch {}
               }
               
-              // Strategy 2: Try modelid-only (no secondary identifier)
+              // Strategy 2: Try bimobjectid-only (no modelid param at all)
+              if (!xktData) {
+                const bimOnlyUrl = `${discovery.url}/GetXktData?bimobjectid=${bimObjId}&context=Building&apiKey=${apiKey}`;
+                console.log(`  Strategy 2: bimobjectid-only → ${bimOnlyUrl}`);
+                try {
+                  const controller = new AbortController();
+                  const timeoutId = setTimeout(() => controller.abort(), 15000);
+                  const res = await fetch(bimOnlyUrl, {
+                    headers: { "Authorization": `Bearer ${accessToken}` },
+                    signal: controller.signal
+                  });
+                  clearTimeout(timeoutId);
+                  console.log(`  Strategy 2 response: ${res.status}`);
+                  if (res.ok) {
+                    const data = await res.arrayBuffer();
+                    if (data.byteLength >= 1024) {
+                      xktData = data;
+                      usedIdentifier = 'bimobjectid-only';
+                    }
+                  }
+                } catch (e) { console.log(`  Strategy 2 error: ${e}`); }
+              }
+              
+              // Strategy 3: Try modelid-only (no secondary identifier)
               if (!xktData) {
                 const url = `${discovery.url}/GetXktData?modelid=${revModelId}&context=Building&apiKey=${apiKey}`;
                 try {
@@ -1618,26 +1641,26 @@ serve(async (req) => {
                 } catch {}
               }
               
-              // Strategy 3: Try with revisionId as modelid param
-              if (!xktData && rev.revisionId) {
-                for (const combo of dedupCombos.slice(0, 3)) {
-                  const url = `${discovery.url}/GetXktData?modelid=${rev.revisionId}&${combo.param}=${encodeURIComponent(combo.value)}&context=Building&apiKey=${apiKey}`;
-                  try {
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 15000);
-                    const res = await fetch(url, {
-                      headers: { "Authorization": `Bearer ${accessToken}` },
-                      signal: controller.signal
-                    });
-                    clearTimeout(timeoutId);
-                    if (res.ok) {
-                      const data = await res.arrayBuffer();
-                      if (data.byteLength >= 1024) {
-                        xktData = data;
-                        usedIdentifier = `revisionId(${combo.label})`;
-                        break;
-                      }
+              // Strategy 4: Try with bimobjectid as the modelid value
+              if (!xktData) {
+                const url = `${discovery.url}/GetXktData?modelid=${bimObjId}&bimobjectid=${bimObjId}&context=Building&apiKey=${apiKey}`;
+                try {
+                  const controller = new AbortController();
+                  const timeoutId = setTimeout(() => controller.abort(), 15000);
+                  const res = await fetch(url, {
+                    headers: { "Authorization": `Bearer ${accessToken}` },
+                    signal: controller.signal
+                  });
+                  clearTimeout(timeoutId);
+                  if (res.ok) {
+                    const data = await res.arrayBuffer();
+                    if (data.byteLength >= 1024) {
+                      xktData = data;
+                      usedIdentifier = 'bimobjectid-as-modelid';
                     }
+                  }
+                } catch {}
+              }
                   } catch {}
                 }
               }
