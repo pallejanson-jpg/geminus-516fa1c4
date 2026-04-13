@@ -1534,18 +1534,37 @@ serve(async (req) => {
               // Try multiple identifier combinations
               let xktData: ArrayBuffer | null = null;
               let usedIdentifier = '';
+              
+              // Find matched revision for additional identifiers
+              const matchedRev = allRevisions.find((r: any) => String(r.modelId || '') === String(revModelId));
+              const revBimObjId = matchedRev?.bimObjectId || matchedRev?.BimObjectId || '';
+              const revEntityId = matchedRev?.entityId || matchedRev?.EntityId || '';
+              
               const idCombos: { param: string; value: string; label: string }[] = [
                 { param: 'bimobjectid', value: bimObjId, label: 'bimobjectid(model)' },
+                { param: 'bimobjectid', value: revBimObjId, label: 'bimobjectid(revision)' },
                 { param: 'externalguid', value: externalGuid, label: 'externalguid(model)' },
                 { param: 'bimobjectid', value: buildingParentBimObjId, label: 'bimobjectid(building.parent)' },
                 { param: 'externalguid', value: modelFmGuid, label: 'externalguid(model.fmGuid)' },
+                { param: 'bimobjectid', value: buildingFmGuid, label: 'bimobjectid(buildingFmGuid)' },
                 { param: 'externalguid', value: buildingFmGuid, label: 'externalguid(buildingFmGuid)' },
+                { param: 'bimobjectid', value: revEntityId, label: 'bimobjectid(revision.entityId)' },
               ];
-              const availableIds = idCombos.filter(c => c.value).map(c => c.label);
+              // Deduplicate by value
+              const seen = new Set<string>();
+              const dedupCombos = idCombos.filter(c => {
+                if (!c.value) return false;
+                const key = `${c.param}=${c.value}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+              });
+              
+              const availableIds = dedupCombos.map(c => c.label);
               console.log(`  ${modelName} (${revModelId}): trying ${availableIds.length} identifiers: ${availableIds.join(', ')}`);
               
-              for (const combo of idCombos) {
-                if (!combo.value) continue;
+              // Strategy 1: Try with modelid + secondary param combos
+              for (const combo of dedupCombos) {
                 const url = `${discovery.url}/GetXktData?modelid=${revModelId}&${combo.param}=${encodeURIComponent(combo.value)}&context=Building&apiKey=${apiKey}`;
                 try {
                   const controller = new AbortController();
@@ -1564,6 +1583,51 @@ serve(async (req) => {
                     }
                   }
                 } catch {}
+              }
+              
+              // Strategy 2: Try modelid-only (no secondary identifier)
+              if (!xktData) {
+                const url = `${discovery.url}/GetXktData?modelid=${revModelId}&context=Building&apiKey=${apiKey}`;
+                try {
+                  const controller = new AbortController();
+                  const timeoutId = setTimeout(() => controller.abort(), 15000);
+                  const res = await fetch(url, {
+                    headers: { "Authorization": `Bearer ${accessToken}` },
+                    signal: controller.signal
+                  });
+                  clearTimeout(timeoutId);
+                  if (res.ok) {
+                    const data = await res.arrayBuffer();
+                    if (data.byteLength >= 1024) {
+                      xktData = data;
+                      usedIdentifier = 'modelid-only';
+                    }
+                  }
+                } catch {}
+              }
+              
+              // Strategy 3: Try with revisionId as modelid param
+              if (!xktData && rev.revisionId) {
+                for (const combo of dedupCombos.slice(0, 3)) {
+                  const url = `${discovery.url}/GetXktData?modelid=${rev.revisionId}&${combo.param}=${encodeURIComponent(combo.value)}&context=Building&apiKey=${apiKey}`;
+                  try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 15000);
+                    const res = await fetch(url, {
+                      headers: { "Authorization": `Bearer ${accessToken}` },
+                      signal: controller.signal
+                    });
+                    clearTimeout(timeoutId);
+                    if (res.ok) {
+                      const data = await res.arrayBuffer();
+                      if (data.byteLength >= 1024) {
+                        xktData = data;
+                        usedIdentifier = `revisionId(${combo.label})`;
+                        break;
+                      }
+                    }
+                  } catch {}
+                }
               }
 
               if (!xktData) {
