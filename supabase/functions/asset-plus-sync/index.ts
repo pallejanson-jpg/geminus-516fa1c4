@@ -2982,15 +2982,57 @@ serve(async (req) => {
       });
       const revData = await revRes.json();
       const allRevs = revData?.modelRevisions || (Array.isArray(revData) ? revData : []);
-      // Filter by building name if we have one
       const { data: bldg } = await supabase.from('assets').select('common_name').eq('fm_guid', buildingFmGuid).eq('category', 'Building').maybeSingle();
       const bName = bldg?.common_name || '';
       const filtered = bName ? allRevs.filter((r: any) => String(r.entityName || '').toLowerCase() === bName.toLowerCase()) : allRevs;
+      
+      // XKT fetch test: try multiple strategies with the latest Published revision
+      const xktTests: any[] = [];
+      // Find latest published A-modell revision
+      const aModelRevs = filtered.filter((r: any) => r.modelName === 'A-modell');
+      const publishedRevs = aModelRevs.filter((r: any) => r.status === 4);
+      const latestPublished = publishedRevs.sort((a: any, b: any) => new Date(b.dateCreated).getTime() - new Date(a.dateCreated).getTime())[0];
+      
+      if (latestPublished) {
+        // Test 1: modelid=modelId (bimObjectId)
+        const url1 = `${discovery.url}/GetXktData?modelid=${latestPublished.modelId}&context=Building&apiKey=${apiKey}`;
+        const r1 = await fetch(url1, { headers: { "Authorization": `Bearer ${accessToken}` } });
+        const b1 = await r1.text();
+        xktTests.push({ strategy: 'modelid=modelId only', url: url1, status: r1.status, bodyLen: b1.length, body: b1.substring(0, 200) });
+        
+        // Test 2: modelid=revisionId 
+        const url2 = `${discovery.url}/GetXktData?modelid=${latestPublished.revisionId}&context=Building&apiKey=${apiKey}`;
+        const r2 = await fetch(url2, { headers: { "Authorization": `Bearer ${accessToken}` } });
+        const b2 = await r2.text();
+        xktTests.push({ strategy: 'modelid=revisionId', url: url2, status: r2.status, bodyLen: b2.length, body: b2.substring(0, 200) });
+
+        // Test 3: modelid=modelId&bimobjectid=modelId 
+        const url3 = `${discovery.url}/GetXktData?modelid=${latestPublished.modelId}&bimobjectid=${latestPublished.modelId}&context=Building&apiKey=${apiKey}`;
+        const r3 = await fetch(url3, { headers: { "Authorization": `Bearer ${accessToken}` } });
+        const b3 = await r3.text();
+        xktTests.push({ strategy: 'modelid+bimobjectid=modelId', url: url3, status: r3.status, bodyLen: b3.length, body: b3.substring(0, 200) });
+        
+        // Test 4: modelid=revisionId&bimobjectid=modelId
+        const url4 = `${discovery.url}/GetXktData?modelid=${latestPublished.revisionId}&bimobjectid=${latestPublished.modelId}&context=Building&apiKey=${apiKey}`;
+        const r4 = await fetch(url4, { headers: { "Authorization": `Bearer ${accessToken}` } });
+        const b4 = await r4.text();
+        xktTests.push({ strategy: 'modelid=revisionId+bimobjectid=modelId', url: url4, status: r4.status, bodyLen: b4.length, body: b4.substring(0, 200) });
+        
+        // Test 5: different context values
+        for (const ctx of ['Default', 'Asset', 'Level']) {
+          const url5 = `${discovery.url}/GetXktData?modelid=${latestPublished.modelId}&bimobjectid=${latestPublished.modelId}&context=${ctx}&apiKey=${apiKey}`;
+          const r5 = await fetch(url5, { headers: { "Authorization": `Bearer ${accessToken}` } });
+          const b5 = await r5.text();
+          xktTests.push({ strategy: `context=${ctx}`, url: url5, status: r5.status, bodyLen: b5.length, body: b5.substring(0, 200) });
+        }
+      }
+      
       return new Response(JSON.stringify({
         totalRevisions: allRevs.length,
         buildingName: bName,
+        latestPublishedAModell: latestPublished || null,
+        xktTests,
         matchedRevisions: filtered,
-        sampleRevision: allRevs[0] || null,
         models: discovery.models,
       }, null, 2), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
