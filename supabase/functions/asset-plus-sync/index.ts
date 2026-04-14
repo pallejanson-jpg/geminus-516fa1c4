@@ -2969,6 +2969,7 @@ serve(async (req) => {
 
     // ============ DIAGNOSTIC: Dump revision data ============
     if (action === 'dump-revisions') {
+      const accessToken = await getAccessToken();
       const buildingFmGuid = body?.buildingFmGuid || '';
       const discovery = await discover3dModelsEndpoint(supabase, accessToken, apiUrl, apiKey, buildingFmGuid);
       if (!discovery.url) {
