@@ -2967,6 +2967,31 @@ serve(async (req) => {
       );
     }
 
+    // ============ DIAGNOSTIC: Dump revision data ============
+    if (action === 'dump-revisions') {
+      const buildingFmGuid = body?.buildingFmGuid || '';
+      const discovery = await discover3dModelsEndpoint(supabase, accessToken, apiUrl, apiKey, buildingFmGuid);
+      if (!discovery.url) {
+        return new Response(JSON.stringify({ error: 'No 3D endpoint' }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const revRes = await fetch(`${discovery.url}/GetAllModelRevisions`, {
+        headers: { "Authorization": `Bearer ${accessToken}` }
+      });
+      const revData = await revRes.json();
+      const allRevs = revData?.modelRevisions || (Array.isArray(revData) ? revData : []);
+      // Filter by building name if we have one
+      const { data: bldg } = await supabase.from('assets').select('common_name').eq('fm_guid', buildingFmGuid).eq('category', 'Building').maybeSingle();
+      const bName = bldg?.common_name || '';
+      const filtered = bName ? allRevs.filter((r: any) => String(r.entityName || '').toLowerCase() === bName.toLowerCase()) : allRevs;
+      return new Response(JSON.stringify({
+        totalRevisions: allRevs.length,
+        buildingName: bName,
+        matchedRevisions: filtered,
+        sampleRevision: allRevs[0] || null,
+        models: discovery.models,
+      }, null, 2), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     // ============ DEFAULT: Unknown action ============
     return new Response(
       JSON.stringify({ success: false, error: `Unknown action: ${action}` }),
