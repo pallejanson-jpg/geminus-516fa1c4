@@ -78,7 +78,7 @@ async function getAccessToken(): Promise<string> {
 // ============ ROBUST 3D ENDPOINT DISCOVERY ============
 // Uses Asset+ OpenAPI endpoints:
 //   GET /GetAllRelatedModels?fmguid={buildingFmGuid}  → BimModel[]
-//   GET /GetXktData?modelid={modelId}&context=Building → XKT binary
+//   GET /GetXktData?modelid={modelId}&context=Default → XKT binary
 interface EndpointDiscoveryResult {
   url: string | null;
   fromCache: boolean;
@@ -1669,7 +1669,7 @@ serve(async (req) => {
               
               // Strategy 1: Try with modelid + secondary param combos
               for (const combo of dedupCombos) {
-                const url = `${discovery.url}/GetXktData?modelid=${revModelId}&${combo.param}=${encodeURIComponent(combo.value)}&context=Building&apiKey=${apiKey}`;
+                const url = `${discovery.url}/GetXktData?modelid=${revModelId}&${combo.param}=${encodeURIComponent(combo.value)}&context=Default&apiKey=${apiKey}`;
                 try {
                   const controller = new AbortController();
                   const timeoutId = setTimeout(() => controller.abort(), 30000);
@@ -1691,7 +1691,7 @@ serve(async (req) => {
               
               // Strategy 2: Try bimobjectid-only (no modelid param at all)
               if (!xktData) {
-                const bimOnlyUrl = `${discovery.url}/GetXktData?bimobjectid=${bimObjId}&context=Building&apiKey=${apiKey}`;
+                const bimOnlyUrl = `${discovery.url}/GetXktData?bimobjectid=${bimObjId}&context=Default&apiKey=${apiKey}`;
                 console.log(`  Strategy 2: bimobjectid-only → ${bimOnlyUrl}`);
                 try {
                   const controller = new AbortController();
@@ -1714,7 +1714,7 @@ serve(async (req) => {
               
               // Strategy 3: Try modelid-only (no secondary identifier)
               if (!xktData) {
-                const url = `${discovery.url}/GetXktData?modelid=${revModelId}&context=Building&apiKey=${apiKey}`;
+                const url = `${discovery.url}/GetXktData?modelid=${revModelId}&context=Default&apiKey=${apiKey}`;
                 try {
                   const controller = new AbortController();
                   const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -1735,7 +1735,7 @@ serve(async (req) => {
               
               // Strategy 4: Try with bimobjectid as the modelid value
               if (!xktData) {
-                const url = `${discovery.url}/GetXktData?modelid=${bimObjId}&bimobjectid=${bimObjId}&context=Building&apiKey=${apiKey}`;
+                const url = `${discovery.url}/GetXktData?modelid=${bimObjId}&bimobjectid=${bimObjId}&context=Default&apiKey=${apiKey}`;
                 try {
                   const controller = new AbortController();
                   const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -1972,7 +1972,7 @@ serve(async (req) => {
         ): Promise<{ data: ArrayBuffer; usedIdentifier: string } | null> {
           for (const id of identifiers) {
             if (!id.value) continue;
-            const url = `${baseUrl}/GetXktData?modelid=${modelId}&${id.param}=${encodeURIComponent(id.value)}&context=Building&apiKey=${key}`;
+            const url = `${baseUrl}/GetXktData?modelid=${modelId}&${id.param}=${encodeURIComponent(id.value)}&context=Default&apiKey=${key}`;
             console.log(`Trying XKT: ${id.label} → ${url.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
             try {
               const res = await fetch(url, { headers: { "Authorization": `Bearer ${token}` } });
@@ -2995,25 +2995,25 @@ serve(async (req) => {
       
       if (latestPublished) {
         // Test 1: modelid=modelId (bimObjectId)
-        const url1 = `${discovery.url}/GetXktData?modelid=${latestPublished.modelId}&context=Building&apiKey=${apiKey}`;
+        const url1 = `${discovery.url}/GetXktData?modelid=${latestPublished.modelId}&context=Default&apiKey=${apiKey}`;
         const r1 = await fetch(url1, { headers: { "Authorization": `Bearer ${accessToken}` } });
         const b1 = await r1.text();
         xktTests.push({ strategy: 'modelid=modelId only', url: url1, status: r1.status, bodyLen: b1.length, body: b1.substring(0, 200) });
         
         // Test 2: modelid=revisionId 
-        const url2 = `${discovery.url}/GetXktData?modelid=${latestPublished.revisionId}&context=Building&apiKey=${apiKey}`;
+        const url2 = `${discovery.url}/GetXktData?modelid=${latestPublished.revisionId}&context=Default&apiKey=${apiKey}`;
         const r2 = await fetch(url2, { headers: { "Authorization": `Bearer ${accessToken}` } });
         const b2 = await r2.text();
         xktTests.push({ strategy: 'modelid=revisionId', url: url2, status: r2.status, bodyLen: b2.length, body: b2.substring(0, 200) });
 
         // Test 3: modelid=modelId&bimobjectid=modelId 
-        const url3 = `${discovery.url}/GetXktData?modelid=${latestPublished.modelId}&bimobjectid=${latestPublished.modelId}&context=Building&apiKey=${apiKey}`;
+        const url3 = `${discovery.url}/GetXktData?modelid=${latestPublished.modelId}&bimobjectid=${latestPublished.modelId}&context=Default&apiKey=${apiKey}`;
         const r3 = await fetch(url3, { headers: { "Authorization": `Bearer ${accessToken}` } });
         const b3 = await r3.text();
         xktTests.push({ strategy: 'modelid+bimobjectid=modelId', url: url3, status: r3.status, bodyLen: b3.length, body: b3.substring(0, 200) });
         
         // Test 4: modelid=revisionId&bimobjectid=modelId
-        const url4 = `${discovery.url}/GetXktData?modelid=${latestPublished.revisionId}&bimobjectid=${latestPublished.modelId}&context=Building&apiKey=${apiKey}`;
+        const url4 = `${discovery.url}/GetXktData?modelid=${latestPublished.revisionId}&bimobjectid=${latestPublished.modelId}&context=Default&apiKey=${apiKey}`;
         const r4 = await fetch(url4, { headers: { "Authorization": `Bearer ${accessToken}` } });
         const b4 = await r4.text();
         xktTests.push({ strategy: 'modelid=revisionId+bimobjectid=modelId', url: url4, status: r4.status, bodyLen: b4.length, body: b4.substring(0, 200) });
