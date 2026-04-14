@@ -1469,21 +1469,74 @@ serve(async (req) => {
 
           // Always build sync list from GetAllRelatedModels (which carries bimObjectId).
           // Enrich with revisionId and missing modelId from GetAllModelRevisions when available.
+          // IMPORTANT: Match revisions using bimObjectId first (exact), then scope name
+          // matching to the same building (entityName) to avoid cross-building collisions.
+          const buildingNameLower = String(buildingName).toLowerCase();
+          
+          // Also look up stored modelIds from assets table (Building Storey attributes)
+          let storedModelIds: Record<string, string> = {};
+          try {
+            const { data: storeys } = await supabase
+              .from('assets')
+              .select('name, attributes')
+              .eq('building_fm_guid', buildingFmGuid)
+              .eq('category', 'Building Storey')
+              .not('attributes', 'is', null);
+            if (storeys) {
+              for (const s of storeys) {
+                const attrs = typeof s.attributes === 'string' ? JSON.parse(s.attributes) : s.attributes;
+                if (attrs?.xktModelId) {
+                  const key = String(s.name || '').toLowerCase();
+                  if (key) storedModelIds[key] = attrs.xktModelId;
+                }
+              }
+            }
+            if (Object.keys(storedModelIds).length > 0) {
+              console.log(`  Found ${Object.keys(storedModelIds).length} stored modelIds from assets table`);
+            }
+          } catch {}
+          
           const modelsToSync = models.map((m: any) => {
             const rawModelId = m.modelId || m.id || m.ModelId || '';
             const bimObjId = m.bimObjectId || m.BimObjectId || '';
             const mName = m.name || m.modelName || m.Name || `Model`;
             const modelNameLower = String(mName).toLowerCase();
-            const matchedRev = allRevisions.find((rev: any) => {
-              const revModelId = String(rev.modelId || '');
-              if (rawModelId && revModelId === String(rawModelId)) return true;
-              // Also match by bimObjectId
-              if (bimObjId && String(rev.bimObjectId || rev.BimObjectId || '') === bimObjId) return true;
-              const revName = String(rev.modelName || '').toLowerCase();
-              return !!(revName && modelNameLower && (revName === modelNameLower || revName.includes(modelNameLower) || modelNameLower.includes(revName)));
-            });
-            // Use bimObjectId as fallback modelId — Asset+ GetXktData accepts it
-            const resolvedModelId = String(rawModelId || matchedRev?.modelId || bimObjId || '');
+            
+            // Step A: Match by bimObjectId (exact)
+            let matchedRev = bimObjId ? allRevisions.find((rev: any) => {
+              const revBim = String(rev.bimObjectId || rev.BimObjectId || '');
+              return revBim && revBim === bimObjId;
+            }) : null;
+            
+            // Step B: Match by modelId (exact)
+            if (!matchedRev && rawModelId) {
+              matchedRev = allRevisions.find((rev: any) => String(rev.modelId || '') === String(rawModelId));
+            }
+            
+            // Step C: Match by name, but ONLY within the same building (entityName filter)
+            if (!matchedRev && modelNameLower) {
+              const buildingScopedRevs = allRevisions.filter((rev: any) => {
+                const revEntity = String(rev.entityName || '').toLowerCase();
+                return revEntity && revEntity === buildingNameLower;
+              });
+              matchedRev = buildingScopedRevs.find((rev: any) => {
+                const revName = String(rev.modelName || '').toLowerCase();
+                return revName && (revName === modelNameLower || revName.includes(modelNameLower) || modelNameLower.includes(revName));
+              });
+            }
+            
+            // Resolve modelId: prefer revision's modelId, then stored modelId, then raw, then bimObjId
+            const storedId = storedModelIds[modelNameLower] || '';
+            const resolvedModelId = String(matchedRev?.modelId || storedId || rawModelId || bimObjId || '');
+            
+            if (matchedRev?.modelId) {
+              console.log(`  ✓ ${mName}: matched revision modelId=${matchedRev.modelId} (entityName=${matchedRev.entityName})`);
+            } else if (storedId) {
+              console.log(`  ◆ ${mName}: using stored modelId=${storedId} from assets table`);
+            } else {
+              console.log(`  ⚠ ${mName}: no revision match, using fallback modelId=${resolvedModelId}`);
+            }
+            
             return {
               modelId: resolvedModelId,
               revisionId: matchedRev?.revisionId || m.revisionId || m.RevisionId || '',
@@ -1492,8 +1545,36 @@ serve(async (req) => {
               _bimObjectId: bimObjId || m.fmGuid || m.FmGuid || '',
               fmGuid: m.fmGuid || m.FmGuid || '',
               externalGuid: m.externalGuid || m.ExternalGuid || '',
+              _resolvedFromRevision: !!matchedRev?.modelId,
             };
           }).filter((m: any) => !!m.modelId);
+          
+          // Store resolved modelIds back to assets table for future use
+          for (const m of modelsToSync) {
+            if (m._resolvedFromRevision && m.modelId) {
+              try {
+                const mNameLower = String(m.modelName).toLowerCase();
+                // Find matching Building Storey by name pattern
+                const { data: storeyRows } = await supabase
+                  .from('assets')
+                  .select('id, attributes, name')
+                  .eq('building_fm_guid', buildingFmGuid)
+                  .eq('category', 'Building Storey')
+                  .ilike('name', `%${m.modelName}%`);
+                if (storeyRows && storeyRows.length > 0) {
+                  for (const row of storeyRows) {
+                    const existing = typeof row.attributes === 'string' ? JSON.parse(row.attributes) : (row.attributes || {});
+                    if (existing.xktModelId !== m.modelId) {
+                      await supabase.from('assets').update({
+                        attributes: { ...existing, xktModelId: m.modelId }
+                      }).eq('id', row.id);
+                      console.log(`  💾 Stored modelId=${m.modelId} in Building Storey "${row.name}"`);
+                    }
+                  }
+                }
+              } catch {}
+            }
+          }
           
           console.log(`Building ${buildingName}: ${modelsToSync.length} models to sync (from GetAllRelatedModels, ${allRevisions.length} total revisions)`);
           
