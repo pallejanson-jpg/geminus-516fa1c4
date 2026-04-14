@@ -2970,6 +2970,8 @@ serve(async (req) => {
     // ============ DIAGNOSTIC: Dump revision data ============
     if (action === 'dump-revisions') {
       const accessToken = await getAccessToken();
+      const apiUrl = _creds.apiUrl || Deno.env.get("ASSET_PLUS_API_URL") || "";
+      const apiKey = _creds.apiKey || Deno.env.get("ASSET_PLUS_API_KEY") || "";
       const buildingFmGuid = body?.buildingFmGuid || '';
       const discovery = await discover3dModelsEndpoint(supabase, accessToken, apiUrl, apiKey, buildingFmGuid);
       if (!discovery.url) {
