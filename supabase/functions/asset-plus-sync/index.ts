@@ -1454,9 +1454,20 @@ serve(async (req) => {
                 const revData = await revRes.json();
                 allRevisions = revData?.modelRevisions || (Array.isArray(revData) ? revData : []);
                 console.log(`Loaded ${allRevisions.length} model revisions`);
-                // Log first 5 revisions for debugging
-                for (let ri = 0; ri < Math.min(5, allRevisions.length); ri++) {
-                  console.log(`  Revision[${ri}]: ${JSON.stringify(allRevisions[ri])}`);
+                // Log first 3 revisions with ALL fields for debugging
+                for (let ri = 0; ri < Math.min(3, allRevisions.length); ri++) {
+                  console.log(`  RevFull[${ri}]: ${JSON.stringify(allRevisions[ri])}`);
+                }
+                // Log revisions matching Småviken
+                const smavikenRevs = allRevisions.filter((r: any) => 
+                  String(r.entityName || '').toLowerCase().includes('småviken') ||
+                  String(r.entityName || '').toLowerCase().includes('smaviken')
+                );
+                if (smavikenRevs.length > 0) {
+                  console.log(`  🔍 Found ${smavikenRevs.length} Småviken revisions:`);
+                  for (const sr of smavikenRevs) {
+                    console.log(`    SmåvikenRev: ${JSON.stringify(sr)}`);
+                  }
                 }
               } else {
                 console.log(`GetAllModelRevisions failed: ${revRes.status}`);
