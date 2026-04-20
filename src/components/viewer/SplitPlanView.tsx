@@ -1262,18 +1262,19 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
                     left: `${label.x}%`,
                     top: `${label.y}%`,
                     transform: 'translate(-50%, -50%)',
-                    fontSize: '6px',
+                    fontSize: '11px',
                     fontWeight: 500,
                     color: '#000000',
-                    textShadow: '0 0 2px white, 0 0 2px white',
+                    textShadow: '0 0 3px white, 0 0 3px white, 0 0 3px white',
                     whiteSpace: 'nowrap',
-                    maxWidth: '60px',
+                    maxWidth: '120px',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
+                    lineHeight: 1.15,
                   }}
                 >
                   {label.number && <div style={{ fontWeight: 600 }}>{label.number}</div>}
-                  {label.name && <div style={{ fontSize: '5px', opacity: 0.85 }}>{label.name}</div>}
+                  {label.name && <div style={{ fontSize: '10px', opacity: 0.9 }}>{label.name}</div>}
                 </div>
               ))}
             </div>
