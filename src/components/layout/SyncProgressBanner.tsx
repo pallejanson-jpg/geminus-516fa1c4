@@ -176,18 +176,20 @@ export const SyncProgressBanner: React.FC = () => {
     return () => clearInterval(timer);
   }, [activeSyncs.length]);
 
-  // Auto-resume stale "assets" or "structure" jobs once per page load
-  useEffect(() => {
-    if (autoResumedRef.current || resumeRef.current || isResuming) return;
-    const staleSync = activeSyncs.find(
-      s => (s.subtree_id === 'assets' || s.subtree_id === 'structure') && isStale(s)
-    );
-    if (staleSync) {
-      autoResumedRef.current = true;
-      console.log(`[SyncProgressBanner] Auto-resuming stale ${staleSync.subtree_id} sync`);
-      handleResume(staleSync.subtree_id);
-    }
-  }, [activeSyncs, isStale, handleResume, isResuming]);
+  // Auto-resume DISABLED — was causing runaway sync loops when the structure
+  // sync repeatedly returns interrupted:true without progressing.
+  // User must now manually click "Resume" from the banner.
+  // useEffect(() => {
+  //   if (autoResumedRef.current || resumeRef.current || isResuming) return;
+  //   const staleSync = activeSyncs.find(
+  //     s => (s.subtree_id === 'assets' || s.subtree_id === 'structure') && isStale(s)
+  //   );
+  //   if (staleSync) {
+  //     autoResumedRef.current = true;
+  //     console.log(`[SyncProgressBanner] Auto-resuming stale ${staleSync.subtree_id} sync`);
+  //     handleResume(staleSync.subtree_id);
+  //   }
+  // }, [activeSyncs, isStale, handleResume, isResuming]);
 
   useEffect(() => {
     const fetchSyncStates = async () => {
