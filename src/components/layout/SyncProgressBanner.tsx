@@ -49,7 +49,16 @@ export const SyncProgressBanner: React.FC = () => {
     const isStructure = subtreeId === 'structure';
     const action = isStructure ? 'sync-structure' : 'sync-assets-resumable';
 
+    // Track progress between iterations to detect "stuck" loops where the function
+    // keeps returning interrupted:true without actually advancing.
+    let lastTotalSynced = -1;
+    let stuckCount = 0;
+    const MAX_STUCK_ITERATIONS = 2;
+    const MAX_TOTAL_ITERATIONS = 30; // hard cap to avoid runaway
+    let iterations = 0;
+
     const runLoop = async () => {
+      iterations++;
       try {
         const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
           body: { action }
@@ -64,6 +73,26 @@ export const SyncProgressBanner: React.FC = () => {
         }
 
         if (data?.interrupted) {
+          const currentTotal = data?.totalSynced ?? 0;
+          if (currentTotal === lastTotalSynced) {
+            stuckCount++;
+          } else {
+            stuckCount = 0;
+            lastTotalSynced = currentTotal;
+          }
+
+          if (stuckCount >= MAX_STUCK_ITERATIONS || iterations >= MAX_TOTAL_ITERATIONS) {
+            console.warn(`[SyncProgressBanner] Aborting sync loop — no progress after ${stuckCount} attempts (total iterations: ${iterations})`);
+            toast({
+              variant: 'destructive',
+              title: 'Sync stuck',
+              description: `Sync stopped advancing at ${currentTotal.toLocaleString()} items. Use Reset and try again.`,
+            });
+            setIsResuming(false);
+            resumeRef.current = false;
+            return;
+          }
+
           setTimeout(() => runLoop(), 2000);
         } else {
           toast({
@@ -147,18 +176,20 @@ export const SyncProgressBanner: React.FC = () => {
     return () => clearInterval(timer);
   }, [activeSyncs.length]);
 
-  // Auto-resume stale "assets" or "structure" jobs once per page load
-  useEffect(() => {
-    if (autoResumedRef.current || resumeRef.current || isResuming) return;
-    const staleSync = activeSyncs.find(
-      s => (s.subtree_id === 'assets' || s.subtree_id === 'structure') && isStale(s)
-    );
-    if (staleSync) {
-      autoResumedRef.current = true;
-      console.log(`[SyncProgressBanner] Auto-resuming stale ${staleSync.subtree_id} sync`);
-      handleResume(staleSync.subtree_id);
-    }
-  }, [activeSyncs, isStale, handleResume, isResuming]);
+  // Auto-resume DISABLED — was causing runaway sync loops when the structure
+  // sync repeatedly returns interrupted:true without progressing.
+  // User must now manually click "Resume" from the banner.
+  // useEffect(() => {
+  //   if (autoResumedRef.current || resumeRef.current || isResuming) return;
+  //   const staleSync = activeSyncs.find(
+  //     s => (s.subtree_id === 'assets' || s.subtree_id === 'structure') && isStale(s)
+  //   );
+  //   if (staleSync) {
+  //     autoResumedRef.current = true;
+  //     console.log(`[SyncProgressBanner] Auto-resuming stale ${staleSync.subtree_id} sync`);
+  //     handleResume(staleSync.subtree_id);
+  //   }
+  // }, [activeSyncs, isStale, handleResume, isResuming]);
 
   useEffect(() => {
     const fetchSyncStates = async () => {
