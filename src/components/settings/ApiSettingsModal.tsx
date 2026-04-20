@@ -1910,9 +1910,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
     useEffect(() => {
         if (isOpen && !hasCheckedSync) {
+            // Lightweight reads only — no remote API checks on open.
+            // The user must click "Check Status" or a "Sync" button to trigger remote work.
             fetchSyncStatus();
             fetchConfig();
-            checkSyncStatus();
             fetchSyncProgress();
             fetchFavoriteBuildings();
             fetchCongeriaData();

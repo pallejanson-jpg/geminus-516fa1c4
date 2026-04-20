@@ -37,9 +37,9 @@ interface SyncProgressCardProps {
 
 const formatDate = (dateStr: string | null, fallbackDateStr?: string | null) => {
   const dateToUse = dateStr || fallbackDateStr;
-  if (!dateToUse) return 'Aldrig';
+  if (!dateToUse) return 'Never';
   const date = new Date(dateToUse);
-  return date.toLocaleDateString('sv-SE', {
+  return date.toLocaleDateString('en-GB', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -66,13 +66,13 @@ export const SyncProgressCard: React.FC<SyncProgressCardProps> = ({
   subtitle,
   localCount,
   remoteCount,
-  remoteLabel = 'i Asset+',
+  remoteLabel = 'in Asset+',
   inSync,
   isSyncing,
   isCheckingSync,
   disabled,
   onSync,
-  syncButtonLabel = 'Synka',
+  syncButtonLabel = 'Sync',
   syncButtonVariant = 'default',
   syncStartedAt,
   syncCompletedAt,
@@ -109,7 +109,7 @@ export const SyncProgressCard: React.FC<SyncProgressCardProps> = ({
       const remainingSec = totalEstimated - elapsedSec;
       return {
         elapsed: formatDuration(elapsedSec),
-        eta: remainingSec > 0 ? `~${formatDuration(remainingSec)} kvar` : 'Snart klar...',
+        eta: remainingSec > 0 ? `~${formatDuration(remainingSec)} left` : 'Almost done...',
       };
     }
 
@@ -141,12 +141,12 @@ export const SyncProgressCard: React.FC<SyncProgressCardProps> = ({
           ) : inSync === true ? (
             <Badge variant="default" className="bg-green-600 text-xs gap-1">
               <CheckCircle2 className="h-3 w-3" />
-              I synk
+              In sync
             </Badge>
           ) : inSync === false ? (
             <Badge variant="destructive" className="text-xs gap-1">
               <AlertCircle className="h-3 w-3" />
-              Ej synkad
+              Out of sync
             </Badge>
           ) : null}
         </div>
@@ -155,7 +155,7 @@ export const SyncProgressCard: React.FC<SyncProgressCardProps> = ({
       {/* Counts + Sync button */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          {localCount.toLocaleString()} lokala
+          {localCount.toLocaleString()} local
           {remoteCount != null && ` • ${remoteCount.toLocaleString()} ${remoteLabel}`}
         </p>
         <div className="flex items-center gap-2">
@@ -172,7 +172,7 @@ export const SyncProgressCard: React.FC<SyncProgressCardProps> = ({
             ) : (
               <RefreshCw className="h-3 w-3" />
             )}
-            {isRunning ? 'Synkar...' : syncButtonLabel}
+            {isRunning ? 'Syncing...' : syncButtonLabel}
           </Button>
         </div>
       </div>
@@ -193,8 +193,8 @@ export const SyncProgressCard: React.FC<SyncProgressCardProps> = ({
               <span className="flex items-center gap-1">
                 {progressLabel || (
                   totalSynced != null
-                    ? `${totalSynced.toLocaleString()} objekt synkade`
-                    : 'Synkroniserar...'
+                    ? `${totalSynced.toLocaleString()} objects synced`
+                    : 'Synchronizing...'
                 )}
               </span>
               <span className="flex items-center gap-1">
@@ -225,7 +225,7 @@ export const SyncProgressCard: React.FC<SyncProgressCardProps> = ({
       {!isRunning && (syncStatus || syncStartedAt || syncCompletedAt) && (
         <div className="text-xs text-muted-foreground border-t pt-2 space-y-1">
           <div className="flex items-center gap-1">
-            <span>Senast: {formatDate(syncCompletedAt, syncStartedAt)}</span>
+            <span>Last: {formatDate(syncCompletedAt, syncStartedAt)}</span>
             {errorMessage && (
               <span className="text-destructive ml-2 line-clamp-1">{errorMessage}</span>
             )}
