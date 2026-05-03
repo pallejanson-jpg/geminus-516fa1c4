@@ -441,6 +441,19 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
       }
     }
 
+    // Mobile guard: never auto-load engineering models — let user opt in
+    if (isMobile && secondaryQueue.length > 0) {
+      console.log(`[ModelLoader] Mobile mode — deferring ${secondaryQueue.length} secondary models (user can load via toolbar)`);
+    }
+
+    // Memory guard: estimate combined size and abort secondary auto-promote on overflow
+    const SOFT_LIMIT_BYTES = isMobile ? 60 * 1024 * 1024 : 150 * 1024 * 1024;
+    const primarySize = loadList.reduce((s, m) => s + (m.file_size ?? 0), 0);
+    const secondarySize = secondaryQueue.reduce((s, m) => s + (m.file_size ?? 0), 0);
+    if (primarySize + secondarySize > SOFT_LIMIT_BYTES) {
+      console.warn(`[ModelLoader] Memory guard: estimated ${((primarySize+secondarySize)/1024/1024).toFixed(1)}MB exceeds soft limit ${(SOFT_LIMIT_BYTES/1024/1024).toFixed(0)}MB — keeping secondary deferred`);
+    }
+
     if (loadList.length === 0) return { loaded: 0, secondaryQueue: [], chunkModels, hasRealTiles };
 
     // Pre-fetch metadata file list
