@@ -27,6 +27,26 @@ export const IFC_TYPE_COLORS: Record<string, number[]> = {
   'ifcfurniture': [0.451, 0.545, 0.467],
   'ifcbuildingelementproxy': [0.451, 0.545, 0.467],
   'ifccasework': [0.451, 0.545, 0.467],
+  // VVS / piping (muted copper/brass)
+  'ifcpipesegment': [0.65, 0.55, 0.45],
+  'ifcpipefitting': [0.65, 0.55, 0.45],
+  'ifcvalve': [0.55, 0.50, 0.45],
+  'ifcsanitaryterminal': [0.80, 0.80, 0.78],
+  'ifcflowterminal': [0.70, 0.70, 0.68],
+  // HVAC ducts (light grey-blue)
+  'ifcductsegment': [0.70, 0.72, 0.74],
+  'ifcductfitting': [0.70, 0.72, 0.74],
+  'ifcairterminal': [0.75, 0.78, 0.80],
+  'ifcairterminalbox': [0.72, 0.74, 0.76],
+  // Electrical (warm yellow-grey)
+  'ifccablesegment': [0.55, 0.50, 0.40],
+  'ifccablecarriersegment': [0.60, 0.55, 0.45],
+  'ifccablecarrierfitting': [0.60, 0.55, 0.45],
+  'ifccarriersegment': [0.60, 0.55, 0.45],
+  'ifcelectricappliance': [0.85, 0.78, 0.55],
+  'ifclightfixture': [0.92, 0.88, 0.65],
+  'ifcoutlet': [0.80, 0.75, 0.55],
+  'ifcswitchingdevice': [0.75, 0.70, 0.50],
 };
 
 export const DEFAULT_COLOR = [0.933, 0.929, 0.918];
