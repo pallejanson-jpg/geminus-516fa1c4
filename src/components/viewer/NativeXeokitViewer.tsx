@@ -49,6 +49,33 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
     return () => { mountedRef.current = false; };
   }, []);
 
+  // ── webglcontextlost recovery: clean secondary models, surface recovery UI ──
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const handler = (e: Event) => {
+      e.preventDefault();
+      console.warn('[NativeViewer] webglcontextlost — destroying secondary models');
+      try {
+        const v = (window as any).__nativeXeokitViewer;
+        if (v?.scene?.models) {
+          for (const [id, m] of Object.entries(v.scene.models as Record<string, any>)) {
+            const upper = String(id).toUpperCase();
+            const isArch = upper.startsWith('A') || upper.includes('ARK') || upper.includes('ARCHITECT');
+            if (!isArch) { try { (m as any).destroy?.(); } catch {} }
+          }
+        }
+      } catch {}
+      (window as any).__xeokitNativeColors = undefined;
+      if (mountedRef.current) {
+        setErrorMsg('GPU memory exhausted. The engineering models have been unloaded — reload to continue with the architectural model only.');
+        setPhase('error');
+      }
+    };
+    canvas.addEventListener('webglcontextlost', handler as any, false);
+    return () => canvas.removeEventListener('webglcontextlost', handler as any);
+  }, []);
+
   // ── Hook: xeokit instance lifecycle ──
   // ── Hook: xeokit instance lifecycle ──
   const { viewerRef, createInstance, destroy } = useXeokitInstance({
