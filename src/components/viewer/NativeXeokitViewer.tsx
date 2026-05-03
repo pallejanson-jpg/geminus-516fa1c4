@@ -205,17 +205,33 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }
         (window as any).__xeokitNativeColors = nativeColors;
 
-        // Native model colors are preserved by default — architect palette is opt-in via theme selector
-        console.log(`[NativeViewer] Native model colors preserved. ${finalIds.length} total entities`);
-        
-        // Log AABB for diagnostics
-        try {
-          const aabb = viewer.scene.aabb;
-          console.log(`[NativeViewer] Scene AABB: [${aabb?.map((v: number) => v.toFixed(1)).join(', ')}]`);
-        } catch {}
-        
-        // Native model colors are the default — do NOT restore saved theme on startup
-      }
+        // Detect raw red defaults / missing A-model — apply architect palette automatically
+        let needsArchitectColors = false;
+        const sceneModels = viewer.scene.models || {};
+        const loadedNames: string[] = Object.values(sceneModels).map((m: any) => String(m?.id || '').toUpperCase());
+        const hasArchModel = loadedNames.some(n => n.startsWith('A') || n.includes('ARK') || n.includes('ARCHITECT'));
+        if (!hasArchModel) {
+          needsArchitectColors = true;
+        } else if (viewer.scene.objects) {
+          let redCount = 0;
+          let sampled = 0;
+          const sampleIds = finalIds.slice(0, Math.min(500, finalIds.length));
+          for (const id of sampleIds) {
+            const e = viewer.scene.objects[id];
+            if (!e) continue;
+            sampled++;
+            const c = e.colorize;
+            const isRedish = !c || (c[0] >= 0.95 && c[1] <= 0.1 && c[2] <= 0.1);
+            if (isRedish) redCount++;
+          }
+          if (sampled > 0 && (redCount / sampled) > 0.05) needsArchitectColors = true;
+        }
+        if (needsArchitectColors) {
+          console.log(`[NativeViewer] Applying architect colors (hasArch=${hasArchModel})`);
+          try { applyArchitectColors(viewer); } catch (e) { console.warn('[NativeViewer] applyArchitectColors failed', e); }
+        } else {
+          console.log(`[NativeViewer] Native model colors preserved. ${finalIds.length} total entities`);
+        }
 
       const totalTime = Math.round(performance.now() - t0);
       console.log(`%c[NativeViewer] 🎉 All ${loaded} models loaded in ${totalTime}ms`, 'color:#22c55e;font-weight:bold;font-size:14px');
