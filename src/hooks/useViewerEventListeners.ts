@@ -10,6 +10,7 @@ import { useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeGuid } from '@/lib/utils';
 import { applyArchitectColors } from '@/lib/architect-colors';
+import { toast } from 'sonner';
 import { emit, on } from '@/lib/event-bus';
 import {
   INSIGHTS_COLOR_UPDATE_EVENT,
@@ -144,35 +145,28 @@ export function useViewerEventListeners({
       const metaObjects = viewer.metaScene.metaObjects;
       if (!metaObjects) return;
 
-      // X-ray everything first
-      const xrayMat = scene.xrayMaterial;
-      if (xrayMat) {
-        xrayMat.fill = true; xrayMat.fillAlpha = 0.08; xrayMat.fillColor = [0.55, 0.55, 0.6];
-        xrayMat.edges = true; xrayMat.edgeAlpha = 0.15;
-      }
-      scene.setObjectsXRayed(scene.objectIds, true);
-      (window as any).__colorFilterActive = true;
-
+      // Buffer matches first — defer xray until we know matchCount > 0
       let matchCount = 0;
       const alreadyColored = new Set<string>();
+      const pendingColorizations: Array<{ id: string; rgb: [number, number, number]; opacity: number }> = [];
 
-      const colorizeEntity = (mo: any, rgb: [number, number, number]) => {
+      const colorizeEntity = (mo: any, rgb: [number, number, number], opacity = 1.0) => {
         const entity = scene.objects?.[mo.id];
         if (entity) {
-          entity.xrayed = false; entity.visible = true;
-          entity.colorize = rgb; entity.opacity = 1.0;
+          pendingColorizations.push({ id: mo.id, rgb, opacity });
           alreadyColored.add(mo.id);
           matchCount++;
         }
       };
-
+      // ── colorize logic continues below ──
+      // (inserted opening brace replaced — see closing log line for end)
+      const _runColorize = () => {
       // Direct entity ID map (bypass GUID matching)
       if (detail.entityColorMap) {
         Object.entries(detail.entityColorMap).forEach(([entityId, rgb]) => {
           const entity = scene.objects?.[entityId];
           if (entity) {
-            entity.xrayed = false; entity.visible = true;
-            entity.colorize = rgb; entity.opacity = 0.85;
+            pendingColorizations.push({ id: entityId, rgb, opacity: 0.85 });
             alreadyColored.add(entityId);
             matchCount++;
           }
@@ -193,6 +187,15 @@ export function useViewerEventListeners({
 
       const fmGuidLookup = new Map<string, [number, number, number]>();
       Object.entries(colorMap).forEach(([key, rgb]) => fmGuidLookup.set(normalizeGuid(key), rgb));
+
+      // Build a name lookup from colorMap keys (room names) as a fallback
+      const roomNameRegistry = (window as any).__roomNameRegistry as Map<string, string> | undefined;
+      const guidByRoomName = new Map<string, string>();
+      if (roomNameRegistry) {
+        roomNameRegistry.forEach((name: string, guid: string) => {
+          if (name) guidByRoomName.set(name.toLowerCase().trim(), normalizeGuid(guid));
+        });
+      }
 
       if (mode === 'asset_category' || mode === 'asset_categories') {
         const typeColorLookup = new Map<string, [number, number, number]>();
@@ -223,6 +226,11 @@ export function useViewerEventListeners({
           const moName = (mo.name || '').toLowerCase().trim();
           let rgb = fmGuidLookup.get(sysId) || fmGuidLookup.get(moId);
           if (!rgb && !useStrictGuidMode && moName && nameColorMap[moName]) rgb = nameColorMap[moName];
+          // Broader fallback: match metaObject name against room name registry
+          if (!rgb && isRoomMode && moName) {
+            const altGuid = guidByRoomName.get(moName);
+            if (altGuid) rgb = fmGuidLookup.get(altGuid);
+          }
           if (rgb) {
             if (isRoomMode) {
               const entity = scene.objects?.[mo.id];
@@ -233,7 +241,7 @@ export function useViewerEventListeners({
               const colorizeChildren = (obj: any) => {
                 obj.children?.forEach((child: any) => {
                   const e = scene.objects?.[child.id];
-                  if (e) { e.xrayed = false; e.visible = true; e.colorize = rgb!; e.opacity = 1.0; matchCount++; }
+                  if (e) { pendingColorizations.push({ id: child.id, rgb: rgb!, opacity: 1.0 }); matchCount++; }
                   colorizeChildren(child);
                 });
               };
@@ -242,7 +250,39 @@ export function useViewerEventListeners({
           }
         });
       }
+      };
+      _runColorize();
+
       console.log('[ViewerEvents] INSIGHTS_COLOR_UPDATE:', mode, Object.keys(colorMap).length, 'entries,', matchCount, 'matched');
+
+      if (matchCount === 0) {
+        // Don't xray — restore visibility and warn
+        (window as any).__colorFilterActive = false;
+        console.warn('[ViewerEvents] No entity matches for color filter — skipping xray pass');
+        try {
+          toast.warning('No matching geometry in loaded model', {
+            description: 'The architectural (A-) model is required for this filter. Load it via Filter → Models.',
+          });
+        } catch {}
+        return;
+      }
+
+      // Now safe to xray + apply buffered colorizations
+      const xrayMat = scene.xrayMaterial;
+      if (xrayMat) {
+        xrayMat.fill = true; xrayMat.fillAlpha = 0.08; xrayMat.fillColor = [0.55, 0.55, 0.6];
+        xrayMat.edges = true; xrayMat.edgeAlpha = 0.15;
+      }
+      scene.setObjectsXRayed(scene.objectIds, true);
+      (window as any).__colorFilterActive = true;
+
+      for (const { id, rgb, opacity } of pendingColorizations) {
+        const entity = scene.objects?.[id];
+        if (entity) {
+          entity.xrayed = false; entity.visible = true;
+          entity.colorize = rgb; entity.opacity = opacity;
+        }
+      }
     };
     const off = on('INSIGHTS_COLOR_UPDATE', handler);
     return () => off();
