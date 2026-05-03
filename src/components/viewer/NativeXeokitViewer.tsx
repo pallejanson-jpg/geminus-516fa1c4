@@ -233,6 +233,13 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           console.log(`[NativeViewer] Native model colors preserved. ${finalIds.length} total entities`);
         }
 
+        // Log AABB for diagnostics
+        try {
+          const aabb = viewer.scene.aabb;
+          console.log(`[NativeViewer] Scene AABB: [${aabb?.map((v: number) => v.toFixed(1)).join(', ')}]`);
+        } catch {}
+      }
+
       const totalTime = Math.round(performance.now() - t0);
       console.log(`%c[NativeViewer] 🎉 All ${loaded} models loaded in ${totalTime}ms`, 'color:#22c55e;font-weight:bold;font-size:14px');
       const memStats = getMemoryStats();
