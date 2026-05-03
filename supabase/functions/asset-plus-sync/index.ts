@@ -2050,6 +2050,41 @@ serve(async (req) => {
             const fileSize = xktData.byteLength;
             console.log(`Model ${modelId} (${modelName}): Downloaded ${(fileSize / 1024 / 1024).toFixed(2)} MB via ${result.usedIdentifier}`);
 
+            // ── Shrinkage guard: reject obviously truncated revisions ──
+            // Look up any prior cached row for this building matching either model_id, model_name, or bimObjectId
+            const { data: priorRows } = await supabase
+              .from('xkt_models')
+              .select('model_id, model_name, file_size, source_updated_at, source_url')
+              .eq('building_fm_guid', buildingFmGuid);
+            let priorSize = 0;
+            let priorRevision = '';
+            if (priorRows?.length) {
+              const lcModelName = (modelName || '').toLowerCase().trim();
+              const match = priorRows.find((r: any) =>
+                r.model_id === modelId ||
+                (lcModelName && (r.model_name || '').toLowerCase().trim() === lcModelName) ||
+                (bimObjectId && (r.source_url || '').includes(bimObjectId))
+              );
+              if (match) {
+                priorSize = match.file_size || 0;
+                priorRevision = match.source_updated_at || '';
+              }
+            }
+            const revisionUnchanged = !revisionId || !priorRevision || priorRevision === revisionId;
+            if (priorSize > 0 && fileSize < priorSize * 0.5 && revisionUnchanged) {
+              const warnMsg = `XKT shrinkage rejected for ${modelName}: ${(priorSize/1024/1024).toFixed(2)}MB → ${(fileSize/1024/1024).toFixed(2)}MB (revision unchanged) — keeping previous file`;
+              console.warn(`⚠️  ${warnMsg}`);
+              modelErrors.push(warnMsg);
+              try {
+                await supabase.from('sync_events' as any).insert({
+                  building_fm_guid: buildingFmGuid,
+                  event_type: 'xkt_shrinkage_rejected',
+                  payload: { modelId, modelName, priorSize, newSize: fileSize, revisionId, bimObjectId },
+                } as any);
+              } catch {}
+              continue;
+            }
+
             // Upload to storage with no-cache
             const { error: uploadError } = await supabase.storage
               .from('xkt-models')
