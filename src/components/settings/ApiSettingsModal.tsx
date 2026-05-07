@@ -172,10 +172,10 @@ const AccFolderNode: React.FC<{
                             <DatabaseIcon className="h-3 w-3" />
                         )}
                         {isSyncingThisFolder
-                            ? (bimSyncProgress || 'Synkar...')
+                            ? (bimSyncProgress || 'Syncing...')
                             : selectedCount > 0
-                                ? `Synka ${selectedCount}`
-                                : 'Synka BIM'}
+                                ? `Sync ${selectedCount}`
+                                : 'Sync BIM'}
                     </Button>
                 )}
             </div>
@@ -751,7 +751,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             });
             if (error) throw error;
             if (data?.success) {
-                toast({ title: 'Synk klar', description: data.message });
+                toast({ title: 'Sync complete', description: data.message });
                 if (data.hint) {
                     setAccLocationsHint(data.hint);
                 } else {
@@ -759,7 +759,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 }
                 handleCheckAccStatus();
             } else {
-                toast({ variant: 'destructive', title: 'Synk misslyckades', description: data?.error });
+                toast({ variant: 'destructive', title: 'Sync failed', description: data?.error });
             }
         } catch (err: any) {
             toast({ variant: 'destructive', title: 'Fel', description: err.message });
@@ -781,10 +781,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             });
             if (error) throw error;
             if (data?.success) {
-                toast({ title: 'Synk klar', description: data.message });
+                toast({ title: 'Sync complete', description: data.message });
                 handleCheckAccStatus();
             } else {
-                toast({ variant: 'destructive', title: 'Synk misslyckades', description: data?.error });
+                toast({ variant: 'destructive', title: 'Sync failed', description: data?.error });
             }
         } catch (err: any) {
             toast({ variant: 'destructive', title: 'Fel', description: err.message });
@@ -858,7 +858,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             // Refresh status
             handleCheckAccToAssetPlus();
         } catch (err: any) {
-            toast({ variant: 'destructive', title: 'Synk misslyckades', description: err.message });
+            toast({ variant: 'destructive', title: 'Sync failed', description: err.message });
         } finally {
             setIsSyncingAccToAp(false);
         }
@@ -1607,7 +1607,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             const links = data?.linksCreated || 0;
             if (created > 0 || links > 0) {
                 toast({
-                    title: "Tekniska system synkade",
+                    title: "Technical systems synced",
                     description: `${created} system, ${links} kopplingar extraherade.`,
                 });
             }
@@ -1859,7 +1859,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         } catch (error: any) {
             toast({
                 variant: "destructive",
-                title: "Synk misslyckades",
+                title: "Sync failed",
                 description: error.message,
             });
             setIsSyncingStructure(false);
@@ -1878,7 +1878,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
             toast({
                 title: "Inkrementell synk startad",
-                description: "Synkar endast ändrade objekt sedan senaste synk.",
+                description: "Syncs only changed objects since last sync.",
             });
 
             const pollInterval = setInterval(async () => {
@@ -2168,7 +2168,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 description: parts.join(', ') || 'Inget att synka.',
             });
         } catch (error: any) {
-            toast({ variant: 'destructive', title: 'Synkfel', description: error.message });
+            toast({ variant: 'destructive', title: 'Sync error', description: error.message });
         } finally {
             setIsSyncingFmAccess(false);
         }
@@ -2991,7 +2991,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                                         className="gap-1 w-full sm:w-auto"
                                                                     >
                                                                         {isSyncingAccLocations ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Building2 className="h-3.5 w-3.5" />}
-                                                                        Synka platser
+                                                                        Sync places
                                                                     </Button>
                                                                     <Button
                                                                         onClick={handleSyncAccAssets}
@@ -3001,7 +3001,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                                         className="gap-1 w-full sm:w-auto"
                                                                     >
                                                                         {isSyncingAccAssets ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Layers className="h-3.5 w-3.5" />}
-                                                                        Synka tillgångar
+                                                                        Sync assets
                                                                     </Button>
                                                                     <Button
                                                                         onClick={handleTestAccConnection}
@@ -3131,7 +3131,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     <div className="flex items-center justify-between">
                                                         <Label className="text-sm font-medium flex items-center gap-1.5">
                                                             <Box className="h-4 w-4 text-primary" />
-                                                            Synka till Asset+
+                                                            Sync to Asset+
                                                         </Label>
                                                         <Button
                                                             variant="ghost"
@@ -3146,7 +3146,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     </div>
 
                                                     <p className="text-xs text-muted-foreground">
-                                                        Skapa ACC-synkade objekt i Asset+ med genererade UUID:n. Byggnader, plan, rum och installationer skapas hierarkiskt.
+                                                        Create ACC-synced objects in Asset+ with generated UUIDs. Buildings, floors, rooms and installations are created hierarchically.
                                                     </p>
 
                                                     {accToApStatus && (
@@ -3156,18 +3156,18 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                                 <span className="font-medium">{accToApStatus.totalAccObjects}</span>
                                                             </div>
                                                             <div className="flex justify-between">
-                                                                <span className="text-muted-foreground">Synkade till Asset+:</span>
+                                                                <span className="text-muted-foreground">Synced to Asset+:</span>
                                                                 <span className="font-medium">{accToApStatus.syncedToAssetPlus}</span>
                                                             </div>
                                                             <div className="flex justify-between">
-                                                                <span className="text-muted-foreground">Ej synkade:</span>
+                                                                <span className="text-muted-foreground">Not synced:</span>
                                                                 <Badge variant={accToApStatus.unsyncedCount > 0 ? "destructive" : "secondary"} className="text-xs">
                                                                     {accToApStatus.unsyncedCount}
                                                                 </Badge>
                                                             </div>
                                                             {accToApStatus.buildings?.length > 0 && (
                                                                 <div className="mt-2 space-y-1">
-                                                                    <p className="text-xs font-medium text-muted-foreground">Byggnader:</p>
+                                                                    <p className="text-xs font-medium text-muted-foreground">Buildings:</p>
                                                                     {accToApStatus.buildings.map((b: any) => (
                                                                         <div key={b.accFmGuid} className="flex items-center justify-between text-xs py-0.5">
                                                                             <span className="truncate">{b.name}</span>
@@ -3195,22 +3195,22 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         {isSyncingAccToAp ? (
                                                             <>
                                                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                                Synkar till Asset+...
+                                                                Syncing to Asset+...
                                                             </>
                                                         ) : (
                                                             <>
                                                                 <Box className="h-3.5 w-3.5" />
-                                                                Synka ACC → Asset+
+                                                                Sync ACC → Asset+
                                                             </>
                                                         )}
                                                     </Button>
 
                                                     {accToApResult && (
                                                         <div className={`rounded-lg border p-2.5 text-xs space-y-1 ${accToApResult.success ? 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800' : 'bg-yellow-50 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800'}`}>
-                                                            <p className="font-medium">{accToApResult.success ? 'Synk lyckades' : 'Synk med varningar'}</p>
+                                                            <p className="font-medium">{accToApResult.success ? 'Sync succeeded' : 'Sync with warnings'}</p>
                                                             {accToApResult.summary && (
                                                                 <div className="space-y-0.5">
-                                                                    <p>Byggnader: {accToApResult.summary.created?.buildings || 0} skapade</p>
+                                                                    <p>Buildings: {accToApResult.summary.created?.buildings || 0} created</p>
                                                                     <p>Plan: {accToApResult.summary.created?.levels || 0} | Rum: {accToApResult.summary.created?.spaces || 0} | Instanser: {accToApResult.summary.created?.instances || 0}</p>
                                                                     <p>Relationer: {accToApResult.summary.totalRelationships || 0} | Egenskaper: {accToApResult.summary.totalPropertiesUpdated || 0}</p>
                                                                     {accToApResult.summary.totalErrors > 0 && (
@@ -3337,7 +3337,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             syncStatus={syncCheck?.xkt?.syncState?.sync_status}
                                             errorMessage={syncCheck?.xkt?.syncState?.error_message}
                                             extraActions={
-                                                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none" title="Tvinga om-nedladdning av alla modeller oavsett revision">
+                                                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none" title="Force re-download of all models regardless of revision">
                                                     <Switch
                                                         checked={forceXkt}
                                                         onCheckedChange={setForceXkt}
@@ -3386,7 +3386,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 <Network className="h-4 w-4 text-primary" />
                                                 <span className="text-sm text-muted-foreground">Tekniska system:</span>
                                                 <span className="text-sm font-medium">{systemCount}</span>
-                                                <span className="text-xs text-muted-foreground ml-auto">Synkas automatiskt med Asset+ / IFC</span>
+                                                <span className="text-xs text-muted-foreground ml-auto">Synced automatically with Asset+ / IFC</span>
                                             </div>
                                         )}
 
@@ -3454,10 +3454,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         <div className="border-t pt-3 mt-3">
                                             <h4 className="text-sm font-medium mb-2 flex items-center gap-1.5">
                                                 <FileText className="h-3.5 w-3.5" />
-                                                Synka dokument &amp; ritningar
+                                                Sync documents &amp; drawings
                                             </h4>
                                             <p className="text-xs text-muted-foreground mb-3">
-                                                Synkar ritningar, dokument och DoU-instruktioner från FM Access till lokal databas för snabb sökning via Geminus AI.
+                                                Syncs drawings, documents and O&M instructions from FM Access to local database for fast search via Geminus AI.
                                             </p>
                                             <FmAccessDocSyncPanel />
                                         </div>
