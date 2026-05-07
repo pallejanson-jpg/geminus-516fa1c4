@@ -199,10 +199,11 @@ export const DataConsistencyBanner: React.FC = () => {
     runLoop();
   };
 
-  useEffect(() => {
-    if (dismissed) return;
-    checkDelta();
-  }, [dismissed]);
+  // Auto-check disabled — sync is now strictly manual via Settings → Sync.
+  // useEffect(() => {
+  //   if (dismissed) return;
+  //   checkDelta();
+  // }, [dismissed]);
 
   const isSyncing = isSyncingStructure || isSyncingAssets;
 
