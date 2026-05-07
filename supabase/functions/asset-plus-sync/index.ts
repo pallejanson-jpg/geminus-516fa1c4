@@ -1000,11 +1000,22 @@ serve(async (req) => {
 
         // --- Quick count check: skip if counts match and not forced ---
         if (!force && currentSkip === 0 && pageMode === 'skip') {
-          const { count: localAssetCount } = await supabase
-            .from('assets')
-            .select('*', { count: 'exact', head: true })
-            .eq('building_fm_guid', building.fm_guid)
-            .eq('category', 'Instance');
+          let localAssetCount: number | null = null;
+          try {
+            const { count, error: countErr } = await supabase
+              .from('assets')
+              .select('fm_guid', { count: 'estimated', head: true })
+              .eq('building_fm_guid', building.fm_guid)
+              .eq('category', 'Instance');
+            if (countErr) {
+              console.log(`Count check failed for ${buildingName}: ${countErr.message} — proceeding with full sync`);
+            } else {
+              localAssetCount = count ?? null;
+            }
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            console.log(`Count check threw for ${buildingName}: ${msg} — proceeding with full sync`);
+          }
 
           if (localAssetCount && localAssetCount > 0 && lastSyncAt) {
             // We have assets and a previous sync timestamp — try incremental
