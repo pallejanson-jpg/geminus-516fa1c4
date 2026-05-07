@@ -641,19 +641,35 @@ serve(async (req) => {
       await markStaleRunningAsInterrupted(supabase);
 
       // --- Phase 1: Fast DB-only counts (no API dependency) ---
+      // Use estimated counts to avoid statement timeouts on large tables
+      const safeCount = async (q: any): Promise<number> => {
+        try {
+          const { count, error } = await q;
+          if (error) {
+            console.warn('safeCount error:', error.message);
+            return 0;
+          }
+          return count || 0;
+        } catch (e) {
+          console.warn('safeCount threw:', e instanceof Error ? e.message : String(e));
+          return 0;
+        }
+      };
+
       const [
-        { count: localStructureCount },
-        { count: localAssetCount },
-        { count: xktCount },
-        { count: buildingCount },
-        { data: syncStates },
+        localStructureCount,
+        localAssetCount,
+        xktCount,
+        buildingCount,
+        syncStatesRes,
       ] = await Promise.all([
-        supabase.from('assets').select('*', { count: 'exact', head: true }).in('category', ['Building', 'Building Storey', 'Space']),
-        supabase.from('assets').select('*', { count: 'exact', head: true }).in('category', ['Instance']),
-        supabase.from('xkt_models' as any).select('*', { count: 'exact', head: true }),
-        supabase.from('assets').select('*', { count: 'exact', head: true }).eq('category', 'Building'),
+        safeCount(supabase.from('assets').select('fm_guid', { count: 'estimated', head: true }).in('category', ['Building', 'Building Storey', 'Space'])),
+        safeCount(supabase.from('assets').select('fm_guid', { count: 'estimated', head: true }).in('category', ['Instance'])),
+        safeCount(supabase.from('xkt_models' as any).select('id', { count: 'estimated', head: true })),
+        safeCount(supabase.from('assets').select('fm_guid', { count: 'estimated', head: true }).eq('category', 'Building')),
         supabase.from('asset_sync_state').select('*'),
       ]);
+      const syncStates = syncStatesRes.data;
 
       const localTotal = (localStructureCount || 0) + (localAssetCount || 0);
 
