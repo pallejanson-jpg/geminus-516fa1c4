@@ -136,7 +136,6 @@ const AppLayoutInner: React.FC = () => {
                     />
                 )}
                 {!isImmersive && <SyncProgressBanner />}
-                {!isImmersive && <DataConsistencyBanner />}
                 <main id="main-content" className="flex-1 min-h-0 relative" role="main">
                     <MainContent />
                 </main>
