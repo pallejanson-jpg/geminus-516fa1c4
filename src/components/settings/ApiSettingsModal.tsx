@@ -3277,7 +3277,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             syncCompletedAt={syncCheck?.structure?.syncState?.last_sync_completed_at}
                                             syncStatus={syncCheck?.structure?.syncState?.sync_status}
                                             errorMessage={syncCheck?.structure?.syncState?.error_message}
-                                            totalSynced={syncCheck?.structure?.syncState?.total_assets}
+                                            totalSynced={syncCheck?.structure?.localCount}
                                         />
                                         <SyncStatusLog steps={structureSyncLog} outcome={structureSyncOutcome} />
 
