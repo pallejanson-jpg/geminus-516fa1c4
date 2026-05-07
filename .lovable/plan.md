@@ -1,80 +1,73 @@
-## Four bugs to fix (Småviken size discrepancy added)
 
-### 1. Color Filter (Area) → all xrayed, nothing colored
+## Issues identified
 
-Console proof:
-```
-[ViewerEvents] INSIGHTS_COLOR_UPDATE: room_spaces 907 entries, 0 matched
-Applied area color filter: 907 rooms, 7 entity matches
-```
-Akerselva loaded only the B-modell fallback (8.76 MB, mostly VVS). B-models contain virtually no `IfcSpace` entities, so the colorize loop in `useViewerEventListeners.ts` finds 0 matches — but `setObjectsXRayed(scene.objectIds, true)` (line 153) still xrays everything → ghost building.
+1. **Auto-syncs run in the background** — `DataConsistencyBanner` (mounted in `AppLayout`) auto-invokes `asset-plus-sync` (`check-delta`) on every mount and can pop a sync banner. `useModelLoader` may also trigger sync on building open.
 
-**Fix in `src/hooks/useViewerEventListeners.ts`** (`INSIGHTS_COLOR_UPDATE` handler):
-- Run the colorize pass first into a buffer.
-- Only call `setObjectsXRayed(...)` when `matchCount > 0`.
-- When `matchCount === 0`, restore visibility, log a warning, and emit a toast: "No spaces in loaded model — the architectural model is required for the Area filter."
-- Broaden the room cache lookup: when an entry in `colorMap` doesn't match any IfcSpace metaObject, fall back to matching `mo.name` against the room name registry (`__roomNameRegistry`) before giving up.
+2. **Counts mismatch (4 140 local vs 3 379 in Asset+) on Buildings/Floors/Rooms** — `check-sync-status` counts all `Building/Building Storey/Space` rows including ACC/IFC-imported entities that don't exist in Asset+. Asset card already excludes them (`accLocalCount`); structure card doesn't.
 
-### 2. Småviken — never loads, app crashes (mobile GPU OOM)
+3. **"62 461 objekt synkade" on the structure card is wrong** — comes from `syncState.total_assets`, which is a cumulative `totalSynced += synced` across every resumed upsert page, counting re-upserts of the same rows.
 
-`sync-xkt-building` returns 4 models totalling ~117 MB:
-- A-modell 8.5 MB (suspicious — see bug #4)
-- B-modell 1.84 MB
-- E-modell 53.05 MB
-- V-modell 53.38 MB
+4. **Swedish strings still appear in sync UI** — e.g. "lokala", "i Asset+", "Ej synkad", "Synkar…", "Synka", "Senast", "objekt synkade". Should be English to match the rest of the app.
 
-`MAX_SINGLE_MODEL_BYTES = 30 MB` skips the in-memory cache for E/V, but they still get loaded into the WebGL scene by `useModelLoader`. On mobile (current viewport 314×434, devicePixelRatio 3) ~116 MB of geometry blows the GPU → ViewerErrorBoundary trips.
+## Plan
 
-**Fix:**
-1. `src/hooks/useModelLoader.ts` `loadAllModels`: when `isMobile` is true, force `secondaryQueue = []` (A-only) and never auto-promote secondary models. Surface a toolbar action "Load engineering models" that opts in on demand.
-2. Add a memory guard in the same function: before pushing each secondary model to the scene, sum `viewer.scene.models[*].numEntities` × heuristic byte cost; abort with toast if estimated total exceeds 60 MB on mobile / 150 MB on desktop.
-3. In `src/components/viewer/NativeXeokitViewer.tsx` add a `webglcontextlost` listener that destroys all secondary models from the scene, clears `__xeokitNativeColors`, and surfaces a "Reload with architectural model only" recovery button (instead of the generic boundary).
+### A. Stop background sync activity (manual-only)
 
-### 3. Akerselva — red/uncolored objects after fallback load
+1. **`src/components/layout/AppLayout.tsx`** — remove `<DataConsistencyBanner />` mount (line 140) and its import (line 8).
+2. **`src/components/common/DataConsistencyBanner.tsx`** — remove the auto `checkDelta()` `useEffect`. Keep component code in case it's needed inside Settings later, but it no longer self-triggers.
+3. **`src/components/layout/SyncProgressBanner.tsx`** — verify no auto-resume path (already commented). Only render when an active `running`/`interrupted` row exists in `asset_sync_state`.
+4. **`src/hooks/useModelLoader.ts`** — gate any `asset-plus-sync` invocation behind an explicit user action / setting; do not call automatically when opening a building.
 
-Console: `Native model colors preserved. 16343 total entities`. `applyArchitectColors()` is imported in `NativeXeokitViewer.tsx` (line 18) but **never called** in the load path. When only the B-modell loads (A-modell 404), VVS pipes/unmapped IFC types render in xeokit's raw red default.
+### B. Fix structure count parity
 
-**Fix:**
-1. In `src/components/viewer/NativeXeokitViewer.tsx` after line 209: sample the loaded scene; if any of the following is true, call `applyArchitectColors(viewer)` automatically:
-   - More than 5% of entities have `colorize` undefined or approximately `[1, 0, 0]`.
-   - No A-model loaded (only B/E/V/secondary disciplines present in `viewer.scene.models`).
-2. Extend `IFC_TYPE_COLORS` in `src/lib/architect-colors.ts` with technical-system types currently falling back to `DEFAULT_COLOR`:
-   - `ifcpipesegment`, `ifcpipefitting`, `ifcductsegment`, `ifcductfitting`
-   - `ifcflowterminal`, `ifcairterminal`, `ifcsanitaryterminal`
-   - `ifccablesegment`, `ifccarriersegment`, `ifcelectricappliance`, `ifclightfixture`
-   Use muted technical palette: pipes/copper `[0.65, 0.55, 0.45]`, ducts `[0.70, 0.72, 0.74]`, electrical `[0.85, 0.78, 0.55]`.
+In `supabase/functions/asset-plus-sync/index.ts`, `check-sync-status` (~line 659):
+- Add `accLocalStructureCount` mirroring the existing `accLocalCount` predicate used for assets (same ACC/IFC source filter).
+- Return `structure.localCount` as Asset+-scope (total minus ACC), plus `structure.accLocalCount` for the badge text the UI already renders (line 3266).
+- `inSync` then compares Asset+-scope local vs `remoteStructureCount`.
 
-### 4. Småviken A-modell file size collapse (8.51 MB ≠ correct)
+### C. Fix the "62 461 objekt synkade" label
 
-Edge function logs from two consecutive sync runs of the same building:
-```
-Run @1777787537 → Model 042dba20  (A-modell) Downloaded 29.84 MB via bimobjectid=042dba20
-Run @1777787608 → Model 486c162d  (A-modell) Downloaded  8.51 MB via bimobjectid=042dba20
-```
-Asset+ returned **two different `model_id`s** for the same A-modell on consecutive `GetAllRelatedModels` calls, but the XKT download used the *same* `bimobjectid=042dba20`. The second run got a much smaller (likely older or mismatched) revision and the system silently overwrote the good 29.84 MB file with the 8.51 MB one. Result: Småviken's "A-modell" in the cache is now a stale/partial version. This matches the existing `mem://constraints/smaviken-xkt-404-issue` pattern.
+1. **UI (`ApiSettingsModal.tsx`, line 3280)** — pass `totalSynced={syncCheck?.structure?.localCount}` for the Structure card, not `syncState.total_assets`. While `isRunning`, show "X upserts" (may include duplicates); when idle show the unique count.
+2. **Edge function `sync-structure`** — at the start of a fresh (non-resumed) run, reset `progress.total_synced` to 0. On `completed`, write the actual unique structure row count (`SELECT count(*) WHERE category in (...)`) into `asset_sync_state.total_assets` so cards show the real number after sync.
 
-**Fix in `supabase/functions/asset-plus-sync/index.ts`** (`sync-xkt-building`):
-1. Before calling `GetXktData`, look up any prior cached row in `xkt_models` matching either `model_id` OR `bimobjectid` for this building. Capture `previous_size`.
-2. After download, if `new_size < previous_size * 0.5` (more than 50% shrinkage) AND no Asset+ revision number changed, **reject the update**, keep the previous file, log `WARN: XKT shrinkage detected (29.84MB → 8.51MB) — keeping previous revision`, and continue.
-3. Add a `model_alias` column (or store in `attributes` JSONB) so we map `486c162d → 042dba20` for future revisions of the same logical A-modell. Use `bimobjectid` as the stable identity, not `model_id`.
-4. Emit the rejection event into `sync_events` so the SyncProgressCard reports it.
+### D. Translate sync UI to English
 
-This complements Asset+'s existing `bimObjectId` fallback identifier protocol (see `mem://integrations/asset-plus/xkt-sync-identifier-protocol`) by adding *integrity validation* on the response.
+Sweep these files and replace Swedish copy with English equivalents:
 
-## Technical notes
+- `src/components/settings/SyncProgressCard.tsx` — already mostly English; verify "local", "in Asset+", "In sync", "Out of sync", "Last:", "Never", "Syncing…", "Sync".
+- `src/components/settings/ApiSettingsModal.tsx` — Sync tab: card titles already English; replace any Swedish toast/label such as "Synkar…", "Synka", "Ej synkad", "Senast", "objekt synkade", "lokala", "i Asset+", "Byggnader", "skapade", "Skapa ACC-synkade objekt…" tooltip, "Tvinga om-nedladdning…", "Återställ", etc.
+- `src/components/layout/SyncProgressBanner.tsx` — already English; double-check toast messages.
+- `src/components/common/DataConsistencyBanner.tsx` — already English; verify.
+- `src/components/settings/SyncStatusLog.tsx` — translate any Swedish labels.
+- Toasts in `asset-plus-service.ts` and any sync-related component (search `rg -n "Synk|synkad|lokala|Senast|Byggnader|Återställ|Tvinga"`) — replace with English.
 
-Files touched:
-- `src/hooks/useViewerEventListeners.ts` — defer xray; broaden room name lookup; toast when 0 matches
-- `src/hooks/useModelLoader.ts` — mobile A-only mode; memory guard before secondary
-- `src/components/viewer/NativeXeokitViewer.tsx` — auto architect colors when raw red detected; webglcontextlost recovery
-- `src/lib/architect-colors.ts` — VVS / electrical / duct IFC type colors
-- `src/components/viewer/ViewerToolbar.tsx` — mobile "Load engineering models" button
-- `supabase/functions/asset-plus-sync/index.ts` — XKT shrinkage rejection + bimobjectid identity reconciliation
+Naming convention to use (consistent with existing English UI):
+- "Synka" → "Sync"
+- "Synkar…" → "Syncing…"
+- "Ej synkad" → "Out of sync"
+- "Synkad" → "In sync"
+- "lokala" → "local"
+- "i Asset+" → "in Asset+"
+- "objekt synkade" → "objects synced"
+- "Senast" → "Last"
+- "Byggnader" → "Buildings", "plan/rum" → "floors/rooms"
+- "Återställ" → "Reset", "Tvinga" → "Force"
 
-Memory updates after implementation:
-- Update `mem://integrations/asset-plus/xkt-sync-identifier-protocol` with the size-shrinkage guard rule.
-- Update `mem://constraints/smaviken-xkt-404-issue` to note the model_id-shuffle root cause.
+### E. Verification
 
-## Out of scope
+- Open the app → Network panel shows no `asset-plus-sync` calls until the user opens Settings → Sync and clicks a button.
+- Settings → Sync → "Check Status": Buildings/Floors/Rooms shows ~3 379 local / 3 379 in Asset+ (with "(N ACC/IFC excluded)" subtitle), "In sync" badge.
+- Run Structure sync manually → progress label reads "X upserts (may include duplicates)" while running; finished card reads the unique count, not 62k.
+- All sync dialogs, cards, badges and toasts read in English only.
 
-- Akerselva ARK-modell 404 from Asset+ stays unresolved (still waiting for the Asset+ web viewer URL/HAR you mentioned). This plan makes the B-modell fallback render correctly and warns the user that Area filter needs the A-model — it does NOT recover the missing A-model itself.
+## Files to change
+
+- `src/components/layout/AppLayout.tsx`
+- `src/components/common/DataConsistencyBanner.tsx`
+- `src/components/layout/SyncProgressBanner.tsx`
+- `src/components/settings/ApiSettingsModal.tsx`
+- `src/components/settings/SyncProgressCard.tsx`
+- `src/components/settings/SyncStatusLog.tsx`
+- `src/hooks/useModelLoader.ts`
+- `src/services/asset-plus-service.ts` (toast strings if any)
+- `supabase/functions/asset-plus-sync/index.ts`
