@@ -5,7 +5,6 @@ import RightSidebar from './RightSidebar';
 import MobileNav from './MobileNav';
 import MainContent from './MainContent';
 import SyncProgressBanner from './SyncProgressBanner';
-import DataConsistencyBanner from '@/components/common/DataConsistencyBanner';
 import VoiceControlButton from '@/components/voice/VoiceControlButton';
 import GunnarButton from '@/components/chat/GunnarButton';
 import IleanButton from '@/components/chat/IleanButton';
