@@ -2045,11 +2045,14 @@ serve(async (req) => {
         for (const model of models) {
           const rawModelId = model.modelId || model.id || model.ModelId || '';
           const modelName = model.name || model.modelName || model.Name || `Model`;
-          const matchedRevisionId = revisions.find((rev: any) => {
-            const revName = String(rev.modelName || '').toLowerCase();
-            const modelNameLower = String(modelName).toLowerCase();
-            return (rawModelId && String(rev.modelId || '') === String(rawModelId)) || (!!revName && !!modelNameLower && (revName === modelNameLower || revName.includes(modelNameLower) || modelNameLower.includes(revName)));
-          })?.modelId || '';
+          const matchedRevisionId = pickLatestPublishedRevision(
+            revisions.filter((rev: any) => {
+              const revName = String(rev.modelName || '').toLowerCase();
+              const modelNameLower = String(modelName).toLowerCase();
+              return (rawModelId && String(rev.modelId || '') === String(rawModelId))
+                || (!!revName && !!modelNameLower && (revName === modelNameLower || revName.includes(modelNameLower) || modelNameLower.includes(revName)));
+            })
+          )?.modelId || '';
           const modelId = rawModelId || matchedRevisionId || `model_${Date.now()}`;
           const bimObjectId = model.bimObjectId || model.BimObjectId || '';
           const modelFmGuid = model.fmGuid || model.FmGuid || '';
