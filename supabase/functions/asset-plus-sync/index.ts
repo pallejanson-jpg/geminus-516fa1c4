@@ -3,6 +3,17 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyAuth, unauthorizedResponse, forbiddenResponse, corsHeaders } from "../_shared/auth.ts";
 import { getAssetPlusCredentials } from "../_shared/credentials.ts";
 
+// Pick the newest revision with status === 4 (Published).
+// Falls back to newest of any status if no Published exists.
+function pickLatestPublishedRevision(revs: any[]): any | null {
+  if (!revs?.length) return null;
+  const byDate = (a: any, b: any) =>
+    new Date(b.dateCreated || b.DateCreated || 0).getTime() -
+    new Date(a.dateCreated || a.DateCreated || 0).getTime();
+  const published = revs.filter((r: any) => Number(r.status ?? r.Status) === 4);
+  return (published.length ? published : revs).sort(byDate)[0] ?? null;
+}
+
 // Module-level credential overrides (set per-request from building_settings)
 let _creds = {
   apiUrl: '',
