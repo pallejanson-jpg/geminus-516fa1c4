@@ -2061,6 +2061,7 @@ serve(async (req) => {
           )?.modelId || '';
           const modelId = rawModelId || matchedRevisionId || `model_${Date.now()}`;
           const bimObjectId = model.bimObjectId || model.BimObjectId || '';
+          const buildingBimObjectIdForModel = model.buildingBimObjectId || model.BuildingBimObjectId || '';
           const modelFmGuid = model.fmGuid || model.FmGuid || '';
           const externalGuid = model.externalGuid || model.ExternalGuid || '';
           const fileName = `${modelId}.xkt`;
