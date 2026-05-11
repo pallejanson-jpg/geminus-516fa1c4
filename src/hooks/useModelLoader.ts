@@ -306,11 +306,11 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
         
         if (!xktData) continue;
         
-        const modelName = rawModelName || matchedRevision?.modelName || matchedRevision?.entityName || modelId;
+        const finalModelName = rawModelName || matchedRevision?.modelName || matchedRevision?.entityName || modelId;
         storeModelInMemory(modelId, buildingFmGuid, xktData);
-        xktCacheService.saveModelFromViewer(modelId, xktData, buildingFmGuid, modelName, revisionId || undefined).catch(() => {});
+        xktCacheService.saveModelFromViewer(modelId, xktData, buildingFmGuid, finalModelName, revisionId || undefined).catch(() => {});
         bootstrapped.push({
-          model_id: modelId, model_name: modelName,
+          model_id: modelId, model_name: finalModelName,
           storage_path: `${buildingFmGuid}/${modelId}.xkt`,
           file_size: xktData.byteLength, storey_fm_guid: null, source: 'db',
         });
