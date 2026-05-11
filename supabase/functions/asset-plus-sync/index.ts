@@ -1593,6 +1593,7 @@ serve(async (req) => {
               modelName: mName,
               entityName: buildingName,
               _bimObjectId: bimObjId || m.fmGuid || m.FmGuid || '',
+              _buildingBimObjectId: m.buildingBimObjectId || m.BuildingBimObjectId || matchedRev?.buildingBimObjectId || matchedRev?.BuildingBimObjectId || '',
               fmGuid: m.fmGuid || m.FmGuid || '',
               externalGuid: m.externalGuid || m.ExternalGuid || '',
               _resolvedFromRevision: !!matchedRev?.modelId,
@@ -1671,19 +1672,24 @@ serve(async (req) => {
             try {
               // Build identifier fallback chain for XKT download
               const bimObjId = rev._bimObjectId || bimObjectIdMap.get(String(revModelId)) || '';
+              const buildingBimObjectId = rev._buildingBimObjectId || '';
               const modelFmGuid = rev.fmGuid || rev.FmGuid || '';
               const externalGuid = rev.externalGuid || rev.ExternalGuid || '';
-              
+
               // Try multiple identifier combinations
               let xktData: ArrayBuffer | null = null;
               let usedIdentifier = '';
-              
+
               // Find matched revision for additional identifiers
               const matchedRev = allRevisions.find((r: any) => String(r.modelId || '') === String(revModelId));
               const revBimObjId = matchedRev?.bimObjectId || matchedRev?.BimObjectId || '';
               const revEntityId = matchedRev?.entityId || matchedRev?.EntityId || '';
-              
+
+              // ALWAYS prefer the per-model buildingBimObjectId so Asset+ scopes the
+              // XKT to this single building (otherwise complex-wide models return
+              // geometry for every building in the complex).
               const idCombos: { param: string; value: string; label: string }[] = [
+                { param: 'bimobjectid', value: buildingBimObjectId, label: 'bimobjectid(buildingBimObjectId)' },
                 { param: 'bimobjectid', value: bimObjId, label: 'bimobjectid(model)' },
                 { param: 'bimobjectid', value: revBimObjId, label: 'bimobjectid(revision)' },
                 { param: 'externalguid', value: externalGuid, label: 'externalguid(model)' },
@@ -1708,7 +1714,7 @@ serve(async (req) => {
               
               // Strategy 1: Try with modelid + secondary param combos
               for (const combo of dedupCombos) {
-                const url = `${discovery.url}/GetXktData?modelid=${revModelId}&${combo.param}=${encodeURIComponent(combo.value)}&context=Default&apiKey=${apiKey}`;
+                const url = `${discovery.url}/GetXktData?modelid=${revModelId}&${combo.param}=${encodeURIComponent(combo.value)}&context=Building&apiKey=${apiKey}`;
                 try {
                   const controller = new AbortController();
                   const timeoutId = setTimeout(() => controller.abort(), 30000);
@@ -1730,7 +1736,7 @@ serve(async (req) => {
               
               // Strategy 2: Try bimobjectid-only (no modelid param at all)
               if (!xktData) {
-                const bimOnlyUrl = `${discovery.url}/GetXktData?bimobjectid=${bimObjId}&context=Default&apiKey=${apiKey}`;
+                const bimOnlyUrl = `${discovery.url}/GetXktData?bimobjectid=${bimObjId}&context=Building&apiKey=${apiKey}`;
                 console.log(`  Strategy 2: bimobjectid-only → ${bimOnlyUrl}`);
                 try {
                   const controller = new AbortController();
@@ -1753,7 +1759,7 @@ serve(async (req) => {
               
               // Strategy 3: Try modelid-only (no secondary identifier)
               if (!xktData) {
-                const url = `${discovery.url}/GetXktData?modelid=${revModelId}&context=Default&apiKey=${apiKey}`;
+                const url = `${discovery.url}/GetXktData?modelid=${revModelId}&context=Building&apiKey=${apiKey}`;
                 try {
                   const controller = new AbortController();
                   const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -1774,7 +1780,7 @@ serve(async (req) => {
               
               // Strategy 4: Try with bimobjectid as the modelid value
               if (!xktData) {
-                const url = `${discovery.url}/GetXktData?modelid=${bimObjId}&bimobjectid=${bimObjId}&context=Default&apiKey=${apiKey}`;
+                const url = `${discovery.url}/GetXktData?modelid=${bimObjId}&bimobjectid=${bimObjId}&context=Building&apiKey=${apiKey}`;
                 try {
                   const controller = new AbortController();
                   const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -2021,7 +2027,7 @@ serve(async (req) => {
         ): Promise<{ data: ArrayBuffer; usedIdentifier: string } | null> {
           for (const id of identifiers) {
             if (!id.value) continue;
-            const url = `${baseUrl}/GetXktData?modelid=${modelId}&${id.param}=${encodeURIComponent(id.value)}&context=Default&apiKey=${key}`;
+            const url = `${baseUrl}/GetXktData?modelid=${modelId}&${id.param}=${encodeURIComponent(id.value)}&context=Building&apiKey=${key}`;
             console.log(`Trying XKT: ${id.label} → ${url.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
             try {
               const res = await fetch(url, { headers: { "Authorization": `Bearer ${token}` } });
@@ -2055,6 +2061,7 @@ serve(async (req) => {
           )?.modelId || '';
           const modelId = rawModelId || matchedRevisionId || `model_${Date.now()}`;
           const bimObjectId = model.bimObjectId || model.BimObjectId || '';
+          const buildingBimObjectIdForModel = model.buildingBimObjectId || model.BuildingBimObjectId || '';
           const modelFmGuid = model.fmGuid || model.FmGuid || '';
           const externalGuid = model.externalGuid || model.ExternalGuid || '';
           const fileName = `${modelId}.xkt`;
@@ -2081,7 +2088,10 @@ serve(async (req) => {
 
           try {
             // Build identifier fallback chain
+            // ALWAYS prefer the per-model buildingBimObjectId so Asset+ scopes the
+            // XKT to this single building.
             const identifiers = [
+              { param: 'bimobjectid', value: buildingBimObjectIdForModel, label: `bimobjectid(buildingBimObjectId)=${buildingBimObjectIdForModel.substring(0,8)}` },
               { param: 'bimobjectid', value: bimObjectId, label: `bimobjectid=${bimObjectId.substring(0,8)}` },
               { param: 'externalguid', value: externalGuid, label: `externalguid(model)=${externalGuid.substring(0,8)}` },
               { param: 'bimobjectid', value: buildingParentBimObjectId, label: `bimobjectid(building.parentBimObjectId)=${buildingParentBimObjectId.substring(0,8)}` },

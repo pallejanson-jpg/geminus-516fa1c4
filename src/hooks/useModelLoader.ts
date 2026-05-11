@@ -274,13 +274,21 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
         const bimObjectId = model.bimObjectId || model.BimObjectId || '';
         const modelFmGuid = model.fmGuid || model.FmGuid || '';
         const externalGuid = model.externalGuid || model.ExternalGuid || '';
+        // The building-scoped slice: prefer the model's own buildingBimObjectId from
+        // GetAllRelatedModels (Asset+ returns this per model when it spans a complex).
+        const buildingBimObjectId =
+          model.buildingBimObjectId || model.BuildingBimObjectId ||
+          matchedRevision?.buildingBimObjectId || matchedRevision?.BuildingBimObjectId || '';
         if (!modelId) {
           console.warn('[ModelLoader] Skipping model with unresolved modelId:', rawModelName || modelFmGuid || buildingFmGuid);
           continue;
         }
         
-        // Build full identifier fallback chain (same as server-side sync)
+        // Build identifier fallback chain. ALWAYS try buildingBimObjectId first so
+        // Asset+ scopes the XKT to this single building (otherwise complex-wide models
+        // return geometry for every building in the complex).
         const idCombos: { param: string; value: string }[] = [
+          { param: 'bimobjectid', value: buildingBimObjectId },
           { param: 'bimobjectid', value: bimObjectId },
           { param: 'externalguid', value: externalGuid },
           { param: 'bimobjectid', value: buildingParentBimObjId },
