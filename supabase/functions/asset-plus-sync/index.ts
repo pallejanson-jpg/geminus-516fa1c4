@@ -1995,10 +1995,20 @@ serve(async (req) => {
           }
         } catch (e) { console.log(`GetAllModelRevisions error: ${e}`); }
 
-        // Build revision lookup: modelId → revisionId
+        // Build revision lookup: modelId → latest Published revisionId.
+        // Group all revisions by modelId, then pick the newest with status=4 per group.
         const revisionMap = new Map<string, string>();
+        const revsByModelId = new Map<string, any[]>();
         for (const rev of revisions) {
-          if (rev.modelId) revisionMap.set(String(rev.modelId), rev.revisionId || '');
+          const mid = String(rev.modelId || '');
+          if (!mid) continue;
+          const arr = revsByModelId.get(mid) ?? [];
+          arr.push(rev);
+          revsByModelId.set(mid, arr);
+        }
+        for (const [mid, revs] of revsByModelId) {
+          const latest = pickLatestPublishedRevision(revs);
+          if (latest?.revisionId) revisionMap.set(mid, String(latest.revisionId));
         }
 
         // Helper: try fetching XKT with multiple identifier combinations
