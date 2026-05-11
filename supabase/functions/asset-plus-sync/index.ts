@@ -2088,7 +2088,10 @@ serve(async (req) => {
 
           try {
             // Build identifier fallback chain
+            // ALWAYS prefer the per-model buildingBimObjectId so Asset+ scopes the
+            // XKT to this single building.
             const identifiers = [
+              { param: 'bimobjectid', value: buildingBimObjectIdForModel, label: `bimobjectid(buildingBimObjectId)=${buildingBimObjectIdForModel.substring(0,8)}` },
               { param: 'bimobjectid', value: bimObjectId, label: `bimobjectid=${bimObjectId.substring(0,8)}` },
               { param: 'externalguid', value: externalGuid, label: `externalguid(model)=${externalGuid.substring(0,8)}` },
               { param: 'bimobjectid', value: buildingParentBimObjectId, label: `bimobjectid(building.parentBimObjectId)=${buildingParentBimObjectId.substring(0,8)}` },
