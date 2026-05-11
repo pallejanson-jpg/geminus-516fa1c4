@@ -1714,7 +1714,7 @@ serve(async (req) => {
               
               // Strategy 1: Try with modelid + secondary param combos
               for (const combo of dedupCombos) {
-                const url = `${discovery.url}/GetXktData?modelid=${revModelId}&${combo.param}=${encodeURIComponent(combo.value)}&context=Default&apiKey=${apiKey}`;
+                const url = `${discovery.url}/GetXktData?modelid=${revModelId}&${combo.param}=${encodeURIComponent(combo.value)}&context=Building&apiKey=${apiKey}`;
                 try {
                   const controller = new AbortController();
                   const timeoutId = setTimeout(() => controller.abort(), 30000);
@@ -1736,7 +1736,7 @@ serve(async (req) => {
               
               // Strategy 2: Try bimobjectid-only (no modelid param at all)
               if (!xktData) {
-                const bimOnlyUrl = `${discovery.url}/GetXktData?bimobjectid=${bimObjId}&context=Default&apiKey=${apiKey}`;
+                const bimOnlyUrl = `${discovery.url}/GetXktData?bimobjectid=${bimObjId}&context=Building&apiKey=${apiKey}`;
                 console.log(`  Strategy 2: bimobjectid-only → ${bimOnlyUrl}`);
                 try {
                   const controller = new AbortController();
@@ -1759,7 +1759,7 @@ serve(async (req) => {
               
               // Strategy 3: Try modelid-only (no secondary identifier)
               if (!xktData) {
-                const url = `${discovery.url}/GetXktData?modelid=${revModelId}&context=Default&apiKey=${apiKey}`;
+                const url = `${discovery.url}/GetXktData?modelid=${revModelId}&context=Building&apiKey=${apiKey}`;
                 try {
                   const controller = new AbortController();
                   const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -1780,7 +1780,7 @@ serve(async (req) => {
               
               // Strategy 4: Try with bimobjectid as the modelid value
               if (!xktData) {
-                const url = `${discovery.url}/GetXktData?modelid=${bimObjId}&bimobjectid=${bimObjId}&context=Default&apiKey=${apiKey}`;
+                const url = `${discovery.url}/GetXktData?modelid=${bimObjId}&bimobjectid=${bimObjId}&context=Building&apiKey=${apiKey}`;
                 try {
                   const controller = new AbortController();
                   const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -2027,7 +2027,7 @@ serve(async (req) => {
         ): Promise<{ data: ArrayBuffer; usedIdentifier: string } | null> {
           for (const id of identifiers) {
             if (!id.value) continue;
-            const url = `${baseUrl}/GetXktData?modelid=${modelId}&${id.param}=${encodeURIComponent(id.value)}&context=Default&apiKey=${key}`;
+            const url = `${baseUrl}/GetXktData?modelid=${modelId}&${id.param}=${encodeURIComponent(id.value)}&context=Building&apiKey=${key}`;
             console.log(`Trying XKT: ${id.label} → ${url.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
             try {
               const res = await fetch(url, { headers: { "Authorization": `Bearer ${token}` } });
