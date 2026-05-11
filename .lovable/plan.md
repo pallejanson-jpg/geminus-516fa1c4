@@ -1,73 +1,107 @@
+## Problem
 
-## Issues identified
+The Asset+ URL you shared:
 
-1. **Auto-syncs run in the background** — `DataConsistencyBanner` (mounted in `AppLayout`) auto-invokes `asset-plus-sync` (`check-delta`) on every mount and can pop a sync banner. `useModelLoader` may also trigger sync on building open.
+```
+revisionStatus=4
+revisionId=c336d675-e4ed-4bee-a09e-11e4ccc97541
+modelType=0
+buildingBimObjectId=46359aa0-…
+complexBimObjectId=c3d4a4a8-…
+```
 
-2. **Counts mismatch (4 140 local vs 3 379 in Asset+) on Buildings/Floors/Rooms** — `check-sync-status` counts all `Building/Building Storey/Space` rows including ACC/IFC-imported entities that don't exist in Asset+. Asset card already excludes them (`accLocalCount`); structure card doesn't.
+`revisionStatus=4` = **Published**. The Asset+ UI always opens the latest *Published* revision.
 
-3. **"62 461 objekt synkade" on the structure card is wrong** — comes from `syncState.total_assets`, which is a cumulative `totalSynced += synced` across every resumed upsert page, counting re-upserts of the same rows.
+In our codebase, the revision matching uses `.find()` on the full `GetAllModelRevisions` list with no status filter and no date sort:
 
-4. **Swedish strings still appear in sync UI** — e.g. "lokala", "i Asset+", "Ej synkad", "Synkar…", "Synka", "Senast", "objekt synkade". Should be English to match the rest of the app.
+- `supabase/functions/asset-plus-sync/index.ts` lines 1544–1564 (sync — primary path)
+- `supabase/functions/asset-plus-sync/index.ts` lines 2026–2030 + 1986–1990 (sync — secondary path / `revisionMap`)
+- `src/hooks/useModelLoader.ts` lines 253–263 (client bootstrap)
+
+`GetAllModelRevisions` returns *every* revision (Draft, Published, Archived, …) for each model. `.find()` returns the first match, so we can pick a Draft or an old revision and download/cache that XKT — which is why the wrong A‑modell version is loaded for Småviken.
+
+The diagnostic code at line 3054–3056 already proves the right pattern:
+
+```ts
+const aModelRevs = filtered.filter(r => r.modelName === 'A-modell');
+const publishedRevs = aModelRevs.filter(r => r.status === 4);
+const latestPublished = publishedRevs
+  .sort((a, b) => new Date(b.dateCreated).getTime() - new Date(a.dateCreated).getTime())[0];
+```
+
+…but the real sync/loader paths don't apply it.
 
 ## Plan
 
-### A. Stop background sync activity (manual-only)
+### 1. Centralize "pick latest Published revision" helper
 
-1. **`src/components/layout/AppLayout.tsx`** — remove `<DataConsistencyBanner />` mount (line 140) and its import (line 8).
-2. **`src/components/common/DataConsistencyBanner.tsx`** — remove the auto `checkDelta()` `useEffect`. Keep component code in case it's needed inside Settings later, but it no longer self-triggers.
-3. **`src/components/layout/SyncProgressBanner.tsx`** — verify no auto-resume path (already commented). Only render when an active `running`/`interrupted` row exists in `asset_sync_state`.
-4. **`src/hooks/useModelLoader.ts`** — gate any `asset-plus-sync` invocation behind an explicit user action / setting; do not call automatically when opening a building.
+Add a small pure helper used by all three call sites:
 
-### B. Fix structure count parity
+```ts
+// Pick the newest revision with status === 4 (Published) for a candidate set.
+// Falls back to newest of any status if no Published exists.
+function pickLatestPublishedRevision(revs: any[]): any | null {
+  if (!revs?.length) return null;
+  const byDate = (a: any, b: any) =>
+    new Date(b.dateCreated || 0).getTime() - new Date(a.dateCreated || 0).getTime();
+  const published = revs.filter(r => Number(r.status) === 4);
+  return (published.length ? published : revs).sort(byDate)[0] ?? null;
+}
+```
 
-In `supabase/functions/asset-plus-sync/index.ts`, `check-sync-status` (~line 659):
-- Add `accLocalStructureCount` mirroring the existing `accLocalCount` predicate used for assets (same ACC/IFC source filter).
-- Return `structure.localCount` as Asset+-scope (total minus ACC), plus `structure.accLocalCount` for the badge text the UI already renders (line 3266).
-- `inSync` then compares Asset+-scope local vs `remoteStructureCount`.
+Place it in the edge function (top of `asset-plus-sync/index.ts`) and a mirrored copy in `src/hooks/useModelLoader.ts` (or extract to `src/services/asset-plus-service.ts` and import from both client paths — edge function keeps its own copy because it can't import client modules).
 
-### C. Fix the "62 461 objekt synkade" label
+### 2. Replace the three matching blocks
 
-1. **UI (`ApiSettingsModal.tsx`, line 3280)** — pass `totalSynced={syncCheck?.structure?.localCount}` for the Structure card, not `syncState.total_assets`. While `isRunning`, show "X upserts" (may include duplicates); when idle show the unique count.
-2. **Edge function `sync-structure`** — at the start of a fresh (non-resumed) run, reset `progress.total_synced` to 0. On `completed`, write the actual unique structure row count (`SELECT count(*) WHERE category in (...)`) into `asset_sync_state.total_assets` so cards show the real number after sync.
+For each existing match-by-bimObjectId / match-by-modelId / match-by-name step, **collect candidates** instead of returning the first match, then run them through `pickLatestPublishedRevision`. Skeleton:
 
-### D. Translate sync UI to English
+```ts
+let candidates: any[] = [];
+if (bimObjId) {
+  candidates = allRevisions.filter(r => String(r.bimObjectId || r.BimObjectId || '') === bimObjId);
+}
+if (!candidates.length && rawModelId) {
+  candidates = allRevisions.filter(r => String(r.modelId || '') === String(rawModelId));
+}
+if (!candidates.length && modelNameLower) {
+  candidates = allRevisions.filter(r => {
+    const sameBuilding = String(r.entityName || '').toLowerCase() === buildingNameLower;
+    const revName = String(r.modelName || '').toLowerCase();
+    return sameBuilding && revName &&
+      (revName === modelNameLower || revName.includes(modelNameLower) || modelNameLower.includes(revName));
+  });
+}
+const matchedRev = pickLatestPublishedRevision(candidates);
+```
 
-Sweep these files and replace Swedish copy with English equivalents:
+Apply at:
+- `asset-plus-sync/index.ts` ~1544–1564 (primary sync mapping)
+- `asset-plus-sync/index.ts` ~1986–2030: replace `revisionMap` build + inline `.find()` with a `Map<modelId, latestPublishedRev>` built via `pickLatestPublishedRevision` grouped by `modelId`.
+- `useModelLoader.ts` ~253–263 (client bootstrap)
 
-- `src/components/settings/SyncProgressCard.tsx` — already mostly English; verify "local", "in Asset+", "In sync", "Out of sync", "Last:", "Never", "Syncing…", "Sync".
-- `src/components/settings/ApiSettingsModal.tsx` — Sync tab: card titles already English; replace any Swedish toast/label such as "Synkar…", "Synka", "Ej synkad", "Senast", "objekt synkade", "lokala", "i Asset+", "Byggnader", "skapade", "Skapa ACC-synkade objekt…" tooltip, "Tvinga om-nedladdning…", "Återställ", etc.
-- `src/components/layout/SyncProgressBanner.tsx` — already English; double-check toast messages.
-- `src/components/common/DataConsistencyBanner.tsx` — already English; verify.
-- `src/components/settings/SyncStatusLog.tsx` — translate any Swedish labels.
-- Toasts in `asset-plus-service.ts` and any sync-related component (search `rg -n "Synk|synkad|lokala|Senast|Byggnader|Återställ|Tvinga"`) — replace with English.
+### 3. Re-download when the cached revision is stale
 
-Naming convention to use (consistent with existing English UI):
-- "Synka" → "Sync"
-- "Synkar…" → "Syncing…"
-- "Ej synkad" → "Out of sync"
-- "Synkad" → "In sync"
-- "lokala" → "local"
-- "i Asset+" → "in Asset+"
-- "objekt synkade" → "objects synced"
-- "Senast" → "Last"
-- "Byggnader" → "Buildings", "plan/rum" → "floors/rooms"
-- "Återställ" → "Reset", "Tvinga" → "Force"
+`xkt_models.source_updated_at` already stores `revisionId`. Today the check is `storedRevision === revisionId` and skips when equal, which is correct **once the right revisionId is selected**. After fix (1)+(2), an old cached XKT (saved against a Draft revision) will simply mismatch the new latest-Published `revisionId` and trigger re-download — no extra logic needed.
 
-### E. Verification
+For client `useModelLoader.ts`, `xktCacheService.saveModelFromViewer(..., revisionId)` is already revision-tagged; just ensure the loader checks `revisionId` before serving from cache. Verify `xkt-cache-service.ts` honours revision when reading; if it doesn't, add the comparison and invalidate on mismatch.
 
-- Open the app → Network panel shows no `asset-plus-sync` calls until the user opens Settings → Sync and clicks a button.
-- Settings → Sync → "Check Status": Buildings/Floors/Rooms shows ~3 379 local / 3 379 in Asset+ (with "(N ACC/IFC excluded)" subtitle), "In sync" badge.
-- Run Structure sync manually → progress label reads "X upserts (may include duplicates)" while running; finished card reads the unique count, not 62k.
-- All sync dialogs, cards, badges and toasts read in English only.
+### 4. Logging
+
+Bump the existing `console.log` at line 1571 to also print `revisionId`, `status`, `dateCreated` so the next regression is one log line away:
+
+```
+✓ A-modell: matched revision modelId=… revisionId=c336d675… status=4 dateCreated=2025-…
+```
+
+### 5. Verify
+
+1. Trigger a manual Asset Sync from Settings for Småviken.
+2. Check edge function logs: every matched revision line should show `status=4` and the revisionId from the URL above (`c336d675-e4ed-4bee-a09e-11e4ccc97541`) for A-modell.
+3. Open Småviken in the viewer → A‑modell geometry matches what Asset+ shows at the supplied URL.
+4. Confirm no `asset-plus-sync` calls happen on app load (manual-only sync from earlier change still in effect).
 
 ## Files to change
 
-- `src/components/layout/AppLayout.tsx`
-- `src/components/common/DataConsistencyBanner.tsx`
-- `src/components/layout/SyncProgressBanner.tsx`
-- `src/components/settings/ApiSettingsModal.tsx`
-- `src/components/settings/SyncProgressCard.tsx`
-- `src/components/settings/SyncStatusLog.tsx`
-- `src/hooks/useModelLoader.ts`
-- `src/services/asset-plus-service.ts` (toast strings if any)
-- `supabase/functions/asset-plus-sync/index.ts`
+- `supabase/functions/asset-plus-sync/index.ts` (primary + secondary sync paths, helper, logging)
+- `src/hooks/useModelLoader.ts` (client bootstrap helper + matcher)
+- `src/services/xkt-cache-service.ts` (verify revision-aware cache hit; small change only if missing)

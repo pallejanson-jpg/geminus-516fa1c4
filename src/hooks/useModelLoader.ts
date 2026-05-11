@@ -247,17 +247,27 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
         }
       } catch {}
 
+      // Pick newest Published revision (status=4); fall back to newest of any status.
+      const pickLatestPublishedRev = (revs: any[]): any | null => {
+        if (!revs?.length) return null;
+        const byDate = (a: any, b: any) =>
+          new Date(b.dateCreated || b.DateCreated || 0).getTime() -
+          new Date(a.dateCreated || a.DateCreated || 0).getTime();
+        const published = revs.filter((r: any) => Number(r.status ?? r.Status) === 4);
+        return (published.length ? published : revs).sort(byDate)[0] ?? null;
+      };
+
       for (const model of discoveredModels) {
         const rawModelId = model.modelId || model.id || model.ModelId || '';
         const rawModelName = model.name || model.modelName || model.Name || '';
-        const matchedRevision = revisions.find((rev: any) => {
+        const modelName = normalizeName(rawModelName);
+        const candidates = revisions.filter((rev: any) => {
           const revModelId = String(rev.modelId || '');
           if (rawModelId && revModelId === String(rawModelId)) return true;
-
           const revName = normalizeName(rev.modelName || rev.entityName);
-          const modelName = normalizeName(rawModelName);
           return !!revName && !!modelName && (revName === modelName || revName.includes(modelName) || modelName.includes(revName));
         });
+        const matchedRevision = pickLatestPublishedRev(candidates);
 
         const modelId = String(rawModelId || matchedRevision?.modelId || '');
         const revisionId = String(matchedRevision?.revisionId || model.revisionId || model.RevisionId || '');
@@ -296,11 +306,11 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
         
         if (!xktData) continue;
         
-        const modelName = rawModelName || matchedRevision?.modelName || matchedRevision?.entityName || modelId;
+        const finalModelName = rawModelName || matchedRevision?.modelName || matchedRevision?.entityName || modelId;
         storeModelInMemory(modelId, buildingFmGuid, xktData);
-        xktCacheService.saveModelFromViewer(modelId, xktData, buildingFmGuid, modelName, revisionId || undefined).catch(() => {});
+        xktCacheService.saveModelFromViewer(modelId, xktData, buildingFmGuid, finalModelName, revisionId || undefined).catch(() => {});
         bootstrapped.push({
-          model_id: modelId, model_name: modelName,
+          model_id: modelId, model_name: finalModelName,
           storage_path: `${buildingFmGuid}/${modelId}.xkt`,
           file_size: xktData.byteLength, storey_fm_guid: null, source: 'db',
         });

@@ -3,6 +3,17 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyAuth, unauthorizedResponse, forbiddenResponse, corsHeaders } from "../_shared/auth.ts";
 import { getAssetPlusCredentials } from "../_shared/credentials.ts";
 
+// Pick the newest revision with status === 4 (Published).
+// Falls back to newest of any status if no Published exists.
+function pickLatestPublishedRevision(revs: any[]): any | null {
+  if (!revs?.length) return null;
+  const byDate = (a: any, b: any) =>
+    new Date(b.dateCreated || b.DateCreated || 0).getTime() -
+    new Date(a.dateCreated || a.DateCreated || 0).getTime();
+  const published = revs.filter((r: any) => Number(r.status ?? r.Status) === 4);
+  return (published.length ? published : revs).sort(byDate)[0] ?? null;
+}
+
 // Module-level credential overrides (set per-request from building_settings)
 let _creds = {
   apiUrl: '',
@@ -1540,35 +1551,36 @@ serve(async (req) => {
             const mName = m.name || m.modelName || m.Name || `Model`;
             const modelNameLower = String(mName).toLowerCase();
             
+            // Collect candidate revisions, then pick the latest Published one.
             // Step A: Match by bimObjectId (exact)
-            let matchedRev = bimObjId ? allRevisions.find((rev: any) => {
+            let candidateRevs: any[] = bimObjId ? allRevisions.filter((rev: any) => {
               const revBim = String(rev.bimObjectId || rev.BimObjectId || '');
               return revBim && revBim === bimObjId;
-            }) : null;
-            
+            }) : [];
+
             // Step B: Match by modelId (exact)
-            if (!matchedRev && rawModelId) {
-              matchedRev = allRevisions.find((rev: any) => String(rev.modelId || '') === String(rawModelId));
+            if (!candidateRevs.length && rawModelId) {
+              candidateRevs = allRevisions.filter((rev: any) => String(rev.modelId || '') === String(rawModelId));
             }
-            
+
             // Step C: Match by name, but ONLY within the same building (entityName filter)
-            if (!matchedRev && modelNameLower) {
-              const buildingScopedRevs = allRevisions.filter((rev: any) => {
+            if (!candidateRevs.length && modelNameLower) {
+              candidateRevs = allRevisions.filter((rev: any) => {
                 const revEntity = String(rev.entityName || '').toLowerCase();
-                return revEntity && revEntity === buildingNameLower;
-              });
-              matchedRev = buildingScopedRevs.find((rev: any) => {
+                if (!revEntity || revEntity !== buildingNameLower) return false;
                 const revName = String(rev.modelName || '').toLowerCase();
                 return revName && (revName === modelNameLower || revName.includes(modelNameLower) || modelNameLower.includes(revName));
               });
             }
-            
+
+            const matchedRev = pickLatestPublishedRevision(candidateRevs);
+
             // Resolve modelId: prefer revision's modelId, then stored modelId, then raw, then bimObjId
             const storedId = storedModelIds[modelNameLower] || '';
             const resolvedModelId = String(matchedRev?.modelId || storedId || rawModelId || bimObjId || '');
-            
+
             if (matchedRev?.modelId) {
-              console.log(`  ✓ ${mName}: matched revision modelId=${matchedRev.modelId} (entityName=${matchedRev.entityName})`);
+              console.log(`  ✓ ${mName}: matched revision modelId=${matchedRev.modelId} revisionId=${matchedRev.revisionId} status=${matchedRev.status} dateCreated=${matchedRev.dateCreated} (entityName=${matchedRev.entityName}, ${candidateRevs.length} candidates)`);
             } else if (storedId) {
               console.log(`  ◆ ${mName}: using stored modelId=${storedId} from assets table`);
             } else {
@@ -1983,10 +1995,20 @@ serve(async (req) => {
           }
         } catch (e) { console.log(`GetAllModelRevisions error: ${e}`); }
 
-        // Build revision lookup: modelId → revisionId
+        // Build revision lookup: modelId → latest Published revisionId.
+        // Group all revisions by modelId, then pick the newest with status=4 per group.
         const revisionMap = new Map<string, string>();
+        const revsByModelId = new Map<string, any[]>();
         for (const rev of revisions) {
-          if (rev.modelId) revisionMap.set(String(rev.modelId), rev.revisionId || '');
+          const mid = String(rev.modelId || '');
+          if (!mid) continue;
+          const arr = revsByModelId.get(mid) ?? [];
+          arr.push(rev);
+          revsByModelId.set(mid, arr);
+        }
+        for (const [mid, revs] of revsByModelId) {
+          const latest = pickLatestPublishedRevision(revs);
+          if (latest?.revisionId) revisionMap.set(mid, String(latest.revisionId));
         }
 
         // Helper: try fetching XKT with multiple identifier combinations
@@ -2023,11 +2045,14 @@ serve(async (req) => {
         for (const model of models) {
           const rawModelId = model.modelId || model.id || model.ModelId || '';
           const modelName = model.name || model.modelName || model.Name || `Model`;
-          const matchedRevisionId = revisions.find((rev: any) => {
-            const revName = String(rev.modelName || '').toLowerCase();
-            const modelNameLower = String(modelName).toLowerCase();
-            return (rawModelId && String(rev.modelId || '') === String(rawModelId)) || (!!revName && !!modelNameLower && (revName === modelNameLower || revName.includes(modelNameLower) || modelNameLower.includes(revName)));
-          })?.modelId || '';
+          const matchedRevisionId = pickLatestPublishedRevision(
+            revisions.filter((rev: any) => {
+              const revName = String(rev.modelName || '').toLowerCase();
+              const modelNameLower = String(modelName).toLowerCase();
+              return (rawModelId && String(rev.modelId || '') === String(rawModelId))
+                || (!!revName && !!modelNameLower && (revName === modelNameLower || revName.includes(modelNameLower) || modelNameLower.includes(revName)));
+            })
+          )?.modelId || '';
           const modelId = rawModelId || matchedRevisionId || `model_${Date.now()}`;
           const bimObjectId = model.bimObjectId || model.BimObjectId || '';
           const modelFmGuid = model.fmGuid || model.FmGuid || '';
