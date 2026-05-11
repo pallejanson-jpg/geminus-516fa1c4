@@ -1551,35 +1551,36 @@ serve(async (req) => {
             const mName = m.name || m.modelName || m.Name || `Model`;
             const modelNameLower = String(mName).toLowerCase();
             
+            // Collect candidate revisions, then pick the latest Published one.
             // Step A: Match by bimObjectId (exact)
-            let matchedRev = bimObjId ? allRevisions.find((rev: any) => {
+            let candidateRevs: any[] = bimObjId ? allRevisions.filter((rev: any) => {
               const revBim = String(rev.bimObjectId || rev.BimObjectId || '');
               return revBim && revBim === bimObjId;
-            }) : null;
-            
+            }) : [];
+
             // Step B: Match by modelId (exact)
-            if (!matchedRev && rawModelId) {
-              matchedRev = allRevisions.find((rev: any) => String(rev.modelId || '') === String(rawModelId));
+            if (!candidateRevs.length && rawModelId) {
+              candidateRevs = allRevisions.filter((rev: any) => String(rev.modelId || '') === String(rawModelId));
             }
-            
+
             // Step C: Match by name, but ONLY within the same building (entityName filter)
-            if (!matchedRev && modelNameLower) {
-              const buildingScopedRevs = allRevisions.filter((rev: any) => {
+            if (!candidateRevs.length && modelNameLower) {
+              candidateRevs = allRevisions.filter((rev: any) => {
                 const revEntity = String(rev.entityName || '').toLowerCase();
-                return revEntity && revEntity === buildingNameLower;
-              });
-              matchedRev = buildingScopedRevs.find((rev: any) => {
+                if (!revEntity || revEntity !== buildingNameLower) return false;
                 const revName = String(rev.modelName || '').toLowerCase();
                 return revName && (revName === modelNameLower || revName.includes(modelNameLower) || modelNameLower.includes(revName));
               });
             }
-            
+
+            const matchedRev = pickLatestPublishedRevision(candidateRevs);
+
             // Resolve modelId: prefer revision's modelId, then stored modelId, then raw, then bimObjId
             const storedId = storedModelIds[modelNameLower] || '';
             const resolvedModelId = String(matchedRev?.modelId || storedId || rawModelId || bimObjId || '');
-            
+
             if (matchedRev?.modelId) {
-              console.log(`  ✓ ${mName}: matched revision modelId=${matchedRev.modelId} (entityName=${matchedRev.entityName})`);
+              console.log(`  ✓ ${mName}: matched revision modelId=${matchedRev.modelId} revisionId=${matchedRev.revisionId} status=${matchedRev.status} dateCreated=${matchedRev.dateCreated} (entityName=${matchedRev.entityName}, ${candidateRevs.length} candidates)`);
             } else if (storedId) {
               console.log(`  ◆ ${mName}: using stored modelId=${storedId} from assets table`);
             } else {
