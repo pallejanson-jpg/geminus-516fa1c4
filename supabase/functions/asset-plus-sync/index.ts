@@ -1672,19 +1672,24 @@ serve(async (req) => {
             try {
               // Build identifier fallback chain for XKT download
               const bimObjId = rev._bimObjectId || bimObjectIdMap.get(String(revModelId)) || '';
+              const buildingBimObjectId = rev._buildingBimObjectId || '';
               const modelFmGuid = rev.fmGuid || rev.FmGuid || '';
               const externalGuid = rev.externalGuid || rev.ExternalGuid || '';
-              
+
               // Try multiple identifier combinations
               let xktData: ArrayBuffer | null = null;
               let usedIdentifier = '';
-              
+
               // Find matched revision for additional identifiers
               const matchedRev = allRevisions.find((r: any) => String(r.modelId || '') === String(revModelId));
               const revBimObjId = matchedRev?.bimObjectId || matchedRev?.BimObjectId || '';
               const revEntityId = matchedRev?.entityId || matchedRev?.EntityId || '';
-              
+
+              // ALWAYS prefer the per-model buildingBimObjectId so Asset+ scopes the
+              // XKT to this single building (otherwise complex-wide models return
+              // geometry for every building in the complex).
               const idCombos: { param: string; value: string; label: string }[] = [
+                { param: 'bimobjectid', value: buildingBimObjectId, label: 'bimobjectid(buildingBimObjectId)' },
                 { param: 'bimobjectid', value: bimObjId, label: 'bimobjectid(model)' },
                 { param: 'bimobjectid', value: revBimObjId, label: 'bimobjectid(revision)' },
                 { param: 'externalguid', value: externalGuid, label: 'externalguid(model)' },
