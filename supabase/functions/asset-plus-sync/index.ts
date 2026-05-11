@@ -1593,6 +1593,7 @@ serve(async (req) => {
               modelName: mName,
               entityName: buildingName,
               _bimObjectId: bimObjId || m.fmGuid || m.FmGuid || '',
+              _buildingBimObjectId: m.buildingBimObjectId || m.BuildingBimObjectId || matchedRev?.buildingBimObjectId || matchedRev?.BuildingBimObjectId || '',
               fmGuid: m.fmGuid || m.FmGuid || '',
               externalGuid: m.externalGuid || m.ExternalGuid || '',
               _resolvedFromRevision: !!matchedRev?.modelId,
