@@ -68,10 +68,24 @@ const isArchitectural = (name: string | null) => {
 export interface UseModelLoaderOptions {
   buildingFmGuid: string;
   isMobile: boolean;
+  modelFilterFmGuid?: string | null;
+  modelFilterCategory?: string | null;
 }
 
-export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptions) {
+const getXktContextForCategory = (category?: string | null): 'Building' | 'Level' | 'Space' | 'Asset' => {
+  const normalized = String(category || '').toLowerCase();
+  if (normalized.includes('building') && !normalized.includes('storey')) return 'Building';
+  if (normalized.includes('storey') || normalized === 'floor' || normalized.includes('level')) return 'Level';
+  if (normalized.includes('space') || normalized.includes('room')) return 'Space';
+  return 'Asset';
+};
+
+export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, modelFilterCategory }: UseModelLoaderOptions) {
   const pendingInsightsColorRef = useRef<InsightsColorUpdateDetail | null>(null);
+  const scopedFmGuid = modelFilterFmGuid || buildingFmGuid;
+  const isScopedLoad = !!modelFilterFmGuid && modelFilterFmGuid !== buildingFmGuid;
+  const modelMemoryScope = isScopedLoad ? `${buildingFmGuid}::${modelFilterFmGuid}` : buildingFmGuid;
+  const xktContext = getXktContextForCategory(isScopedLoad ? modelFilterCategory : 'Building');
 
   /**
    * Fetch model metadata from DB (primary) and storage (fallback).
