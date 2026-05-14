@@ -310,6 +310,9 @@ export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, mo
         // Asset+ scopes the XKT to this single building (otherwise complex-wide models
         // return geometry for every building in the complex).
         const idCombos: { param: string; value: string }[] = [
+          { param: 'bimobjectid', value: scopedBimObjectId },
+          { param: 'externalguid', value: scopedFmGuid },
+          { param: 'externalguid', value: scopedExternalGuid },
           { param: 'bimobjectid', value: buildingBimObjectId },
           { param: 'bimobjectid', value: bimObjectId },
           { param: 'externalguid', value: externalGuid },
@@ -321,7 +324,7 @@ export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, mo
         let xktData: ArrayBuffer | null = null;
         for (const combo of idCombos) {
           if (!combo.value) continue;
-          const xktUrl = `${workingBase}/GetXktData?modelid=${modelId}&${combo.param}=${encodeURIComponent(combo.value)}&context=Building&apiKey=${apiKey}`;
+          const xktUrl = `${workingBase}/GetXktData?modelid=${modelId}&${combo.param}=${encodeURIComponent(combo.value)}&context=${xktContext}&apiKey=${apiKey}`;
           try {
             const xktRes = await fetch(xktUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
             if (!xktRes.ok) continue;
@@ -337,8 +340,10 @@ export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, mo
         if (!xktData) continue;
         
         const finalModelName = rawModelName || matchedRevision?.modelName || matchedRevision?.entityName || modelId;
-        storeModelInMemory(modelId, buildingFmGuid, xktData);
-        xktCacheService.saveModelFromViewer(modelId, xktData, buildingFmGuid, finalModelName, revisionId || undefined).catch(() => {});
+        storeModelInMemory(modelId, modelMemoryScope, xktData);
+        if (!isScopedLoad) {
+          xktCacheService.saveModelFromViewer(modelId, xktData, buildingFmGuid, finalModelName, revisionId || undefined).catch(() => {});
+        }
         bootstrapped.push({
           model_id: modelId, model_name: finalModelName,
           storage_path: `${buildingFmGuid}/${modelId}.xkt`,
@@ -350,7 +355,7 @@ export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, mo
       console.warn('[ModelLoader] Client-side bootstrap failed:', e);
       return [];
     }
-  }, [buildingFmGuid]);
+  }, [buildingFmGuid, isScopedLoad, modelMemoryScope, scopedFmGuid, xktContext]);
 
   /**
    * Load a single XKT model into the viewer (progressive — visible immediately on load).
@@ -383,7 +388,7 @@ export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, mo
           setTimeout(() => done(false), 90_000);
         });
 
-      const memData = getModelFromMemory(modelId, buildingFmGuid);
+      const memData = getModelFromMemory(modelId, modelMemoryScope);
       if (memData) {
         const entity = xktLoader.load({ id: modelId, xkt: memData, edges: true, ...(metaModelSrc && { metaModelSrc }) });
         const ok = await waitForModel(entity);
@@ -413,7 +418,7 @@ export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, mo
       const firstByte = arrayBuf.byteLength > 0 ? String.fromCharCode(new Uint8Array(arrayBuf)[0]) : '';
       if (arrayBuf.byteLength < 50_000 || firstByte === '<' || firstByte === '{') return false;
 
-      storeModelInMemory(modelId, buildingFmGuid, arrayBuf);
+        storeModelInMemory(modelId, modelMemoryScope, arrayBuf);
       const entity = xktLoader.load({ id: modelId, xkt: arrayBuf, edges: true, ...(metaModelSrc && { metaModelSrc }) });
       const ok = await waitForModel(entity);
       if (!ok) return false;
@@ -427,7 +432,7 @@ export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, mo
       console.warn(`[ModelLoader] Error loading ${modelId}:`, e);
       return false;
     }
-  }, [buildingFmGuid]);
+  }, [buildingFmGuid, modelMemoryScope]);
 
   /**
    * Run the full model loading pipeline with progressive visibility.
