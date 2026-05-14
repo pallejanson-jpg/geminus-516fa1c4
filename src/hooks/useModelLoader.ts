@@ -83,8 +83,8 @@ const getXktContextForCategory = (category?: string | null): 'Building' | 'Level
 export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, modelFilterCategory }: UseModelLoaderOptions) {
   const pendingInsightsColorRef = useRef<InsightsColorUpdateDetail | null>(null);
   const scopedFmGuid = modelFilterFmGuid || buildingFmGuid;
-  const isScopedLoad = !!modelFilterFmGuid && modelFilterFmGuid !== buildingFmGuid;
-  const modelMemoryScope = isScopedLoad ? `${buildingFmGuid}::${modelFilterFmGuid}` : buildingFmGuid;
+  const isScopedLoad = !!modelFilterFmGuid;
+  const modelMemoryScope = isScopedLoad ? `${buildingFmGuid}::${scopedFmGuid}` : buildingFmGuid;
   const xktContext = getXktContextForCategory(isScopedLoad ? modelFilterCategory : 'Building');
 
   /**
@@ -195,7 +195,7 @@ export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, mo
       let workingBase: string | null = null;
       for (const base of [...new Set(candidateBases)]) {
         try {
-          const url = `${base}/GetAllRelatedModels?fmguid=${buildingFmGuid}`;
+          const url = `${base}/GetAllRelatedModels?fmguid=${encodeURIComponent(scopedFmGuid)}`;
           const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
           if (res.ok) {
             const data = await res.json();
@@ -206,6 +206,37 @@ export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, mo
       }
 
       if (!discoveredModels?.length || !workingBase) return [];
+
+      let scopedBimObjectId = '';
+      let scopedExternalGuid = '';
+      try {
+        const [{ data: scopedAsset }, coverageRes] = await Promise.all([
+          supabase.from('assets').select('attributes').eq('fm_guid', scopedFmGuid).maybeSingle(),
+          fetch(`${workingBase}/PublishDataServiceGet?subscription-key=${encodeURIComponent(apiKey)}`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+              'Ocp-Apim-Subscription-Key': apiKey,
+            },
+            body: JSON.stringify({
+              filter: ['fmGuid', '=', scopedFmGuid.toLowerCase()],
+              select: ['modelBimObjectId', 'bimObjectId', 'fmGuid', 'externalGuid'],
+              modelType: 0,
+            }),
+          }),
+        ]);
+        const attrs = typeof scopedAsset?.attributes === 'string' ? JSON.parse(scopedAsset.attributes) : scopedAsset?.attributes;
+        scopedExternalGuid = attrs?.externalGuid || attrs?.ExternalGuid || '';
+        if (coverageRes.ok) {
+          const coverageJson = await coverageRes.json();
+          const coverageRows = Array.isArray(coverageJson?.data) ? coverageJson.data : Array.isArray(coverageJson) ? coverageJson : [];
+          scopedBimObjectId = coverageRows.find((r: any) => r?.bimObjectId)?.bimObjectId || '';
+          scopedExternalGuid = scopedExternalGuid || coverageRows.find((r: any) => r?.externalGuid)?.externalGuid || '';
+        }
+      } catch (e) {
+        console.debug('[ModelLoader] Scoped FMGUID lookup failed:', e);
+      }
 
       let revisions: any[] = [];
       try {
