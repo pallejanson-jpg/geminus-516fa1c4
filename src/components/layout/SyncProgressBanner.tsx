@@ -227,7 +227,8 @@ export const SyncProgressBanner: React.FC = () => {
             return;
           }
           
-          if (newState.sync_status === 'running' || newState.sync_status === 'interrupted') {
+          if (newState.sync_status === 'running' && newState.last_sync_started_at &&
+              Date.now() - new Date(newState.last_sync_started_at).getTime() < STALE_THRESHOLD_MS) {
             setDismissed(false);
             setActiveSyncs(prev => {
               const existing = prev.findIndex(s => s.subtree_id === newState.subtree_id);
