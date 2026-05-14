@@ -12,7 +12,7 @@
  *  └─────────────────────────────┘
  */
 
-import React, { useState, useEffect, useCallback, useRef, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useContext, useMemo } from 'react';
 import ViewerFilterPanel from '@/components/viewer/ViewerFilterPanel';
 import {
   X, Menu, Orbit, Hand, Maximize, MousePointer, Ruler,
@@ -227,6 +227,8 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
   setViewMode,
   sdkContainerRef,
   hasIvion,
+  floorFmGuid,
+  entityFmGuid,
   onGoBack,
   viewerInstanceRef,
   viewerReady,
@@ -236,6 +238,14 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
   const { allData } = useContext(AppContext);
   const { user } = useAuth();
   const isSplit = viewMode === 'split2d3d';
+  const modelFilterTarget = useMemo(() => {
+    const fmGuid = entityFmGuid || floorFmGuid || buildingData.fmGuid;
+    const selected = allData.find((item: any) => item.fmGuid === fmGuid);
+    return {
+      fmGuid,
+      category: selected?.category || (floorFmGuid ? 'Building Storey' : 'Building'),
+    };
+  }, [allData, buildingData.fmGuid, entityFmGuid, floorFmGuid]);
   const [splitPlanReady, setSplitPlanReady] = useState(false);
   const [activeTool, setActiveTool] = useState('orbit');
   const [isXrayActive, setIsXrayActive] = useState(false);
