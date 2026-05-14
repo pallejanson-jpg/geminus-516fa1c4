@@ -12,7 +12,7 @@
  *  └─────────────────────────────┘
  */
 
-import React, { useState, useEffect, useCallback, useRef, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useContext, useMemo } from 'react';
 import ViewerFilterPanel from '@/components/viewer/ViewerFilterPanel';
 import {
   X, Menu, Orbit, Hand, Maximize, MousePointer, Ruler,
@@ -227,6 +227,8 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
   setViewMode,
   sdkContainerRef,
   hasIvion,
+  floorFmGuid,
+  entityFmGuid,
   onGoBack,
   viewerInstanceRef,
   viewerReady,
@@ -236,6 +238,14 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
   const { allData } = useContext(AppContext);
   const { user } = useAuth();
   const isSplit = viewMode === 'split2d3d';
+  const modelFilterTarget = useMemo(() => {
+    const fmGuid = entityFmGuid || floorFmGuid || buildingData.fmGuid;
+    const selected = allData.find((item: any) => item.fmGuid === fmGuid);
+    return {
+      fmGuid,
+      category: selected?.category || (floorFmGuid ? 'Building Storey' : 'Building'),
+    };
+  }, [allData, buildingData.fmGuid, entityFmGuid, floorFmGuid]);
   const [splitPlanReady, setSplitPlanReady] = useState(false);
   const [activeTool, setActiveTool] = useState('orbit');
   const [isXrayActive, setIsXrayActive] = useState(false);
@@ -797,13 +807,13 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
             </div>
             <div className="absolute left-0 right-0 z-30 h-1 bg-border" style={{ top: '50%', transform: 'translateY(-50%)' }} />
             <div className="absolute left-0 right-0 bottom-0 overflow-hidden" style={{ height: '50%' }}>
-              <NativeViewerShell buildingFmGuid={buildingData.fmGuid} onClose={onGoBack} hideBackButton hideMobileOverlay hideToolbar hideFloorSwitcher showGeminusMenu={false} />
+              <NativeViewerShell buildingFmGuid={buildingData.fmGuid} modelFilterFmGuid={modelFilterTarget.fmGuid} modelFilterCategory={modelFilterTarget.category} onClose={onGoBack} hideBackButton hideMobileOverlay hideToolbar hideFloorSwitcher showGeminusMenu={false} />
             </div>
           </>
         ) : viewMode === '360' && hasIvion ? (
           <div ref={sdkContainerRef} className="h-full w-full" />
         ) : (
-          <NativeViewerShell buildingFmGuid={buildingData.fmGuid} onClose={onGoBack} hideBackButton hideMobileOverlay hideToolbar hideFloorSwitcher showGeminusMenu={viewMode === '3d'} />
+          <NativeViewerShell buildingFmGuid={buildingData.fmGuid} modelFilterFmGuid={modelFilterTarget.fmGuid} modelFilterCategory={modelFilterTarget.category} onClose={onGoBack} hideBackButton hideMobileOverlay hideToolbar hideFloorSwitcher showGeminusMenu={viewMode === '3d'} />
         )}
       </div>
 

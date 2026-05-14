@@ -80,9 +80,18 @@ const UnifiedViewerContent: React.FC<{
   const visualizationParam = searchParams.get('visualization') as import('@/lib/visualization-utils').VisualizationType | null;
   const insightsModeParam = searchParams.get('insightsMode') || null;
   const xrayParam = searchParams.get('xray') === 'true';
+  const { allData, setViewer3dFmGuid } = useContext(AppContext);
 
   // ─── Building data (shared) ────────────────────────────────────────
   const { buildingData, isLoading, error } = useBuildingViewerData(buildingFmGuid);
+  const modelFilterTarget = useMemo(() => {
+    const fmGuid = entityFmGuid || floorFmGuid || buildingData?.fmGuid || buildingFmGuid || null;
+    const selected = fmGuid ? allData.find((item: any) => item.fmGuid === fmGuid) : null;
+    return {
+      fmGuid,
+      category: selected?.category || (floorFmGuid ? 'Building Storey' : 'Building'),
+    };
+  }, [allData, buildingData?.fmGuid, buildingFmGuid, entityFmGuid, floorFmGuid]);
 
   // ─── View mode ─────────────────────────────────────────────────────
   const hasIvion = !!buildingData?.ivionSiteId;
@@ -612,8 +621,6 @@ const UnifiedViewerContent: React.FC<{
     return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
 
-  const { setViewer3dFmGuid } = useContext(AppContext);
-
   const handleGoBack = useCallback(() => {
     // Clear viewer context to prevent redirect loops from NativeViewerPage
     setViewer3dFmGuid(null);
@@ -917,6 +924,8 @@ const UnifiedViewerContent: React.FC<{
           {shouldUseNative3D ? (
             <NativeViewerShell
               buildingFmGuid={buildingData.fmGuid}
+              modelFilterFmGuid={modelFilterTarget.fmGuid}
+              modelFilterCategory={modelFilterTarget.category}
               onClose={is3DMode ? handleGoBack : () => {}}
               hideBackButton
               hideFloorSwitcher={isSplit2D3D}

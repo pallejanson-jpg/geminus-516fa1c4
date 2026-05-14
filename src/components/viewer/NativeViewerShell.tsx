@@ -39,6 +39,8 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/comp
 
 interface NativeViewerShellProps {
   buildingFmGuid: string;
+  modelFilterFmGuid?: string | null;
+  modelFilterCategory?: string | null;
   onClose: () => void;
   /** Hide the desktop back button (when parent already has one, e.g. UnifiedViewer) */
   hideBackButton?: boolean;
@@ -52,7 +54,7 @@ interface NativeViewerShellProps {
   showGeminusMenu?: boolean;
 }
 
-const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, onClose, hideBackButton = false, hideMobileOverlay = false, hideToolbar = false, hideFloorSwitcher = false, showGeminusMenu = false }) => {
+const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, modelFilterFmGuid, modelFilterCategory, onClose, hideBackButton = false, hideMobileOverlay = false, hideToolbar = false, hideFloorSwitcher = false, showGeminusMenu = false }) => {
   const isMobile = useIsMobile();
   const { allData, isSidebarExpanded } = useContext(AppContext);
 
@@ -1085,6 +1087,8 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       <NativeXeokitViewer
         key={viewerReloadKey}
         buildingFmGuid={buildingFmGuid}
+        modelFilterFmGuid={modelFilterFmGuid || buildingFmGuid}
+        modelFilterCategory={modelFilterCategory || 'Building'}
         onClose={onClose}
         onViewerReady={handleViewerReady}
         forceBootstrap={forceBootstrap}

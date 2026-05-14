@@ -25,6 +25,8 @@ type LoadPhase = 'init' | 'loading_sdk' | 'creating_viewer' | 'syncing' | 'boots
 
 interface NativeXeokitViewerProps {
   buildingFmGuid: string;
+  modelFilterFmGuid?: string | null;
+  modelFilterCategory?: string | null;
   onClose?: () => void;
   onViewerReady?: (viewer: any) => void;
   /** When true, forces a re-download of XKT models from Asset+ before loading */
@@ -33,6 +35,8 @@ interface NativeXeokitViewerProps {
 
 const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   buildingFmGuid,
+  modelFilterFmGuid,
+  modelFilterCategory,
   onClose,
   onViewerReady,
   forceBootstrap = false,
@@ -97,7 +101,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
     loadSingleModel,
     pendingInsightsColorRef,
     isArchitectural,
-  } = useModelLoader({ buildingFmGuid, isMobile });
+  } = useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, modelFilterCategory });
 
   // ── Hook: all event listeners ──
   useViewerEventListeners({
@@ -351,7 +355,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         setPhase('error');
       }
     }
-  }, [buildingFmGuid, forceBootstrap, createInstance, fetchModelMetadata, bootstrapFromAssetPlus, loadAllModels, loadSingleModel, onViewerReady, pendingInsightsColorRef, viewerRef]);
+  }, [buildingFmGuid, modelFilterFmGuid, modelFilterCategory, forceBootstrap, createInstance, fetchModelMetadata, bootstrapFromAssetPlus, loadAllModels, loadSingleModel, onViewerReady, pendingInsightsColorRef, viewerRef]);
 
   // ── Stabilized effect: only re-run when buildingFmGuid changes ──
   // Uses a ref to always call the latest initialize without it being a dependency,
