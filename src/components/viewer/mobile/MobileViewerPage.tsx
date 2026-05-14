@@ -807,13 +807,13 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
             </div>
             <div className="absolute left-0 right-0 z-30 h-1 bg-border" style={{ top: '50%', transform: 'translateY(-50%)' }} />
             <div className="absolute left-0 right-0 bottom-0 overflow-hidden" style={{ height: '50%' }}>
-              <NativeViewerShell buildingFmGuid={buildingData.fmGuid} onClose={onGoBack} hideBackButton hideMobileOverlay hideToolbar hideFloorSwitcher showGeminusMenu={false} />
+              <NativeViewerShell buildingFmGuid={buildingData.fmGuid} modelFilterFmGuid={modelFilterTarget.fmGuid} modelFilterCategory={modelFilterTarget.category} onClose={onGoBack} hideBackButton hideMobileOverlay hideToolbar hideFloorSwitcher showGeminusMenu={false} />
             </div>
           </>
         ) : viewMode === '360' && hasIvion ? (
           <div ref={sdkContainerRef} className="h-full w-full" />
         ) : (
-          <NativeViewerShell buildingFmGuid={buildingData.fmGuid} onClose={onGoBack} hideBackButton hideMobileOverlay hideToolbar hideFloorSwitcher showGeminusMenu={viewMode === '3d'} />
+          <NativeViewerShell buildingFmGuid={buildingData.fmGuid} modelFilterFmGuid={modelFilterTarget.fmGuid} modelFilterCategory={modelFilterTarget.category} onClose={onGoBack} hideBackButton hideMobileOverlay hideToolbar hideFloorSwitcher showGeminusMenu={viewMode === '3d'} />
         )}
       </div>
 
