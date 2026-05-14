@@ -193,12 +193,15 @@ export const SyncProgressBanner: React.FC = () => {
 
   useEffect(() => {
     const fetchSyncStates = async () => {
-      // Fetch both running AND recently-interrupted syncs
+      // Only show syncs that are actually running and recently started.
+      // Stale/interrupted entries are ignored — sync must be triggered manually from Settings.
+      const freshCutoff = new Date(Date.now() - STALE_THRESHOLD_MS).toISOString();
       const { data } = await supabase
         .from('asset_sync_state')
         .select('*')
-        .in('sync_status', ['running', 'interrupted']);
-      
+        .eq('sync_status', 'running')
+        .gte('last_sync_started_at', freshCutoff);
+
       if (data && data.length > 0) {
         setActiveSyncs(data);
         fetchProgress();
@@ -224,7 +227,8 @@ export const SyncProgressBanner: React.FC = () => {
             return;
           }
           
-          if (newState.sync_status === 'running' || newState.sync_status === 'interrupted') {
+          if (newState.sync_status === 'running' && newState.last_sync_started_at &&
+              Date.now() - new Date(newState.last_sync_started_at).getTime() < STALE_THRESHOLD_MS) {
             setDismissed(false);
             setActiveSyncs(prev => {
               const existing = prev.findIndex(s => s.subtree_id === newState.subtree_id);
