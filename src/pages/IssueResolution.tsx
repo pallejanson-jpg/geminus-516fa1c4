@@ -166,14 +166,11 @@ const IssueResolution: React.FC = () => {
         })
         .eq("id", issue.id);
 
-      // Update assignment
-      await supabase
-        .from("bcf_issue_assignments")
-        .update({
-          responded_at: new Date().toISOString(),
-          response_status: "resolved",
-        })
-        .eq("id", assignment.id);
+      // Update assignment via secure RPC
+      await supabase.rpc("respond_to_assignment", {
+        p_token: assignment.token,
+        p_status: "resolved",
+      });
 
       setIssue({ ...issue, status: "resolved" });
       toast({ title: "Issue marked as resolved" });
