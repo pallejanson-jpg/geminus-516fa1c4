@@ -64,12 +64,11 @@ const IssueResolution: React.FC = () => {
   const loadIssueByToken = async (t: string) => {
     setIsLoading(true);
     try {
-      // Find assignment by token
-      const { data: assignmentData, error: assignErr } = await supabase
-        .from("bcf_issue_assignments")
-        .select("*")
-        .eq("token", t)
-        .single();
+      // Find assignment by token via secure RPC (replaces direct anon SELECT)
+      const { data: rpcData, error: assignErr } = await supabase
+        .rpc("get_assignment_by_token", { p_token: t });
+
+      const assignmentData = Array.isArray(rpcData) ? rpcData[0] : rpcData;
 
       if (assignErr || !assignmentData) {
         setError("Invalid or expired link.");
@@ -81,11 +80,9 @@ const IssueResolution: React.FC = () => {
 
       // Mark as viewed
       if (!assignmentData.viewed_at) {
-        await supabase
-          .from("bcf_issue_assignments")
-          .update({ viewed_at: new Date().toISOString() })
-          .eq("id", assignmentData.id);
+        await supabase.rpc("mark_assignment_viewed", { p_token: t });
       }
+
 
       // Fetch issue
       const { data: issueData, error: issueErr } = await supabase
