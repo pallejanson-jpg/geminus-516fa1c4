@@ -2235,6 +2235,27 @@ export type Database = {
         Returns: Json
       }
       get_assets_in_room: { Args: { room_guid: string }; Returns: Json }
+      get_assignment_by_token: {
+        Args: { p_token: string }
+        Returns: {
+          assigned_by_user_id: string
+          assigned_to_user_id: string
+          created_at: string | null
+          id: string
+          issue_id: string
+          responded_at: string | null
+          response_status: string | null
+          sent_at: string | null
+          token: string
+          viewed_at: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "bcf_issue_assignments"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_latest_sensor_values: {
         Args: { sensor_ids: string[] }
         Returns: Json
@@ -2261,6 +2282,11 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      mark_assignment_viewed: { Args: { p_token: string }; Returns: undefined }
+      respond_to_assignment: {
+        Args: { p_status: string; p_token: string }
+        Returns: undefined
+      }
       search_assets_rpc: {
         Args: { building_guid?: string; search: string }
         Returns: Json

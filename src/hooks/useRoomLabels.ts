@@ -174,24 +174,36 @@ export function useRoomLabels(
     }
   }, []);
 
+  // Escape user-controlled metadata to prevent XSS when rendered via innerHTML.
+  const escapeHtml = (str: unknown): string => {
+    const s = String(str ?? '');
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
   // Build label HTML content from config fields
   const buildLabelContent = useCallback((metaObj: any): string => {
     const config = configRef.current;
     const lines: string[] = [];
-    
+
     config.fields.forEach((fieldKey, index) => {
       const value = extractFieldValue(metaObj, fieldKey);
       if (value) {
+        const safe = escapeHtml(value);
         if (index === 0) {
           // First field is primary (larger, bolder)
-          lines.push(`<div style="font-weight: 600; font-size: ${config.fontSize}px; opacity: 0.9;">${value}</div>`);
+          lines.push(`<div style="font-weight: 600; font-size: ${config.fontSize}px; opacity: 0.9;">${safe}</div>`);
         } else {
           // Secondary fields are smaller
-          lines.push(`<div style="font-size: ${config.fontSize - 1}px; opacity: 0.7; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${value}</div>`);
+          lines.push(`<div style="font-size: ${config.fontSize - 1}px; opacity: 0.7; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${safe}</div>`);
         }
       }
     });
-    
+
     return lines.length > 0 ? lines.join('') : '<div style="font-size: 10px;">—</div>';
   }, [extractFieldValue]);
 
