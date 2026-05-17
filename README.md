@@ -36,6 +36,47 @@ npm i
 npm run dev
 ```
 
+## Running locally on your own Node server
+
+The app is a Vite + React SPA. The backend (database, auth, edge functions) lives in Lovable Cloud and is reached via `VITE_SUPABASE_URL` + `VITE_SUPABASE_PUBLISHABLE_KEY`.
+
+### 1. Dev server
+
+```sh
+bun install        # or: npm install
+bun run dev        # http://localhost:5173
+```
+
+`.env` (project root):
+
+```
+VITE_SUPABASE_URL=https://diqfthpfncdojlnqnicq.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=<anon key>
+VITE_SUPABASE_PROJECT_ID=diqfthpfncdojlnqnicq
+```
+
+### 2. Production build served by Node
+
+```sh
+bun run build              # outputs /dist
+npx serve dist -l 3000     # or your own Express static server
+```
+
+Make sure your server falls back to `index.html` for unknown routes (SPA routing).
+
+### 3. Google login when running locally
+
+Google sign-in now uses Supabase's OAuth provider directly (not the Lovable-managed broker), so `http://localhost` works once configured:
+
+1. **Google Cloud Console** → create OAuth Client (Web). Authorized redirect URIs:
+   - `https://diqfthpfncdojlnqnicq.supabase.co/auth/v1/callback`
+   - `http://localhost:5173` (and any other local origin you use)
+2. **Lovable Cloud → Users → Auth Settings → Google**: paste Client ID + Client Secret (this disables the managed Google credentials in favor of yours).
+3. **Auth Settings → URL Configuration**: add `http://localhost:5173` to Site URL / Additional Redirect URLs.
+4. If sign-in misbehaves locally, unregister the service worker (DevTools → Application → Service Workers) — it can cache stale OAuth responses.
+
+No secrets need to be copied to your local machine; all `*_API_KEY` / `*_PASSWORD` values stay as edge-function secrets in Lovable Cloud.
+
 **Edit a file directly in GitHub**
 
 - Navigate to the desired file(s).
