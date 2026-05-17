@@ -62,7 +62,8 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, m
   const [xeokitViewer, setXeokitViewer] = useState<any>(null);
   const [isViewerReady, setIsViewerReady] = useState(false);
   const [viewerReloadKey, setViewerReloadKey] = useState(0);
-  const [forceBootstrap, setForceBootstrap] = useState(true);
+  // DB-first: only force-bootstrap from Asset+ when user explicitly triggers XKT_FORCE_RELOAD
+  const [forceBootstrap, setForceBootstrap] = useState(false);
 
   // Listen for XKT_FORCE_RELOAD to remount the viewer with fresh data
   useEffect(() => {
