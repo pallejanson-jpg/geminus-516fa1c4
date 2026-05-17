@@ -1,107 +1,78 @@
-## Problem
+# Köra appen lokalt + lösa Google-login
 
-The Asset+ URL you shared:
+## Bakgrund
 
-```
-revisionStatus=4
-revisionId=c336d675-e4ed-4bee-a09e-11e4ccc97541
-modelType=0
-buildingBimObjectId=46359aa0-…
-complexBimObjectId=c3d4a4a8-…
-```
+Appen är en ren **Vite + React** frontend (ingen egen Node-backend i repo). All "backend" ligger i Lovable Cloud (Supabase): databas, edge functions, auth. Det betyder att du kan köra frontend var som helst — det enda du behöver är att den når Supabase-projektet `diqfthpfncdojlnqnicq` via `VITE_SUPABASE_URL` och `VITE_SUPABASE_PUBLISHABLE_KEY`.
 
-`revisionStatus=4` = **Published**. The Asset+ UI always opens the latest *Published* revision.
+Google-loginen är däremot inte ren Supabase OAuth — den går via **Lovable Managed OAuth** (`@lovable.dev/cloud-auth-js` i `src/integrations/lovable/index.ts`). Den routar via Lovables OAuth-broker (`oauth.lovable.app` + en proxy på `*.lovable.app` / godkända custom domains). Det är det som blir problemet lokalt: `http://localhost:5173` är inte ett godkänt redirect-ursprung i den managed flödet.
 
-In our codebase, the revision matching uses `.find()` on the full `GetAllModelRevisions` list with no status filter and no date sort:
+---
 
-- `supabase/functions/asset-plus-sync/index.ts` lines 1544–1564 (sync — primary path)
-- `supabase/functions/asset-plus-sync/index.ts` lines 2026–2030 + 1986–1990 (sync — secondary path / `revisionMap`)
-- `src/hooks/useModelLoader.ts` lines 253–263 (client bootstrap)
+## Två alternativ för Google-login lokalt
 
-`GetAllModelRevisions` returns *every* revision (Draft, Published, Archived, …) for each model. `.find()` returns the first match, so we can pick a Draft or an old revision and download/cache that XKT — which is why the wrong A‑modell version is loaded for Småviken.
+### Alternativ A — Behåll Lovable Managed Google (enklast)
+Funkar bara från `*.lovable.app` eller en aktiv custom domain. Lokalt fungerar det INTE eftersom OAuth-brokern inte tillåter `localhost` som redirect.
+- Praktisk lösning: testa auth-flödet i preview/published URL och kör övrig utveckling lokalt utan inloggning (mocka `useAuth` i dev), eller
+- Använd en lokal tunnel (Cloudflare Tunnel / ngrok) som pekar mot en custom domain som redan är tillagd i Lovable.
 
-The diagnostic code at line 3054–3056 already proves the right pattern:
+### Alternativ B — Egna Google OAuth-credentials direkt mot Supabase (rekommenderat för lokalt)
+Slå på "vanlig" Supabase Google-provider med dina egna client ID/secret. Då fungerar `http://localhost:5173` så länge du lägger till det som redirect URL i Google Cloud + Supabase.
 
-```ts
-const aModelRevs = filtered.filter(r => r.modelName === 'A-modell');
-const publishedRevs = aModelRevs.filter(r => r.status === 4);
-const latestPublished = publishedRevs
-  .sort((a, b) => new Date(b.dateCreated).getTime() - new Date(a.dateCreated).getTime())[0];
-```
+Steg:
+1. I Google Cloud Console: skapa OAuth Client (Web), lägg till redirect URI:
+   - `https://diqfthpfncdojlnqnicq.supabase.co/auth/v1/callback`
+   - `http://localhost:5173`
+2. I Lovable Cloud → Users → Auth Settings → Google: klistra in Client ID + Secret (stänger av managed-läget för Google).
+3. Byt anropet i `src/pages/Login.tsx` från `lovable.auth.signInWithOAuth(...)` till `supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })`.
+4. Lägg till `http://localhost:5173` under Site URL / Redirect URLs i Cloud auth-inställningarna.
 
-…but the real sync/loader paths don't apply it.
+---
 
-## Plan
+## Köra frontend på din lokala Node-server
 
-### 1. Centralize "pick latest Published revision" helper
+Två varianter beroende på vad "lokal Node JS-server" betyder:
 
-Add a small pure helper used by all three call sites:
-
-```ts
-// Pick the newest revision with status === 4 (Published) for a candidate set.
-// Falls back to newest of any status if no Published exists.
-function pickLatestPublishedRevision(revs: any[]): any | null {
-  if (!revs?.length) return null;
-  const byDate = (a: any, b: any) =>
-    new Date(b.dateCreated || 0).getTime() - new Date(a.dateCreated || 0).getTime();
-  const published = revs.filter(r => Number(r.status) === 4);
-  return (published.length ? published : revs).sort(byDate)[0] ?? null;
-}
+**1. Bara Vite dev-server (utveckling)**
+```bash
+git clone <repo>
+bun install            # eller npm install
+cp .env.example .env   # se nedan
+bun run dev            # http://localhost:5173
 ```
 
-Place it in the edge function (top of `asset-plus-sync/index.ts`) and a mirrored copy in `src/hooks/useModelLoader.ts` (or extract to `src/services/asset-plus-service.ts` and import from both client paths — edge function keeps its own copy because it can't import client modules).
-
-### 2. Replace the three matching blocks
-
-For each existing match-by-bimObjectId / match-by-modelId / match-by-name step, **collect candidates** instead of returning the first match, then run them through `pickLatestPublishedRevision`. Skeleton:
-
-```ts
-let candidates: any[] = [];
-if (bimObjId) {
-  candidates = allRevisions.filter(r => String(r.bimObjectId || r.BimObjectId || '') === bimObjId);
-}
-if (!candidates.length && rawModelId) {
-  candidates = allRevisions.filter(r => String(r.modelId || '') === String(rawModelId));
-}
-if (!candidates.length && modelNameLower) {
-  candidates = allRevisions.filter(r => {
-    const sameBuilding = String(r.entityName || '').toLowerCase() === buildingNameLower;
-    const revName = String(r.modelName || '').toLowerCase();
-    return sameBuilding && revName &&
-      (revName === modelNameLower || revName.includes(modelNameLower) || modelNameLower.includes(revName));
-  });
-}
-const matchedRev = pickLatestPublishedRevision(candidates);
+`.env` lokalt:
+```
+VITE_SUPABASE_URL=https://diqfthpfncdojlnqnicq.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=<anon key från befintlig .env>
+VITE_SUPABASE_PROJECT_ID=diqfthpfncdojlnqnicq
 ```
 
-Apply at:
-- `asset-plus-sync/index.ts` ~1544–1564 (primary sync mapping)
-- `asset-plus-sync/index.ts` ~1986–2030: replace `revisionMap` build + inline `.find()` with a `Map<modelId, latestPublishedRev>` built via `pickLatestPublishedRevision` grouped by `modelId`.
-- `useModelLoader.ts` ~253–263 (client bootstrap)
-
-### 3. Re-download when the cached revision is stale
-
-`xkt_models.source_updated_at` already stores `revisionId`. Today the check is `storedRevision === revisionId` and skips when equal, which is correct **once the right revisionId is selected**. After fix (1)+(2), an old cached XKT (saved against a Draft revision) will simply mismatch the new latest-Published `revisionId` and trigger re-download — no extra logic needed.
-
-For client `useModelLoader.ts`, `xktCacheService.saveModelFromViewer(..., revisionId)` is already revision-tagged; just ensure the loader checks `revisionId` before serving from cache. Verify `xkt-cache-service.ts` honours revision when reading; if it doesn't, add the comparison and invalidate on mismatch.
-
-### 4. Logging
-
-Bump the existing `console.log` at line 1571 to also print `revisionId`, `status`, `dateCreated` so the next regression is one log line away:
-
+**2. Bygga + servera via Node (prod-likt)**
+```bash
+bun run build          # producerar /dist
+# servera /dist med valfri Node-server, t.ex.:
+npx serve dist -l 3000
+# eller egen Express:
+#   app.use(express.static('dist'))
+#   app.get('*', (_,res)=>res.sendFile('dist/index.html'))
 ```
-✓ A-modell: matched revision modelId=… revisionId=c336d675… status=4 dateCreated=2025-…
-```
+Viktigt: SPA-fallback till `index.html` måste finnas, annars 404 på direktnavigering.
 
-### 5. Verify
+---
 
-1. Trigger a manual Asset Sync from Settings for Småviken.
-2. Check edge function logs: every matched revision line should show `status=4` and the revisionId from the URL above (`c336d675-e4ed-4bee-a09e-11e4ccc97541`) for A-modell.
-3. Open Småviken in the viewer → A‑modell geometry matches what Asset+ shows at the supplied URL.
-4. Confirm no `asset-plus-sync` calls happen on app load (manual-only sync from earlier change still in effect).
+## Tekniska detaljer / checklista
 
-## Files to change
+- **Edge functions, DB, storage** kräver inga ändringar — de bor kvar i Lovable Cloud och nås via samma URL/anon-key.
+- **Service worker** (`public/sw.js`) kan cacha gamla OAuth-svar lokalt — avregistrera den i DevTools → Application om login beter sig konstigt.
+- **PWA-manifest** påverkar inte funktion men `start_url` är hårdkodad mot rotpath, ok lokalt.
+- **CORS**: Supabase tillåter alla origins för anon-key, så inget extra behövs.
+- **Secrets**: alla `*_API_KEY`/`*_PASSWORD` ligger som edge function secrets i Cloud — du ska INTE kopiera dem till din lokala maskin. Frontend behöver dem aldrig.
+- **Auth state efter login**: `useAuth` lyssnar via `onAuthStateChange` och funkar identiskt oavsett provider — inga andra kodändringar krävs om du väljer Alternativ B.
 
-- `supabase/functions/asset-plus-sync/index.ts` (primary + secondary sync paths, helper, logging)
-- `src/hooks/useModelLoader.ts` (client bootstrap helper + matcher)
-- `src/services/xkt-cache-service.ts` (verify revision-aware cache hit; small change only if missing)
+---
+
+## Vad jag föreslår att vi gör
+
+1. Bekräfta vilket alternativ du vill ha (A behåller managed, B byter till egna Google-credentials).
+2. Om B: jag uppdaterar `Login.tsx` till `supabase.auth.signInWithOAuth` och dokumenterar Google Cloud-stegen. Du sätter Client ID/Secret i Cloud auth-UI:t själv.
+3. Jag lägger till en kort `README`-sektion "Köra lokalt" med stegen ovan.
