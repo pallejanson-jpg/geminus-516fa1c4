@@ -152,28 +152,45 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       setPhase('creating_viewer');
       console.log(`[NativeViewer] SDK + viewer created in ${Math.round(performance.now() - t0)}ms`);
 
-      // 2. Always force-download from Asset+ first (bypass stale DB/storage cache)
+      // 2. DB-first: use cached XKT if present, otherwise bootstrap from Asset+
       let models: any[] = [];
       setPhase('syncing');
-      console.log(`[NativeViewer] Force-downloading XKT from Asset+ (forceBootstrap=${forceBootstrap})`);
-      const bootstrapped = await bootstrapFromAssetPlus();
-      if (!mountedRef.current) return;
 
-      if (bootstrapped.length > 0) {
-        models = bootstrapped;
-        console.log(`[NativeViewer] ✅ Got ${bootstrapped.length} fresh models from Asset+`);
-      } else {
-        // Fallback: try DB/storage only if Asset+ returned nothing
-        console.warn('[NativeViewer] Asset+ returned 0 models — falling back to local cache');
-        const { models: dbModels, dbError } = await fetchModelMetadata();
+      if (forceBootstrap) {
+        // Explicit force-reload: skip cache and pull fresh from Asset+
+        console.log('[NativeViewer] forceBootstrap=true → fetching fresh XKT from Asset+');
+        const bootstrapped = await bootstrapFromAssetPlus();
         if (!mountedRef.current) return;
-        if (dbModels && dbModels.length > 0) {
-          models = dbModels;
+        if (bootstrapped.length > 0) {
+          models = bootstrapped;
         } else {
-          setErrorMsg('No 3D models found for this building. Sync XKT models via Settings → Buildings, or upload an IFC file.');
-          setPhase('error');
-          return;
+          console.warn('[NativeViewer] Asset+ returned 0 models — falling back to local cache');
+          const { models: dbModels } = await fetchModelMetadata();
+          if (!mountedRef.current) return;
+          if (dbModels?.length) models = dbModels;
         }
+      } else {
+        // Normal path: check DB first
+        const { models: dbModels } = await fetchModelMetadata();
+        if (!mountedRef.current) return;
+        if (dbModels?.length) {
+          models = dbModels;
+          console.log(`[NativeViewer] ✅ Using ${dbModels.length} cached XKT models from DB`);
+        } else {
+          console.log('[NativeViewer] No cached XKT in DB → bootstrapping from Asset+');
+          const bootstrapped = await bootstrapFromAssetPlus();
+          if (!mountedRef.current) return;
+          if (bootstrapped.length > 0) {
+            models = bootstrapped;
+            console.log(`[NativeViewer] ✅ Bootstrapped ${bootstrapped.length} models from Asset+`);
+          }
+        }
+      }
+
+      if (models.length === 0) {
+        setErrorMsg('No 3D models found for this building. Sync XKT models via Settings → Buildings, or upload an IFC file.');
+        setPhase('error');
+        return;
       }
 
       // 4. Load models progressively
