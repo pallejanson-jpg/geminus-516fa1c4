@@ -2067,39 +2067,25 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
-    // FM Access: Save credentials to api_profiles table
+    // FM Access: Save credentials via edge function (uses service role → bypasses RLS)
     const handleSaveFmAccessConfig = async () => {
         setIsSavingFmAccess(true);
         setFmAccessMessage('');
         try {
-            const payload = {
-                fm_access_api_url: fmAccessConfig.apiUrl.replace(/\/+$/, ''),
-                fm_access_username: fmAccessConfig.username,
-                fm_access_password: fmAccessConfig.password,
-                is_default: true,
-            };
+            // Save via edge function (service role bypasses RLS)
+            const { data: saveData, error: saveError } = await supabase.functions.invoke('fm-access-query', {
+                body: {
+                    action: 'save-api-config',
+                    apiUrl: fmAccessConfig.apiUrl,
+                    username: fmAccessConfig.username,
+                    password: fmAccessConfig.password,
+                }
+            });
+            if (saveError) throw saveError;
+            if (!saveData?.success) throw new Error(saveData?.error || 'Could not save credentials');
+            if (saveData.id) setFmAccessProfileId(saveData.id);
 
-            let error;
-            if (fmAccessProfileId) {
-                // Update existing profile
-                ({ error } = await supabase
-                    .from('api_profiles')
-                    .update(payload)
-                    .eq('id', fmAccessProfileId));
-            } else {
-                // Create new default profile
-                const { data: newProfile, error: insertError } = await supabase
-                    .from('api_profiles')
-                    .insert({ ...payload, name: 'Default' })
-                    .select('id')
-                    .single();
-                error = insertError;
-                if (newProfile) setFmAccessProfileId(newProfile.id);
-            }
-
-            if (error) throw error;
-
-            // Test the connection with new credentials
+            // Test connection
             const { data, error: testError } = await supabase.functions.invoke('fm-access-query', {
                 body: { action: 'test-connection' }
             });

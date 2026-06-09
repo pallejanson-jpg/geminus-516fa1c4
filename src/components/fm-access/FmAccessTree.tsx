@@ -56,9 +56,6 @@ const TreeNodeItem: React.FC<TreeNodeProps> = ({ node, depth, selectedGuid, path
         )}
         <Icon size={14} className="flex-shrink-0 text-primary" />
         <span className="truncate flex-1">{label}</span>
-        {classLabel && (
-          <span className="text-[10px] text-muted-foreground flex-shrink-0">{classLabel}</span>
-        )}
       </button>
       {expanded && hasChildren && (
         <div>

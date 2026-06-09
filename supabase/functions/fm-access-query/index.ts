@@ -1405,6 +1405,56 @@ serve(async (req) => {
         );
       }
 
+      // ── Save FM Access credentials to api_profiles (uses service role → bypasses RLS) ──
+      case 'save-api-config': {
+        const { apiUrl, username, password } = params;
+        if (!apiUrl || !username || !password) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'apiUrl, username and password are required' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        try {
+          const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+          const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+          if (!supabaseUrl || !serviceRoleKey) throw new Error('Supabase service role not configured');
+
+          const payload = {
+            fm_access_api_url: apiUrl.replace(/\/+$/, ''),
+            fm_access_username: username,
+            fm_access_password: password,
+            is_default: true,
+            name: 'Default',
+          };
+
+          // Try update first, then insert
+          const updateResp = await fetch(
+            `${supabaseUrl}/rest/v1/api_profiles?is_default=eq.true`,
+            { method: 'PATCH', headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' }, body: JSON.stringify(payload) }
+          );
+          const updated = await updateResp.json();
+          if (Array.isArray(updated) && updated.length > 0) {
+            // Also invalidate token cache so new credentials are used immediately
+            tokenCache = null;
+            return new Response(JSON.stringify({ success: true, action: 'updated', id: updated[0].id }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+
+          // No existing default profile — insert new one
+          const insertResp = await fetch(
+            `${supabaseUrl}/rest/v1/api_profiles`,
+            { method: 'POST', headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' }, body: JSON.stringify(payload) }
+          );
+          const inserted = await insertResp.json();
+          tokenCache = null;
+          return new Response(JSON.stringify({ success: true, action: 'created', id: inserted?.[0]?.id }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        } catch (error: any) {
+          return new Response(JSON.stringify({ success: false, error: error.message }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+      }
+
       default:
         return new Response(
           JSON.stringify({ success: false, error: `Unknown action: ${action}` }),

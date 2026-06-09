@@ -49,17 +49,27 @@ export interface FmAccessDocument {
 
 export const CLASS_LABELS: Record<number, string> = {
   102: 'Fastighet',
-  103: 'Fastighet',   // Confirmed: "0000 - Kfast", "2631 - Stockholmshem" etc.
-  104: 'Byggnad',     // Confirmed: "Labradorgatan 16/18", "S1" etc.
-  105: 'Plan',        // Confirmed: "2 Tr", "01" etc.
-  106: 'Ritning',
-  107: 'Rum',
+  103: 'Fastighet',
+  104: 'Byggnad',
+  105: 'Plan',
+  106: 'Dokument',   // confirmed from native app tab label
+  107: 'Utrymme',
   109: 'Objekt',
   110: 'Objekt',
   124: 'Objekt',
-  138: 'Dörr',        // Confirmed from grid metadata (equip_from_room, equip_to_room)
-  139: 'Fönster',     // Confirmed from drawing entities (classLabel: "Fönster ■")
+  138: 'Dörr',       // confirmed
+  139: 'Fönster',    // confirmed
+  174: 'El',         // inferred from large count
+  177: 'Brandskydd', // confirmed from native app tab label
+  210: 'Utrymme',   // confirmed from native app tab "Utrymme ■"
+  214: 'Sensor',
 };
+
+// Classes with drawing spot representation — show "■" suffix in tabs
+export const SPOT_CLASS_IDS = new Set([107, 138, 139, 174, 177, 210, 214]);
+
+// Dynamic class label cache — populated from /api/config/classes/json
+export const dynamicClassLabels: Record<number, string> = { ...CLASS_LABELS };
 
 // Classes that represent the navigational hierarchy (show in tree)
 export const NAV_CLASS_IDS = new Set([102, 103, 104, 105]);
