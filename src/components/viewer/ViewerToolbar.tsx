@@ -803,7 +803,18 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
       scene.alphaDepthMask = true;
 
       // Re-apply architect color palette — starting from clean colorized=false slate
-      try { applyArchitectColors(viewer); } catch {}
+      try {
+        const result = applyArchitectColors(viewer);
+        console.log(`[ViewerToolbar] 3D colors restored: ${result.colorized} colorized, ${result.hiddenSpaces} spaces hidden`);
+
+        // Force scene re-render to ensure colors are applied
+        if (scene?.camera) {
+          const cam = scene.camera;
+          cam.eye = [...cam.eye];
+        }
+      } catch (err) {
+        console.error('[ViewerToolbar] Failed to restore colors:', err);
+      }
 
       // Restore navigation: orbit mode
       if (viewer.cameraControl) {

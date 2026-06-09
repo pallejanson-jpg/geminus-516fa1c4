@@ -25,8 +25,6 @@ type LoadPhase = 'init' | 'loading_sdk' | 'creating_viewer' | 'syncing' | 'boots
 
 interface NativeXeokitViewerProps {
   buildingFmGuid: string;
-  modelFilterFmGuid?: string | null;
-  modelFilterCategory?: string | null;
   onClose?: () => void;
   onViewerReady?: (viewer: any) => void;
   /** When true, forces a re-download of XKT models from Asset+ before loading */
@@ -35,8 +33,6 @@ interface NativeXeokitViewerProps {
 
 const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   buildingFmGuid,
-  modelFilterFmGuid,
-  modelFilterCategory,
   onClose,
   onViewerReady,
   forceBootstrap = false,
@@ -101,7 +97,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
     loadSingleModel,
     pendingInsightsColorRef,
     isArchitectural,
-  } = useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, modelFilterCategory });
+  } = useModelLoader({ buildingFmGuid, isMobile });
 
   // ── Hook: all event listeners ──
   useViewerEventListeners({
@@ -152,39 +148,33 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       setPhase('creating_viewer');
       console.log(`[NativeViewer] SDK + viewer created in ${Math.round(performance.now() - t0)}ms`);
 
-      // 2. DB-first: use cached XKT if present, otherwise bootstrap from Asset+
+      // 2. Load models: try cache first, fall back to Asset+ if cache is empty
       let models: any[] = [];
       setPhase('syncing');
 
-      if (forceBootstrap) {
-        // Explicit force-reload: skip cache and pull fresh from Asset+
-        console.log('[NativeViewer] forceBootstrap=true → fetching fresh XKT from Asset+');
+      // Try local cache first (fast path)
+      console.log('[NativeViewer] Checking local cache...');
+      const { models: cachedModels } = await fetchModelMetadata();
+      if (!mountedRef.current) return;
+
+      if (cachedModels && cachedModels.length > 0) {
+        // Cache has models — use them
+        models = cachedModels;
+        console.log(`[NativeViewer] ✅ Loaded ${models.length} models from cache`);
+      } else if (forceBootstrap) {
+        // Cache is empty AND forceBootstrap is set: fetch from Asset+
+        console.log('[NativeViewer] Cache empty — fetching from Asset+');
         const bootstrapped = await bootstrapFromAssetPlus();
         if (!mountedRef.current) return;
-        if (bootstrapped.length > 0) {
-          models = bootstrapped;
-        } else {
-          console.warn('[NativeViewer] Asset+ returned 0 models — falling back to local cache');
-          const { models: dbModels } = await fetchModelMetadata();
-          if (!mountedRef.current) return;
-          if (dbModels?.length) models = dbModels;
-        }
+        models = bootstrapped;
+        console.log(`[NativeViewer] Got ${models.length} models from Asset+`);
       } else {
-        // Normal path: check DB first
-        const { models: dbModels } = await fetchModelMetadata();
+        // Cache is empty AND forceBootstrap is false: still try Asset+ (first visit)
+        console.log('[NativeViewer] Cache empty — trying Asset+ (first visit)');
+        const bootstrapped = await bootstrapFromAssetPlus();
         if (!mountedRef.current) return;
-        if (dbModels?.length) {
-          models = dbModels;
-          console.log(`[NativeViewer] ✅ Using ${dbModels.length} cached XKT models from DB`);
-        } else {
-          console.log('[NativeViewer] No cached XKT in DB → bootstrapping from Asset+');
-          const bootstrapped = await bootstrapFromAssetPlus();
-          if (!mountedRef.current) return;
-          if (bootstrapped.length > 0) {
-            models = bootstrapped;
-            console.log(`[NativeViewer] ✅ Bootstrapped ${bootstrapped.length} models from Asset+`);
-          }
-        }
+        models = bootstrapped;
+        console.log(`[NativeViewer] Got ${models.length} models from Asset+`);
       }
 
       if (models.length === 0) {
@@ -238,13 +228,17 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }
 
         // Capture native model colors
-        const nativeColors = new Map<string, { color: number[]; opacity: number; edges: boolean }>();
+        // Capture native colors BEFORE any palette is applied.
+        // We store `null` (not [1,1,1]) when entity.colorize is not set, so that
+        // restoring with `entity.colorize = null` uses the XKT-embedded material
+        // colour rather than forcing white over it.
+        const nativeColors = new Map<string, { color: number[] | null; opacity: number; edges: boolean }>();
         if (viewer.scene.objects) {
           for (const objId of finalIds) {
             const entity = viewer.scene.objects[objId];
             if (entity) {
               nativeColors.set(objId, {
-                color: entity.colorize ? [...entity.colorize] : [1, 1, 1],
+                color: entity.colorize ? [...entity.colorize] : null,
                 opacity: entity.opacity ?? 1,
                 edges: entity.edges ?? true,
               });
@@ -253,32 +247,67 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }
         (window as any).__xeokitNativeColors = nativeColors;
 
-        // Detect raw red defaults / missing A-model — apply architect palette automatically
-        let needsArchitectColors = false;
-        const sceneModels = viewer.scene.models || {};
-        const loadedNames: string[] = Object.values(sceneModels).map((m: any) => String(m?.id || '').toUpperCase());
-        const hasArchModel = loadedNames.some(n => n.startsWith('A') || n.includes('ARK') || n.includes('ARCHITECT'));
-        if (!hasArchModel) {
-          needsArchitectColors = true;
-        } else if (viewer.scene.objects) {
-          let redCount = 0;
-          let sampled = 0;
-          const sampleIds = finalIds.slice(0, Math.min(500, finalIds.length));
-          for (const id of sampleIds) {
-            const e = viewer.scene.objects[id];
+        // ── Color strategy ────────────────────────────────────────────────────
+        // If the user has explicitly chosen "native model colors" (NONE_VALUE in
+        // localStorage), skip architect colors entirely and let the XKT materials
+        // render as-is. Objects without XKT material assignments are given a
+        // neutral default so xeokit's internal red fallback doesn't show.
+        //
+        // Otherwise run red-detection: if the loaded model has no A-model or
+        // >5 % of sampled objects are raw red, apply the architect palette.
+        const savedTheme = localStorage.getItem('geminus-viewer-theme-id');
+        // Only use native colors if explicitly set to 'none'; otherwise default to architect palette
+        const userWantsNative = savedTheme === 'none';
+
+        if (userWantsNative) {
+          console.log('[NativeViewer] Native colors requested — skipping architect palette');
+          // Clear any colorize overrides that might have been set by a previous
+          // session, so objects use their XKT-embedded material colors.
+          // Objects that xeokit would show as raw red (no XKT material) get a
+          // neutral off-white so the view is readable.
+          const NEUTRAL = [0.933, 0.929, 0.918]; // same as DEFAULT_COLOR in architect-colors.ts
+          for (const id of finalIds) {
+            const e = viewer.scene.objects?.[id];
             if (!e) continue;
-            sampled++;
             const c = e.colorize;
-            const isRedish = !c || (c[0] >= 0.95 && c[1] <= 0.1 && c[2] <= 0.1);
-            if (isRedish) redCount++;
+            const isRawRed = !c || (c[0] >= 0.95 && c[1] <= 0.1 && c[2] <= 0.1);
+            if (isRawRed) {
+              // No XKT material — apply neutral so view is readable
+              e.colorize = NEUTRAL;
+            } else {
+              // Has an actual colorize from a previous architect-colors pass — clear it
+              // so the XKT embedded material colour takes over
+              e.colorize = null;
+            }
           }
-          if (sampled > 0 && (redCount / sampled) > 0.05) needsArchitectColors = true;
-        }
-        if (needsArchitectColors) {
-          console.log(`[NativeViewer] Applying architect colors (hasArch=${hasArchModel})`);
-          try { applyArchitectColors(viewer); } catch (e) { console.warn('[NativeViewer] applyArchitectColors failed', e); }
         } else {
-          console.log(`[NativeViewer] Native model colors preserved. ${finalIds.length} total entities`);
+          // Apply architect palette (auto-detect or explicit theme)
+          let needsArchitectColors = false;
+          const sceneModels = viewer.scene.models || {};
+          const loadedNames: string[] = Object.values(sceneModels).map((m: any) => String(m?.id || '').toUpperCase());
+          const hasArchModel = loadedNames.some(n => n.startsWith('A') || n.includes('ARK') || n.includes('ARCHITECT'));
+          if (!hasArchModel) {
+            needsArchitectColors = true;
+          } else if (viewer.scene.objects) {
+            let redCount = 0;
+            let sampled = 0;
+            const sampleIds = finalIds.slice(0, Math.min(500, finalIds.length));
+            for (const id of sampleIds) {
+              const e = viewer.scene.objects[id];
+              if (!e) continue;
+              sampled++;
+              const c = e.colorize;
+              const isRedish = !c || (c[0] >= 0.95 && c[1] <= 0.1 && c[2] <= 0.1);
+              if (isRedish) redCount++;
+            }
+            if (sampled > 0 && (redCount / sampled) > 0.05) needsArchitectColors = true;
+          }
+          if (needsArchitectColors) {
+            console.log(`[NativeViewer] Applying architect colors (hasArch=${hasArchModel})`);
+            try { applyArchitectColors(viewer); } catch (e) { console.warn('[NativeViewer] applyArchitectColors failed', e); }
+          } else {
+            console.log(`[NativeViewer] Native model colors preserved (theme: ${savedTheme}). ${finalIds.length} total entities`);
+          }
         }
 
         // Log AABB for diagnostics
@@ -372,7 +401,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         setPhase('error');
       }
     }
-  }, [buildingFmGuid, modelFilterFmGuid, modelFilterCategory, forceBootstrap, createInstance, fetchModelMetadata, bootstrapFromAssetPlus, loadAllModels, loadSingleModel, onViewerReady, pendingInsightsColorRef, viewerRef]);
+  }, [buildingFmGuid, forceBootstrap, createInstance, fetchModelMetadata, bootstrapFromAssetPlus, loadAllModels, loadSingleModel, onViewerReady, pendingInsightsColorRef, viewerRef]);
 
   // ── Stabilized effect: only re-run when buildingFmGuid changes ──
   // Uses a ref to always call the latest initialize without it being a dependency,

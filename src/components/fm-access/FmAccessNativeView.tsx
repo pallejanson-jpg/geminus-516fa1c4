@@ -70,7 +70,7 @@ const FmAccessNativeView: React.FC = () => {
     loadHierarchy();
   }, [buildingFmGuid]);
 
-  const handleNodeSelect = (node: FmAccessNode) => {
+  const handleNodeSelect = (node: FmAccessNode, _path?: FmAccessNode[]) => {
     setSelectedNode(node);
   };
 
@@ -78,6 +78,8 @@ const FmAccessNativeView: React.FC = () => {
     setSelectedNode(result);
     setLeftTab('tree');
   };
+
+  const handleTreeSelect = (node: FmAccessNode, _path: FmAccessNode[]) => handleNodeSelect(node);
 
   const handleRefresh = () => {
     loadHierarchy();
@@ -160,7 +162,7 @@ const FmAccessNativeView: React.FC = () => {
                 <FmAccessObjectPanel selectedNode={selectedNode} onRefresh={handleRefresh} onCreateChild={handleCreateChild} />
               </div>
             ) : (
-              <FmAccessTree rootNode={rootNode} loading={treeLoading} selectedGuid={null} onSelect={handleNodeSelect} />
+              <FmAccessTree rootNode={rootNode} loading={treeLoading} selectedGuid={null} onSelect={handleTreeSelect} />
             )}
           </TabsContent>
           <TabsContent value="search" className="flex-1 mt-0">
@@ -201,7 +203,7 @@ const FmAccessNativeView: React.FC = () => {
                 rootNode={rootNode}
                 loading={treeLoading}
                 selectedGuid={selectedNode?.guid || selectedNode?.systemGuid || null}
-                onSelect={handleNodeSelect}
+                onSelect={handleTreeSelect}
               />
             </TabsContent>
             <TabsContent value="search" className="flex-1 mt-0 overflow-hidden">

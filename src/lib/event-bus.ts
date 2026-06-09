@@ -157,6 +157,7 @@ export interface EventMap {
 
   // Model loading
   MODEL_LOAD_REQUESTED: ModelLoadRequestedDetail;
+  MODEL_LOAD_COMPLETE: {};
   MODEL_VISIBILITY_CHANGED: ModelVisibilityChangedDetail;
   SECONDARY_MODELS_AVAILABLE: { models: Array<{ model_id: string; model_name: string }> };
 

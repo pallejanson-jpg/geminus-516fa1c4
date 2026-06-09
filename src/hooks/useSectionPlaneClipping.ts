@@ -154,7 +154,7 @@ export function useSectionPlaneClipping(
   viewerRef: React.MutableRefObject<any>,
   options: SectionPlaneClippingOptions = {}
 ) {
-  const { enabled = true, offset: initialOffset = 0.05, clipMode = 'ceiling', floorCutHeight: initialFloorCutHeight = 0.5 } = options;
+  const { enabled = true, offset: initialOffset = 0.05, clipMode = 'ceiling', floorCutHeight: initialFloorCutHeight = 1.2 } = options;
   
   const topPlaneRef = useRef<any>(null);
   const bottomPlaneRef = useRef<any>(null);
@@ -371,6 +371,7 @@ export function useSectionPlaneClipping(
     const floorMeta = metaObjects[floorId];
     if (!floorMeta) return null;
 
+    // ── Strategy A: traverse hierarchy children ──────────────────────────
     const getAllChildIds = (metaObj: any): string[] => {
       const ids: string[] = [metaObj.id];
       (metaObj.children || []).forEach((child: any) => {
@@ -392,9 +393,181 @@ export function useSectionPlaneClipping(
       }
     });
 
-    if (!hasValidBounds) return null;
+    if (hasValidBounds) {
+      return { id: floorId, name: floorMeta.name || 'Floor', minY, maxY, metaObjectIds: childIds };
+    }
 
-    return { id: floorId, name: floorMeta.name || 'Floor', minY, maxY, metaObjectIds: childIds };
+    // ── Strategy B: parent-traversal upward ──────────────────────────────
+    const byStorey = new Map<string, { minY: number; maxY: number }>();
+    Object.values(metaObjects).forEach((mo: any) => {
+      const entity = scene.objects[mo.id];
+      if (!entity?.aabb) return;
+      let cur: any = mo;
+      while (cur && cur.type?.toLowerCase() !== 'ifcbuildingstorey') cur = cur.parent;
+      if (!cur?.id) return;
+      const prev = byStorey.get(cur.id) ?? { minY: Infinity, maxY: -Infinity };
+      byStorey.set(cur.id, {
+        minY: Math.min(prev.minY, entity.aabb[1]),
+        maxY: Math.max(prev.maxY, entity.aabb[4]),
+      });
+    });
+
+    if (byStorey.has(floorId)) {
+      const b = byStorey.get(floorId)!;
+      return { id: floorId, name: floorMeta.name || 'Floor', minY: b.minY, maxY: b.maxY, metaObjectIds: childIds };
+    }
+
+    // ── Strategy C: Y-histogram clustering (flat IFC hierarchy fallback) ─
+    // Cluster entity bottom-Y values to detect floor bands, then map
+    // each band to a storey by sort order.
+    const bottomYs: number[] = [];
+    Object.values(scene.objects).forEach((entity: any) => {
+      if (!entity?.aabb) return;
+      const h = entity.aabb[4] - entity.aabb[1];
+      // More lenient: include more entities to improve histogram accuracy
+      if (h < 0.1 || h > 20) return; // skip only very trivial and full-building elements
+      bottomYs.push(entity.aabb[1]);
+    });
+
+    // More lenient threshold: allow histogram with fewer entities
+    if (bottomYs.length < 10) return null;
+
+    bottomYs.sort((a, b) => a - b);
+    const BUCKET = 0.25; // 25 cm buckets
+    const histMin = bottomYs[0];
+    const bucketCount = Math.ceil((bottomYs[bottomYs.length - 1] - histMin) / BUCKET) + 1;
+    const hist = new Array(bucketCount).fill(0);
+    bottomYs.forEach(y => hist[Math.floor((y - histMin) / BUCKET)]++);
+
+    const MIN_ENTITIES = Math.max(5, Math.floor(bottomYs.length / 80));
+    const peaks: number[] = [];
+    for (let i = 1; i < hist.length - 1; i++) {
+      if (hist[i] >= MIN_ENTITIES && hist[i] >= hist[i - 1] && hist[i] >= hist[i + 1]) {
+        // Only keep if at least 1m from previous peak (avoid duplicates)
+        const peakY = histMin + (i + 0.5) * BUCKET;
+        if (peaks.length === 0 || peakY - peaks[peaks.length - 1] > 1.0) {
+          peaks.push(peakY);
+        }
+      }
+    }
+
+    // If no clear peaks found, create a simple linear distribution
+    if (peaks.length === 0) {
+      // Fallback: distribute floors evenly across the Y range
+      const minY = Math.min(...bottomYs);
+      const maxY = Math.max(...bottomYs);
+      const range = maxY - minY;
+      const avgFloorHeight = Math.max(3, range / (uniqueStoreys.length || 5));
+
+      // Find this storey's index in the ordered list
+      const storeyIndex = uniqueStoreys.findIndex((s: any) => s.id === floorId);
+      if (storeyIndex >= 0) {
+        const floorMinY = minY + (storeyIndex * avgFloorHeight);
+        const floorMaxY = floorMinY + avgFloorHeight;
+        console.log(`[calculateFloorBounds] No peaks found - using linear distribution: storey ${storeyIndex}/${uniqueStoreys.length}, Y=[${floorMinY.toFixed(2)}, ${floorMaxY.toFixed(2)}]`);
+        return { id: floorId, name: floorMeta.name || 'Floor', minY: floorMinY, maxY: floorMaxY, metaObjectIds: [] };
+      }
+      return null;
+    }
+
+    // ── Debug: log all storeys once ───────────────────────────────────────
+    if (!(window as any).__storeyDebugLogged) {
+      (window as any).__storeyDebugLogged = true;
+      const allS = (Object.values(metaObjects) as any[])
+        .filter((mo: any) => mo?.type?.toLowerCase() === 'ifcbuildingstorey')
+        .sort((a: any, b: any) => (a.name || '').localeCompare(b.name || '', 'no'));
+      console.table(allS.map((s: any, i: number) => ({
+        idx: i,
+        id: s.id,
+        name: s.name || '(no name)',
+        model: s.metaModel?.id?.slice(0, 12) || '?',
+      })));
+      console.log('[2D] Histogram peaks (floor Y levels):', peaks.map((p: number) => p.toFixed(2)));
+    }
+
+    // ── Storey ordering ───────────────────────────────────────────────────
+    // Deduplicate by name (multiple IFC models produce duplicate storeys).
+    // Then sort in PHYSICAL order (bottom → top):
+    //   U-prefix (underground) first, then numbered floors (01, 02…),
+    //   then Havnivå/named floors alphabetically, then Tak (roof) last.
+    const physicalOrder = (name: string): number => {
+      const n = (name || '').trim();
+      const upper = n.toUpperCase();
+      if (/^U\d/i.test(n)) return -1000 + parseInt(n.match(/\d+/)?.[0] ?? '0', 10); // underground
+      const numMatch = n.match(/^(\d+)/);
+      if (numMatch) return parseInt(numMatch[1], 10); // "01 Etasje" → 1
+      if (upper.startsWith('HAV')) return 500; // Havnivå — between basement and ground
+      if (upper.startsWith('TAK') || upper.startsWith('ROOF')) return 9000; // roof
+      return 5000; // other named floors between floors and roof
+    };
+
+    const seenNames = new Set<string>();
+    const uniqueStoreys = (Object.values(metaObjects) as any[])
+      .filter((mo: any) => mo?.type?.toLowerCase() === 'ifcbuildingstorey')
+      .sort((a: any, b: any) => physicalOrder(a.name) - physicalOrder(b.name))
+      .filter((mo: any) => {
+        const key = (mo.name || '').toLowerCase().trim();
+        if (seenNames.has(key)) return false;
+        seenNames.add(key);
+        return true;
+      });
+
+    // ── Map this storey to its Y-position, then match to nearest peak ───────
+    // Simpler approach: just use the storey's own AABB if available
+
+    try {
+      // Try to get Y position from this storey's own entities
+      let storeyMinY = Infinity;
+      let entityCount = 0;
+
+      Object.entries(scene.objects || {}).forEach(([sceneId, sceneObj]: [string, any]) => {
+        if (!sceneObj?.aabb) return;
+
+        const metaObj = metaObjects[sceneId];
+        if (!metaObj) return;
+
+        // Check if this entity belongs to target storey via parent chain
+        let cur: any = metaObj;
+        for (let i = 0; i < 50; i++) {
+          if (!cur) break;
+          if (cur.id === floorId) {
+            storeyMinY = Math.min(storeyMinY, sceneObj.aabb[1]);
+            entityCount++;
+            break;
+          }
+          cur = cur.parent;
+        }
+      });
+
+      if (storeyMinY === Infinity) {
+        console.warn(`[calculateFloorBounds] No entities found for storey ${floorId}. Using fallback.`);
+        // Fallback: use first peak if we have any
+        if (peaks.length === 0) return null;
+        const floorMinY = peaks[0];
+        const floorMaxY = peaks.length > 1 ? peaks[1] : floorMinY + 4.0;
+        return { id: floorId, name: floorMeta.name || 'Floor', minY: floorMinY, maxY: floorMaxY, metaObjectIds: [] };
+      }
+
+      // Find nearest peak to this storey's Y
+      let nearestPeakIdx = 0;
+      let minDist = Math.abs(peaks[0] - storeyMinY);
+      for (let i = 1; i < peaks.length; i++) {
+        const dist = Math.abs(peaks[i] - storeyMinY);
+        if (dist < minDist) {
+          minDist = dist;
+          nearestPeakIdx = i;
+        }
+      }
+
+      const floorMinY = peaks[nearestPeakIdx];
+      const floorMaxY = nearestPeakIdx < peaks.length - 1 ? peaks[nearestPeakIdx + 1] : floorMinY + 4.0;
+
+      console.log(`[calculateFloorBounds] Found ${entityCount} entities, Y=${storeyMinY.toFixed(2)} → peak ${nearestPeakIdx} [${floorMinY.toFixed(2)}, ${floorMaxY.toFixed(2)}]`);
+      return { id: floorId, name: floorMeta.name || 'Floor', minY: floorMinY, maxY: floorMaxY, metaObjectIds: [] };
+    } catch (e) {
+      console.warn(`[calculateFloorBounds] Error: ${e}`);
+      return null;
+    }
   }, [getXeokitViewer]);
 
   /**
@@ -550,8 +723,10 @@ export function useSectionPlaneClipping(
 
     const floorCutHeight = customHeight ?? floorCutHeightRef.current;
     if (customHeight !== undefined) floorCutHeightRef.current = customHeight;
-    
+
     currentFloorMinYRef.current = bounds.minY;
+    // Expose bounds globally so the 2D visual handler can use them for slab filtering
+    (window as any).__2d_currentFloorBounds = { minY: bounds.minY, maxY: bounds.maxY };
 
     const topClipY = bounds.minY + floorCutHeight;
 
@@ -620,9 +795,9 @@ export function useSectionPlaneClipping(
     floorCutHeightRef.current = newHeight;
     const viewer = getXeokitViewer();
     if (!viewer?.scene || currentClipModeRef.current !== 'floor') return;
-    
+
     const topClipY = currentFloorMinYRef.current + newHeight;
-    
+
     if (topPlaneRef.current) {
       try {
         topPlaneRef.current.pos = [0, topClipY, 0];
@@ -630,9 +805,10 @@ export function useSectionPlaneClipping(
         return;
       } catch (e) { /* recreate below */ }
     }
-    
+
     destroyPlane(topPlaneRef);
     topPlaneRef.current = createSectionPlane('2d-top-stable', [0, topClipY, 0], [0, 1, 0]);
+    // Bottom plane stays fixed at floor.minY - 0.05; no need to update it
   }, [getXeokitViewer, createSectionPlane, destroyPlane]);
 
   const removeSectionPlane = useCallback(() => {

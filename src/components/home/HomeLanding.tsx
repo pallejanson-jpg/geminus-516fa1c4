@@ -165,7 +165,7 @@ export default function HomeLanding() {
   };
 
   return (
-    <div className="relative min-h-screen text-foreground">
+    <div className="relative min-h-full text-foreground">
       {/* Full-page skyline background */}
       <img
         src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=1920&auto=format&fit=crop"

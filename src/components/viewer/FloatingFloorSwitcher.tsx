@@ -18,6 +18,7 @@ interface FloatingFloorSwitcherProps {
   isViewerReady?: boolean;
   className?: string;
   compact?: boolean;
+  viewMode?: '2d' | '3d' | '360';
 }
 
 /** @deprecated Use emit('FLOOR_PILLS_TOGGLE', ...) from event-bus */
@@ -29,7 +30,9 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
   isViewerReady = true,
   className,
   compact = false,
+  viewMode = '3d',
 }) => {
+  const is2D = viewMode === '2d';
   const isMobile = useIsMobile();
   const { floors } = useFloorData(viewerRef, buildingFmGuid);
   const { applyFloorVisibility, calculateFloorBounds } = useFloorVisibility(viewerRef);
@@ -127,8 +130,11 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
   const handleFloorSelect = useCallback((floorId: string) => {
     let newVisibleIds: Set<string>;
 
-    if (visibleFloorIds.size === 1 && visibleFloorIds.has(floorId)) {
-      // Clicking already-solo floor → show all
+    if (is2D) {
+      // In 2D mode: always select exactly one floor, no toggling back to "all"
+      newVisibleIds = new Set([floorId]);
+    } else if (visibleFloorIds.size === 1 && visibleFloorIds.has(floorId)) {
+      // In 3D: clicking already-solo floor → show all
       newVisibleIds = new Set(floors.map(f => f.id));
     } else {
       newVisibleIds = new Set([floorId]);
@@ -136,7 +142,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
 
     setVisibleFloorIds(newVisibleIds);
     applyAndDispatch(newVisibleIds);
-  }, [visibleFloorIds, floors, applyAndDispatch]);
+  }, [is2D, visibleFloorIds, floors, applyAndDispatch]);
 
   const handleShowAll = useCallback(() => {
     const allIds = new Set(floors.map(f => f.id));
@@ -203,17 +209,21 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                 </button>
               );
             })}
-            <div className="border-t border-border my-1" />
-            <button
-              onClick={handleShowAll}
-              className={cn(
-                'w-full text-left px-2.5 py-1.5 rounded-md text-sm transition-colors',
-                'hover:bg-accent/50 cursor-pointer',
-                visibleFloorIds.size === floors.length && 'bg-primary/15 text-primary font-medium',
-              )}
-            >
-              All floors
-            </button>
+            {!is2D && (
+              <>
+                <div className="border-t border-border my-1" />
+                <button
+                  onClick={handleShowAll}
+                  className={cn(
+                    'w-full text-left px-2.5 py-1.5 rounded-md text-sm transition-colors',
+                    'hover:bg-accent/50 cursor-pointer',
+                    visibleFloorIds.size === floors.length && 'bg-primary/15 text-primary font-medium',
+                  )}
+                >
+                  All floors
+                </button>
+              </>
+            )}
           </div>
         </PopoverContent>
       </Popover>

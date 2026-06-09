@@ -64,6 +64,26 @@ export function storeModelInMemory(modelId: string, buildingFmGuid: string, data
 }
 
 /**
+ * Clear only the in-memory ArrayBuffer data for a building, WITHOUT resetting the preload guard.
+ * Use this when you need fresh API-fetched data (e.g. after bimobjectid is resolved)
+ * but don't want useXktPreload to re-run and re-populate from Supabase Storage.
+ */
+export function clearBuildingMemoryDataOnly(buildingFmGuid: string): void {
+  const keysToDelete: string[] = [];
+  xktMemoryCache.forEach((data, key) => {
+    if (key.startsWith(`${buildingFmGuid}/`)) {
+      keysToDelete.push(key);
+      totalMemoryBytes -= data.byteLength;
+    }
+  });
+  keysToDelete.forEach(key => xktMemoryCache.delete(key));
+  // Intentionally keep globalPreloadedBuildings intact to prevent re-preload from Supabase Storage
+  if (keysToDelete.length > 0) {
+    console.log(`XKT Memory: Cleared ${keysToDelete.length} data entries for building ${buildingFmGuid.substring(0, 8)}… (preload guard kept — bimobjectid will scope fresh API fetch)`);
+  }
+}
+
+/**
  * Clear memory cache for a building (call when switching buildings)
  */
 export function clearBuildingFromMemory(buildingFmGuid: string): void {

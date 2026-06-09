@@ -23,6 +23,7 @@ const InAppFaultReport = lazy(() => import("@/components/fault-report/InAppFault
 const AiAssetScan = lazy(() => import("@/pages/AiAssetScan"));
 const FmaInternalView = lazy(() => import("@/components/viewer/FmaInternalView"));
 const FmAccessNativeView = lazy(() => import("@/components/fm-access/FmAccessNativeView"));
+const FmaV2View = lazy(() => import("@/components/fm-access/FmaV2View"));
 const CesiumGlobeView = lazy(() => import("@/components/globe/CesiumGlobeView"));
 const CustomerPortalView = lazy(() => import("@/components/support/CustomerPortalView"));
 
@@ -106,7 +107,7 @@ const MainContent: React.FC = () => {
             case 'fma_native':
                 return (
                     <Suspense fallback={<LazyFallback />}>
-                        <FmAccessNativeView />
+                        <FmaV2View />
                     </Suspense>
                 );
             case 'asset_plus':

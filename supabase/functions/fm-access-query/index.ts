@@ -458,14 +458,46 @@ serve(async (req) => {
   try {
     const { action, ...params } = await req.json();
 
+    // Try to load credentials from api_profiles table first (user-configurable)
+    // Falls back to environment variables (Lovable Cloud secrets) if not set in DB
+    let dbApiUrl: string | undefined;
+    let dbUsername: string | undefined;
+    let dbPassword: string | undefined;
+
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+      if (supabaseUrl && serviceRoleKey) {
+        const profileResp = await fetch(
+          `${supabaseUrl}/rest/v1/api_profiles?is_default=eq.true&fm_access_api_url=not.is.null&select=fm_access_api_url,fm_access_username,fm_access_password&limit=1`,
+          { headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` } }
+        );
+        if (profileResp.ok) {
+          const profiles = await profileResp.json();
+          if (profiles?.length > 0) {
+            dbApiUrl = profiles[0].fm_access_api_url || undefined;
+            dbUsername = profiles[0].fm_access_username || undefined;
+            dbPassword = profiles[0].fm_access_password || undefined;
+          }
+        }
+      }
+    } catch (e) {
+      console.log('FM Access: Could not load credentials from DB, using env vars:', e.message);
+    }
+
     const config: FmAccessConfig = {
       tokenUrl: Deno.env.get('FM_ACCESS_TOKEN_URL') || 'https://auth.bim.cloud/auth/realms/swg_demo/protocol/openid-connect/token',
       clientId: Deno.env.get('FM_ACCESS_CLIENT_ID') || 'HDCAgent Basic',
       clientSecret: Deno.env.get('FM_ACCESS_CLIENT_SECRET'),
-      apiUrl: (Deno.env.get('FM_ACCESS_API_URL') || '').replace(/\/+$/, ''),
-      username: Deno.env.get('FM_ACCESS_USERNAME'),
-      password: Deno.env.get('FM_ACCESS_PASSWORD'),
+      apiUrl: (dbApiUrl || Deno.env.get('FM_ACCESS_API_URL') || '').replace(/\/+$/, ''),
+      username: dbUsername || Deno.env.get('FM_ACCESS_USERNAME'),
+      password: dbPassword || Deno.env.get('FM_ACCESS_PASSWORD'),
     };
+
+    // Invalidate token cache if credentials changed
+    if (dbApiUrl || dbUsername || dbPassword) {
+      tokenCache = null; // force re-auth with current credentials
+    }
 
     if (!config.apiUrl) {
       return new Response(
@@ -760,6 +792,50 @@ serve(async (req) => {
         try { data = JSON.parse(text); } catch { data = null; }
         return new Response(
           JSON.stringify({ success: response.ok, data, note: 'Use get-perspective-tree to find buildings.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // ── Load full FM Access root tree (tries multiple perspective IDs) ──
+      case 'get-fma-root': {
+        // Try perspective IDs in order until one returns a non-empty tree
+        const perspectiveIds = ['8', '1', '2', '3', '4', '5'];
+        let rootData: any = null;
+        let workingPerspectiveId = '';
+
+        for (const pid of perspectiveIds) {
+          try {
+            const resp = await fmAccessFetch(config, `/api/perspective/root/json/${pid}`);
+            if (!resp.ok) {
+              console.log(`FM Access get-fma-root: perspective ${pid} returned ${resp.status}`);
+              continue;
+            }
+            const text = await resp.text();
+            let parsed: any;
+            try { parsed = JSON.parse(text); } catch { continue; }
+
+            // Accept if it's a non-empty array or an object with children
+            const nodes = Array.isArray(parsed) ? parsed : (parsed?.children || parsed?.Children || []);
+            if (nodes.length > 0) {
+              rootData = parsed;
+              workingPerspectiveId = pid;
+              console.log(`FM Access get-fma-root: perspective ${pid} returned ${nodes.length} root nodes`);
+              break;
+            }
+          } catch (e: any) {
+            console.log(`FM Access get-fma-root: perspective ${pid} error:`, e.message);
+          }
+        }
+
+        if (!rootData) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'No FM Access perspective root returned data. All perspective IDs 1-8 failed.' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, data: rootData, perspectiveId: workingPerspectiveId }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }

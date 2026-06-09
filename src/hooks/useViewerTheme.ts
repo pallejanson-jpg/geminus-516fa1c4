@@ -150,33 +150,37 @@ export function useViewerTheme() {
         if (xrayedIds?.length > 0) scene.setObjectsXRayed(xrayedIds, false);
       } catch {}
 
-      // Restore native model colors from captured snapshot
-      const nativeColors = (window as any).__xeokitNativeColors as Map<string, { color: number[]; opacity: number; edges: boolean }> | undefined;
+      // Restore native model colors from captured snapshot.
+      // `native.color === null` means the object had no colorize override at
+      // capture time — restoring with null lets xeokit use the XKT-embedded
+      // material colour (the true native colour).  Storing [1,1,1] here would
+      // paint everything white, which is why the capture now saves null.
+      const nativeColors = (window as any).__xeokitNativeColors as Map<string, { color: number[] | null; opacity: number; edges: boolean }> | undefined;
       const objects = scene.objects;
       const metaScene = xeokitViewer.metaScene;
-      
+
       for (const objectId in objects) {
         const entity = objects[objectId];
         if (!entity) continue;
-        
+
         const mo = metaScene?.metaObjects?.[objectId];
         const ifcType = (mo?.type || '').toLowerCase();
-        
+
         if (ifcType === 'ifcspace') {
           entity.opacity = 1;
           entity.visible = false;
           entity.pickable = false;
           continue;
         }
-        
-        // Restore captured native color if available
+
+        // Restore captured native color: null → clear override (uses XKT material)
         const native = nativeColors?.get(objectId);
         if (native) {
-          entity.colorize = native.color;
+          entity.colorize = native.color ?? null; // null clears the override
           entity.opacity = native.opacity;
           entity.edges = native.edges;
         } else {
-          // No captured color — clear colorize to use model default
+          // No captured snapshot — clear override so XKT material shows
           entity.colorize = null;
           entity.opacity = 1;
         }

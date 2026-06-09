@@ -68,46 +68,35 @@ const isArchitectural = (name: string | null) => {
 export interface UseModelLoaderOptions {
   buildingFmGuid: string;
   isMobile: boolean;
-  modelFilterFmGuid?: string | null;
-  modelFilterCategory?: string | null;
 }
 
-const getXktContextForCategory = (category?: string | null): 'Building' | 'Level' | 'Space' | 'Asset' => {
-  const normalized = String(category || '').toLowerCase();
-  if (normalized.includes('building') && !normalized.includes('storey')) return 'Building';
-  if (normalized.includes('storey') || normalized === 'floor' || normalized.includes('level')) return 'Level';
-  if (normalized.includes('space') || normalized.includes('room')) return 'Space';
-  return 'Asset';
-};
-
-export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, modelFilterCategory }: UseModelLoaderOptions) {
+export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptions) {
   const pendingInsightsColorRef = useRef<InsightsColorUpdateDetail | null>(null);
-  const scopedFmGuid = modelFilterFmGuid || buildingFmGuid;
-  const isScopedLoad = !!modelFilterFmGuid;
-  const modelMemoryScope = isScopedLoad ? `${buildingFmGuid}::${scopedFmGuid}` : buildingFmGuid;
-  const xktContext = getXktContextForCategory(isScopedLoad ? modelFilterCategory : 'Building');
 
   /**
    * Fetch model metadata from DB (primary) and storage (fallback).
    * Returns deduplicated model list and storey data.
    */
   const fetchModelMetadata = useCallback(async () => {
-    if (isScopedLoad) {
-      return { models: [] as ModelCandidate[], dbError: null };
-    }
+    // Fetch models and storeys in parallel, but with smart caching
+    // to avoid re-querying on every load
+    const dbResult = await supabase
+      .from('xkt_models')
+      .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at, is_chunk, chunk_order, parent_model_id, format, created_at, updated_at')
+      .eq('building_fm_guid', buildingFmGuid)
+      .order('file_size', { ascending: true })  // Load smallest first
+      .limit(100);  // Safety limit
 
-    const [dbResult, storeyResult] = await Promise.all([
-      supabase
-        .from('xkt_models')
-        .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at, is_chunk, chunk_order, parent_model_id, format, created_at, updated_at')
-        .eq('building_fm_guid', buildingFmGuid)
-        .order('updated_at', { ascending: false }),
-      supabase
+    // Storeys are optional — only fetch if DB has models
+    let storeyResult = { data: null };
+    if (dbResult.data?.length) {
+      storeyResult = await supabase
         .from('assets')
         .select('attributes')
         .eq('building_fm_guid', buildingFmGuid)
-        .eq('category', 'Building Storey'),
-    ]);
+        .eq('category', 'Building Storey')
+        .limit(50);
+    }
 
     let dbModels: ModelCandidate[] = ((dbResult.data as any[]) ?? []).map((m) => ({ ...m, source: 'db' as const }));
     let models = dedupeModelsByName(dbModels);
@@ -162,17 +151,50 @@ export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, mo
     }
 
     return { models, dbError: dbResult.error };
-  }, [buildingFmGuid, isScopedLoad]);
+  }, [buildingFmGuid]);
 
   /**
    * Bootstrap models from Asset+ API and aggressively refresh stale local XKT data.
    */
   const bootstrapFromAssetPlus = useCallback(async (): Promise<ModelCandidate[]> => {
-    clearBuildingFromMemory(modelMemoryScope);
-    console.log(`[ModelLoader] bootstrapFromAssetPlus started for building=${buildingFmGuid}, filter=${scopedFmGuid}, context=${xktContext}`);
+    clearBuildingFromMemory(buildingFmGuid);
+    console.log(`[ModelLoader] bootstrapFromAssetPlus started for ${buildingFmGuid}`);
 
-    // Direct viewer bootstrap only. Do not start persistent sync jobs automatically.
-    console.log('[ModelLoader] Starting scoped client-side bootstrap...');
+    // Step 1: Server-side sync with timeout (fail-fast on slow networks)
+    try {
+      console.log('[ModelLoader] Trying server-side sync with force=true...');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+
+      const { data: syncResult, error: syncError } = await supabase.functions.invoke('asset-plus-sync', {
+        body: { action: 'sync-xkt-building', buildingFmGuid, force: true },
+        headers: { 'Abort-Signal': 'timeout' }
+      });
+      clearTimeout(timeoutId);
+
+      if (syncError) {
+        console.warn('[ModelLoader] Server sync error:', syncError);
+        throw syncError;
+      }
+      console.log('[ModelLoader] Server sync result:', JSON.stringify(syncResult));
+
+      if (syncResult?.synced > 0) {
+        console.log(`[ModelLoader] Server synced ${syncResult.synced} models — reading fresh DB records`);
+        const { data: freshModels } = await supabase
+          .from('xkt_models')
+          .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at, is_chunk, chunk_order, parent_model_id')
+          .eq('building_fm_guid', buildingFmGuid)
+          .order('file_size', { ascending: true });
+        if (freshModels?.length) return freshModels.map((m: any) => ({ ...m, source: 'db' as const }));
+      } else {
+        console.log(`[ModelLoader] Server sync returned 0 synced (hint: ${syncResult?.hint || 'none'})`);
+      }
+    } catch (e) {
+      console.warn('[ModelLoader] Server sync failed (timeout or error):', e instanceof Error ? e.message : String(e));
+    }
+
+    // Step 2: Client-side bootstrap (direct download from Asset+ API)
+    console.log('[ModelLoader] Starting client-side bootstrap...');
     try {
       const [tokenRes, configRes] = await Promise.all([
         supabase.functions.invoke('asset-plus-query', { body: { action: 'getToken', buildingFmGuid } }),
@@ -195,7 +217,7 @@ export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, mo
       let workingBase: string | null = null;
       for (const base of [...new Set(candidateBases)]) {
         try {
-          const url = `${base}/GetAllRelatedModels?fmguid=${encodeURIComponent(scopedFmGuid)}`;
+          const url = `${base}/GetAllRelatedModels?fmguid=${buildingFmGuid}`;
           const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
           if (res.ok) {
             const data = await res.json();
@@ -206,37 +228,6 @@ export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, mo
       }
 
       if (!discoveredModels?.length || !workingBase) return [];
-
-      let scopedBimObjectId = '';
-      let scopedExternalGuid = '';
-      try {
-        const [{ data: scopedAsset }, coverageRes] = await Promise.all([
-          supabase.from('assets').select('attributes').eq('fm_guid', scopedFmGuid).maybeSingle(),
-          fetch(`${workingBase}/PublishDataServiceGet?subscription-key=${encodeURIComponent(apiKey)}`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-              'Ocp-Apim-Subscription-Key': apiKey,
-            },
-            body: JSON.stringify({
-              filter: ['fmGuid', '=', scopedFmGuid.toLowerCase()],
-              select: ['modelBimObjectId', 'bimObjectId', 'fmGuid', 'externalGuid'],
-              modelType: 0,
-            }),
-          }),
-        ]);
-        const attrs = typeof scopedAsset?.attributes === 'string' ? JSON.parse(scopedAsset.attributes) : scopedAsset?.attributes;
-        scopedExternalGuid = attrs?.externalGuid || attrs?.ExternalGuid || '';
-        if (coverageRes.ok) {
-          const coverageJson = await coverageRes.json();
-          const coverageRows = Array.isArray(coverageJson?.data) ? coverageJson.data : Array.isArray(coverageJson) ? coverageJson : [];
-          scopedBimObjectId = coverageRows.find((r: any) => r?.bimObjectId)?.bimObjectId || '';
-          scopedExternalGuid = scopedExternalGuid || coverageRows.find((r: any) => r?.externalGuid)?.externalGuid || '';
-        }
-      } catch (e) {
-        console.debug('[ModelLoader] Scoped FMGUID lookup failed:', e);
-      }
 
       let revisions: any[] = [];
       try {
@@ -310,9 +301,6 @@ export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, mo
         // Asset+ scopes the XKT to this single building (otherwise complex-wide models
         // return geometry for every building in the complex).
         const idCombos: { param: string; value: string }[] = [
-          { param: 'bimobjectid', value: scopedBimObjectId },
-          { param: 'externalguid', value: scopedFmGuid },
-          { param: 'externalguid', value: scopedExternalGuid },
           { param: 'bimobjectid', value: buildingBimObjectId },
           { param: 'bimobjectid', value: bimObjectId },
           { param: 'externalguid', value: externalGuid },
@@ -324,7 +312,7 @@ export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, mo
         let xktData: ArrayBuffer | null = null;
         for (const combo of idCombos) {
           if (!combo.value) continue;
-          const xktUrl = `${workingBase}/GetXktData?modelid=${modelId}&${combo.param}=${encodeURIComponent(combo.value)}&context=${xktContext}&apiKey=${apiKey}`;
+          const xktUrl = `${workingBase}/GetXktData?modelid=${modelId}&${combo.param}=${encodeURIComponent(combo.value)}&context=Building&apiKey=${apiKey}`;
           try {
             const xktRes = await fetch(xktUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
             if (!xktRes.ok) continue;
@@ -340,10 +328,8 @@ export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, mo
         if (!xktData) continue;
         
         const finalModelName = rawModelName || matchedRevision?.modelName || matchedRevision?.entityName || modelId;
-        storeModelInMemory(modelId, modelMemoryScope, xktData);
-        if (!isScopedLoad) {
-          xktCacheService.saveModelFromViewer(modelId, xktData, buildingFmGuid, finalModelName, revisionId || undefined).catch(() => {});
-        }
+        storeModelInMemory(modelId, buildingFmGuid, xktData);
+        xktCacheService.saveModelFromViewer(modelId, xktData, buildingFmGuid, finalModelName, revisionId || undefined).catch(() => {});
         bootstrapped.push({
           model_id: modelId, model_name: finalModelName,
           storage_path: `${buildingFmGuid}/${modelId}.xkt`,
@@ -355,7 +341,7 @@ export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, mo
       console.warn('[ModelLoader] Client-side bootstrap failed:', e);
       return [];
     }
-  }, [buildingFmGuid, isScopedLoad, modelMemoryScope, scopedFmGuid, xktContext]);
+  }, [buildingFmGuid]);
 
   /**
    * Load a single XKT model into the viewer (progressive — visible immediately on load).
@@ -388,7 +374,7 @@ export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, mo
           setTimeout(() => done(false), 90_000);
         });
 
-      const memData = getModelFromMemory(modelId, modelMemoryScope);
+      const memData = getModelFromMemory(modelId, buildingFmGuid);
       if (memData) {
         const entity = xktLoader.load({ id: modelId, xkt: memData, edges: true, ...(metaModelSrc && { metaModelSrc }) });
         const ok = await waitForModel(entity);
@@ -418,7 +404,7 @@ export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, mo
       const firstByte = arrayBuf.byteLength > 0 ? String.fromCharCode(new Uint8Array(arrayBuf)[0]) : '';
       if (arrayBuf.byteLength < 50_000 || firstByte === '<' || firstByte === '{') return false;
 
-        storeModelInMemory(modelId, modelMemoryScope, arrayBuf);
+      storeModelInMemory(modelId, buildingFmGuid, arrayBuf);
       const entity = xktLoader.load({ id: modelId, xkt: arrayBuf, edges: true, ...(metaModelSrc && { metaModelSrc }) });
       const ok = await waitForModel(entity);
       if (!ok) return false;
@@ -432,7 +418,7 @@ export function useModelLoader({ buildingFmGuid, isMobile, modelFilterFmGuid, mo
       console.warn(`[ModelLoader] Error loading ${modelId}:`, e);
       return false;
     }
-  }, [buildingFmGuid, modelMemoryScope]);
+  }, [buildingFmGuid]);
 
   /**
    * Run the full model loading pipeline with progressive visibility.

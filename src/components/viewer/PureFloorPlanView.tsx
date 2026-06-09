@@ -13,6 +13,7 @@
 
 import React, { useCallback, useRef, useEffect } from 'react';
 import SplitPlanView from './SplitPlanView';
+import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 
 interface PureFloorPlanViewProps {
   viewerRef: React.MutableRefObject<any>;
@@ -87,20 +88,19 @@ const PureFloorPlanView: React.FC<PureFloorPlanViewProps> = ({
     }
   }, [viewerRef, onFloorChange]);
 
-  // ── Handle 3D camera movement - update 2D indicator ──────────────────────
+  // ── Listen for external floor selection (from FloatingFloorSwitcher) ──────
   useEffect(() => {
-    const handleCameraMove = () => {
-      // SplitPlanView handles camera position indicator automatically
-      // Just need to ensure viewer ref is available
+    const handleFloorSelectionChanged = (e: Event) => {
+      const detail = (e as CustomEvent<FloorSelectionEventDetail>).detail;
+      if (!detail || !detail.floorId || detail.skipClipping) return;
+
+      // When floor is selected externally, update 3D visibility
+      handleFloorChange(detail.floorId);
     };
 
-    // Camera updates happen automatically via viewer events
-    // No need for explicit handlers - SplitPlanView already displays position indicator
-
-    return () => {
-      // Cleanup
-    };
-  }, [viewerRef]);
+    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorSelectionChanged);
+    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorSelectionChanged);
+  }, [handleFloorChange]);
 
   // ── Handle click-to-navigate from 2D plan ────────────────────────────────
   const handleNavigate = useCallback((entityId: string, fmGuid: string | null, entityName: string | null) => {
@@ -123,6 +123,7 @@ const PureFloorPlanView: React.FC<PureFloorPlanViewProps> = ({
         lockCameraToFloor={true}
         monochrome={true}
         isSplitMode={false}  // Full-screen mode (not split)
+        hidePositionIndicator={true}  // Hide blue camera position marker in pure 2D
         onEntityClick={handleNavigate}
       />
     </div>

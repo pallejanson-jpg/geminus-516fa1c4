@@ -23,7 +23,7 @@ import ViewerRightPanel from './ViewerRightPanel';
 import InventoryFormSheet from '@/components/inventory/InventoryFormSheet';
 import MobileViewerOverlay from './mobile/MobileViewerOverlay';
 import { xktCacheService } from '@/services/xkt-cache-service';
-import { isModelInMemory, getModelFromMemory, storeModelInMemory, getMemoryStats, clearBuildingFromMemory } from '@/hooks/useXktPreload';
+import { isModelInMemory, getModelFromMemory, storeModelInMemory, getMemoryStats, clearBuildingFromMemory, clearBuildingMemoryDataOnly } from '@/hooks/useXktPreload';
 import { useFlashHighlight } from '@/hooks/useFlashHighlight';
 import { usePerformancePlugins } from '@/hooks/usePerformancePlugins';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -292,6 +292,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   
   // Whitelist of model IDs allowed during initial load (null = allow all)
   const allowedModelIdsRef = useRef<Set<string> | null>(null);
+  // Building's own BIM Object ID — injected into GetXktData calls to scope geometry
+  // to this single building. Without it, Asset+ returns the full complex (all buildings).
+  const buildingBimObjectIdRef = useRef<string>('');
   const [spacesCacheReady, setSpacesCacheReady] = useState(false);
   
   // Ref for local annotations plugin
@@ -2500,6 +2503,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       setModelLoadState('loaded');
       setInitStep('ready');
 
+      // Notify ViewerThemeSelector so it can apply the saved theme
+      emit('MODEL_LOAD_COMPLETE', {});
+
       // Load ACC models (GLB/OBJ) directly via xeokit loader plugins
       loadAccDirectModels().catch(e => {
         console.warn('[handleAllModelsLoaded] ACC direct model load failed:', e);
@@ -3784,16 +3790,51 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
       
       // Check if this is an XKT model request (only Asset+ API URLs, not Supabase/Storage)
-      const isXktRequest = (url.includes('.xkt') && 
-                            !url.includes('supabase') && 
+      const isXktRequest = (url.includes('.xkt') &&
+                            !url.includes('supabase') &&
                             !url.includes('googleapis') &&
-                            !url.includes('storage.')) || 
+                            !url.includes('storage.')) ||
                            url.toLowerCase().includes('getxktdata');
-      
+
       if (!isXktRequest) {
         // Not an XKT request, pass through
         return original!(input, init);
       }
+
+      // ── bimobjectid injection ─────────────────────────────────────────────────
+      // The Asset+ SDK calls GetXktData WITHOUT bimobjectid → Asset+ returns geometry
+      // for the ENTIRE complex (every building in the project).
+      // Injecting bimobjectid scopes the response to this building only.
+      let effectiveInput: RequestInfo | URL = input;
+      if (url.toLowerCase().includes('getxktdata') && !/[?&]bimobjectid=/i.test(url)) {
+        const bimId = buildingBimObjectIdRef.current;
+        if (bimId) {
+          // Build scoped URL: inject bimobjectid + force context=Building
+          // Use URL API when possible to handle params cleanly (avoids duplicate context= issues)
+          let scopedUrl: string;
+          try {
+            const parsed = new URL(url);
+            parsed.searchParams.delete('context');   // remove any default context
+            parsed.searchParams.set('bimobjectid', bimId);
+            parsed.searchParams.set('context', 'Building');
+            scopedUrl = parsed.toString();
+          } catch {
+            // Fallback for relative or unusual URLs
+            const sep = url.includes('?') ? '&' : '?';
+            scopedUrl = `${url}${sep}bimobjectid=${encodeURIComponent(bimId)}&context=Building`;
+          }
+          if (typeof input === 'string' || input instanceof URL) {
+            effectiveInput = scopedUrl;
+          } else {
+            // Request object — rebuild with modified URL, preserve headers/method
+            effectiveInput = new Request(scopedUrl, input as Request);
+          }
+          console.log(`[XKT] 🏢 Scoped to building — bimobjectid=${bimId.substring(0, 8)}… injected`);
+        } else {
+          console.warn('[XKT] ⚠️ GetXktData called but buildingBimObjectId is empty — scoping skipped');
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────────
       
       // ─── XKT DIAGNOSTICS ───
       const diagStart = performance.now();
@@ -3810,7 +3851,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           const isAllowed = allowed.has(modelId) || allowed.has(lower) || allowed.has(stripped);
           if (!isAllowed) {
             console.log(`XKT filter: Non-initial model ${modelId} — passing through without caching`);
-            return original!(input, init);
+            return original!(effectiveInput, init);
           }
         }
         
@@ -3868,9 +3909,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         }
       }
       
-      // Fetch from Asset+ API
+      // Fetch from Asset+ API (using effectiveInput which has bimobjectid injected for GetXktData)
       const apiFetchStart = performance.now();
-      const response = await original!(input, init);
+      const response = await original!(effectiveInput, init);
       const apiFetchMs = Math.round(performance.now() - apiFetchStart);
       const totalMs = Math.round(performance.now() - diagStart);
       if (modelId) {
@@ -4111,21 +4152,53 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       }
       
       if (!accessToken) {
-        // Fetch Asset+ access token via edge function
-        const { data: tokenData, error: tokenError } = await supabase.functions.invoke('asset-plus-query', {
-          body: { action: 'getToken' }
-        });
+        // Helper: local Vite dev proxy (bypasses edge-function auth in local dev)
+        const devFetch = async (action: string): Promise<any> => {
+          if (!import.meta.env.DEV) return null;
+          try {
+            const r = await fetch('/__dev/asset-plus-token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action }),
+            });
+            if (!r.ok) return null;
+            return await r.json();
+          } catch { return null; }
+        };
 
-        if (tokenError) {
-          throw new Error('Could not fetch access token');
+        let tokenPayload: any = null;
+
+        // In dev: try local proxy first (no auth required)
+        if (import.meta.env.DEV) {
+          tokenPayload = await devFetch('getToken');
+          if (tokenPayload?.accessToken) {
+            console.log('AssetPlusViewer: Token via local dev proxy ✅');
+          }
         }
 
-        accessToken = tokenData?.accessToken;
-        
+        // Fallback: edge function (works in production / Lovable with authenticated users)
+        if (!tokenPayload?.accessToken) {
+          const { data: efData, error: tokenError } = await supabase.functions.invoke('asset-plus-query', {
+            body: { action: 'getToken' }
+          });
+          if (!tokenError && efData?.accessToken) {
+            tokenPayload = efData;
+            console.log('AssetPlusViewer: Token via edge function ✅');
+          } else if (tokenError) {
+            console.warn('AssetPlusViewer: Edge function token failed:', tokenError.message);
+          }
+        }
+
+        accessToken = tokenPayload?.accessToken;
+
         if (!accessToken) {
-          throw new Error('Asset+ access token is missing. Check your API settings.');
+          throw new Error(
+            import.meta.env.DEV
+              ? 'Asset+ access token missing. Check ASSET_PLUS_* vars in .env and restart the dev server.'
+              : 'Asset+ access token is missing. Check your API settings.'
+          );
         }
-        
+
         // Cache with actual JWT expiry (not hardcoded 55 min!)
         sessionStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify({
           token: accessToken,
@@ -4173,14 +4246,31 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       }
       
       if (!baseUrl) {
-        // Get API configuration
-        const { data: configData } = await supabase.functions.invoke('asset-plus-query', {
-          body: { action: 'getConfig' }
-        });
+        let configPayload: any = null;
 
-        baseUrl = configData?.apiUrl || '';
-        apiKey = configData?.apiKey || '';
-        
+        // Dev proxy first
+        if (import.meta.env.DEV) {
+          try {
+            const r = await fetch('/__dev/asset-plus-token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'getConfig' }),
+            });
+            if (r.ok) configPayload = await r.json();
+          } catch { /* fall through */ }
+        }
+
+        // Fallback: edge function
+        if (!configPayload?.apiUrl) {
+          const { data: efConfig } = await supabase.functions.invoke('asset-plus-query', {
+            body: { action: 'getConfig' }
+          });
+          if (efConfig?.apiUrl) configPayload = efConfig;
+        }
+
+        baseUrl = configPayload?.apiUrl || '';
+        apiKey  = configPayload?.apiKey  || '';
+
         // Cache config (rarely changes)
         if (baseUrl) {
           sessionStorage.setItem(CONFIG_CACHE_KEY, JSON.stringify({ apiUrl: baseUrl, apiKey }));
@@ -4189,7 +4279,45 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       baseUrlRef.current = baseUrl;
 
-      // Resolve model names and build A-model filter for initial loading
+      // ── Fetch this building's own BIM Object ID ───────────────────────────────
+      // The Asset+ SDK calls GetXktData without bimobjectid → returns full-complex geometry.
+      // We inject bimobjectid in the fetch interceptor to scope each XKT to this building.
+      // Source: assets.attributes.bimObjectId (the building's own ID from PublishDataServiceGetMerged).
+      buildingBimObjectIdRef.current = '';
+      if (buildingFmGuid) {
+        try {
+          const { data: bldAsset } = await supabase
+            .from('assets')
+            .select('attributes')
+            .eq('fm_guid', buildingFmGuid)
+            .eq('category', 'Building')
+            .maybeSingle();
+          if (bldAsset?.attributes) {
+            const attrs = typeof bldAsset.attributes === 'string'
+              ? JSON.parse(bldAsset.attributes) : bldAsset.attributes;
+            // Priority: bimObjectId (building's own ID) > buildingBimObjectId > parentBimObjectId
+            // bimObjectId is the object's own BIM Object ID from PublishDataServiceGetMerged.
+            // buildingBimObjectId on a Building record is typically self-referential (== bimObjectId).
+            // parentBimObjectId on a Building may not exist; it's more meaningful on storeys (= parent model ID).
+            buildingBimObjectIdRef.current =
+              attrs?.bimObjectId || attrs?.buildingBimObjectId || attrs?.parentBimObjectId || '';
+          }
+        } catch { /* non-critical */ }
+        if (buildingBimObjectIdRef.current) {
+          console.log(`[XKT] Building BIM Object ID resolved: ${buildingBimObjectIdRef.current}`);
+          // The preload hook may have cached XKT from Supabase Storage before bimobjectid was known.
+          // Those files might contain full-complex geometry (all buildings, not just this one).
+          // Clear the in-memory data so every GetXktData call goes through the fetch interceptor,
+          // which injects bimobjectid to scope the API response to this building only.
+          // We keep globalPreloadedBuildings intact to prevent a redundant re-download from storage.
+          clearBuildingMemoryDataOnly(buildingFmGuid);
+        } else {
+          console.warn(`[XKT] Building BIM Object ID NOT found for ${buildingFmGuid} — XKT will not be scoped to this building`);
+        }
+      }
+
+      // Resolve model names and build model filter for initial loading.
+      // Restricts which XKT files load — prevents all discipline models loading at once.
       try {
         const resolvedGuid = buildingFmGuid;
         if (resolvedGuid) {
@@ -4201,90 +4329,172 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}/i;
           let nameMap = new Map<string, string>();
 
+          // ── Source 1: xkt_models table (fast path — populated after first sync) ──
           if (dbModels && dbModels.length > 0) {
             const hasRealNames = dbModels.some(m => m.model_name && !UUID_RE.test(m.model_name));
-
             if (hasRealNames) {
               dbModels.forEach(m => { if (m.model_name) nameMap.set(m.model_id, m.model_name); });
+              console.log(`XKT filter: ${nameMap.size} model name(s) from xkt_models DB cache`);
             }
-            // If all names are GUIDs/generic, try Asset+ API for real names
           }
 
-          // Fallback: if nameMap is empty, try to resolve via Asset+ API (GetAllRelatedModels)
-          if (nameMap.size === 0 && dbModels && dbModels.length > 0) {
+          // ── Source 2: Asset+ GetAllRelatedModels API ──────────────────────────────
+          // Run when EITHER model names are still missing OR building bimObjectId not yet resolved.
+          // Single API call serves both purposes: model whitelist + bimobjectid injection.
+          // Uses ?fmguid= query param (NOT /api/BimObject/ path param).
+          const needNames    = nameMap.size === 0;
+          const needBimId    = !buildingBimObjectIdRef.current;
+          if (needNames || needBimId) {
             try {
-              const TOKEN_CACHE_KEY = 'geminus_ap_token';
-              const cached = sessionStorage.getItem(TOKEN_CACHE_KEY);
-              const token = cached ? JSON.parse(cached).token : null;
-              const configRaw = sessionStorage.getItem('geminus_ap_config');
-              const apiUrl = configRaw ? JSON.parse(configRaw).apiUrl : baseUrl;
-              
-              if (token && apiUrl) {
-                const res = await fetch(`${apiUrl}/api/BimObject/GetAllRelatedModels/${resolvedGuid}`, {
-                  headers: { 'Authorization': `Bearer ${token}` },
-                });
-                if (res.ok) {
-                  const apiModels = await res.json();
-                  // apiModels is array of { bimObjectId, name, ... }
-                  if (Array.isArray(apiModels)) {
-                    apiModels.forEach((am: any) => {
-                      const matchingDb = dbModels.find(dm =>
-                        dm.model_id === am.bimObjectId ||
-                        dm.model_id.toLowerCase() === am.bimObjectId?.toLowerCase()
-                      );
-                      if (matchingDb && am.name) {
-                        nameMap.set(matchingDb.model_id, am.name);
-                      }
-                    });
-                    console.log(`XKT filter: API fallback resolved ${nameMap.size} model name(s)`);
+              const apToken = accessTokenRef.current;
+              const rawBase     = baseUrl.replace(/\/+$/, '');
+              const strippedBase = rawBase.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
+              const candidates  = [...new Set([rawBase, `${strippedBase}/asset`, strippedBase])];
+
+              let foundModels = false;
+              for (const base of candidates) {
+                try {
+                  const res = await fetch(`${base}/GetAllRelatedModels?fmguid=${resolvedGuid}`, {
+                    headers: { 'Authorization': `Bearer ${apToken}` }
+                  });
+                  if (!res.ok) continue;
+                  const raw = await res.json();
+                  const apiModels: any[] = Array.isArray(raw) ? raw
+                    : raw?.models ?? raw?.items ?? raw?.data ?? [];
+                  if (!apiModels.length) continue;
+
+                  // Always extract building's bimObjectId from the first model that carries it.
+                  // GetAllRelatedModels returns buildingBimObjectId per model — this is the
+                  // authoritative value to use as bimobjectid in GetXktData?context=Building.
+                  if (!buildingBimObjectIdRef.current) {
+                    const firstBuildingBimId = apiModels
+                      .map((am: any) => String(am.buildingBimObjectId || am.BuildingBimObjectId || ''))
+                      .find(id => id && /^[0-9a-f]{8}-/i.test(id));
+                    if (firstBuildingBimId) {
+                      buildingBimObjectIdRef.current = firstBuildingBimId;
+                      console.log(`[XKT] Building BIM Object ID from GetAllRelatedModels: ${firstBuildingBimId}`);
+                      // Supabase-lookup above had no bimObjectId, so clearBuildingMemoryDataOnly
+                      // was not called yet. Clear now so preloaded (possibly unscoped) blobs don't
+                      // bypass the fetch interceptor that injects this bimobjectid.
+                      clearBuildingMemoryDataOnly(buildingFmGuid);
+                    }
                   }
+
+                  if (needNames) {
+                    apiModels.forEach((am: any) => {
+                      // numId  = GetXktData?modelid= value (what the predicate likely receives)
+                      // bimId  = UUID bimObjectId (also possible predicate key)
+                      const numId  = String(am.modelId || am.ModelId || '');
+                      const bimId  = String(am.bimObjectId || am.BimObjectId || '');
+                      const fragId = String(am.id || am.Id || '');
+                      const name   = String(am.name || am.modelName || am.Name || '');
+
+                      // Best DB key for cross-reference
+                      const matchDb = dbModels?.find(dm =>
+                        dm.model_id === numId || dm.model_id.toLowerCase() === numId.toLowerCase() ||
+                        dm.model_id === bimId  || dm.model_id.toLowerCase() === bimId.toLowerCase()
+                      );
+
+                      // Store every identifier variant so the predicate can match regardless of format
+                      const keys = [...new Set(
+                        [matchDb?.model_id, numId, bimId, (fragId !== numId && fragId !== bimId) ? fragId : '']
+                          .filter(Boolean)
+                      )] as string[];
+
+                      keys.forEach(k => {
+                        if (name) nameMap.set(k, name);
+                        else if (!nameMap.has(k)) nameMap.set(k, '');
+                      });
+                    });
+
+                    if (nameMap.size > 0) {
+                      console.log(`XKT filter: ${apiModels.length} model(s) from ${base}/GetAllRelatedModels → ${nameMap.size} keys`);
+                    }
+                  }
+
+                  foundModels = true;
+                  break;
+                } catch { /* try next base */ }
+              }
+              if (!foundModels) console.debug('XKT filter: GetAllRelatedModels returned nothing for all candidate bases');
+            } catch (e) {
+              console.debug('XKT filter: GetAllRelatedModels failed:', e);
+            }
+          }
+
+          // ── Source 3: parentBimObjectId from Building Storey assets ──────────────
+          // Zero-API-call fallback — populated by the sync service from Asset+ storeys.
+          // parentBimObjectId is the UUID that identifies which BIM model each storey is in.
+          if (nameMap.size === 0) {
+            try {
+              const { data: storeys } = await supabase
+                .from('assets')
+                .select('attributes')
+                .eq('building_fm_guid', resolvedGuid)
+                .eq('category', 'Building Storey')
+                .limit(100);
+
+              if (storeys?.length) {
+                storeys.forEach((s: any) => {
+                  const attrs = typeof s.attributes === 'string'
+                    ? JSON.parse(s.attributes) : (s.attributes || {});
+                  const bimId = attrs.parentBimObjectId;
+                  const name  = attrs.parentCommonName || '';
+                  if (bimId && !/^[0-9a-f]{8}-/i.test(name)) {
+                    if (!nameMap.has(bimId)) nameMap.set(bimId, name);
+                  }
+                });
+                if (nameMap.size > 0) {
+                  console.log(`XKT filter: ${nameMap.size} model(s) from storey parentBimObjectId fallback`);
                 }
               }
             } catch (e) {
-              console.debug('XKT filter: API fallback failed:', e);
+              console.debug('XKT filter: Storey attributes fallback failed:', e);
             }
           }
 
-          // If nameMap is still empty, skip filtering — load all models
-
-          // Build A-model filter — only allow models whose name starts with 'A'
+          // ── Build whitelists ───────────────────────────────────────────────────────
           if (nameMap.size > 0) {
             const aModelIdsOriginal = new Set<string>();
-            const aModelIds = new Set<string>();
-            
-            // Also build a file_name → model_id lookup from DB
-            const dbModelLookup = new Map<string, string>();
-            dbModels?.forEach(m => {
-              if (m.file_name) {
-                dbModelLookup.set(m.file_name, m.model_id);
-                dbModelLookup.set(m.file_name.toLowerCase(), m.model_id);
-              }
-            });
+            const aModelIds         = new Set<string>();
+            const allModelIds       = new Set<string>();
+
+            // Add id + lowercase + bare-name (strip .xkt) variants
+            const addVariants = (id: string, target: Set<string>) => {
+              target.add(id);
+              target.add(id.toLowerCase());
+              const bare = id.replace(/\.xkt$/i, '');
+              target.add(bare);
+              target.add(bare.toLowerCase());
+            };
 
             nameMap.forEach((name, id) => {
-              if (name.toLowerCase().startsWith('a')) {
+              addVariants(id, allModelIds);
+              const dbModel = dbModels?.find(m => m.model_id === id);
+              if (dbModel?.file_name) addVariants(dbModel.file_name, allModelIds);
+
+              if (name && name.toLowerCase().startsWith('a')) {
                 aModelIdsOriginal.add(id);
-                // Add all possible key variants the SDK might use
-                aModelIds.add(id);
-                aModelIds.add(id.toLowerCase());
-                // Find the file_name for this model_id and add variants
-                const dbModel = dbModels?.find(m => m.model_id === id);
-                if (dbModel?.file_name) {
-                  aModelIds.add(dbModel.file_name);                          // e.g. "uuid.xkt"
-                  aModelIds.add(dbModel.file_name.toLowerCase());
-                  aModelIds.add(dbModel.file_name.replace(/\.xkt$/i, ''));    // strip .xkt
-                  aModelIds.add(dbModel.file_name.replace(/\.xkt$/i, '').toLowerCase());
-                }
+                addVariants(id, aModelIds);
+                if (dbModel?.file_name) addVariants(dbModel.file_name, aModelIds);
               }
             });
 
             const totalUniqueModels = new Set([...nameMap.keys()].map(k => k.toLowerCase())).size;
+
             if (aModelIdsOriginal.size > 0 && aModelIdsOriginal.size < totalUniqueModels) {
               allowedModelIdsRef.current = aModelIds;
-              console.log(`XKT filter: Initial load restricted to ${aModelIdsOriginal.size} A-model(s) out of ${totalUniqueModels}. Whitelist keys: ${aModelIds.size}`);
+              console.log(`XKT filter ✅ A-models: ${aModelIdsOriginal.size} of ${totalUniqueModels} total (${aModelIds.size} whitelist keys)`);
+              console.log('XKT filter sample:', [...aModelIds].slice(0, 8).join(', '));
+            } else if (allModelIds.size > 0) {
+              allowedModelIdsRef.current = allModelIds;
+              console.log(`XKT filter ✅ All building models: ${totalUniqueModels} model(s) (${allModelIds.size} whitelist keys)`);
+              console.log('XKT filter sample:', [...allModelIds].slice(0, 8).join(', '));
             }
+            // else: allModelIds empty — something went wrong, fall through to null
           } else {
-            console.debug('XKT filter: No model names resolved — loading all models');
+            console.warn(`XKT filter ⚠️ No model info for building ${resolvedGuid} — loading whatever Asset+ returns`);
+            allowedModelIdsRef.current = null;
           }
         }
       } catch (e) {
@@ -4324,10 +4534,31 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           // Token expired or missing — fetch fresh
           console.log("getAccessTokenCallback: JWT expired, fetching fresh token");
           try {
-            const { data } = await supabase.functions.invoke('asset-plus-query', {
-              body: { action: 'getToken' }
-            });
-            const freshToken = data?.accessToken;
+            let freshToken: string | null = null;
+
+            // Dev proxy first
+            if (import.meta.env.DEV) {
+              try {
+                const devRes = await fetch('/__dev/asset-plus-token', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'getToken' }),
+                });
+                if (devRes.ok) {
+                  const devData = await devRes.json();
+                  freshToken = devData?.accessToken || null;
+                }
+              } catch { /* fall through */ }
+            }
+
+            // Fallback: edge function
+            if (!freshToken) {
+              const { data } = await supabase.functions.invoke('asset-plus-query', {
+                body: { action: 'getToken' }
+              });
+              freshToken = data?.accessToken || null;
+            }
+
             if (freshToken) {
               accessTokenRef.current = freshToken;
               const jwtExp = (t: string) => {
@@ -4390,15 +4621,25 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         },
         // additionalDefaultPredicate - filter to only load allowed models (A-model whitelist)
         (modelId: string) => {
-          if (!allowedModelIdsRef.current) return true; // no filter → load all
+          if (!(window as any).__xktPredicateLogCount) (window as any).__xktPredicateLogCount = 0;
+          const logCount: number = (window as any).__xktPredicateLogCount;
+
+          if (!allowedModelIdsRef.current) {
+            // Log first few calls even when unfiltered — tells us what format the SDK uses
+            if (logCount < 5) {
+              console.log(`[XKT predicate] NO FILTER — modelId="${modelId}" (all models pass through)`);
+              (window as any).__xktPredicateLogCount++;
+            }
+            return true; // no filter → load all
+          }
+
           const whitelist = allowedModelIdsRef.current;
-          const lower = modelId.toLowerCase();
+          const lower   = modelId.toLowerCase();
           const stripped = lower.replace(/\.xkt$/i, '');
           const accepted = whitelist.has(modelId) || whitelist.has(lower) || whitelist.has(stripped);
-          // Diagnostic logging for first few calls
-          if (!(window as any).__xktPredicateLogCount) (window as any).__xktPredicateLogCount = 0;
-          if ((window as any).__xktPredicateLogCount < 8) {
-            console.log(`[XKT predicate] modelId="${modelId}" → ${accepted ? 'ACCEPT' : 'REJECT'}`);
+
+          if (logCount < 12) {
+            console.log(`[XKT predicate] modelId="${modelId}" → ${accepted ? '✅ ACCEPT' : '❌ REJECT'} (whitelist: ${whitelist.size} keys)`);
             (window as any).__xktPredicateLogCount++;
           }
           return accepted;

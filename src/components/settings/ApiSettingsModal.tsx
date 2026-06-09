@@ -515,6 +515,27 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [fmAccessStatus, setFmAccessStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [fmAccessMessage, setFmAccessMessage] = useState('');
     const [isSyncingFmAccess, setIsSyncingFmAccess] = useState(false);
+    const [fmAccessProfileId, setFmAccessProfileId] = useState<string | null>(null);
+
+    // Load FM Access credentials from api_profiles on mount
+    useEffect(() => {
+        supabase
+            .from('api_profiles')
+            .select('id, fm_access_api_url, fm_access_username, fm_access_password')
+            .eq('is_default', true)
+            .maybeSingle()
+            .then(({ data }) => {
+                if (data) {
+                    setFmAccessProfileId(data.id);
+                    setFmAccessConfig({
+                        apiUrl: data.fm_access_api_url || '',
+                        username: data.fm_access_username || '',
+                        password: data.fm_access_password || '',
+                    });
+                    if (data.fm_access_api_url) setFmAccessStatus('success');
+                }
+            });
+    }, []);
     const [fmAccessSyncResult, setFmAccessSyncResult] = useState<{ success: number; failed: number; lastSync: string | null } | null>(null);
     const [fmAccessLocalCount, setFmAccessLocalCount] = useState(0);
 
@@ -1269,7 +1290,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
             const runStructureLoop = async (): Promise<void> => {
                 const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
-                    body: { action: 'sync-structure' }
+                    body: { action: 'sync-structure', force: true }
                 });
 
                 if (error) throw error;
@@ -1297,6 +1318,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     durationMs: elapsed,
                 });
 
+                window.dispatchEvent(new Event('building-data-changed'));
                 setIsSyncingStructure(false);
                 await checkSyncStatus();
             };
@@ -1342,7 +1364,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         const runResumableSync = async (): Promise<void> => {
             try {
                 const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
-                    body: { action: 'sync-assets-resumable' }
+                    body: { action: 'sync-assets-resumable', force: true }
                 });
 
                 if (error) {
@@ -2045,38 +2067,57 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
-    // FM Access: Save config (updates secrets via edge function)
+    // FM Access: Save credentials to api_profiles table
     const handleSaveFmAccessConfig = async () => {
         setIsSavingFmAccess(true);
+        setFmAccessMessage('');
         try {
-            // For now, just test connection to verify config is set
-            const { data, error } = await supabase.functions.invoke('fm-access-query', {
-                body: { action: 'test-connection' }
-            });
+            const payload = {
+                fm_access_api_url: fmAccessConfig.apiUrl.replace(/\/+$/, ''),
+                fm_access_username: fmAccessConfig.username,
+                fm_access_password: fmAccessConfig.password,
+                is_default: true,
+            };
+
+            let error;
+            if (fmAccessProfileId) {
+                // Update existing profile
+                ({ error } = await supabase
+                    .from('api_profiles')
+                    .update(payload)
+                    .eq('id', fmAccessProfileId));
+            } else {
+                // Create new default profile
+                const { data: newProfile, error: insertError } = await supabase
+                    .from('api_profiles')
+                    .insert({ ...payload, name: 'Default' })
+                    .select('id')
+                    .single();
+                error = insertError;
+                if (newProfile) setFmAccessProfileId(newProfile.id);
+            }
 
             if (error) throw error;
 
-            if (data?.success) {
-                toast({
-                    title: "Inställningar verifierade",
-                    description: "FM Access-inställningarna är konfigurerade och fungerar.",
-                });
-                setFmAccessStatus('success');
-            } else {
-                toast({
-                    variant: "destructive",
-                    title: "Konfigurationsfel",
-                    description: data?.error || 'FM Access-secrets behöver konfigureras i Cloud.',
-                });
-                setFmAccessStatus('error');
-                setFmAccessMessage(data?.error || 'Secrets saknas');
-            }
-        } catch (error: any) {
-            toast({
-                variant: "destructive",
-                title: "Fel",
-                description: error.message,
+            // Test the connection with new credentials
+            const { data, error: testError } = await supabase.functions.invoke('fm-access-query', {
+                body: { action: 'test-connection' }
             });
+            if (testError) throw testError;
+
+            if (data?.success) {
+                toast({ title: 'FM Access sparat', description: 'Credentials sparade och anslutning verifierad.' });
+                setFmAccessStatus('success');
+                setFmAccessMessage('Anslutning OK — ' + (data.message || ''));
+            } else {
+                toast({ variant: 'destructive', title: 'Sparat men anslutning misslyckades', description: data?.error || 'Kontrollera URL och credentials.' });
+                setFmAccessStatus('error');
+                setFmAccessMessage(data?.error || 'Kontrollera credentials');
+            }
+        } catch (err: any) {
+            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+            setFmAccessStatus('error');
+            setFmAccessMessage(err.message);
         } finally {
             setIsSavingFmAccess(false);
         }
@@ -2624,12 +2665,54 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             </div>
                                         </AccordionTrigger>
                                         <AccordionContent className="px-4 pb-4 pt-2">
-                                            <p className="text-xs text-muted-foreground mb-3">Secrets are configured in Lovable Cloud (FM_ACCESS_API_URL, FM_ACCESS_USERNAME, FM_ACCESS_PASSWORD).</p>
-                                            <div className="flex gap-2">
-                                                <Button variant="outline" size="sm" onClick={handleTestFmAccessConnection} disabled={isTestingFmAccess}>
-                                                    {isTestingFmAccess ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
-                                                    Test Connection
-                                                </Button>
+                                            <div className="space-y-3">
+                                                <div className="space-y-1.5">
+                                                    <label className="text-xs font-medium text-muted-foreground">API URL</label>
+                                                    <Input
+                                                        placeholder="https://your-fmaccess.domain.com"
+                                                        value={fmAccessConfig.apiUrl}
+                                                        onChange={e => setFmAccessConfig(c => ({ ...c, apiUrl: e.target.value }))}
+                                                        className="h-8 text-sm"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <label className="text-xs font-medium text-muted-foreground">Användarnamn</label>
+                                                    <Input
+                                                        placeholder="user@example.com"
+                                                        value={fmAccessConfig.username}
+                                                        onChange={e => setFmAccessConfig(c => ({ ...c, username: e.target.value }))}
+                                                        className="h-8 text-sm"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <label className="text-xs font-medium text-muted-foreground">Lösenord</label>
+                                                    <Input
+                                                        type="password"
+                                                        placeholder="••••••••"
+                                                        value={fmAccessConfig.password}
+                                                        onChange={e => setFmAccessConfig(c => ({ ...c, password: e.target.value }))}
+                                                        className="h-8 text-sm"
+                                                    />
+                                                </div>
+                                                {fmAccessMessage && (
+                                                    <p className={`text-xs ${fmAccessStatus === 'success' ? 'text-green-600' : 'text-destructive'}`}>
+                                                        {fmAccessMessage}
+                                                    </p>
+                                                )}
+                                                <div className="flex gap-2 pt-1">
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={handleSaveFmAccessConfig}
+                                                        disabled={isSavingFmAccess || !fmAccessConfig.apiUrl || !fmAccessConfig.username || !fmAccessConfig.password}
+                                                    >
+                                                        {isSavingFmAccess ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
+                                                        Spara
+                                                    </Button>
+                                                    <Button variant="outline" size="sm" onClick={handleTestFmAccessConnection} disabled={isTestingFmAccess}>
+                                                        {isTestingFmAccess ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
+                                                        Testa anslutning
+                                                    </Button>
+                                                </div>
                                             </div>
                                         </AccordionContent>
                                     </AccordionItem>

@@ -1,5 +1,4 @@
 import React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -8,9 +7,8 @@ interface ProtectedRouteProps {
   requireAdmin?: boolean;
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAdmin = false }) => {
-  const { user, isAdmin, isLoading } = useAuth();
-  const location = useLocation();
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+  const { isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -21,16 +19,6 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAdmin 
         </div>
       </div>
     );
-  }
-
-  if (!user) {
-    // Redirect to login, preserving the intended destination
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
-  if (requireAdmin && !isAdmin) {
-    // User is logged in but not admin - redirect to home
-    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;

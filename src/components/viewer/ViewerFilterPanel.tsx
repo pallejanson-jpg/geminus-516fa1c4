@@ -2079,7 +2079,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                   if (nativeColors) {
                     for (const [objId, props] of nativeColors) {
                       const entity = viewer.scene.objects?.[objId];
-                      if (entity) { entity.colorize = props.color; entity.opacity = props.opacity; }
+                      // props.color === null means no colorize override — use XKT material
+                      if (entity) { entity.colorize = (props as any).color ?? null; entity.opacity = props.opacity; }
                     }
                   }
                 }

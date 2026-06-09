@@ -8,7 +8,7 @@ interface FmAccessTreeProps {
   rootNode: FmAccessNode | null;
   loading: boolean;
   selectedGuid: string | null;
-  onSelect: (node: FmAccessNode) => void;
+  onSelect: (node: FmAccessNode, path: FmAccessNode[]) => void;
 }
 
 const CLASS_ICONS: Record<number, React.ElementType> = {
@@ -23,10 +23,11 @@ interface TreeNodeProps {
   node: FmAccessNode;
   depth: number;
   selectedGuid: string | null;
-  onSelect: (node: FmAccessNode) => void;
+  path: FmAccessNode[];
+  onSelect: (node: FmAccessNode, path: FmAccessNode[]) => void;
 }
 
-const TreeNodeItem: React.FC<TreeNodeProps> = ({ node, depth, selectedGuid, onSelect }) => {
+const TreeNodeItem: React.FC<TreeNodeProps> = ({ node, depth, selectedGuid, path, onSelect }) => {
   const [expanded, setExpanded] = useState(depth < 2);
   const hasChildren = node.children && node.children.length > 0;
   const nodeGuid = node.guid || node.systemGuid;
@@ -44,7 +45,7 @@ const TreeNodeItem: React.FC<TreeNodeProps> = ({ node, depth, selectedGuid, onSe
         )}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
         onClick={() => {
-          onSelect(node);
+          onSelect(node, path);
           if (hasChildren) setExpanded(!expanded);
         }}
       >
@@ -67,6 +68,7 @@ const TreeNodeItem: React.FC<TreeNodeProps> = ({ node, depth, selectedGuid, onSe
               node={child}
               depth={depth + 1}
               selectedGuid={selectedGuid}
+              path={[...path, node]}
               onSelect={onSelect}
             />
           ))}
@@ -97,7 +99,7 @@ const FmAccessTree: React.FC<FmAccessTreeProps> = ({ rootNode, loading, selected
   return (
     <ScrollArea className="h-full">
       <div className="py-1">
-        <TreeNodeItem node={rootNode} depth={0} selectedGuid={selectedGuid} onSelect={onSelect} />
+        <TreeNodeItem node={rootNode} depth={0} selectedGuid={selectedGuid} path={[]} onSelect={onSelect} />
       </div>
     </ScrollArea>
   );

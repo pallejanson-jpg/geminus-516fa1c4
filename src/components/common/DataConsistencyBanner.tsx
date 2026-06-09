@@ -84,7 +84,7 @@ export const DataConsistencyBanner: React.FC = () => {
     const runLoop = async () => {
       try {
         const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
-          body: { action: 'sync-structure' }
+          body: { action: 'sync-structure', force: true }
         });
         if (error) throw error;
 
@@ -100,6 +100,7 @@ export const DataConsistencyBanner: React.FC = () => {
           summary: `${(data?.totalSynced || 0).toLocaleString()} buildings/floors/rooms synced`,
           durationMs: Date.now() - startTime,
         });
+        window.dispatchEvent(new Event('building-data-changed'));
         setIsSyncingStructure(false);
         setTimeout(checkDelta, 2000);
       } catch (err: any) {
@@ -127,7 +128,7 @@ export const DataConsistencyBanner: React.FC = () => {
     const runLoop = async () => {
       try {
         const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
-          body: { action: 'sync-assets-resumable' }
+          body: { action: 'sync-assets-resumable', force: true }
         });
 
         if (error) {

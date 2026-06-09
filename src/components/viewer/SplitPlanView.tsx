@@ -41,6 +41,8 @@ interface SplitPlanViewProps {
   isSplitMode?: boolean;
   /** Callback when an entity is clicked (for opening properties etc.) */
   onEntityClick?: (entityId: string, fmGuid: string | null, entityName: string | null) => void;
+  /** When true, hide the camera position indicator (blue dot) */
+  hidePositionIndicator?: boolean;
 }
 
 interface PanZoom {
@@ -63,6 +65,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
   onRoomLabelsChange,
   isSplitMode = false,
   onEntityClick,
+  hidePositionIndicator = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -1286,7 +1289,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
             </div>
           )}
           {/* Camera position indicator (inside transformed container) */}
-          {cameraPos && (
+          {cameraPos && !hidePositionIndicator && (
             <div
               className="absolute pointer-events-none"
               style={{
