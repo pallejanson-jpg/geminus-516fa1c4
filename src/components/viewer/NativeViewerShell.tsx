@@ -39,8 +39,6 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/comp
 
 interface NativeViewerShellProps {
   buildingFmGuid: string;
-  modelFilterFmGuid?: string | null;
-  modelFilterCategory?: string | null;
   onClose: () => void;
   /** Hide the desktop back button (when parent already has one, e.g. UnifiedViewer) */
   hideBackButton?: boolean;
@@ -54,7 +52,7 @@ interface NativeViewerShellProps {
   showGeminusMenu?: boolean;
 }
 
-const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, modelFilterFmGuid, modelFilterCategory, onClose, hideBackButton = false, hideMobileOverlay = false, hideToolbar = false, hideFloorSwitcher = false, showGeminusMenu = false }) => {
+const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, onClose, hideBackButton = false, hideMobileOverlay = false, hideToolbar = false, hideFloorSwitcher = false, showGeminusMenu = false }) => {
   const isMobile = useIsMobile();
   const { allData, isSidebarExpanded } = useContext(AppContext);
 
@@ -62,7 +60,6 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, m
   const [xeokitViewer, setXeokitViewer] = useState<any>(null);
   const [isViewerReady, setIsViewerReady] = useState(false);
   const [viewerReloadKey, setViewerReloadKey] = useState(0);
-  // DB-first: only force-bootstrap from Asset+ when user explicitly triggers XKT_FORCE_RELOAD
   const [forceBootstrap, setForceBootstrap] = useState(false);
 
   // Listen for XKT_FORCE_RELOAD to remount the viewer with fresh data
@@ -234,6 +231,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, m
   // UI state
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [viewMode, setViewMode] = useState<'2d' | '3d' | '360'>('3d');
+  const viewModeRef = useRef<'2d' | '3d' | '360'>('3d');
   const [showSpaces, setShowSpaces] = useState(false);
   const [showVisualizationMenu, setShowVisualizationMenu] = useState(false);
   const [showRoomVisualization, setShowRoomVisualization] = useState(false);
@@ -371,11 +369,25 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, m
     return result;
   }, []);
 
-  // Wire floor selection → section plane clipping (3D ceiling clip)
+  // Keep viewModeRef in sync — both from local state and from ViewerToolbar's event
+  useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
+  useEffect(() => {
+    return on('VIEW_MODE_CHANGED', (detail) => {
+      if (detail.mode === '2d' || detail.mode === '3d' || detail.mode === '360') {
+        viewModeRef.current = detail.mode as '2d' | '3d' | '360';
+        setViewMode(detail.mode as '2d' | '3d' | '360');
+      }
+    });
+  }, []);
+
+  // Wire floor selection → section plane clipping (3D ceiling clip only)
   useEffect(() => {
     const off = on('FLOOR_SELECTION_CHANGED', (detail: FloorSelectionEventDetail) => {
       const { floorId, visibleMetaFloorIds, visibleFloorFmGuids, isAllFloorsVisible, skipClipping, isSoloFloor } = detail;
       if (skipClipping) return;
+
+      // In 2D mode the section plane is managed by ViewerToolbar — don't interfere
+      if (viewModeRef.current === '2d') return;
 
       if (isAllFloorsVisible) {
         removeSectionPlane();
@@ -1088,8 +1100,6 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, m
       <NativeXeokitViewer
         key={viewerReloadKey}
         buildingFmGuid={buildingFmGuid}
-        modelFilterFmGuid={modelFilterFmGuid || buildingFmGuid}
-        modelFilterCategory={modelFilterCategory || 'Building'}
         onClose={onClose}
         onViewerReady={handleViewerReady}
         forceBootstrap={forceBootstrap}
@@ -1098,7 +1108,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, m
       {/* Bottom toolbar — always mounted for event handling, hidden visually when hideToolbar */}
       {isViewerReady && xeokitViewer && (
         <div style={hideToolbar ? { position: 'absolute', opacity: 0, pointerEvents: 'none', height: 0, overflow: 'hidden' } : undefined}>
-          <ViewerToolbar viewer={xeokitViewer} />
+          <ViewerToolbar viewer={xeokitViewer} buildingFmGuid={buildingFmGuid} />
         </div>
       )}
 
@@ -1124,6 +1134,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, m
           viewerRef={viewerShimRef}
           buildingFmGuid={buildingFmGuid}
           isViewerReady={isViewerReady}
+          viewMode={viewMode}
           className={!isMobile
             ? `${hideBackButton ? 'top-12' : 'top-14'} ${sidebarOffset}`
             : 'bottom-[3.5rem] left-1/2 -translate-x-1/2'

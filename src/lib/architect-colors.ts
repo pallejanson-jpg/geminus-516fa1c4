@@ -67,6 +67,28 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
   let colorized = 0;
   const processedIds = new Set<string>();
 
+  // Get all object IDs for later phases
+  let allIds: string[] = [];
+  try {
+    allIds = scene.objectIds || [];
+  } catch {
+    // objectIds getter can throw if internal map is null
+  }
+
+  // CRITICAL: Batch operations FIRST to clear XKT material conflicts (essential!)
+  // The order matters: disable colorized → set colorize → enable colorized
+  if (allIds.length > 0) {
+    try {
+      console.log(`[applyArchitectColors] Batch-disabling colorized for ${allIds.length} entities to clear XKT materials...`);
+      scene.setObjectsColorized(allIds, false);  // CRITICAL: Disable colorized to clear XKT materials
+      scene.setObjectsVisible(allIds, true);
+      scene.setObjectsOpacity(allIds, 1);
+      console.log(`[applyArchitectColors] ✓ Batch baseline complete`);
+    } catch (e) {
+      console.warn('[applyArchitectColors] Error in batch operations:', e);
+    }
+  }
+
   // Phase 1: Colorize objects that have metaObject entries (IFC-type-based)
   if (metaScene?.metaObjects) {
     for (const [id, metaObj] of Object.entries(metaScene.metaObjects as Record<string, any>)) {
@@ -89,20 +111,49 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
 
       const color = IFC_TYPE_COLORS[ifcType] || DEFAULT_COLOR;
       entity.colorize = color;
+      entity.visible = true;
+      entity.opacity = 1.0;
+      entity.edges = false;  // Subtle edges already set at scene level
       colorized++;
     }
   }
 
+  console.log(`[applyArchitectColors] Phase 1: colorized ${colorized} objects from metaScene`);
+
   // Phase 2: Apply DEFAULT_COLOR to any remaining scene objects without metaObject entries
   // This prevents raw red/uncolored objects from showing
-  let allIds: string[] = [];
-  try { allIds = scene.objectIds || []; } catch { /* objectIds getter can throw if internal map is null */ }
+  if (!allIds || allIds.length === 0) {
+    try { allIds = scene.objectIds || []; } catch { /* objectIds getter can throw if internal map is null */ }
+  }
+  const phase2Start = colorized;
   for (const id of allIds) {
     if (processedIds.has(id)) continue;
     const entity = scene.objects?.[id];
     if (!entity) continue;
     entity.colorize = DEFAULT_COLOR;
+    entity.visible = true;
+    entity.opacity = 1.0;
     colorized++;
+  }
+  const phase2Count = colorized - phase2Start;
+  console.log(`[applyArchitectColors] Phase 2: colorized ${phase2Count} remaining objects (total now: ${colorized})`);
+
+  // Phase 3: CRITICAL — batch-enable colorized flag to apply all color assignments
+  // Without this step, XKT embedded materials override the colorize values
+  if (allIds.length > 0) {
+    try {
+      // Enable colorized for all visible entities that we just colored
+      const visibleIds = allIds.filter(id => {
+        const entity = scene.objects?.[id];
+        return entity && entity.visible;
+      });
+      if (visibleIds.length > 0) {
+        scene.setObjectsColorized(visibleIds, true);
+        console.log(`[applyArchitectColors] Phase 3: batch-enabled colorized for ${visibleIds.length} visible entities`);
+      }
+    } catch (e) {
+      console.warn('[applyArchitectColors] Error enabling colorized flag:', e);
+    }
   }
 
   // Subtle edges for architectural look
@@ -114,6 +165,23 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
       edgeMat.edgeWidth = 1;
     }
   } catch { /* edgeMaterial getter throws if scene is destroyed */ }
+
+  // CRITICAL: Force scene re-render after all color assignments
+  // This ensures xeokit actually applies the color changes to the GPU
+  try {
+    console.log('[applyArchitectColors] Forcing scene update...');
+    // Force scene render by triggering a camera update (minimal change)
+    if (scene.camera) {
+      const cam = scene.camera;
+      cam.eye = [...cam.eye];  // Trigger setter without changing position
+    }
+    // Also force scene re-upload by clearing renderer caches if available
+    if (scene.renderer) {
+      scene.renderer.reset?.();
+    }
+  } catch (e) {
+    console.warn('[applyArchitectColors] Error forcing scene update:', e);
+  }
 
   // Safety fallback: if ALL visible entities were hidden (e.g. model only has IfcSpace),
   // make spaces visible so the user sees something instead of an empty viewport

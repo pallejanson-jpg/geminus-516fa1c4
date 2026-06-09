@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils';
 import { applyArchitectColors } from '@/lib/architect-colors';
 import GunnarChat, { GunnarContext } from '@/components/chat/GunnarChat';
 import { ARCHITECT_BACKGROUND_CHANGED_EVENT } from '@/hooks/useArchitectViewMode';
+import PureFloorPlanView from './PureFloorPlanView';
 import {
   useSectionPlaneClipping,
   FLOOR_SELECTION_CHANGED_EVENT,
@@ -55,6 +56,7 @@ type ViewMode = '3d' | '2d';
 
 interface ViewerToolbarProps {
   viewer: any;
+  buildingFmGuid?: string;
   className?: string;
 }
 
@@ -140,13 +142,14 @@ ToolButton.displayName = 'ToolButton';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
+const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, className }) => {
   const [activeTool, setActiveTool] = useState<ViewerTool>(null);
   const [navMode, setNavMode] = useState<NavMode>('orbit');
   const [viewMode, setViewMode] = useState<ViewMode>('3d');
   const [isXrayActive, setIsXrayActive] = useState(false);
   const [isOnHoverActive, setIsOnHoverActive] = useState(false);
   const [isCrosshairActive, setIsCrosshairActive] = useState(false);
+  const [show2DPlan, setShow2DPlan] = useState(false);  // Pure 2D floor plan view
   const [isGunnarOpen, setIsGunnarOpen] = useState(false);
   const [enabledTools, setEnabledTools] = useState<string[]>(getEnabledTools);
   const [showConfig, setShowConfig] = useState(false);
@@ -158,8 +161,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
   const initialCameraRef = useRef<{ eye: number[]; look: number[]; up: number[] } | null>(null);
 
   const viewModeRef = useRef<ViewMode>(viewMode);
-  const colorizedFor2dRef = useRef<Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean; offset: number[] | null }>>(new Map());
+  const colorizedFor2dRef = useRef<Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean; offset: number[] | null }> | null>(new Map());
   const [currentFloorId, setCurrentFloorId] = useState<string | null>(null);
+  const currentFloorIdRef = useRef<string | null>(null); // sync ref — always up-to-date for rAF callbacks
   const [currentFloorBounds, setCurrentFloorBounds] = useState<{ minY: number; maxY: number } | null>(null);
 
   const viewerShimRef = useRef<any>(null);
@@ -239,6 +243,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
 
       const resolvedFloorId = visibleMetaFloorIds?.length === 1 ? visibleMetaFloorIds[0] : floorId;
 
+      currentFloorIdRef.current = resolvedFloorId; // sync — available immediately in rAF
       setCurrentFloorId(resolvedFloorId);
       setCurrentFloorBounds(bounds || null);
 
@@ -256,11 +261,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
       const soloId = isSolo ? resolvedFloorId : null;
 
       if (viewModeRef.current === '2d') {
-        if (resolvedFloorId) applyFloorPlanClipping(resolvedFloorId);
-        else {
-          const sceneAABB = viewer?.scene?.getAABB?.();
-          if (sceneAABB) applyGlobalFloorPlanClipping(sceneAABB[1]);
-        }
+        // In 2D mode: re-run full entity isolation for the new floor so that
+        // objects from other floors are hidden and styling is re-applied.
+        // handleViewModeChangeRef detects isForceReapply when already in 2D.
+        requestAnimationFrame(() => { handleViewModeChangeRef.current?.('2d'); });
       } else {
         // In 3D mode: apply ceiling clipping to cut objects that extend above next floor
         if (soloId) {
@@ -466,6 +470,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     }
     // Reset alphaDepthMask (xray sets it to false, causing white artifacts)
     scene.alphaDepthMask = true;
+
+    // Re-apply architect colors after batch reset (critical!)
+    try { applyArchitectColors(viewer); } catch (e) { console.warn('[handleResetView] applyArchitectColors failed:', e); }
 
     // Clear global flags set by insights / visualization systems
     (window as any).__colorFilterActive = false;
@@ -747,279 +754,50 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     emit('VIEW_MODE_CHANGED', { mode, floorId: currentFloorId });
 
     if (mode === '2d') {
-      const canvas = scene.canvas?.canvas as HTMLCanvasElement | undefined;
-      const revealCanvas = () => {
-        if (!canvas) return;
-        canvas.style.transition = 'opacity 0.25s ease-in';
-        canvas.style.opacity = '1';
-      };
-
+      // ── Simplified Pure 2D mode using PureFloorPlanView ──
+      // PureFloorPlanView handles all 2D rendering via SplitPlanView's StoreyViewsPlugin
       try {
-        // Hide canvas to avoid 3D flash — skip on force-reapply to prevent flicker
-        if (canvas && !isForceReapply) canvas.style.opacity = '0';
-
-        // Set white background FIRST
+        // Set white background
         emit('ARCHITECT_BACKGROUND_CHANGED', { presetId: 'white' });
 
-        let targetFloorId = currentFloorId;
-
-        // Try to resolve floor from last FLOOR_SELECTION_CHANGED event cache
-        if (!targetFloorId) {
-          // Check sessionStorage for last known floor
-          try {
-            const lastFloor = sessionStorage.getItem('viewer_last_floor_id');
-            if (lastFloor) targetFloorId = lastFloor;
-          } catch {}
-        }
-
-        if (!targetFloorId) {
-          const metaObjects2 = viewer?.metaScene?.metaObjects || {};
-          const storeys = Object.values(metaObjects2)
-            .filter((mo: any) => mo?.type?.toLowerCase() === 'ifcbuildingstorey')
-            .map((mo: any) => {
-              const bounds = calculateFloorBounds(mo.id);
-              return bounds ? { id: mo.id, minY: bounds.minY } : null;
-            })
-            .filter(Boolean) as Array<{ id: string; minY: number }>;
-
-          if (storeys.length > 0) {
-            storeys.sort((a, b) => a.minY - b.minY);
-            targetFloorId = storeys[0].id;
-          }
-        }
-
-        // Force-disable X-ray in strict 2D plan mode
-        const allIds = scene.objectIds || [];
-        if (allIds.length > 0) {
-          scene.setObjectsXRayed(allIds, false);
-        }
-        scene.alphaDepthMask = true;
+        // Disable X-ray in 2D mode
         setIsXrayActive(false);
 
-        // Auto-activate select tool in 2D so objects are immediately pickable
+        // Auto-activate select tool in 2D
         if (activeTool !== 'select') {
           handleToolChange('select');
         }
 
-        // Remove any existing 3D ceiling clipping first
-        try { remove3DClipping(); } catch {}
+        // Show the pure 2D floor plan overlay
+        setShow2DPlan(true);
 
-        if (targetFloorId) {
-          applyFloorPlanClipping(targetFloorId);
-
-          if (targetFloorId !== currentFloorId) {
-            const floorMeta = viewer?.metaScene?.metaObjects?.[targetFloorId];
-            const floorFmGuid =
-              floorMeta?.originalSystemId ||
-              floorMeta?.attributes?.FmGuid ||
-              floorMeta?.attributes?.fmGuid ||
-              floorMeta?.attributes?.fmguid ||
-              targetFloorId;
-
-            setCurrentFloorId(targetFloorId);
-            window.dispatchEvent(new CustomEvent<FloorSelectionEventDetail>(FLOOR_SELECTION_CHANGED_EVENT, {
-              detail: {
-                floorId: targetFloorId,
-                floorName: floorMeta?.name || null,
-                bounds: calculateFloorBounds(targetFloorId) || null,
-                visibleMetaFloorIds: [targetFloorId],
-                visibleFloorFmGuids: [String(floorFmGuid)],
-                isAllFloorsVisible: false,
-                isSoloFloor: true,
-              },
-            }));
-          }
-        } else {
-          const sceneAABB = scene.getAABB?.();
-          if (sceneAABB) applyGlobalFloorPlanClipping(sceneAABB[1]);
-        }
-
-        const edgeMat = scene.edgeMaterial;
-        const origEdgeColor = edgeMat?.edgeColor ? [...edgeMat.edgeColor] : [0.2, 0.2, 0.2];
-        const origEdgeAlpha = edgeMat?.edgeAlpha ?? 0.5;
-        const origEdgeWidth = edgeMat?.edgeWidth ?? 1;
-
-        const SLAB_TYPES = new Set(['ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase', 'ifcplate']);
-        const ROOF_TYPES = new Set(['ifcroof']);
-        const COVERING_TYPES = new Set(['ifccovering']);
-        const WALL_TYPES = new Set(['ifcwall', 'ifcwallstandardcase']);
-        const DOOR_WINDOW_TYPES = new Set(['ifcdoor', 'ifcwindow']);
-        const FURNITURE_TYPES = new Set(['ifcfurnishingelement', 'ifcrailing', 'ifcstair', 'ifcstairflight']);
-        const SPACE_TYPES = new Set(['ifcspace']);
-        const HIDE_TYPES = new Set([...SLAB_TYPES, ...ROOF_TYPES, ...COVERING_TYPES]);
-        const metaObjects = viewer?.metaScene?.metaObjects || scene?.metaScene?.metaObjects || {};
-        const metaCount = Object.keys(metaObjects).length;
-        console.log(`[ViewerToolbar] 2D styling: found ${metaCount} metaObjects, floor: ${targetFloorId}`);
-        const colorized = new Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean; offset: number[] | null }>();
-
-        // Build storey descendant set to scope 2D styling to the selected floor
-        const storeyDescendants = new Set<string>();
-        if (targetFloorId) {
-          const storeyMeta = metaObjects[targetFloorId];
-          if (storeyMeta) {
-            const stack = [...(storeyMeta.children || [])];
-            while (stack.length > 0) {
-              const node = stack.pop();
-              if (!node) continue;
-              storeyDescendants.add(node.id);
-              if (node.children?.length) stack.push(...node.children);
-            }
-          }
-        }
-
-        let visibleCount = 0;
-
-        const saveOrig = (entity: any, id: string) => {
-          colorized.set(id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible, offset: entity.offset ? [...entity.offset] : null });
-        };
-
-        Object.values(metaObjects).forEach((mo: any) => {
-          const typeLower = mo.type?.toLowerCase() || '';
-          const entity = scene.objects?.[mo.id];
-          if (!entity) return;
-
-          // If we have storey descendants, hide entities not belonging to this floor
-          if (storeyDescendants.size > 0 && !storeyDescendants.has(mo.id) && typeLower !== 'ifcbuildingstorey' && typeLower !== 'ifcbuilding' && typeLower !== 'ifcsite' && typeLower !== 'ifcproject') {
-            saveOrig(entity, mo.id);
-            entity.visible = false;
-            entity.pickable = false;
-            return;
-          }
-
-          if (HIDE_TYPES.has(typeLower)) {
-            // Hide slabs, roofs, coverings — they occlude the plan from above
-            saveOrig(entity, mo.id);
-            entity.visible = false; entity.pickable = false;
-         } else if (SPACE_TYPES.has(typeLower)) {
-            saveOrig(entity, mo.id);
-            entity.visible = true; entity.pickable = true; entity.opacity = 0.15; entity.colorize = [0.7, 0.85, 0.95]; entity.edges = true;
-            // Lower spaces so equipment wins pick priority in top-down 2D
-            try {
-              const origOffset = entity.offset ? [...entity.offset] : [0, 0, 0];
-              entity.offset = [origOffset[0], origOffset[1] - 0.3, origOffset[2]];
-            } catch (e) { /* DTX _textureData null — safe to ignore */ }
-            visibleCount++;
-          } else if (WALL_TYPES.has(typeLower)) {
-            saveOrig(entity, mo.id);
-            entity.colorize = [0.25, 0.25, 0.25]; entity.opacity = 1; entity.edges = true; entity.pickable = false;
-            visibleCount++;
-          } else if (DOOR_WINDOW_TYPES.has(typeLower)) {
-            saveOrig(entity, mo.id);
-            entity.colorize = [0.12, 0.12, 0.12]; entity.opacity = 1; entity.edges = true; entity.pickable = false;
-            visibleCount++;
-          } else if (FURNITURE_TYPES.has(typeLower)) {
-            saveOrig(entity, mo.id);
-            entity.visible = false; entity.pickable = false;
-          } else {
-            saveOrig(entity, mo.id);
-            entity.colorize = [0.35, 0.35, 0.35]; entity.opacity = 0.9; entity.edges = true; entity.pickable = true;
-            visibleCount++;
-          }
-        });
-
-        // Safety: if almost no objects are visible after 2D styling, rollback
-        if (visibleCount === 0) {
-          console.warn('[ViewerToolbar] 2D mode: 0 visible objects after styling — rolling back');
-          colorized.forEach((orig, id) => {
-            const entity = scene.objects?.[id];
-            if (entity) {
-              if (orig.colorize) entity.colorize = orig.colorize; else entity.colorize = null;
-              entity.opacity = orig.opacity; entity.edges = orig.edges; entity.pickable = orig.pickable; entity.visible = orig.visible;
-              if (orig.offset) entity.offset = orig.offset; else entity.offset = [0, 0, 0];
-            }
-          });
-          colorized.clear();
-        }
-
-        if (edgeMat) { edgeMat.edgeColor = [0.15, 0.15, 0.15]; edgeMat.edgeAlpha = 1.0; edgeMat.edgeWidth = 2; }
-        colorizedFor2dRef.current = colorized;
-        (viewerShimRef.current as any).__orig2dEdge = { origEdgeColor, origEdgeAlpha, origEdgeWidth };
-
-        // Lock camera: orthographic top-down, no rotation allowed
-        const camera = viewer.camera;
-        if (camera) {
-          const lookX = camera.look[0], lookY = camera.look[1], lookZ = camera.look[2];
-          const dx = camera.eye[0] - lookX, dy = camera.eye[1] - lookY, dz = camera.eye[2] - lookZ;
-          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-
-          // Cancel previous momentum BEFORE setting 2D camera
-          try { viewer.cameraFlight?.cancel?.(); } catch {}
-
-          camera.projection = 'ortho';
-          camera.ortho.scale = dist * 1.2;
-          // Set camera instantly to top-down view
-          viewer.cameraFlight.flyTo({ eye: [lookX, lookY + dist, lookZ], look: [lookX, lookY, lookZ], up: [0, 0, -1], duration: 0 });
-        }
-
-        // Lock navigation: planView mode prevents rotation, only pan + zoom
-        if (viewer.cameraControl) {
-          viewer.cameraControl.navMode = 'planView';
-          viewer.cameraControl.followPointer = false;
-        }
-
-        // Kill any residual inertia from 3D orbit/pan so the view doesn't spin
-        if (viewer.scene?.camera) {
-          const cam = viewer.scene.camera;
-          cam.eye = [...cam.eye];
-          cam.look = [...cam.look];
-          cam.up = [...cam.up];
-        }
-        // Re-assert planView after a short delay to catch late-arriving touch events on mobile
-        setTimeout(() => {
-          if (viewer.cameraControl && viewModeRef.current === '2d') {
-            viewer.cameraControl.navMode = 'planView';
-            viewer.cameraControl.followPointer = false;
-            // Kill inertia again in case touch events re-applied it
-            if (viewer.scene?.camera) {
-              const cam = viewer.scene.camera;
-              cam.eye = [...cam.eye];
-              cam.look = [...cam.look];
-              cam.up = [...cam.up];
-            }
-          }
-        }, 150);
-        // Cache the floor ID for force-reapply
-        if (targetFloorId) {
-          try { sessionStorage.setItem('viewer_last_floor_id', targetFloorId); } catch {}
-        }
+        console.log('[ViewerToolbar] Entering pure 2D mode with PureFloorPlanView');
+        mode2dTransitionRef.current = false;
       } catch (err) {
-        console.warn('[ViewerToolbar] Failed to enter 2D mode cleanly:', err);
-        try { remove2DClipping(); } catch {}
-        try { remove3DClipping(); } catch {}
-      } finally {
-        if (!isForceReapply) {
-          setTimeout(revealCanvas, 80);
-          setTimeout(revealCanvas, 600);
-        }
+        console.warn('[ViewerToolbar] Failed to enter 2D mode:', err);
         mode2dTransitionRef.current = false;
       }
     } else {
-      // Restore all entities modified during 2D mode
-      if (colorizedFor2dRef.current.size > 0) {
-        colorizedFor2dRef.current.forEach((orig, id) => {
-          const entity = scene.objects?.[id];
-          if (entity) {
-            if (orig.colorize) entity.colorize = orig.colorize; else entity.colorize = null;
-            entity.opacity = orig.opacity; entity.edges = orig.edges; entity.pickable = orig.pickable; entity.visible = orig.visible;
-            if (orig.offset) entity.offset = orig.offset; else entity.offset = [0, 0, 0];
-          }
-        });
-        colorizedFor2dRef.current.clear();
-      }
+      // ── 3D restore ────────────────────────────────────────────────────────
+      // Hide the pure 2D floor plan overlay
+      setShow2DPlan(false);
 
-      const origEdge = (viewerShimRef.current as any)?.__orig2dEdge;
-      if (origEdge) {
-        const edgeMat = scene.edgeMaterial;
-        if (edgeMat) { edgeMat.edgeColor = origEdge.origEdgeColor; edgeMat.edgeAlpha = origEdge.origEdgeAlpha; edgeMat.edgeWidth = origEdge.origEdgeWidth; }
-        delete (viewerShimRef.current as any).__orig2dEdge;
-      }
+      // Reset batch state
+      colorizedFor2dRef.current = new Map(); // discard stale map, never null
 
-      // Re-apply architect color palette to ensure spaces are hidden and colors correct
+      const allIds = scene.objectIds || [];
+      if (allIds.length > 0) {
+        scene.setObjectsVisible(allIds, true);
+        scene.setObjectsXRayed(allIds, false);
+        scene.setObjectsPickable(allIds, true);
+        scene.setObjectsColorized(allIds, false);  // CRITICAL: Disable 2D colorizing state before re-applying architect colors
+        scene.setObjectsEdges(allIds, false);
+        scene.setObjectsOpacity(allIds, 1);
+      }
+      scene.alphaDepthMask = true;
+
+      // Re-apply architect color palette — starting from clean colorized=false slate
       try { applyArchitectColors(viewer); } catch {}
-
-      // Remove 2D clipping planes, restore 3D ceiling clip if a floor is selected
-      try { remove2DClipping(); } catch {}
-      if (currentFloorId) { try { applyCeilingClipping(currentFloorId); } catch {} }
 
       // Restore navigation: orbit mode
       if (viewer.cameraControl) {
@@ -1233,6 +1011,23 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
             />
           </div>
         </div>
+      )}
+
+      {/* Pure 2D Floor Plan Mode */}
+      {show2DPlan && viewer && buildingFmGuid && (
+        <PureFloorPlanView
+          viewerRef={viewerRef}
+          buildingFmGuid={buildingFmGuid}
+          currentFloorId={currentFloorId}
+          onFloorChange={(floorId) => {
+            setCurrentFloorId(floorId);
+          }}
+          onEntityClick={(entityId, fmGuid, entityName) => {
+            // Handle navigation from 2D plan click
+            // SplitPlanView dispatches SPLIT_PLAN_NAVIGATE event which we listen for elsewhere
+            console.log(`[ViewerToolbar] 2D plan entity click: ${entityId} (${entityName})`);
+          }}
+        />
       )}
     </TooltipProvider>
   );
