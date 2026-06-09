@@ -160,6 +160,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
   // Store initial camera for reset
   const initialCameraRef = useRef<{ eye: number[]; look: number[]; up: number[] } | null>(null);
 
+  // Ref to viewer for passing to PureFloorPlanView
+  const viewerRef = useRef<any>(null);
+  useEffect(() => {
+    viewerRef.current = viewer;
+  }, [viewer]);
+
   const viewModeRef = useRef<ViewMode>(viewMode);
   const colorizedFor2dRef = useRef<Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean; offset: number[] | null }> | null>(new Map());
   const [currentFloorId, setCurrentFloorId] = useState<string | null>(null);
