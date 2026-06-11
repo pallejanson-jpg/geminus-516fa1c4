@@ -1088,7 +1088,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
       try { remove2DClipping(); } catch {}
       if (currentFloorId) { try { applyCeilingClipping(currentFloorId); } catch {} }
 
-      // Restore navigation: orbit mode
+      // Restore toolbar defaults: Orbit ON, Select OFF
+      // (2D auto-activates the select tool — turn it back off when returning to 3D)
+      if (activeToolRef2.current === 'select') {
+        handleToolChange('select'); // toggles select off
+      }
+      setNavMode('orbit');
       if (viewer.cameraControl) {
         viewer.cameraControl.navMode = 'orbit';
       }

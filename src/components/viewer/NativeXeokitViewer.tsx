@@ -281,33 +281,12 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
             }
           }
         } else {
-          // Apply architect palette (auto-detect or explicit theme)
-          let needsArchitectColors = false;
-          const sceneModels = viewer.scene.models || {};
-          const loadedNames: string[] = Object.values(sceneModels).map((m: any) => String(m?.id || '').toUpperCase());
-          const hasArchModel = loadedNames.some(n => n.startsWith('A') || n.includes('ARK') || n.includes('ARCHITECT'));
-          if (!hasArchModel) {
-            needsArchitectColors = true;
-          } else if (viewer.scene.objects) {
-            let redCount = 0;
-            let sampled = 0;
-            const sampleIds = finalIds.slice(0, Math.min(500, finalIds.length));
-            for (const id of sampleIds) {
-              const e = viewer.scene.objects[id];
-              if (!e) continue;
-              sampled++;
-              const c = e.colorize;
-              const isRedish = !c || (c[0] >= 0.95 && c[1] <= 0.1 && c[2] <= 0.1);
-              if (isRedish) redCount++;
-            }
-            if (sampled > 0 && (redCount / sampled) > 0.05) needsArchitectColors = true;
-          }
-          if (needsArchitectColors) {
-            console.log(`[NativeViewer] Applying architect colors (hasArch=${hasArchModel})`);
-            try { applyArchitectColors(viewer); } catch (e) { console.warn('[NativeViewer] applyArchitectColors failed', e); }
-          } else {
-            console.log(`[NativeViewer] Native model colors preserved (theme: ${savedTheme}). ${finalIds.length} total entities`);
-          }
+          // Architect palette is the default look. The old red-detection heuristic
+          // (sample 500 objects, keep native colors if <5% are red) let models with
+          // genuinely red XKT materials (roofs, facade strips) through unstyled —
+          // so always apply the palette unless the user explicitly chose native.
+          console.log('[NativeViewer] Applying architect colors (default palette)');
+          try { applyArchitectColors(viewer); } catch (e) { console.warn('[NativeViewer] applyArchitectColors failed', e); }
         }
 
         // Log AABB for diagnostics
