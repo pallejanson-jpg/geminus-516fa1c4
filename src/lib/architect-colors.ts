@@ -79,8 +79,8 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
   // The order matters: disable colorized → set colorize → enable colorized
   if (allIds.length > 0) {
     try {
-      console.log(`[applyArchitectColors] Batch-disabling colorized for ${allIds.length} entities to clear XKT materials...`);
-      scene.setObjectsColorized(allIds, false);  // CRITICAL: Disable colorized to clear XKT materials
+      console.log(`[applyArchitectColors] Batch-resetting colorize for ${allIds.length} entities...`);
+      scene.setObjectsColorized(allIds, null);  // null resets colorize to material default (API takes RGB array or null, NOT boolean)
       scene.setObjectsVisible(allIds, true);
       scene.setObjectsOpacity(allIds, 1);
       console.log(`[applyArchitectColors] ✓ Batch baseline complete`);
@@ -138,23 +138,8 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
   const phase2Count = colorized - phase2Start;
   console.log(`[applyArchitectColors] Phase 2: colorized ${phase2Count} remaining objects (total now: ${colorized})`);
 
-  // Phase 3: CRITICAL — batch-enable colorized flag to apply all color assignments
-  // Without this step, XKT embedded materials override the colorize values
-  if (allIds.length > 0) {
-    try {
-      // Enable colorized for all visible entities that we just colored
-      const visibleIds = allIds.filter(id => {
-        const entity = scene.objects?.[id];
-        return entity && entity.visible;
-      });
-      if (visibleIds.length > 0) {
-        scene.setObjectsColorized(visibleIds, true);
-        console.log(`[applyArchitectColors] Phase 3: batch-enabled colorized for ${visibleIds.length} visible entities`);
-      }
-    } catch (e) {
-      console.warn('[applyArchitectColors] Error enabling colorized flag:', e);
-    }
-  }
+  // NOTE: scene.setObjectsColorized(ids, colorize) takes an RGB ARRAY, not a boolean.
+  // Each entity.colorize assignment above already applies the color — no batch flag needed.
 
   // Subtle edges for architectural look
   try {

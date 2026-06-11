@@ -537,7 +537,15 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       }
     }
 
-      // Bold wall edges for Dalux-style crisp plan
+      // Bold wall edges for Dalux-style crisp plan — save originals so we can
+      // restore them after the snapshot (otherwise the live 3D view keeps thick black edges)
+    const origEdgeMaterial = scene.edgeMaterial
+      ? {
+          edgeWidth: scene.edgeMaterial.edgeWidth,
+          edgeColor: [...scene.edgeMaterial.edgeColor],
+          edgeAlpha: scene.edgeMaterial.edgeAlpha,
+        }
+      : null;
     if (scene.edgeMaterial) {
       scene.edgeMaterial.edgeWidth = monochrome ? 12 : 6;
       scene.edgeMaterial.edgeColor = [0, 0, 0];
@@ -560,6 +568,12 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
         entity.opacity = opacity;
         entity.edges = edges;
         entity.visible = visible;
+      }
+      // Restore edge material — otherwise the live 3D view keeps the thick black plan edges
+      if (origEdgeMaterial && scene.edgeMaterial) {
+        scene.edgeMaterial.edgeWidth = origEdgeMaterial.edgeWidth;
+        scene.edgeMaterial.edgeColor = origEdgeMaterial.edgeColor;
+        scene.edgeMaterial.edgeAlpha = origEdgeMaterial.edgeAlpha;
       }
     };
 
@@ -1066,6 +1080,19 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
 
   const handleMouseUp = useCallback(() => {
     panStartRef.current = null;
+  }, []);
+
+  // Clear pan state on window-level mouseup — the container's own onMouseUp never
+  // fires if the button is released outside it (e.g. over the floor dropdown),
+  // which left the plan "stuck" to the cursor until the next click.
+  useEffect(() => {
+    const clearPan = () => { panStartRef.current = null; };
+    window.addEventListener('mouseup', clearPan);
+    window.addEventListener('blur', clearPan);
+    return () => {
+      window.removeEventListener('mouseup', clearPan);
+      window.removeEventListener('blur', clearPan);
+    };
   }, []);
 
   // Touch support
