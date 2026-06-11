@@ -859,6 +859,25 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
         const SPACE_TYPES = new Set(['ifcspace']);
         const HIDE_TYPES = new Set([...SLAB_TYPES, ...ROOF_TYPES, ...COVERING_TYPES]);
         const metaObjects = viewer?.metaScene?.metaObjects || scene?.metaScene?.metaObjects || {};
+
+        // On force-reapply (floor switch while already in 2D): restore the previous
+        // 2D overrides FIRST so styling always starts from the true 3D baseline.
+        // Without this, space offsets accumulate (-0.3 per switch) and 2D-styled
+        // values get re-saved as "originals".
+        if (colorizedFor2dRef.current && colorizedFor2dRef.current.size > 0) {
+          colorizedFor2dRef.current.forEach((orig, id) => {
+            const entity = scene.objects?.[id];
+            if (!entity) return;
+            if (orig.colorize) entity.colorize = orig.colorize; else entity.colorize = null;
+            entity.opacity = orig.opacity;
+            entity.edges = orig.edges;
+            entity.pickable = orig.pickable;
+            entity.visible = orig.visible;
+            if (orig.offset) { try { entity.offset = orig.offset; } catch {} }
+          });
+          colorizedFor2dRef.current.clear();
+        }
+
         const colorized = new Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean; offset: number[] | null }>();
 
         // Build storey descendant set to scope 2D styling to the selected floor
@@ -874,6 +893,24 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
               if (node.children?.length) stack.push(...node.children);
             }
           }
+        }
+
+        // Fallback: some models have empty storey.children — traverse each entity's
+        // parent chain upward to its IfcBuildingStorey instead. Without this, floor
+        // switching in 2D appears dead (all floors stay visible, stacked on top of
+        // each other).
+        if (storeyDescendants.size === 0 && targetFloorId) {
+          Object.values(metaObjects).forEach((mo: any) => {
+            if (!mo?.id || mo.id === targetFloorId) return;
+            let cur: any = mo.parent;
+            let depth = 0;
+            while (cur && depth < 100) {
+              if (cur.id === targetFloorId) { storeyDescendants.add(mo.id); break; }
+              cur = cur.parent;
+              depth++;
+            }
+          });
+          console.log(`[2D] storey.children empty — parent-chain fallback found ${storeyDescendants.size} entities for floor ${targetFloorId}`);
         }
 
         let visibleCount = 0;
@@ -942,7 +979,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
 
         if (edgeMat) { edgeMat.edgeColor = [0.15, 0.15, 0.15]; edgeMat.edgeAlpha = 1.0; edgeMat.edgeWidth = 2; }
         colorizedFor2dRef.current = colorized;
-        (viewerShimRef.current as any).__orig2dEdge = { origEdgeColor, origEdgeAlpha, origEdgeWidth };
+        // Only save edge originals ONCE — on force-reapply the material already holds
+        // the 2D values, and overwriting would corrupt the 3D edges on exit
+        if (!(viewerShimRef.current as any).__orig2dEdge) {
+          (viewerShimRef.current as any).__orig2dEdge = { origEdgeColor, origEdgeAlpha, origEdgeWidth };
+        }
 
         // Lock camera: orthographic top-down, no rotation allowed
         const camera = viewer.camera;

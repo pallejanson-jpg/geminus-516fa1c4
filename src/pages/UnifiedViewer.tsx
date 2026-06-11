@@ -928,7 +928,7 @@ const UnifiedViewerContent: React.FC<{
               modelFilterCategory={modelFilterTarget.category}
               onClose={is3DMode ? handleGoBack : () => {}}
               hideBackButton
-              hideFloorSwitcher={isSplit2D3D}
+              hideFloorSwitcher={false}
               showGeminusMenu={viewMode === '3d'}
             />
           ) : (
