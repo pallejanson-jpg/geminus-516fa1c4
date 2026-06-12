@@ -33,7 +33,7 @@ interface ComplexGroup {
 }
 
 const PortfolioView: React.FC = () => {
-  const { selectedFacility, setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData, setViewer3dFmGuid, refreshInitialData, open360WithContext, openSenslincDashboard, appConfigs } = useContext(AppContext);
+  const { selectedFacility, setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData, setViewer3dFmGuid, refreshInitialData, open360WithContext, openGeminusPremiumDashboard, appConfigs } = useContext(AppContext);
   
   // Preload XKT when a building is selected
   useXktPreload(selectedFacility?.category === 'Building' ? selectedFacility.fmGuid : null);
@@ -218,7 +218,7 @@ const PortfolioView: React.FC = () => {
   const handleShowDocs = (facility: Facility) => setShowDocsFor(facility);
   const handleShowInsights = (facility: Facility) => setActiveApp('insights');
   
-  // Handle opening IoT dashboard - extract sensorDashboard URL from facility attributes or fetch from Senslinc API
+  // Handle opening IoT dashboard - extract sensorDashboard URL from facility attributes or fetch from Geminus Premium API
   const handleOpenIoT = async (facility: Facility) => {
     const attrs = (facility as any).attributes || {};
     
@@ -230,12 +230,12 @@ const PortfolioView: React.FC = () => {
     
     let dashboardUrl = dashboardKey && attrs[dashboardKey]?.value ? attrs[dashboardKey].value : null;
     
-    // If no URL in attributes, try to fetch from Senslinc API using FM GUID
+    // If no URL in attributes, try to fetch from Geminus Premium API using FM GUID
     if (!dashboardUrl && facility.fmGuid) {
       try {
-        console.log('[IoT] Fetching dashboard URL from Senslinc for:', facility.fmGuid);
+        console.log('[IoT] Fetching dashboard URL from Geminus Premium for:', facility.fmGuid);
         const { supabase } = await import('@/integrations/supabase/client');
-        const { data, error } = await supabase.functions.invoke('senslinc-query', {
+        const { data, error } = await supabase.functions.invoke('geminus-premium-query', {
           body: { action: 'get-dashboard-url', fmGuid: facility.fmGuid }
         });
         
@@ -244,7 +244,7 @@ const PortfolioView: React.FC = () => {
           console.log('[IoT] Found dashboard URL via API:', dashboardUrl);
         }
       } catch (err) {
-        console.log('[IoT] Failed to fetch dashboard URL from Senslinc:', err);
+        console.log('[IoT] Failed to fetch dashboard URL from Geminus Premium:', err);
       }
     }
     
@@ -253,7 +253,7 @@ const PortfolioView: React.FC = () => {
       
       if (iotConfig.openMode === 'internal') {
         // Open in internal iframe view
-        openSenslincDashboard({
+        openGeminusPremiumDashboard({
           dashboardUrl,
           facilityName: facility.commonName || facility.name || 'IoT Dashboard',
           facilityFmGuid: facility.fmGuid,
@@ -267,7 +267,7 @@ const PortfolioView: React.FC = () => {
       console.log('No IoT dashboard URL found for:', facility.commonName || facility.name);
       const { toast } = await import('sonner');
       toast.info('No IoT dashboard', {
-        description: 'This object has no linked sensor dashboard in Asset+ or Senslinc.'
+        description: 'This object has no linked sensor dashboard in Geminus Plus or Geminus Premium.'
       });
     }
   };
@@ -735,7 +735,7 @@ const PortfolioView: React.FC = () => {
                 <CardTitle className="mb-2">No buildings found</CardTitle>
                 <CardDescription>
                   {facilities.length === 0 
-                    ? 'Sync data from Asset+ to display buildings'
+                    ? 'Sync data from Geminus Plus to display buildings'
                     : 'Try adjusting your search filters'
                   }
                 </CardDescription>

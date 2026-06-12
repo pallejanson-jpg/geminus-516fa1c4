@@ -19,7 +19,7 @@ interface QuickActionsProps {
   facility: Facility;
   ivionSiteId?: string | null;
   has3DModels?: boolean;
-  hasFmAccess?: boolean;
+  hasGeminusBase?: boolean;
   isLoading?: boolean;
   onOpenMap: () => void;
   onOpenNavigator: (facility: Facility) => void;
@@ -41,7 +41,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
   facility, 
   ivionSiteId,
   has3DModels,
-  hasFmAccess,
+  hasGeminusBase,
   isLoading,
   onOpenMap, 
   onOpenNavigator, 

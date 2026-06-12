@@ -127,7 +127,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
     if (step !== 'picking3D') return;
 
     const xv = (window as any).__nativeXeokitViewer ||
-      (window as any).__assetPlusViewerInstance?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      (window as any).__geminusPlusViewerInstance?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
 
     if (!xv?.scene) {
       console.warn('[AlignmentPicker] No xeokit viewer found for 3D picking');

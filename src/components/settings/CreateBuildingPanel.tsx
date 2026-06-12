@@ -13,7 +13,7 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { deleteBuilding } from '@/services/asset-plus-service';
+import { deleteBuilding } from '@/services/geminus-plus-service';
 import {
   Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers, Timer, Cloud, FileSpreadsheet, KeyRound, Pencil, RefreshCw, Database, ChevronDown, PlayCircle, Trash2, AlertTriangle, RotateCcw, Eye, X
 } from 'lucide-react';
@@ -34,8 +34,8 @@ interface ExistingBuilding {
   fmGuid: string;
   name: string;
   commonName: string;
-  hasCustomAssetPlus: boolean;
-  hasCustomSenslinc: boolean;
+  hasCustomGeminusPlus: boolean;
+  hasCustomGeminusPremium: boolean;
 }
 
 interface CreateBuildingPanelProps {
@@ -84,8 +84,8 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
   const [propertyDialogOpen, setPropertyDialogOpen] = useState(false);
   const [editFmGuid, setEditFmGuid] = useState<string | null>(null);
 
-  // ── Sync from Asset+ state ──
-  const [isSyncingAssetPlus, setIsSyncingAssetPlus] = useState(false);
+  // ── Sync from Geminus Plus state ──
+  const [isSyncingGeminusPlus, setIsSyncingGeminusPlus] = useState(false);
 
   // ── Batch enqueue state ──
   const [isBatchEnqueuing, setIsBatchEnqueuing] = useState(false);
@@ -194,13 +194,13 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       // Fetch building_settings for credential badges
       const { data: settings } = await supabase
         .from('building_settings')
-        .select('fm_guid, assetplus_api_url, senslinc_api_url');
+        .select('fm_guid, geminus_plus_api_url, geminus_premium_api_url');
 
       const settingsMap: Record<string, { hasAp: boolean; hasSl: boolean }> = {};
       (settings || []).forEach((s: any) => {
         settingsMap[s.fm_guid] = {
-          hasAp: !!s.assetplus_api_url,
-          hasSl: !!s.senslinc_api_url,
+          hasAp: !!s.geminus_plus_api_url,
+          hasSl: !!s.geminus_premium_api_url,
         };
       });
 
@@ -214,8 +214,8 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           fmGuid: b.fm_guid,
           name: b.name || '',
           commonName: displayName,
-          hasCustomAssetPlus: settingsMap[b.fm_guid]?.hasAp || false,
-          hasCustomSenslinc: settingsMap[b.fm_guid]?.hasSl || false,
+          hasCustomGeminusPlus: settingsMap[b.fm_guid]?.hasAp || false,
+          hasCustomGeminusPremium: settingsMap[b.fm_guid]?.hasSl || false,
         };
       });
 
@@ -226,8 +226,8 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
             fmGuid: s.fm_guid,
             name: '',
             commonName: s.fm_guid.slice(0, 12) + '…',
-            hasCustomAssetPlus: !!s.assetplus_api_url,
-            hasCustomSenslinc: !!s.senslinc_api_url,
+            hasCustomGeminusPlus: !!s.geminus_plus_api_url,
+            hasCustomGeminusPremium: !!s.geminus_premium_api_url,
           });
         }
       });
@@ -353,7 +353,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
 
     setIsCreating(true);
     try {
-      const { data, error } = await supabase.functions.invoke('asset-plus-create-building', {
+      const { data, error } = await supabase.functions.invoke('geminus-plus-create-building', {
         body: {
           complexDesignation,
           complexName,
@@ -454,7 +454,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       const safeModelName = targetModelName.trim() || ifcFile.name.replace(/\.ifc$/i, '');
       const slotModelId = getModelSlotId(safeModelName);
       
-      // Determine if this is an IFC upload to an existing building (e.g. Asset+ building)
+      // Determine if this is an IFC upload to an existing building (e.g. Geminus Plus building)
       const isUploadToExisting = !createdBuilding && existingBuildings.some(b => b.fmGuid === targetBuildingFmGuid);
       
       const { data: jobRow, error: jobError } = await supabase
@@ -597,7 +597,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           const levels = convResult.levels || [];
           const spaces = convResult.spaces || [];
           if ((levels.length > 0 || spaces.length > 0) && targetModelFmGuid) {
-            addLog(`Creating ${levels.length} levels and ${spaces.length} spaces in Asset+...`);
+            addLog(`Creating ${levels.length} levels and ${spaces.length} spaces in Geminus Plus...`);
             const levelFmGuids = new Map<string, string>();
             const hierarchyLevels = levels.map((level: any) => {
               const fmGuid = crypto.randomUUID();
@@ -613,7 +613,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
             });
 
             const { data: hierarchyData, error: hierarchyError } = await supabase.functions.invoke(
-              'asset-plus-create-hierarchy',
+              'geminus-plus-create-hierarchy',
               { body: { buildingFmGuid: targetBuildingFmGuid, modelFmGuid: targetModelFmGuid, levels: hierarchyLevels, spaces: hierarchySpaces } }
             );
             if (hierarchyError) addLog(`⚠️ Hierarchy creation failed: ${hierarchyError.message}`);
@@ -836,7 +836,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         }
 
         if ((result.levels?.length > 0 || result.spaces?.length > 0) && targetModelFmGuid) {
-          log('Creating hierarchy in Asset+...');
+          log('Creating hierarchy in Geminus Plus...');
           const hierarchyLevels = result.levels.map((level: any) => ({
             fmGuid: levelFmGuids.get(level.id || level.name) || crypto.randomUUID(),
             designation: level.name, commonName: level.name,
@@ -846,10 +846,10 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
             levelFmGuid: levelFmGuids.get(space.parentId) || levelFmGuids.get(space.levelName) || undefined,
           }));
           const { data: hData, error: hError } = await supabase.functions.invoke(
-            'asset-plus-create-hierarchy',
+            'geminus-plus-create-hierarchy',
             { body: { buildingFmGuid: buildingGuid, modelFmGuid: targetModelFmGuid, levels: hierarchyLevels, spaces: hierarchySpaces } }
           );
-          if (hError) log(`⚠️ Asset+ hierarchy failed: ${hError.message}`);
+          if (hError) log(`⚠️ Geminus Plus hierarchy failed: ${hError.message}`);
           else if (hData?.success) log(`✅ ${hData.message}`);
         }
 
@@ -907,23 +907,23 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
     await startIfcUpload(chosenModelName);
   };
 
-  // ── Sync from Asset+ for selected building ──
-  const handleSyncAssetPlus = async () => {
+  // ── Sync from Geminus Plus for selected building ──
+  const handleSyncGeminusPlus = async () => {
     if (!targetBuildingFmGuid) return;
-    setIsSyncingAssetPlus(true);
+    setIsSyncingGeminusPlus(true);
     try {
-      const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+      const { data, error } = await supabase.functions.invoke('geminus-plus-sync', {
         body: { action: 'sync-building', buildingFmGuid: targetBuildingFmGuid },
       });
       if (error) throw error;
       toast({
-        title: 'Asset+ sync complete',
+        title: 'Geminus Plus sync complete',
         description: data?.message || `Synced ${data?.totalSynced || 0} objects.`,
       });
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Asset+ sync failed', description: err.message });
+      toast({ variant: 'destructive', title: 'Geminus Plus sync failed', description: err.message });
     } finally {
-      setIsSyncingAssetPlus(false);
+      setIsSyncingGeminusPlus(false);
     }
   };
 
@@ -1010,12 +1010,12 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
     try {
       const result = await deleteBuilding(selectedBuildingFmGuid);
       if (result.success) {
-        toast({ title: 'Building deleted', description: `${result.summary.assetsDeleted} objects deleted, ${result.summary.expiredInAssetPlus} expired in Asset+.` });
+        toast({ title: 'Building deleted', description: `${result.summary.assetsDeleted} objects deleted, ${result.summary.expiredInGeminusPlus} expired in Geminus Plus.` });
         setSelectedBuildingFmGuid('');
         setCreatedBuilding(null);
         fetchBuildings();
       } else {
-        toast({ variant: 'destructive', title: 'Partially failed', description: `${result.summary.expireErrors} objects could not be expired in Asset+.` });
+        toast({ variant: 'destructive', title: 'Partially failed', description: `${result.summary.expireErrors} objects could not be expired in Geminus Plus.` });
         fetchBuildings();
       }
     } catch (err: any) {
@@ -1077,8 +1077,8 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                   <SelectItem key={b.fmGuid} value={b.fmGuid}>
                     <span className="flex items-center gap-2">
                       {b.commonName}
-                      {b.hasCustomAssetPlus && <Badge variant="secondary" className="text-[9px] px-1 py-0 ml-1">Asset+</Badge>}
-                      {b.hasCustomSenslinc && <Badge variant="secondary" className="text-[9px] px-1 py-0">Senslinc</Badge>}
+                      {b.hasCustomGeminusPlus && <Badge variant="secondary" className="text-[9px] px-1 py-0 ml-1">Geminus Plus</Badge>}
+                      {b.hasCustomGeminusPremium && <Badge variant="secondary" className="text-[9px] px-1 py-0">Geminus Premium</Badge>}
                     </span>
                   </SelectItem>
                 ))}
@@ -1100,7 +1100,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                     </AlertDialogTitle>
                     <AlertDialogDescription>
                       <strong>{selectedBuilding?.commonName}</strong> and all associated objects (floors, rooms, inventory) will be permanently deleted.
-                      Synced objects will be expired in Asset+. This action cannot be undone.
+                      Synced objects will be expired in Geminus Plus. This action cannot be undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -1118,7 +1118,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         {!selectedBuildingFmGuid && !showCreateForm && (
           <Button variant="outline" size="sm" onClick={() => setShowCreateForm(true)} className="w-full gap-1.5 text-xs">
             <Building2 className="h-3.5 w-3.5" />
-            Create new building in Asset+
+            Create new building in Geminus Plus
           </Button>
         )}
       </div>
@@ -1163,7 +1163,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           </div>
           <div className="flex gap-2">
             <Button onClick={handleCreate} disabled={isCreating || !complexDesignation || !complexName || !buildingDesignation || !buildingName} className="flex-1 gap-2">
-              {isCreating ? <><Loader2 className="h-4 w-4 animate-spin" />Creating...</> : <><Building2 className="h-4 w-4" />Create in Asset+</>}
+              {isCreating ? <><Loader2 className="h-4 w-4 animate-spin" />Creating...</> : <><Building2 className="h-4 w-4" />Create in Geminus Plus</>}
             </Button>
             <Button variant="outline" onClick={() => setShowCreateForm(false)}>Cancel</Button>
           </div>
@@ -1205,14 +1205,14 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                 <div className="flex items-center gap-2">
                   <KeyRound className="h-4 w-4 text-muted-foreground" />
                   <span>Edit Credentials</span>
-                  {(selectedBuilding?.hasCustomAssetPlus || selectedBuilding?.hasCustomSenslinc) && (
+                  {(selectedBuilding?.hasCustomGeminusPlus || selectedBuilding?.hasCustomGeminusPremium) && (
                     <Badge variant="secondary" className="text-[9px] px-1.5 py-0 ml-1">Custom</Badge>
                   )}
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-3 pb-3 pt-1">
                 <p className="text-xs text-muted-foreground mb-2">
-                  Add custom API credentials for this building (Asset+, Senslinc).
+                  Add custom API credentials for this building (Geminus Plus, Geminus Premium).
                 </p>
                 <Button
                   variant="outline"
@@ -1306,25 +1306,25 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
               </AccordionContent>
             </AccordionItem>
 
-            {/* ── Sync from Asset+ ── */}
-            <AccordionItem value="assetplus-sync" className="border rounded-lg">
+            {/* ── Sync from Geminus Plus ── */}
+            <AccordionItem value="geminus-plus-sync" className="border rounded-lg">
               <AccordionTrigger className="px-3 py-2.5 hover:no-underline hover:bg-muted/50 text-sm">
                 <div className="flex items-center gap-2">
                   <Database className="h-4 w-4 text-muted-foreground" />
-                  <span>Sync from Asset+</span>
+                  <span>Sync from Geminus Plus</span>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-3 pb-3 pt-1 space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Sync structure and assets from Asset+ for this building. Use the <strong>Sync</strong> tab to sync all buildings.
+                  Sync structure and assets from Geminus Plus for this building. Use the <strong>Sync</strong> tab to sync all buildings.
                 </p>
                 <Button
-                  onClick={handleSyncAssetPlus}
-                  disabled={isSyncingAssetPlus}
+                  onClick={handleSyncGeminusPlus}
+                  disabled={isSyncingGeminusPlus}
                   size="sm"
                   className="gap-1.5"
                 >
-                  {isSyncingAssetPlus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  {isSyncingGeminusPlus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                   Sync this building
                 </Button>
               </AccordionContent>

@@ -35,8 +35,8 @@ const AutodeskCallback = lazy(() => import("@/pages/AutodeskCallback"));
 const Presentation = lazy(() => import("@/pages/Presentation"));
 // Internal showcase presentation
 const Presentation2 = lazy(() => import("@/pages/Presentation2"));
-// FM Access dashboard
-const FmAccessDashboard = lazy(() => import("@/pages/FmAccessDashboard"));
+// Geminus Base dashboard
+const GeminusBaseDashboard = lazy(() => import("@/pages/GeminusBaseDashboard"));
 // Issue resolution page (public, accessed via token link)
 const IssueResolution = lazy(() => import("@/pages/IssueResolution"));
 // Standalone plugin page for external system integration
@@ -51,8 +51,8 @@ const AiChat = lazy(() => import("@/pages/AiChat"));
 const GeminusView = lazy(() => import("@/pages/GeminusView"));
 // New viewer (promoted from mockup)
 const ViewerMockup = lazy(() => import("@/pages/ViewerMockup"));
-// FM Access 2D Standalone test page
-const FmAccess2DStandalone = lazy(() => import("@/pages/FmAccess2DStandalone"));
+// Geminus Base 2D Standalone test page
+const GeminusBase2DStandalone = lazy(() => import("@/pages/GeminusBase2DStandalone"));
 
 const queryClient = new QueryClient();
 
@@ -105,13 +105,13 @@ const App = () => {
           <Route path="/presentation" element={<Suspense fallback={<PresentationSpinner />}><Presentation /></Suspense>} />
           <Route path="/presentation2" element={<Suspense fallback={<PresentationSpinner />}><Presentation2 /></Suspense>} />
           <Route path="/issue/:token" element={<Suspense fallback={<FullPageSpinner />}><IssueResolution /></Suspense>} />
-          <Route path="/fm-access" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><FmAccessDashboard /></ProtectedRoute></Suspense>} />
+          <Route path="/geminus-base" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><GeminusBaseDashboard /></ProtectedRoute></Suspense>} />
           <Route path="/plugin" element={<Suspense fallback={<FullPageSpinner />}><PluginPage /></Suspense>} />
           <Route path="/home-v2" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><HomeLandingV2 /></ProtectedRoute></Suspense>} />
           <Route path="/api-docs" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><ApiDocs /></ProtectedRoute></Suspense>} />
           <Route path="/ai" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><AiChat /></ProtectedRoute></Suspense>} />
           <Route path="/view" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><GeminusView /></ProtectedRoute></Suspense>} />
-          <Route path="/fma-2d" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><FmAccess2DStandalone /></ProtectedRoute></Suspense>} />
+          <Route path="/geminus-base-2d" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><GeminusBase2DStandalone /></ProtectedRoute></Suspense>} />
           
           <Route path="/*" element={<ProtectedRoute><AppLayout /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />

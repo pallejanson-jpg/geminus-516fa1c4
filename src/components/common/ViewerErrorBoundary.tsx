@@ -14,7 +14,7 @@ interface ViewerErrorBoundaryState {
 
 /**
  * Error Boundary for 3D Viewer components.
- * Catches synchronous rendering errors from AssetPlusViewer and its child components,
+ * Catches synchronous rendering errors from GeminusPlusViewer and its child components,
  * preventing a full white-screen crash. Displays a recovery UI with a retry option.
  */
 class ViewerErrorBoundary extends Component<ViewerErrorBoundaryProps, ViewerErrorBoundaryState> {

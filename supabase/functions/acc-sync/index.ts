@@ -985,7 +985,7 @@ async function extractBimHierarchy(
               // Designation = Number (e.g. "K1-205", "08001")
               const designation = number || '';
 
-              // common_name follows Asset+ convention: "Number Description" or just Number
+              // common_name follows Geminus Plus convention: "Number Description" or just Number
               let roomCommonName = '';
               if (designation && descriptiveName) {
                 roomCommonName = `${designation} ${descriptiveName}`;
@@ -1221,7 +1221,7 @@ async function upsertBimAssets(
       bim_version_urn: room.versionUrn,
     };
 
-    // Add room properties as Asset+ compatible attributes array
+    // Add room properties as Geminus Plus compatible attributes array
     const propertyAttributes: { name: string; value: any; dataType: string }[] = [];
     if (room.properties) {
       for (const [propName, propValue] of Object.entries(room.properties)) {
@@ -1592,7 +1592,7 @@ serve(async (req: Request) => {
 
           // Save project ID and region to cache for future reference
           await supabase
-            .from("asset_plus_endpoint_cache")
+            .from("geminus_plus_endpoint_cache")
             .upsert(
               { key: "acc_project_id", value: projectId, updated_at: new Date().toISOString() },
               { onConflict: "key" },
@@ -1600,7 +1600,7 @@ serve(async (req: Request) => {
 
           if (region) {
             await supabase
-              .from("asset_plus_endpoint_cache")
+              .from("geminus_plus_endpoint_cache")
               .upsert(
                 { key: "acc_region", value: region, updated_at: new Date().toISOString() },
                 { onConflict: "key" },
@@ -1745,7 +1745,7 @@ serve(async (req: Request) => {
 
         // Get saved project ID and region
         const { data: cachedValues } = await supabase
-          .from("asset_plus_endpoint_cache")
+          .from("geminus_plus_endpoint_cache")
           .select("key, value")
           .in("key", ["acc_project_id", "acc_region"]);
 

@@ -35,7 +35,7 @@ interface BimSource {
 
 interface LevelItem {
   fmGuid: string;
-  /** All known GUIDs for this level (xeokit originalSystemId + Asset+ fm_guid variants) */
+  /** All known GUIDs for this level (xeokit originalSystemId + Geminus Plus fm_guid variants) */
   allGuids: string[];
   /** Matched xeokit storey meta IDs for this level when available */
   metaObjectIds: string[];
@@ -139,7 +139,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   // ── Shared hooks for consistent data ─────────────────────────────────
   const { floors: sharedFloors } = useFloorData(viewerRef, buildingFmGuid);
-  const { models: sharedModels, applyModelVisibility, assetPlusSources: apSources, storeyLookup } = useModelData(viewerRef, buildingFmGuid);
+  const { models: sharedModels, applyModelVisibility, geminusPlusSources: apSources, storeyLookup } = useModelData(viewerRef, buildingFmGuid);
   
 
   const [sourcesOpen, setSourcesOpen] = useState(true);
@@ -197,7 +197,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       ?? null;
   }, [viewerRef]);
 
-  // ── Derived data from Asset+ ────────────────────────────────────────────
+  // ── Derived data from Geminus Plus ────────────────────────────────────────────
 
   const buildingData = useMemo(() => {
     if (!allData || !buildingFmGuid) return [];
@@ -454,7 +454,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   // ── Spaces: cascading from checked levels (Source→Level→Space funnel) ───
   const spaces: SpaceItem[] = useMemo(() => {
-    // Build set of A-model level GUIDs from Asset+ data (not from levels[].allGuids which may be xeokit IDs)
+    // Build set of A-model level GUIDs from Geminus Plus data (not from levels[].allGuids which may be xeokit IDs)
     const aModelLevelGuids = getAModelStoreyGuids(buildingData, buildingFmGuid || '');
     // Also add normalized variants for matching
     const aModelLevelGuidsNorm = new Set<string>();
@@ -463,7 +463,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const allSpaces = buildingData
       .filter((a: any) => {
         if (a.category !== 'Space' && a.category !== 'IfcSpace') return false;
-        // Only include spaces belonging to A-model levels (using Asset+ FM GUIDs)
+        // Only include spaces belonging to A-model levels (using Geminus Plus FM GUIDs)
         const levelGuid = a.levelFmGuid || a.level_fm_guid || '';
         const levelGuidNorm = normalizeGuid(levelGuid);
         if (aModelLevelGuids.size > 0 && levelGuid) {

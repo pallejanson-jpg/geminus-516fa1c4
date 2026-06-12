@@ -253,7 +253,7 @@ const BuildingSelector: React.FC = () => {
               <div className="text-center text-muted-foreground">
                 <Building2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
                 <p className="text-sm">No buildings available</p>
-                <p className="text-xs mt-1">Sync data from Asset+ to get started</p>
+                <p className="text-xs mt-1">Sync data from Geminus Plus to get started</p>
               </div>
             </div>
           ) : (

@@ -23,7 +23,7 @@ export type {
   LoadSavedViewDetail,
   IssueAnnotationsToggleDetail,
   SensorAnnotationsToggleDetail,
-  FmAccessContextChangedDetail,
+  GeminusBaseContextChangedDetail,
   SplitPlanNavigateDetail,
   ViewerSelectEntityDetail,
   ModelLoadRequestedDetail,
@@ -89,8 +89,8 @@ export const ISSUE_ANNOTATIONS_TOGGLE_EVENT = 'ISSUE_ANNOTATIONS_TOGGLE' as cons
 /** Event dispatched when sensor annotations should be toggled on/off */
 export const SENSOR_ANNOTATIONS_TOGGLE_EVENT = 'SENSOR_ANNOTATIONS_TOGGLE' as const;
 
-/** Event dispatched when FM Access context changes (building/floor/room navigation) */
-export const FM_ACCESS_CONTEXT_CHANGED_EVENT = 'FM_ACCESS_CONTEXT_CHANGED' as const;
+/** Event dispatched when Geminus Base context changes (building/floor/room navigation) */
+export const GEMINUS_BASE_CONTEXT_CHANGED_EVENT = 'GEMINUS_BASE_CONTEXT_CHANGED' as const;
 
 /** Event dispatched to reset 3D colorization (clear xray + restore architect colors) */
 export const INSIGHTS_COLOR_RESET_EVENT = 'INSIGHTS_COLOR_RESET' as const;

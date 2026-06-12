@@ -32,7 +32,7 @@ export const NAVIGATION_TOOLS: ToolConfig[] = [
 export const VISUALIZATION_TOOLS: ToolConfig[] = [
   { id: 'navCube',     label: 'Navigation Cube',            visible: true, inOverflow: false },
   { id: 'treeView',    label: 'Model Tree (Navigator)',     visible: true, inOverflow: false },
-  { id: 'objectInfo',  label: 'Object Info (Asset+)',       visible: true, inOverflow: false },
+  { id: 'objectInfo',  label: 'Object Info (Geminus Plus)',       visible: true, inOverflow: false },
   { id: 'properties',  label: 'Properties (Lovable)',       visible: true, inOverflow: false },
 ];
 

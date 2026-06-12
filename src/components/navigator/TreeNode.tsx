@@ -21,11 +21,11 @@ type Props = {
   onOpen3D?: (node: NavigatorNode) => void;
   onOpen2D?: (node: NavigatorNode) => void;
   onInventory?: (node: NavigatorNode) => void;
-  onSyncToAssetPlus?: (node: NavigatorNode) => void;
+  onSyncToGeminusPlus?: (node: NavigatorNode) => void;
   selectedFmGuids?: Set<string>;
 };
 
-export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onView, onOpen3D, onOpen2D, onInventory, onSyncToAssetPlus, selectedFmGuids }: Props) {
+export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onView, onOpen3D, onOpen2D, onInventory, onSyncToGeminusPlus, selectedFmGuids }: Props) {
   const label = node.commonName || node.name || "(unnamed)";
   const hasChildren = Boolean(node.children?.length);
   const isOpen = expanded.has(node.fmGuid);
@@ -39,7 +39,7 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
   const canOpen2D = node.category === 'Building Storey'; // 2D view only for floors
   const canInventory = node.category === 'Building' || node.category === 'Building Storey' || node.category === 'Space';
   // Sync button only for Instance assets that are local (not yet synced) and have a room
-  const canSyncToAssetPlus = node.category === 'Instance' && node.isLocal === true && node.inRoomFmGuid;
+  const canSyncToGeminusPlus = node.category === 'Instance' && node.isLocal === true && node.inRoomFmGuid;
 
   // Get child count and appropriate label
   const childCount = node.children?.length || 0;
@@ -213,7 +213,7 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
               <TooltipContent side="top">Add</TooltipContent>
             </Tooltip>
           )}
-          {canSyncToAssetPlus && onSyncToAssetPlus && (
+          {canSyncToGeminusPlus && onSyncToGeminusPlus && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -222,15 +222,15 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
                   size="icon"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onSyncToAssetPlus(node);
+                    onSyncToGeminusPlus(node);
                   }}
                   className="h-6 w-6"
-                  aria-label="Sync to Asset+"
+                  aria-label="Sync to Geminus Plus"
                 >
                   <RefreshCw className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-blue-500" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Sync to Asset+</TooltipContent>
+              <TooltipContent side="top">Sync to Geminus Plus</TooltipContent>
             </Tooltip>
           )}
         </div>
@@ -250,7 +250,7 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
               onOpen3D={onOpen3D}
               onOpen2D={onOpen2D}
               onInventory={onInventory}
-              onSyncToAssetPlus={onSyncToAssetPlus}
+              onSyncToGeminusPlus={onSyncToGeminusPlus}
               selectedFmGuids={selectedFmGuids}
             />
           ))}

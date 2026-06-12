@@ -54,7 +54,7 @@ export const DataConsistencyBanner: React.FC = () => {
   const checkDelta = async () => {
     setIsChecking(true);
     try {
-      const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+      const { data, error } = await supabase.functions.invoke('geminus-plus-sync', {
         body: { action: 'check-delta' }
       });
       if (error) throw error;
@@ -83,7 +83,7 @@ export const DataConsistencyBanner: React.FC = () => {
 
     const runLoop = async () => {
       try {
-        const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+        const { data, error } = await supabase.functions.invoke('geminus-plus-sync', {
           body: { action: 'sync-structure', force: true }
         });
         if (error) throw error;
@@ -118,8 +118,8 @@ export const DataConsistencyBanner: React.FC = () => {
     resumeRef.current = true;
     setIsSyncingAssets(true);
     setSyncSteps([
-      { id: 'pull', label: 'Pulling assets from Asset+', status: 'running', startedAt: Date.now() },
-      { id: 'push', label: 'Pushing local objects to Asset+', status: 'pending' },
+      { id: 'pull', label: 'Pulling assets from Geminus Plus', status: 'running', startedAt: Date.now() },
+      { id: 'push', label: 'Pushing local objects to Geminus Plus', status: 'pending' },
     ]);
     setSyncOutcome(null);
     const startTime = Date.now();
@@ -127,7 +127,7 @@ export const DataConsistencyBanner: React.FC = () => {
 
     const runLoop = async () => {
       try {
-        const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+        const { data, error } = await supabase.functions.invoke('geminus-plus-sync', {
           body: { action: 'sync-assets-resumable', force: true }
         });
 
@@ -157,8 +157,8 @@ export const DataConsistencyBanner: React.FC = () => {
         // Push local objects
         updateStep('push', { status: 'running', startedAt: Date.now() });
         try {
-          const { data: pushData, error: pushError } = await supabase.functions.invoke('asset-plus-sync', {
-            body: { action: 'push-missing-to-assetplus' }
+          const { data: pushData, error: pushError } = await supabase.functions.invoke('geminus-plus-sync', {
+            body: { action: 'push-missing-to-geminus-plus' }
           });
           if (pushError) throw pushError;
           const pushed = pushData?.created || 0;
@@ -168,7 +168,7 @@ export const DataConsistencyBanner: React.FC = () => {
             summary: 'Asset sync complete',
             details: [
               `${totalPulled.toLocaleString()} assets pulled`,
-              pushed > 0 ? `${pushed} local objects pushed to Asset+` : 'No local objects to push',
+              pushed > 0 ? `${pushed} local objects pushed to Geminus Plus` : 'No local objects to push',
             ],
             durationMs: Date.now() - startTime,
           });
@@ -228,12 +228,12 @@ export const DataConsistencyBanner: React.FC = () => {
                 <Database className="h-3.5 w-3.5" />
                 Local: {deltaResult.localCount.toLocaleString()}
               </span>
-              <span>Asset+: {deltaResult.remoteCount.toLocaleString()}</span>
+              <span>Geminus Plus: {deltaResult.remoteCount.toLocaleString()}</span>
             </div>
             <p className="mt-1">{deltaResult.message}</p>
           </div>
           
-          <p className="mt-1 text-xs text-muted-foreground/70 italic">ACC data is managed via Asset+ and FM Access.</p>
+          <p className="mt-1 text-xs text-muted-foreground/70 italic">ACC data is managed via Geminus Plus and Geminus Base.</p>
           
           <div className="mt-2 flex gap-2">
             <Button

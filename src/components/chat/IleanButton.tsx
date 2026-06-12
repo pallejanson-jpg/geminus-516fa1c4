@@ -27,7 +27,7 @@ const ContextIcon = ({ type }: { type: string | null }) => {
 };
 
 /**
- * Floating Ilean AI assistant — Document Q&A chat via Senslinc API.
+ * Floating Ilean AI assistant — Document Q&A chat via Geminus Premium API.
  * Native Geminus UI. Similar pattern to GunnarChat.
  */
 export default function IleanButton() {
@@ -300,7 +300,7 @@ export default function IleanButton() {
                       <ExternalLink className="h-3.5 w-3.5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="text-xs">Öppna i Senslinc</TooltipContent>
+                  <TooltipContent side="bottom" className="text-xs">Öppna i Geminus Premium</TooltipContent>
                 </Tooltip>
               )}
               {messages.length > 0 && (
@@ -334,13 +334,13 @@ export default function IleanButton() {
                   </div>
                   <h3 className="font-semibold text-sm mb-1">Fråga Ilean om dokument</h3>
                   <p className="text-xs text-muted-foreground mb-4 max-w-xs">
-                    Ilean svarar på frågor om dokument i Senslinc för{' '}
+                    Ilean svarar på frågor om dokument i Geminus Premium för{' '}
                     {contextEntity.entityName || 'denna byggnad'}.
                   </p>
                   {!isContextAvailable && (
                     <div className="flex items-center gap-1.5 text-xs text-amber-500/80 mb-3 px-3 py-1.5 rounded-lg bg-amber-500/10">
                       <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                      <span>Ingen Senslinc-koppling hittad för denna kontext</span>
+                      <span>Ingen Geminus Premium-koppling hittad för denna kontext</span>
                     </div>
                   )}
                   <div className="flex flex-col gap-2 w-full max-w-xs">

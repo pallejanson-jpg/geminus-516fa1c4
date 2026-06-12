@@ -9,7 +9,7 @@ import { Loader2, Thermometer, Wind, Droplets, Users, Wifi, WifiOff, RefreshCw }
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
-import { useSenslincBuildingData } from '@/hooks/useSenslincData';
+import { useGeminusPremiumBuildingData } from '@/hooks/useGeminusPremiumData';
 import {
   getVisualizationColor, rgbToHex, generateMockSensorData, VISUALIZATION_CONFIGS,
   VisualizationType,
@@ -175,7 +175,7 @@ export default function SensorsTab() {
     return buildings[0] ?? null;
   }, [selectedBuildingGuid, selectedFacility, buildings]);
 
-  const { data: buildingData, isLoading, isLive, error } = useSenslincBuildingData(
+  const { data: buildingData, isLoading, isLive, error } = useGeminusPremiumBuildingData(
     building?.fmGuid ?? null
   );
 
@@ -348,13 +348,13 @@ export default function SensorsTab() {
       {!isLoading && error && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border border-border px-3 py-2 bg-muted/30">
           <WifiOff className="h-3.5 w-3.5 shrink-0 text-destructive" />
-          <span>No live connection to Senslinc for this building.</span>
+          <span>No live connection to Geminus Premium for this building.</span>
         </div>
       )}
       {!isLoading && isLive && buildingData && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border border-green-500/30 px-3 py-2 bg-green-500/5">
           <Wifi className="h-3.5 w-3.5 shrink-0 text-green-400" />
-          <span>Live data from Senslinc · Site: {buildingData.siteName} · {buildingData.machines.length} sensors</span>
+          <span>Live data from Geminus Premium · Site: {buildingData.siteName} · {buildingData.machines.length} sensors</span>
         </div>
       )}
 

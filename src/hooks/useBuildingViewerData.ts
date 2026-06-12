@@ -41,8 +41,8 @@ export interface BuildingViewerData {
   /** Start view coordinates */
   startVlon?: number;
   startVlat?: number;
-  /** FM Access building GUID (for 2D drawing resolution) */
-  fmAccessBuildingGuid?: string;
+  /** Geminus Base building GUID (for 2D drawing resolution) */
+  geminusBaseBuildingGuid?: string;
   /** Start view data (from saved_views via start_view_id) */
   startView?: StartViewData | null;
 }
@@ -104,7 +104,7 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
       try {
         const { data: settings, error: settingsError } = await supabase
           .from('building_settings')
-          .select('ivion_site_id, latitude, longitude, rotation, ivion_start_vlon, ivion_start_vlat, ivion_bim_offset_x, ivion_bim_offset_y, ivion_bim_offset_z, ivion_bim_rotation, fm_access_building_guid, start_view_id')
+          .select('ivion_site_id, latitude, longitude, rotation, ivion_start_vlon, ivion_start_vlat, ivion_bim_offset_x, ivion_bim_offset_y, ivion_bim_offset_z, ivion_bim_rotation, geminus_base_building_guid, start_view_id')
           .eq('fm_guid', buildingFmGuid)
           .maybeSingle();
 
@@ -172,7 +172,7 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
           origin,
           startVlon: settings?.ivion_start_vlon ?? undefined,
           startVlat: settings?.ivion_start_vlat ?? undefined,
-          fmAccessBuildingGuid: (settings as any)?.fm_access_building_guid ?? undefined,
+          geminusBaseBuildingGuid: (settings as any)?.geminus_base_building_guid ?? undefined,
           startView,
         });
       } catch (err) {

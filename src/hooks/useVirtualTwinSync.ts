@@ -17,7 +17,7 @@ import { calculateLookFromHeadingPitch } from '@/lib/coordinate-transform';
 interface UseVirtualTwinSyncOptions {
   /** Reference to the Ivion SDK API */
   ivApiRef: React.MutableRefObject<IvionApi | null>;
-  /** Reference to the Asset+ viewer instance (contains xeokit internally) */
+  /** Reference to the Geminus Plus viewer instance (contains xeokit internally) */
   viewerInstanceRef: React.MutableRefObject<any>;
   /** Ivion-to-BIM coordinate transform */
   transform: IvionBimTransform;

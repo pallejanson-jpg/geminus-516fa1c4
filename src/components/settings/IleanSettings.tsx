@@ -71,7 +71,7 @@ const IleanSettings: React.FC = () => {
         </div>
         <div>
           <h3 className="font-semibold">Ilean AI</h3>
-          <p className="text-sm text-muted-foreground">Document assistant from Senslinc</p>
+          <p className="text-sm text-muted-foreground">Document assistant from Geminus Premium</p>
         </div>
       </div>
 

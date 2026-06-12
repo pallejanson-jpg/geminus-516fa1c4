@@ -390,7 +390,7 @@ export class XktCacheService {
    */
   /**
    * Invalidate (delete) all cached XKT models for a building.
-   * Forces a fresh load from Asset+ on next viewer open.
+   * Forces a fresh load from Geminus Plus on next viewer open.
    */
   async invalidateBuildingCache(buildingFmGuid: string): Promise<boolean> {
     try {

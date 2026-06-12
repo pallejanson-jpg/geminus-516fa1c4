@@ -67,7 +67,7 @@ const NOTES: string[][] = [
     "Addnode already owns every ingredient needed — the question is who connects them.",
     "Symetri brings BIM and construction data, SWG brings FM operations, Bimify digitizes existing buildings.",
     "In Use brings space utilization data — real occupancy, desk booking, room usage.",
-    "Senslinc brings the live heartbeat of the building — IoT sensors in real time.",
+    "Geminus Premium brings the live heartbeat of the building — IoT sensors in real time.",
     "Tribia / INTERAXO brings the construction documentation — project data that becomes an operational asset.",
     "Geminus is the hub that makes all six more valuable than they are separately.",
   ],
@@ -75,16 +75,16 @@ const NOTES: string[][] = [
   [
     "This is not about technology — it's about making each Addnode company more competitive.",
     "For Symetri: ACC and Symetri solutions flow into the operational phase — a seamless handover from project to Geminus.",
-    "For SWG: Asset+ becomes the AI-powered system of record — not just a database.",
+    "For SWG: Geminus Plus becomes the AI-powered system of record — not just a database.",
     "For Bimify: every digitization project creates a lasting digital twin, not just a one-time deliverable.",
-    "For Senslinc: sensor data finally has a home — visible, contextual, actionable.",
+    "For Geminus Premium: sensor data finally has a home — visible, contextual, actionable.",
     "For Tribia: INTERAXO project documentation flows into Geminus — construction data becomes an operational asset.",
   ],
   // Slide 5 — The Proof
   [
     "I want to be clear: this is not a PowerPoint vision — it is running in production today.",
     "A non-developer built this in 3 months using vibe-coding — which is itself the proof of concept for this competition.",
-    "The AI scans 360-degree panorama images and registers assets directly into Asset+ automatically.",
+    "The AI scans 360-degree panorama images and registers assets directly into Geminus Plus automatically.",
     "Six API integrations across the Addnode ecosystem already exist in Geminus right now.",
     "What I am asking for is the investment to turn a working prototype into a certified product.",
   ],
@@ -118,7 +118,7 @@ const NOTES: string[][] = [
   // Slide 9 — Why Addnode Wins
   [
     "FM software is the fastest-growing segment of the built environment — and Addnode has zero dedicated product today.",
-    "Every Geminus user deepens dependency on SWG, Symetri, Bimify, Senslinc, Tribia simultaneously — churn across the group drops.",
+    "Every Geminus user deepens dependency on SWG, Symetri, Bimify, Geminus Premium, Tribia simultaneously — churn across the group drops.",
     "For the first time, SWG and Symetri can approach the same customer together — the building owner who needs both phases.",
     "Geminus turns six separate Addnode companies into one coherent value proposition.",
     "The O in AECO is a blue ocean — and Addnode already has all the assets to win it.",
@@ -127,14 +127,14 @@ const NOTES: string[][] = [
   [
     "One hundred thousand dollars to productize what is already working.",
     "Security hardening, GDPR compliance, deep SWG Concept Evolution API integration.",
-    "Bimify and Senslinc live connectors with certified support agreements.",
+    "Bimify and Geminus Premium live connectors with certified support agreements.",
     "Six months. A product. A competitive moat across the Design Management business area.",
     "The code is running. The integrations exist. I'm ready. Are you?",
   ],
   // Slide 11 — Geminus ESG
   [
     "ESG is the next revenue layer — and 80% of the data infrastructure is already built inside Geminus.",
-    "Building geometry, areas, floors come from Asset+. FM and maintenance history from Faciliate. Energy and indoor climate from Senslinc IoT.",
+    "Building geometry, areas, floors come from Geminus Plus. FM and maintenance history from Faciliate. Energy and indoor climate from Geminus Premium IoT.",
     "What we add: an ESG Data Model with 80+ sustainability data points, OneClickLCA integration for carbon/LCA (Addnode sister company), and an automated EU Taxonomy engine.",
     "The customer pain is real: fragmented data across 5–10 Excel files, manual reporting costing 200+ hours/year, audit risk, and ESG scores now affecting financing terms.",
     "Geminus ESG turns us from an FM vendor into an ESG-native digital twin platform — a new SaaS module, new revenue stream, and a competitive moat no point solution can match.",
@@ -237,8 +237,8 @@ const HubSlide = () => {
     { name: "Symetri / ACC", sub: "BIM & construction data", color: "border-blue-400/70 bg-blue-500/20", tc: "text-blue-300", pos: "top" },
     { name: "In Use", sub: "Space utilization data", color: "border-violet-400/70 bg-violet-500/20", tc: "text-violet-300", pos: "left" },
     { name: "Bimify", sub: "AI scan-to-BIM", color: "border-purple-400/70 bg-purple-500/20", tc: "text-purple-300", pos: "right" },
-    { name: "SWG", sub: "Asset+ & 3 CAFM systems", color: "border-emerald-400/70 bg-emerald-500/20", tc: "text-emerald-300", pos: "bottom-left" },
-    { name: "Senslinc", sub: "IoT real-time data", color: "border-orange-400/70 bg-orange-500/20", tc: "text-orange-300", pos: "bottom-right" },
+    { name: "SWG", sub: "Geminus Plus & 3 CAFM systems", color: "border-emerald-400/70 bg-emerald-500/20", tc: "text-emerald-300", pos: "bottom-left" },
+    { name: "Geminus Premium", sub: "IoT real-time data", color: "border-orange-400/70 bg-orange-500/20", tc: "text-orange-300", pos: "bottom-right" },
   ];
 
   return (
@@ -263,7 +263,7 @@ const HubSlide = () => {
               <line x1="550" y1="280" x2="970" y2="280" stroke="rgba(192,132,252,0.35)" strokeWidth="2" strokeDasharray="6 4" />
               {/* Bottom-left — SWG */}
               <line x1="550" y1="280" x2="210" y2="470" stroke="rgba(52,211,153,0.35)" strokeWidth="2" strokeDasharray="6 4" />
-              {/* Bottom-right — Senslinc */}
+              {/* Bottom-right — Geminus Premium */}
               <line x1="550" y1="280" x2="890" y2="470" stroke="rgba(251,146,60,0.35)" strokeWidth="2" strokeDasharray="6 4" />
               {/* Top-right — Tribia */}
               <line x1="550" y1="280" x2="920" y2="80" stroke="rgba(56,189,248,0.35)" strokeWidth="2" strokeDasharray="6 4" />
@@ -302,13 +302,13 @@ const HubSlide = () => {
             <div className="absolute flex flex-col items-center justify-center rounded-2xl border-2 border-emerald-400/70 bg-emerald-500/20 text-center px-5 py-4"
               style={{ width: 220, height: 100, left: 100, top: 420, zIndex: 10 }}>
               <p className="text-[20px] font-bold text-emerald-300 leading-tight">SWG</p>
-              <p className="text-[14px] text-white/75 mt-1">Asset+ & 3 CAFM systems</p>
+              <p className="text-[14px] text-white/75 mt-1">Geminus Plus & 3 CAFM systems</p>
             </div>
 
-            {/* Senslinc — bottom right */}
+            {/* Geminus Premium — bottom right */}
             <div className="absolute flex flex-col items-center justify-center rounded-2xl border-2 border-orange-400/70 bg-orange-500/20 text-center px-5 py-4"
               style={{ width: 210, height: 100, left: 790, top: 420, zIndex: 10 }}>
-              <p className="text-[20px] font-bold text-orange-300 leading-tight">Senslinc</p>
+              <p className="text-[20px] font-bold text-orange-300 leading-tight">Geminus Premium</p>
               <p className="text-[14px] text-white/75 mt-1">IoT real-time data</p>
             </div>
 
@@ -350,7 +350,7 @@ const UnlocksSlide = () => {
       company: "Service Works Global",
       badge: "FM",
       badgeColor: "bg-emerald-500/20 border-emerald-400/50 text-emerald-300",
-      value: "Asset+ becomes the AI-powered system of record for every building — not just a database",
+      value: "Geminus Plus becomes the AI-powered system of record for every building — not just a database",
       arrowColor: "text-emerald-400",
     },
     {
@@ -368,7 +368,7 @@ const UnlocksSlide = () => {
       arrowColor: "text-purple-400",
     },
     {
-      company: "Senslinc",
+      company: "Geminus Premium",
       badge: "IoT",
       badgeColor: "bg-orange-500/20 border-orange-400/50 text-orange-300",
       value: "Sensor data becomes actionable — visible in context, triggering FM workflows automatically",
@@ -468,15 +468,15 @@ const ProofSlide = () => (
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 p-4">
             <p className="text-[18px] font-bold text-white">3D BIM + Live IoT Overlay</p>
-            <p className="text-[14px] text-white/80">Bimify · ACC · Senslinc in one view</p>
+            <p className="text-[14px] text-white/80">Bimify · ACC · Geminus Premium in one view</p>
           </div>
         </div>
         <div className="relative rounded-2xl overflow-hidden border border-emerald-400/40 h-[240px]">
           <img src={screenshotAiScan} alt="AI Asset Scan" className="w-full h-full object-cover object-top" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 p-4">
-            <p className="text-[18px] font-bold text-white">AI Scans 360° → Registers in Asset+</p>
-            <p className="text-[14px] text-white/80">Gemini Vision · NavVis Ivion · SWG Asset+</p>
+            <p className="text-[18px] font-bold text-white">AI Scans 360° → Registers in Geminus Plus</p>
+            <p className="text-[14px] text-white/80">Gemini Vision · NavVis Ivion · SWG Geminus Plus</p>
           </div>
         </div>
       </div>
@@ -561,7 +561,7 @@ const RoiSlide = () => (
                 <p className="text-[18px] text-white/80">enterprise customers</p>
               </div>
             </div>
-            <p className="text-[17px] text-white/75">Cross-sell: Bimify + Senslinc per customer = significant upsell ARR</p>
+            <p className="text-[17px] text-white/75">Cross-sell: Bimify + Geminus Premium per customer = significant upsell ARR</p>
           </div>
         </div>
       </div>
@@ -642,8 +642,8 @@ const CompetitionSlide = () => {
             <div className="space-y-5">
               {[
                 { label: "AI Assistants (Geminus AI)", sub: "Natural language FM queries — none of them have this" },
-                { label: "AI Inventory", sub: "360° photo scanning → auto-registration in Asset+" },
-                { label: "Full Addnode data stack", sub: "SWG + Symetri + Bimify + Senslinc + In Use + Tribia" },
+                { label: "AI Inventory", sub: "360° photo scanning → auto-registration in Geminus Plus" },
+                { label: "Full Addnode data stack", sub: "SWG + Symetri + Bimify + Geminus Premium + In Use + Tribia" },
                 { label: "Addnode's own IP", sub: "Not a licensed platform — built and owned by Addnode" },
               ].map(({ label, sub }) => (
                 <div key={label} className="flex gap-4 items-start">
@@ -791,7 +791,7 @@ const WhyAddnodeSlide = () => (
             color: "border-cyan-400/50 bg-cyan-500/10",
             tc: "text-cyan-300",
             points: [
-              "Every Geminus user deepens dependency on SWG, Symetri, Bimify, Senslinc, Tribia simultaneously",
+              "Every Geminus user deepens dependency on SWG, Symetri, Bimify, Geminus Premium, Tribia simultaneously",
               "Churn across the group drops as integrations deepen",
               "Lock-in through value, not contracts",
             ],
@@ -853,7 +853,7 @@ const AskSlide = () => (
           {[
             "Security hardening & GDPR compliance",
             "Deep SWG Concept Evolution API integration",
-            "Bimify + Senslinc live certified connectors",
+            "Bimify + Geminus Premium live certified connectors",
           ].map((item) => (
             <div key={item} className="flex items-center gap-4">
               <CheckCircle2 className="w-6 h-6 text-white/60 shrink-0" />
@@ -916,9 +916,9 @@ const EsgSlide = () => (
           </h3>
           <div className="space-y-5">
             {[
-              { icon: Building2, label: "Building data", sub: "BIM, areas, floors", source: "Asset+", color: "text-blue-400" },
+              { icon: Building2, label: "Building data", sub: "BIM, areas, floors", source: "Geminus Plus", color: "text-blue-400" },
               { icon: Zap, label: "FM & maintenance", sub: "Work orders, history", source: "Faciliate", color: "text-emerald-400" },
-              { icon: BarChart3, label: "Energy & indoor climate", sub: "kWh, temp, CO₂", source: "Senslinc IoT", color: "text-orange-400" },
+              { icon: BarChart3, label: "Energy & indoor climate", sub: "kWh, temp, CO₂", source: "Geminus Premium IoT", color: "text-orange-400" },
               { icon: Target, label: "Building hierarchy", sub: "Floors, rooms, zones", source: "Digital Twin", color: "text-cyan-400" },
             ].map(({ icon: Icon, label, sub, source, color }) => (
               <div key={label} className="flex items-start gap-4">

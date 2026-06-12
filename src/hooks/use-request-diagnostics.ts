@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-export type RequestDiagTag = "xkt" | "assetplus" | "backend" | "other";
+export type RequestDiagTag = "xkt" | "geminus-plus" | "backend" | "other";
 
 export type RequestDiagEvent = {
   id: string;

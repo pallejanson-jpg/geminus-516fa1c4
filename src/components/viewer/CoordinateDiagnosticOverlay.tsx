@@ -48,7 +48,7 @@ const CoordinateDiagnosticOverlay: React.FC<CoordinateDiagnosticOverlayProps> = 
       }
 
       // Read BIM camera position
-      const xv = (window as any).__assetPlusViewerInstance?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      const xv = (window as any).__geminusPlusViewerInstance?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
       if (xv?.scene?.camera) {
         const eye = xv.scene.camera.eye;
         setBimPos({ x: eye[0], y: eye[1], z: eye[2] });

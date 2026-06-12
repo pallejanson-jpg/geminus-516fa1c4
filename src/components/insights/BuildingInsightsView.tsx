@@ -28,7 +28,7 @@ import { Facility } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
 const NativeXeokitViewer = React.lazy(() => import('@/components/viewer/NativeXeokitViewer'));
-import { useSenslincBuildingData } from '@/hooks/useSenslincData';
+import { useGeminusPremiumBuildingData } from '@/hooks/useGeminusPremiumData';
 import { cn } from '@/lib/utils';
 import RoomSensorDetailSheet from '@/components/insights/RoomSensorDetailSheet';
 import { INSIGHTS_COLOR_UPDATE_EVENT, ALARM_ANNOTATIONS_SHOW_EVENT, INSIGHTS_COLOR_RESET_EVENT } from '@/lib/viewer-events';
@@ -173,7 +173,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     const [selectedSensorRooms, setSelectedSensorRooms] = useState<Set<string>>(new Set());
     const [sensorSheetOpen, setSensorSheetOpen] = useState(false);
     const [sensorSheetRoom, setSensorSheetRoom] = useState<{ fmGuid: string; name: string } | null>(null);
-    const { data: buildingIoT, isLoading: iotLoading, isLive: iotLive } = useSenslincBuildingData(facility.fmGuid);
+    const { data: buildingIoT, isLoading: iotLoading, isLive: iotLive } = useGeminusPremiumBuildingData(facility.fmGuid);
 
     // FM-flik state (was "Larm")
     const [alarmCount, setAlarmCount] = useState<number>(0);
@@ -473,7 +473,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         entity?: string;
         assetType?: string;
     }) => {
-        // Save color map to sessionStorage for AssetPlusViewer to read
+        // Save color map to sessionStorage for GeminusPlusViewer to read
         sessionStorage.setItem('insights_color_map', JSON.stringify({
             mode: opts.mode,
             colorMap: opts.colorMap,
@@ -493,7 +493,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         assetType?: string;
     }) => {
         // Build a name-based color map for fallback matching in the viewer
-        // (fmGuids from Asset+ may differ from xeokit originalSystemId)
+        // (fmGuids from Geminus Plus may differ from xeokit originalSystemId)
         const nameColorMap: Record<string, [number, number, number]> = {};
         const isFloorMode = opts.mode.startsWith('energy_floor');
         const isRoomMode = opts.mode === 'room_spaces' || opts.mode === 'room_type' || opts.mode === 'room_types';
@@ -1182,7 +1182,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                  {!iotLoading && iotLive && buildingIoT && (
                                      <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border border-green-500/30 px-3 py-2 bg-green-500/5">
                                          <Wifi className="h-3.5 w-3.5 shrink-0 text-green-400" />
-                                         <span>Live data from Senslinc · {buildingIoT.machines.length} sensors</span>
+                                         <span>Live data from Geminus Premium · {buildingIoT.machines.length} sensors</span>
                                      </div>
                                  )}
 

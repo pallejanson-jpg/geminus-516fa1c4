@@ -30,7 +30,7 @@ const ASSET_TYPES = [
   { value: 'other', label: 'Other' },
 ];
 
-// IFC Object categories (mandatory for Asset+)
+// IFC Object categories (mandatory for Geminus Plus)
 const OBJECT_CATEGORIES = [
   { value: 'Instance', label: 'Instance (Inventory)' },
   { value: 'IfcFurniture', label: 'Furniture' },
@@ -292,9 +292,9 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
 
       if (localError) throw localError;
 
-      // Also try to create in Asset+ via edge function
+      // Also try to create in Geminus Plus via edge function
       try {
-        await supabase.functions.invoke('asset-plus-create', {
+        await supabase.functions.invoke('geminus-plus-create', {
           body: {
             fmGuid: formData.fm_guid,
             parentSpaceFmGuid: parentSpaceFmGuid,
@@ -312,7 +312,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
           },
         });
       } catch (apiError) {
-        console.warn('Failed to sync to Asset+:', apiError);
+        console.warn('Failed to sync to Geminus Plus:', apiError);
         // Continue anyway - local save succeeded
       }
 
@@ -539,7 +539,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
 
                 {/* Info about mandatory fields */}
                  <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
-                   <p className="font-medium">Required fields for Asset+:</p>
+                   <p className="font-medium">Required fields for Geminus Plus:</p>
                    <ul className="list-disc list-inside mt-1">
                      <li>FM GUID (auto-generated)</li>
                      <li>Name</li>

@@ -302,7 +302,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       window.dispatchEvent(new CustomEvent(AI_FILTER_SYNC_EVENT, { detail: response.filters }));
     }
 
-    // Open the FM Access 2D drawing for a floor — UnifiedViewer is driven by URL params
+    // Open the Geminus Base 2D drawing for a floor — UnifiedViewer is driven by URL params
     if (response.action === 'show_drawing') {
       const d = response.drawing || {};
       const buildingGuid = d.building_fm_guid || context?.currentBuilding?.fmGuid || context?.viewerState?.buildingFmGuid || '';

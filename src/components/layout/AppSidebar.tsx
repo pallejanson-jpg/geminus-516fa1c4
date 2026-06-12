@@ -32,7 +32,7 @@ import {
 const mainNavItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "3D Viewer", url: "/viewer", icon: Box },
-  { title: "FM Access", url: "/fm-access", icon: Square },
+  { title: "Geminus Base", url: "/geminus-base", icon: Square },
   { title: "Documents", url: "/documents", icon: FileText },
   { title: "Maps", url: "/maps", icon: Map },
 ];

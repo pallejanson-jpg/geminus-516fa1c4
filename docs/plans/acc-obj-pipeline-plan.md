@@ -101,7 +101,7 @@ Skapa ett flöde som:
 - Falls back to existing XKT loading if no manifest
 
 #### Phase 3: OBJ as Optional Secondary Format
-- For small models or FM Access consumers only
+- For small models or Geminus Base consumers only
 - Not primary pipeline due to stall risk
 
 ### Database

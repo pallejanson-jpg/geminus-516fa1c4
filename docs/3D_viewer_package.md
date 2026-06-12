@@ -1,10 +1,10 @@
-# Asset+ 3d Viewer Package Documentation
+# Geminus Plus 3d Viewer Package Documentation
 
-This document provides an in-depth overview and implementation guide of the Asset+ 3d Viewer Package.
+This document provides an in-depth overview and implementation guide of the Geminus Plus 3d Viewer Package.
 
 ## Overview
 
-The Asset+ 3d Viewer Package is a zip file whose contents are used to implement the Asset+ 3d Viewer in non-Vue and/or .Net embedded HTML pages.
+The Geminus Plus 3d Viewer Package is a zip file whose contents are used to implement the Geminus Plus 3d Viewer in non-Vue and/or .Net embedded HTML pages.
 
 ## The compressed zip file
 
@@ -54,9 +54,9 @@ For a good start with lots of code examples, see `external_viewer.html`.
 1. In the `<head>` tag make sure to load `/dist/assetplusviewer.css`
 1. In the `<body>` tag make sure to set CSS classes, otherwise free-floating, temporary elements like tooltips will not be properly formatted, and set a height to fill up the container. Example: `<body class="dx-device-desktop dx-device-generic dx-theme-material dx-theme-material-typography" style="height: 100%; margin: 0px;">`
 1. A `dx-viewport` class must be set on the tag that should constrain the `ObjectDetails` popup. If no class is found, then the `<body>` will be used. Example (the parent `<div>` of the viewer):  `<div class="dx-viewport" style="height: 95%; margin: 0px;">`
-1. A `<div>` tag must exist for the JS code to take ownership over. The tag must have id `AssetPlusViewer`, and should also contain a background matching the one in Asset+ client. Example:
+1. A `<div>` tag must exist for the JS code to take ownership over. The tag must have id `GeminusPlusViewer`, and should also contain a background matching the one in Geminus Plus client. Example:
 ```
-<div id="AssetPlusViewer" style="width: 100%; height: 100%; display: flex; flex: 1 0 auto; background-image: radial-gradient(90% 100% at center top, rgb(236, 236, 236), rgb(42, 42, 50));">
+<div id="GeminusPlusViewer" style="width: 100%; height: 100%; display: flex; flex: 1 0 auto; background-image: radial-gradient(90% 100% at center top, rgb(236, 236, 236), rgb(42, 42, 50));">
 </div>
 ```
 1. At the end of `<body>` make sure that `dist/assetplusviewer.umd.min.js` is loaded
@@ -119,7 +119,7 @@ See the `Display` button in `external_viewer.html` for details. After making sur
 
 ### The assetplusviewer function
 
-The `assetplusviewer` function (internally called `initAssetViewer`) is the main entry point for initializing the AssetPlus Viewer application. It sets up the viewer with the provided configuration and mounts it to the DOM.
+The `assetplusviewer` function (internally called `initAssetViewer`) is the main entry point for initializing the GeminusPlus Viewer application. It sets up the viewer with the provided configuration and mounts it to the DOM.
 
 #### Function Signature
 
@@ -144,14 +144,14 @@ initAssetViewer(
 
 #### Description
 
-The `initAssetViewer` function initializes the AssetPlus Viewer by creating a Vue application and configuring it with the provided parameters. It uses the `AssetDBClient` to handle API interactions and mounts the `App` component to the `#AssetPlusViewer` DOM element.
+The `initAssetViewer` function initializes the GeminusPlus Viewer by creating a Vue application and configuring it with the provided parameters. It uses the `AssetDBClient` to handle API interactions and mounts the `App` component to the `#GeminusPlusViewer` DOM element.
 
 The function returns a `Promise` that resolves with the mounted Vue component once the viewer is fully initialized.
 
 #### Arguments
 
 ##### 1. `baseUrl` (String)
-- **Description**: The base URL for the AssetPlus API.
+- **Description**: The base URL for the GeminusPlus API.
 - **Purpose**: Used by the `AssetDBClient` to make API requests.
 
 ##### 2. `apiKey` (String)

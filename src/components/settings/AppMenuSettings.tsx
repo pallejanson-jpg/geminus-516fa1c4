@@ -42,7 +42,7 @@ const SIDEBAR_ITEM_META: Record<string, { label: string; icon: React.ElementType
   fault_report: { label: 'Fault Report', icon: AlertTriangle, color: 'text-red-500' },
   insights: { label: 'Insights', icon: BarChart2, color: 'text-green-500' },
   fma_plus: { label: DEFAULT_APP_CONFIGS.fma_plus.label, icon: Building2, color: 'text-blue-500' },
-  asset_plus: { label: DEFAULT_APP_CONFIGS.asset_plus.label, icon: Box, color: 'text-purple-500' },
+  geminus_plus: { label: DEFAULT_APP_CONFIGS.geminus_plus.label, icon: Box, color: 'text-purple-500' },
   iot: { label: DEFAULT_APP_CONFIGS.iot.label, icon: Zap, color: 'text-yellow-500' },
   original_archive: { label: DEFAULT_APP_CONFIGS.original_archive.label, icon: Archive, color: 'text-indigo-500' },
   radar: { label: DEFAULT_APP_CONFIGS.radar.label, icon: Radar, color: 'text-pink-500' },

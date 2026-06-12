@@ -1,6 +1,6 @@
 # xeokit SDK Integration Examples
 
-This directory contains reference examples for xeokit SDK features that can be used with the Asset+ 3D Viewer.
+This directory contains reference examples for xeokit SDK features that can be used with the Geminus Plus 3D Viewer.
 
 ## Examples
 
@@ -52,7 +52,7 @@ const treeView = new TreeViewPlugin(viewer, {
 });
 ```
 
-## Integration in Asset+ Viewer
+## Integration in Geminus Plus Viewer
 
 These features are integrated in the React components:
 

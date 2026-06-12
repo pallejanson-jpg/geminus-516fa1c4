@@ -15,10 +15,10 @@ import { getIleanSettings, ILEAN_SETTINGS_CHANGED_EVENT } from '@/components/set
 import { AppContext } from '@/context/AppContext';
 
 /** Apps that should hide header/sidebars for fullscreen experience */
-const IMMERSIVE_APPS = ['assetplus_viewer', 'viewer', 'native_viewer', 'radar'];
+const IMMERSIVE_APPS = ['geminus_plus_viewer', 'viewer', 'native_viewer', 'radar'];
 
 /** Apps where the left sidebar should be fully hidden (but hamburger stays) */
-const VIEWER_APPS = ['assetplus_viewer', 'viewer', 'native_viewer'];
+const VIEWER_APPS = ['geminus_plus_viewer', 'viewer', 'native_viewer'];
 
 const AppLayoutInner: React.FC = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);

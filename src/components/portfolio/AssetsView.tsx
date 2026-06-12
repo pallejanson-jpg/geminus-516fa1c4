@@ -47,7 +47,7 @@ import { Facility } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { AppContext } from '@/context/AppContext';
-import { syncBuildingAssetsIfNeeded, syncAssetToAssetPlus, batchSyncAssetsToAssetPlus, fetchAssetsForBuilding } from '@/services/asset-plus-service';
+import { syncBuildingAssetsIfNeeded, syncAssetToGeminusPlus, batchSyncAssetsToGeminusPlus, fetchAssetsForBuilding } from '@/services/geminus-plus-service';
 import {
   DndContext,
   closestCenter,
@@ -565,12 +565,12 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     }
   };
 
-  // Handle syncing a single asset to Asset+
-  const handleSyncToAssetPlus = useCallback(async (asset: AssetData) => {
+  // Handle syncing a single asset to Geminus Plus
+  const handleSyncToGeminusPlus = useCallback(async (asset: AssetData) => {
     if (!asset.roomFmGuid) {
       toast({
         title: 'Cannot sync',
-        description: 'Asset must be associated with a room to sync to Asset+',
+        description: 'Asset must be associated with a room to sync to Geminus Plus',
         variant: 'destructive',
       });
       return;
@@ -578,11 +578,11 @@ const AssetsView: React.FC<AssetsViewProps> = ({
 
     setSyncingAssetIds((prev) => new Set(prev).add(asset.fmGuid));
     try {
-      const result = await syncAssetToAssetPlus(asset.fmGuid);
+      const result = await syncAssetToGeminusPlus(asset.fmGuid);
       if (result.success) {
         toast({
           title: 'Synced!',
-          description: `${asset.designation} has been synced to Asset+`,
+          description: `${asset.designation} has been synced to Geminus Plus`,
         });
       } else {
         toast({
@@ -620,7 +620,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     setIsBatchSyncing(true);
     try {
       const fmGuids = unsyncedAssets.map((a) => a.fmGuid);
-      const result = await batchSyncAssetsToAssetPlus(fmGuids);
+      const result = await batchSyncAssetsToGeminusPlus(fmGuids);
       
       toast({
         title: 'Batch sync complete',
@@ -710,7 +710,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     setIsBatchSyncing(true);
     try {
       const fmGuids = selectedAssets.map(a => a.fmGuid);
-      const result = await batchSyncAssetsToAssetPlus(fmGuids);
+      const result = await batchSyncAssetsToGeminusPlus(fmGuids);
       
       toast({
         title: 'Sync complete',

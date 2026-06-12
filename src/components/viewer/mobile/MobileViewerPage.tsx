@@ -207,7 +207,7 @@ interface MobileViewerPageProps {
   sync3DHeading: number;
   sync3DPitch: number;
   hasIvion: boolean;
-  hasFmAccess: boolean;
+  hasGeminusBase: boolean;
   floorFmGuid: string | null;
   floorName: string;
   entityFmGuid: string | null;

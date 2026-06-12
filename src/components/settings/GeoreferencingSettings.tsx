@@ -17,7 +17,7 @@ interface GeoSettings {
     latitude: number | null;
     longitude: number | null;
     rotation: number | null;
-    fmAccessBuildingGuid: string | null;
+    geminusBaseBuildingGuid: string | null;
 }
 
 const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({ 
@@ -32,12 +32,12 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
         latitude: null,
         longitude: null,
         rotation: null,
-        fmAccessBuildingGuid: null,
+        geminusBaseBuildingGuid: null,
     });
     const [latInput, setLatInput] = useState('');
     const [lngInput, setLngInput] = useState('');
     const [rotationValue, setRotationValue] = useState(0);
-    const [fmAccessGuidInput, setFmAccessGuidInput] = useState('');
+    const [geminusBaseGuidInput, setGeminusBaseGuidInput] = useState('');
 
     // Fetch current settings
     useEffect(() => {
@@ -48,7 +48,7 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
             try {
                 const { data, error } = await supabase
                     .from('building_settings')
-                    .select('latitude, longitude, rotation, fm_access_building_guid')
+                    .select('latitude, longitude, rotation, geminus_base_building_guid')
                     .eq('fm_guid', buildingFmGuid)
                     .maybeSingle();
 
@@ -59,12 +59,12 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
                         latitude: data.latitude,
                         longitude: data.longitude,
                         rotation: data.rotation ?? 0,
-                        fmAccessBuildingGuid: (data as any).fm_access_building_guid ?? null,
+                        geminusBaseBuildingGuid: (data as any).geminus_base_building_guid ?? null,
                     });
                     setLatInput(data.latitude?.toString() || '');
                     setLngInput(data.longitude?.toString() || '');
                     setRotationValue(data.rotation ?? 0);
-                    setFmAccessGuidInput((data as any).fm_access_building_guid || '');
+                    setGeminusBaseGuidInput((data as any).geminus_base_building_guid || '');
                 }
             } catch (error) {
                 console.error('Failed to fetch georeferencing settings:', error);
@@ -108,12 +108,12 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
                     latitude: lat,
                     longitude: lng,
                     rotation: rotationValue,
-                    fm_access_building_guid: fmAccessGuidInput.trim() || null,
+                    geminus_base_building_guid: geminusBaseGuidInput.trim() || null,
                 } as any, { onConflict: 'fm_guid' });
 
             if (error) throw error;
 
-            setSettings({ latitude: lat, longitude: lng, rotation: rotationValue, fmAccessBuildingGuid: fmAccessGuidInput.trim() || null });
+            setSettings({ latitude: lat, longitude: lng, rotation: rotationValue, geminusBaseBuildingGuid: geminusBaseGuidInput.trim() || null });
             
             // Dispatch event to notify other components
             window.dispatchEvent(new Event('building-settings-changed'));
@@ -205,19 +205,19 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
                         </div>
 
                         <div className="space-y-1.5">
-                            <Label htmlFor="fmAccessGuid" className="text-xs">
-                                FM Access Building GUID
+                            <Label htmlFor="geminusBaseGuid" className="text-xs">
+                                Geminus Base Building GUID
                             </Label>
                             <Input
-                                id="fmAccessGuid"
+                                id="geminusBaseGuid"
                                 type="text"
                                 placeholder="755950d9-f235-4d64-a38d-..."
-                                value={fmAccessGuidInput}
-                                onChange={(e) => setFmAccessGuidInput(e.target.value)}
+                                value={geminusBaseGuidInput}
+                                onChange={(e) => setGeminusBaseGuidInput(e.target.value)}
                                 className="h-9 font-mono text-xs"
                             />
                             <p className="text-[10px] text-muted-foreground">
-                                GUID for the building in FM Access (required for 2D drawings)
+                                GUID for the building in Geminus Base (required for 2D drawings)
                             </p>
                         </div>
                             <Slider

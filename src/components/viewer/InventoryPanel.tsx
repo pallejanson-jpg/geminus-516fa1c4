@@ -61,7 +61,7 @@ interface ColumnDef {
   group: 'core' | 'property';
 }
 
-// Object type categories mapping (object_type = 4 means real "Objects" in Asset Plus)
+// Object type categories mapping (object_type = 4 means real "Objects" in Geminus Plus)
 const OBJECT_TYPE_4_CATEGORIES = new Set([
   'IfcDistributionControlElement', 'IfcFlowTerminal', 'IfcFlowSegment',
   'IfcFlowFitting', 'IfcFlowController', 'IfcFlowMovingDevice',

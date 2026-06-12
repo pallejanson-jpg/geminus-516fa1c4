@@ -231,7 +231,7 @@ export default function CreatePropertyDialog({
           <div className="space-y-2">
             <h3 className="text-sm font-semibold text-foreground">API Profile</h3>
             <p className="text-xs text-muted-foreground">
-              Select which credential set this building uses for Asset+, Senslinc, FM Access, and Ivion.
+              Select which credential set this building uses for Geminus Plus, Geminus Premium, Geminus Base, and Ivion.
             </p>
             <Select
               value={form.api_profile_id || 'default'}

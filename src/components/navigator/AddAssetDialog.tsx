@@ -36,7 +36,7 @@ function generateFmGuid(): string {
 }
 
 /**
- * Property data types for Asset+ API
+ * Property data types for Geminus Plus API
  */
 const DataType = {
   String: 0,
@@ -196,7 +196,7 @@ export function AddAssetDialog({ open, onOpenChange, parentNode, onAssetCreated,
 
       console.log('Creating asset with payload:', payload);
 
-      const { data, error } = await supabase.functions.invoke('asset-plus-create', {
+      const { data, error } = await supabase.functions.invoke('geminus-plus-create', {
         body: payload,
       });
 

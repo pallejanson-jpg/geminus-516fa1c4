@@ -17,7 +17,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import type { FmAccessContextChangedDetail } from '@/lib/event-bus';
+import type { GeminusBaseContextChangedDetail } from '@/lib/event-bus';
 
 import CreateIssueDialog from './CreateIssueDialog';
 import CreateWorkOrderDialog from './CreateWorkOrderDialog';
@@ -62,16 +62,16 @@ export default function GeminusPluginMenu({
   const isMobile = useIsMobile();
   const { user } = useAuth();
 
-  // Track live FM Access context changes (object selection in iframe)
+  // Track live Geminus Base context changes (object selection in iframe)
   const [fmaLiveContext, setFmaLiveContext] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    const isFma = source === 'fma_plus' || source === '2d_fm_access';
+    const isFma = source === 'fma_plus' || source === '2d_geminus_base';
     if (!isFma) return;
-    const handler = (detail: FmAccessContextChangedDetail) => {
+    const handler = (detail: GeminusBaseContextChangedDetail) => {
       if (detail) setFmaLiveContext(detail);
     };
-    const off = on('FM_ACCESS_CONTEXT_CHANGED', handler);
+    const off = on('GEMINUS_BASE_CONTEXT_CHANGED', handler);
     return () => off();
   }, [source]);
 
@@ -87,7 +87,7 @@ export default function GeminusPluginMenu({
   const handleOpen = useCallback((panel: ActivePanel) => {
     if (panel === 'viewer') {
       // Navigate to Geminus View — open in new tab if in plugin/iframe context
-      const isPlugin = source === 'fma_plus' || source === '2d_fm_access' || source === 'faciliate';
+      const isPlugin = source === 'fma_plus' || source === '2d_geminus_base' || source === 'faciliate';
       const url = '/view';
       if (isPlugin || window !== window.top) {
         window.open(url, '_blank');
@@ -105,9 +105,9 @@ export default function GeminusPluginMenu({
     setActivePanel(null);
   }, []);
 
-  // Build Gunnar context from plugin menu props + live FM Access context
+  // Build Gunnar context from plugin menu props + live Geminus Base context
   const gunnarContext: GunnarContext & { contextMetadata?: Record<string, any> } = {
-    activeApp: source === 'fma_plus' ? 'fma_plus' : source === 'fma_native' ? 'fma_native' : source === '2d_fm_access' ? 'fma_plus' : source,
+    activeApp: source === 'fma_plus' ? 'fma_plus' : source === 'geminus_base_native' ? 'geminus_base_native' : source === '2d_geminus_base' ? 'fma_plus' : source,
     currentBuilding: buildingFmGuid ? { fmGuid: buildingFmGuid, name: buildingName || 'Building' } : undefined,
     currentStorey: contextMetadata?.floorGuid ? { fmGuid: contextMetadata.floorGuid, name: contextMetadata.floorName || '' } : undefined,
     currentSpace: contextMetadata?.roomGuid ? { fmGuid: contextMetadata.roomGuid, name: contextMetadata.roomName || '' } : undefined,

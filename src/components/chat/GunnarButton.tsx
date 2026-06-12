@@ -113,7 +113,7 @@ export default function GunnarButton() {
 
   // Clear viewer context when leaving viewer
   useEffect(() => {
-    if (activeApp !== 'assetplus_viewer' && activeApp !== 'native_viewer') {
+    if (activeApp !== 'geminus_plus_viewer' && activeApp !== 'native_viewer') {
       setViewerContext(null);
     }
   }, [activeApp]);

@@ -14,10 +14,10 @@ verify_jwt = false
 [functions.ivion-proxy]
 verify_jwt = false
 
-[functions.senslinc-query]
+[functions.geminus-premium-query]
 verify_jwt = false
 
-[functions.asset-plus-delete]
+[functions.geminus-plus-delete]
 verify_jwt = false
 
 [functions.acc-sync]
@@ -26,7 +26,7 @@ verify_jwt = false
 [functions.acc-auth]
 verify_jwt = false
 
-[functions.acc-to-assetplus]
+[functions.acc-to-geminus-plus]
 verify_jwt = false
 
 [functions.geminus-ai]
@@ -38,10 +38,10 @@ verify_jwt = false
 [functions.mobile-ai-scan]
 verify_jwt = false
 
-[functions.asset-plus-create-building]
+[functions.geminus-plus-create-building]
 verify_jwt = false
 
-[functions.asset-plus-create-hierarchy]
+[functions.geminus-plus-create-hierarchy]
 verify_jwt = false
 
 [functions.send-issue-email]
@@ -74,7 +74,7 @@ verify_jwt = false
 [functions.faciliate-proxy]
 verify_jwt = false
 
-[functions.fm-access-sync]
+[functions.geminus-base-sync]
 verify_jwt = false
 
 [functions.imdf-export]

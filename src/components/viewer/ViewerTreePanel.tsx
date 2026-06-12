@@ -48,7 +48,7 @@ interface ViewerTreePanelProps {
   embedded?: boolean;
   showVisibilityCheckboxes?: boolean;
   startFromStoreys?: boolean;
-  // Asset+ data props
+  // Geminus Plus data props
   buildingFmGuid?: string;
   buildingData?: any[];
   // Controlled state for persistence
@@ -353,7 +353,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
     return () => clearTimeout(t);
   }, [searchQuery]);
 
-  // ── Build tree from Asset+ data ────────────────────────────────────────────
+  // ── Build tree from Geminus Plus data ────────────────────────────────────────────
 
   useEffect(() => {
     if (!isVisible) return;
@@ -622,7 +622,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
           <TreeDeciduous className="h-8 w-8 opacity-40" />
           <span>{debouncedSearch ? 'No match' : 'No floors found'}</span>
           {!debouncedSearch && (
-            <span className="text-xs text-center px-4">Model data loading from Asset+</span>
+            <span className="text-xs text-center px-4">Model data loading from Geminus Plus</span>
           )}
         </div>
       );

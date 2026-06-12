@@ -53,7 +53,7 @@ export interface ClipHeight3DEventDetail {
 }
 
 /**
- * Diagnose what the AssetPlusViewer UMD bundle exposes on the xeokit scene.
+ * Diagnose what the GeminusPlusViewer UMD bundle exposes on the xeokit scene.
  * Call this after viewer init to understand available APIs.
  */
 export function diagnoseXeokitScene(viewer: any) {

@@ -6,17 +6,17 @@ This folder contains documentation for all external systems that Geminus integra
 
 | System | Purpose | Auth Method | Status |
 |--------|---------|-------------|--------|
-| [Asset+](./asset-plus/) | BIM/Asset management | OAuth2 (Keycloak) + API Key | Active |
+| [Geminus Plus](./geminus-plus/) | BIM/Asset management | OAuth2 (Keycloak) + API Key | Active |
 | [Ivion](./ivion/) | 360° panorama & POI | JWT Token | Active |
-| [FM Access](./fm-access/) | Facility management data | Basic Auth | Active |
-| [Senslinc](./senslinc/) | IoT sensor data | Bearer Token | Active |
+| [Geminus Base](./geminus-base/) | Facility management data | Basic Auth | Active |
+| [Geminus Premium](./senslinc/) | IoT sensor data | Bearer Token | Active |
 | [Faciliate](./faciliate/) | Desktop FM system (SWG) | JWT (v2 REST API) | Active |
 | [Congeria](./congeria/) | Document management | Session-based | Planned |
 
 ## Quick Reference
 
-### Asset+ API
-- **Base URL**: Configured via `ASSET_PLUS_API_URL` secret
+### Geminus Plus API
+- **Base URL**: Configured via `GEMINUS_PLUS_API_URL` secret
 - **Primary use**: Syncing building/asset data, property updates
 - **Key endpoints**:
   - `POST /PublishDataServiceGetMerged` - Read objects
@@ -32,15 +32,15 @@ This folder contains documentation for all external systems that Geminus integra
   - `GET /sites` - List sites
   - `POST /poi` - Create point of interest
 
-### FM Access API
-- **Base URL**: Configured via `FM_ACCESS_API_URL` secret
+### Geminus Base API
+- **Base URL**: Configured via `GEMINUS_BASE_API_URL` secret
 - **Primary use**: Work orders, maintenance data
 - **Key endpoints**:
   - `GET /workorders` - List work orders
   - `GET /buildings` - Building information
 
-### Senslinc API
-- **Base URL**: Configured via `SENSLINC_API_URL` secret
+### Geminus Premium API
+- **Base URL**: Configured via `GEMINUS_PREMIUM_API_URL` secret
 - **Primary use**: Real-time sensor readings
 - **Key endpoints**:
   - `GET /sensors` - List sensors
@@ -56,13 +56,13 @@ All API calls are proxied through Supabase Edge Functions to:
 
 | Edge Function | System | Purpose |
 |--------------|--------|---------|
-| `asset-plus-query` | Asset+ | Read objects with filtering |
-| `asset-plus-create` | Asset+ | Create new objects |
-| `asset-plus-update` | Asset+ | Update object properties |
-| `asset-plus-sync` | Asset+ | Batch sync from Asset+ to local DB |
+| `geminus-plus-query` | Geminus Plus | Read objects with filtering |
+| `geminus-plus-create` | Geminus Plus | Create new objects |
+| `geminus-plus-update` | Geminus Plus | Update object properties |
+| `geminus-plus-sync` | Geminus Plus | Batch sync from Geminus Plus to local DB |
 | `ivion-poi` | Ivion | Manage points of interest |
-| `fm-access-query` | FM Access | Query work orders |
-| `senslinc-query` | Senslinc | Query sensor data |
+| `geminus-base-query` | Geminus Base | Query work orders |
+| `geminus-premium-query` | Geminus Premium | Query sensor data |
 | `congeria-sync` | Congeria | Sync documents (planned) |
 
 ## Secrets Configuration
@@ -70,14 +70,14 @@ All API calls are proxied through Supabase Edge Functions to:
 All API credentials are stored as Supabase secrets:
 
 ```
-# Asset+
-ASSET_PLUS_API_URL
-ASSET_PLUS_API_KEY
-ASSET_PLUS_KEYCLOAK_URL
-ASSET_PLUS_CLIENT_ID
-ASSET_PLUS_CLIENT_SECRET
-ASSET_PLUS_USERNAME
-ASSET_PLUS_PASSWORD
+# Geminus Plus
+GEMINUS_PLUS_API_URL
+GEMINUS_PLUS_API_KEY
+GEMINUS_PLUS_KEYCLOAK_URL
+GEMINUS_PLUS_CLIENT_ID
+GEMINUS_PLUS_CLIENT_SECRET
+GEMINUS_PLUS_USERNAME
+GEMINUS_PLUS_PASSWORD
 
 # Ivion
 IVION_API_URL
@@ -86,15 +86,15 @@ IVION_PASSWORD
 IVION_ACCESS_TOKEN
 IVION_REFRESH_TOKEN
 
-# FM Access
-FM_ACCESS_API_URL
-FM_ACCESS_USERNAME
-FM_ACCESS_PASSWORD
+# Geminus Base
+GEMINUS_BASE_API_URL
+GEMINUS_BASE_USERNAME
+GEMINUS_BASE_PASSWORD
 
-# Senslinc
-SENSLINC_API_URL
-SENSLINC_EMAIL
-SENSLINC_PASSWORD
+# Geminus Premium
+GEMINUS_PREMIUM_API_URL
+GEMINUS_PREMIUM_EMAIL
+GEMINUS_PREMIUM_PASSWORD
 
 # Congeria (planned)
 CONGERIA_USERNAME
@@ -114,13 +114,13 @@ CONGERIA_PASSWORD
 │                   Supabase Edge Functions                    │
 │                   (Deno runtime)                             │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
-│  │asset-plus-* │  │ivion-poi    │  │fm-access-query      │  │
+│  │geminus-plus-* │  │ivion-poi    │  │geminus-base-query      │  │
 │  └──────┬──────┘  └──────┬──────┘  └──────────┬──────────┘  │
 └─────────┼────────────────┼─────────────────────┼────────────┘
           │                │                     │
           ▼                ▼                     ▼
     ┌──────────┐     ┌──────────┐          ┌──────────┐
-    │ Asset+   │     │  Ivion   │          │FM Access │
+    │ Geminus Plus   │     │  Ivion   │          │Geminus Base │
     │   API    │     │   API    │          │   API    │
     └──────────┘     └──────────┘          └──────────┘
 ```
@@ -131,9 +131,9 @@ Synced data is stored in Supabase tables for fast access:
 
 | Table | Source | Purpose |
 |-------|--------|---------|
-| `assets` | Asset+ | Buildings, floors, rooms, assets |
-| `xkt_models` | Asset+ | 3D model file metadata |
-| `work_orders` | FM Access | Maintenance work orders |
+| `assets` | Geminus Plus | Buildings, floors, rooms, assets |
+| `xkt_models` | Geminus Plus | 3D model file metadata |
+| `work_orders` | Geminus Base | Maintenance work orders |
 | `documents` | Congeria | Document metadata (planned) |
 
 ## Adding a New Integration

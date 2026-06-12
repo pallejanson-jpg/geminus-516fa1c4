@@ -125,19 +125,19 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
 
     // Resolve model names from storey data
     if (models.length > 0 && storeyResult.data?.length) {
-      const assetPlusNames = new Map<string, string>();
+      const geminusPlusNames = new Map<string, string>();
       storeyResult.data.forEach((s: any) => {
         const attrs = typeof s.attributes === 'string' ? JSON.parse(s.attributes) : (s.attributes || {});
         const guid = attrs.parentBimObjectId;
         const name = attrs.parentCommonName;
         if (guid && name && !/^[0-9a-f]{8}-/i.test(name)) {
-          assetPlusNames.set(guid, name);
-          assetPlusNames.set(guid.toLowerCase(), name);
+          geminusPlusNames.set(guid, name);
+          geminusPlusNames.set(guid.toLowerCase(), name);
         }
       });
-      if (assetPlusNames.size > 0) {
+      if (geminusPlusNames.size > 0) {
         models.forEach((m) => {
-          const resolved = assetPlusNames.get(m.model_id) || assetPlusNames.get(m.model_id.toLowerCase());
+          const resolved = geminusPlusNames.get(m.model_id) || geminusPlusNames.get(m.model_id.toLowerCase());
           if (resolved && resolved !== m.model_name) {
             supabase.from('xkt_models')
               .update({ model_name: resolved })
@@ -154,11 +154,11 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
   }, [buildingFmGuid]);
 
   /**
-   * Bootstrap models from Asset+ API and aggressively refresh stale local XKT data.
+   * Bootstrap models from Geminus Plus API and aggressively refresh stale local XKT data.
    */
-  const bootstrapFromAssetPlus = useCallback(async (): Promise<ModelCandidate[]> => {
+  const bootstrapFromGeminusPlus = useCallback(async (): Promise<ModelCandidate[]> => {
     clearBuildingFromMemory(buildingFmGuid);
-    console.log(`[ModelLoader] bootstrapFromAssetPlus started for ${buildingFmGuid}`);
+    console.log(`[ModelLoader] bootstrapFromGeminusPlus started for ${buildingFmGuid}`);
 
     // Step 1: Server-side sync with timeout (fail-fast on slow networks)
     try {
@@ -166,7 +166,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
 
-      const { data: syncResult, error: syncError } = await supabase.functions.invoke('asset-plus-sync', {
+      const { data: syncResult, error: syncError } = await supabase.functions.invoke('geminus-plus-sync', {
         body: { action: 'sync-xkt-building', buildingFmGuid, force: true },
         headers: { 'Abort-Signal': 'timeout' }
       });
@@ -193,12 +193,12 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
       console.warn('[ModelLoader] Server sync failed (timeout or error):', e instanceof Error ? e.message : String(e));
     }
 
-    // Step 2: Client-side bootstrap (direct download from Asset+ API)
+    // Step 2: Client-side bootstrap (direct download from Geminus Plus API)
     console.log('[ModelLoader] Starting client-side bootstrap...');
     try {
       const [tokenRes, configRes] = await Promise.all([
-        supabase.functions.invoke('asset-plus-query', { body: { action: 'getToken', buildingFmGuid } }),
-        supabase.functions.invoke('asset-plus-query', { body: { action: 'getConfig', buildingFmGuid } }),
+        supabase.functions.invoke('geminus-plus-query', { body: { action: 'getToken', buildingFmGuid } }),
+        supabase.functions.invoke('geminus-plus-query', { body: { action: 'getConfig', buildingFmGuid } }),
       ]);
       const accessToken = tokenRes.data?.accessToken;
       const apiUrl = configRes.data?.apiUrl;
@@ -288,7 +288,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
         const modelFmGuid = model.fmGuid || model.FmGuid || '';
         const externalGuid = model.externalGuid || model.ExternalGuid || '';
         // The building-scoped slice: prefer the model's own buildingBimObjectId from
-        // GetAllRelatedModels (Asset+ returns this per model when it spans a complex).
+        // GetAllRelatedModels (Geminus Plus returns this per model when it spans a complex).
         const buildingBimObjectId =
           model.buildingBimObjectId || model.BuildingBimObjectId ||
           matchedRevision?.buildingBimObjectId || matchedRevision?.BuildingBimObjectId || '';
@@ -298,7 +298,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
         }
         
         // Build identifier fallback chain. ALWAYS try buildingBimObjectId first so
-        // Asset+ scopes the XKT to this single building (otherwise complex-wide models
+        // Geminus Plus scopes the XKT to this single building (otherwise complex-wide models
         // return geometry for every building in the complex).
         const idCombos: { param: string; value: string }[] = [
           { param: 'bimobjectid', value: buildingBimObjectId },
@@ -547,7 +547,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
 
   return {
     fetchModelMetadata,
-    bootstrapFromAssetPlus,
+    bootstrapFromGeminusPlus,
     loadAllModels,
     loadSingleModel,
     pendingInsightsColorRef,

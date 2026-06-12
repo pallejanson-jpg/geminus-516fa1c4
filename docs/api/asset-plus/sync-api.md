@@ -1,5 +1,5 @@
-# Asset+ Sync (FMGUID)
-The Asset+ sync API:s mainly revolve around synchronizing `Parameters`, `Objects`, `Relationships` and `Property Values`.
+# Geminus Plus Sync (FMGUID)
+The Geminus Plus sync API:s mainly revolve around synchronizing `Parameters`, `Objects`, `Relationships` and `Property Values`.
 
 Described in this document are the ways to perform sync operations when `FMGUID` is the main bearer of identity.
 
@@ -11,7 +11,7 @@ Described in this document are the ways to perform sync operations when `FMGUID`
 
 [Property Values](#Property-Values) are the detailed data of the objects.
 ## Pre-requisites
-1. An Asset+ API URL
+1. An Geminus Plus API URL
 1. A valid access token
 1. An API key
 ## Reading data
@@ -691,8 +691,8 @@ Allowable characters for `Name`:
 - Letters
 - Digits
 - Whitespace
-- `Å Ä Ö å ä ö Æ æ Ø ø`
-- `+ - . / # _ , : ; ( ) ' % " . @ ! ¤ & = ' ‘ ’ ´ ^ * – ° £ $ ½`
+- `ï¿½ ï¿½ ï¿½ ï¿½ ï¿½ ï¿½ ï¿½ ï¿½ ï¿½ ï¿½`
+- `+ - . / # _ , : ; ( ) ' % " . @ ! ï¿½ & = ' ï¿½ ï¿½ ï¿½ ^ * ï¿½ ï¿½ ï¿½ $ ï¿½`
  
 When `Name` is matched to an existing `Parameter` then `CreateParameter` will not mutate anything and will just return `200 OK`.
 

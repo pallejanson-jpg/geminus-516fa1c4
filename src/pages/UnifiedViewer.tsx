@@ -2,12 +2,12 @@
  * Unified Viewer — Single component for all viewer modes.
  * 
  * Modes:
- *   3D:    Full-screen AssetPlusViewer only
+ *   3D:    Full-screen GeminusPlusViewer only
  *   split: 3D + 360° side by side
  *   vt:    3D overlay on 360° panorama (Virtual Twin)
  *   360:   Full-screen 360° panorama only
  * 
- * CRITICAL: Only ONE AssetPlusViewer instance is ever mounted.
+ * CRITICAL: Only ONE GeminusPlusViewer instance is ever mounted.
  * Mode switches control CSS (display, width, z-index, pointer-events)
  * so that xeokit keeps loaded XKT models in memory.
  */
@@ -23,14 +23,14 @@ import {
 } from 'lucide-react';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { supabase } from '@/integrations/supabase/client';
-import FmAccess2DPanel from '@/components/viewer/FmAccess2DPanel';
+import GeminusBase2DPanel from '@/components/viewer/GeminusBase2DPanel';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ViewerSyncProvider, useViewerSync, type LocalCoords } from '@/context/ViewerSyncContext';
 import NativeViewerShell from '@/components/viewer/NativeViewerShell';
 
-const AssetPlusViewer = React.lazy(() => import('@/components/viewer/AssetPlusViewer'));
+const GeminusPlusViewer = React.lazy(() => import('@/components/viewer/GeminusPlusViewer'));
 import AlignmentPanel from '@/components/viewer/AlignmentPanel';
 import BuildingSelector from '@/components/viewer/BuildingSelector';
 import Ivion360View from '@/components/viewer/Ivion360View';
@@ -193,11 +193,11 @@ const UnifiedViewerContent: React.FC<{
     return () => off();
   }, [viewMode]);
 
-  // ─── FM Access availability ────────────────────────────────────────
-  const [hasFmAccess, setHasFmAccess] = useState(!!floorFmGuid);
+  // ─── Geminus Base availability ────────────────────────────────────────
+  const [hasGeminusBase, setHasGeminusBase] = useState(!!floorFmGuid);
   useEffect(() => {
-    if (buildingData?.fmAccessBuildingGuid) {
-      setHasFmAccess(true);
+    if (buildingData?.geminusBaseBuildingGuid) {
+      setHasGeminusBase(true);
       return;
     }
     if (!buildingData?.fmGuid) return;
@@ -205,10 +205,10 @@ const UnifiedViewerContent: React.FC<{
       .from('building_external_links')
       .select('id')
       .eq('building_fm_guid', buildingData.fmGuid)
-      .eq('system_name', 'fm_access')
+      .eq('system_name', 'geminus_base')
       .limit(1)
-      .then(({ data }) => setHasFmAccess((data?.length ?? 0) > 0));
-  }, [buildingData?.fmGuid, buildingData?.fmAccessBuildingGuid]);
+      .then(({ data }) => setHasGeminusBase((data?.length ?? 0) > 0));
+  }, [buildingData?.fmGuid, buildingData?.geminusBaseBuildingGuid]);
 
   useEffect(() => {
     if (buildingData && !buildingData.ivionSiteId && viewMode !== '3d' && viewMode !== '2d' && viewMode !== 'split2d3d') {
@@ -456,7 +456,7 @@ const UnifiedViewerContent: React.FC<{
     }
     const checkForViewer = () => {
       const win = window as any;
-      const instance = win.__assetPlusViewerInstance;
+      const instance = win.__geminusPlusViewerInstance;
       if (instance) {
         viewerInstanceRef.current = instance;
         setViewerReady(true);
@@ -593,7 +593,7 @@ const UnifiedViewerContent: React.FC<{
       let xv = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
       if (!xv) {
         const win = window as any;
-        xv = win.__assetPlusViewerInstance?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+        xv = win.__geminusPlusViewerInstance?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
       }
       if (xv?.scene) {
         const ids = xv.scene.objectIds;
@@ -752,7 +752,7 @@ const UnifiedViewerContent: React.FC<{
       sync3DHeading={sync3DHeading}
       sync3DPitch={sync3DPitch}
       hasIvion={hasIvion}
-      hasFmAccess={hasFmAccess}
+      hasGeminusBase={hasGeminusBase}
       floorFmGuid={floorFmGuid}
       floorName={floorName}
       entityFmGuid={entityFmGuid}
@@ -933,7 +933,7 @@ const UnifiedViewerContent: React.FC<{
             />
           ) : (
             <React.Suspense fallback={<div className="flex items-center justify-center h-full bg-black"><Loader2 className="h-8 w-8 animate-spin text-white/50" /></div>}>
-              <AssetPlusViewer
+              <GeminusPlusViewer
                 fmGuid={buildingData.fmGuid}
                 initialFmGuidToFocus={entityFmGuid || undefined}
                 initialVisualization={visualizationParam || undefined}

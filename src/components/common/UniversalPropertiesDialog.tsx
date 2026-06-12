@@ -13,8 +13,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
-import { updateAssetProperties, UpdatePropertyItem, deleteAssets, syncAssetToAssetPlus } from '@/services/asset-plus-service';
-import { pushAssetToFmAccess, pushPropertyChangesToFmAccess, deleteFmAccessObject } from '@/services/fm-access-service';
+import { updateAssetProperties, UpdatePropertyItem, deleteAssets, syncAssetToGeminusPlus } from '@/services/geminus-plus-service';
+import { pushAssetToGeminusBase, pushPropertyChangesToGeminusBase, deleteGeminusBaseObject } from '@/services/geminus-base-service';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -39,7 +39,7 @@ interface PropertyItem {
   label: string;
   value: any;
   editable: boolean;
-  source: 'lovable' | 'asset-plus';
+  source: 'lovable' | 'geminus-plus';
   type: 'text' | 'number' | 'boolean' | 'coordinates';
   section: 'system' | 'geminus' | 'local' | 'area' | 'user-defined' | 'coordinates' | 'classification';
   isDifferent?: boolean;
@@ -172,7 +172,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     setBimFallbackData(fallback);
   }, []);
 
-  // FM Access DOU & Documents
+  // Geminus Base DOU & Documents
   const [douData, setDouData] = useState<any[]>([]);
   const [fmaDocuments, setFmaDocuments] = useState<any[]>([]);
 
@@ -219,7 +219,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
             }
           }
 
-          // Strategy 2: Name-based canonical resolution for spaces (BIM GUID → Asset+ GUID)
+          // Strategy 2: Name-based canonical resolution for spaces (BIM GUID → Geminus Plus GUID)
           const isSpace = metaObj?.type?.toLowerCase()?.includes('ifcspace') || metaObj?.type?.toLowerCase() === 'space';
           if (isSpace && metaObj?.name && (!assetData?.some((a: any) => a.attributes && Object.keys(a.attributes).length > 0))) {
             const spaceName = metaObj.name.trim();
@@ -410,15 +410,15 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           setFormData({});
         }
 
-        // Fetch FM Access DOU and documents for the object(s)
+        // Fetch Geminus Base DOU and documents for the object(s)
         if (assetData && assetData.length > 0) {
           const guidsForDou = assetData.map((a: any) => a.fm_guid);
           const buildingGuids = [...new Set(assetData.map((a: any) => a.building_fm_guid).filter(Boolean))];
 
           const [douResult, docsResult] = await Promise.all([
-            supabase.from('fm_access_dou').select('*').in('object_fm_guid', guidsForDou),
+            supabase.from('geminus_base_dou').select('*').in('object_fm_guid', guidsForDou),
             buildingGuids.length > 0
-              ? supabase.from('fm_access_documents').select('*').in('building_fm_guid', buildingGuids).limit(50)
+              ? supabase.from('geminus_base_documents').select('*').in('building_fm_guid', buildingGuids).limit(50)
               : Promise.resolve({ data: [] }),
           ]);
           setDouData(douResult.data || []);
@@ -686,7 +686,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       });
     }
 
-    // Asset+ properties from attributes JSONB (only for single item to avoid complexity)
+    // Geminus Plus properties from attributes JSONB (only for single item to avoid complexity)
     if (!isMultiMode && firstAsset.attributes) {
       const attrs = firstAsset.attributes as Record<string, any>;
       
@@ -713,7 +713,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
         let displayLabel = key;
         let isUserDefined = false;
         
-        // Handle structured Asset+ values with {name, value, dataType}
+        // Handle structured Geminus Plus values with {name, value, dataType}
         if (value && typeof value === 'object' && 'value' in value && 'name' in value) {
           displayValue = value.value;
           displayLabel = value.name || key;
@@ -739,7 +739,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           label: displayLabel,
           value: displayValue,
           editable: isUserDefined, // User-defined properties are editable
-          source: 'asset-plus',
+          source: 'geminus-plus',
           type: typeof displayValue === 'number' ? 'number' : 'text',
           section,
         });
@@ -810,11 +810,11 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     try {
       // Build update payload (only changed fields)
       const updatePayload: Record<string, any> = {};
-      const assetPlusProperties: UpdatePropertyItem[] = [];
+      const geminusPlusProperties: UpdatePropertyItem[] = [];
       
       if (formData.common_name !== undefined && formData.common_name !== '') {
         updatePayload.common_name = formData.common_name || null;
-        assetPlusProperties.push({
+        geminusPlusProperties.push({
           name: 'commonName',
           value: formData.common_name || '',
           dataType: 0, // String
@@ -822,7 +822,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       }
       if (formData.asset_type !== undefined && formData.asset_type !== '') {
         updatePayload.asset_type = formData.asset_type || null;
-        // asset_type is a Lovable-only field, not synced to Asset+
+        // asset_type is a Lovable-only field, not synced to Geminus Plus
       }
       if (formData.coordinate_x !== undefined && formData.coordinate_x !== '') {
         updatePayload.coordinate_x = parseFloat(formData.coordinate_x) || 0;
@@ -845,7 +845,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
         // Handle structured {name, value, dataType} properties
         if (originalVal && typeof originalVal === 'object' && 'name' in originalVal) {
           attrUpdates[attrKey] = { ...originalVal, value };
-          assetPlusProperties.push({
+          geminusPlusProperties.push({
             name: originalVal.name || attrKey,
             value: value ?? '',
             dataType: originalVal.dataType ?? 0,
@@ -861,36 +861,36 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
         updatePayload.attributes = { ...existingAttrs, ...attrUpdates };
       }
 
-      // Check if any assets need Asset+ sync (is_local = false)
+      // Check if any assets need Geminus Plus sync (is_local = false)
       const syncedAssets = assets.filter(a => a.is_local === false);
-      const hasSyncedAssets = syncedAssets.length > 0 && assetPlusProperties.length > 0;
+      const hasSyncedAssets = syncedAssets.length > 0 && geminusPlusProperties.length > 0;
 
       if (hasSyncedAssets) {
-        // Use Edge Function for synced assets (updates both Asset+ and local DB)
-        const response = await updateAssetProperties(fmGuids, assetPlusProperties);
+        // Use Edge Function for synced assets (updates both Geminus Plus and local DB)
+        const response = await updateAssetProperties(fmGuids, geminusPlusProperties);
         
         if (!response.success) {
           const failedCount = response.summary.failed;
           if (failedCount > 0) {
-            toast.warning(`${response.summary.success} updated, ${failedCount} failed to sync to Asset+`);
+            toast.warning(`${response.summary.success} updated, ${failedCount} failed to sync to Geminus Plus`);
           }
         } else {
-          toast.success(`${response.summary.success} items updated (${response.summary.syncedToAssetPlus} synced to Asset+)`);
+          toast.success(`${response.summary.success} items updated (${response.summary.syncedToGeminusPlus} synced to Geminus Plus)`);
         }
 
-        // Also push to FM Access (best-effort, don't block)
+        // Also push to Geminus Base (best-effort, don't block)
         try {
           const fmaProps: Record<string, any> = {};
-          assetPlusProperties.forEach(p => { fmaProps[p.name] = p.value; });
+          geminusPlusProperties.forEach(p => { fmaProps[p.name] = p.value; });
           if (Object.keys(fmaProps).length > 0) {
             for (const guid of fmGuids) {
-              pushPropertyChangesToFmAccess(guid, fmaProps).catch(e => 
-                console.warn('FM Access property sync failed for', guid, e)
+              pushPropertyChangesToGeminusBase(guid, fmaProps).catch(e => 
+                console.warn('Geminus Base property sync failed for', guid, e)
               );
             }
           }
         } catch (e) {
-          console.warn('FM Access property push skipped:', e);
+          console.warn('Geminus Base property push skipped:', e);
         }
 
         // Update remaining local-only fields (coordinates, asset_type) directly
@@ -961,12 +961,12 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     try {
       const result = await deleteAssets(fmGuids);
       if (result.summary.deleted > 0) {
-        // Best-effort: also delete from FM Access
+        // Best-effort: also delete from Geminus Base
         for (const guid of fmGuids) {
           try {
-            await deleteFmAccessObject(guid);
+            await deleteGeminusBaseObject(guid);
           } catch (fmaErr) {
-            console.warn(`FM Access delete failed for ${guid}:`, fmaErr);
+            console.warn(`Geminus Base delete failed for ${guid}:`, fmaErr);
           }
         }
         toast.success(`${result.summary.deleted} object(s) deleted`);
@@ -984,7 +984,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     }
   };
   
-  const handlePushToAssetPlus = async () => {
+  const handlePushToGeminusPlus = async () => {
     if (assets.length === 0) return;
     setIsPushing(true);
     try {
@@ -992,12 +992,12 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       let succeeded = 0;
       let failed = 0;
       for (const fmGuid of fmGuids) {
-        const result = await syncAssetToAssetPlus(fmGuid);
+        const result = await syncAssetToGeminusPlus(fmGuid);
         if (result.success) succeeded++;
         else failed++;
       }
       if (succeeded > 0) {
-        toast.success(`${succeeded} object(s) pushed to Asset+`);
+        toast.success(`${succeeded} object(s) pushed to Geminus Plus`);
         onUpdate?.();
         // Refresh data
         const { data: refreshed } = await supabase
@@ -1016,29 +1016,29 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     }
   };
 
-  const handlePushToFmAccess = async () => {
+  const handlePushToGeminusBase = async () => {
     if (assets.length === 0) return;
     setIsPushingFma(true);
     try {
       let succeeded = 0;
       let failed = 0;
       for (const fmGuid of fmGuids) {
-        const result = await pushAssetToFmAccess(fmGuid);
+        const result = await pushAssetToGeminusBase(fmGuid);
         if (result.success) succeeded++;
         else {
           failed++;
-          console.warn(`FM Access push failed for ${fmGuid}:`, result.error);
+          console.warn(`Geminus Base push failed for ${fmGuid}:`, result.error);
         }
       }
       if (succeeded > 0) {
-        toast.success(`${succeeded} object(s) pushed to FM Access`);
+        toast.success(`${succeeded} object(s) pushed to Geminus Base`);
         onUpdate?.();
       }
       if (failed > 0) {
-        toast.error(`${failed} object(s) failed to push to FM Access`);
+        toast.error(`${failed} object(s) failed to push to Geminus Base`);
       }
     } catch (error: any) {
-      toast.error('FM Access push failed: ' + error.message);
+      toast.error('Geminus Base push failed: ' + error.message);
     } finally {
       setIsPushingFma(false);
     }
@@ -1300,7 +1300,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                       >
                         <Label className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
                           {prop.label}
-                          {prop.source === 'asset-plus' && (
+                          {prop.source === 'geminus-plus' && (
                             <Badge variant="outline" className="text-[8px] px-1 py-0">A+</Badge>
                           )}
                         </Label>
@@ -1386,7 +1386,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
             </div>
           )}
 
-          {/* FM Access DOU (Drift & Underhåll) */}
+          {/* Geminus Base DOU (Drift & Underhåll) */}
           {douData.length > 0 && (
             <Collapsible
               open={openSections.has('dou')}
@@ -1415,16 +1415,16 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
             </Collapsible>
           )}
 
-          {/* FM Access Documents */}
+          {/* Geminus Base Documents */}
           {fmaDocuments.length > 0 && (
             <Collapsible
-              open={openSections.has('fma-docs')}
-              onOpenChange={() => toggleSection('fma-docs')}
+              open={openSections.has('geminus-base-docs')}
+              onOpenChange={() => toggleSection('geminus-base-docs')}
             >
               <CollapsibleTrigger className="flex items-center justify-between w-full p-2 bg-muted/50 rounded-md hover:bg-muted transition-colors">
                 <div className="flex items-center gap-2">
-                  {openSections.has('fma-docs') ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5 rotate-180" />}
-                  <span className="text-sm font-medium">Dokument (FM Access)</span>
+                  {openSections.has('geminus-base-docs') ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5 rotate-180" />}
+                  <span className="text-sm font-medium">Dokument (Geminus Base)</span>
                   <Badge variant="secondary" className="text-[10px]">{fmaDocuments.length}</Badge>
                 </div>
               </CollapsibleTrigger>
@@ -1496,7 +1496,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                       <AlertDialogDescription>
                         {syncStatus.allLocal 
                           ? 'Detta raderar objektet/objekten permanent från den lokala databasen.'
-                          : 'Objektet/objekten kommer att expieras i Asset+ och tas bort lokalt.'}
+                          : 'Objektet/objekten kommer att expieras i Geminus Plus och tas bort lokalt.'}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -1517,19 +1517,19 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                 </Badge>
               )}
               
-              {/* Push to Asset+ button - only for local objects */}
+              {/* Push to Geminus Plus button - only for local objects */}
               {syncStatus?.allLocal && syncStatus?.isInstance && (
-                <Button variant="outline" size="sm" onClick={handlePushToAssetPlus} disabled={isPushing || isPushingFma}>
+                <Button variant="outline" size="sm" onClick={handlePushToGeminusPlus} disabled={isPushing || isPushingFma}>
                   {isPushing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
-                  Push to Asset+
+                  Push to Geminus Plus
                 </Button>
               )}
               
-              {/* Push to FM Access button */}
+              {/* Push to Geminus Base button */}
               {syncStatus?.isInstance && (
-                <Button variant="outline" size="sm" onClick={handlePushToFmAccess} disabled={isPushingFma || isPushing}>
+                <Button variant="outline" size="sm" onClick={handlePushToGeminusBase} disabled={isPushingFma || isPushing}>
                   {isPushingFma ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
-                  Push to FM Access
+                  Push to Geminus Base
                 </Button>
               )}
               

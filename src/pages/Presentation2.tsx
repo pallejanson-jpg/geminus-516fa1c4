@@ -83,7 +83,7 @@ const NOTES: string[][] = [
   // 4 — Timeline
   [
     "Week 1-2: First prototype — basic viewer shell, navigation, building selector.",
-    "Week 3-4: First API integration with Asset+ — real building data flowing in.",
+    "Week 3-4: First API integration with Geminus Plus — real building data flowing in.",
     "Week 5-6: xeokit 3D engine integrated, IFC models loading in browser.",
     "Week 7-8: AI asset scanning — computer vision on 360° panoramas.",
     "Week 9-10: Ivion 360° integration, split-view, virtual twin overlay.",
@@ -95,12 +95,12 @@ const NOTES: string[][] = [
     "Backend: Supabase — PostgreSQL, Edge Functions, Auth, Storage — zero server management.",
     "3D Engine: xeokit-sdk — open-source WebGL viewer for large IFC/BIM models.",
     "360°: NavVis IVION SDK — panoramic imagery with point-of-interest overlays.",
-    "APIs: Asset+ (FM), Senslinc (IoT), FM Access, Mapbox, Cesium, Google Routes.",
+    "APIs: Geminus Plus (FM), Geminus Premium (IoT), Geminus Base, Mapbox, Cesium, Google Routes.",
     "AI: Gemini and GPT models via Lovable AI — no API keys needed.",
   ],
   // 6 — Digital Twin
   [
-    "The core of Geminus: a 3D digital twin of any building synced with Asset+.",
+    "The core of Geminus: a 3D digital twin of any building synced with Geminus Plus.",
     "Floor switching, room visualization with color-coded overlays.",
     "Split view: 3D model on one side, 360° panorama on the other — camera synced.",
     "Room labels show live data — occupancy, temperature, area — right on the 3D model.",
@@ -109,7 +109,7 @@ const NOTES: string[][] = [
   // 7 — AI Assistants
   [
     "Gunnar is the operations AI — ask questions about the building in natural language.",
-    "He has context: building data, Asset+ properties, sensor readings, maintenance history.",
+    "He has context: building data, Geminus Plus properties, sensor readings, maintenance history.",
     "Ilean is the contextual AI — appears in the viewer, knows what you're looking at.",
     "RAG search: documents indexed and searchable — maintenance manuals, floor plans, reports.",
     "Voice commands: speak to navigate, search, or ask questions hands-free.",
@@ -128,16 +128,16 @@ const NOTES: string[][] = [
   // 9 — Integrations
   [
     "Six Addnode companies connected through one platform — that's the moat.",
-    "Symetri/ACC: BIM data flows in. SWG: Asset+ and 3 CAFM systems (QFM, Concept Evolution).",
+    "Symetri/ACC: BIM data flows in. SWG: Geminus Plus and 3 CAFM systems (QFM, Concept Evolution).",
     "Bimify: scan-to-BIM digitization. In Use: space utilization data.",
-    "Senslinc: IoT sensors — temperature, humidity, CO₂, occupancy.",
+    "Geminus Premium: IoT sensors — temperature, humidity, CO₂, occupancy.",
     "Tribia/INTERAXO: construction documentation becomes operational data.",
     "Plus external APIs: Mapbox for maps, Cesium for 3D globe, Google for routing.",
   ],
   // 10 — IoT & Insights
   [
     "Heatmaps: rooms colored by temperature, occupancy, energy use — at a glance.",
-    "Sensor dashboards: real-time charts with historical data from Senslinc.",
+    "Sensor dashboards: real-time charts with historical data from Geminus Premium.",
     "Predictive maintenance: AI analyzes patterns and warns before equipment fails.",
     "Alarm management: threshold-based alerts with automatic escalation.",
     "All visualized directly in the 3D model — not in a separate dashboard.",
@@ -319,7 +319,7 @@ const WhyLovableSlide = () => (
 const TimelineSlide = () => {
   const milestones = [
     { week: "W1–2", title: "First Prototype", desc: "Viewer shell, navigation, building selector", color: "border-blue-400 bg-blue-500/20", dot: "bg-blue-400" },
-    { week: "W3–4", title: "Asset+ API", desc: "Real building data flowing from FM system", color: "border-emerald-400 bg-emerald-500/20", dot: "bg-emerald-400" },
+    { week: "W3–4", title: "Geminus Plus API", desc: "Real building data flowing from FM system", color: "border-emerald-400 bg-emerald-500/20", dot: "bg-emerald-400" },
     { week: "W5–6", title: "3D Engine", desc: "xeokit integrated, IFC models in browser", color: "border-purple-400 bg-purple-500/20", dot: "bg-purple-400" },
     { week: "W7–8", title: "AI Asset Scan", desc: "Computer vision on 360° panoramas", color: "border-orange-400 bg-orange-500/20", dot: "bg-orange-400" },
     { week: "W9–10", title: "360° + Split View", desc: "Ivion SDK, virtual twin overlay", color: "border-pink-400 bg-pink-500/20", dot: "bg-pink-400" },
@@ -374,7 +374,7 @@ const StackSlide = () => {
     { label: "Backend", items: ["Supabase", "PostgreSQL", "Edge Functions", "Auth + Storage"], color: "border-emerald-400/60 bg-emerald-500/15", icon: Layers, iconColor: "text-emerald-400" },
     { label: "3D / Visualization", items: ["xeokit-sdk", "NavVis IVION", "Mapbox GL", "Cesium"], color: "border-purple-400/60 bg-purple-500/15", icon: Eye, iconColor: "text-purple-400" },
     { label: "AI / ML", items: ["Gemini 2.5", "GPT-5", "RAG Search", "Vision API"], color: "border-orange-400/60 bg-orange-500/15", icon: Brain, iconColor: "text-orange-400" },
-    { label: "Integrations", items: ["Asset+ API", "Senslinc IoT", "FM Access", "INTERAXO"], color: "border-pink-400/60 bg-pink-500/15", icon: Globe, iconColor: "text-pink-400" },
+    { label: "Integrations", items: ["Geminus Plus API", "Geminus Premium IoT", "Geminus Base", "INTERAXO"], color: "border-pink-400/60 bg-pink-500/15", icon: Globe, iconColor: "text-pink-400" },
   ];
 
   return (
@@ -482,7 +482,7 @@ const AiAssistantsSlide = () => (
         <h2 className="text-[60px] font-black mb-8 text-white leading-tight">AI-Powered Intelligence</h2>
         <div className="space-y-6">
           {[
-            { icon: MessageSquare, title: "Gunnar — Operations AI", desc: "Ask anything about the building. Knows Asset+ data, sensors, maintenance history.", color: "text-emerald-400" },
+            { icon: MessageSquare, title: "Gunnar — Operations AI", desc: "Ask anything about the building. Knows Geminus Plus data, sensors, maintenance history.", color: "text-emerald-400" },
             { icon: Brain, title: "Ilean — Contextual AI", desc: "Appears in the viewer. Knows what you're looking at. Suggests actions.", color: "text-purple-400" },
             { icon: Scan, title: "RAG Search", desc: "Documents indexed and searchable — manuals, floor plans, reports.", color: "text-orange-400" },
             { icon: Radio, title: "Voice Commands", desc: "Speak to navigate, search, or ask questions — hands-free.", color: "text-cyan-400" },
@@ -518,7 +518,7 @@ const AiCapabilitiesSlide = () => (
 
         <div className="space-y-5">
           {[
-            { icon: Scan, title: "AI Asset Scan", desc: "360° panoramas → automatic detection & inventory registration in Asset+", color: "text-orange-400" },
+            { icon: Scan, title: "AI Asset Scan", desc: "360° panoramas → automatic detection & inventory registration in Geminus Plus", color: "text-orange-400" },
             { icon: Tag, title: "AI Auto-Classification", desc: "Image recognition classifies assets against Nordic standards (BIP, BSAB-E, AFF)", color: "text-yellow-400" },
             { icon: BookOpen, title: "RAG Document Search", desc: "Semantic search across indexed building documents — manuals, plans, reports", color: "text-blue-400" },
             { icon: Sparkles, title: "AI Assistants", desc: "Gunnar (operations) + Ilean (contextual) — natural language building intelligence", color: "text-purple-400" },
@@ -562,10 +562,10 @@ const IntegrationsSlide = () => (
       <div className="grid grid-cols-3 gap-6 mb-10">
         {[
           { name: "Symetri / ACC", desc: "BIM & construction data", color: "border-blue-400/70 bg-blue-500/20", tc: "text-blue-300" },
-          { name: "SWG", desc: "Asset+ & 3 CAFM systems", color: "border-emerald-400/70 bg-emerald-500/20", tc: "text-emerald-300" },
+          { name: "SWG", desc: "Geminus Plus & 3 CAFM systems", color: "border-emerald-400/70 bg-emerald-500/20", tc: "text-emerald-300" },
           { name: "Bimify", desc: "AI scan-to-BIM", color: "border-purple-400/70 bg-purple-500/20", tc: "text-purple-300" },
           { name: "In Use", desc: "Space utilization data", color: "border-violet-400/70 bg-violet-500/20", tc: "text-violet-300" },
-          { name: "Senslinc", desc: "IoT real-time sensors", color: "border-orange-400/70 bg-orange-500/20", tc: "text-orange-300" },
+          { name: "Geminus Premium", desc: "IoT real-time sensors", color: "border-orange-400/70 bg-orange-500/20", tc: "text-orange-300" },
           { name: "Tribia / INTERAXO", desc: "Construction documentation", color: "border-sky-400/70 bg-sky-500/20", tc: "text-sky-300" },
         ].map(({ name, desc, color, tc }) => (
           <div key={name} className={`flex flex-col items-center justify-center rounded-2xl border-2 ${color} px-6 py-5 text-center`}>
@@ -609,7 +609,7 @@ const IoTSlide = () => (
         <div className="space-y-6">
           {[
             { icon: Thermometer, title: "Heatmaps", desc: "Rooms colored by temperature, occupancy, or energy use", color: "text-red-400" },
-            { icon: BarChart3, title: "Sensor Dashboards", desc: "Real-time + historical charts from Senslinc", color: "text-emerald-400" },
+            { icon: BarChart3, title: "Sensor Dashboards", desc: "Real-time + historical charts from Geminus Premium", color: "text-emerald-400" },
             { icon: Cpu, title: "Predictive Maintenance", desc: "AI analyzes patterns — warns before failure", color: "text-orange-400" },
             { icon: Zap, title: "Alarm Management", desc: "Threshold alerts with automatic escalation", color: "text-yellow-400" },
           ].map(({ icon: Icon, title, desc, color }) => (

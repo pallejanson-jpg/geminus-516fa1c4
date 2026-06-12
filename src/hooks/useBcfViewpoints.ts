@@ -38,7 +38,7 @@ export const useBcfViewpoints = ({ viewerRef }: UseBcfViewpointsProps) => {
   const bcfPluginRef = useRef<any>(null);
 
   /**
-   * Get the xeokit viewer instance from the AssetPlusViewer
+   * Get the xeokit viewer instance from the GeminusPlusViewer
    */
   const getXeokitViewer = useCallback(() => {
     const viewer = viewerRef.current;

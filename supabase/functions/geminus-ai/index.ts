@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Anthropic from "npm:@anthropic-ai/sdk";
 import { verifyAuth, unauthorizedResponse, corsHeaders } from "../_shared/auth.ts";
-import { getSenslincCredentials } from "../_shared/credentials.ts";
+import { getGeminusPremiumCredentials } from "../_shared/credentials.ts";
 
 const MAX_TOOL_ROUNDS = 10;
 const AI_MODEL_PRIMARY = "claude-opus-4-8";
@@ -209,12 +209,12 @@ const tools = [
       },
     },
   },
-  // ── Live IoT sensor data (via Senslinc) ──
+  // ── Live IoT sensor data (via Geminus Premium) ──
   {
     type: "function",
     function: {
       name: "get_live_sensor_data",
-      description: "Get LIVE IoT sensor readings (temperature, CO2, humidity, occupancy, light) for the current building or a specific room. Data comes from the Senslinc/InUse platform. Use when user asks about temperature, air quality, indoor climate, CO2, humidity, occupancy.",
+      description: "Get LIVE IoT sensor readings (temperature, CO2, humidity, occupancy, light) for the current building or a specific room. Data comes from the Geminus Premium platform. Use when user asks about temperature, air quality, indoor climate, CO2, humidity, occupancy.",
       parameters: {
         type: "object",
         properties: {
@@ -294,7 +294,7 @@ const tools = [
         type: "object",
         properties: {
           response_type: { type: "string", enum: ["answer", "navigation", "data_query", "action"] },
-          action: { type: "string", enum: ["highlight", "filter", "colorize", "list", "show_drawing", "none"], description: "Default 'none'. Only viewer actions when explicitly asked. 'show_drawing' opens the FM Access 2D drawing for a floor (requires the drawing field)." },
+          action: { type: "string", enum: ["highlight", "filter", "colorize", "list", "show_drawing", "none"], description: "Default 'none'. Only viewer actions when explicitly asked. 'show_drawing' opens the Geminus Base 2D drawing for a floor (requires the drawing field)." },
           buttons: { type: "array", items: { type: "string" }, description: "2-3 clickable ACTION buttons" },
           suggestions: { type: "array", items: { type: "string" }, description: "2-3 proactive follow-up questions" },
           asset_ids: { type: "array", items: { type: "string" } },
@@ -331,7 +331,7 @@ const tools = [
           },
           drawing: {
             type: "object",
-            description: "For action 'show_drawing': which FM Access 2D drawing to open",
+            description: "For action 'show_drawing': which Geminus Base 2D drawing to open",
             properties: {
               building_fm_guid: { type: "string" },
               storey_fm_guid: { type: "string" },
@@ -722,7 +722,7 @@ async function execListAttributeKeys(supabase: any, args: any) {
   return { category, sampled_assets: (data || []).length, keys: sorted };
 }
 
-/* ── Live IoT sensor data via Senslinc ── */
+/* ── Live IoT sensor data via Geminus Premium ── */
 
 /** Extract sensor values from a machine data row (handles many field name variants) */
 function extractSensorValues(row: any): { temperature: number | null; co2: number | null; humidity: number | null; occupancy: number | null; light: number | null } {
@@ -741,9 +741,9 @@ async function execLiveSensorData(supabase: any, args: any) {
   if (!buildingGuid) return { error: "building_guid required" };
 
   try {
-    const creds = await getSenslincCredentials(supabase, buildingGuid);
+    const creds = await getGeminusPremiumCredentials(supabase, buildingGuid);
     if (!creds.apiUrl || !creds.email || !creds.password) {
-      return { error: "No Senslinc/InUse credentials configured for this building", available: false };
+      return { error: "No Geminus Premium credentials configured for this building", available: false };
     }
 
     const roomGuids = args.room_fm_guids as string[] | undefined;
@@ -753,7 +753,7 @@ async function execLiveSensorData(supabase: any, args: any) {
       const results: any[] = [];
       for (const roomGuid of roomGuids.slice(0, 10)) {
         try {
-          const { data } = await supabase.functions.invoke('senslinc-query', {
+          const { data } = await supabase.functions.invoke('geminus-premium-query', {
             body: { action: 'get-machine-data', fmGuid: roomGuid, buildingFmGuid: buildingGuid, days: 1 },
           });
           if (data?.success && data.data?.machine) {
@@ -772,10 +772,10 @@ async function execLiveSensorData(supabase: any, args: any) {
           console.warn(`[LiveSensor] Failed for room ${roomGuid}:`, e);
         }
       }
-      return { available: results.length > 0, source: "Senslinc/InUse (live)", rooms: results, room_count: results.length };
+      return { available: results.length > 0, source: "Geminus Premium (live)", rooms: results, room_count: results.length };
     } else {
       // Building-level: get all machines for the site
-      const { data } = await supabase.functions.invoke('senslinc-query', {
+      const { data } = await supabase.functions.invoke('geminus-premium-query', {
         body: { action: 'get-building-sensor-data', fmGuid: buildingGuid },
       });
 
@@ -889,7 +889,7 @@ function buildSensorSummary(machines: any[], totalMachines: number, site: any, i
 
   return {
     available: true,
-    source: "Senslinc/InUse (live)",
+    source: "Geminus Premium (live)",
     site_name: site?.name || '',
     dashboard_url: site?.dashboard_url || '',
     machine_count: totalMachines,
@@ -1552,7 +1552,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         };
       }
 
-      // Build response — handle both Senslinc live format and DB fallback format
+      // Build response — handle both Geminus Premium live format and DB fallback format
       let message = "";
       const sensorData: any[] = [];
       const colorMap: Record<string, [number, number, number]> = {};
@@ -1569,7 +1569,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         if (room.occupancy !== null && room.occupancy !== undefined) parts.push(`${Math.round(room.occupancy)}% beläggning`);
         message = `**Sensordata** för ${roomName}:\n${parts.join(" · ")}`;
       } else if (sensorResult.averages) {
-        // Building-level data (both Senslinc and DB fallback)
+        // Building-level data (both Geminus Premium and DB fallback)
         const avg = sensorResult.averages;
         const parts: string[] = [];
         if (avg.temperature !== null && avg.temperature !== undefined) parts.push(`Medeltemp: ${avg.temperature}°C`);
@@ -1598,7 +1598,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
           message += `\nHögst fuktighet: **${hh.name || "Okänt rum"}** (${Math.round(hh.value * 10) / 10}%)`;
         }
 
-        // Build color map for temperature visualization from rooms (DB) or machines (Senslinc)
+        // Build color map for temperature visualization from rooms (DB) or machines (Geminus Premium)
         const items = sensorResult.rooms || sensorResult.machines || [];
         if (sensorType === "all" || sensorType === "temperature") {
           for (const m of items) {
@@ -1960,7 +1960,7 @@ TOOL CALLING FLOW:
 
 IoT / SENSOR DATA:
 - For analytical/ranking questions (e.g. "which room is warmest", "average temperature", "humidity in room 232"), use get_room_sensor_data. This queries cached sensor attributes stored on rooms in the database.
-- For real-time data, use get_live_sensor_data (fetches from Senslinc/InUse platform). It will automatically fall back to DB data if live data is unavailable.
+- For real-time data, use get_live_sensor_data (fetches from Geminus Premium platform). It will automatically fall back to DB data if live data is unavailable.
 - get_room_sensor_data supports: temperature, co2, humidity, occupancy. You can sort by any metric and filter by floor.
 - Prefer get_room_sensor_data for questions about rankings, averages, or specific room sensor values.
 
@@ -1975,8 +1975,8 @@ VIEWER VISUALIZATION (colorize):
 - To color specific objects (e.g. "visa alla innerdörrar blåa i 3D"): query_assets(mode="list", category="Instance", asset_type="IfcDoor", name_search="innerdörr") → present_results with action="colorize" and color_map mapping EACH matching asset fm_guid to [R,G,B] (0-255). fm_guids are auto-resolved to viewer entity ids.
 - RGB examples: blå=[0,100,255], röd=[255,60,60], grön=[0,200,0], gul=[255,220,0], orange=[255,150,0].
 
-2D DRAWINGS (FM Access):
-- When the user asks to see the drawing ("ritningen") for a floor: resolve the floor via get_building_summary (it returns floors with fm_guid + name), then call present_results with action="show_drawing" and drawing={building_fm_guid, storey_fm_guid, storey_name}. storey_name is the floor's display name (e.g. "Plan 2"). This opens the FM Access 2D drawing.
+2D DRAWINGS (Geminus Base):
+- When the user asks to see the drawing ("ritningen") for a floor: resolve the floor via get_building_summary (it returns floors with fm_guid + name), then call present_results with action="show_drawing" and drawing={building_fm_guid, storey_fm_guid, storey_name}. storey_name is the floor's display name (e.g. "Plan 2"). This opens the Geminus Base 2D drawing.
 
 RULES:
 1. Never write stop-answers like "Jag kunde inte slutföra sökningen". If data is missing, interpret and suggest alternatives.

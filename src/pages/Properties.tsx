@@ -21,8 +21,8 @@ interface PropertyRow {
   longitude: number | null;
   isFavorite: boolean;
   profileName: string | null;
-  hasCustomAssetPlus: boolean;
-  hasCustomSenslinc: boolean;
+  hasCustomGeminusPlus: boolean;
+  hasCustomGeminusPremium: boolean;
 }
 
 export default function Properties() {
@@ -37,7 +37,7 @@ export default function Properties() {
     try {
       const { data: settings, error } = await supabase
         .from('building_settings')
-        .select('fm_guid, latitude, longitude, is_favorite, assetplus_api_url, senslinc_api_url, api_profile_id');
+        .select('fm_guid, latitude, longitude, is_favorite, geminus_plus_api_url, geminus_premium_api_url, api_profile_id');
 
       if (error) throw error;
 
@@ -75,8 +75,8 @@ export default function Properties() {
         longitude: s.longitude,
         isFavorite: s.is_favorite,
         profileName: s.api_profile_id ? (profileMap[s.api_profile_id] || null) : null,
-        hasCustomAssetPlus: !!s.assetplus_api_url,
-        hasCustomSenslinc: !!s.senslinc_api_url,
+        hasCustomGeminusPlus: !!s.geminus_plus_api_url,
+        hasCustomGeminusPremium: !!s.geminus_premium_api_url,
       }));
 
       setProperties(rows);
@@ -215,16 +215,16 @@ export default function Properties() {
                       {property.profileName}
                     </Badge>
                   )}
-                  {property.hasCustomAssetPlus && !property.profileName && (
+                  {property.hasCustomGeminusPlus && !property.profileName && (
                     <Badge variant="secondary" className="text-[10px]">
                       <KeyRound className="h-2.5 w-2.5 mr-1" />
-                      Asset+
+                      Geminus Plus
                     </Badge>
                   )}
-                  {property.hasCustomSenslinc && !property.profileName && (
+                  {property.hasCustomGeminusPremium && !property.profileName && (
                     <Badge variant="secondary" className="text-[10px]">
                       <KeyRound className="h-2.5 w-2.5 mr-1" />
-                      Senslinc
+                      Geminus Premium
                     </Badge>
                   )}
                 </div>

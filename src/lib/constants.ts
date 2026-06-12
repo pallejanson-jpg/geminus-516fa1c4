@@ -53,7 +53,7 @@ export const THEME_OPTIONS = [
 export const DEFAULT_APP_CONFIGS: Record<string, AppConfig> = {
     insights: { label: 'Insights', url: '', icon: BarChart2, openMode: 'internal', username: '', password: '' },
     fma_plus: { label: 'FMA+', url: 'https://swg-demo.bim.cloud/', icon: Building2, openMode: 'internal', username: '', password: '' },
-    asset_plus: { label: 'Asset+', url: '', icon: Box, openMode: 'internal', username: '', password: '' },
+    geminus_plus: { label: 'Geminus Plus', url: '', icon: Box, openMode: 'internal', username: '', password: '' },
     iot: { label: 'IoT+', url: 'https://swg-demo.bim.cloud/iot', icon: Zap, openMode: 'internal', username: '', password: '', pollIntervalHours: 24 },
     original_archive: { label: 'OA+', url: '', icon: Archive, openMode: 'internal', username: '', password: '' },
     radar: { label: '360+', url: 'https://swg.iv.navvis.com', icon: Radar, openMode: 'external', username: '', password: '' },
@@ -74,8 +74,8 @@ export const DEFAULT_SIDEBAR_ORDER: SidebarItem[] = [
     { id: 'support', hasDividerAfter: false },
     { id: 'insights', hasDividerAfter: true },
     { id: 'fma_plus', hasDividerAfter: false },
-    { id: 'fma_native', hasDividerAfter: false },
-    { id: 'asset_plus', hasDividerAfter: false },
+    { id: 'geminus_base_native', hasDividerAfter: false },
+    { id: 'geminus_plus', hasDividerAfter: false },
     { id: 'iot', hasDividerAfter: false },
     { id: 'original_archive', hasDividerAfter: false },
     { id: 'radar', hasDividerAfter: false },
@@ -85,7 +85,7 @@ export const DEFAULT_SIDEBAR_ORDER: SidebarItem[] = [
 export const SIDEBAR_ORDER_STORAGE_KEY = 'sidebar-app-order';
 export const SIDEBAR_SETTINGS_CHANGED_EVENT = 'sidebar-settings-changed';
 
-export const SENSLINC_POLL_OPTIONS = [
+export const GEMINUS_PREMIUM_POLL_OPTIONS = [
     { value: 1, label: '1 hour' },
     { value: 6, label: '6 hours' },
     { value: 12, label: '12 hours' },

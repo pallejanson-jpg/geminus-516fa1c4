@@ -1,10 +1,10 @@
-# Asset+ API Integration
+# Geminus Plus API Integration
 
-Asset+ is a BIM-based asset management system that provides the central source of truth for building data in Geminus.
+Geminus Plus is a BIM-based asset management system that provides the central source of truth for building data in Geminus.
 
 ## Authentication
 
-Asset+ uses a two-layer authentication system:
+Geminus Plus uses a two-layer authentication system:
 
 1. **OAuth2 via Keycloak** - Password grant flow for user authentication
 2. **API Key** - Required in the payload of all API calls
@@ -18,10 +18,10 @@ Asset+ uses a two-layer authentication system:
 
 1. POST {KEYCLOAK_URL}/protocol/openid-connect/token
    ├── grant_type: password
-   ├── username: {ASSET_PLUS_USERNAME}
-   ├── password: {ASSET_PLUS_PASSWORD}
-   ├── client_id: {ASSET_PLUS_CLIENT_ID}
-   └── client_secret: {ASSET_PLUS_CLIENT_SECRET} (optional)
+   ├── username: {GEMINUS_PLUS_USERNAME}
+   ├── password: {GEMINUS_PLUS_PASSWORD}
+   ├── client_id: {GEMINUS_PLUS_CLIENT_ID}
+   └── client_secret: {GEMINUS_PLUS_CLIENT_SECRET} (optional)
    
    Response: { access_token: "...", expires_in: 300 }
 
@@ -29,12 +29,12 @@ Asset+ uses a two-layer authentication system:
    Authorization: Bearer {access_token}
 
 3. Include API key in request body:
-   { "APIKey": "{ASSET_PLUS_API_KEY}", ... }
+   { "APIKey": "{GEMINUS_PLUS_API_KEY}", ... }
 ```
 
 ## Object Types
 
-Asset+ uses numeric object types to represent the building hierarchy:
+Geminus Plus uses numeric object types to represent the building hierarchy:
 
 | Type | Name | Description | Swedish |
 |------|------|-------------|---------|
@@ -157,10 +157,10 @@ Soft-delete by setting an expiration date.
 
 | Function | Purpose |
 |----------|---------|
-| `asset-plus-query` | Read objects from local DB (preferred) or API |
-| `asset-plus-create` | Create new objects in Asset+ |
-| `asset-plus-update` | Update properties (syncs both local and Asset+) |
-| `asset-plus-sync` | Batch sync from Asset+ to local database |
+| `geminus-plus-query` | Read objects from local DB (preferred) or API |
+| `geminus-plus-create` | Create new objects in Geminus Plus |
+| `geminus-plus-update` | Update properties (syncs both local and Geminus Plus) |
+| `geminus-plus-sync` | Batch sync from Geminus Plus to local database |
 
 ## Sync Strategy
 

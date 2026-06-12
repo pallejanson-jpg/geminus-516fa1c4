@@ -11,7 +11,7 @@ import NavigatorView from "@/components/navigator/NavigatorView";
 import InsightsView from "@/components/insights/InsightsView";
 import BuildingInsightsView from "@/components/insights/BuildingInsightsView";
 import Ivion360View from "@/components/viewer/Ivion360View";
-import SenslincDashboardView from "@/components/viewer/SenslincDashboardView";
+import GeminusPremiumDashboardView from "@/components/viewer/GeminusPremiumDashboardView";
 import NativeViewerPage from "@/pages/NativeViewerPage";
 
 // Lazy load heavy views
@@ -22,13 +22,13 @@ const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
 const InAppFaultReport = lazy(() => import("@/components/fault-report/InAppFaultReport"));
 const AiAssetScan = lazy(() => import("@/pages/AiAssetScan"));
 const FmaInternalView = lazy(() => import("@/components/viewer/FmaInternalView"));
-const FmAccessNativeView = lazy(() => import("@/components/fm-access/FmAccessNativeView"));
-const FmaV2View = lazy(() => import("@/components/fm-access/FmaV2View"));
+const GeminusBaseNativeView = lazy(() => import("@/components/geminus-base/GeminusBaseNativeView"));
+const GeminusBaseV2View = lazy(() => import("@/components/geminus-base/GeminusBaseV2View"));
 const CesiumGlobeView = lazy(() => import("@/components/globe/CesiumGlobeView"));
 const CustomerPortalView = lazy(() => import("@/components/support/CustomerPortalView"));
 
-const VIEWER_APPS = ['assetplus_viewer', 'viewer', 'native_viewer', 'radar', 'senslinc_dashboard', 'globe', 'map'];
-const FILL_APPS = ['portfolio', 'navigation', 'fma_plus', 'fma_native', 'entity_insights', 'ivion_create'];
+const VIEWER_APPS = ['geminus_plus_viewer', 'viewer', 'native_viewer', 'radar', 'geminus_premium_dashboard', 'globe', 'map'];
+const FILL_APPS = ['portfolio', 'navigation', 'fma_plus', 'geminus_base_native', 'entity_insights', 'ivion_create'];
 
 const LazyFallback = () => (
     <div className="flex-1 flex items-center justify-center">
@@ -37,17 +37,17 @@ const LazyFallback = () => (
 );
 
 const MainContent: React.FC = () => {
-    const { activeApp, insightsFacility, setInsightsFacility, setActiveApp, setIvion360Context, setSenslincDashboardContext, selectedFacility, appConfigs } = useContext(AppContext);
+    const { activeApp, insightsFacility, setInsightsFacility, setActiveApp, setIvion360Context, setGeminusPremiumDashboardContext, selectedFacility, appConfigs } = useContext(AppContext);
     const isMobile = useIsMobile();
     const [previousAppBefore360, setPreviousAppBefore360] = useState('portfolio');
 
     // Route-level document title
     const titleMap: Record<string, string> = {
         home: 'Home', portfolio: 'Portfolio', map: 'Map', navigation: 'Navigator',
-        viewer: '3D Viewer', native_viewer: '3D Viewer', assetplus_viewer: '3D Viewer',
+        viewer: '3D Viewer', native_viewer: '3D Viewer', geminus_plus_viewer: '3D Viewer',
         insights: 'Insights', entity_insights: 'Building Insights', inventory: 'Inventory',
         globe: 'Globe', support: 'Support', fault_report: 'Fault Report',
-        ai_scan: 'AI Scan', radar: '360° View', fma_plus: 'FM Access', fma_native: 'FM Access',
+        ai_scan: 'AI Scan', radar: '360° View', fma_plus: 'Geminus Base', geminus_base_native: 'Geminus Base',
     };
     useDocumentTitle(titleMap[activeApp] || null);
 
@@ -69,7 +69,7 @@ const MainContent: React.FC = () => {
                 );
             case 'navigation':
                 return <NavigatorView />;
-            case 'assetplus_viewer':
+            case 'geminus_plus_viewer':
             case 'viewer':
             case 'native_viewer':
                 return <NativeViewerPage />;
@@ -104,16 +104,16 @@ const MainContent: React.FC = () => {
                     </Suspense>
                 );
             }
-            case 'fma_native':
+            case 'geminus_base_native':
                 return (
                     <Suspense fallback={<LazyFallback />}>
-                        <FmaV2View />
+                        <GeminusBaseV2View />
                     </Suspense>
                 );
-            case 'asset_plus':
+            case 'geminus_plus':
                 return (
                     <PlaceholderView 
-                        title="Asset+" 
+                        title="Geminus Plus" 
                         icon={<Box className="h-8 w-8 text-purple-500" />}
                         description="Asset management"
                     />
@@ -135,11 +135,11 @@ const MainContent: React.FC = () => {
                         }} 
                     />
                 );
-            case 'senslinc_dashboard':
+            case 'geminus_premium_dashboard':
                 return (
-                    <SenslincDashboardView 
+                    <GeminusPremiumDashboardView 
                         onClose={() => {
-                            setSenslincDashboardContext(null);
+                            setGeminusPremiumDashboardContext(null);
                             setActiveApp('portfolio');
                         }} 
                     />

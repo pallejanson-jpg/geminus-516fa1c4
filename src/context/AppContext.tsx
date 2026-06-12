@@ -13,14 +13,14 @@ import React, { createContext, ReactNode, useContext } from 'react';
 import { DEFAULT_APP_CONFIGS } from '@/lib/constants';
 import type { Facility, NavigatorNode, AppConfig } from '@/lib/types';
 import { ThemeProvider, ThemeContext, type ThemeType } from './ThemeContext';
-import { NavigationProvider, NavigationContext, type Ivion360Context, type SenslincDashboardContext } from './NavigationContext';
+import { NavigationProvider, NavigationContext, type Ivion360Context, type GeminusPremiumDashboardContext } from './NavigationContext';
 import { ViewerProvider, ViewerContext, type AssetRegistrationContext, type InventoryPrefill, type FaultReportPrefill, type AnnotationPlacementContext, type ViewerDiagnostics } from './ViewerContext';
 import { DataProvider, DataContext } from './DataContext';
 
 // Re-export types for backward compatibility
 export type { ThemeType } from './ThemeContext';
 export type { AssetRegistrationContext, InventoryPrefill, FaultReportPrefill, AnnotationPlacementContext } from './ViewerContext';
-export type { Ivion360Context, SenslincDashboardContext } from './NavigationContext';
+export type { Ivion360Context, GeminusPremiumDashboardContext } from './NavigationContext';
 
 // Use the shared NavigatorNode type from types.ts
 
@@ -78,9 +78,9 @@ interface AppContextType {
     setIvion360Context: (context: Ivion360Context | null) => void;
     open360WithContext: (context: Ivion360Context) => void;
 
-    senslincDashboardContext: SenslincDashboardContext | null;
-    setSenslincDashboardContext: (context: SenslincDashboardContext | null) => void;
-    openSenslincDashboard: (context: SenslincDashboardContext) => void;
+    geminusPremiumDashboardContext: GeminusPremiumDashboardContext | null;
+    setGeminusPremiumDashboardContext: (context: GeminusPremiumDashboardContext | null) => void;
+    openGeminusPremiumDashboard: (context: GeminusPremiumDashboardContext) => void;
 
     viewerDiagnostics: ViewerDiagnostics | null;
     setViewerDiagnostics: (diag: ViewerDiagnostics | null) => void;
@@ -140,9 +140,9 @@ export const AppContext = createContext<AppContextType>({
     setIvion360Context: () => {},
     open360WithContext: () => {},
 
-    senslincDashboardContext: null,
-    setSenslincDashboardContext: () => {},
-    openSenslincDashboard: () => {},
+    geminusPremiumDashboardContext: null,
+    setGeminusPremiumDashboardContext: () => {},
+    openGeminusPremiumDashboard: () => {},
 
     viewerDiagnostics: null,
     setViewerDiagnostics: () => {},
@@ -184,9 +184,9 @@ const AppContextBridge: React.FC<{ children: ReactNode }> = ({ children }) => {
         ivion360Context: nav.ivion360Context,
         setIvion360Context: nav.setIvion360Context,
         open360WithContext: nav.open360WithContext,
-        senslincDashboardContext: nav.senslincDashboardContext,
-        setSenslincDashboardContext: nav.setSenslincDashboardContext,
-        openSenslincDashboard: nav.openSenslincDashboard,
+        geminusPremiumDashboardContext: nav.geminusPremiumDashboardContext,
+        setGeminusPremiumDashboardContext: nav.setGeminusPremiumDashboardContext,
+        openGeminusPremiumDashboard: nav.openGeminusPremiumDashboard,
         // Viewer
         viewer3dFmGuid: viewer.viewer3dFmGuid,
         setViewer3dFmGuid: viewer.setViewer3dFmGuid,

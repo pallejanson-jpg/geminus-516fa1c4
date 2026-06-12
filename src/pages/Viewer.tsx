@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo } from "react";
 import { AppContext } from "@/context/AppContext";
-import AssetPlusViewer from "@/components/viewer/AssetPlusViewer";
+import GeminusPlusViewer from "@/components/viewer/GeminusPlusViewer";
 import BuildingSelector from "@/components/viewer/BuildingSelector";
 import ViewerErrorBoundary from "@/components/common/ViewerErrorBoundary";
 
@@ -67,12 +67,12 @@ export default function Viewer() {
     );
   }
 
-  // If we have a valid building, show the Asset+ viewer
+  // If we have a valid building, show the Geminus Plus viewer
   if (buildingFmGuid && targetFacility) {
     return (
       <div className="h-full">
         <ViewerErrorBoundary onReset={handleClose}>
-          <AssetPlusViewer 
+          <GeminusPlusViewer 
             fmGuid={buildingFmGuid} 
             initialFmGuidToFocus={viewer3dFmGuid}
             onClose={handleClose} 

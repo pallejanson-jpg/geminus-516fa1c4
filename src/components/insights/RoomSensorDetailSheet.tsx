@@ -6,7 +6,7 @@ import { Loader2, Zap, ExternalLink, Thermometer, Wind, Droplets, Users, Wifi, W
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
-import { useSenslincData } from '@/hooks/useSenslincData';
+import { useGeminusPremiumData } from '@/hooks/useGeminusPremiumData';
 import { VISUALIZATION_CONFIGS, getVisualizationColor, rgbToHex, type VisualizationType } from '@/lib/visualization-utils';
 import { cn } from '@/lib/utils';
 
@@ -257,7 +257,7 @@ const SensorChart: React.FC<{
 const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
   open, onClose, roomFmGuid, roomName,
 }) => {
-  const { data, isLoading, isLive, error } = useSenslincData(open ? roomFmGuid : null);
+  const { data, isLoading, isLive, error } = useGeminusPremiumData(open ? roomFmGuid : null);
 
   const displayName = roomName || data?.machineName || 'Room';
   const machineLabel = data?.machineLabel || data?.machineName;
@@ -294,7 +294,7 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
                 {machineLabel && machineLabel !== displayName && (
                   <span className="text-xs text-muted-foreground">{machineLabel}</span>
                 )}
-                <span className="text-xs text-muted-foreground">Senslinc IoT</span>
+                <span className="text-xs text-muted-foreground">Geminus Premium IoT</span>
                 {data?.machinePk ? (
                   <span className="text-xs text-muted-foreground">· #{data.machinePk}</span>
                 ) : null}
@@ -309,7 +309,7 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
                 size="icon"
                 className="h-7 w-7 hover:bg-primary/10"
                 onClick={() => window.open(dashboardUrl, '_blank')}
-                title="Open in Senslinc"
+                title="Open in Geminus Premium"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
               </Button>
@@ -442,7 +442,7 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
           {!isLoading && isLive && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-lg border border-green-500/20 px-3 py-2 bg-green-500/5">
               <Wifi className="h-3.5 w-3.5 shrink-0 text-green-400" />
-              <span>Live data from Senslinc · Machine #{data?.machinePk}</span>
+              <span>Live data from Geminus Premium · Machine #{data?.machinePk}</span>
             </div>
           )}
 
@@ -454,7 +454,7 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
               onClick={() => window.open(dashboardUrl, '_blank')}
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              Open full Senslinc dashboard
+              Open full Geminus Premium dashboard
             </Button>
           )}
         </div>

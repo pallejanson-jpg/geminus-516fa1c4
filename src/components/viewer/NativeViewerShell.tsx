@@ -308,7 +308,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const [propertiesEntity, setPropertiesEntity] = useState<{ entityId: string; fmGuid: string | null; name: string | null } | null>(null);
   const [propertiesPinned, setPropertiesPinned] = useState(false);
 
-  // Shim ref that matches the old Asset+ ref chain for existing hooks
+  // Shim ref that matches the old Geminus Plus ref chain for existing hooks
   const viewerShimRef = useRef<any>(null);
 
   // Room labels hook — listens for ROOM_LABELS_TOGGLE_EVENT
@@ -352,7 +352,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   /**
    * Resolve fmGuid(s) to xeokit metaObject storey IDs by searching the metaScene.
    * This handles the case where UnifiedViewer dispatches with only visibleFloorFmGuids
-   * (Asset+ GUIDs) and empty visibleMetaFloorIds.
+   * (Geminus Plus GUIDs) and empty visibleMetaFloorIds.
    */
   const resolveMetaFloorIds = useCallback((fmGuids: string[]): string[] => {
     const viewer = (window as any).__nativeXeokitViewer;
@@ -464,7 +464,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       console.warn('[NativeViewerShell] Failed to apply pending AI viewer command', e);
     }
 
-    // Build comprehensive shim that mimics the Asset+ API for all toolbar/settings components
+    // Build comprehensive shim that mimics the Geminus Plus API for all toolbar/settings components
     const assetViewShim = {
       viewer,
       get selectedItemIds() {
@@ -570,7 +570,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     };
 
     // Expose globally so UnifiedViewer, SplitPlanView, and sync hooks can find it
-    (window as any).__assetPlusViewerInstance = viewerShimRef.current;
+    (window as any).__geminusPlusViewerInstance = viewerShimRef.current;
     (window as any).__nativeXeokitViewer = viewer;
 
     // Apply any pending LOAD_SAVED_VIEW that arrived before viewer was ready
@@ -583,8 +583,8 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   // Clean up global refs on unmount
   useEffect(() => {
     return () => {
-      if ((window as any).__assetPlusViewerInstance === viewerShimRef.current) {
-        delete (window as any).__assetPlusViewerInstance;
+      if ((window as any).__geminusPlusViewerInstance === viewerShimRef.current) {
+        delete (window as any).__geminusPlusViewerInstance;
       }
       delete (window as any).__nativeXeokitViewer;
     };
@@ -690,7 +690,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   }, []);
 
   // ── Canonical fmGuid resolution ─────────────────────────────────────────
-  // Resolves a raw BIM entity GUID (originalSystemId) to the canonical Asset+ fmGuid
+  // Resolves a raw BIM entity GUID (originalSystemId) to the canonical Geminus Plus fmGuid
   // by checking if the raw GUID has meaningful data; if not, finds matching Space by name.
   const resolveCanonicalFmGuid = useCallback((rawGuid: string | null, entityId: string): { fmGuid: string | null; name: string | null } => {
     const viewer = (window as any).__nativeXeokitViewer;

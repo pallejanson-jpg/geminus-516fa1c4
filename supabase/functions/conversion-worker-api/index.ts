@@ -449,7 +449,7 @@ Deno.serve(async (req) => {
         (folders || []).filter((f: any) => f.id && !f.name.includes(".")).map((f: any) => f.name)
       );
 
-      // 2. XKT models from any source (Asset+, ACC, manual)
+      // 2. XKT models from any source (Geminus Plus, ACC, manual)
       const { data: xktBuildings } = await supabase
         .from("xkt_models")
         .select("building_fm_guid")

@@ -31,20 +31,20 @@ interface ApiProfile {
   id: string;
   name: string;
   is_default: boolean;
-  assetplus_api_url: string | null;
-  assetplus_api_key: string | null;
-  assetplus_keycloak_url: string | null;
-  assetplus_client_id: string | null;
-  assetplus_client_secret: string | null;
-  assetplus_username: string | null;
-  assetplus_password: string | null;
-  assetplus_audience: string | null;
-  senslinc_api_url: string | null;
-  senslinc_email: string | null;
-  senslinc_password: string | null;
-  fm_access_api_url: string | null;
-  fm_access_username: string | null;
-  fm_access_password: string | null;
+  geminus_plus_api_url: string | null;
+  geminus_plus_api_key: string | null;
+  geminus_plus_keycloak_url: string | null;
+  geminus_plus_client_id: string | null;
+  geminus_plus_client_secret: string | null;
+  geminus_plus_username: string | null;
+  geminus_plus_password: string | null;
+  geminus_plus_audience: string | null;
+  geminus_premium_api_url: string | null;
+  geminus_premium_email: string | null;
+  geminus_premium_password: string | null;
+  geminus_base_api_url: string | null;
+  geminus_base_username: string | null;
+  geminus_base_password: string | null;
   ivion_api_url: string | null;
   ivion_username: string | null;
   ivion_password: string | null;
@@ -54,11 +54,11 @@ type ProfileForm = Omit<ApiProfile, 'id' | 'is_default'>;
 
 const EMPTY_FORM: ProfileForm = {
   name: '',
-  assetplus_api_url: '', assetplus_api_key: '', assetplus_keycloak_url: '',
-  assetplus_client_id: '', assetplus_client_secret: '',
-  assetplus_username: '', assetplus_password: '', assetplus_audience: '',
-  senslinc_api_url: '', senslinc_email: '', senslinc_password: '',
-  fm_access_api_url: '', fm_access_username: '', fm_access_password: '',
+  geminus_plus_api_url: '', geminus_plus_api_key: '', geminus_plus_keycloak_url: '',
+  geminus_plus_client_id: '', geminus_plus_client_secret: '',
+  geminus_plus_username: '', geminus_plus_password: '', geminus_plus_audience: '',
+  geminus_premium_api_url: '', geminus_premium_email: '', geminus_premium_password: '',
+  geminus_base_api_url: '', geminus_base_username: '', geminus_base_password: '',
   ivion_api_url: '', ivion_username: '', ivion_password: '',
 };
 
@@ -128,20 +128,20 @@ export default function ApiProfilesManager() {
     setCreating(false);
     setForm({
       name: profile.name,
-      assetplus_api_url: profile.assetplus_api_url || '',
-      assetplus_api_key: profile.assetplus_api_key || '',
-      assetplus_keycloak_url: profile.assetplus_keycloak_url || '',
-      assetplus_client_id: profile.assetplus_client_id || '',
-      assetplus_client_secret: profile.assetplus_client_secret || '',
-      assetplus_username: profile.assetplus_username || '',
-      assetplus_password: profile.assetplus_password || '',
-      assetplus_audience: profile.assetplus_audience || '',
-      senslinc_api_url: profile.senslinc_api_url || '',
-      senslinc_email: profile.senslinc_email || '',
-      senslinc_password: profile.senslinc_password || '',
-      fm_access_api_url: profile.fm_access_api_url || '',
-      fm_access_username: profile.fm_access_username || '',
-      fm_access_password: profile.fm_access_password || '',
+      geminus_plus_api_url: profile.geminus_plus_api_url || '',
+      geminus_plus_api_key: profile.geminus_plus_api_key || '',
+      geminus_plus_keycloak_url: profile.geminus_plus_keycloak_url || '',
+      geminus_plus_client_id: profile.geminus_plus_client_id || '',
+      geminus_plus_client_secret: profile.geminus_plus_client_secret || '',
+      geminus_plus_username: profile.geminus_plus_username || '',
+      geminus_plus_password: profile.geminus_plus_password || '',
+      geminus_plus_audience: profile.geminus_plus_audience || '',
+      geminus_premium_api_url: profile.geminus_premium_api_url || '',
+      geminus_premium_email: profile.geminus_premium_email || '',
+      geminus_premium_password: profile.geminus_premium_password || '',
+      geminus_base_api_url: profile.geminus_base_api_url || '',
+      geminus_base_username: profile.geminus_base_username || '',
+      geminus_base_password: profile.geminus_base_password || '',
       ivion_api_url: profile.ivion_api_url || '',
       ivion_username: profile.ivion_username || '',
       ivion_password: profile.ivion_password || '',
@@ -216,29 +216,29 @@ export default function ApiProfilesManager() {
     }
   }
 
-  async function testAssetPlus() {
+  async function testGeminusPlus() {
     setTestingAp(true);
     try {
-      // We test by invoking asset-plus-query with profile credentials
+      // We test by invoking geminus-plus-query with profile credentials
       // For now, just verify credentials are filled
-      if (!form.assetplus_api_url || !form.assetplus_keycloak_url) {
-        toast({ title: 'Fill in Asset+ URL and Keycloak URL first', variant: 'destructive' });
+      if (!form.geminus_plus_api_url || !form.geminus_plus_keycloak_url) {
+        toast({ title: 'Fill in Geminus Plus URL and Keycloak URL first', variant: 'destructive' });
         return;
       }
-      toast({ title: 'Asset+ credentials configured ✓', description: 'Save the profile and assign it to a building to test the full connection.' });
+      toast({ title: 'Geminus Plus credentials configured ✓', description: 'Save the profile and assign it to a building to test the full connection.' });
     } finally {
       setTestingAp(false);
     }
   }
 
-  async function testSenslinc() {
+  async function testGeminusPremium() {
     setTestingSl(true);
     try {
-      if (!form.senslinc_api_url) {
-        toast({ title: 'Fill in Senslinc API URL first', variant: 'destructive' });
+      if (!form.geminus_premium_api_url) {
+        toast({ title: 'Fill in Geminus Premium API URL first', variant: 'destructive' });
         return;
       }
-      toast({ title: 'Senslinc credentials configured ✓', description: 'Save the profile and assign it to a building to test the full connection.' });
+      toast({ title: 'Geminus Premium credentials configured ✓', description: 'Save the profile and assign it to a building to test the full connection.' });
     } finally {
       setTestingSl(false);
     }
@@ -285,43 +285,43 @@ export default function ApiProfilesManager() {
         </div>
 
         <Accordion type="multiple" className="w-full min-w-0">
-          <AccordionItem value="assetplus">
-            <AccordionTrigger className="text-xs font-semibold">Asset+ Credentials</AccordionTrigger>
+          <AccordionItem value="geminus-plus">
+            <AccordionTrigger className="text-xs font-semibold">Geminus Plus Credentials</AccordionTrigger>
             <AccordionContent className="space-y-3 pt-2">
-               {renderSecretField('API URL', 'assetplus_api_url', 'https://...')}
-               {renderSecretField('API Key', 'assetplus_api_key')}
-               {renderSecretField('Keycloak URL', 'assetplus_keycloak_url', 'https://...')}
-               {renderSecretField('Client ID', 'assetplus_client_id')}
-               {renderSecretField('Client Secret', 'assetplus_client_secret')}
-               {renderSecretField('Username', 'assetplus_username')}
-               {renderSecretField('Password', 'assetplus_password')}
-               {renderSecretField('Audience', 'assetplus_audience', 'asset-api')}
-              <Button variant="outline" size="sm" onClick={testAssetPlus} disabled={testingAp}>
+               {renderSecretField('API URL', 'geminus_plus_api_url', 'https://...')}
+               {renderSecretField('API Key', 'geminus_plus_api_key')}
+               {renderSecretField('Keycloak URL', 'geminus_plus_keycloak_url', 'https://...')}
+               {renderSecretField('Client ID', 'geminus_plus_client_id')}
+               {renderSecretField('Client Secret', 'geminus_plus_client_secret')}
+               {renderSecretField('Username', 'geminus_plus_username')}
+               {renderSecretField('Password', 'geminus_plus_password')}
+               {renderSecretField('Audience', 'geminus_plus_audience', 'asset-api')}
+              <Button variant="outline" size="sm" onClick={testGeminusPlus} disabled={testingAp}>
                 {testingAp ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <TestTube className="mr-2 h-3 w-3" />}
                 Validate
               </Button>
             </AccordionContent>
           </AccordionItem>
 
-          <AccordionItem value="senslinc">
-            <AccordionTrigger className="text-xs font-semibold">InUse/Senslinc Credentials</AccordionTrigger>
+          <AccordionItem value="geminus-premium">
+            <AccordionTrigger className="text-xs font-semibold">InUse/Geminus Premium Credentials</AccordionTrigger>
             <AccordionContent className="space-y-3 pt-2">
-               {renderSecretField('API URL', 'senslinc_api_url', 'https://...')}
-               {renderSecretField('Email', 'senslinc_email')}
-               {renderSecretField('Password', 'senslinc_password')}
-              <Button variant="outline" size="sm" onClick={testSenslinc} disabled={testingSl}>
+               {renderSecretField('API URL', 'geminus_premium_api_url', 'https://...')}
+               {renderSecretField('Email', 'geminus_premium_email')}
+               {renderSecretField('Password', 'geminus_premium_password')}
+              <Button variant="outline" size="sm" onClick={testGeminusPremium} disabled={testingSl}>
                 {testingSl ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <TestTube className="mr-2 h-3 w-3" />}
                 Validate
               </Button>
             </AccordionContent>
           </AccordionItem>
 
-          <AccordionItem value="fmaccess">
-            <AccordionTrigger className="text-xs font-semibold">FM Access Credentials</AccordionTrigger>
+          <AccordionItem value="geminus-base">
+            <AccordionTrigger className="text-xs font-semibold">Geminus Base Credentials</AccordionTrigger>
             <AccordionContent className="space-y-3 pt-2">
-               {renderSecretField('API URL', 'fm_access_api_url', 'https://...')}
-               {renderSecretField('Username', 'fm_access_username')}
-               {renderSecretField('Password', 'fm_access_password')}
+               {renderSecretField('API URL', 'geminus_base_api_url', 'https://...')}
+               {renderSecretField('Username', 'geminus_base_username')}
+               {renderSecretField('Password', 'geminus_base_password')}
             </AccordionContent>
           </AccordionItem>
 
@@ -368,9 +368,9 @@ export default function ApiProfilesManager() {
       ) : (
         <div className="space-y-2">
           {profiles.map(profile => {
-            const hasAp = !!profile.assetplus_api_url;
-            const hasSl = !!profile.senslinc_api_url;
-            const hasFma = !!profile.fm_access_api_url;
+            const hasAp = !!profile.geminus_plus_api_url;
+            const hasSl = !!profile.geminus_premium_api_url;
+            const hasFma = !!profile.geminus_base_api_url;
             const hasIv = !!profile.ivion_api_url;
             return (
               <Card key={profile.id} className="p-3">
@@ -386,13 +386,13 @@ export default function ApiProfilesManager() {
                       ) : (
                         <>
                           <Badge variant={hasAp ? 'default' : 'outline'} className="text-[9px]">
-                            Asset+ {hasAp ? '✓' : '✗'}
+                            Geminus Plus {hasAp ? '✓' : '✗'}
                           </Badge>
                           <Badge variant={hasSl ? 'default' : 'outline'} className="text-[9px]">
-                            Senslinc {hasSl ? '✓' : '✗'}
+                            Geminus Premium {hasSl ? '✓' : '✗'}
                           </Badge>
                           <Badge variant={hasFma ? 'default' : 'outline'} className="text-[9px]">
-                            FM Access {hasFma ? '✓' : '✗'}
+                            Geminus Base {hasFma ? '✓' : '✗'}
                           </Badge>
                           <Badge variant={hasIv ? 'default' : 'outline'} className="text-[9px]">
                             Ivion {hasIv ? '✓' : '✗'}

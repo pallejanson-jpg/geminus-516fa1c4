@@ -1,5 +1,5 @@
 import React, { createContext, useState, useCallback, useContext, useEffect, ReactNode } from 'react';
-import { fetchLocalAssets } from '@/services/asset-plus-service';
+import { fetchLocalAssets } from '@/services/geminus-plus-service';
 import { isModelName, isAModelName } from '@/lib/building-utils';
 import type { Facility, NavigatorNode } from '@/lib/types';
 
@@ -271,7 +271,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     refreshInitialData().catch((e) => {
-      console.error('Failed to prefetch Asset+ data:', e);
+      console.error('Failed to prefetch Geminus Plus data:', e);
     });
     const handler = () => {
       refreshInitialData().catch((e) => {

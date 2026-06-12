@@ -46,16 +46,16 @@ const HELP_ARTICLES: HelpArticle[] = [
     id: '3d-viewer',
     title: '3D Viewer',
     category: '3D',
-    app: 'Asset+',
+    app: 'Geminus Plus',
     content: 'Use the 3D viewer to explore building models, measure distances, and view room data.',
     keywords: ['3d', 'viewer', 'model', 'bim'],
   },
   {
     id: 'fma-plus',
-    title: 'FM Access Plus',
+    title: 'Geminus Base Plus',
     category: 'Integration',
-    app: 'FM Access',
-    content: 'FM Access Plus provides access to maintenance planning and work orders.',
+    app: 'Geminus Base',
+    content: 'Geminus Base Plus provides access to maintenance planning and work orders.',
     keywords: ['fma', 'maintenance', 'work order'],
   },
   {
@@ -78,7 +78,7 @@ const HELP_ARTICLES: HelpArticle[] = [
 
 const API_CATEGORIES = [
   {
-    name: 'Asset+ Object Management',
+    name: 'Geminus Plus Object Management',
     endpoints: [
       { method: 'POST', path: '/AddObject', description: 'Create new object' },
       { method: 'PUT', path: '/EditObject', description: 'Edit existing object' },
@@ -87,7 +87,7 @@ const API_CATEGORIES = [
     ],
   },
   {
-    name: 'Asset+ Data Retrieval',
+    name: 'Geminus Plus Data Retrieval',
     endpoints: [
       { method: 'GET', path: '/GetObjectsByPage', description: 'Get objects paginated' },
       { method: 'POST', path: '/GetObjectByFmGuid', description: 'Get object by FMGUID' },
@@ -95,14 +95,14 @@ const API_CATEGORIES = [
     ],
   },
   {
-    name: 'Asset+ Revisions',
+    name: 'Geminus Plus Revisions',
     endpoints: [
       { method: 'POST', path: '/PublishRevision', description: 'Publish revision' },
       { method: 'POST', path: '/RestoreRevisionAndXktData', description: 'Restore revision' },
     ],
   },
   {
-    name: 'Asset+ 3D Viewer',
+    name: 'Geminus Plus 3D Viewer',
     endpoints: [
       { method: '-', path: 'cutOutFloorByFmGuid', description: 'Cut out floor plan' },
       { method: '-', path: 'selectFmGuidAndViewFit', description: 'Select and zoom to object' },
@@ -110,7 +110,7 @@ const API_CATEGORIES = [
     ],
   },
   {
-    name: 'FM Access - Authentication',
+    name: 'Geminus Base - Authentication',
     endpoints: [
       { method: 'POST', path: '/auth/realms/{realm}/protocol/openid-connect/token', description: 'Get access token' },
       { method: '-', path: 'X-Hdc-Version-Id', description: 'Required header for most calls' },
@@ -118,7 +118,7 @@ const API_CATEGORIES = [
     ],
   },
   {
-    name: 'FM Access - Drawings',
+    name: 'Geminus Base - Drawings',
     endpoints: [
       { method: 'GET', path: '/api/drawings', description: 'Get drawings for building' },
       { method: 'GET', path: '/api/drawings/{id}/pdf', description: 'Get drawing as PDF' },
@@ -126,7 +126,7 @@ const API_CATEGORIES = [
     ],
   },
   {
-    name: 'FM Access - Documents',
+    name: 'Geminus Base - Documents',
     endpoints: [
       { method: 'GET', path: '/api/documents', description: 'Get documents for building' },
       { method: 'GET', path: '/api/documents/{id}', description: 'Get specific document' },
@@ -152,7 +152,7 @@ const API_CATEGORIES = [
     ],
   },
   {
-    name: 'Senslinc - IoT Sensors',
+    name: 'Geminus Premium - IoT Sensors',
     endpoints: [
       { method: 'GET', path: '/api/sites', description: 'List monitored sites' },
       { method: 'GET', path: '/api/sites/{code}/equipment', description: 'Equipment for site' },
@@ -160,7 +160,7 @@ const API_CATEGORIES = [
     ],
   },
   {
-    name: 'Senslinc - Sensor Data',
+    name: 'Geminus Premium - Sensor Data',
     endpoints: [
       { method: 'GET', path: '/api/indices', description: 'List available data indices' },
       { method: 'POST', path: '/api/search/{workspace}', description: 'Query time-series data' },
@@ -335,7 +335,7 @@ const RightSidebar: React.FC = () => {
         <TabsContent value="api" className="flex-1 flex flex-col overflow-hidden mt-0">
           <div className="p-3 border-b shrink-0">
             <p className="text-xs text-muted-foreground">
-              Asset+ API v1.0 - RESTful endpoints for integration and development
+              Geminus Plus API v1.0 - RESTful endpoints for integration and development
             </p>
           </div>
           <ScrollArea className="flex-1">
@@ -440,7 +440,7 @@ const RightSidebar: React.FC = () => {
       </Tabs>
 
       {/* 3D Diagnostics (shown when in viewer) */}
-      {(activeApp === 'assetplus_viewer' || activeApp === 'viewer') && viewer3dFmGuid && viewerDiagnostics && (
+      {(activeApp === 'geminus_plus_viewer' || activeApp === 'viewer') && viewer3dFmGuid && viewerDiagnostics && (
         <div className="border-t border-border shrink-0">
           <Accordion type="single" collapsible>
             <AccordionItem value="diagnostics" className="border-0">

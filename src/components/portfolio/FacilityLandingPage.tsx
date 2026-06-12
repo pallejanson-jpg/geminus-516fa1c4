@@ -156,16 +156,16 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
 
   // 3D is always available
   const has3DModels = true;
-  const [hasFmAccess, setHasFmAccess] = useState<boolean | undefined>(undefined);
+  const [hasGeminusBase, setHasGeminusBase] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
     if (!buildingGuid) return;
     supabase
       .from('building_settings')
-      .select('fm_access_building_guid')
+      .select('geminus_base_building_guid')
       .eq('fm_guid', buildingGuid)
       .maybeSingle()
-      .then(({ data }) => setHasFmAccess(!!data?.fm_access_building_guid));
+      .then(({ data }) => setHasGeminusBase(!!data?.geminus_base_building_guid));
   }, [buildingGuid]);
 
   // Get child storeys for buildings — use named storeys, exclude unnamed model placeholders
@@ -1048,7 +1048,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
             facility={facility}
             ivionSiteId={settings?.ivionSiteId}
             has3DModels={has3DModels}
-            hasFmAccess={hasFmAccess}
+            hasGeminusBase={hasGeminusBase}
             isLoading={isLoadingSettings}
             onOpenMap={onOpenMap}
             onOpenNavigator={onOpenNavigator}

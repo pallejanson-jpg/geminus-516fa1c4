@@ -17,8 +17,8 @@ export interface ModelInfo {
  * Shared hook for listing BIM models with friendly names.
  * Resolution priority:
  *   1. geometry_entity_map (canonical mapping layer)
- *   2. useModelNames hook (xkt_models + Asset+ API)
- *   3. Asset+ storey attributes (parentBimObjectId → parentCommonName)
+ *   2. useModelNames hook (xkt_models + Geminus Plus API)
+ *   3. Geminus Plus storey attributes (parentBimObjectId → parentCommonName)
  *
  * Also provides a batch-optimised `applyModelVisibility` function.
  */
@@ -96,8 +96,8 @@ export function useModelData(
     return { byGuid, byName };
   }, [gemStoreyData, allData, buildingFmGuid]);
 
-  // Asset+ sources: parentBimObjectId → parentCommonName
-  const assetPlusSources = useMemo(() => {
+  // Geminus Plus sources: parentBimObjectId → parentCommonName
+  const geminusPlusSources = useMemo(() => {
     const map = new Map<string, string>();
 
     // Primary: geometry_entity_map
@@ -227,9 +227,9 @@ export function useModelData(
       extracted.push({ id: dbModel.id, name, shortName, loaded: false });
     });
 
-    // 3. Ensure all Asset+ sources represented
+    // 3. Ensure all Geminus Plus sources represented
     const extractedNames = new Set(extracted.map((m) => m.name.toLowerCase()));
-    assetPlusSources.forEach((sourceName) => {
+    geminusPlusSources.forEach((sourceName) => {
       if (extractedNames.has(sourceName.toLowerCase())) return;
       const viewer2 = getXeokitViewer();
       const metaObjects = viewer2?.metaScene?.metaObjects;
@@ -256,7 +256,7 @@ export function useModelData(
 
     extracted.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
     return extracted;
-  }, [getXeokitViewer, modelNamesMap, dbModels, isLoadingNames, storeyLookup, assetPlusSources]);
+  }, [getXeokitViewer, modelNamesMap, dbModels, isLoadingNames, storeyLookup, geminusPlusSources]);
 
   // ── Batch model visibility (perf optimisation) ─────────────────────────
   const applyModelVisibility = useCallback((visibleIds: Set<string>) => {
@@ -322,7 +322,7 @@ export function useModelData(
     isLoading: isLoadingNames,
     applyModelVisibility,
     extractModels,
-    assetPlusSources,
+    geminusPlusSources,
     storeyLookup,
   };
 }

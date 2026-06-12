@@ -1,7 +1,7 @@
-# FM Access (Tessel HDC) API Integration
+# Geminus Base (Tessel HDC) API Integration
 
 ## Overview
-FM Access uses the Tessel HDC API platform hosted at `landlord.bim.cloud`. It provides 2D floor plan viewing, drawings, and document management.
+Geminus Base uses the Tessel HDC API platform hosted at `landlord.bim.cloud`. It provides 2D floor plan viewing, drawings, and document management.
 
 ## Authentication
 
@@ -9,17 +9,17 @@ FM Access uses the Tessel HDC API platform hosted at `landlord.bim.cloud`. It pr
 Token is obtained from Keycloak using `password` grant type.
 
 ```
-POST {FM_ACCESS_TOKEN_URL}
+POST {GEMINUS_BASE_TOKEN_URL}
 Content-Type: application/x-www-form-urlencoded
 
-grant_type=password&client_id={FM_ACCESS_CLIENT_ID}&username={FM_ACCESS_USERNAME}&password={FM_ACCESS_PASSWORD}
+grant_type=password&client_id={GEMINUS_BASE_CLIENT_ID}&username={GEMINUS_BASE_USERNAME}&password={GEMINUS_BASE_PASSWORD}
 ```
 
 ### Step 2: Get Version ID
 The system version ID is required as a header for most API calls.
 
 ```
-GET {FM_ACCESS_API_URL}/api/systeminfo/json
+GET {GEMINUS_BASE_API_URL}/api/systeminfo/json
 X-Authorization: Bearer {token}
 ```
 
@@ -37,11 +37,11 @@ All API calls require two custom headers:
 
 | Secret | Description |
 |--------|-------------|
-| `FM_ACCESS_TOKEN_URL` | Keycloak token endpoint |
-| `FM_ACCESS_CLIENT_ID` | OAuth2 client ID |
-| `FM_ACCESS_API_URL` | Base URL for HDC API (e.g. `https://landlord.bim.cloud`) |
-| `FM_ACCESS_USERNAME` | Service account username |
-| `FM_ACCESS_PASSWORD` | Service account password |
+| `GEMINUS_BASE_TOKEN_URL` | Keycloak token endpoint |
+| `GEMINUS_BASE_CLIENT_ID` | OAuth2 client ID |
+| `GEMINUS_BASE_API_URL` | Base URL for HDC API (e.g. `https://landlord.bim.cloud`) |
+| `GEMINUS_BASE_USERNAME` | Service account username |
+| `GEMINUS_BASE_PASSWORD` | Service account password |
 
 ## Available Endpoints (via edge function)
 
@@ -86,4 +86,4 @@ All API calls require two custom headers:
 - The `X-Hdc-Version-Id` header is mandatory for most endpoints
 - Token is cached with a 60-second buffer before expiry
 - Version ID is cached for 5 minutes
-- FMGUID is the primary key for cross-system mapping between Geminus, Asset+, and FM Access
+- FMGUID is the primary key for cross-system mapping between Geminus, Geminus Plus, and Geminus Base

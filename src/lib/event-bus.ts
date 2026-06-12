@@ -106,7 +106,7 @@ export interface SensorAnnotationsToggleDetail {
   visible: boolean;
 }
 
-export interface FmAccessContextChangedDetail {
+export interface GeminusBaseContextChangedDetail {
   objectId?: string;
   objectType?: string;
   buildingGuid?: string;
@@ -186,8 +186,8 @@ export interface EventMap {
   NAV_SPEED_GRANULAR: { zoom?: number; pan?: number; rotate?: number };
   FASTNAV_TOGGLE: { enabled: boolean };
 
-  // FM Access
-  FM_ACCESS_CONTEXT_CHANGED: FmAccessContextChangedDetail;
+  // Geminus Base
+  GEMINUS_BASE_CONTEXT_CHANGED: GeminusBaseContextChangedDetail;
 
   // Inventory
   INVENTORY_POSITION_PICKED: { x: number; y: number; z: number };

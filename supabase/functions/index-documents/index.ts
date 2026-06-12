@@ -360,8 +360,8 @@ serve(async (req) => {
       // Index built-in API documentation as help docs
       const apiDocs: { name: string; content: string }[] = [
         {
-          name: "Asset+ API",
-          content: `Asset+ API Integration - BIM-based asset management system.
+          name: "Geminus Plus API",
+          content: `Geminus Plus API Integration - BIM-based asset management system.
 
 Authentication: OAuth2 via Keycloak (password grant) + API Key in payload.
 Token endpoint: POST {KEYCLOAK_URL}/protocol/openid-connect/token with grant_type=password, username, password, client_id, client_secret.
@@ -382,19 +382,19 @@ Key Endpoints:
 
 Constraints: BIM objects (createdInModel=true) cannot be moved via API. Objects must stay within same Building. Buildings/Levels/Spaces require designation and commonName.
 
-Edge Functions: asset-plus-query, asset-plus-create, asset-plus-update, asset-plus-sync.
+Edge Functions: geminus-plus-query, geminus-plus-create, geminus-plus-update, geminus-plus-sync.
 Sync uses resumable approach with pagination for 80k+ assets.`,
         },
         {
-          name: "FM Access API",
-          content: `FM Access (Tessel HDC) API Integration - 2D floor plans, drawings, and document management.
+          name: "Geminus Base API",
+          content: `Geminus Base (Tessel HDC) API Integration - 2D floor plans, drawings, and document management.
 
 Authentication: OAuth2 via Keycloak + custom X-Authorization header (NOT standard Authorization) + X-Hdc-Version-Id header.
 Step 1: POST token endpoint with grant_type=password, client_id, username, password.
 Step 2: GET /api/systeminfo/json to get defaultVersion.versionId.
 Step 3: All calls need X-Authorization: Bearer {token} and X-Hdc-Version-Id: {versionId}.
 
-Secrets: FM_ACCESS_TOKEN_URL, FM_ACCESS_CLIENT_ID, FM_ACCESS_API_URL, FM_ACCESS_USERNAME, FM_ACCESS_PASSWORD.
+Secrets: GEMINUS_BASE_TOKEN_URL, GEMINUS_BASE_CLIENT_ID, GEMINUS_BASE_API_URL, GEMINUS_BASE_USERNAME, GEMINUS_BASE_PASSWORD.
 
 Available Actions:
 - test-connection - Test auth and get version ID.
@@ -436,11 +436,11 @@ Filter syntax: 'Status eq "Active"', 'Description like "%brand%"'.
 Integration strategy: Hybrid — live proxy for active work orders (<30 days), sync pipeline for buildings/leases/historical data.`,
         },
         {
-          name: "Senslinc API",
-          content: `Senslinc IoT Platform - Sensors, measurement data, alarms, and monitoring.
+          name: "Geminus Premium API",
+          content: `Geminus Premium IoT Platform - Sensors, measurement data, alarms, and monitoring.
 
 Authentication: Basic Auth with email and password.
-Secrets: SENSLINC_API_URL, SENSLINC_EMAIL, SENSLINC_PASSWORD.
+Secrets: GEMINUS_PREMIUM_API_URL, GEMINUS_PREMIUM_EMAIL, GEMINUS_PREMIUM_PASSWORD.
 
 Key Endpoints:
 - GET /api/sites - List all monitored sites/buildings.

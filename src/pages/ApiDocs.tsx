@@ -28,13 +28,13 @@ interface ApiSystem {
 
 const API_SYSTEMS: ApiSystem[] = [
   {
-    id: 'assetplus',
-    name: 'Asset+',
+    id: 'geminus-plus',
+    name: 'Geminus Plus',
     description: 'BIM-based object management system — central data source for building data',
     icon: Database,
     color: 'text-blue-500',
     authFlow: 'OAuth2 via Keycloak (password grant) + API Key in payload',
-    baseUrl: '{ASSET_PLUS_API_URL}',
+    baseUrl: '{GEMINUS_PLUS_API_URL}',
     categories: [
       {
         name: 'Object Management',
@@ -79,13 +79,13 @@ const API_SYSTEMS: ApiSystem[] = [
     ],
   },
   {
-    id: 'fmaccess',
-    name: 'FM Access',
+    id: 'geminus-base',
+    name: 'Geminus Base',
     description: 'Tessel HDC — 2D floor plans, drawing management and document archive',
     icon: Building2,
     color: 'text-emerald-500',
     authFlow: 'OAuth2 via Keycloak + X-Authorization header + X-Hdc-Version-Id',
-    baseUrl: '{FM_ACCESS_API_URL}',
+    baseUrl: '{GEMINUS_BASE_API_URL}',
     categories: [
       {
         name: 'Authentication',
@@ -170,13 +170,13 @@ const API_SYSTEMS: ApiSystem[] = [
     ],
   },
   {
-    id: 'senslinc',
-    name: 'Senslinc',
+    id: 'geminus-premium',
+    name: 'Geminus Premium',
     description: 'IoT platform — sensors, measurement data, alarms and monitoring',
     icon: Thermometer,
     color: 'text-purple-500',
-    authFlow: 'Basic Auth (email + password) to Senslinc REST API',
-    baseUrl: '{SENSLINC_API_URL}',
+    authFlow: 'Basic Auth (email + password) to Geminus Premium REST API',
+    baseUrl: '{GEMINUS_PREMIUM_API_URL}',
     categories: [
       {
         name: 'Sites & Equipment',

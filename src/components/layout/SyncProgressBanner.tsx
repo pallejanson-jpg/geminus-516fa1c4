@@ -60,7 +60,7 @@ export const SyncProgressBanner: React.FC = () => {
     const runLoop = async () => {
       iterations++;
       try {
-        const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+        const { data, error } = await supabase.functions.invoke('geminus-plus-sync', {
           body: { action }
         });
 
@@ -123,7 +123,7 @@ export const SyncProgressBanner: React.FC = () => {
     setIsResetting(true);
     const action = subtreeId === 'structure' ? 'reset-structure-progress' : 'reset-assets-progress';
     try {
-      const { error } = await supabase.functions.invoke('asset-plus-sync', {
+      const { error } = await supabase.functions.invoke('geminus-plus-sync', {
         body: { action }
       });
 

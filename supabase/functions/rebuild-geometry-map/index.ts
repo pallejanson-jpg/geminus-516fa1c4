@@ -111,7 +111,7 @@ serve(async (req) => {
       rows.push({
         building_fm_guid: buildingFmGuid,
         asset_fm_guid: asset.fm_guid,
-        source_system: ext?.source || 'asset_plus',
+        source_system: ext?.source || 'geminus_plus',
         entity_type: entityType,
         external_entity_id: ext?.external_id || null,
         model_id: modelInfo?.model_id || null,

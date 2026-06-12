@@ -84,7 +84,7 @@ const FmaInternalView: React.FC<FmaInternalViewProps> = ({
         </Button>
       )}
 
-      {/* FM Access iframe */}
+      {/* Geminus Base iframe */}
       {url && !loadError && (
         <iframe
           ref={iframeRef}

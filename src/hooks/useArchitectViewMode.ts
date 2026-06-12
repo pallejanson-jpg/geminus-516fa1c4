@@ -130,7 +130,7 @@ export function useArchitectViewMode() {
     const preset = ARCHITECT_BACKGROUND_PRESETS.find(p => p.id === presetId);
     if (!preset) return;
 
-    const container = document.getElementById('AssetPlusViewer');
+    const container = document.getElementById('GeminusPlusViewer');
     if (container) {
       // All presets are gradients from white to the bottom color
       container.style.background = `linear-gradient(180deg, rgb(255, 255, 255) 0%, ${preset.bottom} 100%)`;
@@ -162,7 +162,7 @@ export function useArchitectViewMode() {
     console.log('Applying architect view mode...');
 
     // Store original background
-    const container = document.getElementById('AssetPlusViewer');
+    const container = document.getElementById('GeminusPlusViewer');
     if (container) {
       state.originalBackground = container.style.background || '';
       // Apply gradient background (white to color)
@@ -242,7 +242,7 @@ export function useArchitectViewMode() {
     console.log('Removing architect view mode...');
 
     // Restore background
-    const container = document.getElementById('AssetPlusViewer');
+    const container = document.getElementById('GeminusPlusViewer');
     if (container && state.originalBackground) {
       container.style.background = state.originalBackground;
     }

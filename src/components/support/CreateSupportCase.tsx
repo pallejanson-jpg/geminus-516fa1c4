@@ -46,7 +46,7 @@ const CATEGORY_OPTIONS = [
   { value: 'Visualization', label: 'Visualization' },
   { value: 'Laser scanning', label: 'Laser scanning' },
   { value: 'Outdoor', label: 'Outdoor' },
-  { value: 'Asset+', label: 'Asset+' },
+  { value: 'Geminus Plus', label: 'Geminus Plus' },
   { value: 'Interaxo', label: 'Interaxo' },
   { value: 'Supportärende', label: 'Supportärende' },
   { value: 'Annat ärende', label: 'Annat ärende' },

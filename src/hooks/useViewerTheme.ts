@@ -125,14 +125,14 @@ export function useViewerTheme() {
           edgeAlpha: edgeMaterial.edgeAlpha,
         };
       }
-      const container = document.getElementById('AssetPlusViewer') || document.querySelector('.native-viewer-canvas-parent') as HTMLElement;
+      const container = document.getElementById('GeminusPlusViewer') || document.querySelector('.native-viewer-canvas-parent') as HTMLElement;
       if (container) {
         state.originalBackground = container.style.background || '';
       }
     }
 
     // Apply configured background for theme
-    const bgContainer = document.getElementById('AssetPlusViewer') || document.querySelector('.native-viewer-canvas-parent') as HTMLElement;
+    const bgContainer = document.getElementById('GeminusPlusViewer') || document.querySelector('.native-viewer-canvas-parent') as HTMLElement;
     if (bgContainer) {
       bgContainer.style.background = theme.background_color || DEFAULT_VIEWER_THEME_BACKGROUND;
     }
@@ -275,7 +275,7 @@ export function useViewerTheme() {
     }
 
     // Restore background
-    const container = document.getElementById('AssetPlusViewer') || document.querySelector('.native-viewer-canvas-parent') as HTMLElement;
+    const container = document.getElementById('GeminusPlusViewer') || document.querySelector('.native-viewer-canvas-parent') as HTMLElement;
     if (container && state.originalBackground) {
       container.style.background = state.originalBackground;
     }

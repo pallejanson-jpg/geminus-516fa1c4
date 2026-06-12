@@ -10,8 +10,8 @@ export interface Ivion360Context {
   ivionUrl: string;
 }
 
-// Senslinc IoT dashboard context
-export interface SenslincDashboardContext {
+// Geminus Premium IoT dashboard context
+export interface GeminusPremiumDashboardContext {
   dashboardUrl: string;
   facilityName?: string;
   facilityFmGuid?: string;
@@ -41,10 +41,10 @@ interface NavigationContextType {
   setIvion360Context: (context: Ivion360Context | null) => void;
   open360WithContext: (context: Ivion360Context) => void;
 
-  // Senslinc IoT dashboard context
-  senslincDashboardContext: SenslincDashboardContext | null;
-  setSenslincDashboardContext: (context: SenslincDashboardContext | null) => void;
-  openSenslincDashboard: (context: SenslincDashboardContext) => void;
+  // Geminus Premium IoT dashboard context
+  geminusPremiumDashboardContext: GeminusPremiumDashboardContext | null;
+  setGeminusPremiumDashboardContext: (context: GeminusPremiumDashboardContext | null) => void;
+  openGeminusPremiumDashboard: (context: GeminusPremiumDashboardContext) => void;
 }
 
 export const NavigationContext = createContext<NavigationContextType>({
@@ -66,9 +66,9 @@ export const NavigationContext = createContext<NavigationContextType>({
   ivion360Context: null,
   setIvion360Context: () => {},
   open360WithContext: () => {},
-  senslincDashboardContext: null,
-  setSenslincDashboardContext: () => {},
-  openSenslincDashboard: () => {},
+  geminusPremiumDashboardContext: null,
+  setGeminusPremiumDashboardContext: () => {},
+  openGeminusPremiumDashboard: () => {},
 });
 
 export const useNavigation = () => useContext(NavigationContext);
@@ -81,7 +81,7 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children
   const [isRightSidebarVisible, setIsRightSidebarVisible] = useState(false);
   const [insightsFacility, setInsightsFacility] = useState<Facility | null>(null);
   const [ivion360Context, setIvion360Context] = useState<Ivion360Context | null>(null);
-  const [senslincDashboardContext, setSenslincDashboardContext] = useState<SenslincDashboardContext | null>(null);
+  const [geminusPremiumDashboardContext, setGeminusPremiumDashboardContext] = useState<GeminusPremiumDashboardContext | null>(null);
 
   const [appConfigs, setAppConfigs] = useState<Record<string, AppConfig>>(() => {
     const stored = typeof window !== 'undefined' ? window.localStorage.getItem('appConfigs') : null;
@@ -128,9 +128,9 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children
     setActiveApp('radar');
   }, []);
 
-  const openSenslincDashboard = useCallback((context: SenslincDashboardContext) => {
-    setSenslincDashboardContext(context);
-    setActiveApp('senslinc_dashboard');
+  const openGeminusPremiumDashboard = useCallback((context: GeminusPremiumDashboardContext) => {
+    setGeminusPremiumDashboardContext(context);
+    setActiveApp('geminus_premium_dashboard');
   }, []);
 
   return (
@@ -144,7 +144,7 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children
         appConfigs, setAppConfigs,
         insightsFacility, setInsightsFacility, openEntityInsights,
         ivion360Context, setIvion360Context, open360WithContext,
-        senslincDashboardContext, setSenslincDashboardContext, openSenslincDashboard,
+        geminusPremiumDashboardContext, setGeminusPremiumDashboardContext, openGeminusPremiumDashboard,
       }}
     >
       {children}

@@ -112,7 +112,7 @@ function AssetRegistrationForm({
         },
       };
 
-      const { data, error } = await supabase.functions.invoke('asset-plus-create', {
+      const { data, error } = await supabase.functions.invoke('geminus-plus-create', {
         body: payload,
       });
 

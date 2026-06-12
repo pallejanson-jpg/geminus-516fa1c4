@@ -19,7 +19,7 @@ export interface IleanContextEntity {
 
 /**
  * Hook that provides Ilean document Q&A chat functionality.
- * Proxies questions to Senslinc's Ilean API via senslinc-query edge function.
+ * Proxies questions to Geminus Premium's Ilean API via geminus-premium-query edge function.
  */
 export function useIleanData() {
   const { selectedFacility } = useContext(AppContext);
@@ -70,7 +70,7 @@ export function useIleanData() {
     }
   }, [selectedFacility]);
 
-  // Resolve entity info from Senslinc
+  // Resolve entity info from Geminus Premium
   useEffect(() => {
     if (!contextFmGuid) {
       setEntityInfo({ entityName: null, entityType: null, pk: null, dashboardUrl: null });
@@ -84,7 +84,7 @@ export function useIleanData() {
     setIsResolvingContext(true);
 
     supabase.functions
-      .invoke('senslinc-query', {
+      .invoke('geminus-premium-query', {
         body: { action: 'get-ilean-context', fmGuid: contextFmGuid, contextLevel },
       })
       .then(({ data: result, error }) => {
@@ -121,7 +121,7 @@ export function useIleanData() {
     setIsLoading(true);
 
     try {
-      const { data: result, error } = await supabase.functions.invoke('senslinc-query', {
+      const { data: result, error } = await supabase.functions.invoke('geminus-premium-query', {
         body: {
           action: 'ilean-ask',
           fmGuid: contextFmGuid,

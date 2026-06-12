@@ -21,7 +21,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { AppContext } from '@/context/AppContext';
-import { DEFAULT_APP_CONFIGS, SENSLINC_POLL_OPTIONS } from '@/lib/constants';
+import { DEFAULT_APP_CONFIGS, GEMINUS_PREMIUM_POLL_OPTIONS } from '@/lib/constants';
 import SymbolSettings from './SymbolSettings';
 import VoiceSettings from './VoiceSettings';
 import ViewerThemeSettings from './ViewerThemeSettings';
@@ -89,7 +89,7 @@ const getAppIcon = (key: string) => {
     switch (key) {
         case 'insights': return BarChart2;
         case 'fma_plus': return Building2;
-        case 'asset_plus': return Box;
+        case 'geminus_plus': return Box;
         case 'iot': return Zap;
         case 'original_archive': return Archive;
         case 'radar': return Radar;
@@ -274,8 +274,8 @@ const AccFolderNode: React.FC<{
         </div>
     );
 };
-// FM Access Document/Drawing sync sub-panel
-const FmAccessDocSyncPanel: React.FC = () => {
+// Geminus Base Document/Drawing sync sub-panel
+const GeminusBaseDocSyncPanel: React.FC = () => {
     const { toast } = useToast();
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncAction, setSyncAction] = useState<string | null>(null);
@@ -286,7 +286,7 @@ const FmAccessDocSyncPanel: React.FC = () => {
 
     const fetchStatus = async () => {
         try {
-            const { data, error } = await supabase.functions.invoke('fm-access-sync', {
+            const { data, error } = await supabase.functions.invoke('geminus-base-sync', {
                 body: { action: 'get-status' },
             });
             if (!error && data?.success) setStatus(data);
@@ -299,12 +299,12 @@ const FmAccessDocSyncPanel: React.FC = () => {
         setIsSyncing(true);
         setSyncAction(action);
         try {
-            const { data, error } = await supabase.functions.invoke('fm-access-sync', {
+            const { data, error } = await supabase.functions.invoke('geminus-base-sync', {
                 body: { action },
             });
             if (error) throw error;
             toast({
-                title: 'FM Access sync complete',
+                title: 'Geminus Base sync complete',
                 description: action === 'sync-all'
                     ? `Drawings: ${data?.results?.['sync-drawings']?.synced || 0}, Documents: ${data?.results?.['sync-documents']?.synced || 0}, DoU: ${data?.results?.['sync-dou']?.synced || 0}`
                     : `${data?.synced || 0} items synced.`,
@@ -504,40 +504,40 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [originalConfig, setOriginalConfig] = useState<ConfigState | null>(null);
     const [favoriteBuildings, setFavoriteBuildings] = useState<any[]>([]);
     
-    // FM Access state
-    const [fmAccessConfig, setFmAccessConfig] = useState({
+    // Geminus Base state
+    const [geminusBaseConfig, setGeminusBaseConfig] = useState({
         apiUrl: '',
         username: '',
         password: '',
     });
-    const [isSavingFmAccess, setIsSavingFmAccess] = useState(false);
-    const [isTestingFmAccess, setIsTestingFmAccess] = useState(false);
-    const [fmAccessStatus, setFmAccessStatus] = useState<'idle' | 'success' | 'error'>('idle');
-    const [fmAccessMessage, setFmAccessMessage] = useState('');
-    const [isSyncingFmAccess, setIsSyncingFmAccess] = useState(false);
-    const [fmAccessProfileId, setFmAccessProfileId] = useState<string | null>(null);
+    const [isSavingGeminusBase, setIsSavingGeminusBase] = useState(false);
+    const [isTestingGeminusBase, setIsTestingGeminusBase] = useState(false);
+    const [geminusBaseStatus, setGeminusBaseStatus] = useState<'idle' | 'success' | 'error'>('idle');
+    const [geminusBaseMessage, setGeminusBaseMessage] = useState('');
+    const [isSyncingGeminusBase, setIsSyncingGeminusBase] = useState(false);
+    const [geminusBaseProfileId, setGeminusBaseProfileId] = useState<string | null>(null);
 
-    // Load FM Access credentials from api_profiles on mount
+    // Load Geminus Base credentials from api_profiles on mount
     useEffect(() => {
         supabase
             .from('api_profiles')
-            .select('id, fm_access_api_url, fm_access_username, fm_access_password')
+            .select('id, geminus_base_api_url, geminus_base_username, geminus_base_password')
             .eq('is_default', true)
             .maybeSingle()
             .then(({ data }) => {
                 if (data) {
-                    setFmAccessProfileId(data.id);
-                    setFmAccessConfig({
-                        apiUrl: data.fm_access_api_url || '',
-                        username: data.fm_access_username || '',
-                        password: data.fm_access_password || '',
+                    setGeminusBaseProfileId(data.id);
+                    setGeminusBaseConfig({
+                        apiUrl: data.geminus_base_api_url || '',
+                        username: data.geminus_base_username || '',
+                        password: data.geminus_base_password || '',
                     });
-                    if (data.fm_access_api_url) setFmAccessStatus('success');
+                    if (data.geminus_base_api_url) setGeminusBaseStatus('success');
                 }
             });
     }, []);
-    const [fmAccessSyncResult, setFmAccessSyncResult] = useState<{ success: number; failed: number; lastSync: string | null } | null>(null);
-    const [fmAccessLocalCount, setFmAccessLocalCount] = useState(0);
+    const [geminusBaseSyncResult, setGeminusBaseSyncResult] = useState<{ success: number; failed: number; lastSync: string | null } | null>(null);
+    const [geminusBaseLocalCount, setGeminusBaseLocalCount] = useState(0);
 
     // Congeria state
     const [congeriaLinks, setCongeriaLinks] = useState<Record<string, string>>({});
@@ -615,7 +615,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isAccLoggingIn, setIsAccLoggingIn] = useState(false);
     const [isAccLoggingOut, setIsAccLoggingOut] = useState(false);
     
-    // ACC -> Asset+ sync state
+    // ACC -> Geminus Plus sync state
     const [accToApStatus, setAccToApStatus] = useState<any>(null);
     const [isCheckingAccToAp, setIsCheckingAccToAp] = useState(false);
     const [isSyncingAccToAp, setIsSyncingAccToAp] = useState(false);
@@ -838,35 +838,35 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
-    // ACC -> Asset+ sync handlers
-    const handleCheckAccToAssetPlus = async () => {
+    // ACC -> Geminus Plus sync handlers
+    const handleCheckAccToGeminusPlus = async () => {
         setIsCheckingAccToAp(true);
         try {
-            const { data, error } = await supabase.functions.invoke('acc-to-assetplus', {
+            const { data, error } = await supabase.functions.invoke('acc-to-geminus-plus', {
                 body: { action: 'check-status' }
             });
             if (error) throw error;
             setAccToApStatus(data);
         } catch (err: any) {
-            console.error('Failed to check ACC->Asset+ status:', err);
+            console.error('Failed to check ACC->Geminus Plus status:', err);
             toast({ variant: 'destructive', title: 'Fel', description: err.message });
         } finally {
             setIsCheckingAccToAp(false);
         }
     };
 
-    const handleSyncAccToAssetPlus = async () => {
+    const handleSyncAccToGeminusPlus = async () => {
         setIsSyncingAccToAp(true);
         setAccToApResult(null);
         try {
-            const { data, error } = await supabase.functions.invoke('acc-to-assetplus', {
+            const { data, error } = await supabase.functions.invoke('acc-to-geminus-plus', {
                 body: { action: 'sync' }
             });
             if (error) throw error;
             setAccToApResult(data);
             if (data?.success) {
                 toast({ 
-                    title: 'Sync to Asset+ complete', 
+                    title: 'Sync to Geminus Plus complete', 
                     description: `${data.summary?.buildingsSynced || 0} buildings synced` 
                 });
             } else {
@@ -877,7 +877,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 });
             }
             // Refresh status
-            handleCheckAccToAssetPlus();
+            handleCheckAccToGeminusPlus();
         } catch (err: any) {
             toast({ variant: 'destructive', title: 'Sync failed', description: err.message });
         } finally {
@@ -1172,7 +1172,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const fetchConfig = async () => {
         setIsLoadingConfig(true);
         try {
-            const { data, error } = await supabase.functions.invoke('update-asset-plus-config', {
+            const { data, error } = await supabase.functions.invoke('update-geminus-plus-config', {
                 body: { action: 'get-config' }
             });
 
@@ -1244,11 +1244,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
-    // Check sync status against Asset+
+    // Check sync status against Geminus Plus
     const checkSyncStatus = async () => {
         setIsCheckingSync(true);
         try {
-            const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+            const { data, error } = await supabase.functions.invoke('geminus-plus-sync', {
                 body: { action: 'check-sync-status' }
             });
             if (error) throw error;
@@ -1289,7 +1289,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             addStep('structure', 'Syncing buildings, floors & rooms');
 
             const runStructureLoop = async (): Promise<void> => {
-                const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+                const { data, error } = await supabase.functions.invoke('geminus-plus-sync', {
                     body: { action: 'sync-structure', force: true }
                 });
 
@@ -1350,8 +1350,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const handleSyncAssetsChunked = async () => {
         setIsSyncingAssets(true);
         setAssetSyncLog([
-            { id: 'pull', label: 'Pulling assets from Asset+', status: 'running', startedAt: Date.now() },
-            { id: 'push', label: 'Pushing local objects to Asset+', status: 'pending' },
+            { id: 'pull', label: 'Pulling assets from Geminus Plus', status: 'running', startedAt: Date.now() },
+            { id: 'push', label: 'Pushing local objects to Geminus Plus', status: 'pending' },
         ]);
         setAssetSyncOutcome(null);
         const startTime = Date.now();
@@ -1363,7 +1363,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         
         const runResumableSync = async (): Promise<void> => {
             try {
-                const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+                const { data, error } = await supabase.functions.invoke('geminus-plus-sync', {
                     body: { action: 'sync-assets-resumable', force: true }
                 });
 
@@ -1394,11 +1394,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     totalPulled = data?.totalSynced || totalPulled;
                     updateStep('pull', { status: 'done', count: totalPulled, completedAt: Date.now() });
 
-                    // Step 2: Push local objects to Asset+
+                    // Step 2: Push local objects to Geminus Plus
                     updateStep('push', { status: 'running', startedAt: Date.now() });
                     try {
-                        const { data: pushData, error: pushError } = await supabase.functions.invoke('asset-plus-sync', {
-                            body: { action: 'push-missing-to-assetplus' }
+                        const { data: pushData, error: pushError } = await supabase.functions.invoke('geminus-plus-sync', {
+                            body: { action: 'push-missing-to-geminus-plus' }
                         });
                         if (pushError) throw pushError;
                         const pushed = pushData?.created || 0;
@@ -1408,8 +1408,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                             success: true,
                             summary: 'Asset sync complete',
                             details: [
-                                `${totalPulled.toLocaleString()} assets pulled from Asset+`,
-                                pushed > 0 ? `${pushed} local objects pushed to Asset+` : 'No local objects to push',
+                                `${totalPulled.toLocaleString()} assets pulled from Geminus Plus`,
+                                pushed > 0 ? `${pushed} local objects pushed to Geminus Plus` : 'No local objects to push',
                             ],
                             durationMs: Date.now() - startTime,
                         });
@@ -1419,7 +1419,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                             success: true,
                             summary: 'Assets pulled, but push failed',
                             details: [
-                                `${totalPulled.toLocaleString()} assets pulled from Asset+`,
+                                `${totalPulled.toLocaleString()} assets pulled from Geminus Plus`,
                                 `Push failed: ${pushErr.message}`,
                             ],
                             durationMs: Date.now() - startTime,
@@ -1455,7 +1455,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     // Reset assets sync progress (admin action)
     const handleResetAssetsProgress = async () => {
         try {
-            const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+            const { data, error } = await supabase.functions.invoke('geminus-plus-sync', {
                 body: { action: 'reset-assets-progress' }
             });
             
@@ -1494,10 +1494,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             || targetGuid.substring(0, 8) + '...';
         setIsSyncingXkt(true);
         try {
-            toast({ title: `Force refreshing 3D models for ${targetName}...`, description: 'Downloading latest XKT from Asset+' });
+            toast({ title: `Force refreshing 3D models for ${targetName}...`, description: 'Downloading latest XKT from Geminus Plus' });
             
             // 1. Call backend with force: true
-            const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+            const { data, error } = await supabase.functions.invoke('geminus-plus-sync', {
                 body: { action: 'sync-xkt-building', buildingFmGuid: targetGuid, force: true }
             });
             if (error) throw error;
@@ -1541,7 +1541,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         
         const runResumableSync = async (): Promise<void> => {
             try {
-                const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+                const { data, error } = await supabase.functions.invoke('geminus-plus-sync', {
                     body: { action: 'sync-xkt-resumable', force: isForce }
                 });
 
@@ -1616,7 +1616,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     // Auto-trigger system sync (called after asset sync completes)
     const handleAutoSyncSystems = async () => {
         try {
-            const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+            const { data, error } = await supabase.functions.invoke('geminus-plus-sync', {
                 body: { action: 'sync-systems' }
             });
 
@@ -1790,7 +1790,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const handleSyncAllBuildings = async () => {
         setIsSyncingStructure(true);
         try {
-            supabase.functions.invoke('asset-plus-sync', {
+            supabase.functions.invoke('geminus-plus-sync', {
                 body: { action: 'sync-all-buildings' }
             }).catch((err) => {
                 console.log('Edge function call ended:', err?.message);
@@ -1798,7 +1798,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
             toast({
                 title: "Syncing all buildings",
-                description: "Fetching all buildings from Asset+. This may take a while.",
+                description: "Fetching all buildings from Geminus Plus. This may take a while.",
             });
 
             const pollInterval = setInterval(async () => {
@@ -1850,7 +1850,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
         setIsSyncingStructure(true);
         try {
-            supabase.functions.invoke('asset-plus-sync', {
+            supabase.functions.invoke('geminus-plus-sync', {
                 body: { action: 'building-sync', buildingFmGuid }
             }).catch((err) => {
                 console.log('Edge function call ended:', err?.message);
@@ -1892,7 +1892,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const handleIncrementalSync = async () => {
         setIsSyncingAssets(true);
         try {
-            supabase.functions.invoke('asset-plus-sync', {
+            supabase.functions.invoke('geminus-plus-sync', {
                 body: { action: 'incremental-sync' }
             }).catch((err) => {
                 console.log('Edge function call ended:', err?.message);
@@ -2025,104 +2025,104 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         setIsEditMode(false);
     };
 
-    // FM Access: Test connection
-    const handleTestFmAccessConnection = async () => {
-        setIsTestingFmAccess(true);
-        setFmAccessStatus('idle');
-        setFmAccessMessage('');
+    // Geminus Base: Test connection
+    const handleTestGeminusBaseConnection = async () => {
+        setIsTestingGeminusBase(true);
+        setGeminusBaseStatus('idle');
+        setGeminusBaseMessage('');
 
         try {
-            const { data, error } = await supabase.functions.invoke('fm-access-query', {
+            const { data, error } = await supabase.functions.invoke('geminus-base-query', {
                 body: { action: 'test-connection' }
             });
 
             if (error) throw error;
 
             if (data?.success) {
-                setFmAccessStatus('success');
-                setFmAccessMessage(data.message || 'Anslutning lyckades');
+                setGeminusBaseStatus('success');
+                setGeminusBaseMessage(data.message || 'Anslutning lyckades');
                 toast({
-                    title: "FM Access ansluten",
-                    description: data.message || 'Anslutningen till FM Access fungerar.',
+                    title: "Geminus Base ansluten",
+                    description: data.message || 'Anslutningen till Geminus Base fungerar.',
                 });
             } else {
-                setFmAccessStatus('error');
-                setFmAccessMessage(data?.error || 'Okänt fel');
+                setGeminusBaseStatus('error');
+                setGeminusBaseMessage(data?.error || 'Okänt fel');
                 toast({
                     variant: "destructive",
                     title: "Anslutning misslyckades",
-                    description: data?.error || 'Kunde inte ansluta till FM Access.',
+                    description: data?.error || 'Kunde inte ansluta till Geminus Base.',
                 });
             }
         } catch (error: any) {
-            setFmAccessStatus('error');
-            setFmAccessMessage(error.message);
+            setGeminusBaseStatus('error');
+            setGeminusBaseMessage(error.message);
             toast({
                 variant: "destructive",
                 title: "Fel",
                 description: error.message,
             });
         } finally {
-            setIsTestingFmAccess(false);
+            setIsTestingGeminusBase(false);
         }
     };
 
-    // FM Access: Save credentials via edge function (uses service role → bypasses RLS)
-    const handleSaveFmAccessConfig = async () => {
-        setIsSavingFmAccess(true);
-        setFmAccessMessage('');
+    // Geminus Base: Save credentials via edge function (uses service role → bypasses RLS)
+    const handleSaveGeminusBaseConfig = async () => {
+        setIsSavingGeminusBase(true);
+        setGeminusBaseMessage('');
         try {
             // Save via edge function (service role bypasses RLS)
-            const { data: saveData, error: saveError } = await supabase.functions.invoke('fm-access-query', {
+            const { data: saveData, error: saveError } = await supabase.functions.invoke('geminus-base-query', {
                 body: {
                     action: 'save-api-config',
-                    apiUrl: fmAccessConfig.apiUrl,
-                    username: fmAccessConfig.username,
-                    password: fmAccessConfig.password,
+                    apiUrl: geminusBaseConfig.apiUrl,
+                    username: geminusBaseConfig.username,
+                    password: geminusBaseConfig.password,
                 }
             });
             if (saveError) throw saveError;
             if (!saveData?.success) throw new Error(saveData?.error || 'Could not save credentials');
-            if (saveData.id) setFmAccessProfileId(saveData.id);
+            if (saveData.id) setGeminusBaseProfileId(saveData.id);
 
             // Test connection
-            const { data, error: testError } = await supabase.functions.invoke('fm-access-query', {
+            const { data, error: testError } = await supabase.functions.invoke('geminus-base-query', {
                 body: { action: 'test-connection' }
             });
             if (testError) throw testError;
 
             if (data?.success) {
-                toast({ title: 'FM Access sparat', description: 'Credentials sparade och anslutning verifierad.' });
-                setFmAccessStatus('success');
-                setFmAccessMessage('Anslutning OK — ' + (data.message || ''));
+                toast({ title: 'Geminus Base sparat', description: 'Credentials sparade och anslutning verifierad.' });
+                setGeminusBaseStatus('success');
+                setGeminusBaseMessage('Anslutning OK — ' + (data.message || ''));
             } else {
                 toast({ variant: 'destructive', title: 'Sparat men anslutning misslyckades', description: data?.error || 'Kontrollera URL och credentials.' });
-                setFmAccessStatus('error');
-                setFmAccessMessage(data?.error || 'Kontrollera credentials');
+                setGeminusBaseStatus('error');
+                setGeminusBaseMessage(data?.error || 'Kontrollera credentials');
             }
         } catch (err: any) {
             toast({ variant: 'destructive', title: 'Fel', description: err.message });
-            setFmAccessStatus('error');
-            setFmAccessMessage(err.message);
+            setGeminusBaseStatus('error');
+            setGeminusBaseMessage(err.message);
         } finally {
-            setIsSavingFmAccess(false);
+            setIsSavingGeminusBase(false);
         }
     };
 
-    // FM Access: Smart bidirectional sync — auto-creates hierarchy, then syncs inventoried objects
-    const handleSyncToFmAccess = async () => {
-        setIsSyncingFmAccess(true);
+    // Geminus Base: Smart bidirectional sync — auto-creates hierarchy, then syncs inventoried objects
+    const handleSyncToGeminusBase = async () => {
+        setIsSyncingGeminusBase(true);
         try {
             // 1. Test connection first
-            const { data: connData, error: connError } = await supabase.functions.invoke('fm-access-query', {
+            const { data: connData, error: connError } = await supabase.functions.invoke('geminus-base-query', {
                 body: { action: 'test-connection' }
             });
             if (connError || !connData?.success) {
-                toast({ variant: 'destructive', title: 'FM Access ej ansluten', description: connData?.error || connError?.message || 'Kunde inte ansluta.' });
-                setFmAccessStatus('error');
+                toast({ variant: 'destructive', title: 'Geminus Base ej ansluten', description: connData?.error || connError?.message || 'Kunde inte ansluta.' });
+                setGeminusBaseStatus('error');
                 return;
             }
-            setFmAccessStatus('success');
+            setGeminusBaseStatus('success');
 
             // 2. Find all unique building_fm_guids from assets
             const { data: allAssets, error: allError } = await supabase
@@ -2135,32 +2135,32 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
             // Get unique building GUIDs
             const uniqueBuildingGuids = [...new Set(allItems.map(a => a.building_fm_guid).filter(Boolean))] as string[];
-            console.log('[FM Access] Unique buildings to ensure hierarchy for:', uniqueBuildingGuids.length);
+            console.log('[Geminus Base] Unique buildings to ensure hierarchy for:', uniqueBuildingGuids.length);
 
             // 3. Auto-create hierarchy for each building if needed
-            const { ensureFmAccessHierarchy } = await import('@/services/fm-access-service');
+            const { ensureGeminusBaseHierarchy } = await import('@/services/geminus-base-service');
             let hierarchyCreated = 0;
             let hierarchySkipped = 0;
             for (let i = 0; i < uniqueBuildingGuids.length; i++) {
                 const bldGuid = uniqueBuildingGuids[i];
                 try {
-                    const hResult = await ensureFmAccessHierarchy(bldGuid);
+                    const hResult = await ensureGeminusBaseHierarchy(bldGuid);
                     if (hResult.success && hResult.action === 'created') {
                         hierarchyCreated++;
-                        console.log('[FM Access] Hierarchy created for building:', bldGuid, hResult.created);
+                        console.log('[Geminus Base] Hierarchy created for building:', bldGuid, hResult.created);
                     } else {
                         hierarchySkipped++;
                     }
                 } catch (e: any) {
-                    console.error('[FM Access] Hierarchy error for', bldGuid, e.message);
+                    console.error('[Geminus Base] Hierarchy error for', bldGuid, e.message);
                 }
             }
 
             // 4. Sync inventoried assets (created_in_model = false)
             const fmAssets = allItems.filter(a => a.created_in_model === false);
-            setFmAccessLocalCount(fmAssets.length);
+            setGeminusBaseLocalCount(fmAssets.length);
 
-            const { syncAssetWithFmAccess } = await import('@/services/fm-access-service');
+            const { syncAssetWithGeminusBase } = await import('@/services/geminus-base-service');
             let created = 0;
             let updated = 0;
             let pulled = 0;
@@ -2168,7 +2168,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             let failed = 0;
             for (const asset of fmAssets) {
                 try {
-                    const result = await syncAssetWithFmAccess(asset.fm_guid);
+                    const result = await syncAssetWithGeminusBase(asset.fm_guid);
                     if (!result.success) { failed++; continue; }
                     if (result.action === 'created') created++;
                     else if (result.action === 'updated') updated++;
@@ -2180,7 +2180,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             }
 
             const now = new Date().toISOString();
-            setFmAccessSyncResult({ success: created + updated + pulled + hierarchyCreated, failed, lastSync: now });
+            setGeminusBaseSyncResult({ success: created + updated + pulled + hierarchyCreated, failed, lastSync: now });
 
             const parts: string[] = [];
             if (hierarchyCreated > 0) parts.push(`${hierarchyCreated} buildings created`);
@@ -2191,17 +2191,17 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             if (failed > 0) parts.push(`${failed} failed`);
 
             toast({
-                title: 'FM Access-synk klar',
+                title: 'Geminus Base-synk klar',
                 description: parts.join(', ') || 'Inget att synka.',
             });
         } catch (error: any) {
             toast({ variant: 'destructive', title: 'Sync error', description: error.message });
         } finally {
-            setIsSyncingFmAccess(false);
+            setIsSyncingGeminusBase(false);
         }
     };
 
-    // FM Access: Count inventoried assets (created_in_model=false) with FM link
+    // Geminus Base: Count inventoried assets (created_in_model=false) with FM link
     useEffect(() => {
         if (activeTab !== 'sync') return;
         const countFmAssets = async () => {
@@ -2212,9 +2212,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     .select('fm_guid', { count: 'exact', head: true })
                     .not('building_fm_guid', 'is', null)
                     .eq('created_in_model', false);
-                console.log('[FM Access] Inventoried asset count:', count, 'error:', error);
+                console.log('[Geminus Base] Inventoried asset count:', count, 'error:', error);
                 if (!error) {
-                    setFmAccessLocalCount(count ?? 0);
+                    setGeminusBaseLocalCount(count ?? 0);
                 } else {
                     // Fallback: do a regular query and count rows
                     const { data } = await supabase
@@ -2223,10 +2223,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                         .not('building_fm_guid', 'is', null)
                         .eq('created_in_model', false)
                         .limit(5000);
-                    setFmAccessLocalCount(data?.length ?? 0);
+                    setGeminusBaseLocalCount(data?.length ?? 0);
                 }
             } catch (e) {
-                console.error('[FM Access] Count error:', e);
+                console.error('[Geminus Base] Count error:', e);
             }
         };
         countFmAssets();
@@ -2235,7 +2235,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const handleSaveConfig = async () => {
         setIsSaving(true);
         try {
-            const { data, error } = await supabase.functions.invoke('update-asset-plus-config', {
+            const { data, error } = await supabase.functions.invoke('update-geminus-plus-config', {
                 body: { action: 'update-config', config }
             });
 
@@ -2273,7 +2273,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         setConnectionMessage('');
 
         try {
-            const { data, error } = await supabase.functions.invoke('update-asset-plus-config', {
+            const { data, error } = await supabase.functions.invoke('update-geminus-plus-config', {
                 body: { action: 'test-connection' }
             });
 
@@ -2312,7 +2312,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const handleTriggerSync = async () => {
         setIsSyncingAssets(true);
         try {
-            supabase.functions.invoke('asset-plus-sync', {
+            supabase.functions.invoke('geminus-plus-sync', {
                 body: { action: 'full-sync' }
             }).catch((err) => {
                 console.log('Edge function call ended (may be timeout):', err?.message);
@@ -2320,7 +2320,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
             toast({
                 title: "Sync Started",
-                description: `Syncing data from Asset+. This may take a few minutes for large datasets.`,
+                description: `Syncing data from Geminus Plus. This may take a few minutes for large datasets.`,
             });
 
             const pollInterval = setInterval(async () => {
@@ -2555,12 +2555,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                 </p>
                                 
                                 <Accordion type="multiple" className="space-y-2">
-                                    {/* Asset+ API Section */}
-                                    <AccordionItem value="assetplus" className="border rounded-lg">
+                                    {/* Geminus Plus API Section */}
+                                    <AccordionItem value="geminus-plus" className="border rounded-lg">
                                         <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
                                             <div className="flex items-center gap-2 flex-1">
                                                 <Box className="h-5 w-5 text-primary" />
-                                                <span className="font-medium">Asset+</span>
+                                                <span className="font-medium">Geminus Plus</span>
                                                 <Badge variant="outline" className="ml-auto mr-2 text-xs">Configured</Badge>
                                             </div>
                                         </AccordionTrigger>
@@ -2641,13 +2641,13 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         </AccordionContent>
                                     </AccordionItem>
 
-                                    {/* FM Access API Section */}
-                                    <AccordionItem value="fmaccess" className="border rounded-lg">
+                                    {/* Geminus Base API Section */}
+                                    <AccordionItem value="geminus-base" className="border rounded-lg">
                                         <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
                                             <div className="flex items-center gap-2 flex-1">
                                                 <Building2 className="h-5 w-5 text-primary" />
-                                                <span className="font-medium">FM Access</span>
-                                                {fmAccessStatus === 'success' && <Badge className="ml-auto mr-2 text-xs bg-green-100 text-green-800">Connected</Badge>}
+                                                <span className="font-medium">Geminus Base</span>
+                                                {geminusBaseStatus === 'success' && <Badge className="ml-auto mr-2 text-xs bg-green-100 text-green-800">Connected</Badge>}
                                             </div>
                                         </AccordionTrigger>
                                         <AccordionContent className="px-4 pb-4 pt-2">
@@ -2655,9 +2655,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 <div className="space-y-1.5">
                                                     <label className="text-xs font-medium text-muted-foreground">API URL</label>
                                                     <Input
-                                                        placeholder="https://your-fmaccess.domain.com"
-                                                        value={fmAccessConfig.apiUrl}
-                                                        onChange={e => setFmAccessConfig(c => ({ ...c, apiUrl: e.target.value }))}
+                                                        placeholder="https://your-geminus-base.domain.com"
+                                                        value={geminusBaseConfig.apiUrl}
+                                                        onChange={e => setGeminusBaseConfig(c => ({ ...c, apiUrl: e.target.value }))}
                                                         className="h-8 text-sm"
                                                     />
                                                 </div>
@@ -2665,8 +2665,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     <label className="text-xs font-medium text-muted-foreground">Användarnamn</label>
                                                     <Input
                                                         placeholder="user@example.com"
-                                                        value={fmAccessConfig.username}
-                                                        onChange={e => setFmAccessConfig(c => ({ ...c, username: e.target.value }))}
+                                                        value={geminusBaseConfig.username}
+                                                        onChange={e => setGeminusBaseConfig(c => ({ ...c, username: e.target.value }))}
                                                         className="h-8 text-sm"
                                                     />
                                                 </div>
@@ -2675,27 +2675,27 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     <Input
                                                         type="password"
                                                         placeholder="••••••••"
-                                                        value={fmAccessConfig.password}
-                                                        onChange={e => setFmAccessConfig(c => ({ ...c, password: e.target.value }))}
+                                                        value={geminusBaseConfig.password}
+                                                        onChange={e => setGeminusBaseConfig(c => ({ ...c, password: e.target.value }))}
                                                         className="h-8 text-sm"
                                                     />
                                                 </div>
-                                                {fmAccessMessage && (
-                                                    <p className={`text-xs ${fmAccessStatus === 'success' ? 'text-green-600' : 'text-destructive'}`}>
-                                                        {fmAccessMessage}
+                                                {geminusBaseMessage && (
+                                                    <p className={`text-xs ${geminusBaseStatus === 'success' ? 'text-green-600' : 'text-destructive'}`}>
+                                                        {geminusBaseMessage}
                                                     </p>
                                                 )}
                                                 <div className="flex gap-2 pt-1">
                                                     <Button
                                                         size="sm"
-                                                        onClick={handleSaveFmAccessConfig}
-                                                        disabled={isSavingFmAccess || !fmAccessConfig.apiUrl || !fmAccessConfig.username || !fmAccessConfig.password}
+                                                        onClick={handleSaveGeminusBaseConfig}
+                                                        disabled={isSavingGeminusBase || !geminusBaseConfig.apiUrl || !geminusBaseConfig.username || !geminusBaseConfig.password}
                                                     >
-                                                        {isSavingFmAccess ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
+                                                        {isSavingGeminusBase ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
                                                         Spara
                                                     </Button>
-                                                    <Button variant="outline" size="sm" onClick={handleTestFmAccessConnection} disabled={isTestingFmAccess}>
-                                                        {isTestingFmAccess ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
+                                                    <Button variant="outline" size="sm" onClick={handleTestGeminusBaseConnection} disabled={isTestingGeminusBase}>
+                                                        {isTestingGeminusBase ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
                                                         Testa anslutning
                                                     </Button>
                                                 </div>
@@ -2776,19 +2776,19 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         </AccordionContent>
                                     </AccordionItem>
 
-                                    {/* Senslinc API Section */}
-                                    <AccordionItem value="senslinc" className="border rounded-lg">
+                                    {/* Geminus Premium API Section */}
+                                    <AccordionItem value="geminus-premium" className="border rounded-lg">
                                         <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
                                             <div className="flex items-center gap-2 flex-1">
                                                 <Zap className="h-5 w-5 text-yellow-500" />
-                                                <span className="font-medium">Senslinc</span>
+                                                <span className="font-medium">Geminus Premium</span>
                                                 <Badge variant="outline" className="ml-auto mr-2 text-xs bg-green-50 text-green-700 border-green-200">IoT</Badge>
                                             </div>
                                         </AccordionTrigger>
                                         <AccordionContent className="px-4 pb-4 pt-2">
                                             <div className="space-y-4">
                                                 <p className="text-xs text-muted-foreground">
-                                                    IoT sensors and measurements from Senslinc (InUse). Secrets (SENSLINC_API_URL, SENSLINC_EMAIL, SENSLINC_PASSWORD) are configured in Lovable Cloud.
+                                                    IoT sensors and measurements from Geminus Premium (InUse). Secrets (GEMINUS_PREMIUM_API_URL, GEMINUS_PREMIUM_EMAIL, GEMINUS_PREMIUM_PASSWORD) are configured in Lovable Cloud.
                                                 </p>
                                                 
                                                 {/* Polling interval setting */}
@@ -2807,7 +2807,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             });
                                                         }}
                                                     >
-                                                        {SENSLINC_POLL_OPTIONS.map(opt => (
+                                                        {GEMINUS_PREMIUM_POLL_OPTIONS.map(opt => (
                                                             <option key={opt.value} value={opt.value}>{opt.label}</option>
                                                         ))}
                                                     </select>
@@ -2822,7 +2822,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         size="sm" 
                                                         onClick={async () => {
                                                             try {
-                                                                const { data, error } = await supabase.functions.invoke('senslinc-query', { 
+                                                                const { data, error } = await supabase.functions.invoke('geminus-premium-query', { 
                                                                     body: { action: 'test-connection' } 
                                                                 });
                                                                 if (error) throw error;
@@ -2846,14 +2846,14 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         size="sm" 
                                                         onClick={async () => {
                                                             try {
-                                                                const { data, error } = await supabase.functions.invoke('senslinc-query', { 
+                                                                const { data, error } = await supabase.functions.invoke('geminus-premium-query', { 
                                                                     body: { action: 'get-sites' } 
                                                                 });
                                                                 if (error) throw error;
                                                                 const count = Array.isArray(data?.data) ? data.data.length : 0;
                                                                 toast({ 
                                                                     title: 'Data hämtad', 
-                                                                    description: `Hittade ${count} sites i Senslinc.` 
+                                                                    description: `Hittade ${count} sites i Geminus Premium.` 
                                                                 });
                                                             } catch (err: any) { 
                                                                 toast({ 
@@ -3195,17 +3195,17 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     </div>
                                                 )}
 
-                                                {/* ACC -> Asset+ Sync Section */}
+                                                {/* ACC -> Geminus Plus Sync Section */}
                                                 <div className="rounded-lg border p-3 space-y-3">
                                                     <div className="flex items-center justify-between">
                                                         <Label className="text-sm font-medium flex items-center gap-1.5">
                                                             <Box className="h-4 w-4 text-primary" />
-                                                            Sync to Asset+
+                                                            Sync to Geminus Plus
                                                         </Label>
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
-                                                            onClick={handleCheckAccToAssetPlus}
+                                                            onClick={handleCheckAccToGeminusPlus}
                                                             disabled={isCheckingAccToAp}
                                                             className="h-7 text-xs gap-1"
                                                         >
@@ -3215,7 +3215,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     </div>
 
                                                     <p className="text-xs text-muted-foreground">
-                                                        Create ACC-synced objects in Asset+ with generated UUIDs. Buildings, floors, rooms and installations are created hierarchically.
+                                                        Create ACC-synced objects in Geminus Plus with generated UUIDs. Buildings, floors, rooms and installations are created hierarchically.
                                                     </p>
 
                                                     {accToApStatus && (
@@ -3225,8 +3225,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                                 <span className="font-medium">{accToApStatus.totalAccObjects}</span>
                                                             </div>
                                                             <div className="flex justify-between">
-                                                                <span className="text-muted-foreground">Synced to Asset+:</span>
-                                                                <span className="font-medium">{accToApStatus.syncedToAssetPlus}</span>
+                                                                <span className="text-muted-foreground">Synced to Geminus Plus:</span>
+                                                                <span className="font-medium">{accToApStatus.syncedToGeminusPlus}</span>
                                                             </div>
                                                             <div className="flex justify-between">
                                                                 <span className="text-muted-foreground">Not synced:</span>
@@ -3256,7 +3256,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     )}
 
                                                     <Button
-                                                        onClick={handleSyncAccToAssetPlus}
+                                                        onClick={handleSyncAccToGeminusPlus}
                                                         disabled={isSyncingAccToAp}
                                                         size="sm"
                                                         className="w-full gap-1.5"
@@ -3264,12 +3264,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         {isSyncingAccToAp ? (
                                                             <>
                                                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                                Syncing to Asset+...
+                                                                Syncing to Geminus Plus...
                                                             </>
                                                         ) : (
                                                             <>
                                                                 <Box className="h-3.5 w-3.5" />
-                                                                Sync ACC → Asset+
+                                                                Sync ACC → Geminus Plus
                                                             </>
                                                         )}
                                                     </Button>
@@ -3300,12 +3300,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                     <TabsContent value="sync" className="mt-4 flex-1 min-h-0 space-y-4 overflow-y-auto overflow-x-hidden pr-1">
                         <Accordion type="multiple" className="space-y-2">
-                            {/* Asset+ Sync */}
-                            <AccordionItem value="assetplus-sync" className="border rounded-lg px-4">
+                            {/* Geminus Plus Sync */}
+                            <AccordionItem value="geminus-plus-sync" className="border rounded-lg px-4">
                                 <AccordionTrigger className="py-3">
                                     <div className="flex items-center gap-2">
                                         <Box className="h-4 w-4 text-primary" />
-                                        <span>Asset+ Sync</span>
+                                        <span>Geminus Plus Sync</span>
                                         {syncCheck && (
                                             <Badge variant="outline" className="ml-auto mr-2 text-xs">
                                                 {syncCheck.total?.localCount?.toLocaleString() || assetCount.toLocaleString()} objects
@@ -3333,7 +3333,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             icon={<Building2 className="h-5 w-5 text-primary" />}
                                             title="Buildings/Floors/Rooms"
                                             subtitle={syncCheck?.structure?.accLocalCount 
-                                                ? `Asset+ scope (${syncCheck.structure.accLocalCount} ACC/IFC objects excluded)` 
+                                                ? `Geminus Plus scope (${syncCheck.structure.accLocalCount} ACC/IFC objects excluded)` 
                                                 : 'Buildings, floors and rooms'}
                                             localCount={syncCheck?.structure?.localCount || 0}
                                             remoteCount={syncCheck?.structure?.remoteCount}
@@ -3354,7 +3354,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             icon={<Layers className="h-5 w-5 text-primary" />}
                                             title="All Assets"
                                             subtitle={syncCheck?.assets?.accLocalCount
-                                                ? `Asset+ scope (${syncCheck.assets.accLocalCount} ACC/IFC objects excluded)`
+                                                ? `Geminus Plus scope (${syncCheck.assets.accLocalCount} ACC/IFC objects excluded)`
                                                 : 'Installations and inventories (per building)'}
                                             localCount={syncCheck?.assets?.localCount || 0}
                                             remoteCount={syncCheck?.assets?.remoteCount}
@@ -3455,7 +3455,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 <Network className="h-4 w-4 text-primary" />
                                                 <span className="text-sm text-muted-foreground">Tekniska system:</span>
                                                 <span className="text-sm font-medium">{systemCount}</span>
-                                                <span className="text-xs text-muted-foreground ml-auto">Synced automatically with Asset+ / IFC</span>
+                                                <span className="text-xs text-muted-foreground ml-auto">Synced automatically with Geminus Plus / IFC</span>
                                             </div>
                                         )}
 
@@ -3466,7 +3466,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     <span className="font-medium">{syncCheck.total?.localCount?.toLocaleString() || assetCount.toLocaleString()} objects</span>
                                                 </div>
                                                 <div className="flex items-center justify-between text-sm mt-1">
-                                                    <span className="text-muted-foreground">Total in Asset+:</span>
+                                                    <span className="text-muted-foreground">Total in Geminus Plus:</span>
                                                     <span className="font-medium">{syncCheck.total?.remoteCount?.toLocaleString() || '?'} objects</span>
                                                 </div>
                                             </div>
@@ -3475,90 +3475,90 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                 </AccordionContent>
                             </AccordionItem>
 
-                            {/* FM Access Sync */}
-                            <AccordionItem value="fmaccess-sync" className="border rounded-lg px-4">
+                            {/* Geminus Base Sync */}
+                            <AccordionItem value="geminus-base-sync" className="border rounded-lg px-4">
                                 <AccordionTrigger className="py-3">
                                     <div className="flex items-center gap-2">
                                         <Building2 className="h-4 w-4 text-primary" />
-                                        <span>FM Access</span>
-                                        {fmAccessStatus === 'success' && <Badge variant="outline" className="ml-auto mr-2 text-xs">Connected</Badge>}
+                                        <span>Geminus Base</span>
+                                        {geminusBaseStatus === 'success' && <Badge variant="outline" className="ml-auto mr-2 text-xs">Connected</Badge>}
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent>
                                     <div className="space-y-4">
-                                        <p className="text-xs text-muted-foreground">Sync inventoried objects (not in model) with FM Access</p>
+                                        <p className="text-xs text-muted-foreground">Sync inventoried objects (not in model) with Geminus Base</p>
                                         <div className="space-y-2 text-sm">
                                             <div className="flex items-center justify-between">
                                                 <span className="text-muted-foreground">Inventoried objects with FM link:</span>
-                                                <span className="font-medium">{fmAccessLocalCount}</span>
+                                                <span className="font-medium">{geminusBaseLocalCount}</span>
                                             </div>
-                                            {fmAccessSyncResult && (
+                                            {geminusBaseSyncResult && (
                                                 <>
                                                     <div className="flex items-center justify-between">
                                                         <span className="text-muted-foreground">Last sync:</span>
-                                                        <span className="font-medium text-xs">{fmAccessSyncResult.lastSync ? new Date(fmAccessSyncResult.lastSync).toLocaleString('en-US') : '–'}</span>
+                                                        <span className="font-medium text-xs">{geminusBaseSyncResult.lastSync ? new Date(geminusBaseSyncResult.lastSync).toLocaleString('en-US') : '–'}</span>
                                                     </div>
                                                     <div className="flex items-center justify-between">
                                                         <span className="text-muted-foreground">Result:</span>
                                                         <span className="font-medium text-xs">
-                                                            <span className="text-green-600">{fmAccessSyncResult.success} succeeded</span>
-                                                            {fmAccessSyncResult.failed > 0 && <span className="text-red-600 ml-1.5">{fmAccessSyncResult.failed} failed</span>}
+                                                            <span className="text-green-600">{geminusBaseSyncResult.success} succeeded</span>
+                                                            {geminusBaseSyncResult.failed > 0 && <span className="text-red-600 ml-1.5">{geminusBaseSyncResult.failed} failed</span>}
                                                         </span>
                                                     </div>
                                                 </>
                                             )}
                                         </div>
                                         <div className="flex gap-2">
-                                            <Button variant="outline" size="sm" className="gap-1 h-8 text-xs" onClick={handleTestFmAccessConnection} disabled={isTestingFmAccess || isSyncingFmAccess}>
-                                                {isTestingFmAccess ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                            <Button variant="outline" size="sm" className="gap-1 h-8 text-xs" onClick={handleTestGeminusBaseConnection} disabled={isTestingGeminusBase || isSyncingGeminusBase}>
+                                                {isTestingGeminusBase ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                                                 Test Connection
                                             </Button>
-                                            <Button size="sm" className="gap-1 h-8 text-xs" onClick={handleSyncToFmAccess} disabled={isSyncingFmAccess || isTestingFmAccess}>
-                                                {isSyncingFmAccess ? <Loader2 className="h-3 w-3 animate-spin" /> : <Building2 className="h-3 w-3" />}
-                                                {isSyncingFmAccess ? 'Syncing...' : 'Sync with FM Access ↔'}
+                                            <Button size="sm" className="gap-1 h-8 text-xs" onClick={handleSyncToGeminusBase} disabled={isSyncingGeminusBase || isTestingGeminusBase}>
+                                                {isSyncingGeminusBase ? <Loader2 className="h-3 w-3 animate-spin" /> : <Building2 className="h-3 w-3" />}
+                                                {isSyncingGeminusBase ? 'Syncing...' : 'Sync with Geminus Base ↔'}
                                             </Button>
                                         </div>
 
-                                        {/* FM Access Document/Drawing Sync */}
+                                        {/* Geminus Base Document/Drawing Sync */}
                                         <div className="border-t pt-3 mt-3">
                                             <h4 className="text-sm font-medium mb-2 flex items-center gap-1.5">
                                                 <FileText className="h-3.5 w-3.5" />
                                                 Sync documents &amp; drawings
                                             </h4>
                                             <p className="text-xs text-muted-foreground mb-3">
-                                                Syncs drawings, documents and O&M instructions from FM Access to local database for fast search via Geminus AI.
+                                                Syncs drawings, documents and O&M instructions from Geminus Base to local database for fast search via Geminus AI.
                                             </p>
-                                            <FmAccessDocSyncPanel />
+                                            <GeminusBaseDocSyncPanel />
                                         </div>
                                     </div>
                                 </AccordionContent>
                             </AccordionItem>
 
-                            {/* Senslinc Sync */}
-                            <AccordionItem value="senslinc-sync" className="border rounded-lg px-4">
+                            {/* Geminus Premium Sync */}
+                            <AccordionItem value="geminus-premium-sync" className="border rounded-lg px-4">
                                 <AccordionTrigger className="py-3">
                                     <div className="flex items-center gap-2">
                                         <Radar className="h-4 w-4 text-primary" />
-                                        <span>Senslinc</span>
+                                        <span>Geminus Premium</span>
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent>
                                     <div className="space-y-4">
-                                        <p className="text-xs text-muted-foreground">IoT sensors via Senslinc (InUse). Press "Test Connection" to check if the API is available.</p>
+                                        <p className="text-xs text-muted-foreground">IoT sensors via Geminus Premium (InUse). Press "Test Connection" to check if the API is available.</p>
                                         <Button 
                                             size="sm"
                                             variant="outline"
                                             className="gap-1 h-8 text-xs"
                                             onClick={async () => {
                                                 try {
-                                                    const { data, error } = await supabase.functions.invoke('senslinc-query', {
+                                                    const { data, error } = await supabase.functions.invoke('geminus-premium-query', {
                                                         body: { action: 'get-indices' }
                                                     });
                                                     if (error) throw error;
                                                     if (data?.success) {
-                                                        toast({ title: 'Connection OK', description: `Found ${data.indices?.length || 0} indices in Senslinc.` });
+                                                        toast({ title: 'Connection OK', description: `Found ${data.indices?.length || 0} indices in Geminus Premium.` });
                                                     } else {
-                                                        toast({ variant: 'destructive', title: 'Connection Error', description: data?.error || 'Could not reach Senslinc API (possible rate limit)' });
+                                                        toast({ variant: 'destructive', title: 'Connection Error', description: data?.error || 'Could not reach Geminus Premium API (possible rate limit)' });
                                                     }
                                                 } catch (err: any) {
                                                     toast({ variant: 'destructive', title: 'Error', description: err.message });
@@ -3617,7 +3617,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             {allBuildings.length === 0 ? (
                                                 <div className="text-center py-4 text-muted-foreground border rounded-lg bg-muted/30">
                                                     <Database className="h-6 w-6 mx-auto mb-2 opacity-50" />
-                                                    <p className="text-sm">Sync buildings from Asset+ first</p>
+                                                    <p className="text-sm">Sync buildings from Geminus Plus first</p>
                                                 </div>
                                             ) : (
                                                 <div className="space-y-2 max-h-[200px] overflow-y-auto">

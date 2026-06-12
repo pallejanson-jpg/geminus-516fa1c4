@@ -1,7 +1,7 @@
 /**
  * NativeXeokitViewer — Prototype native xeokit viewer using XKTLoaderPlugin.
  *
- * Loads XKT models directly from Supabase Storage, bypassing the Asset+ Vue wrapper.
+ * Loads XKT models directly from Supabase Storage, bypassing the Geminus Plus Vue wrapper.
  * This eliminates the fetch interceptor hack and gives direct control over the loading pipeline.
  *
  * Architecture: Composed from three hooks:
@@ -27,7 +27,7 @@ interface NativeXeokitViewerProps {
   buildingFmGuid: string;
   onClose?: () => void;
   onViewerReady?: (viewer: any) => void;
-  /** When true, forces a re-download of XKT models from Asset+ before loading */
+  /** When true, forces a re-download of XKT models from Geminus Plus before loading */
   forceBootstrap?: boolean;
 }
 
@@ -92,7 +92,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   // ── Hook: model loading pipeline ──
   const {
     fetchModelMetadata,
-    bootstrapFromAssetPlus,
+    bootstrapFromGeminusPlus,
     loadAllModels,
     loadSingleModel,
     pendingInsightsColorRef,
@@ -148,7 +148,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       setPhase('creating_viewer');
       console.log(`[NativeViewer] SDK + viewer created in ${Math.round(performance.now() - t0)}ms`);
 
-      // 2. Load models: try cache first, fall back to Asset+ if cache is empty
+      // 2. Load models: try cache first, fall back to Geminus Plus if cache is empty
       let models: any[] = [];
       setPhase('syncing');
 
@@ -162,19 +162,19 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         models = cachedModels;
         console.log(`[NativeViewer] ✅ Loaded ${models.length} models from cache`);
       } else if (forceBootstrap) {
-        // Cache is empty AND forceBootstrap is set: fetch from Asset+
-        console.log('[NativeViewer] Cache empty — fetching from Asset+');
-        const bootstrapped = await bootstrapFromAssetPlus();
+        // Cache is empty AND forceBootstrap is set: fetch from Geminus Plus
+        console.log('[NativeViewer] Cache empty — fetching from Geminus Plus');
+        const bootstrapped = await bootstrapFromGeminusPlus();
         if (!mountedRef.current) return;
         models = bootstrapped;
-        console.log(`[NativeViewer] Got ${models.length} models from Asset+`);
+        console.log(`[NativeViewer] Got ${models.length} models from Geminus Plus`);
       } else {
-        // Cache is empty AND forceBootstrap is false: still try Asset+ (first visit)
-        console.log('[NativeViewer] Cache empty — trying Asset+ (first visit)');
-        const bootstrapped = await bootstrapFromAssetPlus();
+        // Cache is empty AND forceBootstrap is false: still try Geminus Plus (first visit)
+        console.log('[NativeViewer] Cache empty — trying Geminus Plus (first visit)');
+        const bootstrapped = await bootstrapFromGeminusPlus();
         if (!mountedRef.current) return;
         models = bootstrapped;
-        console.log(`[NativeViewer] Got ${models.length} models from Asset+`);
+        console.log(`[NativeViewer] Got ${models.length} models from Geminus Plus`);
       }
 
       if (models.length === 0) {
@@ -380,7 +380,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         setPhase('error');
       }
     }
-  }, [buildingFmGuid, forceBootstrap, createInstance, fetchModelMetadata, bootstrapFromAssetPlus, loadAllModels, loadSingleModel, onViewerReady, pendingInsightsColorRef, viewerRef]);
+  }, [buildingFmGuid, forceBootstrap, createInstance, fetchModelMetadata, bootstrapFromGeminusPlus, loadAllModels, loadSingleModel, onViewerReady, pendingInsightsColorRef, viewerRef]);
 
   // ── Stabilized effect: only re-run when buildingFmGuid changes ──
   // Uses a ref to always call the latest initialize without it being a dependency,

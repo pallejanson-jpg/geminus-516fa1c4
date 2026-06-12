@@ -82,7 +82,7 @@ export function useIleanContext() {
     setIsLoading(true);
 
     supabase.functions
-      .invoke('senslinc-query', {
+      .invoke('geminus-premium-query', {
         body: { action: 'get-ilean-context', fmGuid: contextFmGuid, contextLevel },
       })
       .then(({ data: result, error }) => {

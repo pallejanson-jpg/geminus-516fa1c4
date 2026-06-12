@@ -101,7 +101,7 @@ export default function KnowledgeBaseSettings() {
       {/* Add form */}
       <div className="flex flex-col sm:flex-row gap-2">
         <Input
-          placeholder="App name (e.g. FM Access)"
+          placeholder="App name (e.g. Geminus Base)"
           value={newAppName}
           onChange={(e) => setNewAppName(e.target.value)}
           className="flex-1"

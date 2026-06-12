@@ -1,4 +1,4 @@
-# Plan: Senslinc Integration - Phase 2
+# Plan: Geminus Premium Integration - Phase 2
 
 **Datum**: 2026-02-05
 **Status**: Planering
@@ -8,9 +8,9 @@
 
 ## Översikt
 
-Denna plan beskriver den fullständiga integrationen av Senslinc (InUse) för att:
+Denna plan beskriver den fullständiga integrationen av Geminus Premium (InUse) för att:
 1. Koppla `sensorUrl` till IoT-knappar i hela applikationen
-2. Aktivera Ilean-assistenten med `ileanUrl` från Asset+
+2. Aktivera Ilean-assistenten med `ileanUrl` från Geminus Plus
 3. Hämta riktig sensordata till Insights-dialogen via Recharts
 
 ---
@@ -18,46 +18,46 @@ Denna plan beskriver den fullständiga integrationen av Senslinc (InUse) för at
 ## Del 1: Sensor-URL Integration (IoT-knappar)
 
 ### Nuläge
-- IoT-knapp finns på rum/assets som öppnar Senslinc dashboard i iframe
-- URL hämtas via `get-dashboard-url` i `senslinc-query` edge function
+- IoT-knapp finns på rum/assets som öppnar Geminus Premium dashboard i iframe
+- URL hämtas via `get-dashboard-url` i `geminus-premium-query` edge function
 - Mappning sker via FM GUID i `code`-fältet
 
 ### Mål
 | Entitet | Källa för sensorUrl | Fallback |
 |---------|---------------------|----------|
-| Byggnad | `attributes.sensorUrl` från Asset+ | `/api/sites?code={fmGuid}` |
-| Våning | `attributes.sensorUrl` från Asset+ | `/api/lines?code={fmGuid}` |
-| Rum | `attributes.sensorUrl` från Asset+ | `/api/machines?code={fmGuid}` |
-| Tillgång | `attributes.sensorUrl` från Asset+ | `/api/machines?code={fmGuid}` |
+| Byggnad | `attributes.sensorUrl` från Geminus Plus | `/api/sites?code={fmGuid}` |
+| Våning | `attributes.sensorUrl` från Geminus Plus | `/api/lines?code={fmGuid}` |
+| Rum | `attributes.sensorUrl` från Geminus Plus | `/api/machines?code={fmGuid}` |
+| Tillgång | `attributes.sensorUrl` från Geminus Plus | `/api/machines?code={fmGuid}` |
 
 ### Implementation
 
-**Steg 1.1: Uppdatera `senslinc-query` edge function**
+**Steg 1.1: Uppdatera `geminus-premium-query` edge function**
 
 Lägg till ny action `get-sensor-url` som:
 1. Först kontrollerar om `sensorUrl` finns i attributen
-2. Fallback: söker i Senslinc API
+2. Fallback: söker i Geminus Premium API
 
 ```typescript
 case 'get-sensor-url': {
   const { fmGuid, sensorUrlFromAsset } = params;
   
-  // Om sensorUrl finns i Asset+, använd den
+  // Om sensorUrl finns i Geminus Plus, använd den
   if (sensorUrlFromAsset) {
     return jsonResponse({ 
       success: true, 
-      data: { dashboardUrl: sensorUrlFromAsset, source: 'asset-plus' } 
+      data: { dashboardUrl: sensorUrlFromAsset, source: 'geminus-plus' } 
     });
   }
   
-  // Fallback: sök i Senslinc
+  // Fallback: sök i Geminus Premium
   return await getDashboardUrl(fmGuid);
 }
 ```
 
 **Steg 1.2: Uppdatera IoT-knappen i QuickActions**
 
-Visa IoT-knapp för alla entiteter som har `sensorUrl` eller matchar i Senslinc.
+Visa IoT-knapp för alla entiteter som har `sensorUrl` eller matchar i Geminus Premium.
 
 ---
 
@@ -69,7 +69,7 @@ Visa IoT-knapp för alla entiteter som har `sensorUrl` eller matchar i Senslinc.
 - Visas som iframe
 
 ### Mål
-- Hämta `ileanUrl` från byggnadens attribut i Asset+ (t.ex. "Smv")
+- Hämta `ileanUrl` från byggnadens attribut i Geminus Plus (t.ex. "Smv")
 - Aktivera Ilean automatiskt när URL finns
 - Visa tydlig indikation när Ilean är tillgänglig
 
@@ -80,7 +80,7 @@ Visa IoT-knapp för alla entiteter som har `sensorUrl` eller matchar i Senslinc.
 Prioriteringsordning:
 1. `attributes.ileanUrl` eller `attributes.ileanURL` på selected facility
 2. `attributes.ilean` (legacy)
-3. Bygg URL från Senslinc API-URL: `https://{domain}/ilean`
+3. Bygg URL från Geminus Premium API-URL: `https://{domain}/ilean`
 
 ```typescript
 // I IleanButton.tsx useEffect:
@@ -120,12 +120,12 @@ När `ileanUrl` finns tillgänglig:
 ### Nuläge
 - InsightsView använder Recharts för diagram
 - PerformanceTab har mock-data (energiförbrukning baserad på fmGuid-hash)
-- Ingen koppling till Senslinc API
+- Ingen koppling till Geminus Premium API
 
 ### Mål
-- Hämta riktig sensordata från Senslinc (temperatur, CO2, fukt, belysning, etc.)
+- Hämta riktig sensordata från Geminus Premium (temperatur, CO2, fukt, belysning, etc.)
 - Visa i befintliga Recharts-komponenter (BarChart, PieChart, LineChart)
-- Undvik iframe-inbäddning (blockas av Senslinc + ger inkonsekvent design)
+- Undvik iframe-inbäddning (blockas av Geminus Premium + ger inkonsekvent design)
 - **VIKTIG**: Tidsseriedata hämtas via Elasticsearch DSL, inte enkla REST-endpoints
 
 ### API-flöde för tidsseriedata
@@ -138,7 +138,7 @@ När `ileanUrl` finns tillgänglig:
 └─────────────────┘    └─────────────────┘    └─────────────────────────┘
 ```
 
-### Senslinc Elasticsearch API
+### Geminus Premium Elasticsearch API
 
 | Endpoint | Metod | Beskrivning |
 |----------|-------|-------------|
@@ -156,11 +156,11 @@ När `ileanUrl` finns tillgänglig:
 
 ### Implementation
 
-**Steg 3.1: Utöka `senslinc-query` med Elasticsearch-stöd**
+**Steg 3.1: Utöka `geminus-premium-query` med Elasticsearch-stöd**
 
 ```typescript
 // Rate-limiting med exponential backoff
-async function senslincFetchWithRetry(
+async function geminusPremiumFetchWithRetry(
   apiUrl: string, 
   endpoint: string, 
   token: string,
@@ -180,14 +180,14 @@ async function senslincFetchWithRetry(
     });
     
     if (response.status === 429) {
-      console.log(`[Senslinc] Rate limited, retry ${attempt + 1}/${maxRetries} after ${delay}ms`);
+      console.log(`[Geminus Premium] Rate limited, retry ${attempt + 1}/${maxRetries} after ${delay}ms`);
       await new Promise(resolve => setTimeout(resolve, delay));
       delay *= 2; // Exponential backoff
       continue;
     }
     
     if (!response.ok) {
-      throw new Error(`Senslinc API error: ${response.status}`);
+      throw new Error(`Geminus Premium API error: ${response.status}`);
     }
     
     return response.json();
@@ -198,13 +198,13 @@ async function senslincFetchWithRetry(
 
 // Nya actions
 case 'get-indices': {
-  const data = await senslincFetchWithRetry(cleanApiUrl, '/api/indices', token);
+  const data = await geminusPremiumFetchWithRetry(cleanApiUrl, '/api/indices', token);
   return jsonResponse({ success: true, data });
 }
 
 case 'get-properties': {
   const { indiceId } = params;
-  const data = await senslincFetchWithRetry(
+  const data = await geminusPremiumFetchWithRetry(
     cleanApiUrl, 
     `/api/properties?indice=${indiceId}`, 
     token
@@ -214,7 +214,7 @@ case 'get-properties': {
 
 case 'search-data': {
   const { workspaceKey, query } = params;
-  const data = await senslincFetchWithRetry(
+  const data = await geminusPremiumFetchWithRetry(
     cleanApiUrl,
     `/api/data-workspaces/${workspaceKey}/_search`,
     token,
@@ -260,24 +260,24 @@ const query = {
 };
 ```
 
-**Steg 3.3: Skapa React hook för Senslinc-data**
+**Steg 3.3: Skapa React hook för Geminus Premium-data**
 
 ```typescript
-// src/hooks/useSenslincData.ts
-interface SenslincDataResult {
-  data: SenslincTimeSeriesData | null;
+// src/hooks/useGeminusPremiumData.ts
+interface GeminusPremiumDataResult {
+  data: GeminusPremiumTimeSeriesData | null;
   isLoading: boolean;
   error: string | null;
   isMock: boolean;
   source: 'live' | 'mock' | 'cache';
 }
 
-export function useSenslincData(fmGuid: string, options?: {
+export function useGeminusPremiumData(fmGuid: string, options?: {
   metrics?: ('temperature' | 'co2' | 'humidity' | 'energy')[];
   period?: 'day' | 'week' | 'month';
   aggregation?: 'hourly' | 'daily';
-}): SenslincDataResult {
-  const [result, setResult] = useState<SenslincDataResult>({
+}): GeminusPremiumDataResult {
+  const [result, setResult] = useState<GeminusPremiumDataResult>({
     data: null,
     isLoading: true,
     error: null,
@@ -289,7 +289,7 @@ export function useSenslincData(fmGuid: string, options?: {
     const fetchData = async () => {
       try {
         // 1. Discovery: Hämta indices
-        const indicesRes = await supabase.functions.invoke('senslinc-query', {
+        const indicesRes = await supabase.functions.invoke('geminus-premium-query', {
           body: { action: 'get-indices' }
         });
         
@@ -301,12 +301,12 @@ export function useSenslincData(fmGuid: string, options?: {
         const workspace = findWorkspaceForEntity(indicesRes.data.data, fmGuid);
         
         // 3. Hämta properties för att veta vilka metrics som finns
-        const propsRes = await supabase.functions.invoke('senslinc-query', {
+        const propsRes = await supabase.functions.invoke('geminus-premium-query', {
           body: { action: 'get-properties', indiceId: workspace.pk }
         });
         
         // 4. Bygg och kör Elasticsearch-query
-        const searchRes = await supabase.functions.invoke('senslinc-query', {
+        const searchRes = await supabase.functions.invoke('geminus-premium-query', {
           body: { 
             action: 'search-data',
             workspaceKey: workspace.key,
@@ -344,11 +344,11 @@ export function useSenslincData(fmGuid: string, options?: {
 
 ```tsx
 // I PerformanceTab.tsx:
-const { data: senslincData, isLoading, isMock } = useSenslincData(building.fmGuid);
+const { data: geminusPremiumData, isLoading, isMock } = useGeminusPremiumData(building.fmGuid);
 
 const energyByBuilding = useMemo(() => {
-  if (senslincData?.energy) {
-    return senslincData.energy.map(e => ({
+  if (geminusPremiumData?.energy) {
+    return geminusPremiumData.energy.map(e => ({
       name: e.buildingName,
       kwhPerSqm: e.kwhPerSqm,
       rating: calculateRating(e.kwhPerSqm),
@@ -356,7 +356,7 @@ const energyByBuilding = useMemo(() => {
   }
   // Fallback till nuvarande mock-logik
   return mockEnergyData;
-}, [senslincData]);
+}, [geminusPremiumData]);
 ```
 
 ---
@@ -373,7 +373,7 @@ const energyByBuilding = useMemo(() => {
 
 ```tsx
 // Exempel i PerformanceTab.tsx
-const { data, isMock } = useSenslincData(building.fmGuid);
+const { data, isMock } = useGeminusPremiumData(building.fmGuid);
 
 <LineChart data={data?.timeseries}>
   <Line 
@@ -412,9 +412,9 @@ const chartColors = {
 
 ---
 
-## Mappning: Senslinc → Asset+
+## Mappning: Geminus Premium → Geminus Plus
 
-| Senslinc | Asset+ | Fält för mappning |
+| Geminus Premium | Geminus Plus | Fält för mappning |
 |----------|--------|-------------------|
 | Site | Building | `code` = `fmGuid` |
 | Line | Building Storey | `code` = `fmGuid` |
@@ -438,11 +438,11 @@ const chartColors = {
 
 | Fil | Ändring |
 |-----|---------|
-| `supabase/functions/senslinc-query/index.ts` | Lägg till: `get-indices`, `get-properties`, `search-data` med exponential backoff |
-| `src/hooks/useSenslincData.ts` | NY: React hook med Elasticsearch-logik och mock-fallback |
+| `supabase/functions/geminus-premium-query/index.ts` | Lägg till: `get-indices`, `get-properties`, `search-data` med exponential backoff |
+| `src/hooks/useGeminusPremiumData.ts` | NY: React hook med Elasticsearch-logik och mock-fallback |
 | `src/components/chat/IleanButton.tsx` | Förbättrad URL-sökning, auto-aktivering |
-| `src/components/insights/tabs/PerformanceTab.tsx` | Använd `useSenslincData`, visa isMock-indikator |
-| `docs/api/senslinc/overview.md` | NY: Dokumentation av Senslinc API-struktur |
+| `src/components/insights/tabs/PerformanceTab.tsx` | Använd `useGeminusPremiumData`, visa isMock-indikator |
+| `docs/api/senslinc/overview.md` | NY: Dokumentation av Geminus Premium API-struktur |
 
 ---
 
@@ -450,7 +450,7 @@ const chartColors = {
 
 1. **Verifiera indices**: Köra `get-indices` för att se vilka workspaces som finns
 2. **Testa en query**: Hämta temperaturdata för ett känt rum (t.ex. i Smv)
-3. **Implementera hook**: Skapa `useSenslincData.ts` med korrekt flöde
+3. **Implementera hook**: Skapa `useGeminusPremiumData.ts` med korrekt flöde
 4. **Uppdatera UI**: Integrera i PerformanceTab med mock-fallback
 
 ---
@@ -459,5 +459,5 @@ const chartColors = {
 
 1. Vilka sensortyper är viktigast att visa först? (Temperatur, CO2, Energi?)
 2. Ska vi visa data för enskilda byggnader eller hela portfolion i Insights?
-3. Finns det specifika attributnamn i Asset+ för `ileanUrl` och `sensorUrl`?
+3. Finns det specifika attributnamn i Geminus Plus för `ileanUrl` och `sensorUrl`?
 4. Vill du ha möjlighet att jämföra byggnader i samma diagram?

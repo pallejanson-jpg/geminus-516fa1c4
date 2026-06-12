@@ -270,7 +270,7 @@ export default function NavigatorView() {
   const canOpen2D = selectedNode?.category === 'Building Storey';
   const canInventory = selectedNode && ['Building', 'Building Storey', 'Space'].includes(selectedNode.category || '');
   const canCreateWorkOrder = selectedNode && ['Building', 'Building Storey', 'Space', 'Instance'].includes(selectedNode.category || '');
-  const canSyncToAssetPlus = selectedNode?.category === 'Instance' && selectedNode.isLocal === true && selectedNode.inRoomFmGuid;
+  const canSyncToGeminusPlus = selectedNode?.category === 'Instance' && selectedNode.isLocal === true && selectedNode.inRoomFmGuid;
 
   return (
     <TooltipProvider>
@@ -390,15 +390,15 @@ export default function NavigatorView() {
                   <Plus className="h-3 w-3 text-muted-foreground" />
                 </Button>
               )}
-              {canSyncToAssetPlus && (
+              {canSyncToGeminusPlus && (
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6"
                   onClick={() => {
-                    toast.info('Sync to Asset+ triggered');
+                    toast.info('Sync to Geminus Plus triggered');
                   }}
-                  title="Sync to Asset+"
+                  title="Sync to Geminus Plus"
                 >
                   <RefreshCw className="h-3 w-3 text-blue-500" />
                 </Button>

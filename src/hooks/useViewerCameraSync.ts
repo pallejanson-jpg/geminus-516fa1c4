@@ -1,6 +1,6 @@
 /**
  * Hook for synchronizing camera between 3D viewer and sync context.
- * Used by AssetPlusViewer to broadcast and receive camera changes.
+ * Used by GeminusPlusViewer to broadcast and receive camera changes.
  */
 
 import { useEffect, useRef, useCallback } from 'react';
@@ -44,7 +44,7 @@ export function useViewerCameraSync({
   const lastBroadcastTime = useRef(0);
   const BROADCAST_THROTTLE_MS = 200;
 
-  // Get xeokit viewer from AssetPlus viewer
+  // Get xeokit viewer from GeminusPlus viewer
   const getXeokitViewer = useCallback(() => {
     const viewer = viewerRef.current;
     return viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;

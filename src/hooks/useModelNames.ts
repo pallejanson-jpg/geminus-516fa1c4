@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
  * Resolution order:
  * 1. `geometry_entity_map` table (canonical mapping layer — authoritative)
  * 2. `xkt_models` database table (fallback)
- * 3. Asset+ `GetModels` API (last resort, persists to DB)
+ * 3. Geminus Plus `GetModels` API (last resort, persists to DB)
  */
 export function useModelNames(buildingFmGuid: string | undefined | null) {
   const [nameEntries, setNameEntries] = useState<[string, string][]>([]);
@@ -29,7 +29,7 @@ export function useModelNames(buildingFmGuid: string | undefined | null) {
           return;
         }
 
-        // Strategy 2: xkt_models + Asset+ storey attributes (legacy fallback)
+        // Strategy 2: xkt_models + Geminus Plus storey attributes (legacy fallback)
         const legacyEntries = await fetchFromLegacySources(buildingFmGuid);
         if (!cancelled) {
           setNameEntries(legacyEntries);
@@ -132,26 +132,26 @@ async function fetchFromGeometryMap(buildingFmGuid: string): Promise<[string, st
 }
 
 /**
- * Legacy fallback: uses xkt_models + Asset+ storey attributes + API.
+ * Legacy fallback: uses xkt_models + Geminus Plus storey attributes + API.
  * This is the original resolution logic, kept for buildings that haven't
  * been re-synced with geometry_entity_map yet.
  */
 async function fetchFromLegacySources(buildingFmGuid: string): Promise<[string, string][]> {
-  // Get BIM model names from Asset+ Building Storey objects
+  // Get BIM model names from Geminus Plus Building Storey objects
   const { data: storeys } = await supabase
     .from('assets')
     .select('fm_guid, name, common_name, attributes')
     .eq('building_fm_guid', buildingFmGuid)
     .eq('category', 'Building Storey');
 
-  const assetPlusModelNames = new Map<string, string>();
+  const geminusPlusModelNames = new Map<string, string>();
   if (storeys) {
     storeys.forEach((s: any) => {
       const attrs = typeof s.attributes === 'string' ? JSON.parse(s.attributes) : (s.attributes || {});
       const guid = attrs.parentBimObjectId;
       const name = attrs.parentCommonName;
       if (guid && name && !/^[0-9a-f]{8}-/i.test(name)) {
-        assetPlusModelNames.set(guid, name);
+        geminusPlusModelNames.set(guid, name);
       }
     });
   }
@@ -163,14 +163,14 @@ async function fetchFromLegacySources(buildingFmGuid: string): Promise<[string, 
     .eq('building_fm_guid', buildingFmGuid);
 
   if (!dbError && dbData && dbData.length > 0) {
-    if (assetPlusModelNames.size > 0) {
+    if (geminusPlusModelNames.size > 0) {
       const entries: [string, string][] = [];
 
       dbData.forEach((m, idx) => {
         let bestName: string | null = null;
 
         if (m.model_name) {
-          for (const [, apName] of assetPlusModelNames) {
+          for (const [, apName] of geminusPlusModelNames) {
             if (m.model_name.toLowerCase().includes(apName.toLowerCase()) ||
                 apName.toLowerCase().includes(m.model_name.toLowerCase())) {
               bestName = apName;
@@ -180,7 +180,7 @@ async function fetchFromLegacySources(buildingFmGuid: string): Promise<[string, 
         }
 
         if (!bestName) {
-          const apNames = Array.from(assetPlusModelNames.values());
+          const apNames = Array.from(geminusPlusModelNames.values());
           const fileUpper = (m.file_name || m.model_id || '').toUpperCase();
           for (const apName of apNames) {
             const firstLetter = apName.charAt(0).toUpperCase();
@@ -224,10 +224,10 @@ async function fetchFromLegacySources(buildingFmGuid: string): Promise<[string, 
     }
   }
 
-  // Fallback: Asset+ API
+  // Fallback: Geminus Plus API
   const [tokenResult, configResult] = await Promise.all([
-    supabase.functions.invoke('asset-plus-query', { body: { action: 'getToken' } }),
-    supabase.functions.invoke('asset-plus-query', { body: { action: 'getConfig' } })
+    supabase.functions.invoke('geminus-plus-query', { body: { action: 'getToken' } }),
+    supabase.functions.invoke('geminus-plus-query', { body: { action: 'getConfig' } })
   ]);
 
   const accessToken = tokenResult.data?.accessToken;

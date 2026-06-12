@@ -22,7 +22,7 @@ import {
   generateMockSensorData,
 } from '@/lib/visualization-utils';
 import { cn, normalizeGuid } from '@/lib/utils';
-import { useSenslincBuildingData } from '@/hooks/useSenslincData';
+import { useGeminusPremiumBuildingData } from '@/hooks/useGeminusPremiumData';
 import IoTHoverLabel from './IoTHoverLabel';
 import VisualizationLegendBar, { VISUALIZATION_LEGEND_SELECT_EVENT, type LegendSelectDetail } from './VisualizationLegendBar';
 
@@ -56,10 +56,10 @@ import { VISUALIZATION_QUICK_SELECT_EVENT } from './VisualizationQuickBar';
 // LocalStorage key for persisting visualization settings
 const STORAGE_KEY = 'roomVisualizationSettings';
 
-/** Resolve the xeokit viewer instance from the ref — tries Asset+ shim path first, then native */
+/** Resolve the xeokit viewer instance from the ref — tries Geminus Plus shim path first, then native */
 export const resolveXeokitViewer = (viewerRef: React.MutableRefObject<any>): any | null => {
   const v = viewerRef.current;
-  // Asset+ shim path (full nesting)
+  // Geminus Plus shim path (full nesting)
   const shim = v?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
   if (shim?.scene) return shim;
   // NativeViewerShell shim path (without AssetViewer nesting)
@@ -90,7 +90,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   embedded = false,
 }) => {
   const { allData } = useContext(AppContext);
-  const { data: buildingIoT } = useSenslincBuildingData(buildingFmGuid);
+  const { data: buildingIoT } = useGeminusPremiumBuildingData(buildingFmGuid);
 
   // Track floor selection from events — overrides prop when available
   const [eventFloorGuids, setEventFloorGuids] = useState<string[] | null>(null);
@@ -448,7 +448,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       }
     }
 
-    // Strategy 6: Name-based matching for Asset+ rooms whose FMGUID differs from BIM GUID
+    // Strategy 6: Name-based matching for Geminus Plus rooms whose FMGUID differs from BIM GUID
     // Build a name→childIds map from IfcSpace metaObjects
     const nameToChildIds = new Map<string, string[]>();
     Object.values(metaObjects).forEach((metaObj: any) => {

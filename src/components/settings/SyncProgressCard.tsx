@@ -66,7 +66,7 @@ export const SyncProgressCard: React.FC<SyncProgressCardProps> = ({
   subtitle,
   localCount,
   remoteCount,
-  remoteLabel = 'in Asset+',
+  remoteLabel = 'in Geminus Plus',
   inSync,
   isSyncing,
   isCheckingSync,
