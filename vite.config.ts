@@ -67,7 +67,7 @@ function assetPlusDevTokenPlugin(env: Record<string, string>): Plugin {
               const text = await tokenRes.text();
               return send(500, { error: `Keycloak ${tokenRes.status}: ${text.slice(0, 200)}` });
             }
-            const data = await tokenRes.json();
+            const data = (await tokenRes.json()) as { access_token: string };
             console.log('[dev-token] Keycloak token fetched ✅');
             return send(200, { accessToken: data.access_token });
           }
