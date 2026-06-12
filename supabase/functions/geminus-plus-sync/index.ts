@@ -1674,8 +1674,9 @@ serve(async (req) => {
               // Build identifier fallback chain for XKT download
               const bimObjId = rev._bimObjectId || bimObjectIdMap.get(String(revModelId)) || '';
               const buildingBimObjectId = rev._buildingBimObjectId || '';
-              const modelFmGuid = rev.fmGuid || rev.FmGuid || '';
-              const externalGuid = rev.externalGuid || rev.ExternalGuid || '';
+              // API responses vary in property casing; keep PascalCase fallback
+              const modelFmGuid = rev.fmGuid || (rev as any).FmGuid || '';
+              const externalGuid = rev.externalGuid || (rev as any).ExternalGuid || '';
 
               // Try multiple identifier combinations
               let xktData: ArrayBuffer | null = null;
@@ -1856,9 +1857,9 @@ serve(async (req) => {
             } catch (e) {
               const errMsg = e instanceof Error ? e.message : String(e);
               if (errMsg.includes('aborted')) {
-                console.log(`Model ${modelId}: Fetch timeout, skipping`);
+                console.log(`Model ${revModelId}: Fetch timeout, skipping`);
               } else {
-                console.log(`Failed to sync model ${modelId}: ${errMsg}`);
+                console.log(`Failed to sync model ${revModelId}: ${errMsg}`);
               }
             }
           }

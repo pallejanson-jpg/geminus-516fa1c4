@@ -499,7 +499,8 @@ serve(async (req) => {
       tokenCache = null; // force re-auth with current credentials
     }
 
-    if (!config.apiUrl) {
+    // save-api-config must work even when nothing is configured yet (first-time setup)
+    if (!config.apiUrl && action !== 'save-api-config') {
       return new Response(
         JSON.stringify({ success: false, error: 'GEMINUS_BASE_API_URL is not configured' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
