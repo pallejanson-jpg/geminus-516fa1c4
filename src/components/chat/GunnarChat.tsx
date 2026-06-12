@@ -401,7 +401,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       const timeout = setTimeout(() => controller.abort(), 60000);
 
       try {
-        const apiMessages = trimHistory(newMessages.filter((_, i) => i > 0));
+        const apiMessages = trimHistory(newMessages);
         const resp = await fetch(CHAT_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
