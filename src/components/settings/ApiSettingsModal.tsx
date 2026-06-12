@@ -2551,7 +2551,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                         ) : (
                             <div className="space-y-4">
                                 <p className="text-sm text-muted-foreground">
-                                    API secrets are configured via Lovable Cloud. Click on sections below for details.
+                                    API credentials are stored in the Geminus database. Click on sections below for details.
                                 </p>
                                 
                                 <Accordion type="multiple" className="space-y-2">
