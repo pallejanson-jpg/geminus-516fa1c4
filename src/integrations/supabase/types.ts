@@ -14,24 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
-      acc_geminus_plus_guid_map: {
+      acc_assetplus_guid_map: {
         Row: {
           acc_fm_guid: string
-          geminus_plus_fm_guid: string
+          assetplus_fm_guid: string
           created_at: string
           object_type: number
           synced_at: string | null
         }
         Insert: {
           acc_fm_guid: string
-          geminus_plus_fm_guid?: string
+          assetplus_fm_guid?: string
           created_at?: string
           object_type?: number
           synced_at?: string | null
         }
         Update: {
           acc_fm_guid?: string
-          geminus_plus_fm_guid?: string
+          assetplus_fm_guid?: string
           created_at?: string
           object_type?: number
           synced_at?: string | null
@@ -190,75 +190,75 @@ export type Database = {
       }
       api_profiles: {
         Row: {
-          geminus_plus_api_key: string | null
-          geminus_plus_api_url: string | null
-          geminus_plus_audience: string | null
-          geminus_plus_client_id: string | null
-          geminus_plus_client_secret: string | null
-          geminus_plus_keycloak_url: string | null
-          geminus_plus_password: string | null
-          geminus_plus_username: string | null
+          assetplus_api_key: string | null
+          assetplus_api_url: string | null
+          assetplus_audience: string | null
+          assetplus_client_id: string | null
+          assetplus_client_secret: string | null
+          assetplus_keycloak_url: string | null
+          assetplus_password: string | null
+          assetplus_username: string | null
           created_at: string
-          geminus_base_api_url: string | null
-          geminus_base_password: string | null
-          geminus_base_username: string | null
+          fm_access_api_url: string | null
+          fm_access_password: string | null
+          fm_access_username: string | null
           id: string
           is_default: boolean
           ivion_api_url: string | null
           ivion_password: string | null
           ivion_username: string | null
           name: string
-          geminus_premium_api_url: string | null
-          geminus_premium_email: string | null
-          geminus_premium_password: string | null
+          senslinc_api_url: string | null
+          senslinc_email: string | null
+          senslinc_password: string | null
           updated_at: string
         }
         Insert: {
-          geminus_plus_api_key?: string | null
-          geminus_plus_api_url?: string | null
-          geminus_plus_audience?: string | null
-          geminus_plus_client_id?: string | null
-          geminus_plus_client_secret?: string | null
-          geminus_plus_keycloak_url?: string | null
-          geminus_plus_password?: string | null
-          geminus_plus_username?: string | null
+          assetplus_api_key?: string | null
+          assetplus_api_url?: string | null
+          assetplus_audience?: string | null
+          assetplus_client_id?: string | null
+          assetplus_client_secret?: string | null
+          assetplus_keycloak_url?: string | null
+          assetplus_password?: string | null
+          assetplus_username?: string | null
           created_at?: string
-          geminus_base_api_url?: string | null
-          geminus_base_password?: string | null
-          geminus_base_username?: string | null
+          fm_access_api_url?: string | null
+          fm_access_password?: string | null
+          fm_access_username?: string | null
           id?: string
           is_default?: boolean
           ivion_api_url?: string | null
           ivion_password?: string | null
           ivion_username?: string | null
           name: string
-          geminus_premium_api_url?: string | null
-          geminus_premium_email?: string | null
-          geminus_premium_password?: string | null
+          senslinc_api_url?: string | null
+          senslinc_email?: string | null
+          senslinc_password?: string | null
           updated_at?: string
         }
         Update: {
-          geminus_plus_api_key?: string | null
-          geminus_plus_api_url?: string | null
-          geminus_plus_audience?: string | null
-          geminus_plus_client_id?: string | null
-          geminus_plus_client_secret?: string | null
-          geminus_plus_keycloak_url?: string | null
-          geminus_plus_password?: string | null
-          geminus_plus_username?: string | null
+          assetplus_api_key?: string | null
+          assetplus_api_url?: string | null
+          assetplus_audience?: string | null
+          assetplus_client_id?: string | null
+          assetplus_client_secret?: string | null
+          assetplus_keycloak_url?: string | null
+          assetplus_password?: string | null
+          assetplus_username?: string | null
           created_at?: string
-          geminus_base_api_url?: string | null
-          geminus_base_password?: string | null
-          geminus_base_username?: string | null
+          fm_access_api_url?: string | null
+          fm_access_password?: string | null
+          fm_access_username?: string | null
           id?: string
           is_default?: boolean
           ivion_api_url?: string | null
           ivion_password?: string | null
           ivion_username?: string | null
           name?: string
-          geminus_premium_api_url?: string | null
-          geminus_premium_email?: string | null
-          geminus_premium_password?: string | null
+          senslinc_api_url?: string | null
+          senslinc_email?: string | null
+          senslinc_password?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -323,7 +323,7 @@ export type Database = {
         }
         Relationships: []
       }
-      geminus_plus_endpoint_cache: {
+      asset_plus_endpoint_cache: {
         Row: {
           key: string
           updated_at: string | null
@@ -802,15 +802,15 @@ export type Database = {
       building_settings: {
         Row: {
           api_profile_id: string | null
-          geminus_plus_api_key: string | null
-          geminus_plus_api_url: string | null
-          geminus_plus_client_id: string | null
-          geminus_plus_client_secret: string | null
-          geminus_plus_keycloak_url: string | null
-          geminus_plus_password: string | null
-          geminus_plus_username: string | null
+          assetplus_api_key: string | null
+          assetplus_api_url: string | null
+          assetplus_client_id: string | null
+          assetplus_client_secret: string | null
+          assetplus_keycloak_url: string | null
+          assetplus_password: string | null
+          assetplus_username: string | null
           created_at: string
-          geminus_base_building_guid: string | null
+          fm_access_building_guid: string | null
           fm_guid: string
           hero_image_url: string | null
           id: string
@@ -829,23 +829,23 @@ export type Database = {
           latitude: number | null
           longitude: number | null
           rotation: number | null
-          geminus_premium_api_url: string | null
-          geminus_premium_email: string | null
-          geminus_premium_password: string | null
+          senslinc_api_url: string | null
+          senslinc_email: string | null
+          senslinc_password: string | null
           start_view_id: string | null
           updated_at: string
         }
         Insert: {
           api_profile_id?: string | null
-          geminus_plus_api_key?: string | null
-          geminus_plus_api_url?: string | null
-          geminus_plus_client_id?: string | null
-          geminus_plus_client_secret?: string | null
-          geminus_plus_keycloak_url?: string | null
-          geminus_plus_password?: string | null
-          geminus_plus_username?: string | null
+          assetplus_api_key?: string | null
+          assetplus_api_url?: string | null
+          assetplus_client_id?: string | null
+          assetplus_client_secret?: string | null
+          assetplus_keycloak_url?: string | null
+          assetplus_password?: string | null
+          assetplus_username?: string | null
           created_at?: string
-          geminus_base_building_guid?: string | null
+          fm_access_building_guid?: string | null
           fm_guid: string
           hero_image_url?: string | null
           id?: string
@@ -864,23 +864,23 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           rotation?: number | null
-          geminus_premium_api_url?: string | null
-          geminus_premium_email?: string | null
-          geminus_premium_password?: string | null
+          senslinc_api_url?: string | null
+          senslinc_email?: string | null
+          senslinc_password?: string | null
           start_view_id?: string | null
           updated_at?: string
         }
         Update: {
           api_profile_id?: string | null
-          geminus_plus_api_key?: string | null
-          geminus_plus_api_url?: string | null
-          geminus_plus_client_id?: string | null
-          geminus_plus_client_secret?: string | null
-          geminus_plus_keycloak_url?: string | null
-          geminus_plus_password?: string | null
-          geminus_plus_username?: string | null
+          assetplus_api_key?: string | null
+          assetplus_api_url?: string | null
+          assetplus_client_id?: string | null
+          assetplus_client_secret?: string | null
+          assetplus_keycloak_url?: string | null
+          assetplus_password?: string | null
+          assetplus_username?: string | null
           created_at?: string
-          geminus_base_building_guid?: string | null
+          fm_access_building_guid?: string | null
           fm_guid?: string
           hero_image_url?: string | null
           id?: string
@@ -899,9 +899,9 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           rotation?: number | null
-          geminus_premium_api_url?: string | null
-          geminus_premium_email?: string | null
-          geminus_premium_password?: string | null
+          senslinc_api_url?: string | null
+          senslinc_email?: string | null
+          senslinc_password?: string | null
           start_view_id?: string | null
           updated_at?: string
         }
@@ -1243,7 +1243,7 @@ export type Database = {
           },
         ]
       }
-      geminus_base_documents: {
+      fm_access_documents: {
         Row: {
           building_fm_guid: string
           class_name: string | null
@@ -1276,7 +1276,7 @@ export type Database = {
         }
         Relationships: []
       }
-      geminus_base_dou: {
+      fm_access_dou: {
         Row: {
           building_fm_guid: string | null
           content: string | null
@@ -1306,7 +1306,7 @@ export type Database = {
         }
         Relationships: []
       }
-      geminus_base_drawings: {
+      fm_access_drawings: {
         Row: {
           building_fm_guid: string
           class_name: string | null
