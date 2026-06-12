@@ -258,7 +258,7 @@ const tools = [
           category: { type: "string", description: "Asset category: 'Space' (rooms), 'Instance' (equipment/components), 'Building Storey' (floors). Defaults to 'Space' when attribute filters are used." },
           asset_type: { type: "string", description: "IFC type filter, e.g. 'IfcDoor' (partial match)" },
           name_search: { type: "string", description: "Partial match on name/common_name, e.g. 'innerdörr'" },
-          attribute_key: { type: "string", description: "Attribute key to filter on (case-insensitive), e.g. 'golvmaterial'" },
+          attribute_key: { type: "string", description: "Attribute key to filter on (case-insensitive; exact or prefix match, so 'golvmaterial' matches GUID-suffixed keys)" },
           attribute_value: { type: "string", description: "Attribute value to match (partial, case-insensitive), e.g. 'parkett'" },
           group_by: { type: "string", description: "Group results by this attribute key, or 'asset_type'. Use with mode='group'." },
           mode: { type: "string", enum: ["count", "list", "group"], description: "count = just the number; list = matching assets (fm_guids + names, max 200); group = counts per value of group_by" },
@@ -615,11 +615,22 @@ async function execBuildingSummary(supabase: any, args: any) {
 
 /* ── Flexible asset query with attribute filters ── */
 
-/** Extract an attribute value by key (case-insensitive); handles both direct values and {value: X} objects */
+/** Strip the 40-char hex GUID suffix Geminus Plus appends to custom property keys */
+function cleanAttrKey(key: string): string {
+  return key.replace(/[0-9A-F]{40}$/i, "");
+}
+
+/** Extract an attribute value by key (case-insensitive, exact or prefix — Geminus Plus
+ *  suffixes custom keys with GUIDs, e.g. "golvmaterial54D5F519...");
+ *  handles both direct values and {value: X} objects */
 function extractAttrValue(attrs: any, key: string): any {
   if (!attrs || typeof attrs !== "object") return undefined;
   const lowerKey = key.toLowerCase();
-  const realKey = Object.keys(attrs).find(k => k.toLowerCase() === lowerKey);
+  const keys = Object.keys(attrs);
+  const realKey =
+    keys.find(k => k.toLowerCase() === lowerKey) ||
+    keys.find(k => cleanAttrKey(k).toLowerCase() === lowerKey) ||
+    keys.find(k => k.toLowerCase().startsWith(lowerKey));
   if (!realKey) return undefined;
   const raw = attrs[realKey];
   if (raw && typeof raw === "object" && "value" in raw) return (raw as any).value;
@@ -713,8 +724,9 @@ async function execListAttributeKeys(supabase: any, args: any) {
     if (!row.attributes || typeof row.attributes !== "object") continue;
     for (const [k, raw] of Object.entries(row.attributes)) {
       const v = raw && typeof raw === "object" && "value" in (raw as any) ? (raw as any).value : raw;
-      if (!keys[k]) keys[k] = { count: 0, example: String(v ?? "").slice(0, 60) };
-      keys[k].count++;
+      const key = cleanAttrKey(k); // GUID-suffixed custom keys collapse to their readable prefix
+      if (!keys[key]) keys[key] = { count: 0, example: String(v ?? "").slice(0, 60) };
+      keys[key].count++;
     }
   }
   const sorted = Object.entries(keys).sort((a, b) => b[1].count - a[1].count).slice(0, 80)
@@ -1750,8 +1762,8 @@ function detectCountOrListQuestion(text: string, buildingGuid: string | null): B
     const cat = matchCategory(core);
     if (cat) return { action: "category_query", payload: { category: cat } };
     if (KNOWN_SYSTEMS[core]) return { action: "system_query", payload: { system: KNOWN_SYSTEMS[core] } };
-    // Unknown object type → building summary shows all counts
-    return { action: "building_summary", payload: {} };
+    // Unknown object type (e.g. attribute questions like "rum med parkett") → let the AI handle it
+    return null;
   }
 
   // "vilka X finns" / "which X exist" / "lista X" / "list X"
@@ -1788,6 +1800,9 @@ function detectViewerIntent(messages: any[], context: any): ButtonActionIntent |
   if (lastMsg.role !== "user") return null;
   const text = lastMsg.content.toLowerCase().trim();
   const buildingGuid = context?.currentBuilding?.fmGuid;
+
+  // Drawings/documents are handled by the AI (show_drawing action) — never fast-path them
+  if (/\b(ritning|ritningen|ritningar|drawing|dokument|document)/i.test(text)) return null;
 
   // 1) Count/list questions get priority (prevents broad regex from catching them)
   const countIntent = detectCountOrListQuestion(text, buildingGuid);

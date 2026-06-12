@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, SUPABASE_URL } from "@/integrations/supabase/client";
 import ReactMarkdown from "react-markdown";
 import { useDeepgramSpeechRecognition as useWebSpeechRecognition } from "@/hooks/useDeepgramSpeechRecognition";
 import { getGunnarSettings, saveGunnarSettings } from "@/components/settings/GunnarSettings";
@@ -101,7 +101,7 @@ function normalizeButtons(raw: ActionButton[] | string[] | undefined): ActionBut
   return raw as ActionButton[];
 }
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/geminus-ai`;
+const CHAT_URL = `${SUPABASE_URL}/functions/v1/geminus-ai`;
 
 const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function GunnarChat({ open, onClose, context, embedded, autoVoice, onAutoVoiceConsumed }, _ref) {
   const [messages, setMessages] = useState<Message[]>([]);

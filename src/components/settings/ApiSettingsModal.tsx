@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "@/integrations/supabase/client";
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
     Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2,
@@ -379,13 +379,13 @@ const ImdfExportPanel: React.FC<{ allBuildings: any[] }> = ({ allBuildings }) =>
         try {
             const { data: { session } } = await supabase.auth.getSession();
             const res = await fetch(
-                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/imdf-export`,
+                `${SUPABASE_URL}/functions/v1/imdf-export`,
                 {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${session?.access_token}`,
-                        'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                        'apikey': SUPABASE_PUBLISHABLE_KEY,
                     },
                     body: JSON.stringify({ buildingFmGuid: selectedBuilding }),
                 }

@@ -271,7 +271,7 @@ async function doLoadIvionSdk(
 
   // ── Attempt 3: script tag through CORS proxy ──────────────────────
   if (!getApi) {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const { SUPABASE_URL: supabaseUrl } = await import('@/integrations/supabase/client');
     if (supabaseUrl) {
       const proxyUrl = `${supabaseUrl}/functions/v1/ivion-proxy/ivion.js`;
       try {

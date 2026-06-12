@@ -4,6 +4,8 @@
  * Falls back to browser speechSynthesis on error.
  */
 
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '@/integrations/supabase/client';
+
 let currentAudio: HTMLAudioElement | null = null;
 
 export async function speakWithDeepgram(
@@ -13,8 +15,8 @@ export async function speakWithDeepgram(
   // Stop any currently playing audio
   stopDeepgramAudio();
 
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const supabaseUrl = SUPABASE_URL;
+  const anonKey = SUPABASE_PUBLISHABLE_KEY;
 
   const response = await fetch(`${supabaseUrl}/functions/v1/deepgram-tts`, {
     method: 'POST',

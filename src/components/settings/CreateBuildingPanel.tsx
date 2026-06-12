@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '@/integrations/supabase/client';
 import { deleteBuilding } from '@/services/geminus-plus-service';
 import {
   Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers, Timer, Cloud, FileSpreadsheet, KeyRound, Pencil, RefreshCw, Database, ChevronDown, PlayCircle, Trash2, AlertTriangle, RotateCcw, Eye, X
@@ -132,8 +132,8 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         e.returnValue = 'IFC conversion in progress. Are you sure you want to leave?';
         // Mark job as failed on unload (best-effort via sendBeacon with auth headers)
         const jobId = activeJobIdRef.current;
-        const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/conversion_jobs?id=eq.${jobId}`;
+        const anonKey = SUPABASE_PUBLISHABLE_KEY;
+        const url = `${SUPABASE_URL}/rest/v1/conversion_jobs?id=eq.${jobId}`;
         const body = JSON.stringify({ status: 'error', error_message: 'Browser tab closed during conversion', updated_at: new Date().toISOString() });
         // sendBeacon doesn't support custom headers, so we use fetch with keepalive instead
         try {
@@ -949,13 +949,13 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('No session');
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseUrl = SUPABASE_URL;
       const resp = await fetch(`${supabaseUrl}/functions/v1/conversion-worker-api/batch-enqueue`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          'apikey': SUPABASE_PUBLISHABLE_KEY,
         },
         body: JSON.stringify({ created_by: user.id }),
       });
