@@ -118,10 +118,11 @@ export function useAiViewerBridge(viewer: any, isReady: boolean) {
     scene.setObjectsXRayed(allIds, true);
     scene.setObjectsXRayed(entityIds, false);
 
-    // Apply per-entity colors
+    // Apply per-entity colors — backend sends RGB 0-255, xeokit expects 0-1
     for (const [entityId, color] of Object.entries(colorMap)) {
       if (scene.objects[entityId]) {
-        scene.setObjectsColorized([entityId], color);
+        const normalized = color.map(v => (v > 1 ? v / 255 : v)) as [number, number, number];
+        scene.setObjectsColorized([entityId], normalized);
       }
     }
 

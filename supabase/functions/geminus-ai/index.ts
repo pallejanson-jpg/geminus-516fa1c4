@@ -1,12 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import Anthropic from "npm:@anthropic-ai/sdk";
 import { verifyAuth, unauthorizedResponse, corsHeaders } from "../_shared/auth.ts";
 import { getSenslincCredentials } from "../_shared/credentials.ts";
 
-const MAX_TOOL_ROUNDS = 3;
-const AI_MODEL_PRIMARY = "google/gemini-3-flash-preview";
-const AI_MODEL_FALLBACK = "google/gemini-2.5-flash-lite";
-const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const MAX_TOOL_ROUNDS = 10;
+const AI_MODEL_PRIMARY = "claude-opus-4-8";
+const AI_MODEL_FALLBACK = "claude-sonnet-4-6";
+const MAX_OUTPUT_TOKENS = 16000;
 
 /* ─────────────────────────────────────────────
    IFC type → user-friendly Swedish name map
@@ -48,7 +49,7 @@ interface ActionButton {
 }
 
 /* ─────────────────────────────────────────────
-   Tool definitions — 5 RPC + utility tools + format_response
+   Tool definitions — 5 RPC + utility tools + present_results
    ───────────────────────────────────────────── */
 
 const tools = [
@@ -244,18 +245,56 @@ const tools = [
       },
     },
   },
-  // ── Final structured response tool ──
+  // ── Flexible asset query with attribute filters & aggregation ──
   {
     type: "function",
     function: {
-      name: "format_response",
-      description: "ALWAYS call this as your LAST tool call. The chat message is the PRIMARY output. Include 2-3 buttons and 2-3 suggestions. Default action is 'none'. Only use viewer actions when user EXPLICITLY asks.",
+      name: "query_assets",
+      description: "Flexible asset query with attribute filters and aggregation. Use for questions about asset/room properties stored in attributes (e.g. 'hur många rum har golvmaterial parkett?', 'vilka golvmaterial finns?') and for filtering objects by type/name (e.g. all doors of type 'Innerdörr'). If you don't know the exact attribute key, call list_attribute_keys first.",
       parameters: {
         type: "object",
         properties: {
-          message: { type: "string", description: "Short answer (max 2-3 sentences). Concrete, no fluff." },
+          building_guid: { type: "string", description: "Building fm_guid (required)" },
+          category: { type: "string", description: "Asset category: 'Space' (rooms), 'Instance' (equipment/components), 'Building Storey' (floors). Defaults to 'Space' when attribute filters are used." },
+          asset_type: { type: "string", description: "IFC type filter, e.g. 'IfcDoor' (partial match)" },
+          name_search: { type: "string", description: "Partial match on name/common_name, e.g. 'innerdörr'" },
+          attribute_key: { type: "string", description: "Attribute key to filter on (case-insensitive), e.g. 'golvmaterial'" },
+          attribute_value: { type: "string", description: "Attribute value to match (partial, case-insensitive), e.g. 'parkett'" },
+          group_by: { type: "string", description: "Group results by this attribute key, or 'asset_type'. Use with mode='group'." },
+          mode: { type: "string", enum: ["count", "list", "group"], description: "count = just the number; list = matching assets (fm_guids + names, max 200); group = counts per value of group_by" },
+        },
+        required: ["building_guid", "mode"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_attribute_keys",
+      description: "List the attribute keys (with example values) that exist on assets in a building. Call this before query_assets when you need to find the right attribute key (e.g. for floor material / golvmaterial).",
+      parameters: {
+        type: "object",
+        properties: {
+          building_guid: { type: "string", description: "Building fm_guid (required)" },
+          category: { type: "string", description: "Asset category to sample (default 'Space' = rooms)" },
+        },
+        required: ["building_guid"],
+        additionalProperties: false,
+      },
+    },
+  },
+  // ── Structured UI/viewer results tool ──
+  {
+    type: "function",
+    function: {
+      name: "present_results",
+      description: "Present structured UI results to the user: viewer action, clickable buttons and follow-up suggestions. Call this ONCE after your data tools and BEFORE writing your final text answer. Default action is 'none'. Only use viewer actions (highlight/filter/colorize) when the user EXPLICITLY asks to see things in the viewer/3D.",
+      parameters: {
+        type: "object",
+        properties: {
           response_type: { type: "string", enum: ["answer", "navigation", "data_query", "action"] },
-          action: { type: "string", enum: ["highlight", "filter", "colorize", "list", "none"], description: "Default 'none'. Only viewer actions when explicitly asked." },
+          action: { type: "string", enum: ["highlight", "filter", "colorize", "list", "show_drawing", "none"], description: "Default 'none'. Only viewer actions when explicitly asked. 'show_drawing' opens the FM Access 2D drawing for a floor (requires the drawing field)." },
           buttons: { type: "array", items: { type: "string" }, description: "2-3 clickable ACTION buttons" },
           suggestions: { type: "array", items: { type: "string" }, description: "2-3 proactive follow-up questions" },
           asset_ids: { type: "array", items: { type: "string" } },
@@ -284,13 +323,24 @@ const tools = [
           },
           color_map: {
             type: "object",
+            description: "For action 'colorize': map asset fm_guid → [R,G,B] (0-255). fm_guids are auto-resolved to viewer entity ids.",
             additionalProperties: {
               type: "array",
               items: { type: "number" },
             },
           },
+          drawing: {
+            type: "object",
+            description: "For action 'show_drawing': which FM Access 2D drawing to open",
+            properties: {
+              building_fm_guid: { type: "string" },
+              storey_fm_guid: { type: "string" },
+              storey_name: { type: "string", description: "Floor display name, e.g. 'Plan 2'" },
+            },
+            additionalProperties: false,
+          },
         },
-        required: ["message", "action", "buttons", "suggestions"],
+        required: ["action", "buttons", "suggestions"],
         additionalProperties: false,
       },
     },
@@ -315,11 +365,20 @@ const tools = [
   },
 ];
 
+/** Convert OpenAI-style tool definitions to Anthropic Messages API format */
+function toAnthropicTools(defs: any[]): Anthropic.Tool[] {
+  return defs.map((t: any) => ({
+    name: t.function.name,
+    description: t.function.description,
+    input_schema: t.function.parameters,
+  }));
+}
+
 /* ─────────────────────────────────────────────
    Tool execution — RPC-based
    ───────────────────────────────────────────── */
 
-async function executeTool(supabase: any, name: string, args: any, apiKey?: string) {
+async function executeTool(supabase: any, name: string, args: any) {
   switch (name) {
     case "get_assets_by_system": {
       const { data, error } = await supabase.rpc("get_assets_by_system", {
@@ -384,7 +443,11 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
       return execLiveSensorData(supabase, args);
     case "get_room_sensor_data":
       return execRoomSensorData(supabase, args);
-    case "format_response": {
+    case "query_assets":
+      return execQueryAssets(supabase, args);
+    case "list_attribute_keys":
+      return execListAttributeKeys(supabase, args);
+    case "present_results": {
       // Auto-resolve viewer entities from asset_ids if external_entity_ids not provided
       if (args.asset_ids?.length && (!args.external_entity_ids || args.external_entity_ids.length === 0)) {
         try {
@@ -394,7 +457,24 @@ async function executeTool(supabase: any, name: string, args: any, apiKey?: stri
           }
         } catch (e) { console.error("Auto-resolve entities failed:", e); }
       }
-      return { formatted: true, ...args };
+      // Re-key color_map from asset fm_guids to viewer entity ids (colorize requires exact entity ids)
+      if (args.color_map && Object.keys(args.color_map).length) {
+        try {
+          const { data } = await supabase.rpc("get_viewer_entities", { asset_ids: Object.keys(args.color_map) });
+          if (data?.length) {
+            const byFmGuid = new Map<string, string>();
+            for (const e of data) {
+              if (e.asset_fm_guid && e.external_entity_id) byFmGuid.set(e.asset_fm_guid, e.external_entity_id);
+            }
+            const remapped: Record<string, any> = {};
+            for (const [k, color] of Object.entries(args.color_map)) {
+              remapped[byFmGuid.get(k) || k] = color;
+            }
+            args.color_map = remapped;
+          }
+        } catch (e) { console.error("Color map entity resolve failed:", e); }
+      }
+      return { presented: true, ...args };
     }
     case "save_memory":
       return execSaveMemory(supabase, args, (globalThis as any).__currentUserId);
@@ -531,6 +611,115 @@ async function execBuildingSummary(supabase: any, args: any) {
     total_issues: (issues.data || []).length,
     top_asset_types: topAssetTypes,
   };
+}
+
+/* ── Flexible asset query with attribute filters ── */
+
+/** Extract an attribute value by key (case-insensitive); handles both direct values and {value: X} objects */
+function extractAttrValue(attrs: any, key: string): any {
+  if (!attrs || typeof attrs !== "object") return undefined;
+  const lowerKey = key.toLowerCase();
+  const realKey = Object.keys(attrs).find(k => k.toLowerCase() === lowerKey);
+  if (!realKey) return undefined;
+  const raw = attrs[realKey];
+  if (raw && typeof raw === "object" && "value" in raw) return (raw as any).value;
+  return raw;
+}
+
+async function execQueryAssets(supabase: any, args: any) {
+  const buildingGuid = args.building_guid;
+  if (!buildingGuid) return { error: "building_guid required" };
+  const mode = args.mode || "count";
+  const usesAttributes = !!(args.attribute_key || (args.group_by && args.group_by !== "asset_type"));
+  const category = args.category || (usesAttributes ? "Space" : undefined);
+
+  const SCAN_LIMIT = 4000;
+  let query = supabase
+    .from("assets")
+    .select(usesAttributes ? "fm_guid, name, common_name, asset_type, attributes" : "fm_guid, name, common_name, asset_type")
+    .eq("building_fm_guid", buildingGuid)
+    .limit(SCAN_LIMIT);
+  if (category) query = query.eq("category", category);
+  if (args.asset_type) query = query.ilike("asset_type", `%${args.asset_type}%`);
+  if (args.name_search) {
+    const term = String(args.name_search).replace(/[%,()]/g, "");
+    query = query.or(`name.ilike.%${term}%,common_name.ilike.%${term}%`);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  let rows: any[] = data || [];
+  const scanned = rows.length;
+
+  if (args.attribute_key) {
+    const wanted = args.attribute_value ? String(args.attribute_value).toLowerCase() : null;
+    rows = rows.filter((r: any) => {
+      const v = extractAttrValue(r.attributes, args.attribute_key);
+      if (v === undefined || v === null || v === "") return false;
+      if (!wanted) return true;
+      return String(v).toLowerCase().includes(wanted);
+    });
+  }
+
+  const base = {
+    count: rows.length,
+    scanned,
+    truncated: scanned >= SCAN_LIMIT,
+    category: category || "all",
+  };
+
+  if (mode === "group") {
+    const groupKey = args.group_by || args.attribute_key;
+    if (!groupKey) return { error: "group_by (or attribute_key) required for mode='group'" };
+    const groups: Record<string, number> = {};
+    for (const r of rows) {
+      const v = groupKey === "asset_type" ? r.asset_type : extractAttrValue(r.attributes, groupKey);
+      const label = v === undefined || v === null || v === "" ? "(saknas)" : String(v);
+      groups[label] = (groups[label] || 0) + 1;
+    }
+    const sorted = Object.entries(groups).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([value, count]) => ({ value, count }));
+    return { ...base, group_by: groupKey, groups: sorted };
+  }
+
+  if (mode === "list") {
+    return {
+      ...base,
+      assets: rows.slice(0, 200).map((r: any) => ({
+        fm_guid: r.fm_guid,
+        name: r.common_name || r.name,
+        asset_type: r.asset_type,
+        ...(args.attribute_key ? { attribute_value: extractAttrValue(r.attributes, args.attribute_key) } : {}),
+      })),
+    };
+  }
+
+  return base;
+}
+
+async function execListAttributeKeys(supabase: any, args: any) {
+  const buildingGuid = args.building_guid;
+  if (!buildingGuid) return { error: "building_guid required" };
+  const category = args.category || "Space";
+  const { data, error } = await supabase
+    .from("assets")
+    .select("attributes")
+    .eq("building_fm_guid", buildingGuid)
+    .eq("category", category)
+    .not("attributes", "is", null)
+    .limit(300);
+  if (error) throw error;
+  const keys: Record<string, { count: number; example: string }> = {};
+  for (const row of data || []) {
+    if (!row.attributes || typeof row.attributes !== "object") continue;
+    for (const [k, raw] of Object.entries(row.attributes)) {
+      const v = raw && typeof raw === "object" && "value" in (raw as any) ? (raw as any).value : raw;
+      if (!keys[k]) keys[k] = { count: 0, example: String(v ?? "").slice(0, 60) };
+      keys[k].count++;
+    }
+  }
+  const sorted = Object.entries(keys).sort((a, b) => b[1].count - a[1].count).slice(0, 80)
+    .map(([key, info]) => ({ key, count: info.count, example: info.example }));
+  return { category, sampled_assets: (data || []).length, keys: sorted };
 }
 
 /* ── Live IoT sensor data via Senslinc ── */
@@ -928,6 +1117,7 @@ interface FastPathResult {
   suggestions: string[];
   sensor_data?: any[];
   color_map?: Record<string, [number, number, number]>;
+  navigate_to_viewer?: boolean;
 }
 
 function detectSimpleIntent(messages: any[]): string | null {
@@ -1350,7 +1540,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
       }
       const sensorType = intent.payload.sensor_type || "all";
       const roomGuids = intent.payload.room_guid ? [intent.payload.room_guid] : undefined;
-      const sensorResult = await execLiveSensorData(supabase, { building_guid: buildingGuid, room_fm_guids: roomGuids });
+      const sensorResult: any = await execLiveSensorData(supabase, { building_guid: buildingGuid, room_fm_guids: roomGuids });
 
       if (!sensorResult.available) {
         return {
@@ -1720,10 +1910,84 @@ function getSimpleIntentResponse(intent: string, text: string, previousConversat
 }
 
 /* ─────────────────────────────────────────────
-   System prompt — simplified, honest about loop
+   System prompt — static cacheable core + dynamic context
    ───────────────────────────────────────────── */
 
-async function buildSystemPrompt(supabase: any, context: any, userProfile: any, previousConversation: any) {
+// Static core — no interpolation, so the prompt-cache prefix (tools + this block) stays stable.
+const STATIC_SYSTEM_PROMPT = `You are Geminus AI — an interactive interface for digital twin / BIM applications.
+
+YOUR GOAL: Help the user forward. Minimize typing. Maximize clickable options. Always give next steps.
+
+LANGUAGE & TERMINOLOGY:
+- Respond in Swedish (unless user writes in English).
+- Never use raw IFC/BIM category names in user-facing text. Translate them:
+  • "Instance" → "utrustning" eller "komponenter"
+  • "Space" → "rum"
+  • "Building Storey" → "våning" / "våningar"
+  • "Building" → "byggnad"
+  • "IfcDoor" → "dörrar"
+  • "IfcWindow" → "fönster"
+  • "IfcWall" / "IfcWallStandardCase" → "väggar"
+  • "IfcSlab" → "bjälklag"
+  • "IfcBeam" → "balkar"
+  • "IfcColumn" → "pelare"
+  • "IfcRoof" → "tak"
+  • "IfcStair" / "IfcStairFlight" → "trappor"
+  • "IfcRailing" → "räcken"
+  • "IfcCovering" → "ytbeklädnad"
+  • "IfcFurniture" → "möbler"
+  • "IfcSensor" / "IfcAlarm" → "sensorer" / "larm"
+  • "IfcPipeSegment" → "rör"
+  • "IfcDuctSegment" → "ventilationskanaler"
+  • "IfcFlowTerminal" → "don" (ventilationsdon, tappställen)
+  • "IfcValve" → "ventiler"
+  • "IfcPump" → "pumpar"
+  • "IfcBoiler" → "pannor"
+  • Other "Ifc..." types → describe in plain Swedish (e.g. "elinstallation", "VS-komponenter")
+- Use category names a fastighetsförvaltare or drifttekniker would understand.
+- When listing asset types, translate to plain Swedish (e.g. "52 dörrar, 120 ventilationsdon, 38 rör").
+
+TOOL CALLING FLOW:
+- Use data tools to gather facts before answering — never fabricate building data.
+- Work silently between tool calls: do not narrate ("Jag kollar...", "Låt mig hämta..."). Only write text as your final answer.
+- When you have results to show, call present_results ONCE (after data tools, before your final answer) with:
+  • action: Default "none". Only "highlight"/"filter"/"colorize" when the user explicitly asks to see things in the viewer/3D.
+  • buttons: 2-3 clickable ACTION buttons (e.g. "Visa i viewer", "Filtrera dörrar", "Byggnadsöversikt").
+  • suggestions: 2-3 proactive follow-up questions.
+  • asset_ids / external_entity_ids / color_map when relevant for the viewer.
+- After present_results, ALWAYS finish with your chat answer as plain text: short and concrete, max 2-3 sentences.
+- Your final plain text IS the chat message shown to the user.
+
+IoT / SENSOR DATA:
+- For analytical/ranking questions (e.g. "which room is warmest", "average temperature", "humidity in room 232"), use get_room_sensor_data. This queries cached sensor attributes stored on rooms in the database.
+- For real-time data, use get_live_sensor_data (fetches from Senslinc/InUse platform). It will automatically fall back to DB data if live data is unavailable.
+- get_room_sensor_data supports: temperature, co2, humidity, occupancy. You can sort by any metric and filter by floor.
+- Prefer get_room_sensor_data for questions about rankings, averages, or specific room sensor values.
+
+ASSET PROPERTY QUERIES (attributes):
+- For questions about asset/room properties like golvmaterial, material, ytskikt etc., use query_assets with attribute filters.
+- If you don't know the exact attribute key: call list_attribute_keys first and pick the best matching key.
+- Example "hur många rum har parkett?": list_attribute_keys → find the floor material key → query_assets(category="Space", attribute_key=<key>, attribute_value="parkett", mode="count").
+- Example "vilka golvmaterial finns?": query_assets(mode="group", group_by=<key>).
+- If the result has truncated=true, mention that the count is based on the first 4000 assets.
+
+VIEWER VISUALIZATION (colorize):
+- To color specific objects (e.g. "visa alla innerdörrar blåa i 3D"): query_assets(mode="list", category="Instance", asset_type="IfcDoor", name_search="innerdörr") → present_results with action="colorize" and color_map mapping EACH matching asset fm_guid to [R,G,B] (0-255). fm_guids are auto-resolved to viewer entity ids.
+- RGB examples: blå=[0,100,255], röd=[255,60,60], grön=[0,200,0], gul=[255,220,0], orange=[255,150,0].
+
+2D DRAWINGS (FM Access):
+- When the user asks to see the drawing ("ritningen") for a floor: resolve the floor via get_building_summary (it returns floors with fm_guid + name), then call present_results with action="show_drawing" and drawing={building_fm_guid, storey_fm_guid, storey_name}. storey_name is the floor's display name (e.g. "Plan 2"). This opens the FM Access 2D drawing.
+
+RULES:
+1. Never write stop-answers like "Jag kunde inte slutföra sökningen". If data is missing, interpret and suggest alternatives.
+2. Every response should include buttons and suggestions via present_results.
+3. Always pass building_guid to data tools when available.
+4. Respond in the SAME LANGUAGE as the user (default Swedish).
+5. Never show UUIDs/GUIDs in message text.
+6. Max 2-3 sentences in the final answer.
+7. Never use IFC class names (IfcXxx) in the final answer — always use Swedish terms.`;
+
+async function buildDynamicContext(supabase: any, context: any, userProfile: any, previousConversation: any) {
   let modelsCtx = "";
   const bGuid = context?.currentBuilding?.fmGuid;
   if (bGuid) {
@@ -1763,107 +2027,55 @@ async function buildSystemPrompt(supabase: any, context: any, userProfile: any, 
   }
 
   const buildingAlreadyResolved = context?.currentBuilding?.fmGuid
-    ? `\nIMPORTANT: The current building "${context.currentBuilding.name}" (fm_guid: ${context.currentBuilding.fmGuid}) is ALREADY resolved. Do NOT call resolve_building_by_name for it. Always pass building_guid="${context.currentBuilding.fmGuid}" to data tools.`
+    ? `\nThe current building "${context.currentBuilding.name}" (fm_guid: ${context.currentBuilding.fmGuid}) is ALREADY resolved. Do NOT call resolve_building_by_name for it. Always pass building_guid="${context.currentBuilding.fmGuid}" to data tools.`
     : "";
 
-  return `You are Geminus AI — an interactive interface for digital twin / BIM applications.
-
-YOUR GOAL: Help the user forward. Minimize typing. Maximize clickable options. Always give next steps.
-
-LANGUAGE & TERMINOLOGY — CRITICAL:
-- ALWAYS respond in Swedish (unless user writes in English).
-- NEVER use raw IFC/BIM category names in user-facing text. Translate them:
-  • "Instance" → "utrustning" eller "komponenter"
-  • "Space" → "rum"
-  • "Building Storey" → "våning" / "våningar"
-  • "Building" → "byggnad"
-  • "IfcDoor" → "dörrar"
-  • "IfcWindow" → "fönster"
-  • "IfcWall" / "IfcWallStandardCase" → "väggar"
-  • "IfcSlab" → "bjälklag"
-  • "IfcBeam" → "balkar"
-  • "IfcColumn" → "pelare"
-  • "IfcRoof" → "tak"
-  • "IfcStair" / "IfcStairFlight" → "trappor"
-  • "IfcRailing" → "räcken"
-  • "IfcCovering" → "ytbeklädnad"
-  • "IfcFurniture" → "möbler"
-  • "IfcSensor" / "IfcAlarm" → "sensorer" / "larm"
-  • "IfcPipeSegment" → "rör"
-  • "IfcDuctSegment" → "ventilationskanaler"
-  • "IfcFlowTerminal" → "don" (ventilationsdon, tappställen)
-  • "IfcValve" → "ventiler"
-  • "IfcPump" → "pumpar"
-  • "IfcBoiler" → "pannor"
-  • Other "Ifc..." types → describe in plain Swedish (e.g. "elinstallation", "VS-komponenter")
-- Use category names a fastighetsförvaltare or drifttekniker would understand.
-- When listing asset types, translate to plain Swedish (e.g. "52 dörrar, 120 ventilationsdon, 38 rör").
-
-RESPONSE FORMAT (via format_response tool — call it LAST, after data tools):
-- message: Short, concrete (max 2-3 sentences). No fluff.
-- buttons: 2-3 clickable ACTION buttons (e.g. "Visa i viewer", "Filtrera dörrar", "Byggnadsöversikt").
-- suggestions: 2-3 proactive follow-up questions.
-- action: Default "none". Only "highlight"/"filter"/"colorize" when user EXPLICITLY asks to see things in the viewer/3D.
-
-TOOL CALLING FLOW:
-- You have up to 2 rounds for data tools, then the final round forces format_response.
-- Round 1: call ONE data tool (e.g. get_building_summary, get_assets_by_system, get_assets_by_category).
-- Round 2 (if needed): call ONE more data tool OR format_response.
-- Round 3: format_response is forced — always produce a structured answer.
-- PREFER calling just ONE data tool then format_response (2 rounds total).
-
-IoT / SENSOR DATA:
-- For analytical/ranking questions (e.g. "which room is warmest", "average temperature", "humidity in room 232"), use get_room_sensor_data. This queries cached sensor attributes stored on rooms in the database.
-- For real-time data, use get_live_sensor_data (fetches from Senslinc/InUse platform). It will automatically fall back to DB data if live data is unavailable.
-- get_room_sensor_data supports: temperature, co2, humidity, occupancy. You can sort by any metric and filter by floor.
-- ALWAYS prefer get_room_sensor_data for questions about rankings, averages, or specific room sensor values.
-
-CRITICAL RULES:
-1. NEVER write stop-answers like "Jag kunde inte slutföra sökningen". If data is missing, interpret and suggest alternatives.
-2. Every response MUST have buttons and suggestions.
-3. ALWAYS use tools to get data — never fabricate.
-4. ALWAYS pass building_guid when available.
-5. Respond in the SAME LANGUAGE as the user (default Swedish).
-6. NEVER show UUIDs/GUIDs in message text.
-7. Max 2-3 sentences in message.
-8. NEVER use IFC class names (IfcXxx) in message text — always use Swedish terms.
-${buildingAlreadyResolved}
-${userCtx}${ctx}${modelsCtx}${memoryCtx}`;
+  return `CURRENT SESSION CONTEXT:${buildingAlreadyResolved}${userCtx}${ctx}${modelsCtx}${memoryCtx}`;
 }
 
 /* ─────────────────────────────────────────────
-   AI API call helper with fallback
+   Claude API — streamed agentic round with model fallback
    ───────────────────────────────────────────── */
 
-async function callAI(apiKey: string, messages: any[], options: { stream?: boolean; tools?: any[]; tool_choice?: string | object; model?: string } = {}) {
-  const model = options.model || AI_MODEL_PRIMARY;
-  const body: any = { model, messages, stream: options.stream ?? false };
-  if (options.tools) {
-    body.tools = options.tools;
-    body.tool_choice = options.tool_choice || "auto";
-  }
-  const resp = await fetch(AI_GATEWAY, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!resp.ok) {
-    const t = await resp.text();
-    console.error(`AI call error (${model}):`, resp.status, t);
-    if (resp.status >= 500 && model === AI_MODEL_PRIMARY) {
-      console.log("Falling back to", AI_MODEL_FALLBACK);
-      return callAI(apiKey, messages, { ...options, model: AI_MODEL_FALLBACK });
-    }
-    if (resp.status === 429) throw { status: 429, message: "Rate limit exceeded. Please try again in a moment." };
-    if (resp.status === 402) throw { status: 402, message: "AI credits exhausted." };
-    throw new Error(`AI gateway error: ${resp.status}`);
-  }
-  return resp;
+function getAnthropicClient(): Anthropic {
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured");
+  return new Anthropic({ apiKey });
 }
 
-/** Generate fallback buttons when AI doesn't provide them */
-function generateFallbackButtons(context: any): ActionButton[] {
-  return defaultButtons(context);
+/** Run one model round with token streaming. Falls back to the secondary model on 5xx/529. */
+async function runClaudeRound(
+  client: Anthropic,
+  params: {
+    system: any;
+    messages: Anthropic.MessageParam[];
+    tools: Anthropic.Tool[];
+    onTextDelta: (text: string) => void;
+  },
+  model = AI_MODEL_PRIMARY,
+): Promise<Anthropic.Message> {
+  try {
+    const stream = client.messages.stream({
+      model,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      thinking: { type: "adaptive" },
+      system: params.system,
+      messages: params.messages,
+      tools: params.tools,
+    });
+    stream.on("text", params.onTextDelta);
+    return await stream.finalMessage();
+  } catch (err: any) {
+    if (err instanceof Anthropic.RateLimitError) {
+      throw { status: 429, message: "Rate limit exceeded. Please try again in a moment." };
+    }
+    if (err instanceof Anthropic.APIError && (err.status ?? 0) >= 500 && model === AI_MODEL_PRIMARY) {
+      console.warn(`Claude ${model} failed (${err.status}), falling back to ${AI_MODEL_FALLBACK}`);
+      return runClaudeRound(client, params, AI_MODEL_FALLBACK);
+    }
+    console.error(`Claude API error (${model}):`, err?.status, err?.message || err);
+    throw err;
+  }
 }
 
 /** Generate fallback suggestions when AI doesn't provide them */
@@ -1877,23 +2089,6 @@ function generateFallbackSuggestions(result: any, context: any): string[] {
     "Visa alla rum",
     "Öppna ärenden",
   ];
-}
-
-/* ── SSE text streaming helper ── */
-
-async function streamText(controller: ReadableStreamDefaultController, encoder: TextEncoder, text: string) {
-  const words = text.split(/(\s+)/);
-  let batch = "";
-  for (let i = 0; i < words.length; i++) {
-    batch += words[i];
-    if (batch.length >= 8 || i === words.length - 1) {
-      try {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "delta", content: batch })}\n\n`));
-      } catch { break; }
-      batch = "";
-      if (i < words.length - 1) await new Promise(r => setTimeout(r, 20));
-    }
-  }
 }
 
 /* ─────────────────────────────────────────────
@@ -1911,8 +2106,7 @@ serve(async (req) => {
   try {
     const startTime = Date.now();
     const { messages, context, proactive } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const anthropic = getAnthropicClient();
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -2010,15 +2204,32 @@ serve(async (req) => {
       }
     }
 
-    // ── Full tool-calling loop with SSE streaming ──
-    let systemPrompt = await buildSystemPrompt(supabase, context, userProfile, previousConversation);
-    if (userMemories) systemPrompt += userMemories;
+    // ── Full agentic loop: Claude + tools + SSE token streaming ──
+    let dynamicContext = await buildDynamicContext(supabase, context, userProfile, previousConversation);
+    if (userMemories) dynamicContext += userMemories;
 
-    const conversation: any[] = [{ role: "system", content: systemPrompt }, ...messages];
+    // Static block carries the cache breakpoint → tools + core prompt are cached across turns.
+    const systemBlocks = [
+      { type: "text", text: STATIC_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
+      { type: "text", text: dynamicContext },
+    ];
 
-    const activeTools = context?.currentBuilding?.fmGuid
-      ? tools.filter((t: any) => t.function.name !== "resolve_building_by_name")
-      : tools;
+    // Anthropic requires the first message to be from the user
+    const conversation: Anthropic.MessageParam[] = messages
+      .filter((m: any) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim())
+      .map((m: any) => ({ role: m.role, content: m.content }));
+    while (conversation.length && conversation[0].role !== "user") conversation.shift();
+    if (conversation.length === 0) {
+      return new Response(JSON.stringify({ error: "No user message provided" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const activeTools = toAnthropicTools(
+      context?.currentBuilding?.fmGuid
+        ? tools.filter((t: any) => t.function.name !== "resolve_building_by_name")
+        : tools
+    );
 
     const sseHeaders = { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" };
     const encoder = new TextEncoder();
@@ -2029,98 +2240,82 @@ serve(async (req) => {
         const send = (data: any) => { try { controller.enqueue(encoder.encode(sse(data))); } catch {} };
         try {
           send({ type: "status", message: "Analyserar frågan…" });
-          let formatResponseResult: any = null;
-          let responded = false;
+
+          let presentMeta: any = null;
+          let fullText = "";
 
           for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-            const isLastRound = round === MAX_TOOL_ROUNDS - 1;
-            const toolChoice = isLastRound
-              ? { type: "function", function: { name: "format_response" } }
-              : "auto";
+            if (round > 0 && !fullText) send({ type: "status", message: "Bearbetar resultat…" });
 
-            if (round > 0 && !formatResponseResult) send({ type: "status", message: "Bearbetar resultat…" });
+            let roundHadText = false;
+            const response = await runClaudeRound(anthropic, {
+              system: systemBlocks,
+              messages: conversation,
+              tools: activeTools,
+              onTextDelta: (delta: string) => {
+                if (!roundHadText && fullText) {
+                  fullText += "\n\n";
+                  send({ type: "delta", content: "\n\n" });
+                }
+                roundHadText = true;
+                fullText += delta;
+                send({ type: "delta", content: delta });
+              },
+            });
 
-            const resp = await callAI(LOVABLE_API_KEY, conversation, { tools: activeTools, tool_choice: toolChoice });
-            const result = await resp.json();
-            const choice = result.choices?.[0];
+            conversation.push({ role: "assistant", content: response.content });
 
-            if (!choice?.message?.tool_calls || choice.message.tool_calls.length === 0) {
-              const content = choice?.message?.content || "";
-              console.log(`Gunnar: direct answer (${Date.now() - startTime}ms, round ${round + 1})`);
-              await streamText(controller, encoder, content);
-              send({ type: "meta", response_type: "answer", action: "none", buttons: generateFallbackButtons(context), asset_ids: [], external_entity_ids: [], filters: {}, suggestions: generateFallbackSuggestions({}, context) });
-              send({ type: "done" });
-              responded = true;
-              const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
-              saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, [...userMsgs, { role: "assistant", content }]).catch(() => {});
+            const toolUses = response.content.filter((b: any) => b.type === "tool_use");
+            if (response.stop_reason !== "tool_use" || toolUses.length === 0) {
+              console.log(`Geminus AI: final answer (${Date.now() - startTime}ms, round ${round + 1}, stop_reason: ${response.stop_reason})`);
               break;
             }
 
-            const toolCalls = choice.message.tool_calls;
-            console.log(`Gunnar round ${round + 1}: ${toolCalls.length} tool(s): ${toolCalls.map((tc: any) => tc.function.name).join(", ")} (${Date.now() - startTime}ms)`);
-            conversation.push(choice.message);
+            console.log(`Geminus AI round ${round + 1}: ${toolUses.length} tool(s): ${toolUses.map((t: any) => t.name).join(", ")} (${Date.now() - startTime}ms)`);
 
             const toolResults = await Promise.all(
-              toolCalls.map(async (tc: any) => {
-                let args: any;
+              toolUses.map(async (tu: any) => {
                 try {
-                  args = typeof tc.function.arguments === "string" ? JSON.parse(tc.function.arguments) : tc.function.arguments;
-                } catch (parseErr) {
-                  console.error(`Tool ${tc.function.name} JSON parse error:`, parseErr);
-                  return { role: "tool" as const, tool_call_id: tc.id, content: JSON.stringify({ error: "Invalid arguments" }) };
-                }
-                try {
-                  const toolResult = await executeTool(supabase, tc.function.name, args, LOVABLE_API_KEY);
-                  if (tc.function.name === "format_response") formatResponseResult = toolResult;
-                  return { role: "tool" as const, tool_call_id: tc.id, content: JSON.stringify(toolResult) };
+                  const result = await executeTool(supabase, tu.name, tu.input || {});
+                  if (tu.name === "present_results") {
+                    presentMeta = result;
+                    // Keep the loop context lean — the metadata goes to the frontend, not back to the model
+                    return { type: "tool_result" as const, tool_use_id: tu.id, content: JSON.stringify({ ok: true }) };
+                  }
+                  return { type: "tool_result" as const, tool_use_id: tu.id, content: JSON.stringify(result) };
                 } catch (err) {
-                  console.error(`Tool ${tc.function.name} error:`, err);
-                  return { role: "tool" as const, tool_call_id: tc.id, content: JSON.stringify({ error: String(err) }) };
+                  console.error(`Tool ${tu.name} error:`, err);
+                  return { type: "tool_result" as const, tool_use_id: tu.id, content: JSON.stringify({ error: String(err) }), is_error: true };
                 }
               })
             );
-            conversation.push(...toolResults);
-
-            if (formatResponseResult) {
-              console.log(`Gunnar: format_response received (${Date.now() - startTime}ms, round ${round + 1})`);
-              const structured: any = {
-                response_type: formatResponseResult.response_type || "answer",
-                action: formatResponseResult.action || "none",
-                buttons: convertAiButtons(formatResponseResult.buttons, context),
-                asset_ids: formatResponseResult.asset_ids || [],
-                external_entity_ids: formatResponseResult.external_entity_ids || [],
-                filters: formatResponseResult.filters || {},
-                suggestions: formatResponseResult.suggestions?.length ? formatResponseResult.suggestions : generateFallbackSuggestions(formatResponseResult, context),
-              };
-              if (formatResponseResult.sensor_data?.length) structured.sensor_data = formatResponseResult.sensor_data;
-              if (formatResponseResult.color_map && Object.keys(formatResponseResult.color_map).length) structured.color_map = formatResponseResult.color_map;
-
-              const messageText = formatResponseResult.message || "";
-              await streamText(controller, encoder, messageText);
-              send({ type: "meta", ...structured });
-              send({ type: "done" });
-              responded = true;
-
-              const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
-              saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, [...userMsgs, { role: "assistant", content: messageText }]).catch(() => {});
-              break;
-            }
+            conversation.push({ role: "user", content: toolResults });
           }
 
-          if (!responded) {
-            console.log(`Gunnar: max rounds reached (${Date.now() - startTime}ms)`);
-            let lastAssistantText = "";
-            for (let i = conversation.length - 1; i >= 0; i--) {
-              if (conversation[i].role === "assistant" && typeof conversation[i].content === "string" && conversation[i].content.trim()) {
-                lastAssistantText = conversation[i].content.trim();
-                break;
-              }
-            }
-            const fallbackMsg = lastAssistantText || "Jag har begränsad information om detta just nu.";
-            await streamText(controller, encoder, fallbackMsg);
-            send({ type: "meta", action: "none", buttons: defaultButtons(context), asset_ids: [], external_entity_ids: [], filters: {}, suggestions: ["Vilka system finns?", "Visa alla rum", "Öppna ärenden"] });
-            send({ type: "done" });
+          // Guard: the model finished without any user-facing text
+          if (!fullText.trim()) {
+            fullText = "Här är resultatet — se alternativen nedan.";
+            send({ type: "delta", content: fullText });
           }
+
+          const structured: any = {
+            response_type: presentMeta?.response_type || "answer",
+            action: presentMeta?.action || "none",
+            buttons: convertAiButtons(presentMeta?.buttons, context),
+            asset_ids: presentMeta?.asset_ids || [],
+            external_entity_ids: presentMeta?.external_entity_ids || [],
+            filters: presentMeta?.filters || {},
+            suggestions: presentMeta?.suggestions?.length ? presentMeta.suggestions : generateFallbackSuggestions(presentMeta, context),
+          };
+          if (presentMeta?.sensor_data?.length) structured.sensor_data = presentMeta.sensor_data;
+          if (presentMeta?.color_map && Object.keys(presentMeta.color_map).length) structured.color_map = presentMeta.color_map;
+          if (presentMeta?.drawing) structured.drawing = presentMeta.drawing;
+
+          send({ type: "meta", ...structured });
+          send({ type: "done" });
+
+          const userMsgs = messages.filter((m: any) => m.role === "user" || m.role === "assistant");
+          saveConversation(supabase, userId, context?.currentBuilding?.fmGuid || null, [...userMsgs, { role: "assistant", content: fullText }]).catch(() => {});
         } catch (err: any) {
           console.error("SSE stream error:", err);
           const send2 = (data: any) => { try { controller.enqueue(encoder.encode(sse(data))); } catch {} };
@@ -2133,7 +2328,7 @@ serve(async (req) => {
 
     return new Response(stream, { headers: sseHeaders });
   } catch (e: any) {
-    console.error("Gunnar chat error:", e);
+    console.error("Geminus AI error:", e);
     const status = e?.status || 500;
     const message = e?.message || (e instanceof Error ? e.message : "Unknown error");
     return new Response(JSON.stringify({ error: message }), {

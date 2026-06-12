@@ -56,7 +56,7 @@ interface ActionButton {
 interface AiStructuredResponse {
   message: string;
   response_type?: 'answer' | 'navigation' | 'data_query' | 'action';
-  action: 'highlight' | 'filter' | 'colorize' | 'list' | 'none';
+  action: 'highlight' | 'filter' | 'colorize' | 'list' | 'show_drawing' | 'none';
   buttons?: ActionButton[] | string[];
   asset_ids: string[];
   external_entity_ids: string[];
@@ -73,6 +73,11 @@ interface AiStructuredResponse {
     status: 'normal' | 'warning' | 'critical';
   }>;
   color_map?: Record<string, [number, number, number]>;
+  drawing?: {
+    building_fm_guid?: string;
+    storey_fm_guid?: string;
+    storey_name?: string;
+  };
   proactive_insights?: string[];
   suggestions?: string[];
   error?: string;
@@ -96,7 +101,7 @@ function normalizeButtons(raw: ActionButton[] | string[] | undefined): ActionBut
   return raw as ActionButton[];
 }
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gunnar-chat`;
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/geminus-ai`;
 
 const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function GunnarChat({ open, onClose, context, embedded, autoVoice, onAutoVoiceConsumed }, _ref) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -280,6 +285,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       suggestions: meta.suggestions || [],
       sensor_data: meta.sensor_data,
       color_map: meta.color_map,
+      drawing: meta.drawing,
     };
   }, []);
 
@@ -294,6 +300,22 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     // Dispatch filter sync if filters present
     if (response.filters && (response.filters.system || response.filters.category || response.filters.room)) {
       window.dispatchEvent(new CustomEvent(AI_FILTER_SYNC_EVENT, { detail: response.filters }));
+    }
+
+    // Open the FM Access 2D drawing for a floor — UnifiedViewer is driven by URL params
+    if (response.action === 'show_drawing') {
+      const d = response.drawing || {};
+      const buildingGuid = d.building_fm_guid || context?.currentBuilding?.fmGuid || context?.viewerState?.buildingFmGuid || '';
+      if (!buildingGuid) {
+        toast.error('Ingen byggnad vald för ritningen.');
+        return;
+      }
+      const params = new URLSearchParams({ building: buildingGuid, mode: '2d' });
+      if (d.storey_fm_guid) params.set('floor', d.storey_fm_guid);
+      if (d.storey_name) params.set('floorName', d.storey_name);
+      toast.info(d.storey_name ? `Öppnar ritningen för ${d.storey_name}…` : 'Öppnar ritningen…');
+      window.location.href = `/viewer?${params.toString()}`;
+      return;
     }
 
     const isViewerAction = response.action === 'highlight' || response.action === 'filter' || response.action === 'colorize';

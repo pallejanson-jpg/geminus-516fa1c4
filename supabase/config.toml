@@ -1,4 +1,4 @@
-project_id = "diqfthpfncdojlnqnicq"
+project_id = "lzhlfditqujumnmfqqvq"
 
 [functions.errorreport-proxy]
 verify_jwt = false
@@ -21,7 +21,7 @@ verify_jwt = false
 [functions.acc-to-assetplus]
 verify_jwt = false
 
-[functions.gunnar-chat]
+[functions.geminus-ai]
 verify_jwt = false
 
 [functions.acc-svf-to-gltf]
