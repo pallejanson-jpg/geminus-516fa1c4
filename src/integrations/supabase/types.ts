@@ -202,6 +202,9 @@ export type Database = {
           fm_access_api_url: string | null
           fm_access_password: string | null
           fm_access_username: string | null
+          geminus_base_api_url: string | null
+          geminus_base_password: string | null
+          geminus_base_username: string | null
           id: string
           is_default: boolean
           ivion_api_url: string | null
@@ -226,6 +229,9 @@ export type Database = {
           fm_access_api_url?: string | null
           fm_access_password?: string | null
           fm_access_username?: string | null
+          geminus_base_api_url?: string | null
+          geminus_base_password?: string | null
+          geminus_base_username?: string | null
           id?: string
           is_default?: boolean
           ivion_api_url?: string | null
@@ -250,6 +256,9 @@ export type Database = {
           fm_access_api_url?: string | null
           fm_access_password?: string | null
           fm_access_username?: string | null
+          geminus_base_api_url?: string | null
+          geminus_base_password?: string | null
+          geminus_base_username?: string | null
           id?: string
           is_default?: boolean
           ivion_api_url?: string | null
@@ -812,6 +821,7 @@ export type Database = {
           created_at: string
           fm_access_building_guid: string | null
           fm_guid: string
+          geminus_base_building_guid: string | null
           hero_image_url: string | null
           id: string
           is_favorite: boolean
@@ -847,6 +857,7 @@ export type Database = {
           created_at?: string
           fm_access_building_guid?: string | null
           fm_guid: string
+          geminus_base_building_guid?: string | null
           hero_image_url?: string | null
           id?: string
           is_favorite?: boolean
@@ -882,6 +893,7 @@ export type Database = {
           created_at?: string
           fm_access_building_guid?: string | null
           fm_guid?: string
+          geminus_base_building_guid?: string | null
           hero_image_url?: string | null
           id?: string
           is_favorite?: boolean
@@ -1339,6 +1351,69 @@ export type Database = {
           object_id?: string | null
           synced_at?: string
           tab_name?: string | null
+        }
+        Relationships: []
+      }
+      geminus_base_documents: {
+        Row: {
+          building_fm_guid: string
+          class_name: string | null
+          document_id: string | null
+          file_name: string | null
+          id: string
+          name: string | null
+          object_id: string | null
+          synced_at: string
+        }
+        Insert: {
+          building_fm_guid: string
+          class_name?: string | null
+          document_id?: string | null
+          file_name?: string | null
+          id?: string
+          name?: string | null
+          object_id?: string | null
+          synced_at?: string
+        }
+        Update: {
+          building_fm_guid?: string
+          class_name?: string | null
+          document_id?: string | null
+          file_name?: string | null
+          id?: string
+          name?: string | null
+          object_id?: string | null
+          synced_at?: string
+        }
+        Relationships: []
+      }
+      geminus_base_dou: {
+        Row: {
+          building_fm_guid: string | null
+          content: string | null
+          doc_type: string | null
+          id: string
+          object_fm_guid: string
+          synced_at: string
+          title: string | null
+        }
+        Insert: {
+          building_fm_guid?: string | null
+          content?: string | null
+          doc_type?: string | null
+          id?: string
+          object_fm_guid: string
+          synced_at?: string
+          title?: string | null
+        }
+        Update: {
+          building_fm_guid?: string | null
+          content?: string | null
+          doc_type?: string | null
+          id?: string
+          object_fm_guid?: string
+          synced_at?: string
+          title?: string | null
         }
         Relationships: []
       }

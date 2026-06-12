@@ -50,9 +50,13 @@ interface NativeViewerShellProps {
   hideFloorSwitcher?: boolean;
   /** Show Geminus floating plugin menu (full 3D mode) */
   showGeminusMenu?: boolean;
+  /** Optional model filter — focus on a single sub-model/floor */
+  modelFilterFmGuid?: string;
+  /** Optional model filter category (e.g. discipline/category) */
+  modelFilterCategory?: string;
 }
 
-const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, onClose, hideBackButton = false, hideMobileOverlay = false, hideToolbar = false, hideFloorSwitcher = false, showGeminusMenu = false }) => {
+const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, onClose, hideBackButton = false, hideMobileOverlay = false, hideToolbar = false, hideFloorSwitcher = false, showGeminusMenu = false, modelFilterFmGuid: _modelFilterFmGuid, modelFilterCategory: _modelFilterCategory }) => {
   const isMobile = useIsMobile();
   const { allData, isSidebarExpanded } = useContext(AppContext);
 
