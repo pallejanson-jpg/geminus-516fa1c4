@@ -451,6 +451,33 @@ export function useSectionPlaneClipping(
       }
     }
 
+    // ── Storey ordering ───────────────────────────────────────────────────
+    // Deduplicate by name (multiple IFC models produce duplicate storeys).
+    // Then sort in PHYSICAL order (bottom → top):
+    //   U-prefix (underground) first, then numbered floors (01, 02…),
+    //   then Havnivå/named floors alphabetically, then Tak (roof) last.
+    const physicalOrder = (name: string): number => {
+      const n = (name || '').trim();
+      const upper = n.toUpperCase();
+      if (/^U\d/i.test(n)) return -1000 + parseInt(n.match(/\d+/)?.[0] ?? '0', 10); // underground
+      const numMatch = n.match(/^(\d+)/);
+      if (numMatch) return parseInt(numMatch[1], 10); // "01 Etasje" → 1
+      if (upper.startsWith('HAV')) return 500; // Havnivå — between basement and ground
+      if (upper.startsWith('TAK') || upper.startsWith('ROOF')) return 9000; // roof
+      return 5000; // other named floors between floors and roof
+    };
+
+    const seenNames = new Set<string>();
+    const uniqueStoreys = (Object.values(metaObjects) as any[])
+      .filter((mo: any) => mo?.type?.toLowerCase() === 'ifcbuildingstorey')
+      .sort((a: any, b: any) => physicalOrder(a.name) - physicalOrder(b.name))
+      .filter((mo: any) => {
+        const key = (mo.name || '').toLowerCase().trim();
+        if (seenNames.has(key)) return false;
+        seenNames.add(key);
+        return true;
+      });
+
     // If no clear peaks found, create a simple linear distribution
     if (peaks.length === 0) {
       // Fallback: distribute floors evenly across the Y range
@@ -485,32 +512,6 @@ export function useSectionPlaneClipping(
       console.log('[2D] Histogram peaks (floor Y levels):', peaks.map((p: number) => p.toFixed(2)));
     }
 
-    // ── Storey ordering ───────────────────────────────────────────────────
-    // Deduplicate by name (multiple IFC models produce duplicate storeys).
-    // Then sort in PHYSICAL order (bottom → top):
-    //   U-prefix (underground) first, then numbered floors (01, 02…),
-    //   then Havnivå/named floors alphabetically, then Tak (roof) last.
-    const physicalOrder = (name: string): number => {
-      const n = (name || '').trim();
-      const upper = n.toUpperCase();
-      if (/^U\d/i.test(n)) return -1000 + parseInt(n.match(/\d+/)?.[0] ?? '0', 10); // underground
-      const numMatch = n.match(/^(\d+)/);
-      if (numMatch) return parseInt(numMatch[1], 10); // "01 Etasje" → 1
-      if (upper.startsWith('HAV')) return 500; // Havnivå — between basement and ground
-      if (upper.startsWith('TAK') || upper.startsWith('ROOF')) return 9000; // roof
-      return 5000; // other named floors between floors and roof
-    };
-
-    const seenNames = new Set<string>();
-    const uniqueStoreys = (Object.values(metaObjects) as any[])
-      .filter((mo: any) => mo?.type?.toLowerCase() === 'ifcbuildingstorey')
-      .sort((a: any, b: any) => physicalOrder(a.name) - physicalOrder(b.name))
-      .filter((mo: any) => {
-        const key = (mo.name || '').toLowerCase().trim();
-        if (seenNames.has(key)) return false;
-        seenNames.add(key);
-        return true;
-      });
 
     // ── Map this storey to its Y-position, then match to nearest peak ───────
     // Simpler approach: just use the storey's own AABB if available
