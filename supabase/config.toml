@@ -1,5 +1,13 @@
 project_id = "lzhlfditqujumnmfqqvq"
 
+[auth]
+site_url = "http://localhost:8080"
+additional_redirect_urls = ["http://localhost:8080", "https://*.lovable.app"]
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+
 [functions.errorreport-proxy]
 verify_jwt = false
 
