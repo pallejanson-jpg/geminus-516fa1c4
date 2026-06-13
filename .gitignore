@@ -30,3 +30,7 @@ dist-ssr
 
 # Supabase CLI local state
 supabase/.temp/
+
+
+# Faciliate connector local secrets
+faciliate-connector/.env

@@ -284,6 +284,26 @@ const tools = [
       },
     },
   },
+  // ── Faciliate FM data (work orders, contracts, maintenance) ──
+  {
+    type: "function",
+    function: {
+      name: "query_faciliate",
+      description: "Query Faciliate FM data: work orders (arbetsorder), fault reports (felanmälan), rental contracts (hyreskontrakt, object_type 'rentlandlord') and planned maintenance (planerat underhåll, 'maintenance'). Data is a cached copy synced from Faciliate. Use for questions about work order status, open issues, contracts, and maintenance plans.",
+      parameters: {
+        type: "object",
+        properties: {
+          object_type: { type: "string", enum: ["workorder", "rentlandlord", "maintenance"], description: "Which Faciliate object type to query" },
+          status: { type: "string", description: "Optional status filter (partial match)" },
+          building_id: { type: "string", description: "Optional Faciliate building ID filter" },
+          search: { type: "string", description: "Optional free-text match on title/description" },
+          mode: { type: "string", enum: ["count", "list"], description: "count = just the number; list = matching records (max 100)" },
+        },
+        required: ["object_type", "mode"],
+        additionalProperties: false,
+      },
+    },
+  },
   // ── Structured UI/viewer results tool ──
   {
     type: "function",
@@ -447,6 +467,8 @@ async function executeTool(supabase: any, name: string, args: any) {
       return execQueryAssets(supabase, args);
     case "list_attribute_keys":
       return execListAttributeKeys(supabase, args);
+    case "query_faciliate":
+      return execQueryFaciliate(supabase, args);
     case "present_results": {
       // Auto-resolve viewer entities from asset_ids if external_entity_ids not provided
       if (args.asset_ids?.length && (!args.external_entity_ids || args.external_entity_ids.length === 0)) {
@@ -732,6 +754,46 @@ async function execListAttributeKeys(supabase: any, args: any) {
   const sorted = Object.entries(keys).sort((a, b) => b[1].count - a[1].count).slice(0, 80)
     .map(([key, info]) => ({ key, count: info.count, example: info.example }));
   return { category, sampled_assets: (data || []).length, keys: sorted };
+}
+
+/** Query the Faciliate cache (synced by the local VPN connector into faciliate_records). */
+async function execQueryFaciliate(supabase: any, args: any) {
+  const objectType = args.object_type;
+  if (!objectType) return { error: "object_type required" };
+  const mode = args.mode || "count";
+
+  let query = supabase
+    .from("faciliate_records")
+    .select(mode === "count" ? "id" : "source_guid, title, status, building_id, raw, synced_at",
+      mode === "count" ? { count: "exact", head: true } : undefined)
+    .eq("object_type", objectType);
+  if (args.status) query = query.ilike("status", `%${args.status}%`);
+  if (args.building_id) query = query.eq("building_id", args.building_id);
+  if (args.search) query = query.ilike("title", `%${String(args.search).replace(/[%,]/g, "")}%`);
+
+  if (mode === "count") {
+    const { count, error } = await query;
+    if (error) throw error;
+    return { object_type: objectType, count: count ?? 0 };
+  }
+
+  const { data, error } = await query.limit(100);
+  if (error) throw error;
+  const rows = data || [];
+  const label = objectType === "rentlandlord" ? "hyreskontrakt" : objectType === "maintenance" ? "planerat underhåll" : "arbetsorder";
+  if (rows.length === 0) {
+    return {
+      object_type: objectType,
+      count: 0,
+      hint: `Inga ${label} i den synkade Faciliate-cachen. Kontrollera att connectorn har körts (sync).`,
+    };
+  }
+  return {
+    object_type: objectType,
+    count: rows.length,
+    records: rows.map((r: any) => ({ guid: r.source_guid, title: r.title, status: r.status, building_id: r.building_id })),
+    last_synced: rows[0]?.synced_at || null,
+  };
 }
 
 /* ── Live IoT sensor data via Geminus Premium ── */
@@ -1989,6 +2051,12 @@ ASSET PROPERTY QUERIES (attributes):
 VIEWER VISUALIZATION (colorize):
 - To color specific objects (e.g. "visa alla innerdörrar blåa i 3D"): query_assets(mode="list", category="Instance", asset_type="IfcDoor", name_search="innerdörr") → present_results with action="colorize" and color_map mapping EACH matching asset fm_guid to [R,G,B] (0-255). fm_guids are auto-resolved to viewer entity ids.
 - RGB examples: blå=[0,100,255], röd=[255,60,60], grön=[0,200,0], gul=[255,220,0], orange=[255,150,0].
+
+FACILIATE FM DATA (work orders, contracts, maintenance):
+- For questions about work orders/fault reports (arbetsorder, felanmälan), rental contracts (hyreskontrakt) or planned maintenance (planerat underhåll), use query_faciliate.
+- object_type: "workorder" (work orders & fault reports), "rentlandlord" (contracts), "maintenance" (planned maintenance).
+- Example "hur många öppna arbetsordrar finns?": query_faciliate(object_type="workorder", status="open", mode="count").
+- This reads a cached copy synced from Faciliate. If a query returns a hint that the cache is empty, tell the user the Faciliate sync needs to run — do NOT state as fact that there are zero records.
 
 2D DRAWINGS (Geminus Base):
 - When the user asks to see the drawing ("ritningen") for a floor: resolve the floor via get_building_summary (it returns floors with fm_guid + name), then call present_results with action="show_drawing" and drawing={building_fm_guid, storey_fm_guid, storey_name}. storey_name is the floor's display name (e.g. "Plan 2"). This opens the Geminus Base 2D drawing.
