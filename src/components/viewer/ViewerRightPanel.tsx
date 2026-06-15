@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useContext, useRef } from "rea
 import {
   Layers, MessageSquare, MessageSquarePlus, Palette, Plus, X, Scissors,
   Box, ChevronDown, Camera, SquareDashed, Settings, Type, TreeDeciduous, Eye, EyeOff, Check, Settings2, Home,
-  Pin, PinOff, Radio, AlertTriangle
+  Pin, PinOff, Radio, AlertTriangle, ClipboardList
 } from "lucide-react";
 import { useFlashHighlight } from "@/hooks/useFlashHighlight";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,7 @@ import LightingControlsPanel from "./LightingControlsPanel";
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
 import { CLIP_HEIGHT_3D_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
 import { FORCE_SHOW_SPACES_EVENT } from "./RoomVisualizationPanel";
-import { VIEW_MODE_REQUESTED_EVENT, ISSUE_MARKER_CLICKED_EVENT, MINIMAP_TOGGLE_EVENT, SENSOR_ANNOTATIONS_TOGGLE_EVENT, ISSUE_ANNOTATIONS_TOGGLE_EVENT, ALARM_ANNOTATIONS_SHOW_EVENT, type IssueMarkerClickedDetail } from "@/lib/viewer-events";
+import { VIEW_MODE_REQUESTED_EVENT, ISSUE_MARKER_CLICKED_EVENT, MINIMAP_TOGGLE_EVENT, SENSOR_ANNOTATIONS_TOGGLE_EVENT, ISSUE_ANNOTATIONS_TOGGLE_EVENT, ALARM_ANNOTATIONS_SHOW_EVENT, WORKORDER_ANNOTATIONS_TOGGLE_EVENT, type IssueMarkerClickedDetail } from "@/lib/viewer-events";
 import { ARCHITECT_BACKGROUND_CHANGED_EVENT, ARCHITECT_BACKGROUND_PRESETS, type BackgroundPresetId } from "@/hooks/useArchitectViewMode";
 import { AppContext } from "@/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -124,6 +124,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
   const [showAlarms, setShowAlarms] = useState(false);
   const [showSensors, setShowSensors] = useState(false);
   const [showIssues, setShowIssues] = useState(false);
+  const [showWorkorders, setShowWorkorders] = useState(false);
 
   // Collapsible section states
   const [modelsOpen, setModelsOpen] = useState(false);
@@ -770,6 +771,23 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                       onCheckedChange={(checked) => {
                         setShowSensors(checked);
                         emit('SENSOR_ANNOTATIONS_TOGGLE', { visible: checked });
+                      }}
+                    />
+                  </div>
+
+                  {/* Show Work Orders Toggle */}
+                  <div className="flex items-center justify-between py-1.5 px-2">
+                    <div className="flex items-center gap-2">
+                      <div className={cn("p-1.5 rounded-md", showWorkorders ? "bg-amber-500/10 text-amber-600" : "bg-muted text-muted-foreground")}>
+                        <ClipboardList className="h-4 w-4" />
+                      </div>
+                      <span className="text-sm">Arbetsordrar</span>
+                    </div>
+                    <Switch
+                      checked={showWorkorders}
+                      onCheckedChange={(checked) => {
+                        setShowWorkorders(checked);
+                        emit('WORKORDER_ANNOTATIONS_TOGGLE', { visible: checked });
                       }}
                     />
                   </div>

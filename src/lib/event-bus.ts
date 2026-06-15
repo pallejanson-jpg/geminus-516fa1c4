@@ -106,6 +106,10 @@ export interface SensorAnnotationsToggleDetail {
   visible: boolean;
 }
 
+export interface WorkorderAnnotationsToggleDetail {
+  visible: boolean;
+}
+
 export interface GeminusBaseContextChangedDetail {
   objectId?: string;
   objectType?: string;
@@ -174,6 +178,7 @@ export interface EventMap {
   TOGGLE_ANNOTATIONS: { show?: boolean; visibleCategories?: string[] };
   ISSUE_ANNOTATIONS_TOGGLE: IssueAnnotationsToggleDetail;
   SENSOR_ANNOTATIONS_TOGGLE: SensorAnnotationsToggleDetail;
+  WORKORDER_ANNOTATIONS_TOGGLE: WorkorderAnnotationsToggleDetail;
   ISSUE_MARKER_CLICKED: IssueMarkerClickedDetail;
 
   // Saved views

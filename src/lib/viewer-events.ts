@@ -89,6 +89,9 @@ export const ISSUE_ANNOTATIONS_TOGGLE_EVENT = 'ISSUE_ANNOTATIONS_TOGGLE' as cons
 /** Event dispatched when sensor annotations should be toggled on/off */
 export const SENSOR_ANNOTATIONS_TOGGLE_EVENT = 'SENSOR_ANNOTATIONS_TOGGLE' as const;
 
+/** Event dispatched when Faciliate work order annotations should be toggled on/off */
+export const WORKORDER_ANNOTATIONS_TOGGLE_EVENT = 'WORKORDER_ANNOTATIONS_TOGGLE' as const;
+
 /** Event dispatched when Geminus Base context changes (building/floor/room navigation) */
 export const GEMINUS_BASE_CONTEXT_CHANGED_EVENT = 'GEMINUS_BASE_CONTEXT_CHANGED' as const;
 

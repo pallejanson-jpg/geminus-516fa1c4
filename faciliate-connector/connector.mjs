@@ -125,6 +125,13 @@ const nestedVal = (o, k, ...props) => {
   return v ?? null;
 };
 
+/** Normalise a CadKey value to a lowercase UUID string or null. */
+function parseCadKey(v) {
+  if (!v) return null;
+  const s = String(v).trim().toLowerCase();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s) ? s : null;
+}
+
 function toRow(objectType, r) {
   return {
     object_type: objectType,
@@ -135,6 +142,10 @@ function toRow(objectType, r) {
       ? String(pick(r, 'WorkorderStatusTitle', 'StatusTitle', 'status', 'Status', 'WorkorderStatus')) : null,
     building_id: String(nestedVal(r, 'Building', 'ID', 'Id', 'id') ?? pick(r, 'BuildingID', 'BuildingCadKey') ?? '') || null,
     building_name: nestedVal(r, 'Building', 'Title', 'Name', 'title') ?? nestedVal(r, 'Property', 'Title', 'Name') ?? null,
+    // BIM cross-reference keys — link work orders to Geminus Plus assets by FM GUID.
+    building_cad_key: parseCadKey(pick(r, 'BuildingCadKey')),
+    floor_cad_key:    parseCadKey(pick(r, 'FloorCadKey')),
+    room_cad_key:     parseCadKey(pick(r, 'RoomCadKey')),
     raw: r,
   };
 }

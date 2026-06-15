@@ -585,6 +585,141 @@ export function useViewerEventListeners({
     };
   }, [buildingFmGuid, viewerRef]);
 
+  // ── WORKORDER_ANNOTATIONS_TOGGLE ──
+  useEffect(() => {
+    let markerContainer: HTMLDivElement | null = null;
+    let cameraUnsubs: Array<() => void> = [];
+    let currentFloorFilter: string | null = null;
+    let markerFloorMap: Map<HTMLDivElement, string | null> = new Map();
+
+    const applyFloor = () => {
+      markerFloorMap.forEach((floorGuid, marker) => {
+        if (!currentFloorFilter) { marker.style.display = ''; return; }
+        marker.style.display = (floorGuid && floorGuid.toLowerCase() === currentFloorFilter.toLowerCase()) ? '' : 'none';
+      });
+    };
+
+    const floorHandler = (detail: FloorSelectionEventDetail) => {
+      if (detail?.isAllFloorsVisible || !detail?.floorId) {
+        currentFloorFilter = null;
+      } else {
+        const viewer = viewerRef.current;
+        let resolved: string | null = null;
+        if (viewer?.metaScene) {
+          const mo = viewer.metaScene.metaObjects?.[detail.floorId];
+          if (mo?.originalSystemId) resolved = mo.originalSystemId;
+        }
+        currentFloorFilter = resolved || detail.floorId;
+      }
+      applyFloor();
+    };
+    const offFloor = on('FLOOR_SELECTION_CHANGED', floorHandler);
+
+    const handler = async (detail: { visible: boolean }) => {
+      const show = detail?.visible ?? true;
+      if (!show) { if (markerContainer) markerContainer.style.display = 'none'; return; }
+      if (markerContainer) {
+        cameraUnsubs.forEach(fn => fn()); cameraUnsubs = [];
+        markerContainer.remove(); markerContainer = null;
+      }
+      markerFloorMap = new Map();
+      const viewer = viewerRef.current;
+      if (!viewer?.scene || !buildingFmGuid) return;
+
+      // Fetch all work orders for this building via building_cad_key
+      const { data: records } = await supabase
+        .from('faciliate_records')
+        .select('source_guid, title, status, room_cad_key, floor_cad_key')
+        .eq('object_type', 'workorder')
+        .eq('building_cad_key', buildingFmGuid.toLowerCase());
+
+      if (!records?.length) return;
+
+      // Group by room_cad_key, count open vs total
+      const rooms = new Map<string, { total: number; open: number; titles: string[]; floor_cad_key: string | null }>();
+      for (const r of records) {
+        const key = r.room_cad_key || '__no_room__';
+        if (!rooms.has(key)) rooms.set(key, { total: 0, open: 0, titles: [], floor_cad_key: r.floor_cad_key || null });
+        const entry = rooms.get(key)!;
+        entry.total++;
+        const s = (r.status || '').toLowerCase();
+        if (!s.includes('avslut') && !s.includes('closed') && !s.includes('done')) entry.open++;
+        if (entry.titles.length < 3) entry.titles.push(r.title || '');
+      }
+
+      const canvas = viewer.scene.canvas?.canvas;
+      const parent = canvas?.parentElement;
+      if (!parent) return;
+
+      const container = document.createElement('div');
+      container.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:30;overflow:hidden;';
+      parent.appendChild(container);
+      markerContainer = container;
+
+      const metaObjects = viewer.metaScene?.metaObjects || {};
+
+      rooms.forEach((info, roomGuid) => {
+        if (roomGuid === '__no_room__') return;
+
+        // Locate the room entity in the scene
+        let wx = 0, wy = 0, wz = 0;
+        for (const mo of Object.values(metaObjects) as any[]) {
+          const sysId = (mo.originalSystemId || '').toLowerCase();
+          const moId = (mo.id || '').toLowerCase();
+          if (sysId === roomGuid || moId === roomGuid) {
+            const entity = viewer.scene.objects?.[mo.id];
+            if (entity?.aabb) {
+              wx = (entity.aabb[0] + entity.aabb[3]) / 2;
+              wy = (entity.aabb[1] + entity.aabb[4]) / 2;
+              wz = (entity.aabb[2] + entity.aabb[5]) / 2;
+            }
+            break;
+          }
+        }
+        if (wx === 0 && wy === 0 && wz === 0) return;
+
+        const hasOpen = info.open > 0;
+        const bg = hasOpen ? '#f59e0b' : '#6b7280';
+        const label = hasOpen ? `${info.open} öppen${info.open > 1 ? 'a' : ''}` : `${info.total} avsl.`;
+        const tooltip = info.titles.filter(Boolean).join('\n') || `${info.total} arbetsorder`;
+
+        const marker = document.createElement('div');
+        marker.style.cssText = `position:absolute;pointer-events:auto;cursor:pointer;display:flex;align-items:center;gap:3px;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;color:white;background:${bg};white-space:nowrap;transform:translate(-50%,-100%);box-shadow:0 1px 4px rgba(0,0,0,0.35);`;
+        marker.innerHTML = `<span style="font-size:9px">🔧</span>${label}`;
+        marker.title = tooltip;
+
+        markerFloorMap.set(marker, info.floor_cad_key);
+        container.appendChild(marker);
+
+        const updatePos = () => {
+          if (!viewer.scene?.canvas) return;
+          if (marker.style.display === 'none') return;
+          const canvasPos = worldToCanvas(viewer, [wx, wy, wz]);
+          if (canvasPos && canvasPos[2] > 0) {
+            marker.style.left = canvasPos[0] + 'px';
+            marker.style.top = canvasPos[1] + 'px';
+            marker.style.visibility = 'visible';
+          } else {
+            marker.style.visibility = 'hidden';
+          }
+        };
+
+        const unsub = viewer.scene.camera?.on?.('matrix', updatePos);
+        if (unsub) cameraUnsubs.push(() => viewer.scene.camera?.off?.('matrix', unsub));
+        updatePos();
+      });
+
+      applyFloor();
+    };
+
+    const offHandler = on('WORKORDER_ANNOTATIONS_TOGGLE', handler);
+    return () => {
+      offHandler(); offFloor();
+      cameraUnsubs.forEach(fn => fn());
+      markerContainer?.remove();
+    };
+  }, [buildingFmGuid, viewerRef]);
+
   // ── VIEWER_SELECT_ENTITY (select + fly-to) ──
   useEffect(() => {
     const handler = (detail: any) => {

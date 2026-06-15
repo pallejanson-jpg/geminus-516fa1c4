@@ -298,6 +298,7 @@ const tools = [
           object_type: { type: "string", enum: ["workorder", "rentlandlord", "maintenance"], description: "Which Faciliate object type to query" },
           status: { type: "string", description: "Optional status filter, partial match on the status title (e.g. 'Öppen', 'Avslutad')" },
           building: { type: "string", description: "Optional building filter — matches building name (e.g. 'Småviken') or Faciliate building ID. If the cache has no building info yet, the result flags building_filter_unavailable." },
+          fm_guid: { type: "string", description: "Optional FM GUID filter — matches room_cad_key, floor_cad_key, or building_cad_key. Use to find work orders for a specific room, floor, or building selected in the viewer." },
           search: { type: "string", description: "Optional free-text match on title/description" },
           mode: { type: "string", enum: ["count", "list"], description: "count = just the number; list = matching records (max 100)" },
         },
@@ -363,6 +364,55 @@ const tools = [
           },
         },
         required: ["action", "buttons", "suggestions"],
+        additionalProperties: false,
+      },
+    },
+  },
+  // ── Insights AI analysis ──
+  {
+    type: "function",
+    function: {
+      name: "run_predictive_maintenance",
+      description: "Run AI-powered predictive maintenance analysis for a building. Analyzes sensor data and equipment to identify risks BEFORE they occur. Returns predictions with risk levels, categories, estimated time to failure. Use when user asks about maintenance risks, upcoming failures, equipment health, or 'vilket underhåll behövs'.",
+      parameters: {
+        type: "object",
+        properties: {
+          building_guid: { type: "string", description: "The building's fm_guid (required)" },
+          room_guids: { type: "array", items: { type: "string" }, description: "Optional: limit analysis to specific room fm_guids" },
+        },
+        required: ["building_guid"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "run_room_optimization",
+      description: "Run AI-powered space optimization analysis for a building. Analyzes room utilization and suggests merges, conversions, and rezoning. Use when user asks about space efficiency, underutilized rooms, space savings, or 'hur används lokalerna'.",
+      parameters: {
+        type: "object",
+        properties: {
+          building_guid: { type: "string", description: "The building's fm_guid (required)" },
+        },
+        required: ["building_guid"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_documents",
+      description: "Search building documents, manuals, drawings, and reports using natural language. Returns relevant document excerpts and a synthesized answer. Use when user asks about specific information in documents, technical specs, or 'vad står det i dokumenten om X'.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Natural language search query" },
+          building_guid: { type: "string", description: "Optional: scope search to a specific building" },
+          source_type: { type: "string", description: "Optional: filter by document type (e.g. 'drawing', 'manual')" },
+        },
+        required: ["query"],
         additionalProperties: false,
       },
     },
@@ -500,6 +550,12 @@ async function executeTool(supabase: any, name: string, args: any) {
       }
       return { presented: true, ...args };
     }
+    case "run_predictive_maintenance":
+      return execPredictiveMaintenance(supabase, args);
+    case "run_room_optimization":
+      return execRoomOptimization(supabase, args);
+    case "search_documents":
+      return execSearchDocuments(supabase, args);
     case "save_memory":
       return execSaveMemory(supabase, args, (globalThis as any).__currentUserId);
     default:
@@ -770,15 +826,19 @@ async function execQueryFaciliate(supabase: any, args: any) {
     .eq("object_type", objectType).not("building_name", "is", null);
   const buildingDataAvailable = (withBuilding ?? 0) > 0;
 
+  const selectCols = mode === "count" ? "id" : "source_guid, title, status, building_id, building_name, room_cad_key, floor_cad_key, building_cad_key, synced_at";
   let query = supabase
     .from("faciliate_records")
-    .select(mode === "count" ? "id" : "source_guid, title, status, building_id, building_name, synced_at",
-      mode === "count" ? { count: "exact", head: true } : undefined)
+    .select(selectCols, mode === "count" ? { count: "exact", head: true } : undefined)
     .eq("object_type", objectType);
   if (args.status) query = query.ilike("status", `%${args.status}%`);
   const building = args.building || args.building_id;
   if (building) {
     query = query.or(`building_name.ilike.%${String(building).replace(/[%,]/g, "")}%,building_id.eq.${building}`);
+  }
+  if (args.fm_guid) {
+    const g = String(args.fm_guid).trim().toLowerCase();
+    query = query.or(`room_cad_key.eq.${g},floor_cad_key.eq.${g},building_cad_key.eq.${g}`);
   }
   if (args.search) query = query.ilike("title", `%${String(args.search).replace(/[%,]/g, "")}%`);
 
@@ -808,7 +868,7 @@ async function execQueryFaciliate(supabase: any, args: any) {
     object_type: objectType,
     count: rows.length,
     building_filter_unavailable: building && !buildingDataAvailable ? true : undefined,
-    records: rows.map((r: any) => ({ guid: r.source_guid, title: r.title, status: r.status, building: r.building_name || r.building_id })),
+    records: rows.map((r: any) => ({ guid: r.source_guid, title: r.title, status: r.status, building: r.building_name || r.building_id, room_guid: r.room_cad_key || undefined })),
     last_synced: rows[0]?.synced_at || null,
   };
 }
@@ -996,6 +1056,35 @@ function buildSensorSummary(machines: any[], totalMachines: number, site: any, i
     lowest_temperature: byTemp.length > 0 ? { name: byTemp[byTemp.length - 1].name, value: byTemp[byTemp.length - 1].temperature, code: byTemp[byTemp.length - 1].code } : null,
     highest_co2: byCo2.length > 0 ? { name: byCo2[0].name, value: byCo2[0].co2, code: byCo2[0].code } : null,
   };
+}
+
+/* ── Insights AI analysis ── */
+
+async function execPredictiveMaintenance(supabase: any, args: any) {
+  const { data, error } = await supabase.functions.invoke("predictive-maintenance", {
+    body: { buildingFmGuid: args.building_guid, roomFmGuids: args.room_guids || null },
+  });
+  if (error) return { error: error.message || "predictive-maintenance function failed" };
+  if (!data?.success) return { error: data?.error || "Analysis failed" };
+  return data.data;
+}
+
+async function execRoomOptimization(supabase: any, args: any) {
+  const { data, error } = await supabase.functions.invoke("room-optimization", {
+    body: { buildingFmGuid: args.building_guid },
+  });
+  if (error) return { error: error.message || "room-optimization function failed" };
+  if (!data?.success) return { error: data?.error || "Analysis failed" };
+  return data.data;
+}
+
+async function execSearchDocuments(supabase: any, args: any) {
+  const { data, error } = await supabase.functions.invoke("rag-search", {
+    body: { query: args.query, buildingFmGuid: args.building_guid || null, sourceType: args.source_type || null },
+  });
+  if (error) return { error: error.message || "rag-search function failed" };
+  if (!data?.success) return { error: data?.error || "Search failed" };
+  return data.data;
 }
 
 /* ── Adaptive Memory ── */
@@ -2243,6 +2332,17 @@ FACILIATE FM DATA (work orders, contracts, maintenance):
 - Example "hur många öppna arbetsordrar finns?": query_faciliate(object_type="workorder", status="Öppen", mode="count").
 - TONE ON MISSING DATA: if a tool returns a hint/note that you have no information, relay it in plain everyday language. NEVER mention internal plumbing — no "cache", "synk", "connector", "databas", "administratör". Just say e.g. "Jag har ingen information om planerat underhåll just nu." Do NOT state as fact that there are zero records.
 - When listing work orders, format as a clean numbered/bulleted list (not a wide table): "**Titel** — status" per line. Suggest concrete follow-ups (e.g. "Visa bara öppna", "Visa felanmälningar").
+
+PREDICTIVE MAINTENANCE & SPACE OPTIMIZATION (Insights AI):
+- For questions about maintenance risks, equipment health, upcoming failures, or "vilket underhåll behövs" / "vilken utrustning är i riskzonen": call run_predictive_maintenance(building_guid). It returns predictions with riskLevel (high/medium/low), category, estimatedTimeToFailure, and an overallRiskScore. Summarize highlights — start with high-risk items.
+- For questions about space efficiency, underutilized rooms, space savings, or "hur används lokalerna": call run_room_optimization(building_guid). It returns utilizationScore, statistics, and suggestions with type/priority. Summarize the score and top 2-3 suggestions.
+- These analyses take a few seconds. Don't say "Jag analyserar..." — just call the tool and report results.
+- You CAN combine these with colorize: for predictive maintenance, map room_guids to risk colors (high=[255,60,60], medium=[255,180,0], low=[0,200,0]); for optimization, color underutilized rooms orange, overcrowded rooms red.
+
+DOCUMENT SEARCH (RAG):
+- For questions about what's written in documents, technical specs, product manuals, or "vad säger dokumentationen om X": call search_documents(query, building_guid).
+- Report the answer field directly. Cite sources from the sources array. If confidence < 0.5, note that the answer may be incomplete.
+- If no documents are found, say "Inga dokument hittades som svarar på din fråga."
 
 2D DRAWINGS (Geminus Base):
 - When the user asks to see the drawing ("ritningen") for a floor: resolve the floor via get_building_summary (it returns floors with fm_guid + name), then call present_results with action="show_drawing" and drawing={building_fm_guid, storey_fm_guid, storey_name}. storey_name is the floor's display name (e.g. "Plan 2"). This opens the Geminus Base 2D drawing.
