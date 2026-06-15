@@ -788,7 +788,7 @@ async function execQueryFaciliate(supabase: any, args: any) {
     // Guard against the misleading "global total answers a building question" case.
     if (building && !buildingDataAvailable) {
       return { object_type: objectType, count: count ?? 0, building_filter_unavailable: true,
-        note: "Byggnadsinfo är inte synkad till Faciliate-cachen ännu, så detta är totalen för hela Faciliate — inte filtrerat på byggnaden." };
+        note: "Jag kan inte dela upp per byggnad just nu — detta är det totala antalet." };
     }
     return { object_type: objectType, count: count ?? 0, filtered_by_building: building || null };
   }
@@ -801,7 +801,7 @@ async function execQueryFaciliate(supabase: any, args: any) {
     return {
       object_type: objectType,
       count: 0,
-      hint: `Inga ${label} i den synkade Faciliate-cachen. Kontrollera att connectorn har körts (sync).`,
+      hint: `Jag har ingen information om ${label} just nu.`,
     };
   }
   return {
@@ -1121,7 +1121,11 @@ function buttonFromLabel(label: string, context: any): ActionButton {
   const lower = label.toLowerCase().trim();
   const buildingGuid = context?.currentBuilding?.fmGuid;
 
-  // Building overview
+  // Building overview — capture a named building if present ("Översikt Akerselva Atrium")
+  const ovMatch = lower.match(/^(?:byggnadsöversikt|översikt|building overview|overview|sammanfattning)\s+(.+)$/i);
+  if (ovMatch) {
+    return { label, action: "building_summary", payload: { name: ovMatch[1].trim() } };
+  }
   if (/^byggnadsöversikt/i.test(lower) || /^(building\s+)?overview/i.test(lower) || /^översikt/i.test(lower) || /^sammanfattning/i.test(lower)) {
     return { label, action: "building_summary" };
   }
@@ -1257,7 +1261,9 @@ function detectButtonAction(messages: any[], context: any): ButtonActionIntent |
   const buildingGuid = context?.currentBuilding?.fmGuid;
 
   // Exact or near-exact matches for common button texts
-  if (/^byggnadsöversikt/i.test(lower)) return { action: "building_summary", payload: {} };
+  const ovMatch2 = lower.match(/^(?:byggnadsöversikt|översikt|overview|building overview)\s+(.+)$/i);
+  if (ovMatch2) return { action: "building_summary", payload: { name: ovMatch2[1].trim() } };
+  if (/^byggnadsöversikt/i.test(lower) || /^översikt$/i.test(lower)) return { action: "building_summary", payload: {} };
   if (/^visa alla rum$/i.test(lower) || /^show all rooms$/i.test(lower)) return { action: "category_query", payload: { category: "Space" } };
   if (/^visa alla tillgångar$/i.test(lower) || /^show all assets$/i.test(lower) || /^alla tillgångar$/i.test(lower)) return { action: "category_query", payload: { category: "Instance" } };
   if (/^visa alla system$/i.test(lower) || /^show all systems$/i.test(lower) || /^vilka system finns/i.test(lower)) return { action: "building_summary", payload: {} };
@@ -1288,9 +1294,25 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
 
   switch (intent.action) {
     case "building_summary": {
-      if (!buildingGuid) {
+      // Resolve which building: explicit fm_guid → named building → active context.
+      let summaryGuid = intent.payload?.fm_guid || buildingGuid;
+      if (!summaryGuid && intent.payload?.name) {
+        const resolved: any = await execResolveBuildingByName(supabase, { name: intent.payload.name });
+        if (resolved.found && resolved.buildings?.length) {
+          summaryGuid = resolved.buildings[0].building_fm_guid || resolved.buildings[0].fm_guid;
+        } else {
+          return {
+            message: `Jag hittar ingen byggnad som heter "${intent.payload.name}".`,
+            response_type: "answer", action: "none",
+            buttons: makeButtons([{ label: "Visa alla byggnader", action: "list_buildings" }]),
+            asset_ids: [], external_entity_ids: [], filters: {},
+            suggestions: ["Vilka byggnader finns?"],
+          };
+        }
+      }
+      if (!summaryGuid) {
         return {
-          message: "Ingen byggnad är vald. Välj en byggnad först.",
+          message: "Vilken byggnad vill du se? Här är alla byggnader.",
           response_type: "answer", action: "none",
           buttons: makeButtons([
             { label: "Visa alla byggnader", action: "list_buildings" },
@@ -1299,7 +1321,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
           suggestions: ["Vilka byggnader finns?"],
         };
       }
-      const summary = await execBuildingSummary(supabase, { fm_guid: buildingGuid });
+      const summary = await execBuildingSummary(supabase, { fm_guid: summaryGuid });
       const topTypes = summary.top_asset_types?.slice(0, 3).map((t: any) => `${t.count}× ${translateIfcType(t.type)}`).join(", ") || "";
       return {
         message: `**${summary.building_name}**\n\n• ${summary.floors_count} våningar, ${summary.rooms} rum, ${summary.assets} tillgångar\n• Total yta: ${summary.total_space_area_m2} m²\n• ${summary.total_issues} ärenden${summary.total_issues > 0 ? ` (${Object.entries(summary.issues_by_status).map(([s, n]) => `${n} ${s}`).join(", ")})` : ""}${topTypes ? `\n• Vanligaste typer: ${topTypes}` : ""}`,
@@ -1600,11 +1622,11 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
       return {
         message: `**${result.total} byggnader**: ${names}.`,
         response_type: "answer", action: "none",
-        buttons: makeButtons(result.buildings.slice(0, 3).map((b: any) => ({
-          label: `Översikt ${b.name}`, action: "building_summary",
+        buttons: makeButtons(result.buildings.slice(0, 5).map((b: any) => ({
+          label: `Översikt ${b.name}`, action: "building_summary", payload: { fm_guid: b.fm_guid, name: b.name },
         }))),
         asset_ids: [], external_entity_ids: [], filters: {},
-        suggestions: result.buildings.slice(0, 3).map((b: any) => `Berätta om ${b.name}`),
+        suggestions: result.buildings.slice(0, 3).map((b: any) => `Översikt ${b.name}`),
       };
     }
 
@@ -2217,9 +2239,9 @@ FACILIATE FM DATA (work orders, contracts, maintenance):
 - For questions about work orders/fault reports (arbetsorder, felanmälan), rental contracts (hyreskontrakt) or planned maintenance (planerat underhåll), use query_faciliate.
 - object_type: "workorder" (work orders & fault reports), "rentlandlord" (contracts), "maintenance" (planned maintenance).
 - status filter matches the status TITLE: use "Öppen" for open, "Avslutad" for closed (not numbers).
-- BUILDING SCOPE: when the user asks about a specific building (e.g. "för Småviken"), pass building="<name>" to query_faciliate. If the result has building_filter_unavailable=true, the cache has no building info yet — then say clearly that you can only give the TOTAL across all of Faciliate and that per-building breakdown needs the connector to re-sync with building data. NEVER present a global total as if it were the building's count.
+- BUILDING SCOPE: when the user asks about a specific building (e.g. "för Småviken"), pass building="<name>" to query_faciliate. If the result has building_filter_unavailable=true, give the TOTAL and add a brief plain note that you can't break it down per building right now. NEVER present a global total as if it were the building's count.
 - Example "hur många öppna arbetsordrar finns?": query_faciliate(object_type="workorder", status="Öppen", mode="count").
-- This reads a cached copy synced from Faciliate. If a query returns a hint that the cache is empty, tell the user the Faciliate sync needs to run — do NOT state as fact that there are zero records.
+- TONE ON MISSING DATA: if a tool returns a hint/note that you have no information, relay it in plain everyday language. NEVER mention internal plumbing — no "cache", "synk", "connector", "databas", "administratör". Just say e.g. "Jag har ingen information om planerat underhåll just nu." Do NOT state as fact that there are zero records.
 - When listing work orders, format as a clean numbered/bulleted list (not a wide table): "**Titel** — status" per line. Suggest concrete follow-ups (e.g. "Visa bara öppna", "Visa felanmälningar").
 
 2D DRAWINGS (Geminus Base):
