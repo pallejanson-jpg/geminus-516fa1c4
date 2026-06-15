@@ -296,8 +296,8 @@ const tools = [
         type: "object",
         properties: {
           object_type: { type: "string", enum: ["workorder", "rentlandlord", "maintenance"], description: "Which Faciliate object type to query" },
-          status: { type: "string", description: "Optional status filter (partial match)" },
-          building_id: { type: "string", description: "Optional Faciliate building ID filter" },
+          status: { type: "string", description: "Optional status filter, partial match on the status title (e.g. 'Öppen', 'Avslutad')" },
+          building: { type: "string", description: "Optional building filter — matches building name (e.g. 'Småviken') or Faciliate building ID. If the cache has no building info yet, the result flags building_filter_unavailable." },
           search: { type: "string", description: "Optional free-text match on title/description" },
           mode: { type: "string", enum: ["count", "list"], description: "count = just the number; list = matching records (max 100)" },
         },
@@ -764,19 +764,33 @@ async function execQueryFaciliate(supabase: any, args: any) {
   if (!objectType) return { error: "object_type required" };
   const mode = args.mode || "count";
 
+  // Is building-level filtering even possible yet? (connector must have synced building info)
+  const { count: withBuilding } = await supabase
+    .from("faciliate_records").select("id", { count: "exact", head: true })
+    .eq("object_type", objectType).not("building_name", "is", null);
+  const buildingDataAvailable = (withBuilding ?? 0) > 0;
+
   let query = supabase
     .from("faciliate_records")
-    .select(mode === "count" ? "id" : "source_guid, title, status, building_id, raw, synced_at",
+    .select(mode === "count" ? "id" : "source_guid, title, status, building_id, building_name, synced_at",
       mode === "count" ? { count: "exact", head: true } : undefined)
     .eq("object_type", objectType);
   if (args.status) query = query.ilike("status", `%${args.status}%`);
-  if (args.building_id) query = query.eq("building_id", args.building_id);
+  const building = args.building || args.building_id;
+  if (building) {
+    query = query.or(`building_name.ilike.%${String(building).replace(/[%,]/g, "")}%,building_id.eq.${building}`);
+  }
   if (args.search) query = query.ilike("title", `%${String(args.search).replace(/[%,]/g, "")}%`);
 
   if (mode === "count") {
     const { count, error } = await query;
     if (error) throw error;
-    return { object_type: objectType, count: count ?? 0 };
+    // Guard against the misleading "global total answers a building question" case.
+    if (building && !buildingDataAvailable) {
+      return { object_type: objectType, count: count ?? 0, building_filter_unavailable: true,
+        note: "Byggnadsinfo är inte synkad till Faciliate-cachen ännu, så detta är totalen för hela Faciliate — inte filtrerat på byggnaden." };
+    }
+    return { object_type: objectType, count: count ?? 0, filtered_by_building: building || null };
   }
 
   const { data, error } = await query.limit(100);
@@ -793,7 +807,8 @@ async function execQueryFaciliate(supabase: any, args: any) {
   return {
     object_type: objectType,
     count: rows.length,
-    records: rows.map((r: any) => ({ guid: r.source_guid, title: r.title, status: r.status, building_id: r.building_id })),
+    building_filter_unavailable: building && !buildingDataAvailable ? true : undefined,
+    records: rows.map((r: any) => ({ guid: r.source_guid, title: r.title, status: r.status, building: r.building_name || r.building_id })),
     last_synced: rows[0]?.synced_at || null,
   };
 }
@@ -1716,6 +1731,88 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
       };
     }
 
+    case "room_sensor_query": {
+      if (!buildingGuid) {
+        return {
+          message: "Ingen byggnad är vald. Välj en byggnad först.",
+          response_type: "answer", action: "none",
+          buttons: makeButtons([{ label: "Visa alla byggnader", action: "list_buildings" }]),
+          asset_ids: [], external_entity_ids: [], filters: {},
+          suggestions: ["Vilka byggnader finns?"],
+        };
+      }
+      const metric = intent.payload.metric || "temperature";
+      const order = intent.payload.order || "desc";
+      const res: any = await execRoomSensorData(supabase, { building_guid: buildingGuid, metric, order });
+      if (!res.available) {
+        return {
+          message: `Inga sensordata finns registrerade för ${buildingName}.`,
+          response_type: "answer", action: "none",
+          buttons: makeButtons([{ label: "Byggnadsöversikt", action: "building_summary" }]),
+          asset_ids: [], external_entity_ids: [], filters: {},
+          suggestions: ["Visa alla rum", "Byggnadsöversikt"],
+        };
+      }
+      const unit = metric === "temperature" ? "°C" : metric === "co2" ? " ppm" : metric === "humidity" ? "%" : "%";
+      const label = metric === "temperature" ? "temperatur" : metric === "co2" ? "CO₂" : metric === "humidity" ? "fuktighet" : "beläggning";
+      const avg = res.averages?.[metric];
+      const hi = metric === "co2" ? res.highest_co2 : metric === "humidity" ? res.highest_humidity : res.highest_temperature;
+      const lo = res.lowest_temperature;
+      let message = `**${label}** i ${buildingName} (${res.room_count} rum med data):`;
+      if (avg !== null && avg !== undefined) message += `\n• Medel: **${avg}${unit}**`;
+      if (hi) message += `\n• Högst: **${hi.name}** (${Math.round(hi.value * 10) / 10}${unit})`;
+      if (metric === "temperature" && lo) message += `\n• Lägst: **${lo.name}** (${Math.round(lo.value * 10) / 10}${unit})`;
+      // Temperature colorize map (same scale as iot_query)
+      const colorMap: Record<string, [number, number, number]> = {};
+      if (metric === "temperature") {
+        for (const r of res.rooms || []) {
+          const t = r.temperature;
+          if (t !== null && t !== undefined && r.fm_guid) {
+            let color: [number, number, number] = [0, 200, 0];
+            if (t < 18) color = [0, 100, 255]; else if (t < 20) color = [100, 200, 255];
+            else if (t > 26) color = [255, 50, 50]; else if (t > 24) color = [255, 150, 0]; else if (t > 22) color = [255, 220, 0];
+            colorMap[r.fm_guid] = color;
+          }
+        }
+      }
+      return {
+        message,
+        response_type: "data_query", action: Object.keys(colorMap).length > 0 ? "colorize" : "none",
+        buttons: makeButtons([
+          { label: "Visa temperatur i viewer", action: "iot_query", payload: { sensor_type: "temperature" } },
+          { label: "Byggnadsöversikt", action: "building_summary" },
+        ]),
+        asset_ids: [], external_entity_ids: [], filters: {},
+        suggestions: ["Vilket rum har högst CO₂?", "Vad är medelfuktigheten?", "Visa alla rum"],
+        color_map: Object.keys(colorMap).length > 0 ? colorMap : undefined,
+      };
+    }
+
+    case "faciliate_count": {
+      const objectType = intent.payload.object_type || "workorder";
+      const label = objectType === "rentlandlord" ? "hyreskontrakt" : objectType === "maintenance" ? "poster planerat underhåll" : "arbetsordrar";
+      const res: any = await execQueryFaciliate(supabase, { object_type: objectType, mode: "count" });
+      if (res.hint) {
+        return {
+          message: res.hint,
+          response_type: "answer", action: "none",
+          buttons: makeButtons([{ label: "Byggnadsöversikt", action: "building_summary" }]),
+          asset_ids: [], external_entity_ids: [], filters: {},
+          suggestions: ["Visa arbetsordrar", "Byggnadsöversikt"],
+        };
+      }
+      return {
+        message: `Det finns **${res.count}** ${label} i Faciliate.`,
+        response_type: "data_query", action: "none",
+        buttons: makeButtons([
+          { label: "Visa exempel", action: "free_text" },
+          { label: "Byggnadsöversikt", action: "building_summary" },
+        ]),
+        asset_ids: [], external_entity_ids: [], filters: {},
+        suggestions: ["Visa några arbetsordrar", "Hur många hyreskontrakt finns?", "Hur många underhållsposter finns?"],
+      };
+    }
+
     default:
       return null;
   }
@@ -1900,13 +1997,41 @@ function detectViewerIntent(messages: any[], context: any): ButtonActionIntent |
   // Drawings/documents are handled by the AI (show_drawing action) — never fast-path them
   if (/\b(ritning|ritningen|ritningar|drawing|dokument|document)/i.test(text)) return null;
 
+  const folded = foldAccents(text);
+
+  // 0) Faciliate counts (work orders / fault reports / contracts / maintenance) → cache.
+  // Only fast-path the GLOBAL count. If the user scopes to a building ("för/i <namn>")
+  // or there's an active building, defer to the AI so it can filter (and be honest if
+  // building info isn't synced) instead of returning a misleading total.
+  const facMatch = folded.match(/\b(hur\s+m[a]nga|antal|how\s+many)\b.*\b(arbetsorder|arbetsordrar|felanmal|workorder|hyreskontrakt|kontrakt|rentlandlord|underhall|maintenance)/);
+  if (facMatch) {
+    const buildingScoped = /\b(for|i|pa)\s+\S/.test(folded) || !!context?.currentBuilding?.fmGuid;
+    if (buildingScoped) return null; // let the AI handle building-scoped Faciliate questions
+    const obj = /hyreskontrakt|kontrakt|rentlandlord/.test(folded) ? "rentlandlord"
+      : /underhall|maintenance/.test(folded) ? "maintenance" : "workorder";
+    return { action: "faciliate_count", payload: { object_type: obj } };
+  }
+
   // 1) Count/list questions get priority (prevents broad regex from catching them)
   const countIntent = detectCountOrListQuestion(text, buildingGuid);
   if (countIntent) return countIntent;
 
-  // 2) IoT/sensor questions — route to live data (ranking questions included now via DB fallback)
+  // 2) Analytical sensor questions (average / warmest / highest) → DB sensor cache (fast).
+  // No \b boundaries: Swedish compounds like "medeltemperaturen" are single words.
   if (buildingGuid) {
-    const iotMatch = text.match(/\b(temperatur|temperature|temp|co2|koldioxid|fuktighet|humidity|luftkvalitet|air quality|inomhusklimat|indoor climate|beläggning|occupancy|sensordata|sensor data|hur varmt|how warm|hur kallt|how cold|varmast|kallast|warmest|coldest)\b/i);
+    const analytical = /(medel|genomsnitt|average|varmast|kallast|warmest|coldest|hogst|lagst|highest|lowest)/.test(folded);
+    const tempWord = /(varmast|kallast|warmest|coldest)/.test(folded);
+    const metricWord = /(temperatur|temp|co2|koldioxid|fukt|humid|belaggning|occupancy|luftkvalitet|inomhusklimat)/.test(folded);
+    if (analytical && (tempWord || metricWord)) {
+      const metric = /(co2|koldioxid)/.test(folded) ? "co2"
+        : /(fukt|humid)/.test(folded) ? "humidity"
+        : /(belag|occup)/.test(folded) ? "occupancy"
+        : "temperature";
+      const order = /(kallast|lagst|coldest|lowest|minst)/.test(folded) ? "asc" : "desc";
+      return { action: "room_sensor_query", payload: { metric, order } };
+    }
+    // 3) Other IoT/sensor questions — live data (auto-falls back to DB cache)
+    const iotMatch = text.match(/\b(temperatur|temperature|temp|co2|koldioxid|fuktighet|humidity|luftkvalitet|air quality|inomhusklimat|indoor climate|beläggning|occupancy|sensordata|sensor data|hur varmt|how warm|hur kallt|how cold)\b/i);
     if (iotMatch) {
       return { action: "iot_query", payload: { sensor_type: "all" } };
     }
@@ -2091,8 +2216,11 @@ VIEWER VISUALIZATION (colorize):
 FACILIATE FM DATA (work orders, contracts, maintenance):
 - For questions about work orders/fault reports (arbetsorder, felanmälan), rental contracts (hyreskontrakt) or planned maintenance (planerat underhåll), use query_faciliate.
 - object_type: "workorder" (work orders & fault reports), "rentlandlord" (contracts), "maintenance" (planned maintenance).
-- Example "hur många öppna arbetsordrar finns?": query_faciliate(object_type="workorder", status="open", mode="count").
+- status filter matches the status TITLE: use "Öppen" for open, "Avslutad" for closed (not numbers).
+- BUILDING SCOPE: when the user asks about a specific building (e.g. "för Småviken"), pass building="<name>" to query_faciliate. If the result has building_filter_unavailable=true, the cache has no building info yet — then say clearly that you can only give the TOTAL across all of Faciliate and that per-building breakdown needs the connector to re-sync with building data. NEVER present a global total as if it were the building's count.
+- Example "hur många öppna arbetsordrar finns?": query_faciliate(object_type="workorder", status="Öppen", mode="count").
 - This reads a cached copy synced from Faciliate. If a query returns a hint that the cache is empty, tell the user the Faciliate sync needs to run — do NOT state as fact that there are zero records.
+- When listing work orders, format as a clean numbered/bulleted list (not a wide table): "**Titel** — status" per line. Suggest concrete follow-ups (e.g. "Visa bara öppna", "Visa felanmälningar").
 
 2D DRAWINGS (Geminus Base):
 - When the user asks to see the drawing ("ritningen") for a floor: resolve the floor via get_building_summary (it returns floors with fm_guid + name), then call present_results with action="show_drawing" and drawing={building_fm_guid, storey_fm_guid, storey_name}. storey_name is the floor's display name (e.g. "Plan 2"). This opens the Geminus Base 2D drawing.

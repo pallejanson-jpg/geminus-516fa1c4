@@ -105,7 +105,8 @@ async function fetchAll(objectType) {
   let skip = 0;
   for (;;) {
     const data = await apiFetch('GET', `/api/v2/${objectType}`, {
-      query: { take: String(CFG.pageSize), skip: String(skip), loadlevel: 'simple' },
+      // fullprimary includes related primary objects (Building, Property) so we can filter by building.
+      query: { take: String(CFG.pageSize), skip: String(skip), loadlevel: 'fullprimary' },
     });
     const items = Array.isArray(data) ? data : (data?.data || data?.items || []);
     if (!items.length) break;
@@ -117,17 +118,24 @@ async function fetchAll(objectType) {
   return all;
 }
 
-// ── field extraction (defensive — exact names confirmed once API is reachable) ──
+// ── field extraction (defensive — verified against JernhusenDemo workorder schema) ──
 const pick = (o, ...keys) => { for (const k of keys) { if (o?.[k] != null && o[k] !== '') return o[k]; } return null; };
-const nestedId = (o, k) => (o?.[k] && typeof o[k] === 'object' ? (o[k].ID ?? o[k].Id ?? o[k].id) : o?.[k]);
+const nestedVal = (o, k, ...props) => {
+  const v = o?.[k];
+  if (v && typeof v === 'object') { for (const p of props) if (v[p] != null && v[p] !== '') return v[p]; return null; }
+  return v ?? null;
+};
 
 function toRow(objectType, r) {
   return {
     object_type: objectType,
     source_guid: String(pick(r, 'guid', 'Guid', 'GUID', 'id', 'ID') ?? cryptoRandom()),
     title: pick(r, 'title', 'Title', 'WorkorderDescriptionPlain', 'Description', 'name', 'Name'),
-    status: String(pick(r, 'status', 'Status', 'workorderStatus', 'WorkorderStatus') ?? '') || null,
-    building_id: String(nestedId(r, 'Building') ?? pick(r, 'BuildingID', 'buildingID', 'buildingId') ?? '') || null,
+    // Prefer the human-readable status title ("Avslutad"/"Öppen") over the numeric code.
+    status: pick(r, 'WorkorderStatusTitle', 'StatusTitle', 'status', 'Status', 'WorkorderStatus') != null
+      ? String(pick(r, 'WorkorderStatusTitle', 'StatusTitle', 'status', 'Status', 'WorkorderStatus')) : null,
+    building_id: String(nestedVal(r, 'Building', 'ID', 'Id', 'id') ?? pick(r, 'BuildingID', 'BuildingCadKey') ?? '') || null,
+    building_name: nestedVal(r, 'Building', 'Title', 'Name', 'title') ?? nestedVal(r, 'Property', 'Title', 'Name') ?? null,
     raw: r,
   };
 }
