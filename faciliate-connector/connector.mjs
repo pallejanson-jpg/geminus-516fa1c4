@@ -33,6 +33,9 @@ function loadEnv() {
 }
 loadEnv();
 
+// Internal Faciliate hosts often use a self-signed TLS cert. Opt-in bypass.
+if (process.env.FACILIATE_INSECURE_TLS === '1') process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 const CFG = {
   baseUrl: (process.env.FACILIATE_BASE_URL || '').replace(/\/+$/, ''),
   username: process.env.FACILIATE_USERNAME || '',
@@ -71,15 +74,13 @@ async function login() {
   return token;
 }
 
-/** Build auth headers per the RestAPI doc: access_token wins for authz; Basic is channel verification. */
+/** Auth headers. Verified against JernhusenDemo: the v2 login JWT goes in
+ * `Authorization: Bearer <token>`. A pre-configured Landlord token (if used
+ * instead) goes in the `access_token` header. */
 async function authHeaders() {
-  const h = {};
-  if (CFG.username && CFG.password) {
-    h['Authorization'] = 'Basic ' + Buffer.from(`${CFG.username}:${CFG.password}`).toString('base64');
-  }
-  const token = CFG.accessToken || (CFG.username ? await login() : null);
-  if (token) h['access_token'] = token;
-  return h;
+  if (CFG.accessToken) return { access_token: CFG.accessToken };
+  const token = await login();
+  return { Authorization: `Bearer ${token}` };
 }
 
 async function apiFetch(method, path, { body, query } = {}) {
