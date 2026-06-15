@@ -99,15 +99,14 @@ async function apiFetch(method, path, { body, query } = {}) {
   return data;
 }
 
-/** Fetch all records of an object type, paging through with take/skip. */
-async function fetchAll(objectType) {
+/** Fetch all records of an object type, paging through with take/skip. Optional filter (e.g. `BuildingID eq "S1"`). */
+async function fetchAll(objectType, filter) {
   const all = [];
   let skip = 0;
   for (;;) {
-    const data = await apiFetch('GET', `/api/v2/${objectType}`, {
-      // fullprimary includes related primary objects (Building, Property) so we can filter by building.
-      query: { take: String(CFG.pageSize), skip: String(skip), loadlevel: 'fullprimary' },
-    });
+    const query = { take: String(CFG.pageSize), skip: String(skip), loadlevel: 'simple' };
+    if (filter) query.filter = filter;
+    const data = await apiFetch('GET', `/api/v2/${objectType}`, { query });
     const items = Array.isArray(data) ? data : (data?.data || data?.items || []);
     if (!items.length) break;
     all.push(...items);
@@ -193,6 +192,33 @@ async function cmdSync(types) {
   console.log('Done.');
 }
 
+/** Sync records for ONE building, stamping building id+name (the list response omits building). */
+async function cmdSyncBuilding(buildingId, buildingName, types) {
+  if (!buildingId || !buildingName) {
+    console.error('Usage: sync-building <BuildingID> "<Building name>" [objecttypes...]');
+    process.exit(1);
+  }
+  const objects = types.length ? types : ['workorder'];
+  console.log(`Syncing building ${buildingId} (${buildingName}): ${objects.join(', ')}`);
+  for (const obj of objects) {
+    process.stdout.write(`  ${obj}… `);
+    try {
+      const items = await fetchAll(obj, `BuildingID eq "${buildingId}"`);
+      const rows = items.map(r => {
+        const row = toRow(obj, r);
+        row.building_id = buildingId;          // stamp from filter context (list omits building)
+        row.building_name = buildingName;
+        return row;
+      });
+      if (rows.length) await upsert(rows);
+      console.log(`${rows.length} records ✅`);
+    } catch (e) {
+      console.log(`FAILED: ${e.message}`);
+    }
+  }
+  console.log('Done.');
+}
+
 async function cmdCreateWorkorder(arg) {
   if (!arg) { console.error('Usage: create-workorder <json|@file.json>'); process.exit(1); }
   const json = arg.startsWith('@') ? readFileSync(arg.slice(1), 'utf8') : arg;
@@ -205,11 +231,12 @@ const [cmd, ...args] = process.argv.slice(2);
 const run = {
   test: () => cmdTest(),
   sync: () => cmdSync(args),
+  'sync-building': () => cmdSyncBuilding(args[0], args[1], args.slice(2)),
   'create-workorder': () => cmdCreateWorkorder(args[0]),
 }[cmd];
 
 if (!run) {
-  console.log('Usage: node connector.mjs <test|sync [types...]|create-workorder <json|@file>>');
+  console.log('Usage: node connector.mjs <test|sync [types...]|sync-building <BuildingID> "<name>" [types...]|create-workorder <json|@file>>');
   process.exit(1);
 }
 run().catch(e => { console.error('Error:', e.message); process.exit(1); });
