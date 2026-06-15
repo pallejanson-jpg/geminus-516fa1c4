@@ -4,10 +4,12 @@ import Anthropic from "npm:@anthropic-ai/sdk";
 import { verifyAuth, unauthorizedResponse, corsHeaders } from "../_shared/auth.ts";
 import { getGeminusPremiumCredentials } from "../_shared/credentials.ts";
 
-const MAX_TOOL_ROUNDS = 10;
-const AI_MODEL_PRIMARY = "claude-opus-4-8";
-const AI_MODEL_FALLBACK = "claude-sonnet-4-6";
-const MAX_OUTPUT_TOKENS = 16000;
+const MAX_TOOL_ROUNDS = 8;
+// Sonnet is the interactive default — fast time-to-first-token, strong tool use.
+// Opus is the fallback for overload (5xx) and for genuinely hard reasoning.
+const AI_MODEL_PRIMARY = "claude-sonnet-4-6";
+const AI_MODEL_FALLBACK = "claude-opus-4-8";
+const MAX_OUTPUT_TOKENS = 4096;
 
 /* ─────────────────────────────────────────────
    IFC type → user-friendly Swedish name map
@@ -2032,8 +2034,8 @@ TOOL CALLING FLOW:
   • buttons: 2-3 clickable ACTION buttons (e.g. "Visa i viewer", "Filtrera dörrar", "Byggnadsöversikt").
   • suggestions: 2-3 proactive follow-up questions.
   • asset_ids / external_entity_ids / color_map when relevant for the viewer.
-- After present_results, ALWAYS finish with your chat answer as plain text: short and concrete, max 2-3 sentences.
-- Your final plain text IS the chat message shown to the user.
+- Write your final answer text and call present_results in the SAME response (text first, then the present_results call) — do not split them across turns. This keeps responses fast.
+- Your plain text IS the chat message shown to the user: short and concrete, max 2-3 sentences.
 
 IoT / SENSOR DATA:
 - For analytical/ranking questions (e.g. "which room is warmest", "average temperature", "humidity in room 232"), use get_room_sensor_data. This queries cached sensor attributes stored on rooms in the database.
@@ -2141,7 +2143,8 @@ async function runClaudeRound(
     const stream = client.messages.stream({
       model,
       max_tokens: MAX_OUTPUT_TOKENS,
-      thinking: { type: "adaptive" },
+      // Thinking disabled on the interactive path: the tools do the work, and
+      // skipping the thinking pre-amble cuts seconds off time-to-first-token.
       system: params.system,
       messages: params.messages,
       tools: params.tools,
@@ -2328,28 +2331,25 @@ serve(async (req) => {
           let fullText = "";
 
           for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-            if (round > 0 && !fullText) send({ type: "status", message: "Bearbetar resultat…" });
+            if (round > 0) send({ type: "status", message: "Bearbetar resultat…" });
 
-            let roundHadText = false;
+            // Buffer this round's text; only the FINAL round's text is the answer.
+            // Intermediate rounds may contain step narration which we must not show.
+            let roundText = "";
             const response = await runClaudeRound(anthropic, {
               system: systemBlocks,
               messages: conversation,
               tools: activeTools,
-              onTextDelta: (delta: string) => {
-                if (!roundHadText && fullText) {
-                  fullText += "\n\n";
-                  send({ type: "delta", content: "\n\n" });
-                }
-                roundHadText = true;
-                fullText += delta;
-                send({ type: "delta", content: delta });
-              },
+              onTextDelta: (delta: string) => { roundText += delta; },
             });
 
             conversation.push({ role: "assistant", content: response.content });
 
             const toolUses = response.content.filter((b: any) => b.type === "tool_use");
+
+            // Terminal: a plain answer with no tool calls — this text is the answer.
             if (response.stop_reason !== "tool_use" || toolUses.length === 0) {
+              if (roundText.trim()) { fullText = roundText; send({ type: "delta", content: roundText }); }
               console.log(`Geminus AI: final answer (${Date.now() - startTime}ms, round ${round + 1}, stop_reason: ${response.stop_reason})`);
               break;
             }
@@ -2373,6 +2373,16 @@ serve(async (req) => {
               })
             );
             conversation.push({ role: "user", content: toolResults });
+
+            // Terminal: model wrote its answer text AND called present_results in
+            // the same turn — flush that text and stop (no extra round needed).
+            if (presentMeta && roundText.trim()) {
+              fullText = roundText;
+              send({ type: "delta", content: roundText });
+              console.log(`Geminus AI: text + present_results same turn, done (${Date.now() - startTime}ms, round ${round + 1})`);
+              break;
+            }
+            // Otherwise roundText (if any) was intermediate narration — discard it.
           }
 
           // Guard: the model finished without any user-facing text

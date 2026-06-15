@@ -36,9 +36,30 @@ function rectPolygon(cx: number, cz: number, halfSide: number, origin: Origin): 
   return [corners.map(([x, z]) => localToGeo(x, z, origin))];
 }
 
+// CRC32 (required by ZIP — extractors like Windows Explorer reject entries with a bad CRC)
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(data: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (let i = 0; i < data.length; i++) {
+    crc = CRC_TABLE[(crc ^ data[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
 /** Simple ZIP creator — stores files uncompressed (method 0) for Deno compatibility */
 function createZip(files: Record<string, string>): Uint8Array {
-  const entries: { name: Uint8Array; data: Uint8Array; offset: number }[] = [];
+  const entries: { name: Uint8Array; data: Uint8Array; crc: number; offset: number }[] = [];
   const encoder = new TextEncoder();
   const parts: Uint8Array[] = [];
   let offset = 0;
@@ -46,6 +67,7 @@ function createZip(files: Record<string, string>): Uint8Array {
   for (const [name, content] of Object.entries(files)) {
     const nameBytes = encoder.encode(name);
     const dataBytes = encoder.encode(content);
+    const crc = crc32(dataBytes);
 
     // Local file header (30 + name + data)
     const header = new ArrayBuffer(30);
@@ -56,15 +78,14 @@ function createZip(files: Record<string, string>): Uint8Array {
     hv.setUint16(8, 0, true);          // compression method (store)
     hv.setUint16(10, 0, true);         // mod time
     hv.setUint16(12, 0, true);         // mod date
-    // CRC32 — skip for simplicity (set to 0, many readers accept it for stored files)
-    hv.setUint32(14, 0, true);
+    hv.setUint32(14, crc, true);       // CRC32
     hv.setUint32(18, dataBytes.length, true); // compressed size
     hv.setUint32(22, dataBytes.length, true); // uncompressed size
     hv.setUint16(26, nameBytes.length, true); // name length
     hv.setUint16(28, 0, true);               // extra length
 
     const headerU8 = new Uint8Array(header);
-    entries.push({ name: nameBytes, data: dataBytes, offset });
+    entries.push({ name: nameBytes, data: dataBytes, crc, offset });
     parts.push(headerU8, nameBytes, dataBytes);
     offset += 30 + nameBytes.length + dataBytes.length;
   }
@@ -81,7 +102,7 @@ function createZip(files: Record<string, string>): Uint8Array {
     cv.setUint16(10, 0, true);
     cv.setUint16(12, 0, true);
     cv.setUint16(14, 0, true);
-    cv.setUint32(16, 0, true);
+    cv.setUint32(16, entry.crc, true); // CRC32
     cv.setUint32(20, entry.data.length, true);
     cv.setUint32(24, entry.data.length, true);
     cv.setUint16(28, entry.name.length, true);
