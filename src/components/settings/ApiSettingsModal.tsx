@@ -468,6 +468,43 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isCheckingSync, setIsCheckingSync] = useState(false);
     const [hasCheckedSync, setHasCheckedSync] = useState(false);
 
+    // Faciliate cache stats
+    const [facilitateCacheStats, setFacilitateCacheStats] = useState<{
+        total: number;
+        byType: Record<string, number>;
+        byBuilding: Array<{ building_name: string | null; building_id: string | null; count: number }>;
+        lastSynced: string | null;
+    } | null>(null);
+    const [isLoadingFacilitateStats, setIsLoadingFacilitateStats] = useState(false);
+
+    const loadFacilitateStats = async () => {
+        setIsLoadingFacilitateStats(true);
+        try {
+            const [countRes, typeRes, buildingRes, latestRes] = await Promise.all([
+                supabase.from('faciliate_records').select('id', { count: 'exact', head: true }),
+                supabase.from('faciliate_records').select('object_type').then(({ data }) => {
+                    const map: Record<string, number> = {};
+                    for (const r of data || []) map[r.object_type] = (map[r.object_type] || 0) + 1;
+                    return map;
+                }),
+                supabase.from('faciliate_records').select('building_name, building_id').then(({ data }) => {
+                    const map = new Map<string, { building_name: string | null; building_id: string | null; count: number }>();
+                    for (const r of data || []) {
+                        const key = r.building_name || r.building_id || '__okänd__';
+                        if (!map.has(key)) map.set(key, { building_name: r.building_name, building_id: r.building_id, count: 0 });
+                        map.get(key)!.count++;
+                    }
+                    return [...map.values()].sort((a, b) => b.count - a.count);
+                }),
+                supabase.from('faciliate_records').select('synced_at').order('synced_at', { ascending: false }).limit(1)
+                    .then(({ data }) => data?.[0]?.synced_at || null),
+            ]);
+            setFacilitateCacheStats({ total: countRes.count ?? 0, byType: typeRes as Record<string, number>, byBuilding: buildingRes as any, lastSynced: latestRes as string | null });
+        } finally {
+            setIsLoadingFacilitateStats(false);
+        }
+    };
+
     // Sync log state for SyncStatusLog
     const [structureSyncLog, setStructureSyncLog] = useState<SyncStep[]>([]);
     const [structureSyncOutcome, setStructureSyncOutcome] = useState<SyncOutcome | null>(null);
@@ -2873,15 +2910,86 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                                     {/* Faciliate API Section */}
                                     <AccordionItem value="faciliate" className="border rounded-lg">
-                                        <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+                                        <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50" onClick={() => { if (!facilitateCacheStats) loadFacilitateStats(); }}>
                                             <div className="flex items-center gap-2 flex-1">
                                                 <Wrench className="h-5 w-5 text-orange-500" />
                                                 <span className="font-medium">Faciliate</span>
-                                                <Badge variant="outline" className="ml-auto mr-2 text-xs bg-orange-50 text-orange-700 border-orange-200">FM System</Badge>
+                                                {facilitateCacheStats && facilitateCacheStats.total > 0
+                                                    ? <Badge variant="outline" className="ml-auto mr-2 text-xs bg-green-50 text-green-700 border-green-200">{facilitateCacheStats.total.toLocaleString()} poster</Badge>
+                                                    : <Badge variant="outline" className="ml-auto mr-2 text-xs bg-orange-50 text-orange-700 border-orange-200">FM System</Badge>}
                                             </div>
                                         </AccordionTrigger>
                                         <AccordionContent className="px-4 pb-4 pt-2">
-                                            <p className="text-xs text-muted-foreground">Integration with Faciliate for work orders. Not configured yet.</p>
+                                            <div className="space-y-4">
+                                                <p className="text-xs text-muted-foreground">
+                                                    Faciliate är ett lokalt installerat FM-system (arbetsordrar, hyreskontrakt, planerat underhåll). Synkronisering sker via en lokal connector som körs innanför SWG VPN — data cachelagras sedan i Geminus.
+                                                </p>
+
+                                                {/* Cache status */}
+                                                {isLoadingFacilitateStats ? (
+                                                    <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Laddar cachestatus…</div>
+                                                ) : facilitateCacheStats ? (
+                                                    <div className="space-y-3">
+                                                        <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
+                                                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Cachestatus</p>
+                                                            {Object.entries(facilitateCacheStats.byType).map(([type, count]) => (
+                                                                <div key={type} className="flex items-center justify-between text-sm">
+                                                                    <span className="text-muted-foreground capitalize">{type === 'workorder' ? 'Arbetsordrar' : type === 'rentlandlord' ? 'Hyreskontrakt' : type === 'maintenance' ? 'Planerat underhåll' : type}</span>
+                                                                    <span className="font-medium">{(count as number).toLocaleString()}</span>
+                                                                </div>
+                                                            ))}
+                                                            {facilitateCacheStats.total === 0 && <p className="text-xs text-muted-foreground">Ingen data synkad ännu.</p>}
+                                                            {facilitateCacheStats.lastSynced && (
+                                                                <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-1.5 mt-1.5">
+                                                                    <span>Senast synkad</span>
+                                                                    <span>{new Date(facilitateCacheStats.lastSynced).toLocaleString('sv-SE')}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {facilitateCacheStats.byBuilding.length > 0 && (
+                                                            <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
+                                                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Per byggnad</p>
+                                                                {facilitateCacheStats.byBuilding.slice(0, 8).map((b, i) => (
+                                                                    <div key={i} className="flex items-center justify-between text-sm">
+                                                                        <span className="text-muted-foreground truncate max-w-[60%]">{b.building_name || b.building_id || 'Okänd'}</span>
+                                                                        <span className="font-medium">{b.count.toLocaleString()}</span>
+                                                                    </div>
+                                                                ))}
+                                                                {facilitateCacheStats.byBuilding.length > 8 && (
+                                                                    <p className="text-xs text-muted-foreground">…och {facilitateCacheStats.byBuilding.length - 8} till</p>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : null}
+
+                                                {/* Sync commands */}
+                                                <div className="space-y-2">
+                                                    <p className="text-xs font-medium">Synkkommandon (körs i terminalen innanför VPN)</p>
+                                                    {[
+                                                        { label: 'Synka en byggnad', cmd: 'node connector.mjs sync-building <BuildingID> "<Namn>" workorder rentlandlord maintenance' },
+                                                        { label: 'Synka allt', cmd: 'node connector.mjs sync' },
+                                                        { label: 'Testa anslutning', cmd: 'node connector.mjs test' },
+                                                    ].map(({ label, cmd }) => (
+                                                        <div key={label} className="rounded border bg-muted/50 p-2">
+                                                            <p className="text-[10px] text-muted-foreground mb-1">{label}</p>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <code className="text-[10px] flex-1 break-all font-mono">{cmd}</code>
+                                                                <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] shrink-0"
+                                                                    onClick={() => { navigator.clipboard.writeText(`cd faciliate-connector && ${cmd}`); toast({ title: 'Kopierat!' }); }}>
+                                                                    Kopiera
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+
+                                                <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={loadFacilitateStats} disabled={isLoadingFacilitateStats}>
+                                                    {isLoadingFacilitateStats ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                                    Uppdatera cachestatus
+                                                </Button>
+                                            </div>
                                         </AccordionContent>
                                     </AccordionItem>
 
@@ -3567,6 +3675,83 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         >
                                             <RefreshCw className="h-3 w-3" />
                                             Test Connection
+                                        </Button>
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
+
+                            {/* Faciliate Sync */}
+                            <AccordionItem value="faciliate-sync" className="border rounded-lg px-4">
+                                <AccordionTrigger className="py-3" onClick={() => { if (!facilitateCacheStats) loadFacilitateStats(); }}>
+                                    <div className="flex items-center gap-2">
+                                        <Wrench className="h-4 w-4 text-orange-500" />
+                                        <span>Faciliate</span>
+                                        {facilitateCacheStats && facilitateCacheStats.total > 0
+                                            ? <Badge variant="outline" className="ml-auto mr-2 text-xs bg-green-50 text-green-700 border-green-200">{facilitateCacheStats.total.toLocaleString()} poster</Badge>
+                                            : <Badge variant="outline" className="ml-auto mr-2 text-xs">Ej synkad</Badge>}
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    <div className="space-y-4">
+                                        <p className="text-xs text-muted-foreground">
+                                            Data synkas via en lokal connector som körs innanför SWG VPN. Kör kommandot nedan i terminalen och återvänd hit för att kontrollera status.
+                                        </p>
+
+                                        {isLoadingFacilitateStats ? (
+                                            <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Laddar…</div>
+                                        ) : facilitateCacheStats && facilitateCacheStats.total > 0 ? (
+                                            <div className="space-y-3">
+                                                {/* Per-type breakdown */}
+                                                <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
+                                                    {Object.entries(facilitateCacheStats.byType).map(([type, count]) => (
+                                                        <div key={type} className="flex items-center justify-between text-sm">
+                                                            <span className="text-muted-foreground">{type === 'workorder' ? 'Arbetsordrar' : type === 'rentlandlord' ? 'Hyreskontrakt' : type === 'maintenance' ? 'Planerat underhåll' : type}</span>
+                                                            <span className="font-medium">{(count as number).toLocaleString()}</span>
+                                                        </div>
+                                                    ))}
+                                                    {facilitateCacheStats.lastSynced && (
+                                                        <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-1.5 mt-1.5">
+                                                            <span>Senast synkad</span>
+                                                            <span>{new Date(facilitateCacheStats.lastSynced).toLocaleString('sv-SE')}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Per-building breakdown */}
+                                                {facilitateCacheStats.byBuilding.filter(b => b.building_name || b.building_id).length > 0 && (
+                                                    <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
+                                                        <p className="text-xs font-medium text-muted-foreground mb-2">Per byggnad</p>
+                                                        {facilitateCacheStats.byBuilding.filter(b => b.building_name || b.building_id).map((b, i) => (
+                                                            <div key={i} className="flex items-center justify-between text-sm">
+                                                                <span className="text-muted-foreground truncate max-w-[65%]">{b.building_name || b.building_id}</span>
+                                                                <span className="font-medium">{b.count.toLocaleString()}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="rounded-lg border bg-muted/30 p-4 text-center">
+                                                <Wrench className="h-6 w-6 mx-auto mb-2 text-muted-foreground/50" />
+                                                <p className="text-sm text-muted-foreground">Ingen Faciliate-data i cachen ännu.</p>
+                                                <p className="text-xs text-muted-foreground mt-1">Kör connector för att synka.</p>
+                                            </div>
+                                        )}
+
+                                        <div className="rounded border bg-muted/50 p-2">
+                                            <p className="text-[10px] text-muted-foreground mb-1">Synka en byggnad (ersätt ID och namn)</p>
+                                            <div className="flex items-center gap-1.5">
+                                                <code className="text-[10px] flex-1 font-mono break-all">node connector.mjs sync-building S1 "Småviken" workorder rentlandlord maintenance</code>
+                                                <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] shrink-0"
+                                                    onClick={() => { navigator.clipboard.writeText('cd faciliate-connector && node connector.mjs sync-building S1 "Småviken" workorder rentlandlord maintenance'); toast({ title: 'Kopierat!' }); }}>
+                                                    Kopiera
+                                                </Button>
+                                            </div>
+                                        </div>
+
+                                        <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={loadFacilitateStats} disabled={isLoadingFacilitateStats}>
+                                            {isLoadingFacilitateStats ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                            Uppdatera status
                                         </Button>
                                     </div>
                                 </AccordionContent>
