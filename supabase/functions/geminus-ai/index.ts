@@ -1175,7 +1175,10 @@ function matchCategory(text: string): string | null {
     "tillgångar": "Instance", "assets": "Instance", "alla tillgångar": "Instance",
     "våningar": "Building Storey", "floors": "Building Storey", "våning": "Building Storey",
   };
-  return categoryMap[lower] || null;
+  if (categoryMap[lower]) return categoryMap[lower];
+  const folded = foldAccents(lower);
+  for (const [k, v] of Object.entries(categoryMap)) if (foldAccents(k) === folded) return v;
+  return null;
 }
 
 /* ─────────────────────────────────────────────
@@ -1744,6 +1747,28 @@ const KNOWN_SYSTEMS: Record<string, string> = {
   "ventiler": "IfcValve", "ventil": "IfcValve", "valves": "IfcValve",
 };
 
+/** Lowercase + strip diacritics so missing å/ä/ö still matches ("dorrar" → "dörrar", "manga" → "många"). */
+function foldAccents(s: string): string {
+  let out = "";
+  for (const ch of s.toLowerCase().normalize("NFD")) {
+    const c = ch.codePointAt(0) ?? 0;
+    if (c >= 0x300 && c <= 0x36f) continue; // skip combining diacritics
+    out += ch;
+  }
+  return out;
+}
+const KNOWN_OBJECT_TYPES_FOLDED: Record<string, { category: string }> =
+  Object.fromEntries(Object.entries(KNOWN_OBJECT_TYPES).map(([k, v]) => [foldAccents(k), v]));
+const KNOWN_SYSTEMS_FOLDED: Record<string, string> =
+  Object.fromEntries(Object.entries(KNOWN_SYSTEMS).map(([k, v]) => [foldAccents(k), v]));
+/** Accent-tolerant lookups for the fast-path dictionaries. */
+function lookupObjectType(word: string): { category: string } | null {
+  return KNOWN_OBJECT_TYPES[word] || KNOWN_OBJECT_TYPES_FOLDED[foldAccents(word)] || null;
+}
+function lookupSystem(word: string): string | null {
+  return KNOWN_SYSTEMS[word] || KNOWN_SYSTEMS_FOLDED[foldAccents(word)] || null;
+}
+
 // IoT / sensor keywords that should trigger live sensor data lookup
 const IOT_KEYWORDS = new Set([
   "temperatur", "temperature", "temp",
@@ -1775,13 +1800,15 @@ function detectShortInput(messages: any[], context: any): ButtonActionIntent | n
   }
 
   // Match known category-type objects (dörrar, rum, våningar → category query)
-  if (buildingGuid && KNOWN_OBJECT_TYPES[lower]) {
-    return { action: "category_query", payload: { category: KNOWN_OBJECT_TYPES[lower].category } };
+  const ot = lookupObjectType(lower);
+  if (buildingGuid && ot) {
+    return { action: "category_query", payload: { category: ot.category } };
   }
 
   // Match known system
-  if (buildingGuid && KNOWN_SYSTEMS[lower]) {
-    return { action: "system_query", payload: { system: KNOWN_SYSTEMS[lower] } };
+  const sys = lookupSystem(lower);
+  if (buildingGuid && sys) {
+    return { action: "system_query", payload: { system: sys } };
   }
 
   // "berätta om X" / "tell me about X" / "vad finns i X" / "sammanfatta X"
@@ -1793,11 +1820,13 @@ function detectShortInput(messages: any[], context: any): ButtonActionIntent | n
     }
     if (subject && subject.length >= 2) {
       // Check if it's a known category
-      if (KNOWN_OBJECT_TYPES[subject]) {
-        return { action: "category_query", payload: { category: KNOWN_OBJECT_TYPES[subject].category } };
+      const sot = lookupObjectType(subject);
+      if (sot) {
+        return { action: "category_query", payload: { category: sot.category } };
       }
-      if (KNOWN_SYSTEMS[subject]) {
-        return { action: "system_query", payload: { system: KNOWN_SYSTEMS[subject] } };
+      const ssys = lookupSystem(subject);
+      if (ssys) {
+        return { action: "system_query", payload: { system: ssys } };
       }
       return { action: "system_query", payload: { system: subject } };
     }
@@ -1819,13 +1848,14 @@ function extractCoreTerm(raw: string): string {
 function detectCountOrListQuestion(text: string, buildingGuid: string | null): ButtonActionIntent | null {
   if (!buildingGuid) return null;
 
-  // "hur många X" / "how many X"
-  const countMatch = text.match(/^(hur\s+många|how\s+many|antal)\s+(.+)$/i);
+  // "hur många X" / "how many X"  (tolerate missing å: "hur manga")
+  const countMatch = text.match(/^(hur\s+m[åa]nga|how\s+many|antal)\s+(.+)$/i);
   if (countMatch) {
     const core = extractCoreTerm(countMatch[2]);
     const cat = matchCategory(core);
     if (cat) return { action: "category_query", payload: { category: cat } };
-    if (KNOWN_SYSTEMS[core]) return { action: "system_query", payload: { system: KNOWN_SYSTEMS[core] } };
+    const sys = lookupSystem(core);
+    if (sys) return { action: "system_query", payload: { system: sys } };
     // Unknown object type (e.g. attribute questions like "rum med parkett") → let the AI handle it
     return null;
   }
@@ -1836,7 +1866,8 @@ function detectCountOrListQuestion(text: string, buildingGuid: string | null): B
     const core = extractCoreTerm(listMatch[2]);
     const cat = matchCategory(core);
     if (cat) return { action: "category_query", payload: { category: cat } };
-    if (KNOWN_SYSTEMS[core]) return { action: "system_query", payload: { system: KNOWN_SYSTEMS[core] } };
+    const sys = lookupSystem(core);
+    if (sys) return { action: "system_query", payload: { system: sys } };
     // "vilka system finns" → building summary
     if (/system/i.test(core)) return { action: "building_summary", payload: {} };
     // Unknown → let AI handle it
@@ -1849,7 +1880,8 @@ function detectCountOrListQuestion(text: string, buildingGuid: string | null): B
     const core = extractCoreTerm(existsMatch[2]);
     const cat = matchCategory(core);
     if (cat) return { action: "category_query", payload: { category: cat } };
-    if (KNOWN_SYSTEMS[core]) return { action: "system_query", payload: { system: KNOWN_SYSTEMS[core] } };
+    const sys = lookupSystem(core);
+    if (sys) return { action: "system_query", payload: { system: sys } };
     // Unknown → let AI handle it
     return null;
   }
@@ -1909,10 +1941,11 @@ function detectViewerIntent(messages: any[], context: any): ButtonActionIntent |
     }
 
     // Check known systems
-    if (KNOWN_SYSTEMS[core]) {
+    const coreSys = lookupSystem(core);
+    if (coreSys) {
       return wantsViewer
-        ? { action: "viewer_highlight", payload: { system: KNOWN_SYSTEMS[core] } }
-        : { action: "system_query", payload: { system: KNOWN_SYSTEMS[core] } };
+        ? { action: "viewer_highlight", payload: { system: coreSys } }
+        : { action: "system_query", payload: { system: coreSys } };
     }
 
     // If core is clean and short (likely a real object name), try system_query
@@ -1933,7 +1966,8 @@ function detectViewerIntent(messages: any[], context: any): ButtonActionIntent |
     if (core.length < 2) return null;
     const catMatch = matchCategory(core);
     if (catMatch) return { action: "viewer_highlight", payload: { category: catMatch } };
-    if (KNOWN_SYSTEMS[core]) return { action: "viewer_highlight", payload: { system: KNOWN_SYSTEMS[core] } };
+    const hlSys = lookupSystem(core);
+    if (hlSys) return { action: "viewer_highlight", payload: { system: hlSys } };
     if (core.split(/\s+/).length <= 3) return { action: "viewer_highlight", payload: { system: core } };
     return null;
   }
