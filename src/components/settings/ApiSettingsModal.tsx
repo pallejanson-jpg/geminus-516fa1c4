@@ -477,6 +477,73 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     } | null>(null);
     const [isLoadingFacilitateStats, setIsLoadingFacilitateStats] = useState(false);
 
+    // Faciliate connector server
+    const CONNECTOR_URL = `http://localhost:${typeof window !== 'undefined' ? (localStorage.getItem('facilitateConnectorPort') || '3001') : '3001'}`;
+    const [connectorStatus, setConnectorStatus] = useState<'unknown' | 'online' | 'offline'>('unknown');
+    const [facilitateBuildings, setFacilitateBuildings] = useState<Array<{ id: string; name: string; cadKey: string | null }>>([]);
+    const [selectedFacBuildingId, setSelectedFacBuildingId] = useState('');
+    const [selectedFacBuildingName, setSelectedFacBuildingName] = useState('');
+    const [facilitateSyncTypes, setFacilitateSyncTypes] = useState(['workorder', 'rentlandlord', 'maintenance']);
+    const [facilitateSyncLog, setFacilitateSyncLog] = useState<string[]>([]);
+    const [isFacilitiateSyncing, setIsFacilitateSyncing] = useState(false);
+
+    const checkConnectorStatus = async () => {
+        try {
+            const r = await fetch(`${CONNECTOR_URL}/status`, { signal: AbortSignal.timeout(3000) });
+            setConnectorStatus(r.ok ? 'online' : 'offline');
+        } catch {
+            setConnectorStatus('offline');
+        }
+    };
+
+    const fetchFacilitateBuildings = async () => {
+        try {
+            const r = await fetch(`${CONNECTOR_URL}/buildings`, { signal: AbortSignal.timeout(10000) });
+            const data = await r.json();
+            setFacilitateBuildings(data.buildings || []);
+        } catch (e: any) {
+            toast({ variant: 'destructive', title: 'Kunde inte hämta byggnader', description: e.message });
+        }
+    };
+
+    const startFacilitateSync = async () => {
+        if (!selectedFacBuildingId || !selectedFacBuildingName) {
+            toast({ variant: 'destructive', title: 'Välj en byggnad' }); return;
+        }
+        setIsFacilitateSyncing(true);
+        setFacilitateSyncLog([`Startar synk av ${selectedFacBuildingName}…`]);
+        try {
+            const res = await fetch(`${CONNECTOR_URL}/sync-building`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ buildingId: selectedFacBuildingId, buildingName: selectedFacBuildingName, types: facilitateSyncTypes }),
+            });
+            const reader = res.body!.getReader();
+            const decoder = new TextDecoder();
+            let buf = '';
+            for (;;) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buf += decoder.decode(value, { stream: true });
+                const parts = buf.split('\n\n');
+                buf = parts.pop() ?? '';
+                for (const part of parts) {
+                    const line = part.replace(/^data: /, '').trim();
+                    if (!line) continue;
+                    try {
+                        const ev = JSON.parse(line);
+                        setFacilitateSyncLog(prev => [...prev, ev.message || '']);
+                        if (ev.type === 'done') { loadFacilitateStats(); }
+                    } catch {}
+                }
+            }
+        } catch (e: any) {
+            setFacilitateSyncLog(prev => [...prev, `❌ ${e.message}`]);
+        } finally {
+            setIsFacilitateSyncing(false);
+        }
+    };
+
     const loadFacilitateStats = async () => {
         setIsLoadingFacilitateStats(true);
         try {
@@ -2910,7 +2977,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                                     {/* Faciliate API Section */}
                                     <AccordionItem value="faciliate" className="border rounded-lg">
-                                        <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50" onClick={() => { if (!facilitateCacheStats) loadFacilitateStats(); }}>
+                                        <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50" onClick={() => { loadFacilitateStats(); checkConnectorStatus(); }}>
                                             <div className="flex items-center gap-2 flex-1">
                                                 <Wrench className="h-5 w-5 text-orange-500" />
                                                 <span className="font-medium">Faciliate</span>
@@ -2922,70 +2989,129 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         <AccordionContent className="px-4 pb-4 pt-2">
                                             <div className="space-y-4">
                                                 <p className="text-xs text-muted-foreground">
-                                                    Faciliate är ett lokalt installerat FM-system (arbetsordrar, hyreskontrakt, planerat underhåll). Synkronisering sker via en lokal connector som körs innanför SWG VPN — data cachelagras sedan i Geminus.
+                                                    Faciliate är ett lokalt installerat FM-system. Synkronisering sker via en lokal connector-server som körs på din dator innanför SWG VPN.
                                                 </p>
 
-                                                {/* Cache status */}
-                                                {isLoadingFacilitateStats ? (
-                                                    <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Laddar cachestatus…</div>
-                                                ) : facilitateCacheStats ? (
-                                                    <div className="space-y-3">
-                                                        <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
-                                                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Cachestatus</p>
-                                                            {Object.entries(facilitateCacheStats.byType).map(([type, count]) => (
-                                                                <div key={type} className="flex items-center justify-between text-sm">
-                                                                    <span className="text-muted-foreground capitalize">{type === 'workorder' ? 'Arbetsordrar' : type === 'rentlandlord' ? 'Hyreskontrakt' : type === 'maintenance' ? 'Planerat underhåll' : type}</span>
-                                                                    <span className="font-medium">{(count as number).toLocaleString()}</span>
-                                                                </div>
-                                                            ))}
-                                                            {facilitateCacheStats.total === 0 && <p className="text-xs text-muted-foreground">Ingen data synkad ännu.</p>}
-                                                            {facilitateCacheStats.lastSynced && (
-                                                                <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-1.5 mt-1.5">
-                                                                    <span>Senast synkad</span>
-                                                                    <span>{new Date(facilitateCacheStats.lastSynced).toLocaleString('sv-SE')}</span>
-                                                                </div>
-                                                            )}
+                                                {/* Connector server status */}
+                                                <div className="rounded-lg border p-3 space-y-3">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className={`h-2 w-2 rounded-full ${connectorStatus === 'online' ? 'bg-green-500' : connectorStatus === 'offline' ? 'bg-red-400' : 'bg-gray-300'}`} />
+                                                            <span className="text-sm font-medium">
+                                                                {connectorStatus === 'online' ? 'Connector online' : connectorStatus === 'offline' ? 'Connector offline' : 'Status okänd'}
+                                                            </span>
                                                         </div>
-
-                                                        {facilitateCacheStats.byBuilding.length > 0 && (
-                                                            <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
-                                                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Per byggnad</p>
-                                                                {facilitateCacheStats.byBuilding.slice(0, 8).map((b, i) => (
-                                                                    <div key={i} className="flex items-center justify-between text-sm">
-                                                                        <span className="text-muted-foreground truncate max-w-[60%]">{b.building_name || b.building_id || 'Okänd'}</span>
-                                                                        <span className="font-medium">{b.count.toLocaleString()}</span>
-                                                                    </div>
-                                                                ))}
-                                                                {facilitateCacheStats.byBuilding.length > 8 && (
-                                                                    <p className="text-xs text-muted-foreground">…och {facilitateCacheStats.byBuilding.length - 8} till</p>
-                                                                )}
-                                                            </div>
-                                                        )}
+                                                        <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={checkConnectorStatus}>
+                                                            <RefreshCw className="h-3 w-3" /> Kontrollera
+                                                        </Button>
                                                     </div>
-                                                ) : null}
-
-                                                {/* Sync commands */}
-                                                <div className="space-y-2">
-                                                    <p className="text-xs font-medium">Synkkommandon (körs i terminalen innanför VPN)</p>
-                                                    {[
-                                                        { label: 'Synka en byggnad', cmd: 'node connector.mjs sync-building <BuildingID> "<Namn>" workorder rentlandlord maintenance' },
-                                                        { label: 'Synka allt', cmd: 'node connector.mjs sync' },
-                                                        { label: 'Testa anslutning', cmd: 'node connector.mjs test' },
-                                                    ].map(({ label, cmd }) => (
-                                                        <div key={label} className="rounded border bg-muted/50 p-2">
-                                                            <p className="text-[10px] text-muted-foreground mb-1">{label}</p>
+                                                    {connectorStatus === 'offline' && (
+                                                        <div className="rounded bg-muted p-2">
+                                                            <p className="text-[10px] text-muted-foreground mb-1">Starta connectorn (kräver VPN):</p>
                                                             <div className="flex items-center gap-1.5">
-                                                                <code className="text-[10px] flex-1 break-all font-mono">{cmd}</code>
+                                                                <code className="text-[10px] font-mono flex-1">cd faciliate-connector &amp;&amp; node connector.mjs serve</code>
                                                                 <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] shrink-0"
-                                                                    onClick={() => { navigator.clipboard.writeText(`cd faciliate-connector && ${cmd}`); toast({ title: 'Kopierat!' }); }}>
+                                                                    onClick={() => { navigator.clipboard.writeText('cd faciliate-connector && node connector.mjs serve'); toast({ title: 'Kopierat!' }); }}>
                                                                     Kopiera
                                                                 </Button>
                                                             </div>
                                                         </div>
-                                                    ))}
+                                                    )}
                                                 </div>
 
-                                                <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={loadFacilitateStats} disabled={isLoadingFacilitateStats}>
+                                                {/* Building selector + sync */}
+                                                {connectorStatus === 'online' && (
+                                                    <div className="space-y-3">
+                                                        <div className="flex gap-2">
+                                                            <div className="flex-1 space-y-1">
+                                                                <Label className="text-xs">Byggnad</Label>
+                                                                {facilitateBuildings.length > 0 ? (
+                                                                    <select
+                                                                        className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
+                                                                        value={selectedFacBuildingId}
+                                                                        onChange={e => {
+                                                                            const b = facilitateBuildings.find(x => x.id === e.target.value);
+                                                                            setSelectedFacBuildingId(e.target.value);
+                                                                            setSelectedFacBuildingName(b?.name || '');
+                                                                        }}
+                                                                    >
+                                                                        <option value="">Välj byggnad…</option>
+                                                                        {facilitateBuildings.map(b => <option key={b.id} value={b.id}>{b.name} ({b.id})</option>)}
+                                                                    </select>
+                                                                ) : (
+                                                                    <div className="flex gap-2">
+                                                                        <Input placeholder="Byggnads-ID (t.ex. S1)" value={selectedFacBuildingId} onChange={e => setSelectedFacBuildingId(e.target.value)} className="h-9 text-sm" />
+                                                                        <Input placeholder="Namn (t.ex. Småviken)" value={selectedFacBuildingName} onChange={e => setSelectedFacBuildingName(e.target.value)} className="h-9 text-sm" />
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            {facilitateBuildings.length === 0 && (
+                                                                <Button variant="outline" size="sm" className="self-end h-9 text-xs gap-1" onClick={fetchFacilitateBuildings}>
+                                                                    <Database className="h-3 w-3" /> Hämta
+                                                                </Button>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="space-y-1">
+                                                            <Label className="text-xs">Objekttyper</Label>
+                                                            <div className="flex gap-3">
+                                                                {[['workorder', 'Arbetsordrar'], ['rentlandlord', 'Hyreskontrakt'], ['maintenance', 'Underhåll']].map(([val, lbl]) => (
+                                                                    <label key={val} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                                                                        <input type="checkbox" checked={facilitateSyncTypes.includes(val)}
+                                                                            onChange={e => setFacilitateSyncTypes(prev => e.target.checked ? [...prev, val] : prev.filter(t => t !== val))}
+                                                                            className="h-3.5 w-3.5" />
+                                                                        {lbl}
+                                                                    </label>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+
+                                                        <Button
+                                                            onClick={startFacilitateSync}
+                                                            disabled={isFacilitiateSyncing || !selectedFacBuildingId}
+                                                            className="w-full gap-2"
+                                                            size="sm"
+                                                        >
+                                                            {isFacilitiateSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                                                            {isFacilitiateSyncing ? 'Synkar…' : 'Synka nu'}
+                                                        </Button>
+
+                                                        {facilitateSyncLog.length > 0 && (
+                                                            <div className="rounded border bg-muted/50 p-2 max-h-32 overflow-y-auto space-y-0.5">
+                                                                {facilitateSyncLog.map((line, i) => (
+                                                                    <p key={i} className="text-[11px] font-mono text-muted-foreground">{line}</p>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                {/* Cache status */}
+                                                {facilitateCacheStats && facilitateCacheStats.total > 0 && (
+                                                    <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
+                                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Cachestatus</p>
+                                                        {Object.entries(facilitateCacheStats.byType).map(([type, count]) => (
+                                                            <div key={type} className="flex items-center justify-between text-sm">
+                                                                <span className="text-muted-foreground">{type === 'workorder' ? 'Arbetsordrar' : type === 'rentlandlord' ? 'Hyreskontrakt' : type === 'maintenance' ? 'Planerat underhåll' : type}</span>
+                                                                <span className="font-medium">{(count as number).toLocaleString()}</span>
+                                                            </div>
+                                                        ))}
+                                                        {facilitateCacheStats.byBuilding.filter(b => b.building_name || b.building_id).slice(0, 6).map((b, i) => (
+                                                            <div key={i} className="flex items-center justify-between text-xs text-muted-foreground">
+                                                                <span className="truncate max-w-[65%]">↳ {b.building_name || b.building_id}</span>
+                                                                <span>{b.count.toLocaleString()}</span>
+                                                            </div>
+                                                        ))}
+                                                        {facilitateCacheStats.lastSynced && (
+                                                            <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-1.5 mt-1.5">
+                                                                <span>Senast synkad</span>
+                                                                <span>{new Date(facilitateCacheStats.lastSynced).toLocaleString('sv-SE')}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                <Button variant="ghost" size="sm" className="gap-1.5 h-7 text-xs text-muted-foreground" onClick={loadFacilitateStats} disabled={isLoadingFacilitateStats}>
                                                     {isLoadingFacilitateStats ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                                                     Uppdatera cachestatus
                                                 </Button>
@@ -3682,76 +3808,113 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                             {/* Faciliate Sync */}
                             <AccordionItem value="faciliate-sync" className="border rounded-lg px-4">
-                                <AccordionTrigger className="py-3" onClick={() => { if (!facilitateCacheStats) loadFacilitateStats(); }}>
+                                <AccordionTrigger className="py-3" onClick={() => { loadFacilitateStats(); checkConnectorStatus(); }}>
                                     <div className="flex items-center gap-2">
                                         <Wrench className="h-4 w-4 text-orange-500" />
                                         <span>Faciliate</span>
-                                        {facilitateCacheStats && facilitateCacheStats.total > 0
-                                            ? <Badge variant="outline" className="ml-auto mr-2 text-xs bg-green-50 text-green-700 border-green-200">{facilitateCacheStats.total.toLocaleString()} poster</Badge>
-                                            : <Badge variant="outline" className="ml-auto mr-2 text-xs">Ej synkad</Badge>}
+                                        {connectorStatus === 'online'
+                                            ? <Badge variant="outline" className="ml-auto mr-2 text-xs bg-green-50 text-green-700 border-green-200">Online</Badge>
+                                            : facilitateCacheStats && facilitateCacheStats.total > 0
+                                                ? <Badge variant="outline" className="ml-auto mr-2 text-xs">{facilitateCacheStats.total.toLocaleString()} poster</Badge>
+                                                : <Badge variant="outline" className="ml-auto mr-2 text-xs">Ej synkad</Badge>}
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent>
                                     <div className="space-y-4">
-                                        <p className="text-xs text-muted-foreground">
-                                            Data synkas via en lokal connector som körs innanför SWG VPN. Kör kommandot nedan i terminalen och återvänd hit för att kontrollera status.
-                                        </p>
 
-                                        {isLoadingFacilitateStats ? (
-                                            <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Laddar…</div>
-                                        ) : facilitateCacheStats && facilitateCacheStats.total > 0 ? (
-                                            <div className="space-y-3">
-                                                {/* Per-type breakdown */}
-                                                <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
-                                                    {Object.entries(facilitateCacheStats.byType).map(([type, count]) => (
-                                                        <div key={type} className="flex items-center justify-between text-sm">
-                                                            <span className="text-muted-foreground">{type === 'workorder' ? 'Arbetsordrar' : type === 'rentlandlord' ? 'Hyreskontrakt' : type === 'maintenance' ? 'Planerat underhåll' : type}</span>
-                                                            <span className="font-medium">{(count as number).toLocaleString()}</span>
-                                                        </div>
-                                                    ))}
-                                                    {facilitateCacheStats.lastSynced && (
-                                                        <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-1.5 mt-1.5">
-                                                            <span>Senast synkad</span>
-                                                            <span>{new Date(facilitateCacheStats.lastSynced).toLocaleString('sv-SE')}</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                {/* Per-building breakdown */}
-                                                {facilitateCacheStats.byBuilding.filter(b => b.building_name || b.building_id).length > 0 && (
-                                                    <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
-                                                        <p className="text-xs font-medium text-muted-foreground mb-2">Per byggnad</p>
-                                                        {facilitateCacheStats.byBuilding.filter(b => b.building_name || b.building_id).map((b, i) => (
-                                                            <div key={i} className="flex items-center justify-between text-sm">
-                                                                <span className="text-muted-foreground truncate max-w-[65%]">{b.building_name || b.building_id}</span>
-                                                                <span className="font-medium">{b.count.toLocaleString()}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
+                                        {/* Connector status + start-server hint */}
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <div className={`h-2 w-2 rounded-full ${connectorStatus === 'online' ? 'bg-green-500' : connectorStatus === 'offline' ? 'bg-red-400' : 'bg-gray-300'}`} />
+                                                <span className="text-sm text-muted-foreground">
+                                                    {connectorStatus === 'online' ? 'Connector igång' : connectorStatus === 'offline' ? 'Connector ej igång' : 'Okänd status'}
+                                                </span>
                                             </div>
-                                        ) : (
-                                            <div className="rounded-lg border bg-muted/30 p-4 text-center">
-                                                <Wrench className="h-6 w-6 mx-auto mb-2 text-muted-foreground/50" />
-                                                <p className="text-sm text-muted-foreground">Ingen Faciliate-data i cachen ännu.</p>
-                                                <p className="text-xs text-muted-foreground mt-1">Kör connector för att synka.</p>
+                                            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={checkConnectorStatus}>
+                                                <RefreshCw className="h-3 w-3" /> Kontrollera
+                                            </Button>
+                                        </div>
+
+                                        {connectorStatus === 'offline' && (
+                                            <div className="rounded bg-muted p-2 text-[11px] text-muted-foreground">
+                                                Starta connectorn (kräver VPN):<br />
+                                                <code className="font-mono">cd faciliate-connector &amp;&amp; node connector.mjs serve</code>
                                             </div>
                                         )}
 
-                                        <div className="rounded border bg-muted/50 p-2">
-                                            <p className="text-[10px] text-muted-foreground mb-1">Synka en byggnad (ersätt ID och namn)</p>
-                                            <div className="flex items-center gap-1.5">
-                                                <code className="text-[10px] flex-1 font-mono break-all">node connector.mjs sync-building S1 "Småviken" workorder rentlandlord maintenance</code>
-                                                <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] shrink-0"
-                                                    onClick={() => { navigator.clipboard.writeText('cd faciliate-connector && node connector.mjs sync-building S1 "Småviken" workorder rentlandlord maintenance'); toast({ title: 'Kopierat!' }); }}>
-                                                    Kopiera
-                                                </Button>
-                                            </div>
+                                        {/* Sync controls — always visible, disabled when offline */}
+                                        <div className="space-y-2">
+                                            {facilitateBuildings.length > 0 ? (
+                                                <select
+                                                    className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
+                                                    value={selectedFacBuildingId}
+                                                    onChange={e => {
+                                                        const b = facilitateBuildings.find(x => x.id === e.target.value);
+                                                        setSelectedFacBuildingId(e.target.value);
+                                                        setSelectedFacBuildingName(b?.name || '');
+                                                    }}
+                                                    disabled={connectorStatus !== 'online'}
+                                                >
+                                                    <option value="">Välj byggnad…</option>
+                                                    {facilitateBuildings.map(b => <option key={b.id} value={b.id}>{b.name} ({b.id})</option>)}
+                                                </select>
+                                            ) : (
+                                                <div className="flex gap-2">
+                                                    <Input placeholder="Byggnads-ID (t.ex. S1)" value={selectedFacBuildingId} onChange={e => setSelectedFacBuildingId(e.target.value)} className="h-9 text-sm" disabled={connectorStatus !== 'online'} />
+                                                    <Input placeholder="Namn" value={selectedFacBuildingName} onChange={e => setSelectedFacBuildingName(e.target.value)} className="h-9 text-sm" disabled={connectorStatus !== 'online'} />
+                                                    <Button variant="outline" size="sm" className="h-9 text-xs shrink-0 gap-1" onClick={fetchFacilitateBuildings} disabled={connectorStatus !== 'online'}>
+                                                        <Database className="h-3 w-3" /> Hämta
+                                                    </Button>
+                                                </div>
+                                            )}
+
+                                            <Button
+                                                onClick={startFacilitateSync}
+                                                disabled={isFacilitiateSyncing || connectorStatus !== 'online' || !selectedFacBuildingId}
+                                                className="w-full gap-2"
+                                                size="sm"
+                                            >
+                                                {isFacilitiateSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                                                {isFacilitiateSyncing ? 'Synkar…' : connectorStatus !== 'online' ? 'Starta connector för att synka' : 'Synka nu'}
+                                            </Button>
                                         </div>
 
-                                        <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={loadFacilitateStats} disabled={isLoadingFacilitateStats}>
+                                        {/* Live progress log */}
+                                        {facilitateSyncLog.length > 0 && (
+                                            <div className="rounded border bg-muted/50 p-2 max-h-28 overflow-y-auto space-y-0.5">
+                                                {facilitateSyncLog.map((line, i) => (
+                                                    <p key={i} className="text-[11px] font-mono text-muted-foreground">{line}</p>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {/* Cache stats */}
+                                        {facilitateCacheStats && facilitateCacheStats.total > 0 && (
+                                            <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
+                                                {Object.entries(facilitateCacheStats.byType).map(([type, count]) => (
+                                                    <div key={type} className="flex items-center justify-between text-sm">
+                                                        <span className="text-muted-foreground">{type === 'workorder' ? 'Arbetsordrar' : type === 'rentlandlord' ? 'Hyreskontrakt' : type === 'maintenance' ? 'Planerat underhåll' : type}</span>
+                                                        <span className="font-medium">{(count as number).toLocaleString()}</span>
+                                                    </div>
+                                                ))}
+                                                {facilitateCacheStats.byBuilding.filter(b => b.building_name).map((b, i) => (
+                                                    <div key={i} className="flex items-center justify-between text-xs text-muted-foreground">
+                                                        <span className="truncate max-w-[65%]">↳ {b.building_name}</span>
+                                                        <span>{b.count.toLocaleString()}</span>
+                                                    </div>
+                                                ))}
+                                                {facilitateCacheStats.lastSynced && (
+                                                    <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-1.5 mt-1">
+                                                        <span>Senast synkad</span>
+                                                        <span>{new Date(facilitateCacheStats.lastSynced).toLocaleString('sv-SE')}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        <Button variant="ghost" size="sm" className="gap-1.5 h-7 text-xs text-muted-foreground" onClick={loadFacilitateStats} disabled={isLoadingFacilitateStats}>
                                             {isLoadingFacilitateStats ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                                            Uppdatera status
+                                            Uppdatera cachestatus
                                         </Button>
                                     </div>
                                 </AccordionContent>

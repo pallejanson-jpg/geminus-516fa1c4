@@ -238,16 +238,116 @@ async function cmdCreateWorkorder(arg) {
   console.log('Created:', JSON.stringify(result, null, 2).slice(0, 1000));
 }
 
+// ── HTTP server mode ──
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+function sendJson(res, status, data) {
+  res.writeHead(status, { ...CORS_HEADERS, 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(data));
+}
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => { try { resolve(JSON.parse(body || '{}')); } catch { resolve({}); } });
+    req.on('error', reject);
+  });
+}
+
+async function cmdServe() {
+  const { createServer } = await import('node:http');
+  const PORT = Number(process.env.CONNECTOR_PORT || 3001);
+
+  const server = createServer(async (req, res) => {
+    if (req.method === 'OPTIONS') { res.writeHead(204, CORS_HEADERS); res.end(); return; }
+    const path = new URL(req.url, 'http://localhost').pathname;
+
+    try {
+      // GET /status — health check
+      if (req.method === 'GET' && path === '/status') {
+        sendJson(res, 200, { ok: true, baseUrl: CFG.baseUrl || null });
+        return;
+      }
+
+      // GET /buildings — fetch building list from Faciliate
+      if (req.method === 'GET' && path === '/buildings') {
+        requireCfg(['baseUrl']);
+        const items = await fetchAll('building');
+        const buildings = items.map(b => ({
+          id:     String(pick(b, 'ID', 'Id', 'id', 'BuildingID') ?? ''),
+          name:   pick(b, 'Title', 'title', 'Name', 'name') ?? '',
+          cadKey: pick(b, 'CadKey', 'cadKey', 'BuildingCadKey') ?? null,
+        })).filter(b => b.id);
+        sendJson(res, 200, { buildings });
+        return;
+      }
+
+      // POST /sync-building — stream progress via SSE
+      if (req.method === 'POST' && path === '/sync-building') {
+        requireCfg(['baseUrl', 'supabaseUrl', 'serviceRoleKey']);
+        const body = await readBody(req);
+        const { buildingId, buildingName, types } = body;
+        if (!buildingId || !buildingName) { sendJson(res, 400, { error: 'buildingId and buildingName required' }); return; }
+        const objects = Array.isArray(types) && types.length ? types : ['workorder', 'rentlandlord', 'maintenance'];
+
+        res.writeHead(200, { ...CORS_HEADERS, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+        const emit = (type, payload) => res.write(`data: ${JSON.stringify({ type, ...payload })}\n\n`);
+
+        try {
+          for (const obj of objects) {
+            emit('progress', { message: `Hämtar ${obj}…` });
+            const items = await fetchAll(obj, `BuildingID eq "${buildingId}"`);
+            const rows = items.map(r => { const row = toRow(obj, r); row.building_id = buildingId; row.building_name = buildingName; return row; });
+            if (rows.length) {
+              emit('progress', { message: `Sparar ${rows.length} ${obj} i Geminus…` });
+              await upsert(rows);
+            }
+            emit('progress', { message: `${obj}: ${rows.length} poster ✅` });
+          }
+          emit('done', { message: `Synk klar för ${buildingName}!` });
+        } catch (e) {
+          emit('error', { message: e.message });
+        }
+        res.end();
+        return;
+      }
+
+      sendJson(res, 404, { error: 'Not found' });
+    } catch (e) {
+      try { sendJson(res, 500, { error: e.message }); } catch { /* response already started */ }
+    }
+  });
+
+  server.listen(PORT, '127.0.0.1', () => {
+    console.log(`✅ Faciliate connector server: http://localhost:${PORT}`);
+    console.log('   GET  /status          — health check');
+    console.log('   GET  /buildings        — list buildings from Faciliate');
+    console.log('   POST /sync-building    — { buildingId, buildingName, types[] } → SSE progress');
+    console.log('\nTryck Ctrl+C för att stänga.\n');
+  });
+
+  // Keep process alive
+  process.on('SIGINT', () => { console.log('\nServer stoppad.'); process.exit(0); });
+  await new Promise(() => {}); // never resolves
+}
+
 const [cmd, ...args] = process.argv.slice(2);
 const run = {
   test: () => cmdTest(),
   sync: () => cmdSync(args),
   'sync-building': () => cmdSyncBuilding(args[0], args[1], args.slice(2)),
   'create-workorder': () => cmdCreateWorkorder(args[0]),
+  serve: () => cmdServe(),
 }[cmd];
 
 if (!run) {
-  console.log('Usage: node connector.mjs <test|sync [types...]|sync-building <BuildingID> "<name>" [types...]|create-workorder <json|@file>>');
+  console.log('Usage: node connector.mjs <test|sync [types...]|sync-building <BuildingID> "<name>" [types...]|create-workorder <json|@file>|serve>');
   process.exit(1);
 }
 run().catch(e => { console.error('Error:', e.message); process.exit(1); });
