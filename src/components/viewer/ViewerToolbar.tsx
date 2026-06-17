@@ -159,7 +159,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
   const initialCameraRef = useRef<{ eye: number[]; look: number[]; up: number[] } | null>(null);
 
   const viewModeRef = useRef<ViewMode>(viewMode);
-  const colorizedFor2dRef = useRef<Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean; offset: number[] | null }> | null>(new Map());
+  const colorizedFor2dRef = useRef<Map<string, { offset: number[] | null }>>(new Map());
   const [currentFloorId, setCurrentFloorId] = useState<string | null>(null);
   const currentFloorIdRef = useRef<string | null>(null); // sync ref — always up-to-date for rAF callbacks
   const [currentFloorBounds, setCurrentFloorBounds] = useState<{ minY: number; maxY: number } | null>(null);
@@ -853,32 +853,43 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
         const SLAB_TYPES = new Set(['ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase', 'ifcplate']);
         const ROOF_TYPES = new Set(['ifcroof']);
         const COVERING_TYPES = new Set(['ifccovering']);
-        const WALL_TYPES = new Set(['ifcwall', 'ifcwallstandardcase']);
-        const DOOR_WINDOW_TYPES = new Set(['ifcdoor', 'ifcwindow']);
-        const FURNITURE_TYPES = new Set(['ifcfurnishingelement', 'ifcrailing', 'ifcstair', 'ifcstairflight']);
+        const WALL_TYPES = new Set(['ifcwall', 'ifcwallstandardcase', 'ifccurtainwall']);
+        const DOOR_WINDOW_TYPES = new Set(['ifcdoor', 'ifcwindow', 'ifcdoorstandardcase', 'ifcwindowstandardcase']);
+        // Furniture + equipment: visible and pickable in 2D (doors/toilets/chairs/etc should be selectable)
+        const FURNITURE_TYPES = new Set([
+          'ifcfurnishingelement', 'ifcfurniture', 'ifcrailing', 'ifcstair', 'ifcstairflight',
+          'ifcsanitaryterminal', 'ifcflowterminal', 'ifcbuildingelementproxy',
+          'ifcelectricappliance', 'ifcswitchingdevice', 'ifcoutlet', 'ifclightfixture',
+        ]);
         const SPACE_TYPES = new Set(['ifcspace']);
         const HIDE_TYPES = new Set([...SLAB_TYPES, ...ROOF_TYPES, ...COVERING_TYPES]);
         const metaObjects = viewer?.metaScene?.metaObjects || scene?.metaScene?.metaObjects || {};
 
-        // On force-reapply (floor switch while already in 2D): restore the previous
-        // 2D overrides FIRST so styling always starts from the true 3D baseline.
-        // Without this, space offsets accumulate (-0.3 per switch) and 2D-styled
-        // values get re-saved as "originals".
-        if (colorizedFor2dRef.current && colorizedFor2dRef.current.size > 0) {
+        // On force-reapply (floor switch while already in 2D): restore Y-offsets from
+        // the previous 2D pass (spaces were lowered) then do a full batch reset so
+        // 2D styling always starts from a clean baseline. Storing only offsets avoids
+        // accumulated drift when colorize/opacity/visibility were saved from an already-
+        // 2D-styled state.
+        if (colorizedFor2dRef.current.size > 0) {
           colorizedFor2dRef.current.forEach((orig, id) => {
+            if (orig.offset === null) return;
             const entity = scene.objects?.[id];
-            if (!entity) return;
-            if (orig.colorize) entity.colorize = orig.colorize; else entity.colorize = null;
-            entity.opacity = orig.opacity;
-            entity.edges = orig.edges;
-            entity.pickable = orig.pickable;
-            entity.visible = orig.visible;
-            if (orig.offset) { try { entity.offset = orig.offset; } catch {} }
+            if (entity) { try { entity.offset = orig.offset; } catch {} }
           });
           colorizedFor2dRef.current.clear();
         }
+        {
+          const resetIds = scene.objectIds || [];
+          if (resetIds.length > 0) {
+            scene.setObjectsVisible(resetIds, true);
+            scene.setObjectsColorized(resetIds, null);
+            scene.setObjectsOpacity(resetIds, 1);
+            scene.setObjectsEdges(resetIds, false);
+            scene.setObjectsPickable(resetIds, true);
+          }
+        }
 
-        const colorized = new Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean; offset: number[] | null }>();
+        const colorized = new Map<string, { offset: number[] | null }>();
 
         // Build storey descendant set to scope 2D styling to the selected floor
         const storeyDescendants = new Set<string>();
@@ -916,7 +927,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
         let visibleCount = 0;
 
         const saveOrig = (entity: any, id: string) => {
-          colorized.set(id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible, offset: entity.offset ? [...entity.offset] : null });
+          colorized.set(id, { offset: entity.offset ? [...entity.offset] : null });
         };
 
         Object.values(metaObjects).forEach((mo: any) => {
@@ -955,7 +966,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
             visibleCount++;
           } else if (FURNITURE_TYPES.has(typeLower)) {
             saveOrig(entity, mo.id);
-            entity.visible = false; entity.pickable = false;
+            entity.colorize = [0.60, 0.60, 0.60]; entity.opacity = 0.9; entity.edges = true; entity.pickable = true; entity.visible = true;
+            visibleCount++;
           } else {
             saveOrig(entity, mo.id);
             entity.colorize = [0.35, 0.35, 0.35]; entity.opacity = 0.9; entity.edges = true; entity.pickable = true;
@@ -963,18 +975,23 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
           }
         });
 
-        // Safety: if no objects are visible after 2D styling, rollback
+        // Safety: if no objects are visible after 2D styling, rollback by restoring offsets
+        // and resetting the scene to its 3D state
         if (visibleCount === 0) {
           console.warn('[ViewerToolbar] 2D mode: 0 visible objects after styling — rolling back');
           colorized.forEach((orig, id) => {
             const entity = scene.objects?.[id];
-            if (entity) {
-              if (orig.colorize) entity.colorize = orig.colorize; else entity.colorize = null;
-              entity.opacity = orig.opacity; entity.edges = orig.edges; entity.pickable = orig.pickable; entity.visible = orig.visible;
-              if (orig.offset) entity.offset = orig.offset; else entity.offset = [0, 0, 0];
+            if (entity && orig.offset !== null) {
+              try { entity.offset = orig.offset; } catch {}
             }
           });
           colorized.clear();
+          const rbIds = scene.objectIds || [];
+          if (rbIds.length > 0) {
+            scene.setObjectsVisible(rbIds, true);
+            scene.setObjectsColorized(rbIds, null);
+            scene.setObjectsOpacity(rbIds, 1);
+          }
         }
 
         if (edgeMat) { edgeMat.edgeColor = [0.15, 0.15, 0.15]; edgeMat.edgeAlpha = 1.0; edgeMat.edgeWidth = 2; }
@@ -1075,6 +1092,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
         if (edgeMat) { edgeMat.edgeColor = origEdge.origEdgeColor; edgeMat.edgeAlpha = origEdge.origEdgeAlpha; edgeMat.edgeWidth = origEdge.origEdgeWidth; }
         delete (viewerShimRef.current as any).__orig2dEdge;
       }
+
+      // Clear color-filter flags so applyArchitectColors is never short-circuited
+      (window as any).__colorFilterActive = false;
+      const vizSet2d = (window as any).__vizColorizedEntityIds;
+      if (vizSet2d instanceof Set) vizSet2d.clear();
 
       // Re-apply architect color palette — starting from a clean slate
       try {

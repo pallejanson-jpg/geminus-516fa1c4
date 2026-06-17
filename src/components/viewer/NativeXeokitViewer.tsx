@@ -307,6 +307,30 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         onViewerReady?.(viewer);
         emit('VIEWER_MODELS_LOADED', { buildingFmGuid });
 
+        // Build IFC GUID → FM GUID map from the assets table so the color filter
+        // can match metaObjects (IFC GUIDs) to colorMap keys (FM GUIDs).
+        supabase
+          .from('assets')
+          .select('fm_guid, attributes')
+          .eq('building_fm_guid', buildingFmGuid)
+          .in('category', ['Building Storey', 'Space', 'IfcBuildingStorey', 'IfcSpace'])
+          .then(({ data }) => {
+            if (!data?.length) return;
+            const map = new Map<string, string>();
+            data.forEach((row: any) => {
+              const attrs = typeof row.attributes === 'string' ? JSON.parse(row.attributes) : (row.attributes || {});
+              const extGuid = attrs.externalGuid;
+              if (extGuid && row.fm_guid) {
+                map.set(extGuid.toLowerCase(), row.fm_guid.toLowerCase());
+              }
+            });
+            if (map.size > 0) {
+              (window as any).__ifcToFmGuid = map;
+              console.log(`[NativeViewer] Built IFC→FM GUID map: ${map.size} entries`);
+            }
+          })
+          .catch(() => {});
+
         // Wire up virtual chunk floor filtering
         if (chunkModels.length > 0 && !hasRealTiles) {
           const virtualChunks = chunkModels
@@ -363,6 +387,11 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
                     if (entity) { entity.visible = false; entity.pickable = false; }
                   }
                 }
+              }
+              // Apply architect palette to new model entities (raw XKT materials often red)
+              const savedTheme = localStorage.getItem('geminus-viewer-theme-id');
+              if (savedTheme !== 'none' && !(window as any).__colorFilterActive) {
+                try { applyArchitectColors(v); } catch {}
               }
             }
           } catch {}
