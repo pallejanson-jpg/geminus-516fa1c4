@@ -57,7 +57,7 @@ interface UseBuildingViewerDataResult {
  * Load all building data needed for any viewer mode (3D, Split, VT, 360).
  */
 export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildingViewerDataResult {
-  const { allData, appConfigs } = useContext(AppContext);
+  const { allData, appConfigs, isLoadingData, navigatorTreeData } = useContext(AppContext);
   const [buildingData, setBuildingData] = useState<BuildingViewerData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -80,15 +80,29 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
 
       console.log('[BuildingViewerData] Looking for building:', buildingFmGuid, 'in allData count:', allData.length);
 
-      // Find building in allData
-      const building = allData.find(
+      // Find building in allData (direct Building entries from FM system)
+      let building: any = allData.find(
         (item: any) =>
           item.fmGuid === buildingFmGuid &&
           (item.category === 'Building' || item.category === 'IfcBuilding')
       );
 
+      // Fallback: synthesized buildings exist only in navigatorTreeData (built from storeys
+      // when the FM system has no explicit Building-category entries for a GUID)
       if (!building) {
-        console.warn('[BuildingViewerData] Building NOT found. Available buildings:', 
+        building = navigatorTreeData.find(
+          (node: any) =>
+            node.fmGuid === buildingFmGuid &&
+            (node.category === 'Building' || node.category === 'IfcBuilding')
+        );
+        if (building) {
+          console.log('[BuildingViewerData] Found building in navigatorTreeData (synthesized):', building.commonName || building.name);
+        }
+      }
+
+      if (!building) {
+        if (isLoadingData) return; // allData not yet populated — effect re-runs when it is
+        console.warn('[BuildingViewerData] Building NOT found. Available buildings:',
           allData.filter((i: any) => i.category === 'Building' || i.category === 'IfcBuilding')
             .map((i: any) => ({ fmGuid: i.fmGuid, name: i.commonName || i.name }))
         );
@@ -186,7 +200,7 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
     if (allData.length > 0) {
       loadBuilding();
     }
-  }, [buildingFmGuid, allData, appConfigs]);
+  }, [buildingFmGuid, allData, appConfigs, isLoadingData]);
 
   return { buildingData, isLoading, error };
 }
