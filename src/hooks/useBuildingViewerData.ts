@@ -197,10 +197,10 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
       setIsLoading(false);
     };
 
-    if (allData.length > 0) {
+    if (allData.length > 0 || navigatorTreeData.length > 0) {
       loadBuilding();
     }
-  }, [buildingFmGuid, allData, appConfigs, isLoadingData]);
+  }, [buildingFmGuid, allData, navigatorTreeData, appConfigs, isLoadingData]);
 
   return { buildingData, isLoading, error };
 }
