@@ -4,11 +4,23 @@ import { corsHeaders } from "../_shared/auth.ts";
 
 const APS_TOKEN_URL = "https://developer.api.autodesk.com/authentication/v2/token";
 
-function getClientCredentials() {
-  const clientId = Deno.env.get("APS_CLIENT_ID");
-  const clientSecret = Deno.env.get("APS_CLIENT_SECRET");
+async function getClientCredentials() {
+  const serviceClient = getServiceClient();
+  const { data, error: dbError } = await serviceClient
+    .from("geminus_plus_endpoint_cache")
+    .select("key, value")
+    .in("key", ["aps_client_id", "aps_client_secret"]);
+
+  console.log("APS credentials DB lookup:", { rowCount: data?.length ?? 0, dbError: dbError?.message });
+
+  const dbClientId = data?.find((r: any) => r.key === "aps_client_id")?.value;
+  const dbClientSecret = data?.find((r: any) => r.key === "aps_client_secret")?.value;
+
+  const clientId = dbClientId || Deno.env.get("APS_CLIENT_ID");
+  const clientSecret = dbClientSecret || Deno.env.get("APS_CLIENT_SECRET");
+
   if (!clientId || !clientSecret) {
-    throw new Error("Missing APS_CLIENT_ID or APS_CLIENT_SECRET");
+    throw new Error("Missing APS Client ID or Client Secret. Set them in Autodesk Forma settings.");
   }
   return { clientId, clientSecret };
 }
@@ -54,7 +66,7 @@ async function verifyUser(req: Request): Promise<{ userId: string; supabase: any
 
 // Exchange authorization code for tokens
 async function exchangeCode(code: string, redirectUri: string, userId: string) {
-  const { clientId, clientSecret } = getClientCredentials();
+  const { clientId, clientSecret } = await getClientCredentials();
 
   const res = await fetch(APS_TOKEN_URL, {
     method: "POST",
@@ -113,7 +125,7 @@ async function refreshToken(userId: string) {
     throw new Error("No stored tokens found for user");
   }
 
-  const { clientId, clientSecret } = getClientCredentials();
+  const { clientId, clientSecret } = await getClientCredentials();
 
   const res = await fetch(APS_TOKEN_URL, {
     method: "POST",
@@ -198,9 +210,9 @@ async function logout(userId: string) {
 }
 
 // Get the authorization URL for Autodesk login
-function getAuthUrl(redirectUri: string) {
-  const { clientId } = getClientCredentials();
-  const scope = "data:read data:write data:create account:read";
+async function getAuthUrl(redirectUri: string) {
+  const { clientId } = await getClientCredentials();
+  const scope = "data:read data:write data:create account:read account:write";
   const authUrl = `https://developer.api.autodesk.com/authentication/v2/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`;
   return { authUrl };
 }
@@ -218,7 +230,7 @@ serve(async (req: Request) => {
     if (action === "get-auth-url") {
       const { redirectUri } = body;
       if (!redirectUri) throw new Error("redirectUri is required");
-      const result = getAuthUrl(redirectUri);
+      const result = await getAuthUrl(redirectUri);
       return new Response(JSON.stringify({ success: true, ...result }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

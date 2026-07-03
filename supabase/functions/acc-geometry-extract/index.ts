@@ -196,7 +196,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Store result
+      // Store GLB as fallback
       let fallbackPath: string | null = null;
       let glbBytes = 0;
       if (geomData && geomData.byteLength >= 100) {
@@ -207,22 +207,87 @@ Deno.serve(async (req) => {
         console.warn("[geom] No geometry obtained");
       }
 
-      // Create manifest (no level data — that requires separate properties fetch)
+      // Convert GLB → XKT so the viewer can load it directly
+      let xktPath: string | null = null;
+      let xktBytes = 0;
+      if (geomData && geomData.byteLength >= 100) {
+        try {
+          console.log("[geom] Converting GLB to XKT...");
+          const xeokitConvert = await import("npm:@xeokit/xeokit-convert@1.3.1");
+          const xktModel = new (xeokitConvert as any).XKTModel({ edgeThreshold: 10 });
+
+          await (xeokitConvert as any).parseGLTFIntoXKTModel({
+            gltfData: geomData,
+            xktModel,
+            log: (msg: string) => console.log("[geom][xkt]", msg),
+          });
+
+          xktModel.finalize();
+          const xktArrayBuffer: ArrayBuffer = (xeokitConvert as any).writeXKTModelToArrayBuffer(xktModel);
+          xktBytes = xktArrayBuffer.byteLength;
+          console.log(`[geom] XKT produced: ${(xktBytes / 1024 / 1024).toFixed(1)} MB`);
+
+          const xktStoragePath = `${buildingFmGuid}/${mKey}.xkt`;
+          const { error: xktUploadErr } = await sb.storage
+            .from("xkt-models")
+            .upload(xktStoragePath, new Blob([xktArrayBuffer], { type: "application/octet-stream" }), { upsert: true, contentType: "application/octet-stream" });
+
+          if (xktUploadErr) {
+            console.error("[geom] XKT upload failed:", xktUploadErr.message);
+          } else {
+            xktPath = xktStoragePath;
+            console.log(`[geom] XKT stored at ${xktStoragePath}`);
+
+            const modelName = body.fileName?.replace(/\.[^.]+$/, "") || mKey;
+            const { error: dbErr } = await sb.from("xkt_models").upsert({
+              building_fm_guid: buildingFmGuid,
+              model_id: mKey,
+              model_name: modelName,
+              file_name: `${mKey}.xkt`,
+              file_size: xktBytes,
+              storage_path: xktStoragePath,
+              format: "xkt",
+              synced_at: new Date().toISOString(),
+              source_updated_at: new Date().toISOString(),
+            }, { onConflict: "building_fm_guid,model_id" });
+
+            if (dbErr) {
+              console.error("[geom] xkt_models upsert failed:", dbErr.message);
+            } else {
+              console.log(`[geom] xkt_models row written for ${buildingFmGuid}/${mKey}`);
+            }
+          }
+        } catch (convErr) {
+          console.error("[geom] GLB→XKT conversion failed:", convErr);
+        }
+      }
+
+      // Create manifest
       const manifest = {
         modelId: mKey,
         source: { accProjectId: accProjectId || "", accFileUrn: versionUrn, apsRegion: region },
         version: new Date().toISOString(),
-        format: "glb",
+        format: xktPath ? "xkt" : "glb",
         coordinateSystem: { up: "Z", units: "mm" },
         materialPolicy: { textures: false },
-        chunks: [] as any[],
+        chunks: xktPath ? [{ modelId: mKey, storagePath: xktPath, storeyFmGuid: null }] : [],
         fallback: fallbackPath ? { url: fallbackPath } : null,
       };
 
       await sb.storage.from("xkt-models").upload(`${buildingFmGuid}/_geometry_manifest.json`, new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json" }), { upsert: true, contentType: "application/json" });
 
-      console.log(`[geom] ✅ Done: fallback=${!!fallbackPath} (${(glbBytes / 1024 / 1024).toFixed(1)} MB)`);
-      return new Response(JSON.stringify({ success: true, manifest, stats: { hasFallback: !!fallbackPath, fallbackSizeMB: +(glbBytes / 1024 / 1024).toFixed(1), tokenType: is3L ? "3-legged" : "2-legged" } }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      console.log(`[geom] ✅ Done: xkt=${!!xktPath} (${(xktBytes / 1024 / 1024).toFixed(1)} MB), glbFallback=${!!fallbackPath}`);
+      return new Response(JSON.stringify({
+        success: true,
+        manifest,
+        stats: {
+          xktPath,
+          xktSizeMB: +(xktBytes / 1024 / 1024).toFixed(1),
+          hasFallback: !!fallbackPath,
+          fallbackSizeMB: +(glbBytes / 1024 / 1024).toFixed(1),
+          tokenType: is3L ? "3-legged" : "2-legged",
+        },
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });

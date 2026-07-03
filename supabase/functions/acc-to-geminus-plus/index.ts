@@ -711,6 +711,267 @@ serve(async (req) => {
       case "sync":
         return await handleSync(supabase, body);
 
+      case "list-jobs": {
+        const { data: jobRows, error: jobErr } = await supabase
+          .from("acc_model_translations")
+          .select("version_urn, model_name, file_name, building_fm_guid, translation_status, started_at, updated_at")
+          .order("started_at", { ascending: false })
+          .limit(10);
+        if (jobErr) throw new Error(jobErr.message);
+        return new Response(JSON.stringify({ success: true, jobs: jobRows ?? [] }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      case "get-gp-auth-config": {
+        const tokenUrl = Deno.env.get("GEMINUS_PLUS_KEYCLOAK_URL") || "";
+        const clientId = Deno.env.get("GEMINUS_PLUS_CLIENT_ID") || "asset-api";
+        if (!tokenUrl) {
+          return new Response(JSON.stringify({ error: "GEMINUS_PLUS_KEYCLOAK_URL not configured" }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        // Derive auth URL from token URL (strip /token, append /auth)
+        const authUrl = tokenUrl.replace(/\/token$/, "/auth");
+        return new Response(JSON.stringify({ authUrl, tokenUrl, clientId }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      case "exchange-keycloak-code": {
+        const { code, redirectUri, tokenUrl: reqTokenUrl, clientId: reqClientId, verifier } = body;
+        if (!code || !redirectUri || !verifier) {
+          return new Response(JSON.stringify({ error: "Missing code, redirectUri, or verifier" }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const tokenUrl = reqTokenUrl || Deno.env.get("GEMINUS_PLUS_KEYCLOAK_URL") || "";
+        const clientId = reqClientId || Deno.env.get("GEMINUS_PLUS_CLIENT_ID") || "asset-api";
+        const params = new URLSearchParams({
+          grant_type: "authorization_code",
+          client_id: clientId,
+          code,
+          redirect_uri: redirectUri,
+          code_verifier: verifier,
+        });
+        const tokenRes = await fetch(tokenUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: params,
+        });
+        const tokenJson = await tokenRes.json();
+        if (!tokenRes.ok) {
+          return new Response(JSON.stringify({ error: tokenJson.error_description || tokenJson.error || `Keycloak ${tokenRes.status}` }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify(tokenJson), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      case "list-buildings": {
+        const gpApiUrl = Deno.env.get("GEMINUS_PLUS_API_URL") || "";
+        if (!gpApiUrl) {
+          return new Response(JSON.stringify({ success: false, error: "GEMINUS_PLUS_API_URL not configured." }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Accept browser-provided token (from PKCE OAuth flow) or fall back to server-side auth
+        let gpAccessToken: string;
+        if (body.accessToken) {
+          gpAccessToken = body.accessToken;
+        } else {
+          const gpKeycloakUrl = Deno.env.get("GEMINUS_PLUS_KEYCLOAK_URL") || "";
+          const gpClientId = Deno.env.get("GEMINUS_PLUS_CLIENT_ID") || "";
+          const gpClientSecret = Deno.env.get("GEMINUS_PLUS_CLIENT_SECRET") || "";
+          const gpUsername = Deno.env.get("GEMINUS_PLUS_USERNAME") || "";
+          const gpPassword = Deno.env.get("GEMINUS_PLUS_PASSWORD") || "";
+
+          if (!gpKeycloakUrl || !gpClientId) {
+            return new Response(JSON.stringify({ success: false, error: "Geminus Plus ej konfigurerat. Logga in via knappen i panelen." }), {
+              status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+
+          const tokenUrl = gpKeycloakUrl.endsWith("/protocol/openid-connect/token")
+            ? gpKeycloakUrl
+            : `${gpKeycloakUrl.replace(/\/+$/, "")}/protocol/openid-connect/token`;
+          const gpAudience = Deno.env.get("GEMINUS_PLUS_AUDIENCE") || "asset-api";
+
+          let tokenRes: Response;
+          const ccParams = new URLSearchParams({ grant_type: "client_credentials", client_id: gpClientId, audience: gpAudience });
+          if (gpClientSecret) ccParams.set("client_secret", gpClientSecret);
+          tokenRes = await fetch(tokenUrl, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: ccParams });
+
+          if (!tokenRes.ok && gpUsername && gpPassword) {
+            const pwParams = new URLSearchParams({ grant_type: "password", client_id: gpClientId, username: gpUsername, password: gpPassword, audience: gpAudience });
+            if (gpClientSecret) pwParams.set("client_secret", gpClientSecret);
+            tokenRes = await fetch(tokenUrl, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: pwParams });
+          }
+
+          if (!tokenRes.ok) {
+            const errText = await tokenRes.text();
+            return new Response(JSON.stringify({ success: false, error: `Keycloak-autentisering misslyckades (${tokenRes.status}). Logga in via knappen i panelen.`, detail: errText.substring(0, 200) }), {
+              status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+          const tokenJson = await tokenRes.json();
+          gpAccessToken = tokenJson.access_token;
+        }
+
+        // Query full hierarchy: Complex → Building → Model
+        const cleanApiUrl = gpApiUrl.replace(/\/+$/, "");
+        const hierarchyUrl = `${cleanApiUrl}/GetBimObjectsByType`;
+        console.log("Fetching GP hierarchy:", hierarchyUrl);
+        let gpRes: Response;
+        let gpText: string;
+        try {
+          gpRes = await fetch(hierarchyUrl, {
+            method: "GET",
+            headers: { "Authorization": `Bearer ${gpAccessToken}` },
+          });
+          gpText = await gpRes.text();
+        } catch (fetchErr: any) {
+          return new Response(JSON.stringify({ success: false, error: `Nätverksfel mot Geminus Plus API: ${fetchErr.message}`, url: hierarchyUrl }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        console.log("GP hierarchy response status:", gpRes!.status, "body[:300]:", gpText!.substring(0, 300));
+        if (!gpRes!.ok) {
+          return new Response(JSON.stringify({ success: false, error: `Geminus Plus API svarade ${gpRes!.status}`, detail: gpText!.substring(0, 500), url: hierarchyUrl }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        let rows: any[];
+        try {
+          rows = JSON.parse(gpText!);
+        } catch {
+          return new Response(JSON.stringify({ success: false, error: "Geminus Plus API returnerade ogiltigt JSON", preview: gpText!.substring(0, 300) }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Build hierarchy (same logic as Revit AssetPlusModelService)
+        const complexMap = new Map<string, any>();
+        for (const row of rows) {
+          const complexId = row.complexId ?? row.ComplexId ?? "";
+          if (!complexMap.has(complexId)) {
+            complexMap.set(complexId, {
+              bimObjectId: row.complexBimObjectId ?? row.ComplexBimObjectId ?? null,
+              name: row.complexName ?? row.ComplexName ?? complexId,
+              buildings: new Map<string, any>(),
+            });
+          }
+          const complex = complexMap.get(complexId)!;
+
+          const buildingId = row.buildingMetaDataId ?? row.BuildingMetaDataId ?? "";
+          if (!buildingId) continue;
+          if (!complex.buildings.has(buildingId)) {
+            complex.buildings.set(buildingId, {
+              bimObjectId: row.buildingBimObjectId ?? row.BuildingBimObjectId ?? null,
+              name: row.buildingMetaDataName ?? row.BuildingMetaDataName ?? buildingId,
+              models: [],
+            });
+          }
+          const building = complex.buildings.get(buildingId)!;
+
+          const modelId = row.modelMetaDataId ?? row.ModelMetaDataId ?? "";
+          if (!modelId) continue;
+          const modelType = String(row.modelType ?? row.ModelType ?? "");
+          if (modelType.toLowerCase() === "orphan") continue;
+          const revStatus = row.modelRevisionStatus ?? row.ModelRevisionStatus ?? "";
+          building.models.push({
+            bimObjectId: row.modelBimObjectId ?? row.ModelBimObjectId ?? null,
+            name: row.modelMetaDataName ?? row.ModelMetaDataName ?? modelId,
+            modelType,
+            revisionStatus: revStatus,
+          });
+        }
+
+        const complexes = Array.from(complexMap.values())
+          .map(c => ({ ...c, buildings: Array.from(c.buildings.values()) }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        return new Response(JSON.stringify({ success: true, complexes }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      case "create-model": {
+        const { buildingBimObjectId, modelName } = body;
+        if (!buildingBimObjectId || !modelName?.trim()) {
+          return new Response(JSON.stringify({ success: false, error: "buildingBimObjectId and modelName are required" }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const gpApiUrl = Deno.env.get("GEMINUS_PLUS_API_URL") || "";
+        const gpKeycloakUrl = Deno.env.get("GEMINUS_PLUS_KEYCLOAK_URL") || "";
+        const gpClientId = Deno.env.get("GEMINUS_PLUS_CLIENT_ID") || "";
+        const gpClientSecret = Deno.env.get("GEMINUS_PLUS_CLIENT_SECRET") || "";
+        const gpUsername = Deno.env.get("GEMINUS_PLUS_USERNAME") || "";
+        const gpPassword = Deno.env.get("GEMINUS_PLUS_PASSWORD") || "";
+
+        if (!gpApiUrl || !gpKeycloakUrl || !gpClientId) {
+          return new Response(JSON.stringify({ success: false, error: "Geminus Plus ej konfigurerat" }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const tokenUrl = gpKeycloakUrl.endsWith("/protocol/openid-connect/token")
+          ? gpKeycloakUrl : `${gpKeycloakUrl.replace(/\/+$/, "")}/protocol/openid-connect/token`;
+
+        let tokenRes: Response;
+        const ccParams = new URLSearchParams({ grant_type: "client_credentials", client_id: gpClientId });
+        if (gpClientSecret) ccParams.set("client_secret", gpClientSecret);
+        tokenRes = await fetch(tokenUrl, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: ccParams });
+        if (!tokenRes.ok && gpUsername && gpPassword) {
+          const pwParams = new URLSearchParams({ grant_type: "password", client_id: gpClientId, username: gpUsername, password: gpPassword });
+          if (gpClientSecret) pwParams.set("client_secret", gpClientSecret);
+          tokenRes = await fetch(tokenUrl, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: pwParams });
+        }
+        if (!tokenRes.ok) {
+          const t = await tokenRes.text();
+          return new Response(JSON.stringify({ success: false, error: `Auth misslyckades: ${t.substring(0, 200)}` }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const { access_token } = await tokenRes.json();
+
+        const modelFmGuid = crypto.randomUUID();
+        const name = modelName.trim();
+        const payload = {
+          BimObjectWithParents: [{
+            BimObject: {
+              ObjectType: 5,
+              Name: name,
+              Designation: name,
+              CommonName: name,
+              FmGuid: modelFmGuid,
+              ParentFmGuid: buildingBimObjectId,
+            },
+          }],
+        };
+
+        const cleanApiUrl = gpApiUrl.replace(/\/+$/, "");
+        const createRes = await fetch(`${cleanApiUrl}/AddObjectList`, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${access_token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const createText = await createRes.text();
+        if (!createRes.ok) {
+          return new Response(JSON.stringify({ success: false, error: `Geminus Plus API ${createRes.status}: ${createText.substring(0, 300)}` }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ success: true, modelFmGuid, modelName: name }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       default:
         return new Response(JSON.stringify({ success: false, error: `Unknown action: ${action}` }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -722,7 +983,7 @@ serve(async (req) => {
       success: false,
       error: err.message || "Internal server error",
     }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

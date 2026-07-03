@@ -87,12 +87,24 @@ async function fetchWithRetry(
 
 // ============ APS OAUTH 2-LEGGED ============
 
-async function getApsAccessToken(): Promise<string> {
-  const clientId = Deno.env.get("APS_CLIENT_ID");
-  const clientSecret = Deno.env.get("APS_CLIENT_SECRET");
+async function getApsAccessToken(serviceClient?: any): Promise<string> {
+  let clientId = Deno.env.get("APS_CLIENT_ID");
+  let clientSecret = Deno.env.get("APS_CLIENT_SECRET");
+
+  // Read from DB if not in env (credentials stored via Settings UI)
+  if ((!clientId || !clientSecret) && serviceClient) {
+    const { data: rows } = await serviceClient
+      .from("geminus_plus_endpoint_cache")
+      .select("key, value")
+      .in("key", ["aps_client_id", "aps_client_secret"]);
+    if (rows) {
+      clientId = clientId || rows.find((r: any) => r.key === "aps_client_id")?.value;
+      clientSecret = clientSecret || rows.find((r: any) => r.key === "aps_client_secret")?.value;
+    }
+  }
 
   if (!clientId || !clientSecret) {
-    throw new Error("Missing APS credentials (APS_CLIENT_ID / APS_CLIENT_SECRET)");
+    throw new Error("Missing APS credentials — set Client ID and Secret in Settings → API → Autodesk Forma");
   }
 
   const credentials = btoa(`${clientId}:${clientSecret}`);
@@ -201,7 +213,7 @@ async function getAccToken(userId: string | null, serviceClient: any): Promise<{
     }
   }
   console.log("Using 2-legged (app) token for ACC API calls");
-  const token = await getApsAccessToken();
+  const token = await getApsAccessToken(serviceClient);
   return { token, is3Legged: false };
 }
 
@@ -889,6 +901,24 @@ async function extractBimHierarchy(
             }
           }
 
+          // Resolve "FMGuid" field — Revit shared parameter written by the FMGUID Manager add-in
+          let fmGuidKey = '';
+          let fmGuidChecksumKey = '';
+          for (const [key, name] of Object.entries(fieldsMap)) {
+            const lowerName = (name as string).toLowerCase().trim();
+            if (lowerName === 'fmguid' || lowerName === 'fm_guid' || lowerName === 'fm guid') {
+              fmGuidKey = key;
+            }
+            if (lowerName === 'fmguid_checksum' || lowerName === 'fmguid checksum' || lowerName === 'fm_guid_checksum') {
+              fmGuidChecksumKey = key;
+            }
+          }
+          if (fmGuidKey) {
+            console.log(`[BIM Fields] FMGuid field found: key=${fmGuidKey}, checksum=${fmGuidChecksumKey || 'none'}`);
+          } else {
+            console.log(`[BIM Fields] No FMGuid field found — will use deterministic IDs`);
+          }
+
           // Fallback to hardcoded keys if not found
           if (!categoryKey) categoryKey = 'p5eddc473';
           if (!nameKey) nameKey = 'p153cb174';
@@ -938,6 +968,7 @@ async function extractBimHierarchy(
                 elevation: obj.props?.[elevationKey] || null,
                 objectId: obj.objectId,
                 versionUrn: idx.versionUrn,
+                fmGuid: fmGuidKey ? (obj.props?.[fmGuidKey] || '') : '',
               });
             } else if (
               category === 'Revit Rooms' || category === 'Rooms' || category === 'IfcSpace' ||
@@ -1008,13 +1039,14 @@ async function extractBimHierarchy(
 
               allRooms.push({
                 externalId,
-                name: descriptiveName || null, // name = descriptive name (e.g. "TRAPPA")
-                number: designation,           // number = designation (e.g. "10026")
+                name: descriptiveName || null,
+                number: designation,
                 commonName: roomCommonName.trim(),
                 level: obj.props?.[levelKey] || null,
                 objectId: obj.objectId,
                 versionUrn: idx.versionUrn,
                 properties: roomProperties,
+                fmGuid: fmGuidKey ? (obj.props?.[fmGuidKey] || '') : '',
               });
             } else if (category && !SKIP_INSTANCE_CATEGORIES.has(category)) {
               // Instance extraction - physical elements
@@ -1062,6 +1094,7 @@ async function extractBimHierarchy(
                 systemName: sysName || sysAbbr || null,
                 systemType: sysType || sysClass || null,
                 properties: instanceProperties,
+                fmGuid: fmGuidKey ? (obj.props?.[fmGuidKey] || '') : '',
               });
             }
           }
@@ -1142,8 +1175,9 @@ async function upsertBimAssets(
   rooms: any[],
   instances: any[],
   accProjectId: string,
+  overrideBuildingFmGuid?: string,
 ): Promise<{ building: number; levels: number; rooms: number; instances: number }> {
-  const buildingFmGuid = `acc-bim-building-${folderId.replace(/[^a-zA-Z0-9-]/g, '')}`;
+  const buildingFmGuid = overrideBuildingFmGuid || `acc-bim-building-${folderId.replace(/[^a-zA-Z0-9-]/g, '')}`;
 
   // 1. Upsert building
   const buildingAsset = {
@@ -1162,30 +1196,69 @@ async function upsertBimAssets(
 
   await supabase.from('assets').upsert(buildingAsset, { onConflict: 'fm_guid', ignoreDuplicates: false });
 
-  // 2. Upsert levels
-  const levelAssets = levels.map(level => ({
-    fm_guid: `acc-bim-level-${level.externalId}`,
-    category: 'Building Storey',
-    name: null,
-    common_name: level.name || `Level ${level.externalId}`,
-    building_fm_guid: buildingFmGuid,
-    level_fm_guid: `acc-bim-level-${level.externalId}`,
-    attributes: {
-      source: 'acc-bim',
-      acc_project_id: accProjectId,
-      acc_folder_id: folderId,
-      bim_external_id: level.externalId,
-      bim_elevation: level.elevation,
-      bim_object_id: level.objectId,
-      bim_version_urn: level.versionUrn,
-    },
-    synced_at: new Date().toISOString(),
-  }));
+  // 2. Upsert levels — cross-model FMGUID reconciliation:
+  // If this building already has a level with the same name OR same elevation (±0.15m),
+  // reuse the existing FMGUID so ARK/VVS/EL models share one stable identifier per floor.
+  const { data: existingLevels } = await supabase
+    .from('assets')
+    .select('fm_guid, common_name, attributes')
+    .eq('building_fm_guid', buildingFmGuid)
+    .in('category', ['Building Storey', 'IfcBuildingStorey']);
+
+  const ELEVATION_TOLERANCE = 0.15; // metres
+
+  function resolveOrCreateLevelFmGuid(level: { externalId: string; name: string; elevation?: number; fmGuid?: string }): string {
+    // Priority 1: Revit FMGuid shared parameter (from FMGUID Manager add-in)
+    if (level.fmGuid && level.fmGuid.trim()) return level.fmGuid.trim();
+    if (!existingLevels) return `acc-bim-level-${level.externalId}`;
+    // Priority 2: Existing DB record — exact name match
+    const byName = existingLevels.find(e => e.common_name === level.name);
+    if (byName) return byName.fm_guid;
+    // Priority 3: Elevation match (±tolerance)
+    if (level.elevation != null) {
+      const byElev = existingLevels.find(e => {
+        const existElev = e.attributes?.bim_elevation;
+        return existElev != null && Math.abs(Number(existElev) - level.elevation!) <= ELEVATION_TOLERANCE;
+      });
+      if (byElev) return byElev.fm_guid;
+    }
+    // Priority 4: No match — deterministic fallback (backwards compatible with existing synced data)
+    return `acc-bim-level-${level.externalId}`;
+  }
+
+  const levelFmGuidMap = new Map<string, string>(); // externalId → resolved fm_guid
+  for (const level of levels) {
+    levelFmGuidMap.set(level.externalId, resolveOrCreateLevelFmGuid(level));
+  }
+
+  const levelAssets = levels.map(level => {
+    const fmGuid = levelFmGuidMap.get(level.externalId)!;
+    const hadRevitFmGuid = !!(level.fmGuid && level.fmGuid.trim());
+    return {
+      fm_guid: fmGuid,
+      category: 'Building Storey',
+      name: null,
+      common_name: level.name || `Level ${level.externalId}`,
+      building_fm_guid: buildingFmGuid,
+      level_fm_guid: fmGuid,
+      attributes: {
+        source: 'acc-bim',
+        acc_project_id: accProjectId,
+        acc_folder_id: folderId,
+        bim_external_id: level.externalId,
+        bim_elevation: level.elevation,
+        bim_object_id: level.objectId,
+        bim_version_urn: level.versionUrn,
+        fmguid_source: hadRevitFmGuid ? 'revit' : 'generated',
+      },
+      synced_at: new Date().toISOString(),
+    };
+  });
 
   // 3. Upsert rooms with level matching and properties
   const levelNameMap = new Map<string, string>();
   for (const level of levels) {
-    levelNameMap.set(level.name, `acc-bim-level-${level.externalId}`);
+    levelNameMap.set(level.name, levelFmGuidMap.get(level.externalId)!);
   }
 
   // Room number -> fm_guid map for instance linking
@@ -1205,7 +1278,9 @@ async function upsertBimAssets(
       }
     }
 
-    const roomFmGuid = `acc-bim-room-${room.externalId}`;
+    // Priority: Revit FMGuid → deterministic fallback (backwards compatible)
+    const hadRevitRoomFmGuid = !!(room.fmGuid && room.fmGuid.trim());
+    const roomFmGuid = hadRevitRoomFmGuid ? room.fmGuid.trim() : `acc-bim-room-${room.externalId}`;
     if (room.number) {
       roomNumberMap.set(room.number, roomFmGuid);
     }
@@ -1219,6 +1294,7 @@ async function upsertBimAssets(
       bim_level_ref: room.level,
       bim_object_id: room.objectId,
       bim_version_urn: room.versionUrn,
+      fmguid_source: hadRevitRoomFmGuid ? 'revit' : 'generated',
     };
 
     // Add room properties as Geminus Plus compatible attributes array
@@ -1316,8 +1392,13 @@ async function upsertBimAssets(
         instAttributes.bim_properties = propertyAttributes;
       }
 
+      // Priority: Revit FMGuid → deterministic fallback (backwards compatible)
+      const hasRevitInstFmGuid = !!(inst.fmGuid && inst.fmGuid.trim());
+      const instFmGuid = hasRevitInstFmGuid ? inst.fmGuid.trim() : `acc-bim-instance-${inst.externalId}`;
+      instAttributes.fmguid_source = hasRevitInstFmGuid ? 'revit' : 'generated';
+
       return {
-        fm_guid: `acc-bim-instance-${inst.externalId}`,
+        fm_guid: instFmGuid,
         category: mapRevitToGeminusCategory(inst.category),
         name: null,
         common_name: inst.name || inst.category || `Instance ${inst.externalId}`,
@@ -1410,8 +1491,9 @@ async function upsertBimAssets(
   }
 
   // 6. Store external ID mappings for reconciliation
+  // Levels use the resolved fm_guid (cross-model matched), not raw externalId-based one
   const allExtIds = [
-    ...levels.map(l => ({ fm_guid: `acc-bim-level-${l.externalId}`, source: 'acc', external_id: l.externalId, last_seen_at: new Date().toISOString() })),
+    ...levels.map(l => ({ fm_guid: levelFmGuidMap.get(l.externalId) ?? `acc-bim-level-${l.externalId}`, source: 'acc', external_id: l.externalId, last_seen_at: new Date().toISOString() })),
     ...rooms.map(r => ({ fm_guid: `acc-bim-room-${r.externalId}`, source: 'acc', external_id: r.externalId, last_seen_at: new Date().toISOString() })),
     ...instances.map(i => ({ fm_guid: `acc-bim-instance-${i.externalId}`, source: 'acc', external_id: i.externalId, last_seen_at: new Date().toISOString() })),
   ];
@@ -1438,7 +1520,7 @@ async function updateSyncState(
 ) {
   const updateData: any = {
     subtree_id: subtreeId,
-    subtree_name: subtreeId === "acc-locations" ? "ACC Platser" : "ACC Tillgångar",
+    subtree_name: subtreeId === "acc-locations" ? "ACC Locations" : "ACC Assets",
     sync_status: status,
     updated_at: new Date().toISOString(),
   };
@@ -1492,8 +1574,8 @@ serve(async (req: Request) => {
           JSON.stringify({
             success: true,
             message: is3Legged 
-              ? "Anslutning via användarinloggning lyckades!" 
-              : "Anslutning till Autodesk lyckades (app-token)!",
+              ? "Connection via user login succeeded!"
+              : "Connection to Autodesk succeeded (app token)!",
             tokenPreview: token.substring(0, 8) + "...",
             is3Legged,
           }),
@@ -1551,7 +1633,7 @@ serve(async (req: Request) => {
             return new Response(
               JSON.stringify({
                 success: false,
-                error: `Kunde inte hämta projekt. Data Management API och Admin API misslyckades båda. Du kan ange projekt-ID manuellt istället.\n\nAdmin-fel: ${adminError instanceof Error ? adminError.message : String(adminError)}`,
+                error: `Could not fetch projects. Both the Data Management API and Admin API failed. You can enter a project ID manually instead.\n\nAdmin error: ${adminError instanceof Error ? adminError.message : String(adminError)}`,
               }),
               { headers: { ...corsHeaders, "Content-Type": "application/json" } },
             );
@@ -1617,10 +1699,10 @@ serve(async (req: Request) => {
           let message: string;
           let hint: string | undefined;
           if (buildings === 0 && storeys === 0 && spaces === 0) {
-            message = "ACC-projektet har inga platser konfigurerade i Locations-modulen (bara root-nod).";
-            hint = "Platsdata (byggnader, plan, rum) kan finnas i BIM-modellerna istället. Prova 'Visa mappar' för att se projektets mappstruktur och BIM-filer.";
+            message = "The ACC project has no locations configured in the Locations module (root node only).";
+            hint = "Location data (buildings, floors, rooms) may be in the BIM models instead. Try 'Show folders' to view the project folder structure and BIM files.";
           } else {
-            message = `Synkade ${upserted} platser: ${buildings} byggnader, ${storeys} våningar, ${spaces} rum`;
+            message = `Synced ${upserted} locations: ${buildings} buildings, ${storeys} floors, ${spaces} rooms`;
           }
 
           return new Response(
@@ -1710,8 +1792,8 @@ serve(async (req: Request) => {
             JSON.stringify({
               success: true,
               message: lastSyncAt
-                ? `Inkrementell synk: ${totalSynced} uppdaterade tillgångar sedan ${new Date(lastSyncAt).toLocaleString('sv-SE')}`
-                : `Synkade ${totalSynced} tillgångar från ACC`,
+                ? `Incremental sync: ${totalSynced} updated assets since ${new Date(lastSyncAt).toLocaleString('en-US')}`
+                : `Synced ${totalSynced} assets from ACC`,
               totalSynced,
               incremental: !!lastSyncAt,
             }),
@@ -1766,8 +1848,8 @@ serve(async (req: Request) => {
         );
       }
 
-      // ---- LIST FOLDERS (Data Management API) ----
-      case "list-folders": {
+      // ---- LIST ARCHIVE FILES (Data Management API — file browser for archive folder picker) ----
+      case "list-archive-files": {
         if (!projectId) {
           return new Response(
             JSON.stringify({ success: false, error: "projectId is required" }),
@@ -2031,7 +2113,7 @@ serve(async (req: Request) => {
           return new Response(
             JSON.stringify({
               success: false,
-              error: "Inga BIM-filer med versionUrn hittades. Se till att filen är en RVT/IFC-fil.",
+              error: "No BIM files with versionUrn found. Make sure the file is an RVT/IFC file.",
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
@@ -2051,7 +2133,7 @@ serve(async (req: Request) => {
               JSON.stringify({
                 success: false,
                 state: 'PROCESSING',
-                message: 'Indexeringen pågår fortfarande hos Autodesk. Prova igen om 30-60 sekunder.',
+                message: 'Indexing is still in progress at Autodesk. Try again in 30-60 seconds.',
                 modelsIndexed: 0,
               }),
               { headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -2062,7 +2144,7 @@ serve(async (req: Request) => {
             return new Response(
               JSON.stringify({
                 success: true,
-                message: `Indexering klar men inga våningsplan, rum eller instanser hittades i ${bimItems.length} BIM-modell(er).`,
+                message: `Indexing complete but no floors, rooms or instances found in ${bimItems.length} BIM model(s).`,
                 indexState,
                 fieldsFound: Object.keys(fieldsMap).length,
                 building: 0,
@@ -2075,12 +2157,13 @@ serve(async (req: Request) => {
             );
           }
 
-          // Upsert to database
+          // Upsert to database — use Geminus Plus buildingFmGuid if provided
           const result = await upsertBimAssets(
             supabase, folderName, folderId, levels, rooms, instances, projectId,
+            body.buildingFmGuid || undefined,
           );
 
-          const message = `Skapade: ${result.building} byggnad, ${result.levels} våningsplan, ${result.rooms} rum, ${result.instances} instanser från ${bimItems.length} modell(er)`;
+          const message = `Created: ${result.building} building, ${result.levels} floors, ${result.rooms} rooms, ${result.instances} instances from ${bimItems.length} model(s)`;
 
           // Update sync state
           await updateSyncState(supabase, "acc-bim", "completed", result.levels + result.rooms + result.instances + result.building);
@@ -2131,7 +2214,7 @@ serve(async (req: Request) => {
         // A1: If already done, return alreadyDone
         if (existing?.translation_status === "success" && existing?.derivative_urn) {
           return new Response(
-            JSON.stringify({ success: true, status: "success", message: "Modellen är redan översatt.", alreadyDone: true }),
+            JSON.stringify({ success: true, status: "success", message: "The model is already translated.", alreadyDone: true }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
@@ -2143,7 +2226,7 @@ serve(async (req: Request) => {
           if (startedAt > sixtyMinAgo) {
             console.log(`[translate-model] Translation already in progress (status=${existing.translation_status}, started=${existing.started_at}). Skipping job restart.`);
             return new Response(
-              JSON.stringify({ success: true, status: "pending", message: "Översättning pågår redan. Fortsätter att bevaka status..." }),
+              JSON.stringify({ success: true, status: "pending", message: "Translation already in progress. Continuing to monitor status..." }),
               { headers: { ...corsHeaders, "Content-Type": "application/json" } },
             );
           }
@@ -2201,12 +2284,30 @@ serve(async (req: Request) => {
         if (!jobRes.ok) {
           const errorText = await jobRes.text();
           console.error(`Model Derivative job failed (${jobRes.status}): ${errorText}`);
+          // 409 = job already in progress in Autodesk MD — treat as pending, save to DB
+          if (jobRes.status === 409) {
+            await supabase.from("acc_model_translations").upsert({
+              version_urn: versionUrn,
+              building_fm_guid: body.buildingFmGuid || null,
+              folder_id: body.folderId || null,
+              file_name: body.fileName || null,
+              model_name: body.modelName || null,
+              is_master_model: body.isMasterModel !== false,
+              translation_status: "inprogress",
+              output_format: "svf",
+              started_at: new Date().toISOString(),
+            }, { onConflict: "version_urn" });
+            return new Response(
+              JSON.stringify({ success: true, status: "inprogress", message: "Translation already in progress in Autodesk Model Derivative." }),
+              { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
           const hint = jobRes.status === 403
-            ? ". Kontrollera att Model Derivative API är aktiverat i Autodesk Developer Portal för din APS-app, och logga ut/in från Autodesk i inställningarna."
+            ? ". Check that the Model Derivative API is enabled in the Autodesk Developer Portal for your APS app, and sign out/in from Autodesk in the settings."
             : "";
           return new Response(
             JSON.stringify({ success: false, error: `Translation job failed (${jobRes.status}): ${errorText}${hint}` }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
 
@@ -2219,6 +2320,8 @@ serve(async (req: Request) => {
           building_fm_guid: body.buildingFmGuid || null,
           folder_id: body.folderId || null,
           file_name: body.fileName || null,
+          model_name: body.modelName || null,
+          is_master_model: body.isMasterModel !== false,
           translation_status: "pending",
           output_format: "svf",
           started_at: new Date().toISOString(),
@@ -2230,7 +2333,7 @@ serve(async (req: Request) => {
             success: true,
             status: "pending",
             urn: urnBase64,
-            message: "Översättningsjobb startat. Kontrollera status med check-translation.",
+            message: "Translation job started. Check status with check-translation.",
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
@@ -2275,7 +2378,7 @@ serve(async (req: Request) => {
           const errorText = await manifestRes.text();
           return new Response(
             JSON.stringify({ success: false, error: `Manifest check failed (${manifestRes.status}): ${errorText}` }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
 
@@ -2313,14 +2416,26 @@ serve(async (req: Request) => {
 
         // When translation succeeds, trigger pipelines (non-blocking)
         if (overallStatus === "success" && body.buildingFmGuid) {
+          // Resolve the user-defined model name: prefer body param, then DB record, then filename
+          const { data: translationRow } = await supabase
+            .from("acc_model_translations")
+            .select("model_name, file_name, is_master_model")
+            .eq("version_urn", versionUrn)
+            .maybeSingle();
+          const resolvedModelName: string =
+            body.modelName ||
+            translationRow?.model_name ||
+            body.fileName?.replace(/\.[^.]+$/, "") ||
+            translationRow?.file_name?.replace(/\.[^.]+$/, "") ||
+            "ACC Model";
+
           // Check if IFC derivative is available — if so, download and feed into ifc-to-xkt pipeline
-          const ifcDeriv = derivatives.find(d => 
+          const ifcDeriv = derivatives.find(d =>
             d.outputType === 'ifc' || d.mime === 'application/octet-stream' && d.role === 'graphics'
           );
 
           if (ifcDeriv) {
             console.log(`[check-translation] IFC derivative found — downloading for XKT conversion pipeline`);
-            // Download IFC derivative and upload to ifc-uploads, then trigger ifc-to-xkt
             const ifcDownloadUrl = `${mdBaseCheck}/${urnBase64}/manifest/${encodeURIComponent(ifcDeriv.urn)}`;
             fetch(ifcDownloadUrl, {
               headers: { "Authorization": `Bearer ${token}` },
@@ -2335,14 +2450,13 @@ serve(async (req: Request) => {
               const { error: uploadErr } = await supabase.storage
                 .from("ifc-uploads")
                 .upload(ifcPath, ifcBlob, { contentType: "application/octet-stream", upsert: true });
-              
+
               if (uploadErr) {
                 console.warn(`[check-translation] IFC upload failed:`, uploadErr.message);
                 return;
               }
               console.log(`[check-translation] IFC uploaded (${(ifcData.byteLength/1024/1024).toFixed(1)}MB), triggering ifc-to-xkt...`);
-              
-              // Trigger ifc-to-xkt for real per-storey tiling
+
               await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/ifc-to-xkt`, {
                 method: "POST",
                 headers: {
@@ -2352,7 +2466,8 @@ serve(async (req: Request) => {
                 body: JSON.stringify({
                   ifcStoragePath: ifcPath,
                   buildingFmGuid: body.buildingFmGuid,
-                  modelName: body.fileName?.replace(/\.[^.]+$/, '') || "ACC Model",
+                  modelName: resolvedModelName,
+                  isMasterModel: translationRow?.is_master_model !== false,
                 }),
               }).then(r => console.log(`[check-translation] ifc-to-xkt triggered: ${r.status}`))
                 .catch(e => console.warn(`[check-translation] ifc-to-xkt trigger failed:`, e));
@@ -2373,6 +2488,7 @@ serve(async (req: Request) => {
               versionUrn,
               modelKey: body.modelKey || body.buildingFmGuid,
               accProjectId: body.accProjectId || "",
+              fileName: resolvedModelName,
               userId: auth.userId || null,
             }),
           }).then(r => console.log(`[check-translation] Geometry extract triggered: ${r.status}`))
@@ -2470,9 +2586,9 @@ serve(async (req: Request) => {
             return new Response(
               JSON.stringify({ 
                 success: false, 
-                error: "SVF2-översättning klar men ingen nedladdningsbar geometri (OBJ/glTF) hittades. " +
-                       "SVF2 är ett streaming-format som inte kan laddas ner som en enstaka fil. " +
-                       "Överväg att använda Autodesk Viewer för denna modell.",
+                error: "SVF2 translation complete but no downloadable geometry (OBJ/glTF) found. " +
+                       "SVF2 is a streaming format that cannot be downloaded as a single file. " +
+                       "Consider using Autodesk Viewer for this model.",
                 formatLimitation: true,
                 svf2Complete: true,
                 availableFormats: allDerivs.map(d => d.outputType || d.mime).filter(Boolean),
@@ -2488,7 +2604,7 @@ serve(async (req: Request) => {
 
         if (!derivUrn) {
           return new Response(
-            JSON.stringify({ success: false, error: "Ingen nedladdningsbar geometri hittades." }),
+            JSON.stringify({ success: false, error: "No downloadable geometry found." }),
             { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
@@ -2547,7 +2663,7 @@ serve(async (req: Request) => {
             downloadUrl: urlData?.signedUrl || null,
             fileSize,
             derivativeUrn: derivUrn,
-            message: `Derivative nedladdad (${(fileSize / 1024 / 1024).toFixed(2)} MB) och uppladdad till lagring.`,
+            message: `Derivative downloaded (${(fileSize / 1024 / 1024).toFixed(2)} MB) and uploaded to storage.`,
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
@@ -2692,6 +2808,827 @@ serve(async (req: Request) => {
         console.log(`[list-hubs] Found ${hubs.length} hubs`);
         return new Response(
           JSON.stringify({ success: true, hubs }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      // ---- SYNC FORMA BUILDING (orchestration: locations + assets + translation) ----
+      case "sync-forma-building": {
+        if (!projectId) {
+          return new Response(
+            JSON.stringify({ success: false, error: "projectId is required" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const orchResults: {
+          locations: any;
+          assets: any;
+          translation: any;
+          errors: string[];
+        } = { locations: null, assets: null, translation: null, errors: [] };
+
+        const { token: orchToken } = await getAccToken(auth.userId, supabase);
+
+        // ── Step 1: Sync location tree (Building / Level / Space) ──
+        try {
+          await updateSyncState(supabase, "acc-locations", "running");
+          const nodes = await fetchAllLocationNodes(orchToken, projectId, region);
+          const mapped = buildLocationTree(nodes);
+          const upserted = await upsertLocationAssets(supabase, mapped, projectId);
+          await supabase.from("geminus_plus_endpoint_cache").upsert(
+            { key: "acc_project_id", value: projectId, updated_at: new Date().toISOString() },
+            { onConflict: "key" },
+          );
+          if (region) {
+            await supabase.from("geminus_plus_endpoint_cache").upsert(
+              { key: "acc_region", value: region, updated_at: new Date().toISOString() },
+              { onConflict: "key" },
+            );
+          }
+          await updateSyncState(supabase, "acc-locations", "completed", upserted);
+          orchResults.locations = {
+            success: true,
+            upserted,
+            buildings: mapped.filter(m => m.category === "Building").length,
+            storeys: mapped.filter(m => m.category === "Building Storey").length,
+            spaces: mapped.filter(m => m.category === "Space").length,
+          };
+          console.log(`[sync-forma-building] Locations done: ${upserted} nodes`);
+        } catch (e: any) {
+          await updateSyncState(supabase, "acc-locations", "failed", undefined, e.message);
+          orchResults.errors.push(`Locations: ${e.message}`);
+          orchResults.locations = { success: false, error: e.message };
+        }
+
+        // ── Step 2: Sync assets (installations) ──
+        try {
+          await updateSyncState(supabase, "acc-assets", "running");
+          const nodes2 = await fetchAllLocationNodes(orchToken, projectId, region);
+          const mapped2 = buildLocationTree(nodes2);
+          const locationMap = new Map<string, MappedNode>();
+          for (const m of mapped2) locationMap.set(m.node.id, m);
+          const categoryMap = await fetchAccCategories(orchToken, projectId, region);
+
+          let totalSynced = 0;
+          let cursorState: string | undefined;
+          do {
+            const page = await fetchAccAssets(orchToken, projectId, region, cursorState);
+            if (page.results.length > 0) {
+              totalSynced += await upsertAccAssets(supabase, page.results, locationMap, categoryMap, projectId);
+            }
+            cursorState = page.cursorState;
+          } while (cursorState);
+
+          await updateSyncState(supabase, "acc-assets", "completed", totalSynced);
+          orchResults.assets = { success: true, totalSynced };
+          console.log(`[sync-forma-building] Assets done: ${totalSynced}`);
+        } catch (e: any) {
+          await updateSyncState(supabase, "acc-assets", "failed", undefined, e.message);
+          orchResults.errors.push(`Assets: ${e.message}`);
+          orchResults.assets = { success: false, error: e.message };
+        }
+
+        // ── Step 3: Start model translation (if versionUrn provided) ──
+        if (body.versionUrn) {
+          try {
+            const versionUrn = body.versionUrn as string;
+            const urnB64 = btoa(versionUrn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+            const { data: existingTrans } = await supabase
+              .from("acc_model_translations")
+              .select("translation_status")
+              .eq("version_urn", versionUrn)
+              .maybeSingle();
+
+            if (existingTrans?.translation_status === "success") {
+              orchResults.translation = { success: true, status: "alreadyDone", versionUrn };
+            } else if (existingTrans?.translation_status === "pending" || existingTrans?.translation_status === "inprogress") {
+              orchResults.translation = { success: true, status: "inprogress", versionUrn };
+            } else {
+              const decodedUrn = atob(urnB64.replace(/-/g, '+').replace(/_/g, '/'));
+              const isEmea = decodedUrn.includes('wipemea');
+              const mdEndpoint = isEmea
+                ? "https://developer.api.autodesk.com/modelderivative/v2/regions/eu/designdata/job"
+                : "https://developer.api.autodesk.com/modelderivative/v2/designdata/job";
+
+              const jobRes = await fetchWithRetry(mdEndpoint, {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${orchToken}`,
+                  "Content-Type": "application/json",
+                  "x-ads-force": "true",
+                },
+                body: JSON.stringify({
+                  input: { urn: urnB64 },
+                  output: { formats: [{ type: "svf", views: ["3d"] }, { type: "ifc" }] },
+                }),
+              });
+
+              if (jobRes.ok) {
+                await supabase.from("acc_model_translations").upsert({
+                  version_urn: versionUrn,
+                  building_fm_guid: body.buildingFmGuid || null,
+                  folder_id: body.folderId || null,
+                  file_name: body.fileName || null,
+                  model_name: body.modelName || null,
+                  is_master_model: body.isMasterModel !== false,
+                  translation_status: "pending",
+                  output_format: "svf",
+                  started_at: new Date().toISOString(),
+                }, { onConflict: "version_urn" });
+                orchResults.translation = { success: true, status: "pending", versionUrn };
+                console.log(`[sync-forma-building] Translation job started`);
+              } else {
+                const errText = await jobRes.text();
+                orchResults.errors.push(`Translation: ${jobRes.status} ${errText.substring(0, 200)}`);
+                orchResults.translation = { success: false, error: errText.substring(0, 200) };
+              }
+            }
+          } catch (e: any) {
+            orchResults.errors.push(`Translation: ${e.message}`);
+            orchResults.translation = { success: false, error: e.message };
+          }
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: orchResults.errors.length === 0,
+            results: orchResults,
+            message: [
+              orchResults.locations?.success
+                ? `${orchResults.locations.upserted} locations (${orchResults.locations.buildings} buildings, ${orchResults.locations.storeys} floors, ${orchResults.locations.spaces} rooms)`
+                : `Locations failed`,
+              orchResults.assets?.success
+                ? `${orchResults.assets.totalSynced} assets`
+                : `Assets failed`,
+              orchResults.translation
+                ? `Geometri: ${orchResults.translation.status}`
+                : null,
+            ].filter(Boolean).join(" · "),
+            errors: orchResults.errors,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      // ---- RENAME MODEL ----
+      case "rename-model": {
+        // body: { buildingFmGuid, modelId, newName }
+        const { modelId, newName } = body;
+        if (!modelId || !newName?.trim()) {
+          return new Response(
+            JSON.stringify({ success: false, error: "modelId and newName are required" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const buildingFmGuid = body.buildingFmGuid as string | undefined;
+
+        // Update xkt_models
+        let xktQuery = supabase
+          .from("xkt_models")
+          .update({ model_name: newName.trim(), updated_at: new Date().toISOString() })
+          .eq("model_id", modelId);
+        if (buildingFmGuid) xktQuery = xktQuery.eq("building_fm_guid", buildingFmGuid);
+
+        const { error: updateErr, count } = await xktQuery;
+        if (updateErr) {
+          return new Response(
+            JSON.stringify({ success: false, error: updateErr.message }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        // Also update acc_model_translations if a matching row exists
+        await supabase
+          .from("acc_model_translations")
+          .update({ model_name: newName.trim() })
+          .eq("building_fm_guid", buildingFmGuid || "")
+          .neq("translation_status", "success");
+
+        console.log(`[rename-model] Renamed model ${modelId} to "${newName.trim()}" (${count} rows updated)`);
+        return new Response(
+          JSON.stringify({ success: true, modelId, newName: newName.trim() }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      // ---- LIST FOLDERS (returns flat folder tree for folder pickers) ----
+      case "list-folders": {
+        if (!projectId) {
+          return new Response(JSON.stringify({ success: false, error: "projectId is required" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        const { token: lfToken2 } = await getAccToken(auth.userId, supabase);
+        const lfCleanId2 = projectId.replace(/^b\./, "");
+        const lfFullId2 = `b.${lfCleanId2}`;
+        const lfRegion2 = getRegionHeader(region);
+        const lfAccountId2 = body.accountId;
+        const lfHubId2 = lfAccountId2 ? `b.${lfAccountId2.replace(/^b\./, "")}` : null;
+
+        const topRes = await fetch(
+          `https://developer.api.autodesk.com/project/v1/hubs/${lfHubId2}/projects/${lfFullId2}/topFolders`,
+          { headers: { "Authorization": `Bearer ${lfToken2}`, "Accept": "application/json", ...lfRegion2 } },
+        );
+        if (!topRes.ok) {
+          const err = await topRes.text();
+          return new Response(JSON.stringify({ success: false, error: `Top folders failed (${topRes.status}): ${err}` }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        const topData = await topRes.json();
+        const topFolders: any[] = topData.data || [];
+
+        const folderMap: Record<string, { name: string; parentId: string | null }> = {};
+
+        async function collectFolders(folderId: string, folderName: string, parentId: string | null, depth = 0) {
+          folderMap[folderId] = { name: folderName, parentId };
+          if (depth >= 3) return;
+          const url = `https://developer.api.autodesk.com/data/v1/projects/${lfFullId2}/folders/${folderId}/contents`;
+          const res = await fetch(url, { headers: { "Authorization": `Bearer ${lfToken2}`, "Accept": "application/json", ...lfRegion2 } });
+          if (!res.ok) return;
+          const d = await res.json();
+          for (const item of (d.data || [])) {
+            if (item.type === "folders") {
+              const name = item.attributes?.displayName || item.attributes?.name || item.id;
+              await collectFolders(item.id, name, folderId, depth + 1);
+            }
+          }
+        }
+
+        for (const tf of topFolders) {
+          const name = tf.attributes?.displayName || tf.attributes?.name || tf.id;
+          await collectFolders(tf.id, name, null);
+        }
+
+        return new Response(JSON.stringify({ success: true, folders: folderMap }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ---- LIST ARCHIVE FILES (thin wrapper for file picker UI) ----
+      case "list-archive-files": {
+        if (!projectId) {
+          return new Response(
+            JSON.stringify({ success: false, error: "projectId is required" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+        // Re-use the list-folders logic by calling ourselves recursively — but we inline a
+        // simplified version here to avoid duplication: just return BIM files from top-level
+        // folder and one level deep, no full tree walk needed.
+        const { token: lfToken } = await getAccToken(auth.userId, supabase);
+        const lfCleanProjectId = projectId.replace(/^b\./, "");
+        const lfFullProjectId = `b.${lfCleanProjectId}`;
+        const lfRegionHeaders = getRegionHeader(region);
+
+        // Get account ID
+        const lfFrontendAccountId = body.accountId;
+        const lfRegionUpper = (region || "US").toUpperCase();
+        const lfAccountId = lfFrontendAccountId ||
+          (lfRegionUpper === "EMEA"
+            ? (Deno.env.get("ACC_ACCOUNT_ID_EMEA") || Deno.env.get("ACC_ACCOUNT_ID"))
+            : (Deno.env.get("ACC_ACCOUNT_ID_US") || Deno.env.get("ACC_ACCOUNT_ID")));
+        const lfHubId = lfAccountId ? `b.${lfAccountId.replace(/^b\./, "")}` : null;
+
+        // Get top folders
+        const lfTopRes = await fetch(
+          `https://developer.api.autodesk.com/project/v1/hubs/${lfHubId}/projects/${lfFullProjectId}/topFolders`,
+          { headers: { "Authorization": `Bearer ${lfToken}`, "Accept": "application/json", ...lfRegionHeaders } },
+        );
+        if (!lfTopRes.ok) {
+          const err = await lfTopRes.text();
+          return new Response(JSON.stringify({ success: false, error: `Top folders failed (${lfTopRes.status}): ${err}` }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        const lfTopData = await lfTopRes.json();
+        const lfTopFolders = lfTopData.data || [];
+        const lfRootFolder = lfTopFolders.find((f: any) => {
+          const n = (f.attributes?.name || "").toLowerCase();
+          return n.includes("project file") || n.includes("projektfiler");
+        }) || lfTopFolders[0];
+
+        if (!lfRootFolder) {
+          return new Response(JSON.stringify({ success: true, files: [] }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Fetch root folder contents + one level of subfolders
+        const lfBimFiles: any[] = [];
+        const lfFolderMap: Record<string, { name: string; parentId: string | null }> = {};
+        async function collectBimFiles(folderId: string, folderName: string, parentId: string | null, maxDepth: number, depth = 0) {
+          lfFolderMap[folderId] = { name: folderName, parentId };
+          const url = `https://developer.api.autodesk.com/data/v1/projects/${lfFullProjectId}/folders/${folderId}/contents`;
+          const res = await fetch(url, { headers: { "Authorization": `Bearer ${lfToken}`, "Accept": "application/json", ...lfRegionHeaders } });
+          if (!res.ok) return;
+          const d = await res.json();
+          const included = d.included || [];
+          for (const item of (d.data || [])) {
+            if (item.type === "folders" && depth < maxDepth) {
+              const subName = item.attributes?.displayName || item.attributes?.name || item.id;
+              await collectBimFiles(item.id, subName, folderId, maxDepth, depth + 1);
+            } else if (item.type === "items") {
+              const name = item.attributes?.displayName || item.attributes?.name || "";
+              const extType = item.attributes?.extension?.type || "";
+              if (isBimFile(name, extType)) {
+                const tipVersionUrn = item.relationships?.tip?.data?.id ||
+                  included.find((v: any) => v.type === "versions" && v.relationships?.item?.data?.id === item.id)?.id || null;
+                lfBimFiles.push({
+                  itemId: item.id,
+                  name,
+                  versionUrn: tipVersionUrn,
+                  folderId,
+                  size: item.attributes?.storageSize || null,
+                });
+              }
+            }
+          }
+        }
+        const rootFolderName = lfRootFolder.attributes?.displayName || lfRootFolder.attributes?.name || "Project Files";
+        await collectBimFiles(lfRootFolder.id, rootFolderName, null, 2);
+
+        return new Response(JSON.stringify({ success: true, files: lfBimFiles, folders: lfFolderMap, rootFolderId: lfRootFolder.id }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ---- CREATE ACC PROJECT + COPY ARCHIVE FILE ----
+      case "create-acc-project": {
+        const {
+          renovationProjectId,
+          accountId: caAccountId,
+          archiveProjectId: caArchiveProjectId,
+          archiveFileItemId: caArchiveFileItemId,
+          archiveFileName: caArchiveFileName,
+          archiveVersionUrn: caArchiveVersionUrn,
+          projectName: caProjectName,
+        } = body;
+
+        if (!renovationProjectId || !caAccountId || !caArchiveProjectId || !caArchiveFileItemId || !caProjectName) {
+          return new Response(
+            JSON.stringify({ success: false, error: "renovationProjectId, accountId, archiveProjectId, archiveFileItemId, projectName are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const { token: caToken } = await getAccToken(auth.userId, supabase);
+        const caCleanAccountId = caAccountId.replace(/^b\./, "");
+        const caRegionUpper = (region || "US").toUpperCase();
+        const caRegionHeaders = getRegionHeader(region);
+
+        // Mark as creating
+        await supabase.from("renovation_projects").update({
+          acc_setup_status: "creating",
+          acc_account_id: caCleanAccountId,
+          archive_project_id: caArchiveProjectId,
+          archive_file_item_id: caArchiveFileItemId,
+          archive_file_name: caArchiveFileName || null,
+          archive_version_urn: caArchiveVersionUrn || null,
+        }).eq("id", renovationProjectId);
+
+        // Step 1: Create ACC project
+        const today = new Date().toISOString().split("T")[0];
+        const endDate = new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+        const createProjRes = await fetch(
+          `https://developer.api.autodesk.com/construction/admin/v1/accounts/${caCleanAccountId}/projects`,
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${caToken}`,
+              "Content-Type": "application/json",
+              ...caRegionHeaders,
+            },
+            body: JSON.stringify({
+              name: caProjectName,
+              type: "BIM 360",
+              service_types: ["field_management"],
+              start_date: today,
+              end_date: endDate,
+              timezone: "Europe/Stockholm",
+              country: "SE",
+              currency: "SEK",
+            }),
+          },
+        );
+
+        if (!createProjRes.ok) {
+          const errText = await createProjRes.text();
+          console.error(`[create-acc-project] Project creation failed (${createProjRes.status}): ${errText}`);
+          await supabase.from("renovation_projects").update({
+            acc_setup_status: "error",
+            acc_setup_error: `Project creation failed (${createProjRes.status}): ${errText.slice(0, 300)}`,
+          }).eq("id", renovationProjectId);
+          return new Response(JSON.stringify({ success: false, error: `ACC project creation failed: ${errText.slice(0, 200)}` }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const newProject = await createProjRes.json();
+        const newProjectId = newProject.id || newProject.data?.id;
+        if (!newProjectId) {
+          await supabase.from("renovation_projects").update({
+            acc_setup_status: "error",
+            acc_setup_error: "Project created but ID not returned",
+          }).eq("id", renovationProjectId);
+          return new Response(JSON.stringify({ success: false, error: "Project created but no ID returned" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        console.log(`[create-acc-project] Created ACC project: ${newProjectId}`);
+
+        // Update DB with new ACC project ID immediately
+        await supabase.from("renovation_projects").update({
+          acc_renovation_project_id: newProjectId,
+        }).eq("id", renovationProjectId);
+
+        // Steps 2–7: Copy file (fire-and-forget to avoid timeout)
+        async function copyFileToProject() {
+          try {
+            const caFullArchiveProjectId = `b.${caArchiveProjectId.replace(/^b\./, "")}`;
+            const caFullNewProjectId = `b.${newProjectId.replace(/^b\./, "")}`;
+
+            // Step 2: Get tip version of archive file
+            const versionsRes = await fetch(
+              `https://developer.api.autodesk.com/data/v1/projects/${caFullArchiveProjectId}/items/${encodeURIComponent(caArchiveFileItemId)}/versions`,
+              { headers: { "Authorization": `Bearer ${caToken}`, "Accept": "application/json", ...caRegionHeaders } },
+            );
+            if (!versionsRes.ok) throw new Error(`Versions fetch failed: ${versionsRes.status}`);
+            const versionsData = await versionsRes.json();
+            const tipVersion = versionsData.data?.[0];
+            if (!tipVersion) throw new Error("No versions found for archive file");
+
+            // Storage URN is in relationships.storage
+            const storageRef = tipVersion.relationships?.storage?.data;
+            if (!storageRef) throw new Error("No storage reference on tip version");
+            // storageRef.id is like "urn:adsk.objects:os.object:wip.dm.prod.xxx/filename.rvt"
+            const storageUrn = storageRef.id;
+            // Parse bucket and object name from urn: urn:adsk.objects:os.object:{bucket}/{object}
+            const urnParts = storageUrn.replace("urn:adsk.objects:os.object:", "").split("/");
+            const bucketKey = urnParts[0];
+            const objectName = urnParts.slice(1).join("/");
+
+            // Step 3: Download file bytes from archive project storage
+            const downloadUrl = `https://developer.api.autodesk.com/oss/v2/buckets/${encodeURIComponent(bucketKey)}/objects/${encodeURIComponent(objectName)}`;
+            const downloadRes = await fetch(downloadUrl, {
+              headers: { "Authorization": `Bearer ${caToken}`, ...caRegionHeaders },
+            });
+            if (!downloadRes.ok) throw new Error(`File download failed: ${downloadRes.status}`);
+            const fileBytes = await downloadRes.arrayBuffer();
+            const fileSize = fileBytes.byteLength;
+            console.log(`[create-acc-project] Downloaded ${fileSize} bytes for "${caArchiveFileName}"`);
+
+            // Step 4: Get target project top folders (wait for project to be ready — poll up to 60s)
+            let targetRootFolderId: string | null = null;
+            const caHubId = `b.${caCleanAccountId}`;
+            for (let attempt = 0; attempt < 12; attempt++) {
+              await new Promise(r => setTimeout(r, 5000));
+              const tfRes = await fetch(
+                `https://developer.api.autodesk.com/project/v1/hubs/${caHubId}/projects/${caFullNewProjectId}/topFolders`,
+                { headers: { "Authorization": `Bearer ${caToken}`, "Accept": "application/json", ...caRegionHeaders } },
+              );
+              if (tfRes.ok) {
+                const tfData = await tfRes.json();
+                const pf = (tfData.data || []).find((f: any) => {
+                  const n = (f.attributes?.name || "").toLowerCase();
+                  return n.includes("project file") || n.includes("projektfiler");
+                }) || tfData.data?.[0];
+                if (pf) { targetRootFolderId = pf.id; break; }
+              }
+            }
+            if (!targetRootFolderId) throw new Error("Target project folder not available after 60s");
+
+            // Step 5: Create storage location in new project
+            const storageBody = {
+              jsonapi: { version: "1.0" },
+              data: {
+                type: "objects",
+                attributes: { name: caArchiveFileName || "model.rvt" },
+                relationships: { target: { data: { type: "folders", id: targetRootFolderId } } },
+              },
+            };
+            const createStorageRes = await fetch(
+              `https://developer.api.autodesk.com/data/v1/projects/${caFullNewProjectId}/storage`,
+              {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${caToken}`, "Content-Type": "application/vnd.api+json", "Accept": "application/vnd.api+json", ...caRegionHeaders },
+                body: JSON.stringify(storageBody),
+              },
+            );
+            if (!createStorageRes.ok) throw new Error(`Storage creation failed: ${createStorageRes.status} ${await createStorageRes.text()}`);
+            const storageData = await createStorageRes.json();
+            const newStorageUrn = storageData.data?.id;
+            const newObjectKey = newStorageUrn?.replace("urn:adsk.objects:os.object:", "");
+            const [newBucketKey, ...newObjectParts] = (newObjectKey || "").split("/");
+            const newObjectName = newObjectParts.join("/");
+
+            // Step 6: Upload bytes to new storage
+            const uploadUrl = `https://developer.api.autodesk.com/oss/v2/buckets/${encodeURIComponent(newBucketKey)}/objects/${encodeURIComponent(newObjectName)}`;
+            const uploadRes = await fetch(uploadUrl, {
+              method: "PUT",
+              headers: { "Authorization": `Bearer ${caToken}`, "Content-Type": "application/octet-stream", ...caRegionHeaders },
+              body: fileBytes,
+            });
+            if (!uploadRes.ok) throw new Error(`File upload failed: ${uploadRes.status}`);
+            console.log(`[create-acc-project] Uploaded ${fileSize} bytes to new project`);
+
+            // Step 7: Create item in target folder
+            const createItemBody = {
+              jsonapi: { version: "1.0" },
+              data: {
+                type: "items",
+                attributes: {
+                  displayName: caArchiveFileName || "model.rvt",
+                  extension: { type: "items:autodesk.bim360:File", version: "1.0" },
+                },
+                relationships: {
+                  tip: { data: { type: "versions", id: "1" } },
+                  parent: { data: { type: "folders", id: targetRootFolderId } },
+                },
+              },
+              included: [{
+                type: "versions",
+                id: "1",
+                attributes: {
+                  name: caArchiveFileName || "model.rvt",
+                  extension: { type: "versions:autodesk.bim360:File", version: "1.0" },
+                },
+                relationships: { storage: { data: { type: "objects", id: newStorageUrn } } },
+              }],
+            };
+            const createItemRes = await fetch(
+              `https://developer.api.autodesk.com/data/v1/projects/${caFullNewProjectId}/items`,
+              {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${caToken}`, "Content-Type": "application/vnd.api+json", "Accept": "application/vnd.api+json", ...caRegionHeaders },
+                body: JSON.stringify(createItemBody),
+              },
+            );
+            if (!createItemRes.ok) throw new Error(`Create item failed: ${createItemRes.status} ${await createItemRes.text()}`);
+            const newItemData = await createItemRes.json();
+            const newItemId = newItemData.data?.id;
+            const newVersionUrn = newItemData.included?.[0]?.id || newItemData.data?.relationships?.tip?.data?.id;
+
+            console.log(`[create-acc-project] File copied. New item: ${newItemId}`);
+
+            // Mark ready
+            await supabase.from("renovation_projects").update({
+              acc_setup_status: "ready",
+              acc_setup_error: null,
+              archive_folder_id: targetRootFolderId,
+            }).eq("id", renovationProjectId);
+
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`[create-acc-project] File copy failed: ${msg}`);
+            await supabase.from("renovation_projects").update({
+              acc_setup_status: "error",
+              acc_setup_error: msg.slice(0, 500),
+            }).eq("id", renovationProjectId);
+          }
+        }
+
+        // Fire-and-forget
+        copyFileToProject().catch(() => {});
+
+        return new Response(
+          JSON.stringify({ success: true, accProjectId: newProjectId, status: "creating", message: "ACC project created. Copying file in background…" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      // ---- SYNC BACK TO ARCHIVE ----
+      case "sync-back-to-archive": {
+        const { renovationProjectId: sbRenovProjectId } = body;
+        if (!sbRenovProjectId) {
+          return new Response(
+            JSON.stringify({ success: false, error: "renovationProjectId is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const { data: renovRow } = await supabase
+          .from("renovation_projects")
+          .select("*")
+          .eq("id", sbRenovProjectId)
+          .single();
+
+        if (!renovRow) {
+          return new Response(JSON.stringify({ success: false, error: "Renovation project not found" }),
+            { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const sbAccProjectId = renovRow.acc_renovation_project_id;
+        const sbArchiveProjectId = renovRow.archive_project_id;
+        const sbArchiveFileItemId = renovRow.archive_file_item_id;
+        const sbFileName = renovRow.archive_file_name || "model.rvt";
+        const sbBuildingFmGuid = renovRow.building_fm_guid;
+
+        if (!sbAccProjectId || !sbArchiveProjectId || !sbArchiveFileItemId) {
+          return new Response(JSON.stringify({ success: false, error: "Project not fully set up (missing acc_renovation_project_id, archive_project_id, or archive_file_item_id)" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const { token: sbToken } = await getAccToken(auth.userId, supabase);
+        const sbRegionHeaders = getRegionHeader(region);
+        const sbFullRenovProjectId = `b.${sbAccProjectId.replace(/^b\./, "")}`;
+        const sbFullArchiveProjectId = `b.${sbArchiveProjectId.replace(/^b\./, "")}`;
+
+        async function syncBack() {
+          try {
+            // Step 1: Get latest version from renovation project (find the item first)
+            const sbRenovFoldersRes = await fetch(
+              `https://developer.api.autodesk.com/project/v1/hubs/b.${(renovRow.acc_account_id || "").replace(/^b\./, "")}/projects/${sbFullRenovProjectId}/topFolders`,
+              { headers: { "Authorization": `Bearer ${sbToken}`, "Accept": "application/json", ...sbRegionHeaders } },
+            );
+            let sbRenovItemId: string | null = null;
+            if (sbRenovFoldersRes.ok) {
+              const sbFoldersData = await sbRenovFoldersRes.json();
+              const sbProjFolder = (sbFoldersData.data || []).find((f: any) => {
+                const n = (f.attributes?.name || "").toLowerCase();
+                return n.includes("project file") || n.includes("projektfiler");
+              }) || sbFoldersData.data?.[0];
+              if (sbProjFolder) {
+                const contRes = await fetch(
+                  `https://developer.api.autodesk.com/data/v1/projects/${sbFullRenovProjectId}/folders/${sbProjFolder.id}/contents`,
+                  { headers: { "Authorization": `Bearer ${sbToken}`, "Accept": "application/json", ...sbRegionHeaders } },
+                );
+                if (contRes.ok) {
+                  const contData = await contRes.json();
+                  const rvtItem = (contData.data || []).find((i: any) =>
+                    (i.attributes?.displayName || "").toLowerCase().endsWith(".rvt") || i.type === "items"
+                  );
+                  sbRenovItemId = rvtItem?.id || null;
+                }
+              }
+            }
+
+            // Step 2: Get tip version storage URN from renovation item
+            if (!sbRenovItemId) throw new Error("Could not find model file in renovation project");
+            const sbVersionsRes = await fetch(
+              `https://developer.api.autodesk.com/data/v1/projects/${sbFullRenovProjectId}/items/${encodeURIComponent(sbRenovItemId)}/versions`,
+              { headers: { "Authorization": `Bearer ${sbToken}`, "Accept": "application/json", ...sbRegionHeaders } },
+            );
+            if (!sbVersionsRes.ok) throw new Error(`Versions fetch failed: ${sbVersionsRes.status}`);
+            const sbVersionsData = await sbVersionsRes.json();
+            const sbTipVersion = sbVersionsData.data?.[0];
+            if (!sbTipVersion) throw new Error("No versions in renovation project");
+
+            const sbStorageRef = sbTipVersion.relationships?.storage?.data;
+            if (!sbStorageRef) throw new Error("No storage reference on renovation model version");
+            const sbStorageUrn = sbStorageRef.id;
+            const [sbBucketKey, ...sbObjParts] = sbStorageUrn.replace("urn:adsk.objects:os.object:", "").split("/");
+            const sbObjectName = sbObjParts.join("/");
+
+            // Step 3: Download bytes
+            const sbDownloadRes = await fetch(
+              `https://developer.api.autodesk.com/oss/v2/buckets/${encodeURIComponent(sbBucketKey)}/objects/${encodeURIComponent(sbObjectName)}`,
+              { headers: { "Authorization": `Bearer ${sbToken}`, ...sbRegionHeaders } },
+            );
+            if (!sbDownloadRes.ok) throw new Error(`Download failed: ${sbDownloadRes.status}`);
+            const sbBytes = await sbDownloadRes.arrayBuffer();
+            console.log(`[sync-back-to-archive] Downloaded ${sbBytes.byteLength} bytes from renovation project`);
+
+            // Step 4: Create storage in archive project
+            const sbNewStorageRes = await fetch(
+              `https://developer.api.autodesk.com/data/v1/projects/${sbFullArchiveProjectId}/storage`,
+              {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${sbToken}`, "Content-Type": "application/vnd.api+json", "Accept": "application/vnd.api+json", ...sbRegionHeaders },
+                body: JSON.stringify({
+                  jsonapi: { version: "1.0" },
+                  data: {
+                    type: "objects",
+                    attributes: { name: sbFileName },
+                    relationships: { target: { data: { type: "items", id: sbArchiveFileItemId } } },
+                  },
+                }),
+              },
+            );
+            if (!sbNewStorageRes.ok) throw new Error(`Archive storage creation failed: ${sbNewStorageRes.status}`);
+            const sbNewStorageData = await sbNewStorageRes.json();
+            const sbNewStorageUrn = sbNewStorageData.data?.id;
+            const [sbNewBucket, ...sbNewObjParts] = (sbNewStorageUrn || "").replace("urn:adsk.objects:os.object:", "").split("/");
+            const sbNewObjectName = sbNewObjParts.join("/");
+
+            // Step 5: Upload to archive storage
+            const sbUploadRes = await fetch(
+              `https://developer.api.autodesk.com/oss/v2/buckets/${encodeURIComponent(sbNewBucket)}/objects/${encodeURIComponent(sbNewObjectName)}`,
+              {
+                method: "PUT",
+                headers: { "Authorization": `Bearer ${sbToken}`, "Content-Type": "application/octet-stream", ...sbRegionHeaders },
+                body: sbBytes,
+              },
+            );
+            if (!sbUploadRes.ok) throw new Error(`Upload to archive failed: ${sbUploadRes.status}`);
+
+            // Step 6: Create new version on the archive item
+            const sbNewVersionBody = {
+              jsonapi: { version: "1.0" },
+              data: {
+                type: "versions",
+                attributes: {
+                  name: sbFileName,
+                  extension: { type: "versions:autodesk.bim360:File", version: "1.0" },
+                },
+                relationships: {
+                  item: { data: { type: "items", id: sbArchiveFileItemId } },
+                  storage: { data: { type: "objects", id: sbNewStorageUrn } },
+                },
+              },
+            };
+            const sbCreateVersionRes = await fetch(
+              `https://developer.api.autodesk.com/data/v1/projects/${sbFullArchiveProjectId}/versions`,
+              {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${sbToken}`, "Content-Type": "application/vnd.api+json", "Accept": "application/vnd.api+json", ...sbRegionHeaders },
+                body: JSON.stringify(sbNewVersionBody),
+              },
+            );
+            if (!sbCreateVersionRes.ok) {
+              const errText = await sbCreateVersionRes.text();
+              throw new Error(`Create archive version failed: ${sbCreateVersionRes.status} ${errText.slice(0, 200)}`);
+            }
+            console.log(`[sync-back-to-archive] New version created in archive project`);
+
+            // Step 7: Mark project completed
+            await supabase.from("renovation_projects").update({
+              status: "completed",
+              completed_at: new Date().toISOString(),
+            }).eq("id", sbRenovProjectId);
+
+            // Step 8: Trigger BIM sync from archive (fire-and-forget)
+            const cacheRes = await supabase.from("geminus_plus_endpoint_cache").select("value").eq("key", "acc_project_id").maybeSingle();
+            if (cacheRes.data?.value) {
+              fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/acc-sync`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
+                body: JSON.stringify({ action: "sync-forma-building", projectId: cacheRes.data.value, buildingFmGuid: sbBuildingFmGuid }),
+              }).catch(() => {});
+            }
+
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`[sync-back-to-archive] Failed: ${msg}`);
+            await supabase.from("renovation_projects").update({
+              acc_setup_status: "error",
+              acc_setup_error: `Sync-back failed: ${msg.slice(0, 500)}`,
+            }).eq("id", sbRenovProjectId);
+          }
+        }
+
+        // Fire-and-forget
+        syncBack().catch(() => {});
+
+        return new Response(
+          JSON.stringify({ success: true, message: "Syncing model back to archive in background…" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      case "complete-renovation-project": {
+        const { renovationProjectId, buildingFmGuid: renovBuildingFmGuid } = body;
+        if (!renovationProjectId) {
+          return new Response(
+            JSON.stringify({ success: false, error: "renovationProjectId is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const { error: updateErr } = await supabase
+          .from("renovation_projects")
+          .update({ status: "completed", completed_at: new Date().toISOString() })
+          .eq("id", renovationProjectId);
+
+        if (updateErr) {
+          return new Response(
+            JSON.stringify({ success: false, error: updateErr.message }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        // Look up master ACC project from endpoint cache
+        const { data: cache } = await supabase
+          .from("geminus_plus_endpoint_cache")
+          .select("value")
+          .eq("key", "acc_project_id")
+          .maybeSingle();
+
+        // Fire-and-forget re-sync from master to avoid edge function timeout
+        if (cache?.value) {
+          fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/acc-sync`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+            },
+            body: JSON.stringify({
+              action: "sync-forma-building",
+              projectId: cache.value,
+              buildingFmGuid: renovBuildingFmGuid,
+            }),
+          }).catch(() => {});
+        }
+
+        console.log(`[complete-renovation-project] Completed project ${renovationProjectId}, sync triggered: ${!!cache?.value}`);
+        return new Response(
+          JSON.stringify({ success: true, syncTriggered: !!cache?.value }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }

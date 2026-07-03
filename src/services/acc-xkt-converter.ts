@@ -323,7 +323,9 @@ export class AccXktConverter {
       buildingFmGuid?: string;
       folderId?: string;
       fileName?: string;
+      modelName?: string;
       region?: string;
+      isMasterModel?: boolean;
     } = {}
   ): Promise<TranslationStatus> {
     try {
@@ -334,7 +336,9 @@ export class AccXktConverter {
           buildingFmGuid: options.buildingFmGuid,
           folderId: options.folderId,
           fileName: options.fileName,
+          modelName: options.modelName,
           region: options.region,
+          isMasterModel: options.isMasterModel !== false,
         },
       });
 
@@ -346,7 +350,7 @@ export class AccXktConverter {
 
       return {
         status: data?.status === 'success' ? 'success' : 'pending',
-        message: data?.message || 'Översättning startad',
+        message: data?.message || 'Translation started',
       };
     } catch (e: any) {
       return { status: 'failed', error: e.message };
@@ -369,9 +373,9 @@ export class AccXktConverter {
         progress: data?.progress,
         derivativeCount: data?.derivativeCount,
         message: data?.status === 'success'
-          ? `Översättning klar (${data?.derivativeCount || 0} derivatives)`
+          ? `Translation complete (${data?.derivativeCount || 0} derivatives)`
           : data?.status === 'inprogress'
-            ? `Översätter... ${data?.progress || ''}`
+            ? `Translating... ${data?.progress || ''}`
             : undefined,
       };
     } catch (e: any) {
@@ -442,27 +446,27 @@ export class AccXktConverter {
 
     try {
       // 1. Fetch the derivative binary from the signed storage URL
-      log('Laddar ner derivat från storage...');
+      log('Downloading derivative from storage...');
       const response = await fetch(downloadUrl);
       if (!response.ok) {
         throw new Error(`Failed to fetch derivative: ${response.status}`);
       }
       const glbData = await response.arrayBuffer();
-      log(`Nedladdat: ${(glbData.byteLength / 1024 / 1024).toFixed(2)} MB`);
+      log(`Downloaded: ${(glbData.byteLength / 1024 / 1024).toFixed(2)} MB`);
 
       // Detect format of downloaded data
       const format = detectFormat(glbData);
-      log(`Detekterat format: ${format}`);
+      log(`Detected format: ${format}`);
 
       // For IFC and GLB/OBJ: convert to XKT for optimized viewer loading
       if (format === 'ifc' || format === 'glb' || format === 'obj') {
-        log(`Konverterar ${format.toUpperCase()} till XKT...`);
+        log(`Converting ${format.toUpperCase()} to XKT...`);
         const xktData = await convertGlbToXkt(glbData, log);
         
         const storageFileName = `${modelId}.xkt`;
         const storagePath = `${buildingFmGuid}/${storageFileName}`;
         
-        log(`Sparar XKT-fil (${(xktData.byteLength / 1024 / 1024).toFixed(2)} MB)...`);
+        log(`Saving XKT file (${(xktData.byteLength / 1024 / 1024).toFixed(2)} MB)...`);
         
         const blob = new Blob([xktData], { type: 'application/octet-stream' });
         const { error: uploadError } = await supabase.storage
@@ -495,11 +499,11 @@ export class AccXktConverter {
           });
         
         if (dbError) {
-          log(`DB-fel: ${dbError.message}`);
+          log(`DB error: ${dbError.message}`);
           return { success: false, error: `DB error: ${dbError.message}` };
         }
 
-        log(`XKT-modell sparad! Viewern laddar den direkt.`);
+        log(`XKT model saved! The viewer will load it directly.`);
         return { success: true };
       }
 
@@ -508,7 +512,7 @@ export class AccXktConverter {
       const storageFileName = `${modelId}.${fileExt}`;
       const storagePath = `${buildingFmGuid}/${storageFileName}`;
       
-      log(`Okänt format, sparar som ${fileExt}...`);
+      log(`Unknown format, saving as ${fileExt}...`);
       
       const blob = new Blob([glbData], { type: 'application/octet-stream' });
       const { error: uploadError } = await supabase.storage
@@ -540,14 +544,14 @@ export class AccXktConverter {
         });
       
       if (dbError) {
-        log(`DB-fel: ${dbError.message}`);
+        log(`DB error: ${dbError.message}`);
         return { success: false, error: `DB error: ${dbError.message}` };
       }
 
-      log(`Modell sparad som ${fileExt}.`);
+      log(`Model saved as ${fileExt}.`);
       return { success: true };
     } catch (e: any) {
-      log(`Konverteringsfel: ${e.message}`);
+      log(`Conversion error: ${e.message}`);
       console.error('convertAndStore error:', e);
       return { success: false, error: e.message };
     }
@@ -663,7 +667,7 @@ export class AccXktConverter {
     onStatusChange: (status: TranslationStatus) => void
   ): Promise<TranslationStatus> {
     try {
-      onStatusChange({ status: 'server-converting', message: 'Konverterar geometri på servern (kan ta några minuter)...', progressPercent: 10, step: 'Väntar på server...' });
+      onStatusChange({ status: 'server-converting', message: 'Converting geometry on the server (may take a few minutes)...', progressPercent: 10, step: 'Waiting for server...' });
 
       const { data, error } = await supabase.functions.invoke('acc-svf-to-gltf', {
         body: {
@@ -681,7 +685,7 @@ export class AccXktConverter {
       if (data?.pending) {
         for (let attempt = 1; attempt < SVR_MAX_RETRIES; attempt++) {
           const minutesLeft = Math.max(0, Math.ceil(((SVR_MAX_RETRIES - attempt) * SVR_INTERVAL) / 60000));
-          onStatusChange({ status: 'server-converting', message: `Väntar på översättning från Autodesk... (ca ${minutesLeft} min kvar)`, progressPercent: Math.min(5 + Math.round((attempt / SVR_MAX_RETRIES) * 25), 30), step: 'Väntar på Autodesk...' });
+          onStatusChange({ status: 'server-converting', message: `Waiting for translation from Autodesk... (approx. ${minutesLeft} min remaining)`, progressPercent: Math.min(5 + Math.round((attempt / SVR_MAX_RETRIES) * 25), 30), step: 'Waiting for Autodesk...' });
           await new Promise(r => setTimeout(r, 10000));
           const retry = await supabase.functions.invoke('acc-svf-to-gltf', {
             body: { versionUrn, buildingFmGuid: options.buildingFmGuid, fileName: options.fileName },
@@ -693,7 +697,7 @@ export class AccXktConverter {
           }
         }
         if (data?.pending) {
-          const failStatus: TranslationStatus = { status: 'failed', error: 'Översättningen tog för lång tid. Försök igen om en stund.' };
+          const failStatus: TranslationStatus = { status: 'failed', error: 'The translation took too long. Please try again shortly.' };
           onStatusChange(failStatus);
           return failStatus;
         }
@@ -701,22 +705,22 @@ export class AccXktConverter {
 
       if (data?.success && data.downloadUrl && options.buildingFmGuid) {
         // Server gave us a GLB/OBJ - save directly (no XKT conversion)
-        onStatusChange({ status: 'converting', message: 'Sparar 3D-modell...', progressPercent: 35, step: 'Sparar modell...' });
+        onStatusChange({ status: 'converting', message: 'Saving 3D model...', progressPercent: 35, step: 'Saving model...' });
         const safeModelId = versionUrn.replace(/[^a-zA-Z0-9-_]/g, '_');
         const convertResult = await this.convertAndStore(
           data.downloadUrl,
           options.buildingFmGuid,
           safeModelId,
           options.fileName,
-          (msg) => onStatusChange({ status: 'converting', message: msg, progressPercent: 40, step: 'Konverterar IFC-geometri...' })
+          (msg) => onStatusChange({ status: 'converting', message: msg, progressPercent: 40, step: 'Converting IFC geometry...' })
         );
 
         if (convertResult.success) {
-          const finalStatus: TranslationStatus = { status: 'complete', message: '3D-modell sparad!', progressPercent: 100, step: 'Klar!' };
+          const finalStatus: TranslationStatus = { status: 'complete', message: '3D model saved!', progressPercent: 100, step: 'Done!' };
           onStatusChange(finalStatus);
           return finalStatus;
         }
-        const failStatus: TranslationStatus = { status: 'failed', error: convertResult.error || 'Modellsparning misslyckades' };
+        const failStatus: TranslationStatus = { status: 'failed', error: convertResult.error || 'Model save failed' };
         onStatusChange(failStatus);
         return failStatus;
       }
@@ -724,17 +728,17 @@ export class AccXktConverter {
       if (data?.formatLimitation) {
         const failStatus: TranslationStatus = {
           status: 'failed',
-          error: data.error || 'Formatet stöds inte för 3D-konvertering.',
+          error: data.error || 'The format is not supported for 3D conversion.',
         };
         onStatusChange(failStatus);
         return failStatus;
       }
 
-      const failStatus: TranslationStatus = { status: 'failed', error: data?.error || 'Serverkonvertering misslyckades' };
+      const failStatus: TranslationStatus = { status: 'failed', error: data?.error || 'Server conversion failed' };
       onStatusChange(failStatus);
       return failStatus;
     } catch (e: any) {
-      const failStatus: TranslationStatus = { status: 'failed', error: `Serverkonvertering: ${e.message}` };
+      const failStatus: TranslationStatus = { status: 'failed', error: `Server conversion: ${e.message}` };
       onStatusChange(failStatus);
       return failStatus;
     }
@@ -764,7 +768,7 @@ export class AccXktConverter {
       if (elapsed > MAX_WAIT_MS) {
         return {
           status: 'failed',
-          error: 'Översättningen tar längre tid än väntat (>25 min). Jobbet fortsätter i Autodesk – försök igen om en stund.',
+          error: 'The translation is taking longer than expected (>25 min). The job continues in Autodesk — please try again shortly.',
         };
       }
 
@@ -772,7 +776,7 @@ export class AccXktConverter {
       const result = await this.checkTranslation(versionUrn);
 
       if (result.status === 'success') {
-        onStatusChange({ status: 'success', message: `Översättning klar! Laddar ner geometri...` });
+        onStatusChange({ status: 'success', message: `Translation complete! Downloading geometry...` });
         return result;
       }
 
@@ -784,9 +788,9 @@ export class AccXktConverter {
       const elapsedPct = Math.min(5 + Math.round(((Date.now() - startTime) / MAX_WAIT_MS) * 15), 20);
       onStatusChange({
         status: 'pending',
-        message: `Väntar på översättning från Autodesk... ${result.progress || ''} (ca ${minutesLeft} min kvar)`,
+        message: `Waiting for translation from Autodesk... ${result.progress || ''} (approx. ${minutesLeft} min remaining)`,
         progressPercent: elapsedPct,
-        step: 'Väntar på Autodesk...',
+        step: 'Waiting for Autodesk...',
       });
 
       await new Promise(r => setTimeout(r, POLL_INTERVAL));
@@ -802,12 +806,14 @@ export class AccXktConverter {
       buildingFmGuid?: string;
       folderId?: string;
       fileName?: string;
+      modelName?: string;
       region?: string;
+      isMasterModel?: boolean;
     },
     onStatusChange: (status: TranslationStatus) => void
   ): Promise<TranslationStatus> {
     // Step 1: Start translation (or confirm already done)
-    onStatusChange({ status: 'pending', message: 'Startar översättning...', progressPercent: 2, step: 'Startar översättning...' });
+    onStatusChange({ status: 'pending', message: 'Starting translation...', progressPercent: 2, step: 'Starting translation...' });
     const startResult = await this.startTranslation(versionUrn, options);
     
     if (startResult.status === 'failed') {
@@ -817,7 +823,7 @@ export class AccXktConverter {
 
     // Step 2: If not alreadyDone, poll check-translation until success (up to 25 min)
     if (startResult.status !== 'success') {
-      onStatusChange({ status: 'pending', message: 'Väntar på översättning från Autodesk...', progressPercent: 5, step: 'Väntar på Autodesk...' });
+      onStatusChange({ status: 'pending', message: 'Waiting for translation from Autodesk...', progressPercent: 5, step: 'Waiting for Autodesk...' });
       const translationResult = await this.waitForTranslation(versionUrn, onStatusChange);
       if (translationResult.status === 'failed') {
         onStatusChange(translationResult);
@@ -831,7 +837,7 @@ export class AccXktConverter {
     let dlResult: TranslationStatus = { status: 'pending' };
 
     for (let attempt = 0; attempt < DL_MAX_RETRIES; attempt++) {
-      onStatusChange({ status: 'downloading', message: attempt > 0 ? `Laddar ner geometri (försök ${attempt + 1})...` : 'Laddar ner geometri...', progressPercent: 22 + attempt * 2, step: 'Laddar ner IFC-fil...' });
+      onStatusChange({ status: 'downloading', message: attempt > 0 ? `Downloading geometry (attempt ${attempt + 1})...` : 'Downloading geometry...', progressPercent: 22 + attempt * 2, step: 'Downloading IFC file...' });
       dlResult = await this.downloadDerivative(versionUrn, options);
       if (dlResult.status !== 'pending') break;
       await new Promise(r => setTimeout(r, DL_INTERVAL));
@@ -840,7 +846,7 @@ export class AccXktConverter {
     if (dlResult.status === 'complete' && dlResult.downloadUrl) {
       // Direct download worked
       if (options.buildingFmGuid) {
-        onStatusChange({ status: 'converting', message: 'Sparar 3D-modell...', progressPercent: 35, step: 'Sparar modell...' });
+        onStatusChange({ status: 'converting', message: 'Saving 3D model...', progressPercent: 35, step: 'Saving model...' });
         const safeModelId = versionUrn.replace(/[^a-zA-Z0-9-_]/g, '_');
         const convertResult = await this.convertAndStore(
           dlResult.downloadUrl,
@@ -849,21 +855,21 @@ export class AccXktConverter {
           options.fileName,
           (msg) => {
             let pct = 40;
-            if (msg.includes('Nedladdat')) pct = 38;
-            else if (msg.includes('Detekterat')) pct = 42;
-            else if (msg.includes('Sparar')) pct = 70;
-            else if (msg.includes('sparad')) pct = 98;
-            onStatusChange({ status: 'converting', message: msg, progressPercent: pct, step: pct < 70 ? 'Bearbetar modell...' : 'Sparar 3D-modell...' });
+            if (msg.includes('Downloaded')) pct = 38;
+            else if (msg.includes('Detected')) pct = 42;
+            else if (msg.includes('Saving')) pct = 70;
+            else if (msg.includes('saved')) pct = 98;
+            onStatusChange({ status: 'converting', message: msg, progressPercent: pct, step: pct < 70 ? 'Processing model...' : 'Saving 3D model...' });
           }
         );
 
         if (convertResult.success) {
-          const finalStatus: TranslationStatus = { status: 'complete', message: '3D-modell sparad!', progressPercent: 100, step: 'Klar!' };
+          const finalStatus: TranslationStatus = { status: 'complete', message: '3D model saved!', progressPercent: 100, step: 'Done!' };
           onStatusChange(finalStatus);
           return finalStatus;
         } else {
           // Client-side failed, try server-side
-          onStatusChange({ status: 'server-converting', message: 'Klientlagring misslyckades, testar serverkonvertering...' });
+          onStatusChange({ status: 'server-converting', message: 'Client save failed, trying server-side conversion...' });
           return this.tryServerConversion(versionUrn, options, onStatusChange);
         }
       }
@@ -874,13 +880,13 @@ export class AccXktConverter {
     // Download failed or stayed pending – try server-side conversion
     if (dlResult.status === 'pending') {
       // Translation was "success" but download still pending? Unusual, try server
-      onStatusChange({ status: 'server-converting', message: 'Konverterar geometri på servern...' });
+      onStatusChange({ status: 'server-converting', message: 'Converting geometry on the server...' });
       return this.tryServerConversion(versionUrn, options, onStatusChange);
     }
 
     if (dlResult.status === 'failed') {
       // Likely SVF2/format issue – try server conversion
-      onStatusChange({ status: 'server-converting', message: 'Konverterar geometri på servern...' });
+      onStatusChange({ status: 'server-converting', message: 'Converting geometry on the server...' });
       return this.tryServerConversion(versionUrn, options, onStatusChange);
     }
 

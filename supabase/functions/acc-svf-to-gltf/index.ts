@@ -540,9 +540,9 @@ serve(async (req: Request) => {
       return new Response(
         JSON.stringify({
           success: false,
-          error: "Kunde inte konvertera modellen till 3D-format. " +
-                 "Varken IFC- eller SVF-export lyckades via Autodesk API. " +
-                 "Hierarkidata (byggnader, våningar, rum) synkas via BIM-synk.",
+          error: "Could not convert the model to 3D format. " +
+                 "Neither IFC nor SVF export succeeded via the Autodesk API. " +
+                 "Hierarchy data (buildings, floors, rooms) is synced via BIM sync.",
           logs,
           formatLimitation: true,
         }),
@@ -589,7 +589,7 @@ serve(async (req: Request) => {
         fileSize: glbData.byteLength,
         format: fileExt,
         logs,
-        message: `Modell exporterad som ${fileExt.toUpperCase()} (${(glbData.byteLength / 1024 / 1024).toFixed(2)} MB)`,
+        message: `Model exported as ${fileExt.toUpperCase()} (${(glbData.byteLength / 1024 / 1024).toFixed(2)} MB)`,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
