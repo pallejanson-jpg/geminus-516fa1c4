@@ -73,7 +73,7 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
   useEffect(() => {
     const loadBuilding = async () => {
       if (!buildingFmGuid) {
-        setError('Ingen byggnad angiven');
+        setError('No building specified');
         setIsLoading(false);
         return;
       }
@@ -100,13 +100,56 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
         }
       }
 
+      // Fallback: query Supabase directly — covers timing edge cases where in-memory
+      // data hasn't hydrated yet, or where the building GUID comes from a data source
+      // not reflected in allData (e.g. building_settings table, external links).
       if (!building) {
-        if (isLoadingData) return; // allData not yet populated — effect re-runs when it is
-        console.warn('[BuildingViewerData] Building NOT found. Available buildings:',
-          allData.filter((i: any) => i.category === 'Building' || i.category === 'IfcBuilding')
+        try {
+          const { data: dbBuilding } = await supabase
+            .from('assets')
+            .select('fm_guid, name, common_name, category')
+            .eq('fm_guid', buildingFmGuid)
+            .in('category', ['Building', 'IfcBuilding'])
+            .maybeSingle();
+          if (dbBuilding) {
+            building = {
+              fmGuid: dbBuilding.fm_guid,
+              name: dbBuilding.name,
+              commonName: dbBuilding.common_name,
+              category: dbBuilding.category,
+            };
+            console.log('[BuildingViewerData] Found building via direct DB query:', building.commonName || building.name);
+          }
+        } catch (dbErr) {
+          console.warn('[BuildingViewerData] DB fallback query failed:', dbErr);
+        }
+      }
+
+      // Last resort: infer building name from its children (storeys) in allData
+      if (!building) {
+        const childStorey = allData.find(
+          (item: any) => item.buildingFmGuid === buildingFmGuid &&
+            (item.category === 'Building Storey' || item.category === 'IfcBuildingStorey')
+        );
+        if (childStorey) {
+          const attrs = childStorey.attributes || {};
+          building = {
+            fmGuid: buildingFmGuid,
+            name: attrs.buildingDesignation || attrs.buildingCommonName || `Building ${buildingFmGuid.substring(0, 8)}`,
+            commonName: attrs.buildingCommonName || null,
+            category: 'Building',
+          };
+          console.log('[BuildingViewerData] Inferred building from storey child:', building.name);
+        }
+      }
+
+      if (!building) {
+        if (isLoadingData) return; // data still loading — effect re-runs when complete
+        console.warn('[BuildingViewerData] Building not found for GUID:', buildingFmGuid,
+          'Available in allData:', allData.filter((i: any) => i.category === 'Building' || i.category === 'IfcBuilding')
             .map((i: any) => ({ fmGuid: i.fmGuid, name: i.commonName || i.name }))
         );
-        setError('Byggnaden kunde inte hittas');
+        setError('Building not found');
         setIsLoading(false);
         return;
       }
