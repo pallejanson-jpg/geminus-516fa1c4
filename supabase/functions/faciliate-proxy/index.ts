@@ -117,7 +117,7 @@ serve(async (req) => {
 
 
   try {
-    const { action, objectType, guid, filter, sort, take, skip, loadlevel, payload } = await req.json();
+    const { action, objectType, guid, filter, sort, take, skip, loadlevel } = await req.json();
 
     switch (action) {
       case "login": {
@@ -149,16 +149,6 @@ serve(async (req) => {
         if (loadlevel) params.set("loadlevel", loadlevel);
         const qs = params.toString();
         return await apiRequest("GET", `/api/v2/${objectType}/${guid}${qs ? `?${qs}` : ""}`);
-      }
-
-      case "create": {
-        if (!objectType || !payload) throw new Error("objectType and payload required for create action");
-        return await apiRequest("POST", `/api/v2/${objectType}`, payload);
-      }
-
-      case "update": {
-        if (!objectType || !guid || !payload) throw new Error("objectType, guid and payload required for update action");
-        return await apiRequest("PUT", `/api/v2/${objectType}/${guid}`, payload);
       }
 
       default:
