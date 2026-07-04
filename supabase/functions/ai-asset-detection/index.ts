@@ -11,7 +11,6 @@ const corsHeaders = {
 // Environment
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
 
 // Ivion API URL
 const IVION_API_URL = (Deno.env.get('IVION_API_URL') || '').trim().replace(/\/+$/, '');
@@ -156,7 +155,7 @@ async function cleanupStaleScanJobs(): Promise<number> {
     .from('scan_jobs')
     .update({ 
       status: 'failed', 
-      error_message: 'Automatiskt avbruten - ingen aktivitet på 30 minuter',
+      error_message: 'Automatically cancelled - no activity for 30 minutes',
       completed_at: new Date().toISOString()
     })
     .eq('status', 'running')
@@ -171,7 +170,7 @@ async function cleanupStaleScanJobs(): Promise<number> {
     .from('scan_jobs')
     .update({ 
       status: 'cancelled', 
-      error_message: 'Automatiskt avbruten - aldrig startad',
+      error_message: 'Automatically cancelled - never started',
       completed_at: new Date().toISOString()
     })
     .eq('status', 'queued')
@@ -732,24 +731,37 @@ async function analyzeImageWithAI(
     text: `Detect these objects in this 360° panorama and extract detailed properties:\n${objectDescriptions}` 
   });
   
-  // Add the panorama image to analyze
-  userContent.push({ 
-    type: "image_url", 
-    image_url: { url: `data:image/jpeg;base64,${imageBase64}` }
+  // Add the panorama image to analyze (Anthropic base64 format)
+  userContent.push({
+    type: "image",
+    source: { type: "base64", media_type: "image/jpeg", data: imageBase64 }
   });
-  
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+
+  // Build Anthropic-format content: replace any image_url entries added above for examples
+  const anthropicContent: any[] = userContent.map((item: any) => {
+    if (item.type === "image_url") {
+      // Convert data-URI example images to Anthropic format
+      const url: string = item.image_url?.url || "";
+      const b64 = url.startsWith("data:") ? url.split(",")[1] : url;
+      return { type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64 } };
+    }
+    return item;
+  });
+
+  const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+  if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json"
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        {
-          role: "system",
-          content: `You are an expert at detecting objects and equipment in indoor photographs.
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 4096,
+      system: `You are an expert at detecting objects and equipment in indoor photographs.
 The images are viewport captures from a 360° indoor scanning system, showing a regular perspective view (not equirectangular).
 You have excellent OCR capabilities and can read text on labels, stickers, and equipment.
 
@@ -759,37 +771,32 @@ For each object you find, return JSON with:
 - bounding_box: [ymin, xmin, ymax, xmax] normalized to 0-1000 scale
 - description: detailed description of what you see including any visible text
 - extracted_properties: an object with these fields (include only if you can determine them):
-  - brand: manufacturer name if visible (e.g., 'Gloria', 'Ansul', 'Presto', 'Housegard')
+  - brand: manufacturer name if visible
   - model: model number or name if visible on labels/stickers
-  - size: capacity or size (e.g., '6 kg', '2 kg', 'A3', '9L')
-  - type: specific type (e.g., 'Pulver ABC', 'CO2', 'Skum', 'Vatten')
+  - size: capacity or size
+  - type: specific type
   - color: primary color of the object
-  - mounting: how it's installed ('Väggmonterad', 'Golvstående', 'I skåp', 'Takmontering')
-  - condition: visible condition ('God', 'Sliten', 'Ny', 'Okänd')
+  - mounting: how it's installed
+  - condition: visible condition
   - text_visible: all readable text you can see on labels, stickers, or the object itself
 
-IMPORTANT: Use OCR to read ALL visible text on labels, stickers, and equipment. 
+IMPORTANT: Use OCR to read ALL visible text on labels, stickers, and equipment.
 Extract brand and model from visible text when possible.
 If a property cannot be determined with reasonable confidence, omit it.
 When example images are provided, use them to better understand what each object type looks like.
 
-Return ONLY a JSON array. If nothing found, return []. Do not include any other text or markdown.`
-        },
-        {
-          role: "user",
-          content: userContent
-        }
-      ]
+Return ONLY a JSON array. If nothing found, return []. Do not include any other text or markdown.`,
+      messages: [{ role: "user", content: anthropicContent }],
     })
   });
-  
+
   if (!response.ok) {
     const error = await response.text();
     throw new Error(`AI API error: ${response.status} - ${error.slice(0, 200)}`);
   }
-  
+
   const result = await response.json();
-  const content = result.choices?.[0]?.message?.content || '[]';
+  const content = result.content?.[0]?.text || '[]';
   
   console.log('AI raw response (first 500 chars):', content.slice(0, 500));
   console.log('AI response length:', content.length);
@@ -1159,7 +1166,7 @@ async function processBatch(params: {
       .from('scan_jobs')
       .update({ 
         status: 'failed', 
-        error_message: `Ivion-anslutning misslyckades: ${e.message}`,
+        error_message: `Ivion connection failed: ${e.message}`,
         completed_at: new Date().toISOString()
       })
       .eq('id', job.id);
@@ -1243,7 +1250,7 @@ async function processBatch(params: {
       
       // Check fail-fast: too many consecutive download failures
       if (consecutiveDownloadFailures >= MAX_CONSECUTIVE_DOWNLOAD_FAILURES) {
-        const failMessage = `Skanning avbruten: ${consecutiveDownloadFailures} bildnedladdningar misslyckades i rad. Senaste fel: ${lastDownloadError}. Kontrollera NavVis/Ivion behörigheter.`;
+        const failMessage = `Scan aborted: ${consecutiveDownloadFailures} image downloads failed in a row. Last error: ${lastDownloadError}. Check NavVis/Ivion permissions.`;
         console.error(failMessage);
         await supabase.from('scan_jobs').update({
           status: 'failed',
@@ -1263,7 +1270,7 @@ async function processBatch(params: {
       
       // Check fail-fast: too many consecutive AI failures
       if (consecutiveAiFailures >= MAX_CONSECUTIVE_AI_FAILURES) {
-        const failMessage = `Skanning avbruten: ${consecutiveAiFailures} AI-analyser misslyckades i rad. Kan vara rate-limit eller API-problem.`;
+        const failMessage = `Scan aborted: ${consecutiveAiFailures} AI analyses failed in a row. May be a rate limit or API issue.`;
         console.error(failMessage);
         await supabase.from('scan_jobs').update({
           status: 'failed',
@@ -1293,7 +1300,7 @@ async function processBatch(params: {
           console.log(`No URL found for image ${imageFilename}, skipping`);
           noUrlSkips++;
           consecutiveDownloadFailures++;
-          lastDownloadError = 'Ingen giltig URL hittades';
+          lastDownloadError = 'No valid URL found';
           totalProcessed++;
           imagesInBatch++;
           continue;
@@ -1309,13 +1316,13 @@ async function processBatch(params: {
           console.error(`Download failed for ${imageFilename}:`, dlError.message);
           downloadFailures++;
           consecutiveDownloadFailures++;
-          lastDownloadError = dlError.message?.slice(0, 100) || 'Nedladdning misslyckades';
+          lastDownloadError = dlError.message?.slice(0, 100) || 'Download failed';
           errorMessages.push(`Image ${imageFilename}: ${lastDownloadError}`);
           totalProcessed++;
           imagesInBatch++;
           
           // Update error_message in real-time
-          const statusMsg = `Nedladdningsfel: ${downloadFailures}/${totalProcessed}. Senaste: ${lastDownloadError}`;
+          const statusMsg = `Download errors: ${downloadFailures}/${totalProcessed}. Last: ${lastDownloadError}`;
           await supabase.from('scan_jobs').update({
             error_message: statusMsg,
             current_dataset: dataset.name,
@@ -2222,12 +2229,20 @@ serve(async (req) => {
           .select('fm_guid, coordinate_x, coordinate_y, coordinate_z')
           .eq('building_fm_guid', scanJob.building_fm_guid)
           .not('coordinate_x', 'is', null);
-        
+
+        // Also include pending (not yet approved) detections so rescans don't create duplicates
+        const { data: pendingAssets } = await supabase
+          .from('pending_detections')
+          .select('id, coordinate_x, coordinate_y, coordinate_z')
+          .eq('building_fm_guid', scanJob.building_fm_guid)
+          .eq('status', 'pending')
+          .not('coordinate_x', 'is', null);
+
         const DEDUP_DISTANCE_M = 2.0;
-        
+
         function isAlreadyInventoriedBatch(coords: { x: number; y: number; z: number }): boolean {
-          if (!existingAssets || existingAssets.length === 0) return false;
-          for (const asset of existingAssets) {
+          const allCoords = [...(existingAssets || []), ...(pendingAssets || [])];
+          for (const asset of allCoords) {
             if (asset.coordinate_x == null || asset.coordinate_y == null || asset.coordinate_z == null) continue;
             const dx = coords.x - asset.coordinate_x;
             const dy = coords.y - asset.coordinate_y;
@@ -2263,7 +2278,7 @@ Return ONE flat JSON array containing all detections across all images. If nothi
           },
         ];
 
-        // Add few-shot reference examples BEFORE the actual screenshots
+        // Add few-shot reference examples BEFORE the actual screenshots (Anthropic format)
         for (const tpl of tpls) {
           if (tpl.example_images && tpl.example_images.length > 0) {
             userContent.push({
@@ -2271,40 +2286,44 @@ Return ONE flat JSON array containing all detections across all images. If nothi
               text: `Reference examples for "${tpl.object_type}" (${tpl.name}) — this is what you are looking for:`,
             });
             for (const exUrl of (tpl.example_images as string[]).slice(0, 3)) {
-              userContent.push({ type: 'image_url', image_url: { url: exUrl } });
+              const b64 = exUrl.startsWith('data:') ? exUrl.split(',')[1] : exUrl;
+              userContent.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } });
             }
           }
         }
 
         userContent.push({ type: 'text', text: `--- Now analyze the ${params.screenshots.length} scan images below: ---` });
-        
-        // Add all screenshot images
+
+        // Add all screenshot images (Anthropic base64 format)
         for (let idx = 0; idx < params.screenshots.length; idx++) {
           userContent.push({ type: 'text', text: `Image ${idx + 1} of ${params.screenshots.length} (orientation ${Math.round(idx * 360 / params.screenshots.length)}°):` });
-          userContent.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${params.screenshots[idx]}` } });
+          userContent.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: params.screenshots[idx] } });
         }
-        
-        const batchResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+
+        const ANTHROPIC_API_KEY_BATCH = Deno.env.get('ANTHROPIC_API_KEY');
+        if (!ANTHROPIC_API_KEY_BATCH) throw new Error('ANTHROPIC_API_KEY not configured');
+
+        const batchResponse = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+          headers: {
+            'x-api-key': ANTHROPIC_API_KEY_BATCH,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+          },
           body: JSON.stringify({
-            model: 'google/gemini-2.5-flash',
-            messages: [
-              {
-                role: 'system',
-                content: 'You are an expert at detecting objects and equipment in indoor photographs. Return ONLY a valid JSON array. If nothing found, return []. No markdown, no other text.',
-              },
-              { role: 'user', content: userContent },
-            ],
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 4096,
+            system: 'You are an expert at detecting objects and equipment in indoor photographs. Return ONLY a valid JSON array. If nothing found, return []. No markdown, no other text.',
+            messages: [{ role: 'user', content: userContent }],
           }),
         });
-        
+
         if (!batchResponse.ok) {
           throw new Error(`Batch AI error: ${batchResponse.status}`);
         }
-        
+
         const batchResult = await batchResponse.json();
-        const batchContent = batchResult.choices?.[0]?.message?.content || '[]';
+        const batchContent = batchResult.content?.[0]?.text || '[]';
         
         // Parse detections — use depth-tracking extraction to handle AI text after the JSON array
         function extractJsonArrayFromBatch(text: string): string | null {
@@ -2334,6 +2353,19 @@ Return ONE flat JSON array containing all detections across all images. If nothi
           console.warn(`[batch] Capping ${allDetections.length} detections to ${MAX_DETECTIONS_PER_BATCH} (hallucination guard)`);
           allDetections = allDetections.slice(0, MAX_DETECTIONS_PER_BATCH);
         }
+
+        // Fix 4: Deduplicate within batch — same object_type seen from multiple rotation angles
+        // Keep best confidence per object_type, allow max 2 of the same type (e.g. two actual sprinklers)
+        const MAX_SAME_TYPE_PER_BATCH = 2;
+        const typeCount: Record<string, number> = {};
+        allDetections = allDetections
+          .sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0))
+          .filter((det: any) => {
+            const t = det.object_type;
+            typeCount[t] = (typeCount[t] || 0) + 1;
+            return typeCount[t] <= MAX_SAME_TYPE_PER_BATCH;
+          });
+        console.log(`[analyze-screenshot-batch] After rotation-dedup: ${allDetections.length} detections`);
 
         console.log(`[analyze-screenshot-batch] AI returned ${allDetections.length} detections from ${params.screenshots.length} images`);
         
@@ -2523,6 +2555,30 @@ Return ONE flat JSON array containing all detections across all images. If nothi
             console.error('Thumbnail save failed:', e);
           }
           
+          // Auto-match Geminus space from NavVis siteModelEntity
+          let autoRoomFmGuid2: string | null = null;
+          let autoLevelFmGuid2: string | null = null;
+          const sme2 = params.siteModelEntity as any;
+          if (sme2?.name && scanJob.building_fm_guid) {
+            const { data: matchedSpaces2 } = await supabase
+              .from('assets')
+              .select('fm_guid, level_fm_guid, common_name, name')
+              .eq('building_fm_guid', scanJob.building_fm_guid)
+              .in('category', ['Space', 'IfcSpace'])
+              .or(`common_name.ilike.%${sme2.name}%,name.ilike.%${sme2.name}%`)
+              .limit(5);
+            if (matchedSpaces2 && matchedSpaces2.length > 0) {
+              const smeNameLower2 = (sme2.name as string).toLowerCase().trim();
+              const exact2 = matchedSpaces2.find((s: any) =>
+                s.common_name?.toLowerCase().trim() === smeNameLower2 ||
+                s.name?.toLowerCase().trim() === smeNameLower2
+              );
+              const best2 = exact2 || matchedSpaces2[0];
+              autoRoomFmGuid2 = (best2 as any).fm_guid || null;
+              autoLevelFmGuid2 = (best2 as any).level_fm_guid || null;
+            }
+          }
+
           const { error: insertErr } = await supabase
             .from('pending_detections')
             .insert({
@@ -2542,12 +2598,12 @@ Return ONE flat JSON array containing all detections across all images. If nothi
               coordinate_z: worldCoords.z,
               thumbnail_url: thumbnailUrl,
               detection_template_id: matchingTemplate?.id || null,
-              status: 'pending',
+              ivion_site_model_entity: sme2 || null,
             });
-          
+
           if (!insertErr) savedCount++;
         }
-        
+
         if (skippedDedup > 0) {
           console.log(`[analyze-screenshot] Dedup: skipped ${skippedDedup} already-inventoried objects`);
         }
@@ -2572,6 +2628,234 @@ Return ONE flat JSON array containing all detections across all images. If nothi
           completed_at: new Date().toISOString(),
         }).eq('id', params.scanJobId);
         result = { success: true };
+        break;
+      }
+
+      case 'create-server-scan-job': {
+        // Create a scan job and return it immediately — processing done by run-server-scan
+        if (!userId) throw new Error('Authentication required');
+        if (!params.buildingFmGuid || !params.ivionSiteId || !params.templates) {
+          throw new Error('buildingFmGuid, ivionSiteId, and templates are required');
+        }
+        const csjSupabase = createClient(supabaseUrl, supabaseServiceKey);
+        const { data: csjJob, error: csjErr } = await csjSupabase
+          .from('scan_jobs')
+          .insert({
+            building_fm_guid: params.buildingFmGuid,
+            ivion_site_id: params.ivionSiteId,
+            templates: params.templates,
+            status: 'queued',
+            started_at: new Date().toISOString(),
+            created_by: userId,
+          })
+          .select()
+          .single();
+        if (csjErr || !csjJob) throw new Error(`Failed to create scan job: ${csjErr?.message}`);
+        result = csjJob;
+        break;
+      }
+
+      case 'server-side-scan': {
+        if (!userId) throw new Error('Authentication required');
+        if (!params.buildingFmGuid || !params.ivionSiteId || !params.templates) {
+          throw new Error('buildingFmGuid, ivionSiteId, and templates are required');
+        }
+
+        const ssSupabase = createClient(supabaseUrl, supabaseServiceKey);
+        const startTime = Date.now();
+        const TIMEOUT_MS = 120_000; // bail out before the 150s hard limit
+        const MAX_IMAGES = 30;
+        const resumeFromIndex: number = params.resumeFromIndex ?? 0;
+
+        // Create or reuse scan job
+        let ssScanJobId: string;
+        if (params.scanJobId) {
+          // Reuse existing job (called from client after create-server-scan-job)
+          ssScanJobId = params.scanJobId;
+          await ssSupabase.from('scan_jobs').update({ status: 'running' }).eq('id', ssScanJobId);
+        } else {
+          // Legacy: create job inline
+          const { data: ssJob, error: ssJobErr } = await ssSupabase
+            .from('scan_jobs')
+            .insert({
+              building_fm_guid: params.buildingFmGuid,
+              ivion_site_id: params.ivionSiteId,
+              templates: params.templates,
+              status: 'running',
+              started_at: new Date().toISOString(),
+              created_by: userId,
+            })
+            .select()
+            .single();
+          if (ssJobErr || !ssJob) throw new Error(`Failed to create scan job: ${ssJobErr?.message}`);
+          ssScanJobId = ssJob.id;
+        }
+
+        // 2. Load templates
+        const ssAllTemplates = await getTemplates();
+        const ssActiveTemplates = ssAllTemplates.filter(t => (params.templates as string[]).includes(t.object_type));
+
+        if (ssActiveTemplates.length === 0) {
+          await ssSupabase.from('scan_jobs').update({
+            status: 'failed',
+            error_message: 'No active templates found',
+            completed_at: new Date().toISOString(),
+          }).eq('id', ssScanJobId);
+          throw new Error('No active templates found for selected types');
+        }
+
+        // 3. Get datasets
+        let ssDatasets: IvionDataset[];
+        try {
+          ssDatasets = await getIvionDatasets(params.ivionSiteId);
+        } catch (e: any) {
+          await ssSupabase.from('scan_jobs').update({
+            status: 'failed',
+            error_message: `Ivion connection failed: ${e.message}`,
+            completed_at: new Date().toISOString(),
+          }).eq('id', ssScanJobId);
+          throw e;
+        }
+
+        if (ssDatasets.length === 0) {
+          await ssSupabase.from('scan_jobs').update({
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+            total_images: 0,
+          }).eq('id', ssScanJobId);
+          result = { success: true, scanJobId: ssScanJobId, totalSynced: 0, detections: 0 };
+          break;
+        }
+
+        // 4. Sample up to MAX_IMAGES evenly across all datasets
+        interface SampledImage { dataset: IvionDataset; image: IvionImage }
+        const sampledImages: SampledImage[] = [];
+
+        for (const ds of ssDatasets) {
+          if (sampledImages.length >= MAX_IMAGES) break;
+          let dsImages: IvionImage[];
+          try {
+            dsImages = await getDatasetImages(params.ivionSiteId, ds.name);
+          } catch {
+            continue;
+          }
+          if (dsImages.length === 0) continue;
+
+          // Evenly spaced step across this dataset
+          const remaining = MAX_IMAGES - sampledImages.length;
+          const step = Math.max(1, Math.floor(dsImages.length / Math.min(remaining, dsImages.length)));
+          for (let i = 0; i < dsImages.length && sampledImages.length < MAX_IMAGES; i += step) {
+            sampledImages.push({ dataset: ds, image: dsImages[i] });
+          }
+        }
+
+        await ssSupabase.from('scan_jobs').update({ total_images: sampledImages.length }).eq('id', ssScanJobId);
+
+        // 5. Process images with timeout guard
+        let ssProcessed = 0;
+        let ssDetections = 0;
+        let ssInterrupted = false;
+
+        for (let idx = resumeFromIndex; idx < sampledImages.length; idx++) {
+          if (Date.now() - startTime > TIMEOUT_MS) {
+            ssInterrupted = true;
+            break;
+          }
+
+          const { dataset, image } = sampledImages[idx];
+          const imageFilename = image.filePath || `${String(image.id).padStart(5, '0')}-pano.jpg`;
+
+          try {
+            const imageUrl = await getPanoramaImageUrl(params.ivionSiteId, dataset.name, imageFilename);
+            if (!imageUrl) {
+              ssProcessed++;
+              continue;
+            }
+
+            const base64 = await downloadImageAsBase64(imageUrl);
+            const detections = await analyzeImageWithAI(base64, ssActiveTemplates);
+
+            for (const det of detections) {
+              const bbox = {
+                ymin: det.bounding_box[0],
+                xmin: det.bounding_box[1],
+                ymax: det.bounding_box[2],
+                xmax: det.bounding_box[3],
+              };
+              const coords = imageToWorldCoords(bbox, image.pose?.position || { x: 0, y: 0, z: 0 });
+              const detectionId = crypto.randomUUID();
+              const template = ssActiveTemplates.find(t => t.object_type === det.object_type);
+
+              let thumbnailUrl: string | null = null;
+              try {
+                thumbnailUrl = await saveThumbnail(base64, bbox, detectionId);
+              } catch { /* non-fatal */ }
+
+              const { error: insertErr } = await ssSupabase.from('pending_detections').insert({
+                id: detectionId,
+                scan_job_id: ssScanJobId,
+                building_fm_guid: params.buildingFmGuid,
+                ivion_site_id: params.ivionSiteId,
+                ivion_dataset_name: dataset.name,
+                ivion_image_id: image.id,
+                detection_template_id: template?.id || null,
+                object_type: det.object_type,
+                confidence: det.confidence,
+                bounding_box: bbox,
+                coordinate_x: coords.x,
+                coordinate_y: coords.y,
+                coordinate_z: coords.z,
+                thumbnail_url: thumbnailUrl,
+                ai_description: det.description,
+                extracted_properties: det.extracted_properties || {},
+                status: 'pending',
+              });
+
+              if (!insertErr) ssDetections++;
+            }
+          } catch (e: any) {
+            console.error(`server-side-scan: error on image ${imageFilename}:`, e);
+          }
+
+          ssProcessed++;
+
+          // Update progress every 5 images
+          if (ssProcessed % 5 === 0) {
+            await ssSupabase.from('scan_jobs').update({
+              processed_images: resumeFromIndex + ssProcessed,
+              detections_found: ssDetections,
+            }).eq('id', ssScanJobId);
+          }
+        }
+
+        // 6. Finalize
+        if (ssInterrupted) {
+          await ssSupabase.from('scan_jobs').update({
+            processed_images: resumeFromIndex + ssProcessed,
+            detections_found: ssDetections,
+          }).eq('id', ssScanJobId);
+          result = {
+            success: true,
+            interrupted: true,
+            processedSoFar: resumeFromIndex + ssProcessed,
+            scanJobId: ssScanJobId,
+            detections: ssDetections,
+          };
+        } else {
+          await ssSupabase.from('scan_jobs').update({
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+            processed_images: resumeFromIndex + ssProcessed,
+            detections_found: ssDetections,
+          }).eq('id', ssScanJobId);
+          result = {
+            success: true,
+            interrupted: false,
+            scanJobId: ssScanJobId,
+            totalSynced: resumeFromIndex + ssProcessed,
+            detections: ssDetections,
+          };
+        }
         break;
       }
 

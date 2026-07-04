@@ -912,12 +912,12 @@ serve(async (req) => {
 
         // Fallback: RAG search in indexed documents, then use AI to answer
         console.log('[Geminus Premium] No Ilean API found, trying RAG document search fallback');
-        const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-        if (!LOVABLE_API_KEY) {
+        const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+        if (!ANTHROPIC_API_KEY) {
           return jsonResponse({
             success: true,
             data: {
-              answer: `Ilean-tjänsten för dokumentfrågor kunde inte nås för ${entityName || 'denna byggnad'}. Kontrollera att Geminus Premium Ilean är aktiverat för denna fastighet.`,
+              answer: `The Ilean document Q&A service could not be reached for ${entityName || 'this building'}. Please verify that Geminus Premium Ilean is enabled for this property.`,
               source: 'fallback-error',
             },
           });
@@ -934,23 +934,24 @@ serve(async (req) => {
 
         try {
           // Extract keywords from the question
-          const kwResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+          const kwResp = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+            headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
             body: JSON.stringify({
-              model: 'google/gemini-2.5-flash-lite',
+              model: 'claude-haiku-4-5-20251001',
+              max_tokens: 200,
+              temperature: 0,
+              system: 'Extract 3-6 search keywords from the user query. Return ONLY a JSON array of strings. Include relevant language variants.',
               messages: [
-                { role: 'system', content: 'Extract 3-6 search keywords from the user query. Return ONLY a JSON array of strings. Include Swedish and English variants.' },
                 { role: 'user', content: question },
               ],
-              max_tokens: 200, temperature: 0,
             }),
           });
 
           let keywords: string[] = [question];
           if (kwResp.ok) {
             const kwData = await kwResp.json();
-            const kwContent = kwData.choices?.[0]?.message?.content || '';
+            const kwContent = kwData.content?.[0]?.text || '';
             try {
               const parsed = JSON.parse(kwContent.match(/\[[\s\S]*\]/)?.[0] || '[]');
               if (Array.isArray(parsed) && parsed.length > 0) keywords = parsed;
@@ -981,46 +982,48 @@ serve(async (req) => {
         // Build context-aware prompt with RAG document context if available
         const hasRagContext = ragChunks.length > 0;
         const ragContextBlock = hasRagContext
-          ? `\n\nDOKUMENTKONTEXT (från indexerade dokument):\n${ragChunks.map((c, i) => `[${i + 1}] Källa: ${c.file_name || 'okänd'}\n${c.content.slice(0, 600)}`).join('\n\n')}\n\nAnvänd ovanstående dokumentkontext för att besvara frågan. Citera alltid källa (filnamn) när du refererar till information.`
+          ? `\n\nDOCUMENT CONTEXT (from indexed documents):\n${ragChunks.map((c, i) => `[${i + 1}] Source: ${c.file_name || 'unknown'}\n${c.content.slice(0, 600)}`).join('\n\n')}\n\nUse the document context above to answer the question. Always cite the source (file name) when referencing information.`
           : '';
 
-        const systemPrompt = `Du är Ilean, en AI-assistent som svarar på frågor om dokument i fastighetssystemet. Du är integrerad i Geminus digital twin-plattform.
+        const systemPrompt = `You are Ilean, an AI assistant that answers questions about documents in the facility management system. You are integrated in the Geminus digital twin platform.
 
-Aktuell kontext:
-- Entitet: ${entityName || 'Okänd'}
-- Kontextnivå: ${level === 'building' ? 'Byggnad' : level === 'floor' ? 'Våningsplan' : 'Rum/utrymme'}
+Current context:
+- Entity: ${entityName || 'Unknown'}
+- Context level: ${level === 'building' ? 'Building' : level === 'floor' ? 'Floor' : 'Room/space'}
 ${entityPk ? `- Geminus Premium PK: ${entityPk}` : ''}
-${hasRagContext ? `- Antal dokumentkällor: ${ragSources.length}` : '- Inga indexerade dokument hittades'}
+${hasRagContext ? `- Number of document sources: ${ragSources.length}` : '- No indexed documents found'}
 ${ragContextBlock}
 
 ${hasRagContext
-  ? 'Basera ditt svar på dokumentkontexten ovan. Om informationen inte räcker, säg det tydligt. Hitta INTE PÅ innehåll utöver vad dokumenten visar.'
-  : 'VIKTIGT: Inga dokument hittades. Informera användaren att inga relevanta dokument finns indexerade och föreslå att de laddar upp eller indexerar dokument via inställningarna.'}
+  ? 'Base your answer on the document context above. If the information is insufficient, say so clearly. Do NOT fabricate content beyond what the documents show.'
+  : 'IMPORTANT: No documents were found. Inform the user that no relevant documents are indexed and suggest they upload or index documents via the settings.'}
 
-Svara ALLTID på samma språk som användaren skriver.`;
+Always respond in the same language the user writes in.`;
 
         const aiMessages = [
-          { role: 'system', content: systemPrompt },
           ...(conversationHistory || []).map(m => ({ role: m.role, content: m.content })),
           { role: 'user', content: question },
         ];
 
         try {
-          const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+          const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-              'Content-Type': 'application/json',
+              'x-api-key': ANTHROPIC_API_KEY,
+              'anthropic-version': '2023-06-01',
+              'content-type': 'application/json',
             },
             body: JSON.stringify({
-              model: 'google/gemini-3-flash-preview',
+              model: 'claude-haiku-4-5-20251001',
+              max_tokens: 2048,
+              system: systemPrompt,
               messages: aiMessages,
             }),
           });
 
           if (!aiResp.ok) {
             const errText = await aiResp.text();
-            console.error('[Ilean] AI gateway error:', aiResp.status, errText);
+            console.error('[Ilean] Anthropic API error:', aiResp.status, errText);
             return jsonResponse({
               success: true,
               data: {
@@ -1031,12 +1034,12 @@ Svara ALLTID på samma språk som användaren skriver.`;
           }
 
           const aiData = await aiResp.json();
-          const answer = aiData.choices?.[0]?.message?.content || 'No response generated.';
+          const answer = aiData.content?.[0]?.text || 'No response generated.';
           return jsonResponse({
             success: true,
             data: {
               answer,
-              source: hasRagContext ? 'rag-documents' : 'lovable-ai-fallback',
+              source: hasRagContext ? 'rag-documents' : 'ai-fallback',
               sources: ragSources,
               documentCount: ragChunks.length,
             },

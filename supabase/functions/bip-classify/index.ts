@@ -22,10 +22,10 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    if (!ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
     // Verify user
@@ -110,70 +110,67 @@ serve(async (req) => {
       .filter(Boolean)
       .join("\n");
 
-    const systemPrompt = `Du är en expert på svenska byggklassificeringssystem, särskilt BIP (Byggvarubedömningen i Projekt).
-Din uppgift är att matcha ett givet tillgångsobjekt (asset) mot de mest relevanta BIP-typbeteckningarna.
+    const systemPrompt = `You are an expert on Swedish building classification systems, particularly BIP (Byggvarubedömningen i Projekt).
+Your task is to match a given asset object against the most relevant BIP type designations.
 
-Regler:
-- Returnera de 3-5 bäst matchande BIP-koderna
-- Basera matchningen på objektets namn, typ, IFC-kategori och egenskaper
-- Varje förslag ska ha en konfidensnivå (0.0-1.0)
-- Inkludera BSAB-E och AFF-kopplingar om de finns
-- Svara ALLTID via tool-anropet, aldrig som fri text`;
+Rules:
+- Return the 3-5 best matching BIP codes
+- Base the match on the object's name, type, IFC category and properties
+- Each suggestion must have a confidence level (0.0-1.0)
+- Include BSAB-E and AFF links if available
+- ALWAYS respond via the tool call, never as free text`;
 
-    const userPrompt = `Klassificera detta objekt mot BIP-typbeteckningar:
+    const userPrompt = `Classify this object against BIP type designations:
 
 ${assetDescription}
 
-Tillgängliga BIP-typbeteckningar (kod | titel | typbeteckning | BSAB-E | huvudkategori):
+Available BIP type designations (code | title | type designation | BSAB-E | main category):
 ${referenceText}`;
 
-    // Call Lovable AI Gateway with tool calling for structured output
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // Call Anthropic directly with tool use for structured output
+    const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 2048,
+        system: systemPrompt,
         messages: [
-          { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
         tools: [
           {
-            type: "function",
-            function: {
-              name: "classify_bip",
-              description: "Return ranked BIP classification suggestions for the asset",
-              parameters: {
-                type: "object",
-                properties: {
-                  suggestions: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        code: { type: "string", description: "BIP subcategory code, e.g. 'EA2'" },
-                        title: { type: "string", description: "BIP title" },
-                        usercode_syntax: { type: "string", description: "Typbeteckning syntax, e.g. 'EA2xx-i'" },
-                        bsab_e: { type: "string", description: "BSAB-E code" },
-                        aff: { type: "string", description: "AFF code if available" },
-                        confidence: { type: "number", description: "Confidence score 0.0-1.0" },
-                        reasoning: { type: "string", description: "Brief explanation for the match" },
-                      },
-                      required: ["code", "title", "confidence"],
-                      additionalProperties: false,
+            name: "classify_bip",
+            description: "Return ranked BIP classification suggestions for the asset",
+            input_schema: {
+              type: "object",
+              properties: {
+                suggestions: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      code: { type: "string", description: "BIP subcategory code, e.g. 'EA2'" },
+                      title: { type: "string", description: "BIP title" },
+                      usercode_syntax: { type: "string", description: "Typbeteckning syntax, e.g. 'EA2xx-i'" },
+                      bsab_e: { type: "string", description: "BSAB-E code" },
+                      aff: { type: "string", description: "AFF code if available" },
+                      confidence: { type: "number", description: "Confidence score 0.0-1.0" },
+                      reasoning: { type: "string", description: "Brief explanation for the match" },
                     },
+                    required: ["code", "title", "confidence"],
                   },
                 },
-                required: ["suggestions"],
-                additionalProperties: false,
               },
+              required: ["suggestions"],
             },
           },
         ],
-        tool_choice: { type: "function", function: { name: "classify_bip" } },
+        tool_choice: { type: "tool", name: "classify_bip" },
       }),
     });
 
@@ -184,25 +181,19 @@ ${referenceText}`;
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (aiResponse.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
       const errText = await aiResponse.text();
-      console.error("AI gateway error:", aiResponse.status, errText);
-      throw new Error(`AI gateway error: ${aiResponse.status}`);
+      console.error("Anthropic API error:", aiResponse.status, errText);
+      throw new Error(`Anthropic API error: ${aiResponse.status}`);
     }
 
     const aiData = await aiResponse.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+    const toolUse = aiData.content?.find((b: any) => b.type === "tool_use");
 
-    if (!toolCall) {
+    if (!toolUse) {
       throw new Error("AI did not return structured classification");
     }
 
-    const result = JSON.parse(toolCall.function.arguments);
+    const result = toolUse.input;
 
     return new Response(
       JSON.stringify({

@@ -36,10 +36,11 @@ serve(async (req) => {
 
   try {
     const { role, goals } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
+
+    if (!ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
     const roleName = roleNames[role] || role || "Professional";
@@ -47,21 +48,21 @@ serve(async (req) => {
       .map((g: string) => goalDescriptions[g] || g)
       .join(", ");
 
-    // Generate script and avatar in parallel
+    // Generate script (Anthropic) and avatar (Google Gemini image generation) in parallel
     const [scriptResult, avatarResult] = await Promise.allSettled([
       // Script generation
-      fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: [
-            { 
-              role: "system", 
-              content: `You are a friendly onboarding assistant for Geminus, a cutting-edge digital twin platform for facility management.
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 500,
+          temperature: 0.7,
+          system: `You are a friendly onboarding assistant for Geminus, a cutting-edge digital twin platform for facility management.
 
 Your task is to generate a short, warm welcome message (2-3 paragraphs) for a new user.
 
@@ -73,48 +74,43 @@ Guidelines:
 - Use encouraging language that makes them excited to explore
 - Write in English only
 - Do not use markdown formatting, just plain text
-- End with an encouraging call-to-action` 
-            },
-            { 
-              role: "user", 
+- End with an encouraging call-to-action`,
+          messages: [
+            {
+              role: "user",
               content: `Generate a personalized welcome message for a new Geminus user with the following profile:
 
 Role: ${roleName}
 Goals: ${goalsList || "exploring the platform"}
 
-Create a friendly, professional welcome that helps them feel confident getting started.` 
+Create a friendly, professional welcome that helps them feel confident getting started.`
             },
           ],
-          max_tokens: 500,
-          temperature: 0.7,
         }),
       }),
-      
-      // Avatar image generation
-      fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash-image",
-          messages: [
-            { 
-              role: "user", 
-              content: avatarPrompts[role] || avatarPrompts.other
-            }
-          ],
-          modalities: ["image", "text"]
-        }),
-      }),
+
+      // Avatar image generation — Google Gemini's image model has no Anthropic equivalent,
+      // so this calls Google's Generative Language API directly instead.
+      (async () => {
+        if (!GOOGLE_AI_API_KEY) throw new Error("GOOGLE_AI_API_KEY is not configured");
+        return fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${GOOGLE_AI_API_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: avatarPrompts[role] || avatarPrompts.other }] }],
+            }),
+          }
+        );
+      })(),
     ]);
 
     // Process script result
     let script = "";
     if (scriptResult.status === "fulfilled" && scriptResult.value.ok) {
       const scriptData = await scriptResult.value.json();
-      script = scriptData.choices?.[0]?.message?.content || "";
+      script = scriptData.content?.[0]?.text || "";
     } else {
       console.error("Script generation failed:", scriptResult.status === "rejected" ? scriptResult.reason : "Response not ok");
       // Provide fallback script
@@ -129,7 +125,11 @@ Get started by exploring the 3D viewer to navigate your building models, or chec
     let avatarImage: string | null = null;
     if (avatarResult.status === "fulfilled" && avatarResult.value.ok) {
       const avatarData = await avatarResult.value.json();
-      avatarImage = avatarData.choices?.[0]?.message?.images?.[0]?.image_url?.url || null;
+      const imgPart = avatarData.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
+      if (imgPart?.inlineData?.data) {
+        const mimeType = imgPart.inlineData.mimeType || "image/png";
+        avatarImage = `data:${mimeType};base64,${imgPart.inlineData.data}`;
+      }
     } else {
       console.error("Avatar generation failed:", avatarResult.status === "rejected" ? avatarResult.reason : "Response not ok");
       // avatarImage remains null - frontend will show fallback

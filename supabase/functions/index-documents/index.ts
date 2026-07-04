@@ -6,7 +6,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const CHUNK_SIZE = 2000;
 
 function chunkText(text: string, chunkSize = CHUNK_SIZE): string[] {
@@ -29,38 +28,37 @@ function chunkText(text: string, chunkSize = CHUNK_SIZE): string[] {
   return chunks.filter(c => c.length > 10);
 }
 
-/** Extract text from PDF using AI (multimodal) */
+/** Extract text from PDF using Claude (native PDF document support) */
 async function extractPdfTextViaAI(pdfBytes: Uint8Array, apiKey: string): Promise<string> {
   // Convert to base64
   const base64 = btoa(String.fromCharCode(...pdfBytes));
 
-  const resp = await fetch(AI_GATEWAY, {
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 8000,
+      temperature: 0,
       messages: [
         {
           role: "user",
           content: [
             {
-              type: "text",
-              text: "Extract ALL text content from this PDF document. Return only the raw text, preserving structure with line breaks. Do not add commentary or formatting.",
+              type: "document",
+              source: { type: "base64", media_type: "application/pdf", data: base64 },
             },
             {
-              type: "image_url",
-              image_url: {
-                url: `data:application/pdf;base64,${base64}`,
-              },
+              type: "text",
+              text: "Extract ALL text content from this PDF document. Return only the raw text, preserving structure with line breaks. Do not add commentary or formatting.",
             },
           ],
         },
       ],
-      max_tokens: 8000,
-      temperature: 0,
     }),
   });
 
@@ -71,7 +69,7 @@ async function extractPdfTextViaAI(pdfBytes: Uint8Array, apiKey: string): Promis
   }
 
   const result = await resp.json();
-  return result.choices?.[0]?.message?.content || "";
+  return result.content?.[0]?.text || "";
 }
 
 /** Basic PDF text extraction fallback */
@@ -108,7 +106,7 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const apiKey = Deno.env.get("LOVABLE_API_KEY")!;
+    const apiKey = Deno.env.get("ANTHROPIC_API_KEY")!;
     const firecrawlKey = Deno.env.get("FIRECRAWL_API_KEY");
 
     const supabase = createClient(supabaseUrl, serviceKey);

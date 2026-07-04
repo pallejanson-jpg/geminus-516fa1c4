@@ -27,9 +27,9 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
     const supabase = createClient(
@@ -54,7 +54,7 @@ serve(async (req) => {
     let templateContext = "";
 
     if (templates && templates.length > 0) {
-      templateContext = `Known object types in this facility (use these for context): ${templates.map((t: any) => `${t.object_type} (${t.default_category || "Övrigt"}): ${t.ai_prompt || t.description || t.name}`).join("; ")}. If the object matches one of these types, use the matching category. If it doesn't match any template, still identify it to the best of your ability.`;
+      templateContext = `Known object types in this facility (use these for context): ${templates.map((t: any) => `${t.object_type} (${t.default_category || "Other"}): ${t.ai_prompt || t.description || t.name}`).join("; ")}. If the object matches one of these types, use the matching category. If it doesn't match any template, still identify it to the best of your ability.`;
     }
 
     // Build symbol list for AI matching
@@ -62,15 +62,15 @@ serve(async (req) => {
       ? `\nAvailable annotation symbols (use these exact IDs): ${symbols.map((s: any) => `"${s.id}" = "${s.name}" (category: ${s.category})`).join("; ")}.`
       : "";
 
-    const systemPrompt = `You are an expert at identifying building equipment and assets from photos taken during facility management inspections in Sweden. ${templateContext}${symbolContext} Return ONLY valid JSON, no markdown, no explanation.`;
+    const systemPrompt = `You are an expert at identifying building equipment and assets from photos taken during facility management inspections. ${templateContext}${symbolContext} Return ONLY valid JSON, no markdown, no explanation.`;
 
     const userPrompt = `Identify the main object in this photo. Return a JSON object with exactly these fields:
 {
   "objectType": one of ["fire_extinguisher", "fire_alarm_button", "smoke_detector", "fire_hose", "electrical_panel", "door", "elevator", "staircase", "ventilation", "hvac_unit", "sprinkler", "emergency_light", "access_control", "other"],
-  "suggestedName": a short descriptive name in Swedish (e.g. "Brandsläckare 6kg ABC", "Larmknapp plan 2", "Rökdetektor optisk"),
-  "description": a brief description in Swedish of what you see, including placement, condition and any notable details (1-2 sentences),
+  "suggestedName": a short descriptive name in English (e.g. "Fire extinguisher 6kg ABC", "Alarm button floor 2", "Optical smoke detector"),
+  "description": a brief description in English of what you see, including placement, condition and any notable details (1-2 sentences),
   "confidence": a number between 0.0 and 1.0,
-  "category": one of ["Brandskydd", "El", "VVS", "Ventilation", "Dörrar", "Transporter", "Säkerhet", "Övrigt"],
+  "category": one of ["Fire Protection", "Electrical", "HVAC", "Ventilation", "Doors", "Transport", "Security", "Other"],
   "suggestedSymbolId": the UUID of the best matching annotation symbol from the available list, or null if no good match,
   "properties": {
     "manufacturer": "manufacturer/brand name or null",
@@ -84,28 +84,29 @@ serve(async (req) => {
   }
 }`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 800,
+        system: systemPrompt,
         messages: [
-          { role: "system", content: systemPrompt },
           {
             role: "user",
             content: [
               {
-                type: "image_url",
-                image_url: { url: `data:image/jpeg;base64,${imageBase64}` },
+                type: "image",
+                source: { type: "base64", media_type: "image/jpeg", data: imageBase64 },
               },
               { type: "text", text: userPrompt },
             ],
           },
         ],
-        max_tokens: 800,
       }),
     });
 
@@ -116,18 +117,12 @@ serve(async (req) => {
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Payment required, please add funds to your Lovable AI workspace." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
       const errText = await response.text();
-      throw new Error(`AI gateway error ${response.status}: ${errText}`);
+      throw new Error(`Anthropic API error ${response.status}: ${errText}`);
     }
 
     const aiData = await response.json();
-    const content = aiData.choices?.[0]?.message?.content || "";
+    const content = aiData.content?.[0]?.text || "";
 
     // Parse JSON from response
     let result: any = null;
@@ -144,7 +139,7 @@ serve(async (req) => {
           suggestedName: "",
           description: "",
           confidence: 0,
-          category: "Övrigt",
+          category: "Other",
           suggestedSymbolId: null,
           properties: {},
         }),
