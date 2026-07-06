@@ -472,17 +472,79 @@ async function upsertAssets(supabase: any, items: any[], options?: { skipGeometr
     synced_at: new Date().toISOString(),
   }));
 
-  // Upsert in chunks of 100 to avoid Postgres statement timeouts on large batches
+  // Upsert in chunks of 100 to avoid Postgres statement timeouts on large batches.
+  // Before overwriting, check whether the local row was edited (via the app UI) after
+  // its last sync — if so, only let the incoming remote value win when the remote's own
+  // timestamp is actually newer than that local edit. Otherwise we'd silently discard a
+  // concurrent local edit every time a pull runs. This is a "last write wins" comparison,
+  // not a merge or a block: whichever side changed most recently keeps its value.
+  const CONFLICT_GRACE_MS = 2000; // absorbs clock/rounding noise between updated_at and synced_at
   const UPSERT_CHUNK = 100;
+  let conflictsDetected = 0;
+
   for (let i = 0; i < assets.length; i += UPSERT_CHUNK) {
     const chunk = assets.slice(i, i + UPSERT_CHUNK);
-    const { error } = await supabase
+    const fmGuids = chunk.map((a: any) => a.fm_guid);
+
+    const { data: existingRows } = await supabase
       .from('assets')
-      .upsert(chunk, { 
-        onConflict: 'fm_guid',
-        ignoreDuplicates: false 
-      });
-    if (error) throw error;
+      .select('fm_guid, updated_at, synced_at')
+      .in('fm_guid', fmGuids);
+    const existingByGuid = new Map((existingRows || []).map((r: any) => [r.fm_guid, r]));
+
+    const safeToOverwrite: any[] = [];
+    const localWins: Array<{ fm_guid: string; source_updated_at: string | null; synced_at: string }> = [];
+
+    for (const row of chunk) {
+      const existing = existingByGuid.get(row.fm_guid);
+      // New locally-unknown row, or no bookkeeping timestamps yet — nothing to conflict with.
+      const localEditedSinceSync = !!existing?.updated_at && !!existing?.synced_at &&
+        new Date(existing.updated_at).getTime() > new Date(existing.synced_at).getTime() + CONFLICT_GRACE_MS;
+
+      if (!existing || !localEditedSinceSync) {
+        safeToOverwrite.push(row);
+        continue;
+      }
+
+      const remoteIsNewer = !!row.source_updated_at &&
+        new Date(row.source_updated_at).getTime() > new Date(existing.updated_at).getTime();
+
+      if (remoteIsNewer) {
+        safeToOverwrite.push(row);
+      } else {
+        // Local edit is newer than the remote's (or the remote has no timestamp to compare).
+        // Keep the local content, but still record that we've seen this remote version so
+        // the same conflict isn't re-flagged on every subsequent sync run.
+        conflictsDetected++;
+        console.warn(
+          `[sync-conflict] geminus-plus assets.${row.fm_guid}: local edited at ${existing.updated_at}, ` +
+          `remote at ${row.source_updated_at || 'unknown'} — keeping local value, skipping overwrite`
+        );
+        localWins.push({ fm_guid: row.fm_guid, source_updated_at: row.source_updated_at, synced_at: row.synced_at });
+      }
+    }
+
+    if (safeToOverwrite.length > 0) {
+      const { error } = await supabase
+        .from('assets')
+        .upsert(safeToOverwrite, {
+          onConflict: 'fm_guid',
+          ignoreDuplicates: false
+        });
+      if (error) throw error;
+    }
+
+    for (const conflict of localWins) {
+      const { error } = await supabase
+        .from('assets')
+        .update({ source_updated_at: conflict.source_updated_at, synced_at: conflict.synced_at })
+        .eq('fm_guid', conflict.fm_guid);
+      if (error) console.error(`[sync-conflict] bookkeeping update failed for ${conflict.fm_guid}:`, error);
+    }
+  }
+
+  if (conflictsDetected > 0) {
+    console.warn(`[sync-conflict] upsertAssets: kept local values for ${conflictsDetected} row(s) edited locally since their last sync`);
   }
 
   // Also populate geometry entity map (skip during bulk sync for performance)
