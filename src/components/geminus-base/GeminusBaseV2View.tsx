@@ -7,7 +7,10 @@ import { AppContext } from '@/context/AppContext';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, ChevronUp, ChevronDown, RefreshCw } from 'lucide-react';
+import {
+  Loader2, ChevronUp, ChevronDown, RefreshCw, ArrowLeft,
+  Square, LayoutPanelLeft, Box, SplitSquareHorizontal, Combine, View, BarChart2, Map as MapIcon,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useGeminusBaseApi, GeminusBaseNode, CLASS_LABELS, NAV_CLASS_IDS, LEAF_CLASS_IDS, dynamicClassLabels, SPOT_CLASS_IDS } from '@/hooks/useGeminusBaseApi';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -16,35 +19,61 @@ import GeminusBaseV2ViewerPanel, { GeminusBaseV2ViewerHandle } from './GeminusBa
 import GeminusBaseV2ObjectGrid from './GeminusBaseV2ObjectGrid';
 
 // ── Viewer toolbar ────────────────────────────────────────────────────────────
+// 2d-fma = FM Access vector drawing (Tessel embedded viewer).
+// All other modes render the Geminus UnifiedViewer (/viewer) embedded in an iframe.
 
-type ViewMode = '2d' | '3d' | 'split';
+type ViewMode = '2d-fma' | '2d' | 'split2d3d' | '3d' | 'split' | 'vt' | '360';
+
+const MODE_DEFS: Array<{ mode: ViewMode; label: string; Icon: React.ComponentType<{ size?: number | string; className?: string }> }> = [
+  { mode: '2d-fma', label: '2D-FMA', Icon: MapIcon },
+  { mode: '2d', label: '2D', Icon: Square },
+  { mode: 'split2d3d', label: '2D/3D', Icon: LayoutPanelLeft },
+  { mode: '3d', label: '3D', Icon: Box },
+  { mode: 'split', label: '3D/360', Icon: SplitSquareHorizontal },
+  { mode: 'vt', label: 'VT', Icon: Combine },
+  { mode: '360', label: '360°', Icon: View },
+];
 
 interface ViewerToolbarProps {
   viewMode: ViewMode;
   onViewMode: (m: ViewMode) => void;
   enabled: boolean;
+  insightsOpen: boolean;
+  onToggleInsights: () => void;
 }
 
-const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewMode, onViewMode, enabled }) => (
+const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewMode, onViewMode, enabled, insightsOpen, onToggleInsights }) => (
   <div className="flex items-center gap-1 px-3 py-1 border-b border-border bg-card shrink-0">
-    {(['2d', 'split', '3d'] as ViewMode[]).map(m => {
-      const labels: Record<ViewMode, string> = { '2d': '2D', 'split': '2D + 3D', '3d': '3D' };
-      return (
-        <button
-          key={m}
-          disabled={!enabled}
-          onClick={() => onViewMode(m)}
-          className={cn(
-            'px-3 py-0.5 text-xs rounded font-medium transition-colors',
-            viewMode === m
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed',
-          )}
-        >
-          {labels[m]}
-        </button>
-      );
-    })}
+    {MODE_DEFS.map(({ mode, label, Icon }) => (
+      <button
+        key={mode}
+        disabled={!enabled}
+        onClick={() => onViewMode(mode)}
+        className={cn(
+          'flex items-center gap-1.5 px-3 py-0.5 text-xs rounded font-medium transition-colors',
+          viewMode === mode
+            ? 'bg-primary text-primary-foreground'
+            : 'text-muted-foreground hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed',
+        )}
+      >
+        <Icon size={13} />
+        {label}
+      </button>
+    ))}
+    <div className="flex-1" />
+    <button
+      disabled={!enabled}
+      onClick={onToggleInsights}
+      className={cn(
+        'flex items-center gap-1.5 px-3 py-0.5 text-xs rounded font-medium transition-colors',
+        insightsOpen
+          ? 'bg-primary text-primary-foreground'
+          : 'text-muted-foreground hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed',
+      )}
+    >
+      <BarChart2 size={13} />
+      Insights
+    </button>
   </div>
 );
 
@@ -60,7 +89,7 @@ interface ClassTab {
 // ── Main component ─────────────────────────────────────────────────────────────
 const GeminusBaseV2View: React.FC = () => {
   const isMobile = useIsMobile();
-  const { navigatorTreeData } = useContext(AppContext);
+  const { navigatorTreeData, setActiveApp } = useContext(AppContext);
   const {
     getHierarchy, getObjectStats, getGridObjects,
   } = useGeminusBaseApi();
@@ -91,16 +120,66 @@ const GeminusBaseV2View: React.FC = () => {
   // viewerGeminusBaseGuid: Geminus Base building systemGuid (to resolve correct drawing)
   const [viewerBuildingGuid, setViewerBuildingGuid] = useState('');
   const [viewerGeminusBaseGuid, setViewerGeminusBaseGuid] = useState('');
-  const [viewer3dObject, setViewer3dObject] = useState<string>('');
 
-  // Persist last-used view mode in localStorage
-  const [viewMode, setViewModeRaw] = useState<'2d' | '3d' | 'split'>(
-    () => (localStorage.getItem('fma_viewMode') as any) || '2d'
-  );
-  const setViewMode = (m: '2d' | '3d' | 'split') => {
-    localStorage.setItem('fma_viewMode', m);
+  // Persist last-used view mode in localStorage (v2 key — the old key used
+  // '2d'/'split'/'3d' with different semantics)
+  const [viewMode, setViewModeRaw] = useState<ViewMode>(() => {
+    const stored = localStorage.getItem('fma_viewMode_v2') as ViewMode | null;
+    if (stored && MODE_DEFS.some(d => d.mode === stored)) return stored;
+    const legacy = localStorage.getItem('fma_viewMode');
+    if (legacy === '3d') return '3d';
+    if (legacy === 'split') return 'split2d3d';
+    return '2d-fma';
+  });
+
+  // The Geminus UnifiedViewer iframe stays mounted once loaded (models are heavy);
+  // mode changes are pushed via postMessage instead of remounting.
+  const [iframeMounted, setIframeMounted] = useState(viewMode !== '2d-fma');
+  const [iframeInitialMode] = useState<ViewMode>(viewMode !== '2d-fma' ? viewMode : '3d');
+  const [insightsOpen, setInsightsOpen] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const viewModeStateRef = useRef(viewMode);
+  const insightsOpenRef = useRef(insightsOpen);
+  useEffect(() => { viewModeStateRef.current = viewMode; }, [viewMode]);
+  useEffect(() => { insightsOpenRef.current = insightsOpen; }, [insightsOpen]);
+
+  const postToViewer = useCallback((msg: object) => {
+    iframeRef.current?.contentWindow?.postMessage(msg, window.location.origin);
+  }, []);
+
+  const setViewMode = (m: ViewMode) => {
+    localStorage.setItem('fma_viewMode_v2', m);
     setViewModeRaw(m);
+    if (m !== '2d-fma') {
+      if (!iframeMounted) setIframeMounted(true);
+      else postToViewer({ type: 'geminus-viewer-mode', mode: m });
+    }
   };
+
+  const handleToggleInsights = () => {
+    const open = !insightsOpen;
+    setInsightsOpen(open);
+    // Insights lives in the embedded Geminus viewer — switch away from the FMA drawing
+    if (viewMode === '2d-fma') setViewMode('3d');
+    postToViewer({ type: 'geminus-viewer-insights', open });
+  };
+
+  // Re-assert current mode + insights once the iframe SPA has booted
+  // (postMessages sent before boot are lost)
+  const handleIframeLoad = useCallback(() => {
+    setTimeout(() => {
+      const m = viewModeStateRef.current;
+      if (m !== '2d-fma') postToViewer({ type: 'geminus-viewer-mode', mode: m });
+      if (insightsOpenRef.current) postToViewer({ type: 'geminus-viewer-insights', open: true });
+    }, 1500);
+  }, [postToViewer]);
+
+  const iframeSrc = useMemo(() =>
+    viewerBuildingGuid
+      ? `/viewer?building=${viewerBuildingGuid}&embedded=true&mode=${iframeInitialMode === '2d-fma' ? '3d' : iframeInitialMode}`
+      : '',
+    [viewerBuildingGuid, iframeInitialMode]);
+
   const viewerRef = useRef<GeminusBaseV2ViewerHandle>(null);
   const pendingShowRef = useRef<{ classId: number; objectId: number } | null>(null);
 
@@ -260,11 +339,6 @@ const GeminusBaseV2View: React.FC = () => {
       }
     }
 
-    // 3D viewer URL param — pass objectId for building-level navigation
-    if (node.classId === 104 && node.systemGuid) {
-      setViewer3dObject(node.systemGuid);
-    }
-
     const classId = node.classId;
     const objectId = node.objectId;
     if (!classId || !objectId || objectId < 0) return;
@@ -388,7 +462,12 @@ const GeminusBaseV2View: React.FC = () => {
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-1.5 border-b border-border bg-card shrink-0">
+      <div className="flex items-center gap-2 px-2 py-1.5 border-b border-border bg-card shrink-0">
+        <Button variant="ghost" size="sm" className="h-6 px-2 gap-1.5" onClick={() => setActiveApp('home')}>
+          <ArrowLeft size={13} />
+          Back
+        </Button>
+        <div className="h-4 w-px bg-border" />
         <span className="text-sm font-semibold truncate">
           {selectedNode?.objectName || 'Geminus Base 2.0'}
         </span>
@@ -429,6 +508,8 @@ const GeminusBaseV2View: React.FC = () => {
               viewMode={viewMode}
               onViewMode={setViewMode}
               enabled={!!viewerBuildingGuid}
+              insightsOpen={insightsOpen}
+              onToggleInsights={handleToggleInsights}
             />
 
             {/* Grid panel */}
@@ -496,31 +577,25 @@ const GeminusBaseV2View: React.FC = () => {
               )}
             </div>
 
-            {/* Viewer */}
-            <div className="flex-1 overflow-hidden">
+            {/* Viewer — both viewers stay mounted; visibility toggles with mode */}
+            <div className="flex-1 overflow-hidden relative">
               {!viewerBuildingGuid ? (
                 <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
                   Select a building or floor to load the viewer
                 </div>
-              ) : viewMode === '2d' ? (
-                <GeminusBaseV2ViewerPanel ref={viewerRef} buildingFmGuid={viewerBuildingGuid}
-                  geminusBaseBuildingGuid={viewerGeminusBaseGuid || undefined}
-                  onObjectSelected={handleViewerSelection} onReady={handleViewerReady} className="h-full" />
-              ) : viewMode === '3d' ? (
-                <iframe src={`/viewer?building=${viewerBuildingGuid}${viewer3dObject ? `&fmGuid=${viewer3dObject}` : ''}`}
-                  className="w-full h-full border-0" title="3D Viewer" />
               ) : (
-                <div className="flex h-full">
-                  <div className="flex-1 border-r border-border overflow-hidden">
+                <>
+                  <div className={cn('absolute inset-0', viewMode === '2d-fma' ? 'block' : 'hidden')}>
                     <GeminusBaseV2ViewerPanel ref={viewerRef} buildingFmGuid={viewerBuildingGuid}
                       geminusBaseBuildingGuid={viewerGeminusBaseGuid || undefined}
                       onObjectSelected={handleViewerSelection} onReady={handleViewerReady} className="h-full" />
                   </div>
-                  <div className="flex-1 overflow-hidden">
-                    <iframe src={`/viewer?building=${viewerBuildingGuid}`}
-                      className="w-full h-full border-0" title="3D Viewer" />
-                  </div>
-                </div>
+                  {iframeMounted && iframeSrc && (
+                    <iframe ref={iframeRef} src={iframeSrc} onLoad={handleIframeLoad}
+                      className={cn('absolute inset-0 w-full h-full border-0', viewMode !== '2d-fma' ? 'block' : 'hidden')}
+                      title="Geminus Viewer" />
+                  )}
+                </>
               )}
             </div>
           </div>

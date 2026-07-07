@@ -80,6 +80,9 @@ const UnifiedViewerContent: React.FC<{
   const visualizationParam = searchParams.get('visualization') as import('@/lib/visualization-utils').VisualizationType | null;
   const insightsModeParam = searchParams.get('insightsMode') || null;
   const xrayParam = searchParams.get('xray') === 'true';
+  // Embedded mode: rendered inside an iframe (e.g. FMA 2.0) — no own header,
+  // mode/insights controlled by the parent via postMessage.
+  const embedded = searchParams.get('embedded') === 'true';
   const { allData, setViewer3dFmGuid } = useContext(AppContext);
 
   // ─── Building data (shared) ────────────────────────────────────────
@@ -352,6 +355,26 @@ const UnifiedViewerContent: React.FC<{
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [transform, setTransform] = useState<IvionBimTransform>(IDENTITY_TRANSFORM);
   const [insightsPanelOpen, setInsightsPanelOpen] = useState(!!insightsModeParam);
+
+  // ─── Embedded mode: parent window controls mode/insights via postMessage ──
+  useEffect(() => {
+    if (!embedded) return;
+    const handler = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      const d = e.data;
+      if (d?.type === 'geminus-viewer-mode') {
+        const validModes: ViewMode[] = ['2d', '3d', 'split', 'split2d3d', 'vt', '360'];
+        if (validModes.includes(d.mode)) {
+          userChangedModeRef.current = true;
+          setViewMode(d.mode);
+        }
+      } else if (d?.type === 'geminus-viewer-insights') {
+        setInsightsPanelOpen(v => (typeof d.open === 'boolean' ? d.open : !v));
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [embedded]);
 
   // Resize xeokit canvas when insights panel toggles (layout changes height)
   useEffect(() => {
@@ -793,7 +816,8 @@ const UnifiedViewerContent: React.FC<{
   // ─── Desktop Render ────────────────────────────────────────────────
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-black">
-      {/* ─── Header toolbar ─── */}
+      {/* ─── Header toolbar (hidden in embedded mode — parent renders the controls) ─── */}
+      {!embedded && (
       <div className="shrink-0 flex items-center justify-between p-2 bg-black/80 backdrop-blur-sm z-40">
         {/* Left: Back + building name */}
         <div className="flex items-center gap-3">
@@ -899,6 +923,7 @@ const UnifiedViewerContent: React.FC<{
           </Button>
         </div>
       </div>
+      )}
 
       {/* ─── Content area ─── */}
       <div ref={contentRef} className="flex-1 flex flex-col min-h-0">
