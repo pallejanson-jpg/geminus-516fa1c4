@@ -20,18 +20,44 @@ interface TokenResponse {
   expires_in: number;
 }
 
-// Cache for token and version
-let tokenCache: { token: string; expiresAt: number } | null = null;
+// Cache for token and version. The token cache is keyed on the credentials so a
+// credential change invalidates it naturally — never invalidate per-request, as a
+// fresh Keycloak password grant on every call trips brute-force/quick-login
+// protection ("invalid_grant: Invalid user credentials") under parallel load.
+let tokenCache: { token: string; expiresAt: number; credKey: string } | null = null;
+let tokenInFlight: { credKey: string; promise: Promise<string> } | null = null;
 let versionIdCache: { versionId: string; fetchedAt: number } | null = null;
+// Profile row to persist the shared token cache to (set per request when DB credentials are used)
+let tokenPersistProfileId: string | null = null;
+
+function credKeyOf(config: GeminusBaseConfig): string {
+  return [config.tokenUrl, config.clientId, config.clientSecret, config.username, config.password].join('|');
+}
 
 /**
- * Get Geminus Base token using client_credentials grant
+ * Get Geminus Base token using password or client_credentials grant.
+ * Deduplicates concurrent requests so parallel API calls share one grant.
  */
+// Per-isolate jitter: isolates refresh at slightly different times near expiry,
+// so one isolate renews and persists while the rest keep using the shared token.
+const refreshJitterMs = Math.floor(Math.random() * 120_000);
+
 async function getToken(config: GeminusBaseConfig): Promise<string> {
-  if (tokenCache && Date.now() < tokenCache.expiresAt) {
+  const credKey = credKeyOf(config);
+  if (tokenCache && tokenCache.credKey === credKey && Date.now() < tokenCache.expiresAt - refreshJitterMs) {
     return tokenCache.token;
   }
+  if (tokenInFlight && tokenInFlight.credKey === credKey) {
+    return tokenInFlight.promise;
+  }
+  const promise = fetchToken(config, credKey).finally(() => {
+    if (tokenInFlight?.credKey === credKey) tokenInFlight = null;
+  });
+  tokenInFlight = { credKey, promise };
+  return promise;
+}
 
+async function fetchToken(config: GeminusBaseConfig, credKey: string): Promise<string> {
   console.log('Geminus Base: Fetching new token from', config.tokenUrl);
 
   const params = new URLSearchParams();
@@ -66,11 +92,30 @@ async function getToken(config: GeminusBaseConfig): Promise<string> {
   }
 
   const data = await response.json() as TokenResponse;
-  
+
   tokenCache = {
     token: data.access_token,
     expiresAt: Date.now() + (data.expires_in - 60) * 1000,
+    credKey,
   };
+
+  // Persist to the api_profiles row so other edge isolates reuse this token
+  // instead of doing their own password grant (fire-and-forget).
+  if (tokenPersistProfileId) {
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+      if (supabaseUrl && serviceRoleKey) {
+        fetch(`${supabaseUrl}/rest/v1/api_profiles?id=eq.${tokenPersistProfileId}`, {
+          method: 'PATCH',
+          headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ geminus_base_token_cache: tokenCache }),
+        }).catch(e => console.log('Geminus Base: token cache persist failed:', e.message));
+      }
+    } catch (e) {
+      console.log('Geminus Base: token cache persist error:', e.message);
+    }
+  }
 
   console.log('Geminus Base: Token obtained, expires in', data.expires_in, 'seconds');
   return data.access_token;
@@ -469,7 +514,7 @@ serve(async (req) => {
       const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
       if (supabaseUrl && serviceRoleKey) {
         const profileResp = await fetch(
-          `${supabaseUrl}/rest/v1/api_profiles?is_default=eq.true&geminus_base_api_url=not.is.null&select=geminus_base_api_url,geminus_base_username,geminus_base_password&limit=1`,
+          `${supabaseUrl}/rest/v1/api_profiles?is_default=eq.true&geminus_base_api_url=not.is.null&select=id,geminus_base_api_url,geminus_base_username,geminus_base_password,geminus_base_token_cache&limit=1`,
           { headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` } }
         );
         if (profileResp.ok) {
@@ -478,6 +523,19 @@ serve(async (req) => {
             dbApiUrl = profiles[0].geminus_base_api_url || undefined;
             dbUsername = profiles[0].geminus_base_username || undefined;
             dbPassword = profiles[0].geminus_base_password || undefined;
+            tokenPersistProfileId = profiles[0].id || null;
+            // Hydrate the shared token cache from the DB. Edge isolates are
+            // ephemeral and scale out — without a shared cache every isolate
+            // does its own Keycloak password grant, and parallel grants trip
+            // Keycloak's quick-login/brute-force lock (invalid_grant).
+            const dbCache = profiles[0].geminus_base_token_cache;
+            if (
+              dbCache?.token && dbCache?.credKey &&
+              typeof dbCache.expiresAt === 'number' &&
+              (!tokenCache || tokenCache.expiresAt < dbCache.expiresAt)
+            ) {
+              tokenCache = { token: dbCache.token, expiresAt: dbCache.expiresAt, credKey: dbCache.credKey };
+            }
           }
         }
       }
@@ -494,10 +552,9 @@ serve(async (req) => {
       password: dbPassword || Deno.env.get('GEMINUS_BASE_PASSWORD'),
     };
 
-    // Invalidate token cache if credentials changed
-    if (dbApiUrl || dbUsername || dbPassword) {
-      tokenCache = null; // force re-auth with current credentials
-    }
+    // NOTE: never invalidate the token cache per-request — it is keyed on the
+    // credentials, so a credential change already forces a new grant. A fresh
+    // Keycloak password grant on every call trips brute-force protection.
 
     // save-api-config must work even when nothing is configured yet (first-time setup)
     if (!config.apiUrl && action !== 'save-api-config') {
@@ -1343,38 +1400,72 @@ serve(async (req) => {
         }
       }
 
-      // ── Discover drawing upload API capabilities ──────────────────
+      // ── Discover geometry/model/drawing import capabilities ──────────────
+      // Read-only (GET/OPTIONS) map of which HDC paths the tenant gateway exposes.
+      // Finding (2026-06-15, swg-demo.bim.cloud): the tenant gateway only ALLOWS
+      // /api/object, /api/perspective, /api/search, /api/config, /api/systeminfo.
+      // ALL geometry/model/IFC/file/import paths return nginx 403 — they are blocked
+      // at the gateway and never reach the app. Programmatic geometry import is a
+      // landlord-level operation (landlord.bim.cloud + HDC Remote Agent) not exposed
+      // here. The classifier below tags each path: 'allowed' (reaches app: 200/app-404),
+      // 'gateway-blocked' (nginx 403), or 'error'.
       case 'discover-drawing-api': {
         try {
           const results: Record<string, any> = {};
 
-          // Probe various drawing-related endpoints
-          const endpoints = [
-            { path: '/api/drawings', method: 'GET', label: 'list-drawings' },
-            { path: '/api/drawings', method: 'OPTIONS', label: 'drawings-options' },
+          const endpoints: Array<{ path: string; method?: string; label: string }> = [
+            // Known-allowed (control group)
+            { path: '/api/systeminfo/json', label: 'allowed-systeminfo' },
+            { path: '/api/config/classes/json', label: 'allowed-classes' },
+            { path: '/api/search/quick?query=a', label: 'allowed-search' },
+            { path: '/api/object', label: 'allowed-object' },
+            // Read endpoints the edge function assumes but the gateway blocks on this tenant
+            { path: '/api/drawings', label: 'read-drawings' },
+            { path: '/api/documents', label: 'read-documents' },
+            { path: '/api/floors', label: 'read-floors' },
+            // Geometry / model / IFC import candidates
+            { path: '/api/import', label: 'import' },
+            { path: '/api/import/package', label: 'import-package' },
+            { path: '/api/packages', label: 'packages' },
+            { path: '/api/ifc', label: 'ifc' },
+            { path: '/api/ifc/import', label: 'ifc-import' },
+            { path: '/api/bim', label: 'bim' },
+            { path: '/api/model', label: 'model' },
+            { path: '/api/models', label: 'models' },
+            { path: '/api/geometry', label: 'geometry' },
             { path: '/api/files', method: 'OPTIONS', label: 'files-options' },
             { path: '/api/files/upload', method: 'OPTIONS', label: 'files-upload-options' },
-            { path: '/api/config/classes/json', method: 'GET', label: 'classes' },
+            { path: '/api/upload', label: 'upload' },
+            { path: '/api/export', label: 'export' },
+            { path: '/api/sync', label: 'sync' },
+            { path: '/api/fi2', label: 'fi2' },
           ];
 
           for (const ep of endpoints) {
             try {
-              const resp = await geminusBaseFetch(config, ep.path, { method: ep.method });
+              const resp = await geminusBaseFetch(config, ep.path, { method: ep.method || 'GET' });
               const text = await resp.text();
               let data: any;
-              try { data = JSON.parse(text); } catch { data = text.substring(0, 500); }
+              try { data = JSON.parse(text); } catch { data = text.substring(0, 300); }
+              const isNginx403 = resp.status === 403 && typeof data === 'string' && data.includes('403 Forbidden');
+              const classification = isNginx403
+                ? 'gateway-blocked'
+                : (resp.status < 500 ? 'allowed' : 'error');
               results[ep.label] = {
+                path: ep.path,
+                method: ep.method || 'GET',
                 status: resp.status,
-                headers: Object.fromEntries(resp.headers.entries()),
-                data: typeof data === 'string' ? data : JSON.stringify(data).substring(0, 1000),
+                classification,
+                server: resp.headers.get('server') || undefined,
+                data: typeof data === 'string' ? data.substring(0, 200) : JSON.stringify(data).substring(0, 200),
               };
             } catch (e: any) {
-              results[ep.label] = { error: e.message };
+              results[ep.label] = { path: ep.path, classification: 'error', error: e.message };
             }
           }
 
           return new Response(
-            JSON.stringify({ success: true, results }),
+            JSON.stringify({ success: true, apiUrl: config.apiUrl, results }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         } catch (error: any) {
