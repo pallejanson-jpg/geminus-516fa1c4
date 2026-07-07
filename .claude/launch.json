@@ -4,8 +4,9 @@
     {
       "name": "geminus-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 8080
+      "runtimeArgs": ["run", "dev", "--", "--port", "$PORT"],
+      "port": 8080,
+      "autoPort": true
     }
   ]
 }

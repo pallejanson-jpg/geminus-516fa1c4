@@ -34,3 +34,6 @@ supabase/.temp/
 
 # Faciliate connector local secrets
 faciliate-connector/.env
+
+# Local MCP server scratch output
+mcp/geminus/err.txt

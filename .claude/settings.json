@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc --noEmit*)",
+      "mcp__Claude_Preview__preview_console_logs",
+      "mcp__Claude_Preview__preview_screenshot",
+      "mcp__Claude_Preview__preview_start",
+      "mcp__Claude_Preview__preview_snapshot",
+      "mcp__ccd_session_mgmt__search_session_transcripts",
+      "mcp__Claude_Preview__preview_logs",
+      "Bash(npx supabase secrets list*)",
+      "Bash(npx supabase --version*)",
+      "mcp__Claude_Preview__preview_list",
+      "Bash(npx supabase functions list*)",
+      "Bash(npx supabase functions logs*)",
+      "mcp__geminus__list_buildings",
+      "Bash(where *)"
+    ]
+  }
+}
