@@ -43,7 +43,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       /^(start|hem|home)$/i,
     ],
     action: (ctx) => { ctx.setActiveApp('home'); },
-    description: 'Öppna hem',
+    description: 'Open home',
     category: 'navigation',
   },
   {
@@ -52,7 +52,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       /^portfolio$/i,
     ],
     action: (ctx) => { ctx.setActiveApp('portfolio'); },
-    description: 'Öppna portfolio',
+    description: 'Open portfolio',
     category: 'navigation',
   },
   {
@@ -61,7 +61,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       /^navigator$/i,
     ],
     action: (ctx) => { ctx.setActiveApp('navigation'); },
-    description: 'Öppna navigator',
+    description: 'Open navigator',
     category: 'navigation',
   },
   {
@@ -70,7 +70,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       /^karta$/i,
     ],
     action: (ctx) => { ctx.setActiveApp('map'); },
-    description: 'Öppna karta',
+    description: 'Open map',
     category: 'navigation',
   },
   {
@@ -79,7 +79,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       /^insights$/i,
     ],
     action: (ctx) => { ctx.setActiveApp('insights'); },
-    description: 'Öppna insights',
+    description: 'Open insights',
     category: 'navigation',
   },
   {
@@ -88,7 +88,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       /^inventering$/i,
     ],
     action: (ctx) => { ctx.setActiveApp('inventory'); },
-    description: 'Öppna inventering',
+    description: 'Open inventory',
     category: 'navigation',
   },
   {
@@ -97,7 +97,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       /^felanmälan$/i,
     ],
     action: (ctx) => { ctx.setActiveApp('fault_report'); },
-    description: 'Öppna felanmälan',
+    description: 'Open fault report',
     category: 'navigation',
   },
 
@@ -107,7 +107,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       /^(öppna|visa)\s+(3d|tre-?d|viewer|visare|visaren|3d-?visare|3d-?visaren)$/i,
     ],
     action: (ctx) => { ctx.setActiveApp('native_viewer'); },
-    description: 'Öppna 3D-visare',
+    description: 'Open 3D viewer',
     category: '3d',
   },
   {
@@ -121,12 +121,12 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       const building = findBuilding(ctx.navigatorTreeData, searchTerm);
       if (building) {
         ctx.setViewer3dFmGuid(building.fmGuid);
-        toast.success(`Öppnar ${building.name} i 3D`);
+        toast.success(`Opening ${building.name} in 3D`);
       } else {
-        toast.error(`Hittade ingen byggnad som matchar "${searchTerm}"`);
+        toast.error(`No building found matching "${searchTerm}"`);
       }
     },
-    description: 'Visa [byggnad] i 3D',
+    description: 'Show [building] in 3D',
     category: '3d',
   },
   {
@@ -134,7 +134,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       /^(stäng|avsluta|lämna)\s+(3d|tre-?d|visaren|3d-?visare|3d-?visaren)$/i,
     ],
     action: (ctx) => { ctx.setViewer3dFmGuid(null); },
-    description: 'Stäng 3D-visare',
+    description: 'Close 3D viewer',
     category: '3d',
   },
   {
@@ -146,12 +146,12 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       const building = findBuilding(ctx.navigatorTreeData, searchTerm);
       if (building) {
         ctx.setViewer3dFmGuid(building.fmGuid);
-        toast.success(`Byter till ${building.name}`);
+        toast.success(`Switching to ${building.name}`);
       } else {
-        toast.error(`Hittade ingen byggnad: "${searchTerm}"`);
+        toast.error(`No building found: "${searchTerm}"`);
       }
     },
-    description: 'Byt byggnad till [namn]',
+    description: 'Switch building to [name]',
     category: '3d',
   },
 
@@ -185,7 +185,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       /^360$/i,
     ],
     action: (ctx) => { ctx.setViewMode('360'); },
-    description: 'Öppna 360°-vy',
+    description: 'Open 360° view',
     category: 'viewer',
   },
   {
@@ -193,7 +193,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       /^(byt till|visa|öppna)\s+(split|delad vy|delad|splitvy)$/i,
     ],
     action: (ctx) => { ctx.setViewMode('split'); },
-    description: 'Visa split-vy',
+    description: 'Show split view',
     category: 'viewer',
   },
 
@@ -205,9 +205,9 @@ const VOICE_COMMANDS: VoiceCommand[] = [
     action: (_ctx, match) => {
       const floorNumber = match[3];
       emit('VOICE_FLOOR_SELECT', { floorNumber });
-      toast.info(`Isolerar våning ${floorNumber}`);
+      toast.info(`Isolating floor ${floorNumber}`);
     },
-    description: 'Visa våning [nummer]',
+    description: 'Show floor [number]',
     category: 'viewer',
   },
 
@@ -218,10 +218,10 @@ const VOICE_COMMANDS: VoiceCommand[] = [
     ],
     action: (_ctx, match, callbacks) => {
       const roomSearch = match[3];
-      callbacks.onSearch?.(`rum ${roomSearch}`);
-      toast.info(`Söker rum ${roomSearch}`);
+      callbacks.onSearch?.(`room ${roomSearch}`);
+      toast.info(`Searching for room ${roomSearch}`);
     },
-    description: 'Visa rum [namn/nummer]',
+    description: 'Show room [name/number]',
     category: 'viewer',
   },
 
@@ -234,7 +234,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       const searchTerm = match[2];
       callbacks.onSearch?.(searchTerm);
     },
-    description: 'Sök efter [objekt]',
+    description: 'Search for [object]',
     category: 'search',
   },
 
@@ -248,7 +248,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       // Dispatch event to open issue dialog
       setTimeout(() => emit('VOICE_CREATE_ISSUE'), 500);
     },
-    description: 'Skapa ärende',
+    description: 'Create issue',
     category: 'navigation',
   },
 
@@ -259,9 +259,9 @@ const VOICE_COMMANDS: VoiceCommand[] = [
     ],
     action: () => {
       emit('VOICE_CLEAR_FILTERS');
-      toast.info('Filter rensade');
+      toast.info('Filters cleared');
     },
-    description: 'Rensa filter',
+    description: 'Clear filters',
     category: 'viewer',
   },
 
@@ -272,7 +272,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       /^gunnar$/i,
     ],
     action: (_ctx, _match, callbacks) => { callbacks.onOpenGunnar?.(); },
-    description: 'Öppna Gunnar',
+    description: 'Open Gunnar',
     category: 'assistant',
   },
   {
@@ -283,7 +283,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       const question = match[2];
       callbacks.onAskGunnar?.(question);
     },
-    description: 'Fråga Gunnar [fråga]',
+    description: 'Ask Gunnar [question]',
     category: 'assistant',
   },
 
@@ -293,7 +293,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       /^(hjälp|help|vilka kommandon|kommandon|vad kan jag säga).*$/i,
     ],
     action: () => {},
-    description: 'Visa hjälp',
+    description: 'Show help',
     category: 'help',
   },
 ];
@@ -317,7 +317,7 @@ export function useVoiceCommands(callbacks: VoiceCommandCallbacks = {}) {
           const match = normalizedTranscript.match(pattern);
           if (match) {
             if (command.category === 'help') {
-              return { matched: true, command, feedback: 'Visar hjälp', isHelpCommand: true };
+              return { matched: true, command, feedback: 'Showing help', isHelpCommand: true };
             }
             command.action(appContext, match, callbacks);
             return { matched: true, command, feedback: command.description };

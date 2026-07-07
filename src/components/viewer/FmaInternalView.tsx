@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import GeminusPluginMenu from './GeminusPluginMenu';
 import { AppContext } from '@/context/AppContext';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface FmaInternalViewProps {
   url: string;
@@ -21,6 +22,7 @@ const FmaInternalView: React.FC<FmaInternalViewProps> = ({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { setActiveApp } = useContext(AppContext);
   const isMobile = useIsMobile();
+  const { t } = useLanguage();
 
   // Timeout: if iframe hasn't loaded within 15s, show fallback
   useEffect(() => {
@@ -45,7 +47,7 @@ const FmaInternalView: React.FC<FmaInternalViewProps> = ({
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
           <div className="text-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">Loading FMA+…</p>
+            <p className="text-sm text-muted-foreground">{t('Laddar FMA+…', 'Loading FMA+…')}</p>
           </div>
         </div>
       )}
@@ -55,17 +57,17 @@ const FmaInternalView: React.FC<FmaInternalViewProps> = ({
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
           <div className="text-center space-y-4 p-6 max-w-sm">
             <AlertTriangle className="h-10 w-10 text-yellow-500 mx-auto" />
-            <h3 className="text-lg font-semibold text-foreground">FMA+ kunde inte laddas</h3>
+            <h3 className="text-lg font-semibold text-foreground">{t('FMA+ kunde inte laddas', 'FMA+ could not be loaded')}</h3>
             <p className="text-sm text-muted-foreground">
-              Servern svarar inte eller blockerar inbäddning. Prova att öppna i en ny flik istället.
+              {t('Servern svarar inte eller blockerar inbäddning. Prova att öppna i en ny flik istället.', 'The server is not responding or is blocking embedding. Try opening in a new tab instead.')}
             </p>
             <div className="flex flex-col gap-2">
               <Button onClick={handleOpenExternal} className="gap-2">
                 <ExternalLink className="h-4 w-4" />
-                Öppna FMA+ i ny flik
+                {t('Öppna FMA+ i ny flik', 'Open FMA+ in new tab')}
               </Button>
               <Button variant="outline" onClick={() => setActiveApp('home')}>
-                Tillbaka
+                {t('Tillbaka', 'Back')}
               </Button>
             </div>
           </div>

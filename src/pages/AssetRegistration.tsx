@@ -16,18 +16,19 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
 import NativeXeokitViewer from '@/components/viewer/NativeXeokitViewer';
+import { useLanguage } from '@/context/LanguageContext';
 
-// Asset type options for dropdown
+// Asset type options for dropdown — labels are translated at render time via t()
 const ASSET_TYPES = [
-  { value: 'fire_extinguisher', label: 'Brandsläckare' },
-  { value: 'chair', label: 'Stol' },
-  { value: 'table', label: 'Bord' },
-  { value: 'hvac', label: 'Luftbehandlingsaggregat' },
-  { value: 'sprinkler', label: 'Sprinkler' },
-  { value: 'sensor', label: 'Sensor' },
-  { value: 'lamp', label: 'Lampa' },
-  { value: 'cabinet', label: 'Skåp' },
-  { value: 'other', label: 'Övrigt' },
+  { value: 'fire_extinguisher', labelSv: 'Brandsläckare', labelEn: 'Fire Extinguisher' },
+  { value: 'chair', labelSv: 'Stol', labelEn: 'Chair' },
+  { value: 'table', labelSv: 'Bord', labelEn: 'Table' },
+  { value: 'hvac', labelSv: 'Luftbehandlingsaggregat', labelEn: 'HVAC Unit' },
+  { value: 'sprinkler', labelSv: 'Sprinkler', labelEn: 'Sprinkler' },
+  { value: 'sensor', labelSv: 'Sensor', labelEn: 'Sensor' },
+  { value: 'lamp', labelSv: 'Lampa', labelEn: 'Lamp' },
+  { value: 'cabinet', labelSv: 'Skåp', labelEn: 'Cabinet' },
+  { value: 'other', labelSv: 'Övrigt', labelEn: 'Other' },
 ];
 
 // Object category options (from IFC)
@@ -59,14 +60,15 @@ interface AssetRegistrationFormProps {
  * Asset Registration Form - shown below the 3D viewer
  * Receives picked coordinates via callback from parent
  */
-function AssetRegistrationForm({ 
-  registrationContext, 
+function AssetRegistrationForm({
+  registrationContext,
   coordinates,
   isPickingCoordinates,
   onPickCoordinates,
-  onComplete, 
-  onCancel 
+  onComplete,
+  onCancel
 }: AssetRegistrationFormProps) {
+  const { t } = useLanguage();
   const [isLoading, setIsLoading] = useState(false);
   
   // Form fields
@@ -93,7 +95,8 @@ function AssetRegistrationForm({
 
     try {
       const newFmGuid = generateFmGuid();
-      const assetTypeLabel = ASSET_TYPES.find(t => t.value === assetType)?.label || assetType;
+      const assetTypeEntry = ASSET_TYPES.find(entry => entry.value === assetType);
+      const assetTypeLabel = assetTypeEntry ? t(assetTypeEntry.labelSv, assetTypeEntry.labelEn) : assetType;
 
       const payload = {
         fmGuid: newFmGuid,
@@ -138,7 +141,7 @@ function AssetRegistrationForm({
     <Card className="border-t rounded-t-none">
       <CardHeader className="py-3 px-4">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Register Asset</CardTitle>
+          <CardTitle className="text-base">{t('Registrera tillgång', 'Register Asset')}</CardTitle>
           <Button variant="ghost" size="icon" onClick={onCancel} className="h-8 w-8">
             <X className="h-4 w-4" />
           </Button>
@@ -152,7 +155,7 @@ function AssetRegistrationForm({
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Coordinate picker */}
           <div className="space-y-2">
-            <Label>Position in 3D view *</Label>
+            <Label>{t('Position i 3D-vy *', 'Position in 3D view *')}</Label>
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -162,7 +165,7 @@ function AssetRegistrationForm({
                 disabled={isLoading}
               >
                 <MapPin className="h-4 w-4" />
-                {isPickingCoordinates ? 'Waiting for click...' : coordinates ? 'Change position' : 'Select position'}
+                {isPickingCoordinates ? t('Väntar på klick...', 'Waiting for click...') : coordinates ? t('Ändra position', 'Change position') : t('Välj position', 'Select position')}
               </Button>
               {coordinates && (
                 <div className="flex items-center gap-1 px-3 bg-muted rounded-md text-sm">
@@ -177,15 +180,15 @@ function AssetRegistrationForm({
 
           {/* Asset type dropdown */}
           <div className="space-y-2">
-            <Label htmlFor="assetType">Asset Type</Label>
+            <Label htmlFor="assetType">{t('Tillgångstyp', 'Asset Type')}</Label>
             <Select value={assetType} onValueChange={setAssetType} disabled={isLoading}>
               <SelectTrigger>
-                <SelectValue placeholder="Select type..." />
+                <SelectValue placeholder={t('Välj typ...', 'Select type...')} />
               </SelectTrigger>
               <SelectContent>
                 {ASSET_TYPES.map((type) => (
                   <SelectItem key={type.value} value={type.value}>
-                    {type.label}
+                    {t(type.labelSv, type.labelEn)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -194,12 +197,12 @@ function AssetRegistrationForm({
 
           {/* Designation */}
           <div className="space-y-2">
-            <Label htmlFor="designation">Designation / Number *</Label>
+            <Label htmlFor="designation">{t('Beteckning / Nummer *', 'Designation / Number *')}</Label>
             <Input
               id="designation"
               value={designation}
               onChange={(e) => setDesignation(e.target.value)}
-              placeholder="e.g. FE-001, Chair-A1"
+              placeholder={t('t.ex. FE-001, Stol-A1', 'e.g. FE-001, Chair-A1')}
               required
               disabled={isLoading}
             />
@@ -207,7 +210,7 @@ function AssetRegistrationForm({
 
           {/* Object category dropdown */}
           <div className="space-y-2">
-            <Label htmlFor="objectCategory">Object Category (IFC)</Label>
+            <Label htmlFor="objectCategory">{t('Objektkategori (IFC)', 'Object Category (IFC)')}</Label>
             <Select value={objectCategory} onValueChange={setObjectCategory} disabled={isLoading}>
               <SelectTrigger>
                 <SelectValue />
@@ -224,12 +227,12 @@ function AssetRegistrationForm({
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="description">Description (optional)</Label>
+            <Label htmlFor="description">{t('Beskrivning (valfritt)', 'Description (optional)')}</Label>
             <Input
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Free-text description..."
+              placeholder={t('Fritextbeskrivning...', 'Free-text description...')}
               disabled={isLoading}
             />
           </div>
@@ -243,20 +246,20 @@ function AssetRegistrationForm({
               disabled={isLoading}
               className="flex-1"
             >
-              Cancel
+              {t('Avbryt', 'Cancel')}
             </Button>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               disabled={isLoading || !coordinates}
               className="flex-1"
             >
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Registering...
+                  {t('Registrerar...', 'Registering...')}
                 </>
               ) : (
-                'Register'
+                t('Registrera', 'Register')
               )}
             </Button>
           </div>
@@ -274,6 +277,7 @@ function AssetRegistrationForm({
 export default function AssetRegistration() {
   const { assetRegistrationContext, cancelAssetRegistration, refreshInitialData } = useContext(AppContext);
   const isMobile = useIsMobile();
+  const { t } = useLanguage();
   
   // Coordinate picking state - managed at this level and passed to viewer via props
   const [coordinates, setCoordinates] = useState<{ x: number; y: number; z: number } | null>(null);
@@ -331,7 +335,7 @@ export default function AssetRegistration() {
   if (!assetRegistrationContext) {
     return (
       <div className="h-full flex items-center justify-center">
-        <p className="text-muted-foreground">No registration context active</p>
+        <p className="text-muted-foreground">{t('Ingen registreringskontext aktiv', 'No registration context active')}</p>
       </div>
     );
   }
@@ -349,7 +353,7 @@ export default function AssetRegistration() {
         />
         {isPickingCoordinates && (
           <div className="absolute top-3 left-3 z-20 bg-primary/90 text-primary-foreground text-xs px-3 py-1.5 rounded-md shadow-md">
-            Long-press / double-click to select position
+            {t('Lång tryckning / dubbelklick för att välja position', 'Long-press / double-click to select position')}
           </div>
         )}
       </div>

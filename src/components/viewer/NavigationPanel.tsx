@@ -3,12 +3,14 @@
  * Room selectors, route calculation, edit/navigate mode toggle.
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { useLanguage } from '@/context/LanguageContext';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
-import { Navigation, Pencil, Route, X, ArrowRight } from 'lucide-react';
+import { Navigation, Pencil, Route, X, ArrowRight, Accessibility } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Select,
@@ -20,7 +22,7 @@ import {
 import {
   parseNavGraph,
   findNodeByRoom,
-  dijkstra,
+  dijkstraWithOptions,
   mergeGraphs,
   navGraphToGeoJSON,
   type NavGraph,
@@ -48,11 +50,14 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
   graph,
   onClose,
 }) => {
+  const { t } = useLanguage();
   const [fromRoom, setFromRoom] = useState<string>('');
   const [toRoom, setToRoom] = useState<string>('');
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [preferElevator, setPreferElevator] = useState(false);
+  const [roomSearch, setRoomSearch] = useState('');
 
   // Fetch rooms (Space category) from database
   const [rooms, setRooms] = useState<any[]>([]);
@@ -68,6 +73,14 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
     };
     fetchRooms();
   }, [buildingFmGuid]);
+
+  const filteredRooms = useMemo(() => {
+    if (!roomSearch.trim()) return rooms;
+    const q = roomSearch.toLowerCase();
+    return rooms.filter(r =>
+      (r.common_name || r.name || '').toLowerCase().includes(q)
+    );
+  }, [rooms, roomSearch]);
 
   // Load graph from database on mount
   useEffect(() => {
@@ -105,7 +118,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
       return;
     }
 
-    const result = dijkstra(graph, startNode.nodeId, endNode.nodeId);
+    const result = dijkstraWithOptions(graph, startNode.nodeId, endNode.nodeId, { preferElevator });
     setRoute(result);
     onRouteCalculated(result);
   }, [fromRoom, toRoom, graph, onRouteCalculated]);
@@ -165,7 +178,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Navigation className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold text-foreground">Navigation</h3>
+          <h3 className="text-sm font-semibold text-foreground">{t('Navigation', 'Navigation')}</h3>
         </div>
         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
           <X className="h-3.5 w-3.5" />
@@ -178,24 +191,24 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {isEditMode ? <Pencil className="h-3.5 w-3.5 text-muted-foreground" /> : <Route className="h-3.5 w-3.5 text-muted-foreground" />}
-          <Label className="text-xs">{isEditMode ? 'Edit graph' : 'Navigate'}</Label>
+          <Label className="text-xs">{isEditMode ? t('Redigera graf', 'Edit graph') : t('Navigera', 'Navigate')}</Label>
         </div>
         <Switch checked={isEditMode} onCheckedChange={handleEditToggle} />
       </div>
 
       {isEditMode && (
         <div className="text-[10px] text-muted-foreground bg-muted/50 rounded p-2">
-          <p><strong>📍 Node:</strong> Click to place waypoints</p>
-          <p><strong>🔗 Edge:</strong> Click two nodes to connect</p>
-          <p><strong>🏠 Room:</strong> Link node to nearest room</p>
-          <p><strong>🗑️ Delete:</strong> Click to remove</p>
-          <p className="mt-1">Nodes: {graph.nodes.size} | Edges: {graph.edges.length}</p>
+          <p><strong>📍 {t('Nod', 'Node')}:</strong> {t('Klicka för att placera vägpunkter', 'Click to place waypoints')}</p>
+          <p><strong>🔗 {t('Kant', 'Edge')}:</strong> {t('Klicka två noder för att koppla', 'Click two nodes to connect')}</p>
+          <p><strong>🏠 {t('Rum', 'Room')}:</strong> {t('Koppla nod till närmaste rum', 'Link node to nearest room')}</p>
+          <p><strong>🗑️ {t('Ta bort', 'Delete')}:</strong> {t('Klicka för att radera', 'Click to remove')}</p>
+          <p className="mt-1">{t('Noder', 'Nodes')}: {graph.nodes.size} | {t('Kanter', 'Edges')}: {graph.edges.length}</p>
         </div>
       )}
 
       {isEditMode && (
         <Button size="sm" variant="outline" onClick={handleSave} disabled={isSaving} className="text-xs">
-          {isSaving ? 'Saving…' : 'Save graph'}
+          {isSaving ? t('Sparar…', 'Saving…') : t('Spara graf', 'Save graph')}
         </Button>
       )}
 
@@ -203,15 +216,26 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
         <>
           <Separator />
 
+          {/* Room search */}
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">{t('Sök rum', 'Search room')}</Label>
+            <Input
+              value={roomSearch}
+              onChange={e => setRoomSearch(e.target.value)}
+              placeholder={t('Filtrera rum…', 'Filter rooms…')}
+              className="h-8 text-xs"
+            />
+          </div>
+
           {/* From room */}
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">From room</Label>
+            <Label className="text-xs text-muted-foreground">{t('Från rum', 'From room')}</Label>
             <Select value={fromRoom} onValueChange={setFromRoom}>
               <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Select start room" />
+                <SelectValue placeholder={t('Välj startrum', 'Select start room')} />
               </SelectTrigger>
               <SelectContent>
-                {rooms.map((room: any) => (
+                {filteredRooms.map((room: any) => (
                   <SelectItem key={room.fm_guid} value={room.fm_guid} className="text-xs">
                     {room.common_name || room.name || room.fm_guid?.slice(0, 8)}
                   </SelectItem>
@@ -227,19 +251,28 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
 
           {/* To room */}
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">To room</Label>
+            <Label className="text-xs text-muted-foreground">{t('Till rum', 'To room')}</Label>
             <Select value={toRoom} onValueChange={setToRoom}>
               <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Select target room" />
+                <SelectValue placeholder={t('Välj målrum', 'Select destination room')} />
               </SelectTrigger>
               <SelectContent>
-                {rooms.map((room: any) => (
+                {filteredRooms.map((room: any) => (
                   <SelectItem key={room.fm_guid} value={room.fm_guid} className="text-xs">
                     {room.common_name || room.name || room.fm_guid?.slice(0, 8)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Accessibility toggle */}
+          <div className="flex items-center justify-between py-1">
+            <div className="flex items-center gap-2">
+              <Accessibility className="h-3.5 w-3.5 text-muted-foreground" />
+              <Label className="text-xs">{t('Undvik trappor (hiss)', 'Avoid stairs (elevator)')}</Label>
+            </div>
+            <Switch checked={preferElevator} onCheckedChange={setPreferElevator} />
           </div>
 
           {/* Find route button */}
@@ -250,32 +283,32 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
             className="text-xs"
           >
             <Route className="h-3.5 w-3.5 mr-1" />
-            Find route
+            {t('Hitta rutt', 'Find route')}
           </Button>
 
           {graph.nodes.size === 0 && (
             <p className="text-[10px] text-muted-foreground text-center">
-              No navigation graph exists. Enable edit mode to create one.
+              {t('Ingen navigeringsgraf finns. Aktivera redigeringsläget för att skapa en.', 'No navigation graph exists. Enable edit mode to create one.')}
             </p>
           )}
 
           {/* Route result */}
           {route && (
             <div className="bg-muted/50 rounded p-2 space-y-1">
-              <p className="text-xs font-medium text-foreground">Route found!</p>
+              <p className="text-xs font-medium text-foreground">{t('Rutt hittad!', 'Route found!')}</p>
               <p className="text-[10px] text-muted-foreground">
-                Distance: {route.totalDistance.toFixed(1)} units
+                {t('Avstånd', 'Distance')}: {route.totalDistance.toFixed(1)} {t('enheter', 'units')}
               </p>
               <p className="text-[10px] text-muted-foreground">
-                Waypoints: {route.path.length}
+                {t('Vägpunkter', 'Waypoints')}: {route.path.length}
               </p>
               {route.floorTransitions.length > 0 && (
                 <p className="text-[10px] text-muted-foreground">
-                  Floor transitions: {route.floorTransitions.length}
+                  {t('Våningsövergångar', 'Floor transitions')}: {route.floorTransitions.length}
                 </p>
               )}
               <Button size="sm" variant="outline" onClick={handleClearRoute} className="text-xs w-full mt-1">
-                Clear route
+                {t('Rensa rutt', 'Clear route')}
               </Button>
             </div>
           )}

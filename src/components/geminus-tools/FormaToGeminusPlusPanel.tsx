@@ -402,6 +402,7 @@ export default function FormaToGeminusPlusPanel() {
                 buildingFmGuid,
                 modelName: effectiveModelName || file.name,
                 isMasterModel,
+                region: selectedHubRegion,
               },
             });
 
@@ -456,10 +457,11 @@ export default function FormaToGeminusPlusPanel() {
                   folderName,
                   singleItem: { versionUrn: file.versionUrn, name: file.name },
                   buildingFmGuid,
+                  region: selectedHubRegion,
                 },
               });
               if (bimErr || bimData?.state === 'PROCESSING') {
-                const msg = bimErr?.message || bimData?.message || 'Indexing still in progress — try again in 60s.';
+                const msg = bimData?.error || bimData?.message || bimErr?.message || 'Indexing still in progress — try again in 60s.';
                 log(`${file.name}: ${msg}`, bimData?.state === 'PROCESSING' ? 'warn' : 'error');
               } else if (bimData?.success) {
                 log(`${file.name}: ${bimData.message}`, 'ok');
@@ -841,7 +843,7 @@ export default function FormaToGeminusPlusPanel() {
                       <p className="text-[10px] text-muted-foreground italic truncate">{jobCheckResults[job.version_urn]}</p>
                     )}
                   </div>
-                  {isActive && (
+                  {(isActive || isDone) && (
                     <button
                       onClick={() => checkJob(job.version_urn, job.building_fm_guid ?? null)}
                       className="shrink-0 text-[10px] text-blue-600 hover:underline"

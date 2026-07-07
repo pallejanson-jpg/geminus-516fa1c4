@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Navigation, X, LocateFixed, Car, Footprints, Bus, Building2, ArrowRight, Clock, MapPinned, Search } from 'lucide-react';
+import { Navigation, X, LocateFixed, Car, Footprints, Bus, Building2, ArrowRight, Clock, MapPinned, Search, Accessibility } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { supabase } from '@/integrations/supabase/client';
+import { useLanguage } from '@/context/LanguageContext';
 import { MapFacility } from '@/hooks/useMapFacilities';
 import { useIsMobile } from '@/hooks/use-mobile';
 import StreetViewThumbnail from '@/components/map/StreetViewThumbnail';
@@ -37,6 +38,7 @@ interface NavigationMapPanelProps {
     buildingFmGuid: string;
     targetRoomFmGuid: string | null;
     profile: 'walking' | 'driving' | 'transit';
+    preferElevator: boolean;
   }) => void;
   onClose: () => void;
   routeSummary?: {
@@ -216,14 +218,18 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
   activeStepIndex,
   pickingOrigin,
 }) => {
+  const { t } = useLanguage();
   const isMobile = useIsMobile();
   const [profile, setProfile] = useState<'walking' | 'driving' | 'transit'>('walking');
+  const [preferElevator, setPreferElevator] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [selectedBuildingGuid, setSelectedBuildingGuid] = useState<string>('');
   const [selectedRoomGuid, setSelectedRoomGuid] = useState<string>('');
+  const [roomSearch, setRoomSearch] = useState('');
   const [rooms, setRooms] = useState<RoomOption[]>([]);
   const [isLocating, setIsLocating] = useState(false);
   const [drawerExpanded, setDrawerExpanded] = useState(true);
+  const [isLoadingRooms, setIsLoadingRooms] = useState(false);
 
   // Geocoding state
   const [originText, setOriginText] = useState('');
@@ -316,14 +322,16 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
 
   useEffect(() => {
     if (!selectedBuildingGuid) { setRooms([]); return; }
+    setIsLoadingRooms(true);
     supabase
       .from('assets')
       .select('fm_guid, name')
       .eq('building_fm_guid', selectedBuildingGuid)
-      .eq('category', 'Space')
+      .in('category', ['Space', 'IfcSpace'])
       .order('name')
       .then(({ data }) => {
         setRooms((data || []).map(r => ({ fm_guid: r.fm_guid, name: r.name || r.fm_guid })));
+        setIsLoadingRooms(false);
       });
   }, [selectedBuildingGuid]);
 
@@ -331,6 +339,12 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
     () => facilities.find(f => f.fmGuid === selectedBuildingGuid),
     [facilities, selectedBuildingGuid]
   );
+
+  const filteredRooms = useMemo(() => {
+    if (!roomSearch.trim()) return rooms;
+    const q = roomSearch.toLowerCase();
+    return rooms.filter(r => r.name.toLowerCase().includes(q));
+  }, [rooms, roomSearch]);
 
   const handleNavigate = useCallback(() => {
     if (!userLocation || !selectedBuilding) return;
@@ -340,8 +354,9 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
       buildingFmGuid: selectedBuildingGuid,
       targetRoomFmGuid: selectedRoomGuid || null,
       profile,
+      preferElevator,
     });
-  }, [userLocation, selectedBuilding, selectedBuildingGuid, selectedRoomGuid, profile, onNavigate]);
+  }, [userLocation, selectedBuilding, selectedBuildingGuid, selectedRoomGuid, profile, preferElevator, onNavigate]);
 
   const allSteps = useMemo(() => {
     if (!routeSummary) return [];
@@ -360,13 +375,13 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
       {/* Picking origin banner */}
       {pickingOrigin && (
         <div className="bg-primary/10 border border-primary/30 rounded-md px-2 py-1.5 text-xs text-primary font-medium text-center animate-pulse">
-          Click on the map to select start point
+          {t('Klicka på kartan för att välja startpunkt', 'Click on the map to select start point')}
         </div>
       )}
 
       {/* Origin */}
       <div className="space-y-1 relative">
-        <label className="text-xs text-muted-foreground">From</label>
+        <label className="text-xs text-muted-foreground">{t('Från', 'From')}</label>
         <div className="flex gap-1.5">
           <div className="relative flex-1">
             <Input
@@ -377,7 +392,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
               }}
               onFocus={() => { if (geocodingResults.length > 0) setShowGeoResults(true); }}
               onBlur={() => setTimeout(() => setShowGeoResults(false), 200)}
-              placeholder="Enter address or select on map"
+              placeholder={t('Ange adress eller välj på kartan', 'Enter address or select on map')}
               className="h-9 text-xs"
             />
             {/* Geocoding dropdown */}
@@ -403,7 +418,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
             className="h-9 w-9 shrink-0"
             onClick={handleLocate}
             disabled={isLocating}
-            title="My location (GPS)"
+            title={t('Min plats (GPS)', 'My location (GPS)')}
           >
             <LocateFixed size={14} className={isLocating ? 'animate-pulse' : ''} />
           </Button>
@@ -413,7 +428,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
               size="icon"
               className="h-9 w-9 shrink-0"
               onClick={onRequestMapClick}
-              title="Select position on map"
+              title={t('Välj position på kartan', 'Select position on map')}
             >
               <MapPinned size={14} />
             </Button>
@@ -423,10 +438,10 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
 
       {/* Destination building */}
       <div className="space-y-1">
-        <label className="text-xs text-muted-foreground">To building</label>
+        <label className="text-xs text-muted-foreground">{t('Till byggnad', 'To building')}</label>
         <Select value={selectedBuildingGuid} onValueChange={v => { setSelectedBuildingGuid(v); setSelectedRoomGuid(''); }}>
           <SelectTrigger className="h-9 text-xs">
-            <SelectValue placeholder="Select building" />
+            <SelectValue placeholder={t('Välj byggnad', 'Select building')} />
           </SelectTrigger>
           <SelectContent>
             {facilities.filter(f => f.lat && f.lng).map(f => (
@@ -438,22 +453,46 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
         </Select>
       </div>
 
-      {/* Destination room */}
-      {rooms.length > 0 && (
+      {/* Destination room — always shown when a building is selected */}
+      {selectedBuildingGuid && (
         <div className="space-y-1">
-         <label className="text-xs text-muted-foreground">To room (optional)</label>
-          <Select value={selectedRoomGuid} onValueChange={setSelectedRoomGuid}>
-            <SelectTrigger className="h-9 text-xs">
-              <SelectValue placeholder="Optional entrance" />
-            </SelectTrigger>
-            <SelectContent className="max-h-48">
-              {rooms.map(r => (
-                <SelectItem key={r.fm_guid} value={r.fm_guid} className="text-xs">
-                  {r.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <label className="text-xs text-muted-foreground">{t('Till rum (valfritt)', 'To room (optional)')}</label>
+          {isLoadingRooms ? (
+            <div className="h-9 flex items-center px-3 text-xs text-muted-foreground border border-input rounded-md bg-background">
+              {t('Hämtar rum…', 'Loading rooms…')}
+            </div>
+          ) : rooms.length === 0 ? (
+            <div className="h-9 flex items-center px-3 text-xs text-muted-foreground border border-input rounded-md bg-background">
+              {t('Inga rum hittades för denna byggnad', 'No rooms found for this building')}
+            </div>
+          ) : (
+            <>
+              <div className="relative">
+                <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={roomSearch}
+                  onChange={e => setRoomSearch(e.target.value)}
+                  placeholder={t('Sök rum…', 'Search rooms…')}
+                  className="w-full h-9 pl-6 pr-2 text-xs rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+              <Select value={selectedRoomGuid} onValueChange={setSelectedRoomGuid}>
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue placeholder={t('Välj rum', 'Select room')} />
+                </SelectTrigger>
+                <SelectContent className="max-h-48">
+                  {filteredRooms.map(r => (
+                    <SelectItem key={r.fm_guid} value={r.fm_guid} className="text-xs">
+                      {r.name}
+                    </SelectItem>
+                  ))}
+                  {filteredRooms.length === 0 && roomSearch && (
+                    <div className="px-2 py-2 text-xs text-muted-foreground">{t(`Inget rum matchar "${roomSearch}"`, `No room matches "${roomSearch}"`)}</div>
+                  )}
+                </SelectContent>
+              </Select>
+            </>
+          )}
         </div>
       )}
 
@@ -465,7 +504,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
           className="flex-1 h-9 text-xs gap-1"
           onClick={() => setProfile('walking')}
         >
-          <Footprints size={12} /> Walk
+          <Footprints size={12} /> {t('Gå', 'Walk')}
         </Button>
         <Button
           variant={profile === 'driving' ? 'default' : 'outline'}
@@ -473,7 +512,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
           className="flex-1 h-9 text-xs gap-1"
           onClick={() => setProfile('driving')}
         >
-          <Car size={12} /> Drive
+          <Car size={12} /> {t('Kör', 'Drive')}
         </Button>
         <Button
           variant={profile === 'transit' ? 'default' : 'outline'}
@@ -481,8 +520,24 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
           className="flex-1 h-9 text-xs gap-1"
           onClick={() => setProfile('transit')}
         >
-          <Bus size={12} /> Transit
+          <Bus size={12} /> {t('Kollektivtrafik', 'Transit')}
         </Button>
+      </div>
+
+      {/* Accessibility toggle */}
+      <div className="flex items-center justify-between py-0.5">
+        <div className="flex items-center gap-2">
+          <Accessibility size={13} className="text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">{t('Undvik trappor', 'Avoid stairs')}</span>
+        </div>
+        <button
+          role="switch"
+          aria-checked={preferElevator}
+          onClick={() => setPreferElevator(p => !p)}
+          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${preferElevator ? 'bg-primary' : 'bg-input'}`}
+        >
+          <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform ${preferElevator ? 'translate-x-4' : 'translate-x-0'}`} />
+        </button>
       </div>
 
       {/* Navigate button */}
@@ -491,7 +546,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
         disabled={!userLocation || !selectedBuildingGuid}
         onClick={handleNavigate}
       >
-        <Navigation size={14} className="mr-1" /> Get Directions
+        <Navigation size={14} className="mr-1" /> {t('Visa väg', 'Get Directions')}
       </Button>
 
       {/* Route summary with steps */}
@@ -527,14 +582,14 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
           {allSteps.length === 0 && (
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-xs">
-                <Badge variant="secondary" className="text-[10px]">Outdoor</Badge>
+                <Badge variant="secondary" className="text-[10px]">{t('Utomhus', 'Outdoor')}</Badge>
                 <span>{formatDistance(routeSummary.outdoorDistance)}</span>
                 <span className="text-muted-foreground">·</span>
                 <span>{formatDuration(routeSummary.outdoorDuration)}</span>
               </div>
               {routeSummary.indoorDistance > 0 && (
                 <div className="flex items-center gap-2 text-xs">
-                  <Badge variant="outline" className="text-[10px]">Indoor</Badge>
+                  <Badge variant="outline" className="text-[10px]">{t('Inomhus', 'Indoor')}</Badge>
                   <span>~{formatDistance(routeSummary.indoorDistance)}</span>
                 </div>
               )}
@@ -550,7 +605,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
               onClick={onShowIndoor}
             >
               <Building2 size={12} />
-              Show in building
+              {t('Visa i byggnad', 'Show in building')}
               <ArrowRight size={12} />
             </Button>
           )}
@@ -586,7 +641,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
           <DrawerHeader className="py-2 px-3 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
               <Navigation size={16} className="text-primary" />
-              <DrawerTitle className="text-sm">Navigation</DrawerTitle>
+              <DrawerTitle className="text-sm">{t('Navigation', 'Navigation')}</DrawerTitle>
             </div>
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
               <X size={14} />
@@ -604,18 +659,17 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
   return (
     <div className="absolute top-3 left-3 z-20 w-80">
       <Card className="bg-card/95 backdrop-blur-sm shadow-xl border-border">
-        <CardContent className="p-3 space-y-3">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Navigation size={16} className="text-primary" />
-              <span className="text-sm font-semibold">Navigation</span>
-            </div>
-            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
-              <X size={14} />
-            </Button>
+        {/* Sticky header */}
+        <div className="flex items-center justify-between px-3 pt-3 pb-2">
+          <div className="flex items-center gap-2">
+            <Navigation size={16} className="text-primary" />
+            <span className="text-sm font-semibold">{t('Navigation', 'Navigation')}</span>
           </div>
-
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
+            <X size={14} />
+          </Button>
+        </div>
+        <CardContent className="p-3 pt-0 space-y-3 overflow-y-auto max-h-[calc(100dvh-5.5rem)]">
           {panelContent}
         </CardContent>
       </Card>

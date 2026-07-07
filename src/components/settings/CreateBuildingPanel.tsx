@@ -21,6 +21,7 @@ import ExcelTemplateDownload from '@/components/import/ExcelTemplateDownload';
 import ExcelImportDialog from '@/components/import/ExcelImportDialog';
 import CreatePropertyDialog from '@/components/properties/CreatePropertyDialog';
 import { formatDistanceToNow } from 'date-fns';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface CreatedBuilding {
   complexFmGuid: string;
@@ -44,6 +45,7 @@ interface CreateBuildingPanelProps {
 
 const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAccTab }) => {
   const { toast } = useToast();
+  const { t } = useLanguage();
 
   // ── Shared building selector ──
   const [existingBuildings, setExistingBuildings] = useState<ExistingBuilding[]>([]);
@@ -57,6 +59,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
   const [buildingDesignation, setBuildingDesignation] = useState('');
   const [buildingName, setBuildingName] = useState('');
   const [modelName, setModelName] = useState('A-modell');
+  const [customFmGuid, setCustomFmGuid] = useState('');
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -362,6 +365,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           modelName: modelName || 'A-modell',
           latitude: latitude ? parseFloat(latitude) : null,
           longitude: longitude ? parseFloat(longitude) : null,
+          ...(customFmGuid.trim() ? { buildingFmGuid: customFmGuid.trim() } : {}),
         },
       });
 
@@ -1058,19 +1062,19 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <Building2 className="h-5 w-5 text-primary" />
-          <h3 className="font-semibold text-sm">Select Building</h3>
+          <h3 className="font-semibold text-sm">{t('Välj byggnad', 'Select Building')}</h3>
           <Button variant="ghost" size="icon" className="h-7 w-7 ml-auto" onClick={fetchBuildings}>
             <RefreshCw className="h-3.5 w-3.5" />
           </Button>
         </div>
 
         {loadingBuildings ? (
-          <div className="text-xs text-muted-foreground py-2">Loading buildings...</div>
+          <div className="text-xs text-muted-foreground py-2">{t('Laddar byggnader...', 'Loading buildings...')}</div>
         ) : (
           <div className="flex items-center gap-2">
             <Select value={selectedBuildingFmGuid} onValueChange={(v) => { setSelectedBuildingFmGuid(v); setShowCreateForm(false); handleResetIfc(); }}>
               <SelectTrigger className="h-10 text-sm flex-1">
-                <SelectValue placeholder="Select a building..." />
+                <SelectValue placeholder={t('Välj en byggnad...', 'Select a building...')} />
               </SelectTrigger>
               <SelectContent>
                 {existingBuildings.map(b => (
@@ -1096,7 +1100,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                   <AlertDialogHeader>
                     <AlertDialogTitle className="flex items-center gap-2">
                       <AlertTriangle className="h-5 w-5 text-destructive" />
-                      Delete building?
+                      {t('Ta bort byggnad?', 'Delete building?')}
                     </AlertDialogTitle>
                     <AlertDialogDescription>
                       <strong>{selectedBuilding?.commonName}</strong> and all associated objects (floors, rooms, inventory) will be permanently deleted.
@@ -1104,9 +1108,9 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogCancel>{t('Avbryt', 'Cancel')}</AlertDialogCancel>
                     <AlertDialogAction onClick={handleDeleteBuilding} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                      Delete All
+                      {t('Ta bort allt', 'Delete All')}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -1118,7 +1122,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         {!selectedBuildingFmGuid && !showCreateForm && (
           <Button variant="outline" size="sm" onClick={() => setShowCreateForm(true)} className="w-full gap-1.5 text-xs">
             <Building2 className="h-3.5 w-3.5" />
-            Create new building in Geminus Plus
+            {t('Skapa ny byggnad i Geminus Plus', 'Create new building in Geminus Plus')}
           </Button>
         )}
       </div>
@@ -1126,46 +1130,58 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       {/* ══════ Create New Building (expandable) ══════ */}
       {showCreateForm && !selectedBuildingFmGuid && (
         <div className="space-y-3 border rounded-lg p-4 bg-muted/20">
-          <h4 className="font-medium text-sm">Create new property & building</h4>
+          <h4 className="font-medium text-sm">{t('Skapa ny fastighet & byggnad', 'Create new property & building')}</h4>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Property designation *</Label>
+              <Label className="text-xs">{t('Fastighetsbeteckning *', 'Property designation *')}</Label>
               <Input placeholder="e.g. PROPERTY-01" value={complexDesignation} onChange={e => setComplexDesignation(e.target.value)} className="h-9 text-sm" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Property name *</Label>
+              <Label className="text-xs">{t('Fastighetsnamn *', 'Property name *')}</Label>
               <Input placeholder="e.g. Main Street 5" value={complexName} onChange={e => setComplexName(e.target.value)} className="h-9 text-sm" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Building designation *</Label>
+              <Label className="text-xs">{t('Byggnadsbeteckning *', 'Building designation *')}</Label>
               <Input placeholder="e.g. BLDG-A" value={buildingDesignation} onChange={e => setBuildingDesignation(e.target.value)} className="h-9 text-sm" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Building name *</Label>
+              <Label className="text-xs">{t('Byggnadsnamn *', 'Building name *')}</Label>
               <Input placeholder="e.g. Main Building" value={buildingName} onChange={e => setBuildingName(e.target.value)} className="h-9 text-sm" />
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs flex items-center gap-1"><Layers className="h-3 w-3" /> Model name</Label>
+            <Label className="text-xs flex items-center gap-1"><Layers className="h-3 w-3" /> {t('Modellnamn', 'Model name')}</Label>
             <Input placeholder="e.g. A-model" value={modelName} onChange={e => setModelName(e.target.value)} className="h-9 text-sm" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">{t('FMGUID (valfritt)', 'FMGUID (optional)')}</Label>
+            <Input
+              placeholder={t('Lämna tomt för auto-genererat UUID', 'Leave blank for auto-generated UUID')}
+              value={customFmGuid}
+              onChange={e => setCustomFmGuid(e.target.value)}
+              className="h-9 text-sm font-mono"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              {t('Används vid import från Forma/ACC — ange samma GUID som sätts på byggnaden i Geminus.', 'Used for Forma/ACC import — enter the same GUID set on the building in Geminus.')}
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs flex items-center gap-1"><MapPin className="h-3 w-3" /> Latitude</Label>
+              <Label className="text-xs flex items-center gap-1"><MapPin className="h-3 w-3" /> {t('Latitud', 'Latitude')}</Label>
               <Input type="number" step="any" placeholder="59.3293" value={latitude} onChange={e => setLatitude(e.target.value)} className="h-9 text-sm" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs flex items-center gap-1"><MapPin className="h-3 w-3" /> Longitude</Label>
+              <Label className="text-xs flex items-center gap-1"><MapPin className="h-3 w-3" /> {t('Longitud', 'Longitude')}</Label>
               <Input type="number" step="any" placeholder="18.0686" value={longitude} onChange={e => setLongitude(e.target.value)} className="h-9 text-sm" />
             </div>
           </div>
           <div className="flex gap-2">
             <Button onClick={handleCreate} disabled={isCreating || !complexDesignation || !complexName || !buildingDesignation || !buildingName} className="flex-1 gap-2">
-              {isCreating ? <><Loader2 className="h-4 w-4 animate-spin" />Creating...</> : <><Building2 className="h-4 w-4" />Create in Geminus Plus</>}
+              {isCreating ? <><Loader2 className="h-4 w-4 animate-spin" />{t('Skapar...', 'Creating...')}</> : <><Building2 className="h-4 w-4" />{t('Skapa i Geminus Plus', 'Create in Geminus Plus')}</>}
             </Button>
-            <Button variant="outline" onClick={() => setShowCreateForm(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setShowCreateForm(false)}>{t('Avbryt', 'Cancel')}</Button>
           </div>
         </div>
       )}
@@ -1179,9 +1195,9 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           disabled={isBatchEnqueuing}
         >
           {isBatchEnqueuing ? (
-            <><Loader2 className="h-4 w-4 animate-spin" />Enqueuing buildings...</>
+            <><Loader2 className="h-4 w-4 animate-spin" />{t('Köar byggnader...', 'Enqueuing buildings...')}</>
           ) : (
-            <><PlayCircle className="h-4 w-4" />Enqueue all buildings</>
+            <><PlayCircle className="h-4 w-4" />{t('Köa alla byggnader', 'Enqueue all buildings')}</>
           )}
         </Button>
         <p className="text-[11px] text-muted-foreground mt-1.5">
@@ -1261,7 +1277,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                     </div>
                     {isConverting && !conversionDone && (
                       <p className="text-[10px] text-muted-foreground animate-pulse flex items-center gap-1">
-                        <Cloud className="h-3 w-3" /> Converting — this may take a few minutes…
+                        <Cloud className="h-3 w-3" /> {t('Konverterar — detta kan ta några minuter…', 'Converting — this may take a few minutes…')}
                       </p>
                     )}
                     <div className="rounded-md border bg-background p-2 max-h-32 overflow-y-auto">
@@ -1272,14 +1288,14 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                     {conversionDone && (
                       <div className="flex items-center gap-1.5 text-xs text-green-600">
                         <CheckCircle2 className="h-3.5 w-3.5" />
-                        Model is ready — it will appear automatically in the 3D viewer.
+                        {t('Modellen är klar — den visas automatiskt i 3D-visaren.', 'Model is ready — it will appear automatically in the 3D viewer.')}
                       </div>
                     )}
                   </div>
                 )}
                 {conversionDone && (
                   <Button variant="outline" size="sm" onClick={handleResetIfc} className="text-xs">
-                    Upload another
+                    {t('Ladda upp en till', 'Upload another')}
                   </Button>
                 )}
               </AccordionContent>
@@ -1290,7 +1306,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
               <AccordionTrigger className="px-3 py-2.5 hover:no-underline hover:bg-muted/50 text-sm">
                 <div className="flex items-center gap-2">
                   <Layers className="h-4 w-4 text-blue-500" />
-                  <span>Upload from ACC</span>
+                  <span>Upload from Autodesk Forma</span>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-3 pb-3 pt-1 space-y-3">
@@ -1300,7 +1316,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                 </p>
                 {onSwitchToAccTab && (
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={onSwitchToAccTab}>
-                    <Layers className="h-3.5 w-3.5" /> Open ACC Settings
+                    <Layers className="h-3.5 w-3.5" /> Open Autodesk Forma Settings
                   </Button>
                 )}
               </AccordionContent>
@@ -1440,15 +1456,15 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       <Dialog open={slotDialogOpen} onOpenChange={setSlotDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Select model slot</DialogTitle>
+            <DialogTitle>{t('Välj modellplats', 'Select model slot')}</DialogTitle>
             <DialogDescription>
-              Choose which model this IFC should replace for {selectedBuilding?.commonName || 'the selected building'}.
+              {t(`Välj vilken modell denna IFC ska ersätta för ${selectedBuilding?.commonName || 'den valda byggnaden'}.`, `Choose which model this IFC should replace for ${selectedBuilding?.commonName || 'the selected building'}.`)}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Existing model slot</Label>
+              <Label className="text-xs">{t('Befintlig modellplats', 'Existing model slot')}</Label>
               <Select value={slotChoice} onValueChange={setSlotChoice}>
                 <SelectTrigger className="h-9 text-sm">
                   <SelectValue placeholder="Select a model slot" />
@@ -1457,14 +1473,14 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                   {availableModelSlots.map(slot => (
                     <SelectItem key={slot} value={slot}>{slot}</SelectItem>
                   ))}
-                  <SelectItem value="__new__">Create new slot</SelectItem>
+                  <SelectItem value="__new__">{t('Skapa ny plats', 'Create new slot')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {slotChoice === '__new__' && (
               <div className="space-y-1.5">
-                <Label className="text-xs">New model name</Label>
+                <Label className="text-xs">{t('Nytt modellnamn', 'New model name')}</Label>
                 <Input
                   value={newSlotName}
                   onChange={e => setNewSlotName(e.target.value)}
@@ -1476,8 +1492,8 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSlotDialogOpen(false)}>Cancel</Button>
-            <Button onClick={confirmIfcSlotSelection}>Continue</Button>
+            <Button variant="outline" onClick={() => setSlotDialogOpen(false)}>{t('Avbryt', 'Cancel')}</Button>
+            <Button onClick={confirmIfcSlotSelection}>{t('Fortsätt', 'Continue')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', (e) => {
 // Clear reload counter on successful load
 sessionStorage.removeItem(RELOAD_KEY);
 
-// Register service worker for PWA
-if ('serviceWorker' in navigator) {
+// Register service worker for PWA (production only — dev HMR + SW causes reload loops)
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {
       // SW registration failed — app still works without it

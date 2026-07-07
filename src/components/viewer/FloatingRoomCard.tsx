@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface RoomData {
   fmGuid: string;
@@ -34,6 +35,7 @@ const FloatingRoomCard: React.FC<FloatingRoomCardProps> = ({
   onClose,
   onExpandToFull,
 }) => {
+  const { t } = useLanguage();
   const isMobile = useIsMobile();
   const cardRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState(initialPosition || { x: 100, y: 100 });
@@ -114,13 +116,13 @@ const FloatingRoomCard: React.FC<FloatingRoomCardProps> = ({
         )}
         {room.function && (
           <div>
-            <span className="text-muted-foreground">Funktion:</span>
+            <span className="text-muted-foreground">{t('Funktion:', 'Function:')}</span>
             <span className="ml-1">{room.function}</span>
           </div>
         )}
         {room.floorName && (
           <div className="col-span-2">
-            <span className="text-muted-foreground">Våning:</span>
+            <span className="text-muted-foreground">{t('Våning:', 'Floor:')}</span>
             <span className="ml-1">{room.floorName}</span>
           </div>
         )}
@@ -147,7 +149,7 @@ const FloatingRoomCard: React.FC<FloatingRoomCardProps> = ({
           {/* Drag handle visual indicator */}
           <div className="absolute top-1.5 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-muted-foreground/30" />
           <span className="text-sm font-medium truncate max-w-[200px]">
-            {room.name || room.number || 'Rum'}
+            {room.name || room.number || t('Rum', 'Room')}
           </span>
           <div className="flex items-center gap-1">
             {onExpandToFull && (
@@ -191,7 +193,7 @@ const FloatingRoomCard: React.FC<FloatingRoomCardProps> = ({
         <div className="flex items-center gap-2">
           <Move className="h-3 w-3 text-muted-foreground" />
           <span className="text-sm font-medium truncate max-w-[140px]">
-            {room.name || room.number || 'Rum'}
+            {room.name || room.number || t('Rum', 'Room')}
           </span>
         </div>
         <div className="flex items-center gap-1">

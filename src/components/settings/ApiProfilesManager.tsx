@@ -290,7 +290,7 @@ export default function ApiProfilesManager() {
             <AccordionContent className="space-y-3 pt-2">
                {renderSecretField('API URL', 'geminus_plus_api_url', 'https://...')}
                {renderSecretField('API Key', 'geminus_plus_api_key')}
-               {renderSecretField('Keycloak URL', 'geminus_plus_keycloak_url', 'https://...')}
+               {renderSecretField('Keycloak URL (incl. realm)', 'geminus_plus_keycloak_url', 'https://sso.example.com/realms/AssetDB')}
                {renderSecretField('Client ID', 'geminus_plus_client_id')}
                {renderSecretField('Client Secret', 'geminus_plus_client_secret')}
                {renderSecretField('Username', 'geminus_plus_username')}

@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface ExtractedProperties {
   brand?: string;
@@ -35,6 +36,7 @@ interface PendingDetection {
   building_fm_guid: string;
   ivion_image_id: number | null;
   ivion_dataset_name: string | null;
+  ivion_site_model_entity: any | null;
   coordinate_x: number | null;
   coordinate_y: number | null;
   coordinate_z: number | null;
@@ -145,13 +147,14 @@ const ApprovalDialog: React.FC<{
     supabase.from('assets')
       .select('fm_guid, name, common_name')
       .eq('building_fm_guid', detection.building_fm_guid)
-      .eq('category', 'IfcBuildingStorey')
+      .in('category', ['Building Storey', 'IfcBuildingStorey'])
       .order('name')
       .then(({ data }) => {
         const floorData = data || [];
         setFloors(floorData);
 
-        // Auto-match floor by ivion_dataset_name
+        // Auto-match floor: try ivion_dataset_name first, then siteModelEntity level info
+        let floorMatched = false;
         if (detection.ivion_dataset_name && floorData.length > 0) {
           const dsName = detection.ivion_dataset_name.toLowerCase();
           const matched = floorData.find(f => {
@@ -163,12 +166,29 @@ const ApprovalDialog: React.FC<{
           });
           if (matched) {
             setForm(prev => ({ ...prev, levelFmGuid: matched.fm_guid }));
+            floorMatched = true;
+          }
+        }
+        // Fallback: try siteModelEntity.levelName / .level / .floorName
+        if (!floorMatched && floorData.length > 0) {
+          const sme = detection.ivion_site_model_entity as any;
+          const smeLevelName = (sme?.levelName || sme?.level || sme?.floorName || '').toLowerCase();
+          if (smeLevelName) {
+            const matched = floorData.find(f => {
+              const fName = (f.name || '').toLowerCase();
+              const fCommon = (f.common_name || '').toLowerCase();
+              return fName === smeLevelName || fCommon === smeLevelName
+                || smeLevelName.includes(fName) || fName.includes(smeLevelName);
+            });
+            if (matched) {
+              setForm(prev => ({ ...prev, levelFmGuid: matched.fm_guid }));
+            }
           }
         }
       });
-  }, [open, detection.building_fm_guid, detection.ivion_dataset_name]);
+  }, [open, detection.building_fm_guid, detection.ivion_dataset_name, detection.ivion_site_model_entity]);
 
-  // Load rooms when floor changes
+  // Load rooms when floor changes, then auto-match from siteModelEntity
   useEffect(() => {
     if (!form.levelFmGuid) {
       setRooms([]);
@@ -178,10 +198,29 @@ const ApprovalDialog: React.FC<{
       .select('fm_guid, name, common_name')
       .eq('building_fm_guid', detection.building_fm_guid)
       .eq('level_fm_guid', form.levelFmGuid)
-      .eq('category', 'IfcSpace')
+      .in('category', ['Space', 'IfcSpace'])
       .order('name')
-      .then(({ data }) => setRooms(data || []));
-  }, [form.levelFmGuid, detection.building_fm_guid]);
+      .then(({ data }) => {
+        const roomData = data || [];
+        setRooms(roomData);
+
+        // Auto-match room by ivion_site_model_entity.name
+        const sme = detection.ivion_site_model_entity as any;
+        if (sme?.name && roomData.length > 0) {
+          const smeName = sme.name.toLowerCase();
+          const matched = roomData.find(r => {
+            const rName = (r.name || '').toLowerCase();
+            const rCommon = (r.common_name || '').toLowerCase();
+            return rName === smeName || rCommon === smeName
+              || smeName.includes(rName) || rName.includes(smeName)
+              || smeName.includes(rCommon) || rCommon.includes(smeName);
+          });
+          if (matched) {
+            setForm(prev => ({ ...prev, roomFmGuid: matched.fm_guid }));
+          }
+        }
+      });
+  }, [form.levelFmGuid, detection.building_fm_guid, detection.ivion_site_model_entity]);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -360,6 +399,11 @@ const ApprovalDialog: React.FC<{
                   ))}
                 </SelectContent>
               </Select>
+              {(detection.ivion_site_model_entity as any)?.name && (
+                <p className="text-xs text-foreground/60">
+                  BIM room: {(detection.ivion_site_model_entity as any).name}
+                </p>
+              )}
             </div>
           )}
 
@@ -411,6 +455,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
   onDetectionProcessed,
 }) => {
   const { toast } = useToast();
+  const { t } = useLanguage();
   
   const [detections, setDetections] = useState<PendingDetection[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -450,7 +495,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
       setTotalCount(data.total || 0);
     } catch (error: any) {
       toast({
-        title: 'Fel vid laddning',
+        title: t('Fel vid laddning', 'Error loading'),
         description: error.message,
         variant: 'destructive',
       });
@@ -498,12 +543,12 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
 
       if (error) throw error;
       
-      toast({ title: 'Avvisad' });
+      toast({ title: t('Avvisad', 'Rejected') });
       loadDetections();
       onDetectionProcessed();
     } catch (error: any) {
       toast({
-        title: 'Fel',
+        title: t('Fel', 'Error'),
         description: error.message,
         variant: 'destructive',
       });
@@ -528,15 +573,15 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
       if (error) throw error;
       
       toast({
-        title: 'Godkänt',
-        description: `${data.approved} detektioner godkända`,
+        title: t('Godkänt', 'Approved'),
+        description: t(`${data.approved} detektioner godkända`, `${data.approved} detections approved`),
       });
       clearSelection();
       loadDetections();
       onDetectionProcessed();
     } catch (error: any) {
       toast({
-        title: 'Fel',
+        title: t('Fel', 'Error'),
         description: error.message,
         variant: 'destructive',
       });
@@ -561,15 +606,15 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
       if (error) throw error;
       
       toast({
-        title: 'Avvisade',
-        description: `${data.rejected} detektioner avvisade`,
+        title: t('Avvisade', 'Rejected'),
+        description: t(`${data.rejected} detektioner avvisade`, `${data.rejected} detections rejected`),
       });
       clearSelection();
       loadDetections();
       onDetectionProcessed();
     } catch (error: any) {
       toast({
-        title: 'Fel',
+        title: t('Fel', 'Error'),
         description: error.message,
         variant: 'destructive',
       });

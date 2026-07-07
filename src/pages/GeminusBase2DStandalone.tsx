@@ -5,9 +5,11 @@
 import React from 'react';
 import { useSearchParams } from 'react-router-dom';
 import GeminusBase2DPanel from '@/components/viewer/GeminusBase2DPanel';
+import { useLanguage } from '@/context/LanguageContext';
 
 const GeminusBase2DStandalone: React.FC = () => {
   const [params] = useSearchParams();
+  const { t } = useLanguage();
 
   const buildingFmGuid = params.get('building') || '';
   const floorName = params.get('floor') || undefined;
@@ -20,7 +22,7 @@ const GeminusBase2DStandalone: React.FC = () => {
         <div className="text-center max-w-md space-y-2">
           <h1 className="text-lg font-semibold">Geminus Base 2D Viewer</h1>
           <p className="text-sm text-muted-foreground">
-            Ange query-parametrar i URL:en för att ladda en ritning:
+            {t('Ange query-parametrar i URL:en för att ladda en ritning:', 'Provide query parameters in the URL to load a drawing:')}
           </p>
           <code className="block text-xs bg-muted px-3 py-2 rounded">
             /geminus-base-2d?building=&lt;fmGuid&gt;&amp;floor=&lt;floorName&gt;&amp;geminusBaseGuid=&lt;geminusBaseGuid&gt;

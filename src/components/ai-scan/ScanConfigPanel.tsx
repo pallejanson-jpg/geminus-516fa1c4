@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Scan, AlertCircle, CheckCircle2, Info, Download, Loader2, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { Building2, Scan, AlertCircle, CheckCircle2, Info, Download, Loader2, Wifi, WifiOff, RefreshCw, Server, Monitor } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -51,6 +51,8 @@ interface IvionStatus {
   authMethod?: string;
 }
 
+type ScanMode = 'browser' | 'server';
+
 interface ScanConfigPanelProps {
   templates: DetectionTemplate[];
   buildings: Building[];
@@ -68,6 +70,7 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
   
   const [selectedBuilding, setSelectedBuilding] = useState<string>('');
   const [selectedTemplates, setSelectedTemplates] = useState<string[]>([]);
+  const [scanMode, setScanMode] = useState<ScanMode>('browser');
   const [isStarting, setIsStarting] = useState(false);
   const [isTestingAccess, setIsTestingAccess] = useState(false);
   const [isTestingDownload, setIsTestingDownload] = useState(false);
@@ -260,25 +263,57 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
     setIsStarting(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('ai-asset-detection', {
-        body: {
-          action: 'start-scan',
-          buildingFmGuid: selectedBuilding,
-          ivionSiteId: siteId,
-          templates: selectedTemplates,
-        }
-      });
+      if (scanMode === 'server') {
+        // Step 1: create the job record and get it back immediately
+        const { data: job, error: jobErr } = await supabase.functions.invoke('ai-asset-detection', {
+          body: {
+            action: 'create-server-scan-job',
+            buildingFmGuid: selectedBuilding,
+            ivionSiteId: siteId,
+            templates: selectedTemplates,
+          }
+        });
 
-      if (error) throw error;
+        if (jobErr) throw jobErr;
+        if (!job?.id) throw new Error('Failed to create scan job');
 
-      const ivionBaseUrl = IVION_DEFAULT_BASE_URL;
+        // Step 2: navigate to Scanning tab right away
+        onScanStarted(job);
 
-      toast({
-        title: 'Scan starting',
-        description: 'Opening 360° viewer for browser-based scanning...',
-      });
+        toast({
+          title: 'Server-side scan started',
+          description: 'Scanning images on the server — check the Scanning tab for progress.',
+        });
 
-      onScanStarted(data, { ivionBaseUrl });
+        // Step 3: trigger the actual scan in the background (don't await — let it run)
+        supabase.functions.invoke('ai-asset-detection', {
+          body: {
+            action: 'server-side-scan',
+            buildingFmGuid: selectedBuilding,
+            ivionSiteId: siteId,
+            templates: selectedTemplates,
+            scanJobId: job.id,
+          }
+        }).catch((e) => console.error('Server scan error:', e));
+      } else {
+        const { data, error } = await supabase.functions.invoke('ai-asset-detection', {
+          body: {
+            action: 'start-scan',
+            buildingFmGuid: selectedBuilding,
+            ivionSiteId: siteId,
+            templates: selectedTemplates,
+          }
+        });
+
+        if (error) throw error;
+
+        toast({
+          title: 'Scan starting',
+          description: 'Opening 360° viewer for browser-based scanning...',
+        });
+
+        onScanStarted(data, { ivionBaseUrl: IVION_DEFAULT_BASE_URL });
+      }
     } catch (error: any) {
       toast({
         title: 'Could not start scan',
@@ -290,15 +325,15 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
     }
   };
 
-  const buildingsWithIvion = buildings.filter(b => 
+  const buildingsWithIvion = buildings.filter(b =>
     buildingSettings[b.fm_guid]?.ivion_site_id
   );
 
-  const canStartScan = selectedBuilding && 
-    getIvionSiteId() && 
-    selectedTemplates.length > 0 && 
+  const canStartScan = selectedBuilding &&
+    getIvionSiteId() &&
+    selectedTemplates.length > 0 &&
     !isStarting &&
-    ivionStatus?.connected;
+    (scanMode === 'server' ? true : ivionStatus?.connected);
 
   return (
     <div className="space-y-6 pb-4 max-w-4xl mx-auto">
@@ -521,24 +556,75 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
       </Card>
       </div>
 
+      {/* Scan Mode Toggle */}
+      <Card>
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-medium">Scan mode:</span>
+            <div className="flex gap-2">
+              <Button
+                variant={scanMode === 'browser' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setScanMode('browser')}
+              >
+                <Monitor className="h-4 w-4 mr-1" />
+                Browser
+              </Button>
+              <Button
+                variant={scanMode === 'server' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setScanMode('server')}
+              >
+                <Server className="h-4 w-4 mr-1" />
+                Server-side
+              </Button>
+            </div>
+            <span className="text-sm text-muted-foreground">
+              {scanMode === 'browser'
+                ? 'Runs in the browser via 360° viewer (keep tab open)'
+                : 'Runs entirely on the server — no browser viewer needed'}
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Info Card */}
       <Card className="bg-muted/50">
         <CardContent className="pt-4">
           <div className="flex items-start gap-3">
             <Info className="h-5 w-5 text-muted-foreground mt-0.5" />
             <div className="text-sm text-muted-foreground space-y-2">
-              <p>
-                <strong>How it works:</strong> The scan runs directly in the browser via the 360° viewer.
-                The AI analyzes screenshots taken from the panorama view and identifies objects based on selected templates.
-              </p>
-              <p>
-                Detected objects appear in the review queue where you can approve or reject them.
-                Approved objects are automatically created as assets in the system.
-              </p>
-              <p>
-                <strong>Note:</strong> Keep the browser tab open during the entire scan.
-                You can pause and resume at any time.
-              </p>
+              {scanMode === 'browser' ? (
+                <>
+                  <p>
+                    <strong>How it works:</strong> The scan runs directly in the browser via the 360° viewer.
+                    The AI analyzes screenshots taken from the panorama view and identifies objects based on selected templates.
+                  </p>
+                  <p>
+                    Detected objects appear in the review queue where you can approve or reject them.
+                    Approved objects are automatically created as assets in the system.
+                  </p>
+                  <p>
+                    <strong>Note:</strong> Keep the browser tab open during the entire scan.
+                    You can pause and resume at any time.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p>
+                    <strong>How it works:</strong> The scan runs entirely on the server. NavVis panorama images
+                    are downloaded and analyzed by Claude automatically — no 360° viewer is opened.
+                  </p>
+                  <p>
+                    Up to 30 images are processed per call (evenly sampled across all datasets).
+                    Detected objects appear in the review queue just like browser scans.
+                  </p>
+                  <p>
+                    <strong>Note:</strong> The server uses its own NavVis credentials; the browser Ivion
+                    connection status does not need to be green to start a server-side scan.
+                  </p>
+                </>
+              )}
             </div>
           </div>
         </CardContent>

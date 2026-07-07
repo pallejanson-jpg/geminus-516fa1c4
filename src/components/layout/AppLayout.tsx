@@ -13,6 +13,7 @@ import { getVoiceSettings, VOICE_SETTINGS_CHANGED_EVENT } from '@/components/set
 import { getGunnarSettings, GUNNAR_SETTINGS_CHANGED_EVENT } from '@/components/settings/GunnarSettings';
 import { getIleanSettings, ILEAN_SETTINGS_CHANGED_EVENT } from '@/components/settings/IleanSettings';
 import { AppContext } from '@/context/AppContext';
+import { supabase } from '@/integrations/supabase/client';
 
 /** Apps that should hide header/sidebars for fullscreen experience */
 const IMMERSIVE_APPS = ['geminus_plus_viewer', 'viewer', 'native_viewer', 'radar'];
@@ -26,7 +27,7 @@ const AppLayoutInner: React.FC = () => {
     const [gunnarVisible, setGunnarVisible] = useState(() => getGunnarSettings().visible);
     const [ileanVisible, setIleanVisible] = useState(() => getIleanSettings().visible);
     const isMobile = useIsMobile();
-    const { activeApp } = useContext(AppContext);
+    const { activeApp, setSelectedFacility } = useContext(AppContext);
 
     const { isSidebarExpanded, setIsSidebarExpanded } = useContext(AppContext);
     // Hide chrome on mobile always for immersive apps
@@ -67,6 +68,32 @@ const AppLayoutInner: React.FC = () => {
         window.addEventListener(ILEAN_SETTINGS_CHANGED_EVENT, handleIleanSettingsChange as EventListener);
         return () => window.removeEventListener(ILEAN_SETTINGS_CHANGED_EVENT, handleIleanSettingsChange as EventListener);
     }, []);
+
+    // Deep link: ?building=<fm_guid> → auto-select building
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const buildingGuid = params.get('building');
+        if (buildingGuid) {
+            params.delete('building');
+            const newUrl = params.toString()
+                ? `${window.location.pathname}?${params.toString()}`
+                : window.location.pathname;
+            window.history.replaceState({}, '', newUrl);
+            supabase
+                .from('assets')
+                .select('fm_guid, name, common_name')
+                .eq('fm_guid', buildingGuid)
+                .eq('category', 'Building')
+                .maybeSingle()
+                .then(({ data }) => {
+                    setSelectedFacility({
+                        fmGuid: buildingGuid,
+                        name: data?.common_name || data?.name || buildingGuid,
+                        commonName: data?.common_name || undefined,
+                    });
+                });
+        }
+    }, [setSelectedFacility]);
 
     // Deep link: ?gunnar=voice → auto-open Gunnar in voice mode
     useEffect(() => {

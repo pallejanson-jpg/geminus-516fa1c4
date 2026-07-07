@@ -213,7 +213,7 @@ export function useViewerEventListeners({
         const isRoomMode = mode === 'room_spaces' || mode === 'room_type' || mode === 'room_types';
         const isFloorMode = mode.startsWith('energy_floor');
         const nameColorMap = detail.nameColorMap || {};
-        const useStrictGuidMode = isFloorMode || detail.strictGuidMode;
+        const useStrictGuidMode = detail.strictGuidMode || false;
 
         Object.values(metaObjects).forEach((mo: any) => {
           if (alreadyColored.has(mo.id)) return;
@@ -224,7 +224,13 @@ export function useViewerEventListeners({
           const sysId = normalizeGuid(mo.originalSystemId || '');
           const moId = normalizeGuid(mo.id || '');
           const moName = (mo.name || '').toLowerCase().trim();
-          let rgb = fmGuidLookup.get(sysId) || fmGuidLookup.get(moId);
+          // XKT entity ID → FM GUID bridge for Asset+ models (name-matched at load time)
+          const xktIdToFmGuid = (window as any).__xktIdToFmGuid as Map<string, string> | undefined;
+          const fmFromXkt = xktIdToFmGuid
+            ? (xktIdToFmGuid.get(sysId) || xktIdToFmGuid.get(moId))
+            : undefined;
+          let rgb = fmGuidLookup.get(sysId) || fmGuidLookup.get(moId)
+            || (fmFromXkt ? fmGuidLookup.get(fmFromXkt) : undefined);
           if (!rgb && !useStrictGuidMode && moName && nameColorMap[moName]) rgb = nameColorMap[moName];
           // Broader fallback: match metaObject name against room name registry
           if (!rgb && isRoomMode && moName) {
@@ -256,14 +262,9 @@ export function useViewerEventListeners({
       console.log('[ViewerEvents] INSIGHTS_COLOR_UPDATE:', mode, Object.keys(colorMap).length, 'entries,', matchCount, 'matched');
 
       if (matchCount === 0) {
-        // Don't xray — restore visibility and warn
+        // Don't xray — restore visibility and return silently
         (window as any).__colorFilterActive = false;
         console.warn('[ViewerEvents] No entity matches for color filter — skipping xray pass');
-        try {
-          toast.warning('No matching geometry in loaded model', {
-            description: 'The architectural (A-) model is required for this filter. Load it via Filter → Models.',
-          });
-        } catch {}
         return;
       }
 
@@ -680,8 +681,8 @@ export function useViewerEventListeners({
 
         const hasOpen = info.open > 0;
         const bg = hasOpen ? '#f59e0b' : '#6b7280';
-        const label = hasOpen ? `${info.open} öppen${info.open > 1 ? 'a' : ''}` : `${info.total} avsl.`;
-        const tooltip = info.titles.filter(Boolean).join('\n') || `${info.total} arbetsorder`;
+        const label = hasOpen ? `${info.open} open` : `${info.total} closed`;
+        const tooltip = info.titles.filter(Boolean).join('\n') || `${info.total} work order${info.total !== 1 ? 's' : ''}`;
 
         const marker = document.createElement('div');
         marker.style.cssText = `position:absolute;pointer-events:auto;cursor:pointer;display:flex;align-items:center;gap:3px;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;color:white;background:${bg};white-space:nowrap;transform:translate(-50%,-100%);box-shadow:0 1px 4px rgba(0,0,0,0.35);`;

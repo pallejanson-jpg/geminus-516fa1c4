@@ -1,4 +1,5 @@
 import React, { useState, useContext, useCallback, useEffect, useRef } from 'react';
+import { useLanguage } from '@/context/LanguageContext';
 import {
   Menu, X, MessageSquarePlus, LifeBuoy, BarChart2, Bot, FileText, Wrench,
   Send, Loader2, Package, Eye,
@@ -37,15 +38,16 @@ interface GeminusPluginMenuProps {
 
 type ActivePanel = null | 'issue' | 'workorder' | 'support' | 'insights' | 'gunnar' | 'ilean' | 'inventory' | 'viewer';
 
-const MENU_ITEMS = [
-  { id: 'issue' as const, label: 'Skapa ärende', icon: MessageSquarePlus },
-  { id: 'workorder' as const, label: 'Arbetsorder', icon: Wrench },
-  { id: 'support' as const, label: 'Supportärende', icon: LifeBuoy },
-  { id: 'inventory' as const, label: 'Asset panel', icon: Package },
-  { id: 'insights' as const, label: 'Insikter', icon: BarChart2 },
-  { id: 'viewer' as const, label: 'Geminus View', icon: Eye },
-  { id: 'gunnar' as const, label: 'Fråga Geminus AI', icon: Bot },
-  { id: 'ilean' as const, label: 'Fråga Ilean', icon: FileText },
+// Labels are defined as functions to support i18n — called inside the component
+const MENU_ITEM_DEFS = [
+  { id: 'issue' as const, labelSv: 'Skapa ärende', labelEn: 'Create issue', icon: MessageSquarePlus },
+  { id: 'workorder' as const, labelSv: 'Arbetsorder', labelEn: 'Work order', icon: Wrench },
+  { id: 'support' as const, labelSv: 'Supportärende', labelEn: 'Support case', icon: LifeBuoy },
+  { id: 'inventory' as const, labelSv: 'Asset panel', labelEn: 'Asset panel', icon: Package },
+  { id: 'insights' as const, labelSv: 'Insikter', labelEn: 'Insights', icon: BarChart2 },
+  { id: 'viewer' as const, labelSv: 'Geminus View', labelEn: 'Geminus View', icon: Eye },
+  { id: 'gunnar' as const, labelSv: 'Fråga Geminus AI', labelEn: 'Ask Geminus AI', icon: Bot },
+  { id: 'ilean' as const, labelSv: 'Fråga Ilean', labelEn: 'Ask Ilean', icon: FileText },
 ];
 
 export default function GeminusPluginMenu({
@@ -54,6 +56,7 @@ export default function GeminusPluginMenu({
   source,
   contextMetadata,
 }: GeminusPluginMenuProps) {
+  const { t } = useLanguage();
   const [expanded, setExpanded] = useState(false);
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -135,7 +138,7 @@ export default function GeminusPluginMenu({
         viewpoint_json: { source, ...contextMetadata },
       });
       if (error) throw error;
-      toast.success('Ärende skapat');
+      toast.success(t('Ärende skapat', 'Issue created'));
       handleClose();
     } catch (err: any) {
       toast.error('Could not create issue: ' + (err.message || 'Unknown error'));
@@ -157,7 +160,7 @@ export default function GeminusPluginMenu({
             "flex flex-col gap-1.5 mb-1 animate-in slide-in-from-bottom-2 fade-in duration-200",
             isMobile && "max-h-[60dvh] overflow-y-auto"
           )}>
-            {MENU_ITEMS.map((item) => (
+            {MENU_ITEM_DEFS.map((item) => (
               <button
                 key={item.id}
                 onClick={() => handleOpen(item.id)}
@@ -169,7 +172,7 @@ export default function GeminusPluginMenu({
                 )}
               >
                 <item.icon className="h-4 w-4 text-primary shrink-0" />
-                {item.label}
+                {t(item.labelSv, item.labelEn)}
               </button>
             ))}
           </div>
@@ -197,7 +200,7 @@ export default function GeminusPluginMenu({
               </Button>
             </TooltipTrigger>
             <TooltipContent side="left" className="bg-primary text-primary-foreground border-primary">
-              Geminus-menyn
+              {t('Geminus-menyn', 'Geminus menu')}
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -236,7 +239,7 @@ export default function GeminusPluginMenu({
           open={true}
           onClose={handleClose}
           onCreated={() => {
-            toast.success('Supportärende skapat');
+            toast.success(t('Supportärende skapat', 'Support case created'));
             handleClose();
           }}
           prefill={{
@@ -303,7 +306,7 @@ export default function GeminusPluginMenu({
           <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/50 shrink-0">
             <span className="text-sm font-medium flex items-center gap-2">
               <FileText className="h-4 w-4 text-primary" />
-              Ilean — Dokument
+              {t('Ilean — Dokument', 'Ilean — Documents')}
             </span>
             <Button variant="ghost" size="icon" className="h-9 w-9 min-h-[44px] min-w-[44px]" onClick={handleClose}>
               <X className="h-4 w-4" />

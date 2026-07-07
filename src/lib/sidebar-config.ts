@@ -4,7 +4,7 @@
 import React from 'react';
 import {
   Box, ClipboardList, AlertTriangle, BarChart2, Building2,
-  Zap, Archive, Radar, Scan, Globe, Cuboid, LifeBuoy,
+  Zap, Archive, Radar, Scan, Globe, Cuboid, LifeBuoy, HardHat, Wrench,
 } from 'lucide-react';
 import { DEFAULT_APP_CONFIGS } from '@/lib/constants';
 
@@ -21,6 +21,7 @@ export interface SidebarItemMeta {
 /** Apps that count as "viewer" context */
 export const VIEWER_CONTEXT_APPS = ['native_viewer', 'radar', 'geminus_plus', 'viewer', 'geminus_plus_viewer', 'split_viewer', 'virtual_twin'];
 
+// labels translated at render time
 export const SIDEBAR_ITEM_META: Record<string, SidebarItemMeta> = {
   inventory:        { icon: ClipboardList, color: 'text-orange-500',  label: 'Inventory',                          type: 'internal', contexts: ['building', 'viewer'] },
   fault_report:     { icon: AlertTriangle, color: 'text-destructive', label: 'Fault Report',                       type: 'internal', contexts: ['building', 'viewer'] },
@@ -34,6 +35,8 @@ export const SIDEBAR_ITEM_META: Record<string, SidebarItemMeta> = {
   ai_scan:          { icon: Scan,          color: 'text-accent',      label: 'AI Scan',                            type: 'internal', contexts: ['building', 'viewer'] },
   globe:            { icon: Globe,         color: 'text-primary',     label: 'Globe',                              type: 'internal', contexts: ['global'] },
   native_viewer:    { icon: Cuboid,        color: 'text-primary',     label: '3D Viewer',                          type: 'internal', contexts: ['building', 'viewer'] },
+  blm_forma:        { icon: HardHat,       color: 'text-orange-400',  label: 'BLM ↔ Forma',                   type: 'internal', contexts: ['global', 'building'] },
+  geminus_tools:    { icon: Wrench,        color: 'text-blue-500',    label: 'Geminus Tools',                  type: 'internal', contexts: ['global', 'building'] },
 };
 
 /** Derive the current context level from app state */

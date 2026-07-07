@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { Eye, EyeOff, ChevronDown, Tag } from 'lucide-react';
+import { useLanguage } from '@/context/LanguageContext';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -35,6 +36,7 @@ const AnnotationToggleMenu: React.FC<AnnotationToggleMenuProps> = ({
   buildingFmGuid,
   className
 }) => {
+  const { t } = useLanguage();
   const [categories, setCategories] = useState<AnnotationCategory[]>([]);
   const [symbolColors, setSymbolColors] = useState<Record<string, string>>({});
   const [allVisible, setAllVisible] = useState(true);
@@ -158,7 +160,7 @@ const AnnotationToggleMenu: React.FC<AnnotationToggleMenuProps> = ({
           className={cn("gap-2 shadow-lg bg-card/95 backdrop-blur-sm border", className)}
         >
           <Tag className="h-4 w-4" />
-          <span className="hidden sm:inline">Annotationer</span>
+          <span className="hidden sm:inline">{t('Annotationer', 'Annotations')}</span>
           <span className="text-xs text-muted-foreground">
             ({visibleCount}/{categories.length})
           </span>
@@ -167,7 +169,7 @@ const AnnotationToggleMenu: React.FC<AnnotationToggleMenuProps> = ({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Annotationstyper</span>
+          <span className="text-xs text-muted-foreground">{t('Annotationstyper', 'Annotation types')}</span>
           <Button
             variant="ghost"
             size="sm"
@@ -177,12 +179,12 @@ const AnnotationToggleMenu: React.FC<AnnotationToggleMenuProps> = ({
             {allVisible ? (
               <>
                 <EyeOff className="h-3 w-3 mr-1" />
-                Dölj alla
+                {t('Dölj alla', 'Hide all')}
               </>
             ) : (
               <>
                 <Eye className="h-3 w-3 mr-1" />
-                Visa alla
+                {t('Visa alla', 'Show all')}
               </>
             )}
           </Button>

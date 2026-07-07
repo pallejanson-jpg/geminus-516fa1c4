@@ -66,6 +66,19 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const [viewerReloadKey, setViewerReloadKey] = useState(0);
   const [forceBootstrap, setForceBootstrap] = useState(false);
 
+  // Reset viewer state when building changes
+  const prevBuildingFmGuidRef = React.useRef(buildingFmGuid);
+  useEffect(() => {
+    if (prevBuildingFmGuidRef.current !== buildingFmGuid) {
+      prevBuildingFmGuidRef.current = buildingFmGuid;
+      setXeokitViewer(null);
+      setIsViewerReady(false);
+      startViewAppliedRef.current = null;
+      setForceBootstrap(false);
+      setViewerReloadKey(k => k + 1);
+    }
+  }, [buildingFmGuid]);
+
   // Listen for XKT_FORCE_RELOAD to remount the viewer with fresh data
   useEffect(() => {
     const handler = (e: CustomEvent) => {
@@ -466,6 +479,20 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       }
     } catch (e) {
       console.warn('[NativeViewerShell] Failed to apply pending AI viewer command', e);
+    }
+
+    // Apply any pending alarm annotation payload (set by AlarmManagementTab when viewer wasn't mounted)
+    try {
+      const pendingAlarms = sessionStorage.getItem('pending_alarm_annotations');
+      if (pendingAlarms) {
+        sessionStorage.removeItem('pending_alarm_annotations');
+        const payload = JSON.parse(pendingAlarms);
+        setTimeout(() => {
+          emit('ALARM_ANNOTATIONS_SHOW', payload);
+        }, 2500);
+      }
+    } catch (e) {
+      console.warn('[NativeViewerShell] Failed to apply pending alarm annotations', e);
     }
 
     // Build comprehensive shim that mimics the Geminus Plus API for all toolbar/settings components

@@ -6,6 +6,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Sun, Moon, Clock, MapPin, Calendar } from 'lucide-react';
+import { useLanguage } from '@/context/LanguageContext';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
@@ -31,6 +32,7 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
   viewerRef,
   isViewerReady = false,
 }) => {
+  const { t } = useLanguage();
   const {
     lightingState,
     sunStudyState,
@@ -75,12 +77,12 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
 
   // Quick time presets
   const timePresets = [
-    { label: 'Gryning', time: '06:00' },
-    { label: 'Morgon', time: '09:00' },
-    { label: 'Middag', time: '12:00' },
-    { label: 'Eftermiddag', time: '15:00' },
-    { label: 'Kväll', time: '18:00' },
-    { label: 'Skymning', time: '21:00' },
+    { label: t('Gryning', 'Dawn'), time: '06:00' },
+    { label: t('Morgon', 'Morning'), time: '09:00' },
+    { label: t('Middag', 'Noon'), time: '12:00' },
+    { label: t('Eftermiddag', 'Afternoon'), time: '15:00' },
+    { label: t('Kväll', 'Evening'), time: '18:00' },
+    { label: t('Skymning', 'Dusk'), time: '21:00' },
   ];
 
   // Location presets (Swedish cities)
@@ -111,7 +113,7 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
               <Moon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             )}
           </div>
-          <span className="text-xs sm:text-sm">Belysning</span>
+          <span className="text-xs sm:text-sm">{t('Belysning', 'Lighting')}</span>
         </div>
         <Switch 
           checked={lightingState.enabled} 
@@ -125,7 +127,7 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
         <div className="space-y-2 pl-8 sm:pl-10">
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <Label className="text-[10px] sm:text-xs text-muted-foreground">Omgivningsljus</Label>
+              <Label className="text-[10px] sm:text-xs text-muted-foreground">{t('Omgivningsljus', 'Ambient light')}</Label>
               <span className="text-[10px] sm:text-xs text-muted-foreground">
                 {Math.round(lightingState.ambientIntensity * 100)}%
               </span>
@@ -143,7 +145,7 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
           
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <Label className="text-[10px] sm:text-xs text-muted-foreground">Riktat ljus</Label>
+              <Label className="text-[10px] sm:text-xs text-muted-foreground">{t('Riktat ljus', 'Directional light')}</Label>
               <span className="text-[10px] sm:text-xs text-muted-foreground">
                 {Math.round(lightingState.directionalIntensity * 100)}%
               </span>
@@ -178,7 +180,7 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
               >
                 <Sun className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </div>
-              <span className="text-xs sm:text-sm">Solstudie</span>
+              <span className="text-xs sm:text-sm">{t('Solstudie', 'Sun study')}</span>
             </button>
           </CollapsibleTrigger>
           <Switch 
@@ -194,7 +196,7 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">
                 <MapPin className="h-3 w-3 text-muted-foreground" />
-                <Label className="text-[10px] sm:text-xs text-muted-foreground">Plats</Label>
+                <Label className="text-[10px] sm:text-xs text-muted-foreground">{t('Plats', 'Location')}</Label>
               </div>
               <div className="flex flex-wrap gap-1">
                 {locationPresets.map(loc => (
@@ -244,7 +246,7 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">
                 <Calendar className="h-3 w-3 text-muted-foreground" />
-                <Label className="text-[10px] sm:text-xs text-muted-foreground">Datum</Label>
+                <Label className="text-[10px] sm:text-xs text-muted-foreground">{t('Datum', 'Date')}</Label>
               </div>
               <Input
                 type="date"
@@ -259,7 +261,7 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">
                 <Clock className="h-3 w-3 text-muted-foreground" />
-                <Label className="text-[10px] sm:text-xs text-muted-foreground">Tid</Label>
+                <Label className="text-[10px] sm:text-xs text-muted-foreground">{t('Tid', 'Time')}</Label>
               </div>
               <Input
                 type="time"
@@ -288,16 +290,16 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
             {sunPosition && sunStudyState.enabled && (
               <div className="mt-2 p-2 rounded-md bg-muted/50 text-[10px] space-y-1">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Höjd:</span>
+                  <span className="text-muted-foreground">{t('Höjd:', 'Altitude:')}</span>
                   <span>{formatAltitude(sunPosition.altitude)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Riktning:</span>
+                  <span className="text-muted-foreground">{t('Riktning:', 'Azimuth:')}</span>
                   <span>{formatAzimuth(sunPosition.azimuth)}</span>
                 </div>
                 {sunPosition.altitude < 0 && (
                   <div className="text-orange-500 mt-1">
-                    ⚠️ Solen är under horisonten
+                    ⚠️ {t('Solen är under horisonten', 'Sun is below the horizon')}
                   </div>
                 )}
               </div>

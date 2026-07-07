@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { getIleanSettings, saveIleanSettings } from '@/components/settings/IleanSettings';
 import { useIleanData } from '@/hooks/useIleanData';
 import ReactMarkdown from 'react-markdown';
+import { useLanguage } from '@/context/LanguageContext';
 
 const BUTTON_SIZE = 56;
 
@@ -31,6 +32,7 @@ const ContextIcon = ({ type }: { type: string | null }) => {
  * Native Geminus UI. Similar pattern to GunnarChat.
  */
 export default function IleanButton() {
+  const { t } = useLanguage();
   const {
     messages, sendMessage, clearMessages, isLoading, isSending,
     contextEntity, contextLevel, isContextAvailable,
@@ -226,7 +228,7 @@ export default function IleanButton() {
               )}
             </div>
           </TooltipTrigger>
-          <TooltipContent side="right" className="font-medium">Öppna Ilean (dra för att flytta)</TooltipContent>
+          <TooltipContent side="right" className="font-medium">{t('Öppna Ilean (dra för att flytta)', 'Open Ilean (drag to move)')}</TooltipContent>
         </Tooltip>
       </div>
 
@@ -277,7 +279,7 @@ export default function IleanButton() {
                 </div>
                 <div className="flex flex-col">
                   <span className="font-semibold text-sm leading-tight">Ilean</span>
-                  <span className="text-[10px] text-muted-foreground leading-tight">Dokument-AI</span>
+                  <span className="text-[10px] text-muted-foreground leading-tight">{t('Dokument-AI', 'Document AI')}</span>
                 </div>
               </div>
             </div>
@@ -300,7 +302,7 @@ export default function IleanButton() {
                       <ExternalLink className="h-3.5 w-3.5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="text-xs">Öppna i Geminus Premium</TooltipContent>
+                  <TooltipContent side="bottom" className="text-xs">{t('Öppna i Geminus Premium', 'Open in Geminus Premium')}</TooltipContent>
                 </Tooltip>
               )}
               {messages.length > 0 && (
@@ -310,7 +312,7 @@ export default function IleanButton() {
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="text-xs">Rensa konversation</TooltipContent>
+                  <TooltipContent side="bottom" className="text-xs">{t('Rensa konversation', 'Clear conversation')}</TooltipContent>
                 </Tooltip>
               )}
               {!isMobile && (
@@ -332,15 +334,17 @@ export default function IleanButton() {
                   <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-teal-600/20 flex items-center justify-center mb-3">
                     <FileQuestion className="h-7 w-7 text-cyan-500/60" />
                   </div>
-                  <h3 className="font-semibold text-sm mb-1">Fråga Ilean om dokument</h3>
+                  <h3 className="font-semibold text-sm mb-1">{t('Fråga Ilean om dokument', 'Ask Ilean about documents')}</h3>
                   <p className="text-xs text-muted-foreground mb-4 max-w-xs">
-                    Ilean svarar på frågor om dokument i Geminus Premium för{' '}
-                    {contextEntity.entityName || 'denna byggnad'}.
+                    {t(
+                      `Ilean svarar på frågor om dokument i Geminus Premium för ${contextEntity.entityName || 'denna byggnad'}.`,
+                      `Ilean answers questions about documents in Geminus Premium for ${contextEntity.entityName || 'this building'}.`
+                    )}
                   </p>
                   {!isContextAvailable && (
                     <div className="flex items-center gap-1.5 text-xs text-amber-500/80 mb-3 px-3 py-1.5 rounded-lg bg-amber-500/10">
                       <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                      <span>Ingen Geminus Premium-koppling hittad för denna kontext</span>
+                      <span>{t('Ingen Geminus Premium-koppling hittad för denna kontext', 'No Geminus Premium connection found for this context')}</span>
                     </div>
                   )}
                   <div className="flex flex-col gap-2 w-full max-w-xs">
@@ -409,7 +413,7 @@ export default function IleanButton() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Fråga om dokument..."
+                placeholder={t('Fråga om dokument...', 'Ask about documents...')}
                 disabled={isSending}
                 className="flex-1 h-9 text-sm rounded-lg border-border/50 focus-visible:ring-cyan-500/30"
               />

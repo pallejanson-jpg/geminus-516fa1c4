@@ -19,13 +19,13 @@ export interface RoomLabelConfig {
 
 // Available fields that can be shown on labels
 export const AVAILABLE_LABEL_FIELDS = [
-  { key: 'commonName', label: 'Rumsnamn', description: 'Rummets namn' },
-  { key: 'designation', label: 'Rumsnummer', description: 'Beteckning/nummer' },
-  { key: 'longName', label: 'Långt namn', description: 'Fullständigt namn' },
-  { key: 'nta', label: 'Nettoyta (NTA)', description: 'Nettoyta i m²' },
-  { key: 'bta', label: 'Bruttoyta (BTA)', description: 'Bruttoyta i m²' },
-  { key: 'function', label: 'Funktion', description: 'Rummets funktion' },
-  { key: 'department', label: 'Avdelning', description: 'Tillhörande avdelning' },
+  { key: 'commonName', label: 'Room Name', description: 'Name of the room' },
+  { key: 'designation', label: 'Room Number', description: 'Designation/number' },
+  { key: 'longName', label: 'Long Name', description: 'Full name' },
+  { key: 'nta', label: 'Net Area (NTA)', description: 'Net area in m²' },
+  { key: 'bta', label: 'Gross Area (GFA)', description: 'Gross floor area in m²' },
+  { key: 'function', label: 'Function', description: 'Room function' },
+  { key: 'department', label: 'Department', description: 'Associated department' },
 ];
 
 export function useRoomLabelConfigs() {
@@ -96,8 +96,8 @@ export function useRoomLabelConfigs() {
 
       await fetchConfigs();
       toast({
-        title: 'Etikettkonfiguration skapad',
-        description: `"${config.name}" har sparats.`,
+        title: 'Label configuration created',
+        description: `"${config.name}" has been saved.`,
       });
 
       return data;
@@ -165,7 +165,7 @@ export function useRoomLabelConfigs() {
       }
 
       toast({
-        title: 'Konfiguration borttagen',
+        title: 'Configuration deleted',
       });
     } catch (error: any) {
       console.error('Failed to delete room label config:', error);

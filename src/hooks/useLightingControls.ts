@@ -335,9 +335,9 @@ export function useLightingControls() {
   const formatAltitude = useCallback((altitude: number) => {
     const degrees = (altitude * 180) / Math.PI;
     if (degrees < 0) {
-      return `${Math.abs(degrees).toFixed(1)}° under horisonten`;
+      return `${Math.abs(degrees).toFixed(1)}° below horizon`;
     }
-    return `${degrees.toFixed(1)}° över horisonten`;
+    return `${degrees.toFixed(1)}° above horizon`;
   }, []);
 
   /**
@@ -348,10 +348,10 @@ export function useLightingControls() {
     let degrees = ((azimuth * 180) / Math.PI + 180) % 360;
     
     const directions = [
-      'N', 'NNO', 'NO', 'ONO', 
-      'O', 'OSO', 'SO', 'SSO',
-      'S', 'SSV', 'SV', 'VSV',
-      'V', 'VNV', 'NV', 'NNV'
+      'N', 'NNE', 'NE', 'ENE',
+      'E', 'ESE', 'SE', 'SSE',
+      'S', 'SSW', 'SW', 'WSW',
+      'W', 'WNW', 'NW', 'NNW'
     ];
     const index = Math.round(degrees / 22.5) % 16;
     

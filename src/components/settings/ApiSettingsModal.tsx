@@ -14,13 +14,15 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { useToast } from "@/hooks/use-toast";
 import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "@/integrations/supabase/client";
 import { 
-    Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
+    Box, Database, RefreshCw, CheckCircle2, AlertCircle,
     Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2,
-    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles, FileText, FolderOpen, ChevronRight, ChevronDown as ChevronDownIcon, File, Database as DatabaseIcon, Cuboid, Bot, Network, RotateCcw
+    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles, FileText, FolderOpen, ChevronRight, ChevronDown as ChevronDownIcon, File, Database as DatabaseIcon, Cuboid, Bot, Network, RotateCcw, Copy
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AppContext } from '@/context/AppContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { DEFAULT_APP_CONFIGS, GEMINUS_PREMIUM_POLL_OPTIONS } from '@/lib/constants';
 import SymbolSettings from './SymbolSettings';
 import VoiceSettings from './VoiceSettings';
@@ -110,7 +112,10 @@ const AccFolderNode: React.FC<{
     toggleBimFile: (itemId: string) => void;
     translationStatuses: Record<string, TranslationStatus>;
     onTranslate3D: (item: any, folder: any) => void;
-}> = ({ folder, depth, expandedFolders, toggleFolder, syncingBimFolderId, bimSyncProgress, handleSyncBimData, formatFileSize, selectedBimFiles, toggleBimFile, translationStatuses, onTranslate3D }) => {
+    masterModelUrn: string;
+    setMasterModelUrn: (urn: string) => void;
+}> = ({ folder, depth, expandedFolders, toggleFolder, syncingBimFolderId, bimSyncProgress, handleSyncBimData, formatFileSize, selectedBimFiles, toggleBimFile, translationStatuses, onTranslate3D, masterModelUrn, setMasterModelUrn }) => {
+    const { t } = useLanguage();
     const hasChildren = (folder.children || []).length > 0;
     const isSyncingThisFolder = syncingBimFolderId === folder.id;
     const isExpanded = expandedFolders.has(folder.id);
@@ -151,7 +156,7 @@ const AccFolderNode: React.FC<{
                     <FolderOpen className="h-3 w-3 text-amber-500 shrink-0" />
                     <span className="font-medium truncate">{folder.name}</span>
                     <Badge variant="outline" className="ml-auto text-[9px] shrink-0">
-                        {totalCount} {totalCount === 1 ? 'fil' : 'filer'}
+                        {totalCount} {totalCount === 1 ? t('fil', 'file') : t('filer', 'files')}
                     </Badge>
                 </button>
                 {hasAnyBimFiles && (
@@ -204,6 +209,19 @@ const AccFolderNode: React.FC<{
                                         {isBim && (
                                             <Badge variant="secondary" className="text-[8px] sm:text-[9px] shrink-0 px-1 py-0">BIM</Badge>
                                         )}
+                                        {isBim && item.versionUrn && (
+                                            <label className="flex items-center gap-0.5 cursor-pointer shrink-0" title="A-modell (master) — skapar våningsplan och rum">
+                                                <input
+                                                    type="radio"
+                                                    name="masterModel"
+                                                    checked={masterModelUrn === item.versionUrn}
+                                                    onChange={() => setMasterModelUrn(item.versionUrn)}
+                                                    className="h-2.5 w-2.5 accent-primary"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                />
+                                                <span className="text-[8px] sm:text-[9px] text-muted-foreground">A</span>
+                                            </label>
+                                        )}
                                         {isBim && item.versionUrn && (() => {
                                             const ts = translationStatuses[item.versionUrn];
                                             if (ts?.status === 'complete' || ts?.status === 'success') {
@@ -226,7 +244,7 @@ const AccFolderNode: React.FC<{
                                                     disabled={ts?.status === 'pending' || ts?.status === 'inprogress'}
                                                 >
                                                     <Cuboid className="h-2.5 w-2.5" />
-                                                    {ts?.status === 'failed' ? 'Igen' : '3D'}
+                                                    {ts?.status === 'failed' ? t('Igen', 'Retry') : '3D'}
                                                 </Button>
                                             );
                                         })()}
@@ -256,6 +274,8 @@ const AccFolderNode: React.FC<{
                                     toggleBimFile={toggleBimFile}
                                     translationStatuses={translationStatuses}
                                     onTranslate3D={onTranslate3D}
+                                    masterModelUrn={masterModelUrn}
+                                    setMasterModelUrn={setMasterModelUrn}
                                 />
                             ))}
                         </div>
@@ -455,12 +475,16 @@ const ImdfExportPanel: React.FC<{ allBuildings: any[] }> = ({ allBuildings }) =>
 const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) => {
 
     const { toast } = useToast();
+    const { t } = useLanguage();
     const { appConfigs, setAppConfigs, viewer3dFmGuid, selectedFacility } = useContext(AppContext);
     const [activeTab, setActiveTab] = useState('apps');
     // Separate syncing states for each sync type
     const [isSyncingStructure, setIsSyncingStructure] = useState(false);
     const [isSyncingAssets, setIsSyncingAssets] = useState(false);
     const [isSyncingXkt, setIsSyncingXkt] = useState(false);
+    const [selectedSingleBuilding, setSelectedSingleBuilding] = useState<string>('');
+    const [isSyncingSingleBuilding, setIsSyncingSingleBuilding] = useState(false);
+    const [singleBuildingSyncResult, setSingleBuildingSyncResult] = useState<{ success: boolean; message: string } | null>(null);
     const [forceXkt, setForceXkt] = useState(false);
     const [syncStatuses, setSyncStatuses] = useState<SyncStatus[]>([]);
     const [assetCount, setAssetCount] = useState<number>(0);
@@ -502,13 +526,13 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             const data = await r.json();
             setFacilitateBuildings(data.buildings || []);
         } catch (e: any) {
-            toast({ variant: 'destructive', title: 'Kunde inte hämta byggnader', description: e.message });
+            toast({ variant: 'destructive', title: t('Kunde inte hämta byggnader', 'Could not fetch buildings'), description: e.message });
         }
     };
 
     const startFacilitateSync = async () => {
         if (!selectedFacBuildingId || !selectedFacBuildingName) {
-            toast({ variant: 'destructive', title: 'Välj en byggnad' }); return;
+            toast({ variant: 'destructive', title: t('Välj en byggnad', 'Select a building') }); return;
         }
         setIsFacilitateSyncing(true);
         setFacilitateSyncLog([`Startar synk av ${selectedFacBuildingName}…`]);
@@ -718,6 +742,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [accAuthStatus, setAccAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>('checking');
     const [isAccLoggingIn, setIsAccLoggingIn] = useState(false);
     const [isAccLoggingOut, setIsAccLoggingOut] = useState(false);
+
+    // APS App credentials (Client ID / Secret stored in geminus_plus_endpoint_cache)
+    const [apsClientId, setApsClientId] = useState('');
+    const [apsClientSecret, setApsClientSecret] = useState('');
+    const [apsCredentialsSaved, setApsCredentialsSaved] = useState(false);
+    const [isSavingApsCredentials, setIsSavingApsCredentials] = useState(false);
     
     // ACC -> Geminus Plus sync state
     const [accToApStatus, setAccToApStatus] = useState<any>(null);
@@ -727,6 +757,14 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
     // System count (displayed in sync status)
     const [systemCount, setSystemCount] = useState(0);
+
+    // Forma import: target building + master model selection
+    const [accTargetBuildingFmGuid, setAccTargetBuildingFmGuid] = useState(() =>
+        sessionStorage.getItem('acc_target_building_fm_guid') || ''
+    );
+    const [accMasterModelUrn, setAccMasterModelUrn] = useState('');
+    const [accBuildings, setAccBuildings] = useState<Array<{ fm_guid: string; name: string }>>([]);
+    const [isLoadingAccBuildings, setIsLoadingAccBuildings] = useState(false);
 
     // Check Autodesk 3-legged auth status on mount
     useEffect(() => {
@@ -757,17 +795,17 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     if (error) throw error;
                     if (data?.success) {
                         setAccAuthStatus('authenticated');
-                        toast({ title: 'Autodesk-inloggning lyckades', description: 'Du är nu inloggad med ditt Autodesk-konto.' });
+                        toast({ title: t('Autodesk-inloggning lyckades', 'Autodesk login successful'), description: t('Du är nu inloggad med ditt Autodesk-konto.', 'You are now logged in with your Autodesk account.') });
                     } else {
                         throw new Error(data?.error || 'Token exchange failed');
                     }
                 } catch (err: any) {
-                    toast({ variant: 'destructive', title: 'Inloggning misslyckades', description: err.message });
+                    toast({ variant: 'destructive', title: t('Inloggning misslyckades', 'Login failed'), description: err.message });
                 } finally {
                     setIsAccLoggingIn(false);
                 }
             } else if (event.data?.type === 'autodesk-oauth-error') {
-                toast({ variant: 'destructive', title: 'Autodesk-inloggning avbruten', description: event.data.error });
+                toast({ variant: 'destructive', title: t('Autodesk-inloggning avbruten', 'Autodesk login cancelled'), description: event.data.error });
             }
         };
         window.addEventListener('message', handleMessage);
@@ -789,7 +827,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 window.open(data.authUrl, 'autodesk-login', `width=${width},height=${height},left=${left},top=${top},popup=yes`);
             }
         } catch (err: any) {
-            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+            toast({ variant: 'destructive', title: 'Error', description: err.message });
         }
     };
 
@@ -802,11 +840,32 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             });
             if (error) throw error;
             setAccAuthStatus('unauthenticated');
-            toast({ title: 'Utloggad', description: 'Du har loggats ut från Autodesk.' });
+            toast({ title: t('Utloggad', 'Logged out'), description: t('Du har loggats ut från Autodesk.', 'You have been logged out from Autodesk.') });
         } catch (err: any) {
-            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+            toast({ variant: 'destructive', title: 'Error', description: err.message });
         } finally {
             setIsAccLoggingOut(false);
+        }
+    };
+
+    const handleSaveApsCredentials = async () => {
+        if (!apsClientId.trim() || !apsClientSecret.trim()) {
+            toast({ variant: 'destructive', title: 'Missing fields', description: 'Enter both Client ID and Client Secret.' });
+            return;
+        }
+        setIsSavingApsCredentials(true);
+        try {
+            const { error: upsertError } = await supabase.from('geminus_plus_endpoint_cache').upsert([
+                { key: 'aps_client_id', value: apsClientId.trim() },
+                { key: 'aps_client_secret', value: apsClientSecret.trim() },
+            ], { onConflict: 'key' });
+            if (upsertError) throw upsertError;
+            setApsCredentialsSaved(true);
+            toast({ title: 'Credentials saved', description: 'Autodesk Forma app credentials stored. You can now log in.' });
+        } catch (err: any) {
+            toast({ variant: 'destructive', title: 'Error', description: err.message });
+        } finally {
+            setIsSavingApsCredentials(false);
         }
     };
 
@@ -822,16 +881,16 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             if (data?.success) {
                 setAccConnectionStatus('success');
                 setAccConnectionMessage(data.message);
-                toast({ title: 'Anslutning OK', description: data.message });
+                toast({ title: t('Anslutning OK', 'Connection OK'), description: data.message });
             } else {
                 setAccConnectionStatus('error');
-                setAccConnectionMessage(data?.error || 'Okänt fel');
-                toast({ variant: 'destructive', title: 'Anslutning misslyckades', description: data?.error });
+                setAccConnectionMessage(data?.error || t('Okänt fel', 'Unknown error'));
+                toast({ variant: 'destructive', title: t('Anslutning misslyckades', 'Connection failed'), description: data?.error });
             }
         } catch (err: any) {
             setAccConnectionStatus('error');
             setAccConnectionMessage(err.message);
-            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+            toast({ variant: 'destructive', title: 'Error', description: err.message });
         } finally {
             setIsTestingAcc(false);
         }
@@ -887,7 +946,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 toast({ variant: 'destructive', title: 'Sync failed', description: data?.error });
             }
         } catch (err: any) {
-            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+            toast({ variant: 'destructive', title: 'Error', description: err.message });
         } finally {
             setIsSyncingAccLocations(false);
         }
@@ -912,7 +971,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 toast({ variant: 'destructive', title: 'Sync failed', description: data?.error });
             }
         } catch (err: any) {
-            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+            toast({ variant: 'destructive', title: 'Error', description: err.message });
         } finally {
             setIsSyncingAccAssets(false);
         }
@@ -953,7 +1012,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             setAccToApStatus(data);
         } catch (err: any) {
             console.error('Failed to check ACC->Geminus Plus status:', err);
-            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+            toast({ variant: 'destructive', title: 'Error', description: err.message });
         } finally {
             setIsCheckingAccToAp(false);
         }
@@ -1001,6 +1060,22 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     }, [accFolders]);
     useEffect(() => { sessionStorage.setItem('acc_top_level_items', JSON.stringify(accTopLevelItems)); }, [accTopLevelItems]);
     useEffect(() => { sessionStorage.setItem('acc_root_folder_name', accRootFolderName); }, [accRootFolderName]);
+
+    // Load APS credentials from DB when modal opens
+    useEffect(() => {
+        if (!isOpen) return;
+        supabase.from('geminus_plus_endpoint_cache')
+            .select('key, value')
+            .in('key', ['aps_client_id', 'aps_client_secret'])
+            .then(({ data }) => {
+                if (!data) return;
+                const id = data.find(r => r.key === 'aps_client_id')?.value || '';
+                const secret = data.find(r => r.key === 'aps_client_secret')?.value || '';
+                setApsClientId(id);
+                setApsClientSecret(secret);
+                setApsCredentialsSaved(!!(id && secret));
+            });
+    }, [isOpen]);
 
     useEffect(() => {
         if (isOpen && accAuthStatus !== 'checking' && !hasLoadedAccSettings) {
@@ -1101,7 +1176,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const handleSyncBimData = async (folder: any, selectedFiles?: any[]) => {
         const effectiveProjectId = manualAccProjectId.trim() || selectedAccProjectId;
         if (!effectiveProjectId) {
-            toast({ variant: 'destructive', title: 'Projekt-ID saknas', description: 'Ange ett ACC-projekt-ID först.' });
+            toast({ variant: 'destructive', title: 'Project ID missing', description: 'Enter an Autodesk Forma project ID first.' });
             return;
         }
 
@@ -1205,17 +1280,25 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     // Handle 3D translation for a BIM file
     const handleTranslate3D = async (item: any, folder: any) => {
         if (!item.versionUrn) {
-            toast({ variant: 'destructive', title: 'Fel', description: 'Filen saknar versionUrn.' });
+            toast({ variant: 'destructive', title: 'Error', description: 'File is missing versionUrn.' });
             return;
         }
 
         const effectiveProjectId = manualAccProjectId.trim() || selectedAccProjectId;
-        const buildingFmGuid = `acc-bim-building-${folder.id.replace(/[^a-zA-Z0-9-]/g, '')}`;
+        const buildingFmGuid = accTargetBuildingFmGuid ||
+            `acc-bim-building-${folder.id.replace(/[^a-zA-Z0-9-]/g, '')}`;
+
+        if (!accTargetBuildingFmGuid) {
+            toast({ variant: 'destructive', title: t('Välj byggnad', 'Select building'), description: t('Koppla importen till en byggnad innan 3D-konvertering.', 'Link the import to a building before 3D conversion.') });
+            return;
+        }
+
+        const isMasterModel = !accMasterModelUrn || accMasterModelUrn === item.versionUrn;
 
         // Update status to pending
-        setTranslationStatuses(prev => ({ ...prev, [item.versionUrn]: { status: 'pending', message: 'Startar...' } }));
+        setTranslationStatuses(prev => ({ ...prev, [item.versionUrn]: { status: 'pending', message: t('Startar...', 'Starting...') } }));
 
-        toast({ title: 'Konvertering startad', description: `Startar 3D-konvertering för ${item.name}...` });
+        toast({ title: t('Konvertering startad', 'Conversion started'), description: t(`Startar 3D-konvertering för ${item.name}...`, `Starting 3D conversion for ${item.name}...`) });
 
         const { accXktConverter } = await import('@/services/acc-xkt-converter');
         const result = await accXktConverter.runFullPipeline(
@@ -1224,7 +1307,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 buildingFmGuid,
                 folderId: folder.id,
                 fileName: item.name,
+                modelName: item.name.replace(/\.[^.]+$/, ''),
                 region: accRegion,
+                isMasterModel,
             },
             (status) => {
                 setTranslationStatuses(prev => ({ ...prev, [item.versionUrn]: status }));
@@ -1237,9 +1322,31 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             const isFormatLimitation = result.error?.includes('SVF2') || result.error?.includes('serverbaserad') || result.error?.includes('formatLimitation');
             toast({ 
                 variant: 'destructive', 
-                title: isFormatLimitation ? 'Formatbegränsning' : 'Konvertering misslyckades', 
-                description: result.error || 'Okänt fel',
+                title: isFormatLimitation ? t('Formatbegränsning', 'Format limitation') : t('Konvertering misslyckades', 'Conversion failed'),
+                description: result.error || t('Okänt fel', 'Unknown error'),
             });
+        }
+    };
+
+    // Persist accTargetBuildingFmGuid to sessionStorage
+    useEffect(() => {
+        sessionStorage.setItem('acc_target_building_fm_guid', accTargetBuildingFmGuid);
+    }, [accTargetBuildingFmGuid]);
+
+    const fetchAccBuildings = async () => {
+        setIsLoadingAccBuildings(true);
+        try {
+            const { data, error } = await supabase
+                .from('assets')
+                .select('fm_guid, common_name, name')
+                .eq('category', 'Building')
+                .order('common_name');
+            if (error) throw error;
+            setAccBuildings((data || []).map((b: any) => ({ fm_guid: b.fm_guid, name: b.common_name || b.name || b.fm_guid })));
+        } catch (err: any) {
+            toast({ variant: 'destructive', title: 'Kunde inte hämta byggnader', description: err.message });
+        } finally {
+            setIsLoadingAccBuildings(false);
         }
     };
 
@@ -1392,9 +1499,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         try {
             addStep('structure', 'Syncing buildings, floors & rooms');
 
-            const runStructureLoop = async (): Promise<void> => {
+            const runStructureLoop = async (isFirst = false): Promise<void> => {
                 const { data, error } = await supabase.functions.invoke('geminus-plus-sync', {
-                    body: { action: 'sync-structure', force: true }
+                    body: { action: 'sync-structure', force: isFirst }
                 });
 
                 if (error) throw error;
@@ -1406,7 +1513,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                         message: `${data.totalSynced || 0} items (${data.phase})...`,
                         count: data.totalSynced || 0,
                     });
-                    setTimeout(() => runStructureLoop(), 2000);
+                    setTimeout(() => runStructureLoop(false), 2000);
                     return;
                 }
 
@@ -1432,7 +1539,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 description: 'Syncing buildings, floors and rooms...',
             });
 
-            runStructureLoop();
+            runStructureLoop(true);
         } catch (error: any) {
             setStructureSyncLog(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'error' as const, message: error.message, completedAt: Date.now() } : s));
             setStructureSyncOutcome({
@@ -1578,6 +1685,26 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 title: 'Reset failed',
                 description: error.message,
             });
+        }
+    };
+
+    const handleSyncSingleBuilding = async () => {
+        if (!selectedSingleBuilding || isSyncingSingleBuilding) return;
+        setIsSyncingSingleBuilding(true);
+        setSingleBuildingSyncResult(null);
+        try {
+            const { data, error } = await supabase.functions.invoke('geminus-plus-sync', {
+                body: { action: 'sync-single-building', buildingFmGuid: selectedSingleBuilding }
+            });
+            if (error) throw error;
+            setSingleBuildingSyncResult({ success: true, message: `${(data?.totalSynced || 0).toLocaleString()} assets synced` });
+            toast({ title: 'Building synced', description: `${(data?.totalSynced || 0).toLocaleString()} assets updated` });
+            await checkSyncStatus();
+        } catch (error: any) {
+            setSingleBuildingSyncResult({ success: false, message: error.message });
+            toast({ variant: 'destructive', title: 'Sync failed', description: error.message });
+        } finally {
+            setIsSyncingSingleBuilding(false);
         }
     };
 
@@ -2003,8 +2130,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             });
 
             toast({
-                title: "Inkrementell synk startad",
-                description: "Syncs only changed objects since last sync.",
+                title: t('Inkrementell synk startad', 'Incremental sync started'),
+                description: t('Synkar bara ändrade objekt sedan senaste synk.', 'Syncs only changed objects since last sync.'),
             });
 
             const pollInterval = setInterval(async () => {
@@ -2036,9 +2163,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
     useEffect(() => {
         if (isOpen && !hasCheckedSync) {
-            // Lightweight reads only — no remote API checks on open.
-            // The user must click "Check Status" or a "Sync" button to trigger remote work.
             fetchSyncStatus();
+            checkSyncStatus();
             fetchConfig();
             fetchSyncProgress();
             fetchFavoriteBuildings();
@@ -2144,18 +2270,18 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
             if (data?.success) {
                 setGeminusBaseStatus('success');
-                setGeminusBaseMessage(data.message || 'Anslutning lyckades');
+                setGeminusBaseMessage(data.message || t('Anslutning lyckades', 'Connection successful'));
                 toast({
-                    title: "Geminus Base ansluten",
-                    description: data.message || 'Anslutningen till Geminus Base fungerar.',
+                    title: t('Geminus Base ansluten', 'Geminus Base connected'),
+                    description: data.message || t('Anslutningen till Geminus Base fungerar.', 'The Geminus Base connection is working.'),
                 });
             } else {
                 setGeminusBaseStatus('error');
-                setGeminusBaseMessage(data?.error || 'Okänt fel');
+                setGeminusBaseMessage(data?.error || t('Okänt fel', 'Unknown error'));
                 toast({
                     variant: "destructive",
-                    title: "Anslutning misslyckades",
-                    description: data?.error || 'Kunde inte ansluta till Geminus Base.',
+                    title: t('Anslutning misslyckades', 'Connection failed'),
+                    description: data?.error || t('Kunde inte ansluta till Geminus Base.', 'Could not connect to Geminus Base.'),
                 });
             }
         } catch (error: any) {
@@ -2196,16 +2322,16 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             if (testError) throw testError;
 
             if (data?.success) {
-                toast({ title: 'Geminus Base sparat', description: 'Credentials sparade och anslutning verifierad.' });
+                toast({ title: t('Geminus Base sparat', 'Geminus Base saved'), description: t('Credentials sparade och anslutning verifierad.', 'Credentials saved and connection verified.') });
                 setGeminusBaseStatus('success');
-                setGeminusBaseMessage('Anslutning OK — ' + (data.message || ''));
+                setGeminusBaseMessage(t('Anslutning OK — ', 'Connection OK — ') + (data.message || ''));
             } else {
-                toast({ variant: 'destructive', title: 'Sparat men anslutning misslyckades', description: data?.error || 'Kontrollera URL och credentials.' });
+                toast({ variant: 'destructive', title: t('Sparat men anslutning misslyckades', 'Saved but connection failed'), description: data?.error || t('Kontrollera URL och credentials.', 'Check URL and credentials.') });
                 setGeminusBaseStatus('error');
-                setGeminusBaseMessage(data?.error || 'Kontrollera credentials');
+                setGeminusBaseMessage(data?.error || t('Kontrollera credentials', 'Check credentials'));
             }
         } catch (err: any) {
-            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+            toast({ variant: 'destructive', title: 'Error', description: err.message });
             setGeminusBaseStatus('error');
             setGeminusBaseMessage(err.message);
         } finally {
@@ -2222,7 +2348,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 body: { action: 'test-connection' }
             });
             if (connError || !connData?.success) {
-                toast({ variant: 'destructive', title: 'Geminus Base ej ansluten', description: connData?.error || connError?.message || 'Kunde inte ansluta.' });
+                toast({ variant: 'destructive', title: t('Geminus Base ej ansluten', 'Geminus Base not connected'), description: connData?.error || connError?.message || t('Kunde inte ansluta.', 'Could not connect.') });
                 setGeminusBaseStatus('error');
                 return;
             }
@@ -2295,8 +2421,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             if (failed > 0) parts.push(`${failed} failed`);
 
             toast({
-                title: 'Geminus Base-synk klar',
-                description: parts.join(', ') || 'Inget att synka.',
+                title: t('Geminus Base-synk klar', 'Geminus Base sync complete'),
+                description: parts.join(', ') || t('Inget att synka.', 'Nothing to sync.'),
             });
         } catch (error: any) {
             toast({ variant: 'destructive', title: 'Sync error', description: error.message });
@@ -2800,7 +2926,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     </Button>
                                                     <Button variant="outline" size="sm" onClick={handleTestGeminusBaseConnection} disabled={isTestingGeminusBase}>
                                                         {isTestingGeminusBase ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
-                                                        Testa anslutning
+                                                        Test connection
                                                     </Button>
                                                 </div>
                                             </div>
@@ -2931,19 +3057,19 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                                 });
                                                                 if (error) throw error;
                                                                 toast({ 
-                                                                    title: data?.success ? 'Anslutning OK' : 'Misslyckades', 
-                                                                    description: data?.message || data?.error 
+                                                                    title: data?.success ? 'Connection OK' : 'Failed',
+                                                                    description: data?.message || data?.error
                                                                 });
-                                                            } catch (err: any) { 
-                                                                toast({ 
-                                                                    variant: 'destructive', 
-                                                                    title: 'Fel', 
-                                                                    description: err.message 
-                                                                }); 
+                                                            } catch (err: any) {
+                                                                toast({
+                                                                    variant: 'destructive',
+                                                                    title: 'Error',
+                                                                    description: err.message
+                                                                });
                                                             }
                                                         }}
                                                     >
-                                                        <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Testa anslutning
+                                                        <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Test connection
                                                     </Button>
                                                     <Button 
                                                         variant="outline" 
@@ -2955,16 +3081,16 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                                 });
                                                                 if (error) throw error;
                                                                 const count = Array.isArray(data?.data) ? data.data.length : 0;
-                                                                toast({ 
-                                                                    title: 'Data hämtad', 
-                                                                    description: `Hittade ${count} sites i Geminus Premium.` 
+                                                                toast({
+                                                                    title: 'Data fetched',
+                                                                    description: `Found ${count} sites in Geminus Premium.`
                                                                 });
                                                             } catch (err: any) { 
-                                                                toast({ 
-                                                                    variant: 'destructive', 
-                                                                    title: 'Fel', 
-                                                                    description: err.message 
-                                                                }); 
+                                                                toast({
+                                                                    variant: 'destructive',
+                                                                    title: 'Error',
+                                                                    description: err.message
+                                                                });
                                                             }
                                                         }}
                                                     >
@@ -2982,14 +3108,14 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 <Wrench className="h-5 w-5 text-orange-500" />
                                                 <span className="font-medium">Faciliate</span>
                                                 {facilitateCacheStats && facilitateCacheStats.total > 0
-                                                    ? <Badge variant="outline" className="ml-auto mr-2 text-xs bg-green-50 text-green-700 border-green-200">{facilitateCacheStats.total.toLocaleString()} poster</Badge>
+                                                    ? <Badge variant="outline" className="ml-auto mr-2 text-xs bg-green-50 text-green-700 border-green-200">{facilitateCacheStats.total.toLocaleString()} records</Badge>
                                                     : <Badge variant="outline" className="ml-auto mr-2 text-xs bg-orange-50 text-orange-700 border-orange-200">FM System</Badge>}
                                             </div>
                                         </AccordionTrigger>
                                         <AccordionContent className="px-4 pb-4 pt-2">
                                             <div className="space-y-4">
                                                 <p className="text-xs text-muted-foreground">
-                                                    Faciliate är ett lokalt installerat FM-system. Synkronisering sker via en lokal connector-server som körs på din dator innanför SWG VPN.
+                                                    Faciliate is a locally installed FM system. Synchronization runs via a local connector server on your computer inside the SWG VPN.
                                                 </p>
 
                                                 {/* Connector server status */}
@@ -3002,17 +3128,17 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             </span>
                                                         </div>
                                                         <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={checkConnectorStatus}>
-                                                            <RefreshCw className="h-3 w-3" /> Kontrollera
+                                                            <RefreshCw className="h-3 w-3" /> {t('Kontrollera', 'Check')}
                                                         </Button>
                                                     </div>
                                                     {connectorStatus === 'offline' && (
                                                         <div className="rounded bg-muted p-2">
-                                                            <p className="text-[10px] text-muted-foreground mb-1">Starta connectorn (kräver VPN):</p>
+                                                            <p className="text-[10px] text-muted-foreground mb-1">{t('Starta connectorn (kräver VPN):', 'Start the connector (requires VPN):')}</p>
                                                             <div className="flex items-center gap-1.5">
                                                                 <code className="text-[10px] font-mono flex-1">cd faciliate-connector &amp;&amp; node connector.mjs serve</code>
                                                                 <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] shrink-0"
-                                                                    onClick={() => { navigator.clipboard.writeText('cd faciliate-connector && node connector.mjs serve'); toast({ title: 'Kopierat!' }); }}>
-                                                                    Kopiera
+                                                                    onClick={() => { navigator.clipboard.writeText('cd faciliate-connector && node connector.mjs serve'); toast({ title: t('Kopierat!', 'Copied!') }); }}>
+                                                                    {t('Kopiera', 'Copy')}
                                                                 </Button>
                                                             </div>
                                                         </div>
@@ -3035,7 +3161,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                                             setSelectedFacBuildingName(b?.name || '');
                                                                         }}
                                                                     >
-                                                                        <option value="">Välj byggnad…</option>
+                                                                        <option value="">{t('Välj byggnad…', 'Select building…')}</option>
                                                                         {facilitateBuildings.map(b => <option key={b.id} value={b.id}>{b.name} ({b.id})</option>)}
                                                                     </select>
                                                                 ) : (
@@ -3047,15 +3173,15 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             </div>
                                                             {facilitateBuildings.length === 0 && (
                                                                 <Button variant="outline" size="sm" className="self-end h-9 text-xs gap-1" onClick={fetchFacilitateBuildings}>
-                                                                    <Database className="h-3 w-3" /> Hämta
+                                                                    <Database className="h-3 w-3" /> {t('Hämta', 'Fetch')}
                                                                 </Button>
                                                             )}
                                                         </div>
 
                                                         <div className="space-y-1">
-                                                            <Label className="text-xs">Objekttyper</Label>
+                                                            <Label className="text-xs">{t('Objekttyper', 'Object types')}</Label>
                                                             <div className="flex gap-3">
-                                                                {[['workorder', 'Arbetsordrar'], ['rentlandlord', 'Hyreskontrakt'], ['maintenance', 'Underhåll']].map(([val, lbl]) => (
+                                                                {[[`workorder`, t('Arbetsordrar', 'Work orders')], [`rentlandlord`, t('Hyreskontrakt', 'Lease contracts')], [`maintenance`, t('Underhåll', 'Maintenance')]].map(([val, lbl]) => (
                                                                     <label key={val} className="flex items-center gap-1.5 text-xs cursor-pointer">
                                                                         <input type="checkbox" checked={facilitateSyncTypes.includes(val)}
                                                                             onChange={e => setFacilitateSyncTypes(prev => e.target.checked ? [...prev, val] : prev.filter(t => t !== val))}
@@ -3073,7 +3199,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             size="sm"
                                                         >
                                                             {isFacilitiateSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                                                            {isFacilitiateSyncing ? 'Synkar…' : 'Synka nu'}
+                                                            {isFacilitiateSyncing ? t('Synkar…', 'Syncing…') : t('Synka nu', 'Sync now')}
                                                         </Button>
 
                                                         {facilitateSyncLog.length > 0 && (
@@ -3089,10 +3215,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 {/* Cache status */}
                                                 {facilitateCacheStats && facilitateCacheStats.total > 0 && (
                                                     <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
-                                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Cachestatus</p>
+                                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">{t('Cachestatus', 'Cache status')}</p>
                                                         {Object.entries(facilitateCacheStats.byType).map(([type, count]) => (
                                                             <div key={type} className="flex items-center justify-between text-sm">
-                                                                <span className="text-muted-foreground">{type === 'workorder' ? 'Arbetsordrar' : type === 'rentlandlord' ? 'Hyreskontrakt' : type === 'maintenance' ? 'Planerat underhåll' : type}</span>
+                                                                <span className="text-muted-foreground">{type === 'workorder' ? t('Arbetsordrar', 'Work orders') : type === 'rentlandlord' ? t('Hyreskontrakt', 'Lease contracts') : type === 'maintenance' ? t('Planerat underhåll', 'Planned maintenance') : type}</span>
                                                                 <span className="font-medium">{(count as number).toLocaleString()}</span>
                                                             </div>
                                                         ))}
@@ -3104,7 +3230,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         ))}
                                                         {facilitateCacheStats.lastSynced && (
                                                             <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-1.5 mt-1.5">
-                                                                <span>Senast synkad</span>
+                                                                <span>{t('Senast synkad', 'Last synced')}</span>
                                                                 <span>{new Date(facilitateCacheStats.lastSynced).toLocaleString('sv-SE')}</span>
                                                             </div>
                                                         )}
@@ -3113,7 +3239,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                                                 <Button variant="ghost" size="sm" className="gap-1.5 h-7 text-xs text-muted-foreground" onClick={loadFacilitateStats} disabled={isLoadingFacilitateStats}>
                                                     {isLoadingFacilitateStats ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                                                    Uppdatera cachestatus
+                                                    {t('Uppdatera cachestatus', 'Refresh cache status')}
                                                 </Button>
                                             </div>
                                         </AccordionContent>
@@ -3127,23 +3253,65 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 <span className="font-medium">Autodesk Forma</span>
                                                 {accAuthStatus === 'authenticated' && <Badge className="ml-auto mr-2 text-xs bg-green-100 text-green-800 border-green-200">Inloggad</Badge>}
                                                 {accAuthStatus === 'unauthenticated' && accConnectionStatus === 'success' && <Badge className="ml-auto mr-2 text-xs bg-yellow-100 text-yellow-800 border-yellow-200">App-token</Badge>}
-                                                {accAuthStatus === 'unauthenticated' && accConnectionStatus === 'idle' && <Badge variant="outline" className="ml-auto mr-2 text-xs">ACC</Badge>}
+                                                {accAuthStatus === 'unauthenticated' && accConnectionStatus === 'idle' && <Badge variant="outline" className="ml-auto mr-2 text-xs">Autodesk Forma</Badge>}
                                                 {accAuthStatus === 'checking' && <Loader2 className="ml-auto mr-2 h-3.5 w-3.5 animate-spin" />}
                                             </div>
                                         </AccordionTrigger>
                                         <AccordionContent className="px-4 pb-4 pt-2">
                                             <div className="space-y-4">
                                                 <p className="text-xs text-muted-foreground">
-                                                    Integration med Autodesk Forma. Logga in med ditt Autodesk-konto för att ge appen tillgång till dina Forma-projekt.
+                                                    Connect to Autodesk Forma. Log in with your Autodesk account to give the app access to your Forma projects.
                                                 </p>
+
+                                                {/* APS App Credentials */}
+                                                <div className="rounded-lg border p-3 space-y-3">
+                                                    <Label className="text-sm font-medium">App Credentials (APS Client ID &amp; Secret)</Label>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Register an app at Autodesk Platform Services (APS) and enter the Client ID and Secret below. Required for OAuth login to work.
+                                                    </p>
+                                                    <div className="space-y-2">
+                                                        <div className="space-y-1">
+                                                            <Label className="text-xs text-muted-foreground">Client ID</Label>
+                                                            <Input
+                                                                value={apsClientId}
+                                                                onChange={e => { setApsClientId(e.target.value); setApsCredentialsSaved(false); }}
+                                                                placeholder="Enter APS Client ID"
+                                                                className="h-8 text-sm font-mono"
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <Label className="text-xs text-muted-foreground">Client Secret</Label>
+                                                            <Input
+                                                                type="password"
+                                                                value={apsClientSecret}
+                                                                onChange={e => { setApsClientSecret(e.target.value); setApsCredentialsSaved(false); }}
+                                                                placeholder="Enter APS Client Secret"
+                                                                className="h-8 text-sm font-mono"
+                                                            />
+                                                        </div>
+                                                        <Button
+                                                            size="sm"
+                                                            onClick={handleSaveApsCredentials}
+                                                            disabled={isSavingApsCredentials || (!apsClientId.trim() || !apsClientSecret.trim())}
+                                                            className="gap-1.5"
+                                                        >
+                                                            {isSavingApsCredentials
+                                                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                : apsCredentialsSaved
+                                                                    ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                                                    : null}
+                                                            {apsCredentialsSaved ? 'Saved' : 'Save credentials'}
+                                                        </Button>
+                                                    </div>
+                                                </div>
 
                                                 {/* Autodesk Login Section */}
                                                 <div className="rounded-lg border p-3 space-y-3">
-                                                    <Label className="text-sm font-medium">Autodesk-inloggning (3-legged OAuth)</Label>
+                                                    <Label className="text-sm font-medium">Autodesk Login (3-legged OAuth)</Label>
                                                     {accAuthStatus === 'authenticated' ? (
                                                         <div className="flex items-center gap-2">
                                                             <CheckCircle2 className="h-4 w-4 text-green-600" />
-                                                            <span className="text-sm text-green-700 dark:text-green-400">Inloggad med Autodesk-konto</span>
+                                                            <span className="text-sm text-green-700 dark:text-green-400">{t('Inloggad med Autodesk-konto', 'Logged in with Autodesk account')}</span>
                                                             <Button
                                                                 variant="ghost"
                                                                 size="sm"
@@ -3151,7 +3319,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                                 disabled={isAccLoggingOut}
                                                                 className="ml-auto"
                                                             >
-                                                                {isAccLoggingOut ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Logga ut'}
+                                                                {isAccLoggingOut ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t('Logga ut', 'Log out')}
                                                             </Button>
                                                         </div>
                                                     ) : (
@@ -3163,11 +3331,17 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                                 className="gap-1.5"
                                                             >
                                                                 {isAccLoggingIn ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <User className="h-3.5 w-3.5" />}
-                                                                Logga in med Autodesk
+                                                                {t('Logga in med Autodesk', 'Log in with Autodesk')}
                                                             </Button>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                Öppnar Autodesk-inloggning i ett popup-fönster. Dina API-anrop använder sedan dina egna behörigheter.
-                                                            </p>
+                                                            <div className="rounded border bg-muted/50 px-2 py-1.5 space-y-1">
+                                                                <p className="text-xs text-muted-foreground">Register this exact callback URL in your APS app:</p>
+                                                                <div className="flex items-center gap-1">
+                                                                    <code className="text-xs font-mono break-all flex-1">{window.location.origin}/auth/autodesk/callback</code>
+                                                                    <Button variant="ghost" size="sm" className="h-6 px-1.5 shrink-0" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/auth/autodesk/callback`); toast({ title: 'Copied' }); }}>
+                                                                        <Copy className="h-3 w-3" />
+                                                                    </Button>
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </div>
@@ -3175,7 +3349,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 {/* Hub/Account selector — auto-discovered via API */}
                                                 <div className="space-y-2">
                                                     <div className="flex items-center justify-between">
-                                                        <Label className="text-sm font-medium">Konto (Hub)</Label>
+                                                        <Label className="text-sm font-medium">{t('Konto (Hub)', 'Account (Hub)')}</Label>
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
@@ -3221,7 +3395,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                                                 {accProjects.length > 0 && (
                                                     <div className="space-y-2">
-                                                        <Label className="text-sm font-medium">Select ACC project</Label>
+                                                        <Label className="text-sm font-medium">Select Autodesk Forma project</Label>
                                                         <select
                                                             className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
                                                             value={selectedAccProjectId}
@@ -3238,10 +3412,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                                                 {/* Manual project ID input */}
                                                 <div className="space-y-2">
-                                                    <Label className="text-sm font-medium text-muted-foreground">Projekt-ID</Label>
+                                                    <Label className="text-sm font-medium text-muted-foreground">Project ID</Label>
                                                     <div className="flex gap-2">
                                                         <Input
-                                                            placeholder="Klistra in ACC projekt-ID (GUID)"
+                                                            placeholder={t('Klistra in Autodesk Forma projekt-ID (GUID)', 'Paste Autodesk Forma project ID (GUID)')}
                                                             value={manualAccProjectId}
                                                             onChange={(e) => setManualAccProjectId(e.target.value)}
                                                             className="font-mono text-xs"
@@ -3270,7 +3444,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         className="gap-1.5 w-full"
                                                     >
                                                         {isLoadingAccFolders ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5" />}
-                                                        {accFolders !== null ? 'Uppdatera mappar' : 'Visa mappar'}
+                                                        {accFolders !== null ? t('Uppdatera mappar', 'Refresh folders') : t('Visa mappar', 'Show folders')}
                                                     </Button>
                                                 )}
 
@@ -3281,7 +3455,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             <AccordionTrigger className="px-3 py-2 hover:no-underline hover:bg-muted/50 text-xs text-muted-foreground">
                                                                 <div className="flex items-center gap-1.5">
                                                                     <Settings2 className="h-3.5 w-3.5" />
-                                                                    Fler åtgärder
+                                                                    More actions
                                                                 </div>
                                                             </AccordionTrigger>
                                                             <AccordionContent className="px-3 pb-3 pt-1">
@@ -3314,7 +3488,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                                         className="gap-1 w-full sm:w-auto"
                                                                     >
                                                                         {isTestingAcc ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
-                                                                        Testa anslutning
+                                                                        Test connection
                                                                     </Button>
                                                                     <Button
                                                                         onClick={handleCheckAccStatus}
@@ -3351,6 +3525,50 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     </div>
                                                 )}
 
+                                                {/* Building selector — link import to a Geminus building */}
+                                                <div className="rounded-lg border p-3 space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <Label className="text-sm font-medium flex items-center gap-1.5">
+                                                            <Building2 className="h-4 w-4 text-blue-500" />
+                                                            {t('Koppla till byggnad', 'Link to building')}
+                                                        </Label>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={fetchAccBuildings}
+                                                            disabled={isLoadingAccBuildings}
+                                                            className="h-7 text-xs gap-1"
+                                                        >
+                                                            {isLoadingAccBuildings ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                                            {accBuildings.length === 0 ? t('Hämta byggnader', 'Load buildings') : t('Uppdatera', 'Refresh')}
+                                                        </Button>
+                                                    </div>
+                                                    {accBuildings.length > 0 ? (
+                                                        <select
+                                                            className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
+                                                            value={accTargetBuildingFmGuid}
+                                                            onChange={(e) => setAccTargetBuildingFmGuid(e.target.value)}
+                                                        >
+                                                            <option value="">{t('— Välj byggnad —', '— Select building —')}</option>
+                                                            {accBuildings.map((b) => (
+                                                                <option key={b.fm_guid} value={b.fm_guid}>{b.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    ) : (
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {t('Klicka "Hämta byggnader" för att välja vilken byggnad importen ska kopplas till.', 'Click "Load buildings" to choose which building the import links to.')}
+                                                        </p>
+                                                    )}
+                                                    {accTargetBuildingFmGuid && (
+                                                        <p className="text-[10px] text-muted-foreground font-mono truncate">
+                                                            {accTargetBuildingFmGuid}
+                                                        </p>
+                                                    )}
+                                                    <p className="text-[10px] text-muted-foreground">
+                                                        {t('Markera radio "A" vid den fil som är A-modellen — den skapar våningsplan och rum. Övriga modeller matchar automatiskt mot A-modellens plan.', 'Mark radio "A" on the architecture model — it creates floors and rooms. Other models match automatically.')}
+                                                    </p>
+                                                </div>
+
                                                 {/* ACC Folder Browser */}
                                                 {accFolders !== null && (
                                                     <>
@@ -3359,9 +3577,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         <div className="flex items-center justify-between">
                                                             <Label className="text-sm font-medium flex items-center gap-1.5">
                                                                 <FolderOpen className="h-4 w-4" />
-                                                                {accRootFolderName || 'Mappar'}
+                                                                {accRootFolderName || t('Mappar', 'Folders')}
                                                             </Label>
-                                                            <span className="text-xs text-muted-foreground">{accFolders.length} mappar</span>
+                                                            <span className="text-xs text-muted-foreground">{accFolders.length} {t('mappar', 'folders')}</span>
                                                         </div>
                                                         
                                                         {accFolders.length === 0 && accTopLevelItems.length === 0 && (
@@ -3384,12 +3602,14 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                                     toggleBimFile={toggleBimFile}
                                                                     translationStatuses={translationStatuses}
                                                                     onTranslate3D={handleTranslate3D}
+                                                                    masterModelUrn={accMasterModelUrn}
+                                                                    setMasterModelUrn={setAccMasterModelUrn}
                                                                 />
                                                             ))}
 
                                                             {accTopLevelItems.length > 0 && (
                                                                 <div className="pt-1 border-t">
-                                                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide px-2.5 py-1">Filer i rotkatalogen</p>
+                                                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide px-2.5 py-1">Files in root folder</p>
                                                                     {accTopLevelItems.map((item: any) => (
                                                                         <div key={item.id} className="flex items-center gap-2 text-xs py-1 px-2.5 rounded hover:bg-muted/50">
                                                                             <File className="h-3 w-3 text-muted-foreground shrink-0" />
@@ -3407,123 +3627,28 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 {accStatus && (
                                                     <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
                                                         <div className="flex items-center justify-between text-sm">
-                                                            <span className="text-muted-foreground">Platser (lokalt):</span>
+                                                            <span className="text-muted-foreground">Locations (local):</span>
                                                             <span className="font-medium">{accStatus.localLocationCount}</span>
                                                         </div>
                                                         <div className="flex items-center justify-between text-sm">
-                                                            <span className="text-muted-foreground">Tillgångar (lokalt):</span>
+                                                            <span className="text-muted-foreground">Assets (local):</span>
                                                             <span className="font-medium">{accStatus.localAssetCount}</span>
                                                         </div>
                                                         {accStatus.locationsSyncState && (
                                                             <div className="flex items-center justify-between text-sm">
-                                                                <span className="text-muted-foreground">Plats-synk:</span>
+                                                                <span className="text-muted-foreground">Location sync:</span>
                                                                 <span className="font-medium">{accStatus.locationsSyncState.sync_status}</span>
                                                             </div>
                                                         )}
                                                         {accStatus.assetsSyncState && (
                                                             <div className="flex items-center justify-between text-sm">
-                                                                <span className="text-muted-foreground">Tillgångs-synk:</span>
+                                                                <span className="text-muted-foreground">Asset sync:</span>
                                                                 <span className="font-medium">{accStatus.assetsSyncState.sync_status}</span>
                                                             </div>
                                                         )}
                                                     </div>
                                                 )}
 
-                                                {/* ACC -> Geminus Plus Sync Section */}
-                                                <div className="rounded-lg border p-3 space-y-3">
-                                                    <div className="flex items-center justify-between">
-                                                        <Label className="text-sm font-medium flex items-center gap-1.5">
-                                                            <Box className="h-4 w-4 text-primary" />
-                                                            Sync to Geminus Plus
-                                                        </Label>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={handleCheckAccToGeminusPlus}
-                                                            disabled={isCheckingAccToAp}
-                                                            className="h-7 text-xs gap-1"
-                                                        >
-                                                            {isCheckingAccToAp ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                                                            Status
-                                                        </Button>
-                                                    </div>
-
-                                                    <p className="text-xs text-muted-foreground">
-                                                        Create ACC-synced objects in Geminus Plus with generated UUIDs. Buildings, floors, rooms and installations are created hierarchically.
-                                                    </p>
-
-                                                    {accToApStatus && (
-                                                        <div className="space-y-1.5 text-sm">
-                                                            <div className="flex justify-between">
-                                                                <span className="text-muted-foreground">ACC-objekt totalt:</span>
-                                                                <span className="font-medium">{accToApStatus.totalAccObjects}</span>
-                                                            </div>
-                                                            <div className="flex justify-between">
-                                                                <span className="text-muted-foreground">Synced to Geminus Plus:</span>
-                                                                <span className="font-medium">{accToApStatus.syncedToGeminusPlus}</span>
-                                                            </div>
-                                                            <div className="flex justify-between">
-                                                                <span className="text-muted-foreground">Not synced:</span>
-                                                                <Badge variant={accToApStatus.unsyncedCount > 0 ? "destructive" : "secondary"} className="text-xs">
-                                                                    {accToApStatus.unsyncedCount}
-                                                                </Badge>
-                                                            </div>
-                                                            {accToApStatus.buildings?.length > 0 && (
-                                                                <div className="mt-2 space-y-1">
-                                                                    <p className="text-xs font-medium text-muted-foreground">Buildings:</p>
-                                                                    {accToApStatus.buildings.map((b: any) => (
-                                                                        <div key={b.accFmGuid} className="flex items-center justify-between text-xs py-0.5">
-                                                                            <span className="truncate">{b.name}</span>
-                                                                            <div className="flex items-center gap-1.5">
-                                                                                <span className="text-muted-foreground">{b.childCount} obj</span>
-                                                                                {b.synced ? (
-                                                                                    <CheckCircle2 className="h-3 w-3 text-green-600" />
-                                                                                ) : (
-                                                                                    <Circle className="h-3 w-3 text-muted-foreground" />
-                                                                                )}
-                                                                            </div>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    )}
-
-                                                    <Button
-                                                        onClick={handleSyncAccToGeminusPlus}
-                                                        disabled={isSyncingAccToAp}
-                                                        size="sm"
-                                                        className="w-full gap-1.5"
-                                                    >
-                                                        {isSyncingAccToAp ? (
-                                                            <>
-                                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                                Syncing to Geminus Plus...
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <Box className="h-3.5 w-3.5" />
-                                                                Sync ACC → Geminus Plus
-                                                            </>
-                                                        )}
-                                                    </Button>
-
-                                                    {accToApResult && (
-                                                        <div className={`rounded-lg border p-2.5 text-xs space-y-1 ${accToApResult.success ? 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800' : 'bg-yellow-50 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800'}`}>
-                                                            <p className="font-medium">{accToApResult.success ? 'Sync succeeded' : 'Sync with warnings'}</p>
-                                                            {accToApResult.summary && (
-                                                                <div className="space-y-0.5">
-                                                                    <p>Buildings: {accToApResult.summary.created?.buildings || 0} created</p>
-                                                                    <p>Plan: {accToApResult.summary.created?.levels || 0} | Rum: {accToApResult.summary.created?.spaces || 0} | Instanser: {accToApResult.summary.created?.instances || 0}</p>
-                                                                    <p>Relationer: {accToApResult.summary.totalRelationships || 0} | Egenskaper: {accToApResult.summary.totalPropertiesUpdated || 0}</p>
-                                                                    {accToApResult.summary.totalErrors > 0 && (
-                                                                        <p className="text-red-600 dark:text-red-400">Fel: {accToApResult.summary.totalErrors}</p>
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    )}
-                                                </div>
                                             </div>
                                         </AccordionContent>
                                     </AccordionItem>
@@ -3534,6 +3659,107 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                     <TabsContent value="sync" className="mt-4 flex-1 min-h-0 space-y-4 overflow-y-auto overflow-x-hidden pr-1">
                         <Accordion type="multiple" className="space-y-2">
+                            {/* ACC -> Geminus Plus Sync */}
+                            <AccordionItem value="acc-to-geminus-plus" className="border rounded-lg px-4">
+                                <AccordionTrigger className="py-3">
+                                    <div className="flex items-center gap-2">
+                                        <Box className="h-4 w-4 text-primary" />
+                                        <span>Sync to Geminus Plus</span>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    <div className="space-y-3 pb-2">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-xs text-muted-foreground">
+                                                Create Autodesk Forma-synced objects in Geminus Plus with generated UUIDs. Buildings, floors, rooms and installations are created hierarchically.
+                                            </p>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={handleCheckAccToGeminusPlus}
+                                                disabled={isCheckingAccToAp}
+                                                className="h-7 text-xs gap-1 ml-2 shrink-0"
+                                            >
+                                                {isCheckingAccToAp ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                                Status
+                                            </Button>
+                                        </div>
+
+                                        {accToApStatus && (
+                                            <div className="space-y-1.5 text-sm">
+                                                <div className="flex justify-between">
+                                                    <span className="text-muted-foreground">Total Autodesk Forma objects:</span>
+                                                    <span className="font-medium">{accToApStatus.totalAccObjects}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-muted-foreground">Synced to Geminus Plus:</span>
+                                                    <span className="font-medium">{accToApStatus.syncedToGeminusPlus}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-muted-foreground">Not synced:</span>
+                                                    <Badge variant={accToApStatus.unsyncedCount > 0 ? "destructive" : "secondary"} className="text-xs">
+                                                        {accToApStatus.unsyncedCount}
+                                                    </Badge>
+                                                </div>
+                                                {accToApStatus.buildings?.length > 0 && (
+                                                    <div className="mt-2 space-y-1">
+                                                        <p className="text-xs font-medium text-muted-foreground">Buildings:</p>
+                                                        {accToApStatus.buildings.map((b: any) => (
+                                                            <div key={b.accFmGuid} className="flex items-center justify-between text-xs py-0.5">
+                                                                <span className="truncate">{b.name}</span>
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <span className="text-muted-foreground">{b.childCount} obj</span>
+                                                                    {b.synced ? (
+                                                                        <CheckCircle2 className="h-3 w-3 text-green-600" />
+                                                                    ) : (
+                                                                        <Circle className="h-3 w-3 text-muted-foreground" />
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        <Button
+                                            onClick={handleSyncAccToGeminusPlus}
+                                            disabled={isSyncingAccToAp}
+                                            size="sm"
+                                            className="w-full gap-1.5"
+                                        >
+                                            {isSyncingAccToAp ? (
+                                                <>
+                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                    Syncing to Geminus Plus...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Box className="h-3.5 w-3.5" />
+                                                    Sync Autodesk Forma → Geminus Plus
+                                                </>
+                                            )}
+                                        </Button>
+
+                                        {accToApResult && (
+                                            <div className={`rounded-lg border p-2.5 text-xs space-y-1 ${accToApResult.success ? 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800' : 'bg-yellow-50 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800'}`}>
+                                                <p className="font-medium">{accToApResult.success ? 'Sync succeeded' : 'Sync with warnings'}</p>
+                                                {accToApResult.summary && (
+                                                    <div className="space-y-0.5">
+                                                        <p>Buildings: {accToApResult.summary.created?.buildings || 0} created</p>
+                                                        <p>Floors: {accToApResult.summary.created?.levels || 0} | Rooms: {accToApResult.summary.created?.spaces || 0} | Instances: {accToApResult.summary.created?.instances || 0}</p>
+                                                        <p>Relationships: {accToApResult.summary.totalRelationships || 0} | Properties: {accToApResult.summary.totalPropertiesUpdated || 0}</p>
+                                                        {accToApResult.summary.totalErrors > 0 && (
+                                                            <p className="text-red-600 dark:text-red-400">Errors: {accToApResult.summary.totalErrors}</p>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
+
                             {/* Geminus Plus Sync */}
                             <AccordionItem value="geminus-plus-sync" className="border rounded-lg px-4">
                                 <AccordionTrigger className="py-3">
@@ -3622,6 +3848,41 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             }
                                         />
                                         <SyncStatusLog steps={assetSyncLog} outcome={assetSyncOutcome} />
+
+                                        {/* Per-building sync */}
+                                        <div className="border rounded-lg p-4 space-y-3">
+                                            <div>
+                                                <p className="text-sm font-medium">{t('Synka enskild byggnad', 'Sync individual building')}</p>
+                                                <p className="text-xs text-muted-foreground mt-0.5">{t('Snabb sync av assets för en specifik byggnad (~10–30 s)', 'Quick asset sync for a specific building (~10–30 s)')}</p>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <Select value={selectedSingleBuilding} onValueChange={setSelectedSingleBuilding}>
+                                                    <SelectTrigger className="flex-1 h-8 text-sm">
+                                                        <SelectValue placeholder={t('Välj byggnad...', 'Select building...')} />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {allBuildings.map(b => (
+                                                            <SelectItem key={b.fm_guid} value={b.fm_guid}>
+                                                                {b.common_name || b.fm_guid}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <Button
+                                                    size="sm"
+                                                    className="h-8 text-xs"
+                                                    disabled={!selectedSingleBuilding || isSyncingSingleBuilding || isSyncingStructure || isSyncingAssets}
+                                                    onClick={handleSyncSingleBuilding}
+                                                >
+                                                    {isSyncingSingleBuilding ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />{t('Synkar...', 'Syncing...')}</> : t('Synka', 'Sync')}
+                                                </Button>
+                                            </div>
+                                            {singleBuildingSyncResult && (
+                                                <p className={`text-xs ${singleBuildingSyncResult.success ? 'text-green-600' : 'text-destructive'}`}>
+                                                    {singleBuildingSyncResult.success ? '✓ ' : '✗ '}{singleBuildingSyncResult.message}
+                                                </p>
+                                            )}
+                                        </div>
 
                                         <SyncProgressCard
                                             icon={<Box className="h-5 w-5 text-primary" />}
@@ -3815,7 +4076,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         {connectorStatus === 'online'
                                             ? <Badge variant="outline" className="ml-auto mr-2 text-xs bg-green-50 text-green-700 border-green-200">Online</Badge>
                                             : facilitateCacheStats && facilitateCacheStats.total > 0
-                                                ? <Badge variant="outline" className="ml-auto mr-2 text-xs">{facilitateCacheStats.total.toLocaleString()} poster</Badge>
+                                                ? <Badge variant="outline" className="ml-auto mr-2 text-xs">{facilitateCacheStats.total.toLocaleString()} records</Badge>
                                                 : <Badge variant="outline" className="ml-auto mr-2 text-xs">Ej synkad</Badge>}
                                     </div>
                                 </AccordionTrigger>
@@ -3827,17 +4088,17 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             <div className="flex items-center gap-2">
                                                 <div className={`h-2 w-2 rounded-full ${connectorStatus === 'online' ? 'bg-green-500' : connectorStatus === 'offline' ? 'bg-red-400' : 'bg-gray-300'}`} />
                                                 <span className="text-sm text-muted-foreground">
-                                                    {connectorStatus === 'online' ? 'Connector igång' : connectorStatus === 'offline' ? 'Connector ej igång' : 'Okänd status'}
+                                                    {connectorStatus === 'online' ? t('Connector igång', 'Connector running') : connectorStatus === 'offline' ? t('Connector ej igång', 'Connector not running') : t('Okänd status', 'Unknown status')}
                                                 </span>
                                             </div>
                                             <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={checkConnectorStatus}>
-                                                <RefreshCw className="h-3 w-3" /> Kontrollera
+                                                <RefreshCw className="h-3 w-3" /> {t('Kontrollera', 'Check')}
                                             </Button>
                                         </div>
 
                                         {connectorStatus === 'offline' && (
                                             <div className="rounded bg-muted p-2 text-[11px] text-muted-foreground">
-                                                Starta connectorn (kräver VPN):<br />
+                                                {t('Starta connectorn (kräver VPN):', 'Start the connector (requires VPN):')}<br />
                                                 <code className="font-mono">cd faciliate-connector &amp;&amp; node connector.mjs serve</code>
                                             </div>
                                         )}
@@ -3855,7 +4116,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     }}
                                                     disabled={connectorStatus !== 'online'}
                                                 >
-                                                    <option value="">Välj byggnad…</option>
+                                                    <option value="">{t('Välj byggnad…', 'Select building…')}</option>
                                                     {facilitateBuildings.map(b => <option key={b.id} value={b.id}>{b.name} ({b.id})</option>)}
                                                 </select>
                                             ) : (
@@ -3863,7 +4124,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     <Input placeholder="Byggnads-ID (t.ex. S1)" value={selectedFacBuildingId} onChange={e => setSelectedFacBuildingId(e.target.value)} className="h-9 text-sm" disabled={connectorStatus !== 'online'} />
                                                     <Input placeholder="Namn" value={selectedFacBuildingName} onChange={e => setSelectedFacBuildingName(e.target.value)} className="h-9 text-sm" disabled={connectorStatus !== 'online'} />
                                                     <Button variant="outline" size="sm" className="h-9 text-xs shrink-0 gap-1" onClick={fetchFacilitateBuildings} disabled={connectorStatus !== 'online'}>
-                                                        <Database className="h-3 w-3" /> Hämta
+                                                        <Database className="h-3 w-3" /> {t('Hämta', 'Fetch')}
                                                     </Button>
                                                 </div>
                                             )}
@@ -3875,7 +4136,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 size="sm"
                                             >
                                                 {isFacilitiateSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                                                {isFacilitiateSyncing ? 'Synkar…' : connectorStatus !== 'online' ? 'Starta connector för att synka' : 'Synka nu'}
+                                                {isFacilitiateSyncing ? t('Synkar…', 'Syncing…') : connectorStatus !== 'online' ? t('Starta connector för att synka', 'Start connector to sync') : t('Synka nu', 'Sync now')}
                                             </Button>
                                         </div>
 
@@ -3893,7 +4154,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
                                                 {Object.entries(facilitateCacheStats.byType).map(([type, count]) => (
                                                     <div key={type} className="flex items-center justify-between text-sm">
-                                                        <span className="text-muted-foreground">{type === 'workorder' ? 'Arbetsordrar' : type === 'rentlandlord' ? 'Hyreskontrakt' : type === 'maintenance' ? 'Planerat underhåll' : type}</span>
+                                                        <span className="text-muted-foreground">{type === 'workorder' ? t('Arbetsordrar', 'Work orders') : type === 'rentlandlord' ? t('Hyreskontrakt', 'Lease contracts') : type === 'maintenance' ? t('Planerat underhåll', 'Planned maintenance') : type}</span>
                                                         <span className="font-medium">{(count as number).toLocaleString()}</span>
                                                     </div>
                                                 ))}
@@ -3905,7 +4166,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 ))}
                                                 {facilitateCacheStats.lastSynced && (
                                                     <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-1.5 mt-1">
-                                                        <span>Senast synkad</span>
+                                                        <span>{t('Senast synkad', 'Last synced')}</span>
                                                         <span>{new Date(facilitateCacheStats.lastSynced).toLocaleString('sv-SE')}</span>
                                                     </div>
                                                 )}

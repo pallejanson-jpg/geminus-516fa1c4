@@ -15,6 +15,7 @@ import { Slider } from '@/components/ui/slider';
 import { toast } from 'sonner';
 import { ivionToBim, type IvionBimTransform, type Vec3 } from '@/lib/ivion-bim-transform';
 import { resolveMainView } from '@/lib/ivion-sdk';
+import { useLanguage } from '@/context/LanguageContext';
 
 type PickStep = 'idle' | 'picking360' | 'picking3D' | 'done';
 
@@ -51,6 +52,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
   onOffsetsCalculated,
   onClose,
 }) => {
+  const { t } = useLanguage();
   const [step, setStep] = useState<PickStep>('picking360');
   const [ivionPoint, setIvionPoint] = useState<Vec3 | null>(null);
   const [bimPoint, setBimPoint] = useState<Vec3 | null>(null);
@@ -202,7 +204,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
       offsetZ: parseFloat((bimPoint.z - rotated.z).toFixed(2)),
     };
     console.log('[AlignmentPicker] Calculated offsets:', offsets);
-    toast.success('Offset beräknad och tillämpad');
+    toast.success(t('Offset beräknad och tillämpad', 'Offset calculated and applied'));
     onOffsetsCalculated(offsets);
   }, [ivionPoint, bimPoint, transform, onOffsetsCalculated]);
 
@@ -222,13 +224,13 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium flex items-center gap-1.5">
           <Crosshair className="h-3.5 w-3.5 text-primary" />
-          Punktkalibrering
+          {t('Punktkalibrering', 'Point calibration')}
         </span>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={reset} title="Starta om">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={reset} title={t('Starta om', 'Restart')}>
             <RotateCcw className="h-3 w-3" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose} title="Avbryt">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose} title={t('Avbryt', 'Cancel')}>
             <X className="h-3 w-3" />
           </Button>
         </div>
@@ -240,7 +242,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           <div className="flex items-center justify-between text-[10px]">
             <span className="flex items-center gap-1 text-foreground/70">
               <Ruler className="h-3 w-3" />
-              Avstånd till yta
+              {t('Avstånd till yta', 'Distance to surface')}
             </span>
             <span className="font-mono text-foreground">{rayDistance.toFixed(1)} m</span>
           </div>
@@ -253,7 +255,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
             className="w-full"
           />
           <p className="text-[9px] text-foreground/50">
-            Ungefärligt avstånd från kameran till ytan du pekar på.
+            {t('Ungefärligt avstånd från kameran till ytan du pekar på.', 'Approximate distance from the camera to the surface you are pointing at.')}
           </p>
         </div>
       )}
@@ -268,19 +270,19 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           {ivionPoint ? <Check className="h-3 w-3" /> : '1'}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-foreground">Klicka i 360°-vyn</p>
+          <p className="font-medium text-foreground">{t('Klicka i 360°-vyn', 'Click in the 360° view')}</p>
           {ivionPoint ? (
             <p className="text-green-400 font-mono text-[10px] mt-1.5">✓ {formatCoord(ivionPoint)}</p>
           ) : (
             <div className="mt-0.5 space-y-1.5">
               <p className="text-foreground/70 leading-snug">
-                <strong>Titta direkt på</strong> en punkt du kan identifiera i 3D (hörn, dörr, pelare) och <strong>klicka</strong>.
-                Justera avståndet ovan om punkten är långt bort.
+                <strong>{t('Titta direkt på', 'Look directly at')}</strong> {t('en punkt du kan identifiera i 3D (hörn, dörr, pelare) och', 'a point you can identify in 3D (corner, door, column) and')} <strong>{t('klicka', 'click')}</strong>.
+                {t(' Justera avståndet ovan om punkten är långt bort.', ' Adjust the distance above if the point is far away.')}
               </p>
               {step === 'picking360' && (
                 <div className="flex items-center gap-1.5 text-primary">
                   <MousePointerClick className="h-3 w-3" />
-                  <span className="text-[11px] font-medium animate-pulse">Väntar på klick i 360°...</span>
+                  <span className="text-[11px] font-medium animate-pulse">{t('Väntar på klick i 360°...', 'Waiting for click in 360°...')}</span>
                 </div>
               )}
               {captureError && (
@@ -304,13 +306,13 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           {bimPoint ? <Check className="h-3 w-3" /> : '2'}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-foreground">Klicka på samma punkt i 3D</p>
+          <p className="font-medium text-foreground">{t('Klicka på samma punkt i 3D', 'Click the same point in 3D')}</p>
           {bimPoint ? (
             <p className="text-green-400 font-mono text-[10px] mt-1">✓ {formatCoord(bimPoint)}</p>
           ) : step === 'picking3D' ? (
             <div className="mt-1 space-y-1">
               <p className="text-foreground/70 leading-snug">
-                Klicka nu på <strong>exakt samma punkt</strong> i 3D-modellen till vänster.
+                {t('Klicka nu på', 'Now click on')} <strong>{t('exakt samma punkt', 'exactly the same point')}</strong> {t('i 3D-modellen till vänster.', 'in the 3D model on the left.')}
               </p>
               {ivionPoint && (
                 <p className="text-foreground/50 text-[10px] font-mono">
@@ -319,11 +321,11 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
               )}
               <div className="flex items-center gap-1.5 text-primary">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                <span className="text-[11px] font-medium animate-pulse">Väntar på klick i 3D...</span>
+                <span className="text-[11px] font-medium animate-pulse">{t('Väntar på klick i 3D...', 'Waiting for click in 3D...')}</span>
               </div>
             </div>
           ) : (
-            <p className="text-foreground/60 mt-1">Klicka i 360° först (steg 1)</p>
+            <p className="text-foreground/60 mt-1">{t('Klicka i 360° först (steg 1)', 'Click in 360° first (step 1)')}</p>
           )}
         </div>
       </div>
@@ -341,13 +343,13 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
               <span className="text-foreground">{formatCoord(bimPoint)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-foreground/70">Avstånd:</span>
+              <span className="text-foreground/70">{t('Avstånd:', 'Distance:')}</span>
               <span className="text-foreground">{rayDistance.toFixed(1)} m</span>
             </div>
           </div>
           <Button size="sm" className="w-full h-7 text-xs gap-1.5" onClick={applyOffsets}>
             <Check className="h-3 w-3" />
-            Applicera beräknad offset
+            {t('Applicera beräknad offset', 'Apply calculated offset')}
           </Button>
         </div>
       )}

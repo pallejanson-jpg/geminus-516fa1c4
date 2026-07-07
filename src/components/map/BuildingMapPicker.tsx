@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Map, { Marker, NavigationControl, GeolocateControl } from 'react-map-gl';
+import { useLanguage } from '@/context/LanguageContext';
 import { MapPin, Loader2, MousePointer, Maximize2, Minimize2, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +25,7 @@ const BuildingMapPicker: React.FC<BuildingMapPickerProps> = ({
   onPositionChange,
   className,
 }) => {
+  const { t } = useLanguage();
   const [mapboxToken, setMapboxToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,10 +48,10 @@ const BuildingMapPicker: React.FC<BuildingMapPickerProps> = ({
     const fetchToken = async () => {
       try {
         const { data, error } = await supabase.functions.invoke('get-mapbox-token');
-        if (error) { setError('Could not fetch map token'); return; }
+        if (error) { setError(t('Kunde inte hämta karttoken', 'Could not fetch map token')); return; }
         if (data?.token) { setMapboxToken(data.token); }
-        else { setError('Mapbox token is not configured'); }
-      } catch { setError('Could not connect to server'); }
+        else { setError(t('Mapbox-token är inte konfigurerat', 'Mapbox token is not configured')); }
+      } catch { setError(t('Kunde inte ansluta till servern', 'Could not connect to server')); }
       finally { setIsLoading(false); }
     };
     fetchToken();
@@ -88,10 +90,10 @@ const BuildingMapPicker: React.FC<BuildingMapPickerProps> = ({
         setViewState(prev => ({ ...prev, latitude: lat, longitude: lng, zoom: 16 }));
         setAddressQuery(json.features[0].place_name || addressQuery);
       } else {
-        setSearchError('No location found');
+        setSearchError(t('Ingen plats hittades', 'No location found'));
       }
     } catch {
-      setSearchError('Search failed');
+      setSearchError(t('Sökning misslyckades', 'Search failed'));
     } finally {
       setIsSearching(false);
     }
@@ -111,7 +113,7 @@ const BuildingMapPicker: React.FC<BuildingMapPickerProps> = ({
     return (
       <div className={cn("flex flex-col items-center justify-center h-60 bg-muted/30 rounded-lg text-center p-4", className)}>
         <MapPin className="h-6 w-6 text-muted-foreground mb-2" />
-        <p className="text-xs text-muted-foreground">{error || 'Map not available'}</p>
+        <p className="text-xs text-muted-foreground">{error || t('Kartan är inte tillgänglig', 'Map not available')}</p>
       </div>
     );
   }
@@ -131,7 +133,7 @@ const BuildingMapPicker: React.FC<BuildingMapPickerProps> = ({
           value={addressQuery}
           onChange={(e) => { setAddressQuery(e.target.value); setSearchError(null); }}
           onKeyDown={(e) => { if (e.key === 'Enter') handleAddressSearch(); }}
-          placeholder="Search address..."
+          placeholder={t('Sök adress...', 'Search address...')}
           className="h-7 text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 px-1"
         />
         {addressQuery && (
@@ -151,7 +153,7 @@ const BuildingMapPicker: React.FC<BuildingMapPickerProps> = ({
           disabled={!addressQuery.trim() || isSearching}
           onClick={handleAddressSearch}
         >
-          {isSearching ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Search'}
+          {isSearching ? <Loader2 className="h-3 w-3 animate-spin" /> : t('Sök', 'Search')}
         </Button>
       </div>
 
@@ -166,7 +168,7 @@ const BuildingMapPicker: React.FC<BuildingMapPickerProps> = ({
         {/* Click instruction + expand button */}
         <div className="absolute top-2 left-2 z-10 bg-card/90 backdrop-blur-sm rounded-md px-2 py-1 flex items-center gap-1.5">
           <MousePointer className="h-3 w-3 text-primary" />
-          <span className="text-[10px] text-muted-foreground">Klicka för att sätta position</span>
+          <span className="text-[10px] text-muted-foreground">{t('Klicka för att sätta position', 'Click to set position')}</span>
         </div>
 
         <Button
@@ -174,7 +176,7 @@ const BuildingMapPicker: React.FC<BuildingMapPickerProps> = ({
           variant="secondary"
           className="absolute top-2 right-2 z-10 h-7 w-7 bg-card/90 backdrop-blur-sm"
           onClick={() => setIsExpanded(!isExpanded)}
-          title={isExpanded ? 'Förminska' : 'Förstora'}
+          title={isExpanded ? t('Förminska', 'Minimize') : t('Förstora', 'Maximize')}
         >
           {isExpanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
         </Button>
@@ -213,7 +215,7 @@ const BuildingMapPicker: React.FC<BuildingMapPickerProps> = ({
                 {pendingPosition && (
                   <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap">
                     <span className="text-[9px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded">
-                      Ny position
+                      {t('Ny position', 'New position')}
                     </span>
                   </div>
                 )}

@@ -3,6 +3,7 @@ import { Crosshair, X, Check, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import NativeXeokitViewer from '@/components/viewer/NativeXeokitViewer';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface Inline3dPositionPickerProps {
   buildingFmGuid: string;
@@ -17,6 +18,7 @@ const Inline3dPositionPicker: React.FC<Inline3dPositionPickerProps> = ({
   onPositionConfirmed,
   onClose,
 }) => {
+  const { t } = useLanguage();
   const [pendingCoords, setPendingCoords] = useState<{ x: number; y: number; z: number } | null>(null);
 
   const handleViewerReady = useCallback((viewer: any) => {
@@ -100,7 +102,7 @@ const Inline3dPositionPicker: React.FC<Inline3dPositionPickerProps> = ({
   const handleConfirm = () => {
     if (pendingCoords) {
       onPositionConfirmed(pendingCoords);
-      toast.success('Position bekräftad', {
+      toast.success(t('Position bekräftad', 'Position confirmed'), {
         description: `X: ${pendingCoords.x.toFixed(2)}, Y: ${pendingCoords.y.toFixed(2)}, Z: ${pendingCoords.z.toFixed(2)}`,
       });
       setPendingCoords(null);
@@ -112,7 +114,7 @@ const Inline3dPositionPicker: React.FC<Inline3dPositionPickerProps> = ({
       <div className="flex items-center justify-between p-2 border-b bg-background/95 backdrop-blur shrink-0">
         <div className="flex items-center gap-2">
           <Crosshair className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium">Välj 3D-position</span>
+          <span className="text-sm font-medium">{t('Välj 3D-position', 'Select 3D position')}</span>
         </div>
         <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
           <X className="h-4 w-4" />
@@ -140,11 +142,11 @@ const Inline3dPositionPicker: React.FC<Inline3dPositionPickerProps> = ({
             </p>
             <Button size="sm" variant="outline" onClick={() => setPendingCoords(null)} className="gap-1">
               <RotateCcw className="h-3.5 w-3.5" />
-              Välj om
+              {t('Välj om', 'Reselect')}
             </Button>
             <Button size="sm" onClick={handleConfirm} className="gap-1">
               <Check className="h-3.5 w-3.5" />
-              Bekräfta
+              {t('Bekräfta', 'Confirm')}
             </Button>
           </div>
         )}

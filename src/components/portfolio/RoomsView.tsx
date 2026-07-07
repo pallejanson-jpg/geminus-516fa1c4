@@ -60,6 +60,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDialog';
 import { useToast } from '@/hooks/use-toast';
+import { useLanguage } from '@/context/LanguageContext';
 
 import { emit } from '@/lib/event-bus';
 // Deterministic color palette for room name grouping
@@ -200,6 +201,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
   onSelectRoom,
 }) => {
   const { toast } = useToast();
+  const { t } = useLanguage();
   const [viewMode, setViewMode] = useState<'grid' | 'gallery'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortColumn, setSortColumn] = useState<string>('roomNumber');
@@ -544,8 +546,8 @@ const RoomsView: React.FC<RoomsViewProps> = ({
 
   const title =
     facility.category === 'Building'
-      ? `Rooms in ${facility.commonName || facility.name}`
-      : `Rooms at ${facility.commonName || facility.name}`;
+      ? t(`Rum i ${facility.commonName || facility.name}`, `Rooms in ${facility.commonName || facility.name}`)
+      : t(`Rum vid ${facility.commonName || facility.name}`, `Rooms at ${facility.commonName || facility.name}`);
 
   // Group columns by category for dropdown
   const systemCols = allColumns.filter(c => c.category === 'system');
@@ -561,7 +563,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
           <div className="min-w-0">
             <h1 className="text-sm sm:text-base md:text-lg font-bold truncate">{title}</h1>
             <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
-              {filteredRooms.length} rooms · {Math.round(totalArea).toLocaleString('en-US')} m²
+              {filteredRooms.length} {t('rum', 'rooms')} · {Math.round(totalArea).toLocaleString('sv-SE')} m²
             </p>
           </div>
         </div>
@@ -576,7 +578,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
           <Input
-            placeholder="Search rooms..."
+            placeholder={t('Sök rum...', 'Search rooms...')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-7 sm:pl-9 h-8 sm:h-9 text-xs sm:text-sm"
@@ -588,12 +590,12 @@ const RoomsView: React.FC<RoomsViewProps> = ({
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="h-8 sm:h-9 gap-2">
               <Settings2 size={14} />
-              <span className="hidden sm:inline">Columns</span>
+              <span className="hidden sm:inline">{t('Kolumner', 'Columns')}</span>
               <Badge variant="secondary" className="text-xs ml-1">{visibleColumns.length}</Badge>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 max-h-80 overflow-y-auto bg-popover">
-            <DropdownMenuLabel>System Properties</DropdownMenuLabel>
+            <DropdownMenuLabel>{t('Systemegenskaper', 'System Properties')}</DropdownMenuLabel>
             {systemCols.map(col => (
               <DropdownMenuCheckboxItem
                 key={col.key}
@@ -606,7 +608,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
             {calculatedCols.length > 0 && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuLabel>Calculated</DropdownMenuLabel>
+                <DropdownMenuLabel>{t('Beräknade', 'Calculated')}</DropdownMenuLabel>
                 {calculatedCols.map(col => (
                   <DropdownMenuCheckboxItem
                     key={col.key}
@@ -621,7 +623,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
             {userDefinedCols.length > 0 && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuLabel>User defined</DropdownMenuLabel>
+                <DropdownMenuLabel>{t('Användardefinierade', 'User defined')}</DropdownMenuLabel>
                 {userDefinedCols.map(col => (
                   <DropdownMenuCheckboxItem
                     key={col.key}
@@ -643,7 +645,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
             size="icon"
             onClick={() => setViewMode('grid')}
             className="h-8 w-8 sm:h-9 sm:w-9"
-            title="Tabell"
+            title={t('Tabell', 'Table')}
           >
             <List size={16} />
           </Button>
@@ -652,7 +654,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
             size="icon"
             onClick={() => setViewMode('gallery')}
             className="h-8 w-8 sm:h-9 sm:w-9"
-            title="Galleri"
+            title={t('Galleri', 'Gallery')}
           >
             <LayoutGrid size={16} />
           </Button>
@@ -662,30 +664,30 @@ const RoomsView: React.FC<RoomsViewProps> = ({
       {/* Selection toolbar - shown when rows are selected */}
       {selectedRows.size > 0 && (
         <div className="border-b px-4 py-2 flex items-center gap-2 bg-muted/50 shrink-0">
-          <Badge variant="secondary">{selectedRows.size} selected</Badge>
-          
+          <Badge variant="secondary">{selectedRows.size} {t('valda', 'selected')}</Badge>
+
           <Button size="sm" variant="outline" onClick={handleShowSelectedProperties} className="gap-1">
             <Info size={14} />
-            Properties
+            {t('Egenskaper', 'Properties')}
           </Button>
 
           {onOpen3D && (
             <Button size="sm" variant="outline" onClick={handleOpen3DSelected} className="gap-1">
               <Cuboid size={14} />
-              Viewer
+              {t('Visare', 'Viewer')}
             </Button>
           )}
-          
+
           <Button size="sm" variant="ghost" onClick={() => setSelectedRows(new Set())} className="gap-1 ml-auto">
             <ArrowLeft size={14} />
-            Deselect
+            {t('Avmarkera', 'Deselect')}
           </Button>
         </div>
       )}
 
       {/* Sensor metric buttons */}
       <div className="border-b px-2 sm:px-3 md:px-4 py-1.5 flex items-center gap-1.5 shrink-0">
-        <span className="text-[10px] text-muted-foreground mr-1">Visualize:</span>
+        <span className="text-[10px] text-muted-foreground mr-1">{t('Visualisera:', 'Visualize:')}</span>
         {ROOM_SENSOR_METRICS.map(m => (
           <Button
             key={m.key}
@@ -782,7 +784,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                           colSpan={orderedVisibleColumns.length + 1}
                           className="text-center py-8 text-muted-foreground"
                         >
-                         No rooms found
+                         {t('Inga rum hittades', 'No rooms found')}
                         </TableCell>
                       </TableRow>
                     )}
@@ -878,7 +880,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
               {filteredRooms.length === 0 && (
                 <div className="col-span-full text-center py-12 text-muted-foreground">
                   <DoorOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No rooms found</p>
+                  <p>{t('Inga rum hittades', 'No rooms found')}</p>
                 </div>
               )}
             </div>

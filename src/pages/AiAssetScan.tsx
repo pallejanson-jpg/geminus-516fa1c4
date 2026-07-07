@@ -195,7 +195,7 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid: prop
   }
 
   return (
-    <div className="h-full flex flex-col p-3 md:p-6 overflow-auto bg-background">
+    <div className="min-h-full flex flex-col p-3 md:p-6 bg-background">
       {/* Header */}
       <div className="flex items-center justify-between mb-4 md:mb-6 gap-2">
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
@@ -231,7 +231,7 @@ const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid: prop
       </div>
 
       {/* Main content */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
         <TabsList className="grid w-full grid-cols-4 mb-3 md:mb-4 h-auto p-1">
           <TabsTrigger 
             value="configure" 

@@ -29,6 +29,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface AnnotationSymbol {
   id: string;
@@ -67,6 +68,7 @@ const COLOR_PALETTE = [
 
 const SymbolSettings: React.FC = () => {
   const { toast } = useToast();
+  const { t } = useLanguage();
   const [symbols, setSymbols] = useState<AnnotationSymbol[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [editingSymbol, setEditingSymbol] = useState<AnnotationSymbol | null>(null);
@@ -96,7 +98,7 @@ const SymbolSettings: React.FC = () => {
     } catch (error: any) {
       toast({
         variant: 'destructive',
-        title: 'Fel vid hämtning',
+        title: t('Fel vid hämtning', 'Fetch error'),
         description: error.message,
       });
     } finally {
@@ -232,11 +234,11 @@ const SymbolSettings: React.FC = () => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Configure how different asset types are displayed as annotations in the 3D viewer.
+          {t('Konfigurera hur olika tillgångstyper visas som annoteringar i 3D-visaren.', 'Configure how different asset types are displayed as annotations in the 3D viewer.')}
         </p>
         <Button onClick={handleOpenCreate} size="sm" className="gap-2">
           <Plus className="h-4 w-4" />
-          New Symbol
+          {t('Ny symbol', 'New Symbol')}
         </Button>
       </div>
 
@@ -244,8 +246,8 @@ const SymbolSettings: React.FC = () => {
         {symbols.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <Circle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>No symbols configured</p>
-            <p className="text-xs mt-1">Click "New Symbol" to create one</p>
+            <p>{t('Inga symboler konfigurerade', 'No symbols configured')}</p>
+            <p className="text-xs mt-1">{t('Klicka "Ny symbol" för att skapa en', 'Click "New Symbol" to create one')}</p>
           </div>
         ) : (
           <Accordion type="single" collapsible className="space-y-2">
@@ -313,7 +315,7 @@ const SymbolSettings: React.FC = () => {
                         onClick={() => handleOpenEdit(symbol)}
                       >
                         <Pencil className="h-4 w-4 mr-1" />
-                        Edit
+                        {t('Redigera', 'Edit')}
                       </Button>
                       <Button
                         variant="ghost"
@@ -322,7 +324,7 @@ const SymbolSettings: React.FC = () => {
                         onClick={() => handleDelete(symbol)}
                       >
                         <Trash2 className="h-4 w-4 mr-1" />
-                        Delete
+                        {t('Ta bort', 'Delete')}
                       </Button>
                     </div>
                   </div>
@@ -338,13 +340,13 @@ const SymbolSettings: React.FC = () => {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {editingSymbol ? 'Edit Symbol' : 'New Annotation Symbol'}
+              {editingSymbol ? t('Redigera symbol', 'Edit Symbol') : t('Ny annoteringsymbol', 'New Annotation Symbol')}
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="symbol-name">Name</Label>
+              <Label htmlFor="symbol-name">{t('Namn', 'Name')}</Label>
               <Input
                 id="symbol-name"
                 value={formData.name}
@@ -355,21 +357,21 @@ const SymbolSettings: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="symbol-category">Category</Label>
+              <Label htmlFor="symbol-category">{t('Kategori', 'Category')}</Label>
               <Input
                 id="symbol-category"
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                placeholder="e.g. Fire, Sensor, Sprinkler"
+                placeholder={t('t.ex. Brand, Sensor, Sprinkler', 'e.g. Fire, Sensor, Sprinkler')}
                 className="h-11"
               />
               <p className="text-xs text-muted-foreground">
-                Used to match assets based on category or name
+                {t('Används för att matcha tillgångar baserat på kategori eller namn', 'Used to match assets based on category or name')}
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label>Color</Label>
+              <Label>{t('Färg', 'Color')}</Label>
               <div className="flex flex-wrap gap-2">
                 {COLOR_PALETTE.map((color) => (
                   <button
@@ -387,7 +389,7 @@ const SymbolSettings: React.FC = () => {
               </div>
               <div className="flex items-center gap-2 mt-2">
                 <Label htmlFor="custom-color" className="text-xs text-muted-foreground">
-                  Custom color:
+                  {t('Anpassad färg:', 'Custom color:')}
                 </Label>
                 <input
                   id="custom-color"
@@ -408,7 +410,7 @@ const SymbolSettings: React.FC = () => {
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                <Label htmlFor="symbol-icon">Icon (optional)</Label>
+                <Label htmlFor="symbol-icon">{t('Ikon (valfritt)', 'Icon (optional)')}</Label>
               </div>
               
               {/* Preview */}
@@ -442,7 +444,7 @@ const SymbolSettings: React.FC = () => {
                   id="symbol-icon"
                   value={formData.icon_url}
                   onChange={(e) => setFormData({ ...formData, icon_url: e.target.value })}
-                  placeholder="URL or upload..."
+                  placeholder={t('URL eller ladda upp...', 'URL or upload...')}
                   className="h-11 flex-1"
                 />
                 <label className="cursor-pointer">
@@ -488,12 +490,12 @@ const SymbolSettings: React.FC = () => {
                 </label>
               </div>
               <p className="text-xs text-muted-foreground">
-                Upload an image or enter a URL
+                {t('Ladda upp en bild eller ange en URL', 'Upload an image or enter a URL')}
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="marker-html">Custom HTML (optional)</Label>
+              <Label htmlFor="marker-html">{t('Anpassad HTML (valfritt)', 'Custom HTML (optional)')}</Label>
               <textarea
                 id="marker-html"
                 value={formData.marker_html}
@@ -502,7 +504,7 @@ const SymbolSettings: React.FC = () => {
                 className="w-full h-20 px-3 py-2 text-sm border rounded-md resize-none"
               />
               <p className="text-xs text-muted-foreground">
-                Custom HTML for advanced markers
+                {t('Anpassad HTML för avancerade markörer', 'Custom HTML for advanced markers')}
               </p>
             </div>
 
@@ -515,7 +517,7 @@ const SymbolSettings: React.FC = () => {
                 className="rounded"
               />
               <Label htmlFor="is-default" className="text-sm font-normal">
-                Use as default if no category matches
+                {t('Använd som standard om ingen kategori matchar', 'Use as default if no category matches')}
               </Label>
             </div>
           </div>
@@ -527,7 +529,7 @@ const SymbolSettings: React.FC = () => {
               disabled={isSaving}
             >
               <X className="h-4 w-4 mr-2" />
-              Cancel
+              {t('Avbryt', 'Cancel')}
             </Button>
             <Button onClick={handleSave} disabled={isSaving}>
               {isSaving ? (
@@ -535,7 +537,7 @@ const SymbolSettings: React.FC = () => {
               ) : (
                 <Save className="h-4 w-4 mr-2" />
               )}
-              {editingSymbol ? 'Update' : 'Create'}
+              {editingSymbol ? t('Uppdatera', 'Update') : t('Skapa', 'Create')}
             </Button>
           </DialogFooter>
         </DialogContent>

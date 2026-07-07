@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, useContext } from 'react';
 import { Palette, X, RefreshCw, AlertCircle, GripVertical } from 'lucide-react';
+import { useLanguage } from '@/context/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -89,6 +90,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   className,
   embedded = false,
 }) => {
+  const { t } = useLanguage();
   const { allData } = useContext(AppContext);
   const { data: buildingIoT } = useGeminusPremiumBuildingData(buildingFmGuid);
 
@@ -820,7 +822,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       setHoverLabel({
         visible: true,
         position: { x: canvasCoords[0], y: canvasCoords[1] },
-        roomName: room.name || 'Okänt rum',
+        roomName: room.name || t('Okänt rum', 'Unknown room'),
         value,
         color,
       });
@@ -862,21 +864,21 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
       {/* Visualization type selector */}
       <div className="space-y-2">
-        <Label className="text-xs text-muted-foreground">Visualization type</Label>
+        <Label className="text-xs text-muted-foreground">{t('Visualiseringstyp', 'Visualization type')}</Label>
         <Select
           value={visualizationType}
           onValueChange={(v) => setVisualizationType(v as VisualizationType)}
         >
           <SelectTrigger className="h-9">
-            <SelectValue placeholder="Select type…" />
+            <SelectValue placeholder={t('Välj typ…', 'Select type…')} />
           </SelectTrigger>
           <SelectContent className="bg-card border shadow-lg z-[60]">
-            <SelectItem value="none">None</SelectItem>
-            <SelectItem value="temperature">🌡️ Temperature</SelectItem>
+            <SelectItem value="none">{t('Ingen', 'None')}</SelectItem>
+            <SelectItem value="temperature">🌡️ {t('Temperatur', 'Temperature')}</SelectItem>
             <SelectItem value="co2">💨 CO₂</SelectItem>
-            <SelectItem value="humidity">💧 Humidity</SelectItem>
-            <SelectItem value="occupancy">👥 Occupancy</SelectItem>
-            <SelectItem value="area">📐 Area (NTA)</SelectItem>
+            <SelectItem value="humidity">💧 {t('Luftfuktighet', 'Humidity')}</SelectItem>
+            <SelectItem value="occupancy">👥 {t('Beläggning', 'Occupancy')}</SelectItem>
+            <SelectItem value="area">📐 {t('Area (NTA)', 'Area (NTA)')}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -886,20 +888,20 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         <div className="flex items-center justify-between">
           <Label className="text-xs flex items-center gap-1">
             <AlertCircle className="h-3 w-3 text-amber-500" />
-            Simulated data
+            {t('Simulerad data', 'Simulated data')}
           </Label>
           <Switch checked={useMockData} onCheckedChange={setUseMockData} />
         </div>
       )}
 
       {hasRealData && visualizationType !== 'none' && (
-        <p className="text-xs text-green-600">✓ Real sensor data available</p>
+        <p className="text-xs text-green-600">✓ {t('Verklig sensordata tillgänglig', 'Real sensor data available')}</p>
       )}
 
       {/* Legend */}
       {visualizationType !== 'none' && config && (
         <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Color scale ({config.unit})</Label>
+          <Label className="text-xs text-muted-foreground">{t('Färgskala', 'Color scale')} ({config.unit})</Label>
           <div className="h-4 rounded-sm" style={{ background: legendGradient }} />
           <div className="flex justify-between text-[10px] text-muted-foreground">
             <span>{config.min} {config.unit}</span>
@@ -910,15 +912,15 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
       {/* Stats */}
       <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
-        <span>{isProcessing ? 'Processing…' : `${rooms.length} rooms found`}</span>
-        {colorizedCount > 0 && <span className="text-primary">{colorizedCount} färglagda</span>}
+        <span>{isProcessing ? t('Bearbetar…', 'Processing…') : `${rooms.length} ${t('rum hittade', 'rooms found')}`}</span>
+        {colorizedCount > 0 && <span className="text-primary">{colorizedCount} {t('färglagda', 'colorized')}</span>}
       </div>
 
       {/* Actions */}
       <div className="flex gap-2">
         <Button variant="outline" size="sm" className="flex-1" onClick={resetColors} disabled={colorizedCount === 0 || isProcessing}>
           <RefreshCw className="h-3 w-3 mr-1" />
-          Rensa färger
+          {t('Rensa färger', 'Clear colors')}
         </Button>
       </div>
     </div>
@@ -963,7 +965,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         <div className="flex items-center gap-2">
           <GripVertical className="h-4 w-4 text-muted-foreground" />
           <Palette className="h-4 w-4 text-primary" />
-          <span className="font-medium text-sm">Rumsvisualisering</span>
+          <span className="font-medium text-sm">{t('Rumsvisualisering', 'Room visualization')}</span>
         </div>
         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
           <X className="h-4 w-4" />

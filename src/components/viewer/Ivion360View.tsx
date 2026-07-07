@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext, useCallback, useRef } from "react";
+import { useLanguage } from '@/context/LanguageContext';
 import { Loader2, ExternalLink, X, Maximize2, Minimize2, Plus, MapPin, RefreshCw, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppContext, Ivion360Context } from "@/context/AppContext";
@@ -53,6 +54,7 @@ export default function Ivion360View({
   initialHeading,
 }: Ivion360ViewProps) {
   const isMobile = useIsMobile();
+  const { t } = useLanguage();
   const { ivion360Context, setIvion360Context } = useContext(AppContext);
   const [isLoading, setIsLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -191,8 +193,8 @@ export default function Ivion360View({
         setIsLoading(false);
         
         console.log('[Ivion360View] ✅ SDK mode active', loginToken ? '(auto-authenticated)' : '(manual login needed)');
-        toast.success('360° SDK ansluten', { 
-          description: loginToken ? 'Automatisk autentisering aktiv' : 'Automatisk synkronisering aktiv',
+        toast.success(t('360° SDK ansluten', '360° SDK connected'), {
+          description: loginToken ? t('Automatisk autentisering aktiv', 'Automatic authentication active') : t('Automatisk synkronisering aktiv', 'Automatic synchronization active'),
         });
       } catch (err) {
         if (cancelled) return;
@@ -399,7 +401,7 @@ export default function Ivion360View({
       onSyncRequest();
     } else {
       syncToIvion();
-      toast.success('360°-vy synkad till 3D-position');
+      toast.success(t('360°-vy synkad till 3D-position', '360° view synced to 3D position'));
     }
   }, [onSyncRequest, syncToIvion]);
 
@@ -475,8 +477,8 @@ export default function Ivion360View({
     return (
       <div className="h-full flex items-center justify-center p-4">
         <div className="text-center text-muted-foreground">
-          <p className="text-sm">No 360° view configured</p>
-          <p className="text-xs mt-2">Configure Ivion Site ID in building settings</p>
+          <p className="text-sm">{t('Ingen 360°-vy konfigurerad', 'No 360° view configured')}</p>
+          <p className="text-xs mt-2">{t('Konfigurera Ivion Site ID i byggnadsinställningar', 'Configure Ivion Site ID in building settings')}</p>
         </div>
       </div>
     );
@@ -509,12 +511,12 @@ export default function Ivion360View({
                 {renderMode === 'iframe' && sdkStatus === 'failed' && (
                   <span className="text-xs text-amber-600 bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" />
-                    Iframe-läge
+                    {t('Iframe-läge', 'Iframe mode')}
                   </span>
                 )}
                 {!isLoadingImages && imageCache.length > 0 && (
                   <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                    {imageCache.length} bilder
+                    {t(`${imageCache.length} bilder`, `${imageCache.length} images`)}
                   </span>
                 )}
               </>
@@ -527,11 +529,11 @@ export default function Ivion360View({
                 variant="ghost"
                 size="sm"
                 onClick={handleManualSync}
-                title="Synka 360° till 3D"
+                title={t('Synka 360° till 3D', 'Sync 360° to 3D')}
                 className="gap-1.5"
               >
                 <RefreshCw className="h-4 w-4" />
-                <span className="hidden sm:inline text-xs">Synka</span>
+                <span className="hidden sm:inline text-xs">{t('Synka', 'Sync')}</span>
               </Button>
             )}
             
@@ -542,17 +544,17 @@ export default function Ivion360View({
                   variant="ghost"
                   size="sm"
                   onClick={() => setRegistrationPanelOpen(true)}
-                  title="Registrera tillgång"
+                  title={t('Registrera tillgång', 'Register asset')}
                   className="gap-1.5"
                 >
                   <Plus className="h-4 w-4" />
-                  <span className="hidden sm:inline text-xs">Registrera</span>
+                  <span className="hidden sm:inline text-xs">{t('Registrera', 'Register')}</span>
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setUnplacedPanelOpen(true)}
-                  title="Skapa POI från Geminus"
+                  title={t('Skapa POI från Geminus', 'Create POI from Geminus')}
                   className="gap-1.5"
                 >
                   <MapPin className="h-4 w-4" />
@@ -584,13 +586,13 @@ export default function Ivion360View({
             <div className="flex flex-col items-center gap-2">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <span className="text-sm text-muted-foreground">
-                 {sdkStatus === 'loading' 
-                   ? 'Loading 360° SDK...'
-                   : isRenewingToken 
-                     ? 'Renewing connection...' 
-                     : isLoadingImages 
-                       ? 'Loading image positions...'
-                       : 'Loading 360° view...'}
+                 {sdkStatus === 'loading'
+                   ? t('Laddar 360° SDK...', 'Loading 360° SDK...')
+                   : isRenewingToken
+                     ? t('Förnyar anslutning...', 'Renewing connection...')
+                     : isLoadingImages
+                       ? t('Laddar bildpositioner...', 'Loading image positions...')
+                       : t('Laddar 360°-vy...', 'Loading 360° view...')}
               </span>
             </div>
           </div>
@@ -600,12 +602,12 @@ export default function Ivion360View({
         {syncEnabled && !isLoadingImages && imageCache.length === 0 && hasImageLoadError && (
           <div className="absolute top-12 left-2 right-2 z-20 bg-amber-100 dark:bg-amber-900/40 
                           text-amber-800 dark:text-amber-200 text-xs px-3 py-2 rounded shadow flex items-center justify-between gap-2">
-             <span>⚠️ Could not fetch image positions for sync.</span>
-             <button 
+             <span>⚠️ {t('Kunde inte hämta bildpositioner för synk.', 'Could not fetch image positions for sync.')}</span>
+             <button
                onClick={retryLoadImages}
                className="underline hover:no-underline whitespace-nowrap"
              >
-               Try again
+               {t('Försök igen', 'Try again')}
              </button>
           </div>
         )}
@@ -654,7 +656,7 @@ export default function Ivion360View({
             ivionSiteId={ivionSiteId || null}
             onClose={() => setUnplacedPanelOpen(false)}
             onAssetsCreated={() => {
-              toast.success('POIs skapade i Ivion');
+              toast.success(t('POIs skapade i Ivion', 'POIs created in Ivion'));
             }}
           />
         )}

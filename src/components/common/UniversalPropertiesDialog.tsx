@@ -18,6 +18,7 @@ import { pushAssetToGeminusBase, pushPropertyChangesToGeminusBase, deleteGeminus
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface UniversalPropertiesDialogProps {
   isOpen: boolean;
@@ -95,6 +96,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   inline = false,
 }) => {
   const isMobile = useIsMobile();
+  const { t } = useLanguage();
   
   // Normalize fmGuids to always be an array
   const fmGuids = useMemo(() => 
@@ -1107,7 +1109,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       // Update local state
       setAssets(prev => prev.map(a => ({ ...a, attributes: updatedAttrs })));
       setBipApplied(suggestion.code);
-      toast.success(`BIP-kod ${suggestion.code} tillämpad`);
+      toast.success(t(`BIP-kod ${suggestion.code} tillämpad`, `BIP code ${suggestion.code} applied`));
       onUpdate?.();
     } catch (error: any) {
       toast.error('Could not save BIP code: ' + error.message);
@@ -1344,7 +1346,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
             <div className="mt-3 space-y-2">
               <div className="flex items-center gap-2 px-2">
                 <Sparkles className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium">BIP-förslag</span>
+                <span className="text-sm font-medium">{t('BIP-förslag', 'BIP Suggestions')}</span>
               </div>
               {bipSuggestions.map((s, i) => (
                 <div key={i} className="border rounded-md p-2.5 space-y-1 bg-muted/30">
@@ -1395,7 +1397,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
               <CollapsibleTrigger className="flex items-center justify-between w-full p-2 bg-muted/50 rounded-md hover:bg-muted transition-colors">
                 <div className="flex items-center gap-2">
                   {openSections.has('dou') ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5 rotate-180" />}
-                  <span className="text-sm font-medium">Drift & Underhåll</span>
+                  <span className="text-sm font-medium">{t('Drift & Underhåll', 'Operations & Maintenance')}</span>
                   <Badge variant="secondary" className="text-[10px]">{douData.length}</Badge>
                 </div>
               </CollapsibleTrigger>
@@ -1424,7 +1426,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
               <CollapsibleTrigger className="flex items-center justify-between w-full p-2 bg-muted/50 rounded-md hover:bg-muted transition-colors">
                 <div className="flex items-center gap-2">
                   {openSections.has('geminus-base-docs') ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5 rotate-180" />}
-                  <span className="text-sm font-medium">Dokument (Geminus Base)</span>
+                  <span className="text-sm font-medium">{t('Dokument (Geminus Base)', 'Documents (Geminus Base)')}</span>
                   <Badge variant="secondary" className="text-[10px]">{fmaDocuments.length}</Badge>
                 </div>
               </CollapsibleTrigger>
@@ -1494,16 +1496,16 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                     <AlertDialogHeader>
                       <AlertDialogTitle>Delete {isMultiMode ? `${fmGuids.length} objects` : 'object'}?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        {syncStatus.allLocal 
-                          ? 'Detta raderar objektet/objekten permanent från den lokala databasen.'
-                          : 'Objektet/objekten kommer att expieras i Geminus Plus och tas bort lokalt.'}
+                        {syncStatus.allLocal
+                          ? t('Detta raderar objektet/objekten permanent från den lokala databasen.', 'This permanently deletes the object(s) from the local database.')
+                          : t('Objektet/objekten kommer att expieras i Geminus Plus och tas bort lokalt.', 'The object(s) will be expired in Geminus Plus and removed locally.')}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Avbryt</AlertDialogCancel>
+                      <AlertDialogCancel>{t('Avbryt', 'Cancel')}</AlertDialogCancel>
                       <AlertDialogAction onClick={handleDelete} disabled={isDeleting}>
                         {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-                        Radera
+                        {t('Radera', 'Delete')}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -1513,7 +1515,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
               {syncStatus?.isInstance && syncStatus.hasBimCreated && (
                 <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
                   <AlertCircle className="h-3 w-3" />
-                  Finns i BIM-modell — kan inte raderas
+                  {t('Finns i BIM-modell — kan inte raderas', 'In BIM model — cannot be deleted')}
                 </Badge>
               )}
               
@@ -1536,7 +1538,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
               {/* BIP Classify button */}
               <Button variant="outline" size="sm" onClick={handleClassify} disabled={isClassifying}>
                 {isClassifying ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Sparkles className="h-4 w-4 mr-1" />}
-                Klassificera (BIP)
+                {t('Klassificera (BIP)', 'Classify (BIP)')}
               </Button>
             </div>
             

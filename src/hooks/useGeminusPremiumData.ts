@@ -304,7 +304,7 @@ export interface GeminusPremiumBuildingData {
   }>;
 }
 
-export function useGeminusPremiumBuildingData(buildingFmGuid: string | null | undefined) {
+export function useGeminusPremiumBuildingData(buildingFmGuid: string | null | undefined, refreshKey?: number) {
   const [data, setData] = useState<GeminusPremiumBuildingData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLive, setIsLive] = useState(false);
@@ -338,7 +338,7 @@ export function useGeminusPremiumBuildingData(buildingFmGuid: string | null | un
         setIsLive(false);
         setIsLoading(false);
       });
-  }, [buildingFmGuid]);
+  }, [buildingFmGuid, refreshKey]);
 
   return { data, isLoading, isLive, error };
 }

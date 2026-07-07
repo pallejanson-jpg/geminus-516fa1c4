@@ -48,20 +48,20 @@ export interface GeminusBaseDocument {
 // ── Class ID mapping ───────────────────────────────────────────────
 
 export const CLASS_LABELS: Record<number, string> = {
-  102: 'Fastighet',
-  103: 'Fastighet',
-  104: 'Byggnad',
-  105: 'Plan',
-  106: 'Dokument',   // confirmed from native app tab label
-  107: 'Utrymme',
-  109: 'Objekt',
-  110: 'Objekt',
-  124: 'Objekt',
-  138: 'Dörr',       // confirmed
-  139: 'Fönster',    // confirmed
-  174: 'El',         // inferred from large count
-  177: 'Brandskydd', // confirmed from native app tab label
-  210: 'Utrymme',   // confirmed from native app tab "Utrymme ■"
+  102: 'Property',
+  103: 'Property',
+  104: 'Building',
+  105: 'Floor',
+  106: 'Document',   // confirmed from native app tab label
+  107: 'Space',
+  109: 'Object',
+  110: 'Object',
+  124: 'Object',
+  138: 'Door',       // confirmed
+  139: 'Window',     // confirmed
+  174: 'Electrical', // inferred from large count
+  177: 'Fire Safety', // confirmed from native app tab label
+  210: 'Space',      // confirmed from native app tab "Utrymme ■"
   214: 'Sensor',
 };
 
@@ -220,7 +220,7 @@ export function useGeminusBaseApi() {
   const createObject = useCallback((parentGuid: string, name: string, classId?: number, properties?: Record<string, any>) =>
     withLoading(async () => {
       const res = await fmCall('create-object', { parentGuid, name, classId, properties });
-      toast({ title: 'Objekt skapat', description: name });
+      toast({ title: 'Object created', description: name });
       return res.data;
     }), [withLoading, toast]);
 
@@ -234,7 +234,7 @@ export function useGeminusBaseApi() {
   const deleteObject = useCallback((guid: string) =>
     withLoading(async () => {
       const res = await fmCall('delete-object', { guid });
-      toast({ title: 'Objekt raderat' });
+      toast({ title: 'Object deleted' });
       return res.data;
     }), [withLoading, toast]);
 
@@ -512,7 +512,7 @@ export function useGeminusBaseApi() {
   const testConnection = useCallback(() =>
     withLoading(async () => {
       const res = await fmCall('test-connection');
-      toast({ title: 'Anslutning OK', description: res.message });
+      toast({ title: 'Connection OK', description: res.message });
       return res;
     }), [withLoading, toast]);
 

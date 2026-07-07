@@ -23,6 +23,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
+import { useLanguage } from '@/context/LanguageContext';
 
 
 // Helper for deterministic pseudo-random based on string
@@ -114,6 +115,7 @@ const priorityConfig: Record<MockWorkOrder['priority'], { label: string; color: 
 export default function FacilityManagementTab() {
     const { navigatorTreeData } = useContext(AppContext);
     const isMobile = useIsMobile();
+    const { t } = useLanguage();
     const [showWorkOrderList, setShowWorkOrderList] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<WorkOrderStatus | 'all'>('all');
@@ -251,7 +253,7 @@ export default function FacilityManagementTab() {
 
     const kpiCards = [
         { 
-            title: totals.hasRealAlarms ? 'Aktiva larm' : (isMobile ? 'Active' : 'Active Issues'), 
+            title: totals.hasRealAlarms ? t('Aktiva larm', 'Active Alarms') : (isMobile ? 'Active' : 'Active Issues'),
             value: totals.totalActive, 
             icon: totals.hasRealAlarms ? Bell : AlertTriangle, 
             color: totals.hasRealAlarms ? 'text-destructive' : 'text-yellow-500',
@@ -363,7 +365,7 @@ export default function FacilityManagementTab() {
                                 <Badge variant="destructive" className="text-[9px] px-1 py-0 ml-1">Live</Badge>
                             )}
                         </CardTitle>
-                        <CardDescription>{totals.hasRealAlarms ? 'IfcAlarm-data (riktiga) + mock för övriga' : 'Active service issues'}</CardDescription>
+                        <CardDescription>{totals.hasRealAlarms ? t('IfcAlarm-data (riktiga) + mock för övriga', 'IfcAlarm data (real) + mock for others') : 'Active service issues'}</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="h-64">

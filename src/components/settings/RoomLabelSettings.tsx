@@ -10,8 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useRoomLabelConfigs, RoomLabelConfig, AVAILABLE_LABEL_FIELDS } from '@/hooks/useRoomLabelConfigs';
+import { useLanguage } from '@/context/LanguageContext';
 
 const RoomLabelSettings: React.FC = () => {
+  const { t } = useLanguage();
   const {
     configs,
     loading,
@@ -85,7 +87,7 @@ const RoomLabelSettings: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <div className="text-muted-foreground">Loading…</div>
+        <div className="text-muted-foreground">{t('Laddar…', 'Loading…')}</div>
       </div>
     );
   }
@@ -94,14 +96,14 @@ const RoomLabelSettings: React.FC = () => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-medium">Room Labels</h3>
+          <h3 className="text-lg font-medium">{t('Rumsetiketter', 'Room Labels')}</h3>
           <p className="text-sm text-muted-foreground">
-            Configure how labels are displayed on rooms in the 3D viewer
+            {t('Konfigurera hur etiketter visas på rum i 3D-visaren', 'Configure how labels are displayed on rooms in the 3D viewer')}
           </p>
         </div>
         <Button onClick={() => setShowCreateDialog(true)} size="sm" className="gap-2">
           <Plus className="h-4 w-4" />
-          New configuration
+          {t('Ny konfiguration', 'New configuration')}
         </Button>
       </div>
 
@@ -129,7 +131,7 @@ const RoomLabelSettings: React.FC = () => {
                   <div className="space-y-4">
                     {/* Name input */}
                     <div className="space-y-1.5">
-                      <Label className="text-xs">Name</Label>
+                      <Label className="text-xs">{t('Namn', 'Name')}</Label>
                       <Input
                         value={editForm.name || ''}
                         onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
@@ -139,7 +141,7 @@ const RoomLabelSettings: React.FC = () => {
 
                     {/* Fields selection */}
                     <div className="space-y-2">
-                      <Label className="text-xs">Fields to display</Label>
+                      <Label className="text-xs">{t('Fält att visa', 'Fields to display')}</Label>
                       <div className="flex flex-wrap gap-2">
                         {AVAILABLE_LABEL_FIELDS.map((field) => (
                           <Badge
@@ -157,7 +159,7 @@ const RoomLabelSettings: React.FC = () => {
                     {/* Height slider */}
                     <div className="space-y-2">
                       <div className="flex justify-between">
-                        <Label className="text-xs">Height above floor</Label>
+                        <Label className="text-xs">{t('Höjd ovanför golv', 'Height above floor')}</Label>
                         <span className="text-xs text-muted-foreground">{(editForm.height_offset ?? 0.05).toFixed(2)}m</span>
                       </div>
                       <Slider
@@ -171,7 +173,7 @@ const RoomLabelSettings: React.FC = () => {
 
                     {/* Scale with distance */}
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs">Scale with distance</Label>
+                      <Label className="text-xs">{t('Skala med avstånd', 'Scale with distance')}</Label>
                       <Switch
                         checked={editForm.scale_with_distance ?? true}
                         onCheckedChange={(v) => setEditForm({ ...editForm, scale_with_distance: v })}
@@ -181,8 +183,8 @@ const RoomLabelSettings: React.FC = () => {
                     {/* Occlusion toggle */}
                     <div className="flex items-center justify-between">
                       <div>
-                        <Label className="text-xs">Occlusion</Label>
-                        <p className="text-[10px] text-muted-foreground">Hide labels behind walls/ceilings</p>
+                        <Label className="text-xs">{t('Ocklusion', 'Occlusion')}</Label>
+                        <p className="text-[10px] text-muted-foreground">{t('Dölj etiketter bakom väggar/tak', 'Hide labels behind walls/ceilings')}</p>
                       </div>
                       <Switch
                         checked={editForm.occlusion_enabled ?? true}
@@ -193,8 +195,8 @@ const RoomLabelSettings: React.FC = () => {
                     {/* Flat on floor toggle */}
                     <div className="flex items-center justify-between">
                       <div>
-                        <Label className="text-xs">Flat mode</Label>
-                        <p className="text-[10px] text-muted-foreground">Lay labels flat on the floor</p>
+                        <Label className="text-xs">{t('Platt läge', 'Flat mode')}</Label>
+                        <p className="text-[10px] text-muted-foreground">{t('Lägg etiketter plant på golvet', 'Lay labels flat on the floor')}</p>
                       </div>
                       <Switch
                         checked={editForm.flat_on_floor ?? false}
@@ -204,7 +206,7 @@ const RoomLabelSettings: React.FC = () => {
 
                     {/* Click action */}
                     <div className="space-y-2">
-                      <Label className="text-xs">Click action</Label>
+                      <Label className="text-xs">{t('Klickåtgärd', 'Click action')}</Label>
                       <Select
                         value={editForm.click_action || 'none'}
                         onValueChange={(v) => setEditForm({ ...editForm, click_action: v as any })}
@@ -213,9 +215,9 @@ const RoomLabelSettings: React.FC = () => {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="none">None</SelectItem>
-                          <SelectItem value="flyto">Fly camera to room</SelectItem>
-                          <SelectItem value="roomcard">Show room card</SelectItem>
+                          <SelectItem value="none">{t('Ingen', 'None')}</SelectItem>
+                          <SelectItem value="flyto">{t('Flyg kameran till rum', 'Fly camera to room')}</SelectItem>
+                          <SelectItem value="roomcard">{t('Visa rumskort', 'Show room card')}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -224,11 +226,11 @@ const RoomLabelSettings: React.FC = () => {
                     <div className="flex justify-end gap-2 pt-2">
                       <Button size="sm" variant="ghost" onClick={cancelEdit}>
                         <X className="h-4 w-4 mr-1" />
-                         Cancel
+                         {t('Avbryt', 'Cancel')}
                        </Button>
                        <Button size="sm" onClick={() => handleUpdate(config.id)}>
                          <Check className="h-4 w-4 mr-1" />
-                         Save
+                         {t('Spara', 'Save')}
                       </Button>
                     </div>
                   </div>
@@ -236,22 +238,22 @@ const RoomLabelSettings: React.FC = () => {
                   // View mode
                   <div className="space-y-3">
                     <p className="text-xs text-muted-foreground">
-                       Fields: {config.fields.map(f => 
+                       {t('Fält', 'Fields')}: {config.fields.map(f =>
                          AVAILABLE_LABEL_FIELDS.find(af => af.key === f)?.label || f
-                       ).join(', ')} • 
-                       Height: {config.height_offset}m • 
-                       Click: {getClickActionLabel(config.click_action)}
+                       ).join(', ')} •
+                       {t('Höjd', 'Height')}: {config.height_offset}m •
+                       {t('Klick', 'Click')}: {getClickActionLabel(config.click_action)}
                     </p>
-                    
+
                     {/* Actions */}
                     <div className="flex items-center gap-2">
                       <Button size="sm" variant="outline" onClick={() => startEdit(config)}>
                         <Edit2 className="h-4 w-4 mr-1" />
-                         Edit
+                         {t('Redigera', 'Edit')}
                        </Button>
                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteConfig(config.id)}>
                          <Trash2 className="h-4 w-4 mr-1" />
-                         Delete
+                         {t('Ta bort', 'Delete')}
                       </Button>
                     </div>
                   </div>
@@ -263,9 +265,9 @@ const RoomLabelSettings: React.FC = () => {
       ) : (
         <div className="text-center py-8 text-muted-foreground border rounded-lg bg-muted/30">
           <Tag className="h-8 w-8 mx-auto mb-2 opacity-50" />
-           <p>No label configurations yet</p>
+           <p>{t('Inga etikettkonfigurationer ännu', 'No label configurations yet')}</p>
            <Button onClick={() => setShowCreateDialog(true)} variant="outline" size="sm" className="mt-2">
-             Create your first
+             {t('Skapa din första', 'Create your first')}
            </Button>
         </div>
       )}
@@ -274,24 +276,25 @@ const RoomLabelSettings: React.FC = () => {
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>New Label Configuration</DialogTitle>
+            <DialogTitle>{t('Ny etikettkonfiguration', 'New Label Configuration')}</DialogTitle>
             <DialogDescription>
-              Create a new configuration for how room labels appear in the 3D viewer.
+              {t('Skapa en ny konfiguration för hur rumsetiketter visas i 3D-visaren.', 'Create a new configuration for how room labels appear in the 3D viewer.')}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Name</Label>
+              <Label>{t('Namn', 'Name')}</Label>
               <Input
-                placeholder="e.g. 'Name and area'"
+                placeholder={t("t.ex. 'Namn och area'", "e.g. 'Name and area'")}
+
                 value={editForm.name || ''}
                 onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
               />
             </div>
 
             <div className="space-y-2">
-              <Label>Fields to display</Label>
+              <Label>{t('Fält att visa', 'Fields to display')}</Label>
               <div className="flex flex-wrap gap-2">
                 {AVAILABLE_LABEL_FIELDS.map((field) => (
                   <Badge
@@ -308,7 +311,7 @@ const RoomLabelSettings: React.FC = () => {
 
             <div className="space-y-2">
               <div className="flex justify-between">
-                <Label>Höjd ovanför golv</Label>
+                <Label>{t('Höjd ovanför golv', 'Height above floor')}</Label>
                 <span className="text-sm text-muted-foreground">{(editForm.height_offset ?? 0.05).toFixed(2)}m</span>
               </div>
               <Slider
@@ -321,7 +324,7 @@ const RoomLabelSettings: React.FC = () => {
             </div>
 
             <div className="flex items-center justify-between">
-              <Label>Skala med avstånd</Label>
+              <Label>{t('Skala med avstånd', 'Scale with distance')}</Label>
               <Switch
                 checked={editForm.scale_with_distance ?? true}
                 onCheckedChange={(v) => setEditForm({ ...editForm, scale_with_distance: v })}
@@ -330,8 +333,8 @@ const RoomLabelSettings: React.FC = () => {
 
             <div className="flex items-center justify-between">
               <div>
-                <Label>Ocklusion</Label>
-                <p className="text-xs text-muted-foreground">Dölj etiketter bakom väggar/tak</p>
+                <Label>{t('Ocklusion', 'Occlusion')}</Label>
+                <p className="text-xs text-muted-foreground">{t('Dölj etiketter bakom väggar/tak', 'Hide labels behind walls/ceilings')}</p>
               </div>
               <Switch
                 checked={editForm.occlusion_enabled ?? true}
@@ -341,8 +344,8 @@ const RoomLabelSettings: React.FC = () => {
 
             <div className="flex items-center justify-between">
               <div>
-                <Label>Platt läge</Label>
-                <p className="text-xs text-muted-foreground">Lägg etiketter plant på golvet</p>
+                <Label>{t('Platt läge', 'Flat mode')}</Label>
+                <p className="text-xs text-muted-foreground">{t('Lägg etiketter plant på golvet', 'Lay labels flat on the floor')}</p>
               </div>
               <Switch
                 checked={editForm.flat_on_floor ?? false}
@@ -351,7 +354,7 @@ const RoomLabelSettings: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <Label>Klickåtgärd</Label>
+              <Label>{t('Klickåtgärd', 'Click action')}</Label>
               <Select
                 value={editForm.click_action || 'none'}
                 onValueChange={(v) => setEditForm({ ...editForm, click_action: v as any })}
@@ -360,9 +363,9 @@ const RoomLabelSettings: React.FC = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  <SelectItem value="flyto">Fly camera to room</SelectItem>
-                  <SelectItem value="roomcard">Show room card</SelectItem>
+                  <SelectItem value="none">{t('Ingen', 'None')}</SelectItem>
+                  <SelectItem value="flyto">{t('Flyg kameran till rum', 'Fly camera to room')}</SelectItem>
+                  <SelectItem value="roomcard">{t('Visa rumskort', 'Show room card')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -370,10 +373,10 @@ const RoomLabelSettings: React.FC = () => {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowCreateDialog(false); setEditForm({}); }}>
-               Cancel
+               {t('Avbryt', 'Cancel')}
              </Button>
              <Button onClick={handleCreate} disabled={!editForm.name}>
-               Create
+               {t('Skapa', 'Create')}
              </Button>
           </DialogFooter>
         </DialogContent>

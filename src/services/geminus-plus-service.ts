@@ -18,22 +18,41 @@ export function isAccSourcedBuilding(fmGuid: string): boolean {
  * Note: Due to Supabase's default 1000 row limit, we paginate through all results.
  */
 export async function fetchLocalAssets(categories?: string[]): Promise<any[]> {
+  const COLS = "fm_guid, category, name, common_name, building_fm_guid, level_fm_guid, in_room_fm_guid, complex_common_name, attributes, is_local, created_in_model, asset_type, synced_at, annotation_placed, symbol_id, gross_area";
+
+  const mapRow = (asset: any) => ({
+    fmGuid: asset.fm_guid,
+    category: asset.category,
+    name: asset.name,
+    commonName: asset.common_name,
+    buildingFmGuid: asset.building_fm_guid,
+    levelFmGuid: asset.level_fm_guid,
+    inRoomFmGuid: asset.in_room_fm_guid,
+    complexCommonName: asset.complex_common_name,
+    attributes: asset.attributes,
+    isLocal: asset.is_local,
+    createdInModel: asset.created_in_model,
+    assetType: asset.asset_type,
+    syncedAt: asset.synced_at,
+    annotationPlaced: asset.annotation_placed,
+    symbolId: asset.symbol_id,
+    grossArea: asset.gross_area,
+  });
+
+  // Paginate regardless of whether categories are filtered — server caps at 1000 rows per request.
   const allAssets: any[] = [];
   const pageSize = 1000;
   let offset = 0;
-  let hasMore = true;
 
-  while (hasMore) {
+  while (true) {
     let query = supabase
       .from("assets")
-      .select("fm_guid, category, name, common_name, building_fm_guid, level_fm_guid, in_room_fm_guid, complex_common_name, attributes, is_local, created_in_model, asset_type, synced_at, annotation_placed, symbol_id, gross_area")
-      .order("fm_guid", { ascending: true }) // Stable ordering for pagination
+      .select(COLS)
+      .order("fm_guid", { ascending: true })
       .range(offset, offset + pageSize - 1);
-
     if (categories && categories.length > 0) {
       query = query.in("category", categories);
     }
-
     const { data, error } = await query;
 
     if (error) {
@@ -41,36 +60,10 @@ export async function fetchLocalAssets(categories?: string[]): Promise<any[]> {
       throw new Error(error.message || "Failed to fetch assets from database");
     }
 
-    if (!data || data.length === 0) {
-      hasMore = false;
-    } else {
-      // Map database snake_case to camelCase for frontend compatibility
-      const mapped = data.map((asset) => ({
-        fmGuid: asset.fm_guid,
-        category: asset.category,
-        name: asset.name,
-        commonName: asset.common_name,
-        buildingFmGuid: asset.building_fm_guid,
-        levelFmGuid: asset.level_fm_guid,
-        inRoomFmGuid: asset.in_room_fm_guid,
-        complexCommonName: asset.complex_common_name,
-        attributes: asset.attributes,
-        isLocal: asset.is_local,
-        createdInModel: asset.created_in_model,
-        assetType: asset.asset_type,
-        syncedAt: asset.synced_at,
-        annotationPlaced: asset.annotation_placed,
-        symbolId: asset.symbol_id,
-        grossArea: asset.gross_area,
-      }));
-      allAssets.push(...mapped);
-      
-      if (data.length < pageSize) {
-        hasMore = false;
-      } else {
-        offset += pageSize;
-      }
-    }
+    if (!data || data.length === 0) break;
+    allAssets.push(...data.map(mapRow));
+    if (data.length < pageSize) break;
+    offset += pageSize;
   }
 
   return allAssets;
@@ -281,7 +274,7 @@ export async function syncAssetToGeminusPlus(assetFmGuid: string): Promise<{ suc
   if (!asset.in_room_fm_guid) {
     return {
       success: false,
-      error: "Asset måste vara kopplad till ett rum (in_room_fm_guid) för att synkas till Geminus Plus"
+      error: "Asset must be linked to a room (in_room_fm_guid) to sync to Geminus Plus"
     };
   }
 

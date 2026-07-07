@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { emit } from '@/lib/event-bus';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface AnnotationCategory {
   category: string;       // Internal key (asset_type)
@@ -22,6 +23,7 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
   viewerRef,
   buildingFmGuid,
 }) => {
+  const { t } = useLanguage();
   const [categories, setCategories] = useState<AnnotationCategory[]>([]);
   const [allVisible, setAllVisible] = useState(true);
 
@@ -138,7 +140,7 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
   if (categories.length === 0) {
     return (
       <p className="text-xs text-muted-foreground text-center py-4">
-        No annotations in this building
+        {t('Inga annotationer i den här byggnaden', 'No annotations in this building')}
       </p>
     );
   }
@@ -149,7 +151,7 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
     <div className="space-y-2">
       <div className="flex items-center justify-between pb-2 border-b">
         <span className="text-xs text-muted-foreground">
-          {visibleCount}/{categories.length} visible
+          {visibleCount}/{categories.length} {t('synliga', 'visible')}
         </span>
         <Button
           variant="ghost"
@@ -160,12 +162,12 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
           {allVisible ? (
             <>
               <EyeOff className="h-3 w-3" />
-              Hide all
+              {t('Dölj alla', 'Hide all')}
             </>
           ) : (
             <>
               <Eye className="h-3 w-3" />
-              Show all
+              {t('Visa alla', 'Show all')}
             </>
           )}
         </Button>

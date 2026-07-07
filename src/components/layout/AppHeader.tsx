@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect, useContext, useCallback } from 'rea
 import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { 
-    Search, Home, LayoutGrid, Globe, Network, User as UserIcon, 
-    Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Settings, LogOut, Shield, Sparkles, AppWindow, Code
+    Search, Home, LayoutGrid, Globe, Network, User as UserIcon,
+    Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Settings, LogOut, Shield, Sparkles, AppWindow, Code, Wand2
 } from 'lucide-react';
 import ApiSettingsModal from '@/components/settings/ApiSettingsModal';
 import ProfileModal from '@/components/settings/ProfileModal';
@@ -26,6 +26,7 @@ import { useSearchResults, SearchResult } from '@/hooks/useSearchResults';
 import { SearchResultsList } from '@/components/common/SearchResultsList';
 import { CommandSearch } from '@/components/common/CommandSearch';
 import { useAuth } from '@/hooks/useAuth';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface AppHeaderProps {
     isLoading?: boolean;
@@ -50,6 +51,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     } = useContext(AppContext);
     
     const { user, profile, isAdmin, signOut } = useAuth();
+    const { t } = useLanguage();
     const isMobile = useIsMobile();
     const { toast } = useToast();
     const [globalSearch, setGlobalSearch] = useState('');
@@ -124,10 +126,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     }, []);
 
     const viewButtons = [
-        { key: 'portfolio', mode: 'grid', icon: LayoutGrid, label: 'Portfolio' },
-        { key: 'map', mode: undefined, icon: Globe, label: 'Map' },
-        { key: 'navigation', mode: undefined, icon: Network, label: 'Navigator' },
-        { key: 'native_viewer', mode: undefined, icon: Cuboid, label: '3D View' },
+        { key: 'portfolio', mode: 'grid', icon: LayoutGrid, label: t('Portfolio', 'Portfolio') },
+        { key: 'map', mode: undefined, icon: Globe, label: t('Karta', 'Map') },
+        { key: 'navigation', mode: undefined, icon: Network, label: t('Navigator', 'Navigator') },
+        { key: 'native_viewer', mode: undefined, icon: Cuboid, label: t('3D-vy', '3D View') },
     ];
 
     return (
@@ -154,7 +156,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                     className="hidden md:flex gap-2"
                 >
                     <Home size={18} />
-                    <span className="hidden lg:inline">Home</span>
+                    <span className="hidden lg:inline">{t('Hem', 'Home')}</span>
                 </AppButton>
 
                 <div className="hidden md:flex items-center gap-1 ml-2">
@@ -181,7 +183,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                     className="w-full flex items-center gap-2 h-9 sm:h-10 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground hover:bg-accent/50 transition-colors"
                 >
                     <Search className="h-4 w-4 shrink-0" />
-                    <span className="flex-1 text-left truncate">Search buildings, rooms, objects...</span>
+                    <span className="flex-1 text-left truncate">{t('Sök byggnader, rum, objekt...', 'Search buildings, rooms, objects...')}</span>
                     <kbd className="hidden sm:inline-flex h-5 items-center gap-0.5 rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
                         ⌘K
                     </kbd>
@@ -193,10 +195,20 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             {/* Right section */}
             <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                 <AppButton
+                    onClick={() => navigate('/new-ui-preview')}
+                    variant="outline"
+                    className="gap-2 border-primary/40 text-primary hover:bg-primary/10"
+                    title={t('Testa nya Geminus UI', 'Try new Geminus UI')}
+                >
+                    <Wand2 size={16} />
+                    <span className="hidden lg:inline">{t('Testa nya Geminus UI', 'Try new Geminus UI')}</span>
+                </AppButton>
+
+                <AppButton
                     onClick={toggleRightSidebar}
                     variant="ghost"
                     className="h-9 w-9 sm:h-10 sm:w-10"
-                    title="Help Center"
+                    title={t('Hjälpcenter', 'Help Center')}
                 >
                     <HelpCircle size={18} />
                 </AppButton>
@@ -219,7 +231,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                                 {isAdmin && (
                                     <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
                                         <Shield className="h-2.5 w-2.5 mr-0.5" />
-                                        Admin
+                                        {t('Admin', 'Admin')}
                                     </Badge>
                                 )}
                             </div>
@@ -228,28 +240,28 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
                             <UserIcon className="mr-2 h-4 w-4" />
-                            Profile
+                            {t('Profil', 'Profile')}
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setIsApiSettingsOpen(true)}>
                             <Settings className="mr-2 h-4 w-4" />
-                            Settings
+                            {t('Inställningar', 'Settings')}
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setIsAppMenuOpen(true)}>
                             <AppWindow className="mr-2 h-4 w-4" />
-                            Apps
+                            {t('Appar', 'Apps')}
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => navigate('/onboarding')}>
                             <Sparkles className="mr-2 h-4 w-4" />
-                            Start introduction
+                            {t('Starta introduktion', 'Start introduction')}
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => navigate('/api-docs')}>
                             <Code className="mr-2 h-4 w-4" />
-                            API Documentation
+                            {t('API-dokumentation', 'API Documentation')}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
                             <LogOut className="mr-2 h-4 w-4" />
-                            Sign out
+                            {t('Logga ut', 'Sign out')}
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>

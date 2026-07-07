@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface ExampleImagesUploadProps {
   templateId?: string;
@@ -13,13 +14,14 @@ interface ExampleImagesUploadProps {
   maxImages?: number;
 }
 
-const ExampleImagesUpload: React.FC<ExampleImagesUploadProps> = ({ 
+const ExampleImagesUpload: React.FC<ExampleImagesUploadProps> = ({
   templateId,
-  value, 
-  onChange, 
+  value,
+  onChange,
   disabled,
   maxImages = 5
 }) => {
+  const { t } = useLanguage();
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -28,13 +30,13 @@ const ExampleImagesUpload: React.FC<ExampleImagesUploadProps> = ({
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      toast.error('Endast bilder tillåtna');
+      toast.error(t('Endast bilder tillåtna', 'Only images are allowed'));
       return;
     }
 
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      toast.error('Bilden får max vara 5 MB');
+      toast.error(t('Bilden får max vara 5 MB', 'Image must be at most 5 MB'));
       return;
     }
 
@@ -59,7 +61,7 @@ const ExampleImagesUpload: React.FC<ExampleImagesUploadProps> = ({
         .getPublicUrl(fileName);
 
       onChange([...value, urlData.publicUrl]);
-      toast.success('Exempelbild uppladdad!');
+      toast.success(t('Exempelbild uppladdad!', 'Example image uploaded!'));
     } catch (error: any) {
       console.error('Upload error:', error);
       toast.error('Could not upload image', {
@@ -91,11 +93,11 @@ const ExampleImagesUpload: React.FC<ExampleImagesUploadProps> = ({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <Label className="text-sm font-medium">
-          Exempelbilder ({value.length}/{maxImages})
+          {t('Exempelbilder', 'Example images')} ({value.length}/{maxImages})
         </Label>
         {value.length > 0 && (
           <span className="text-xs text-muted-foreground">
-            Förbättrar AI-precision
+            {t('Förbättrar AI-precision', 'Improves AI accuracy')}
           </span>
         )}
       </div>
@@ -104,9 +106,9 @@ const ExampleImagesUpload: React.FC<ExampleImagesUploadProps> = ({
         {/* Existing images */}
         {value.map((url, index) => (
           <div key={url} className="relative aspect-square group">
-            <img 
-              src={url} 
-              alt={`Exempel ${index + 1}`} 
+            <img
+              src={url}
+              alt={t(`Exempel ${index + 1}`, `Example ${index + 1}`)}
               className="w-full h-full object-cover rounded-lg border border-border"
             />
             <Button
@@ -147,8 +149,10 @@ const ExampleImagesUpload: React.FC<ExampleImagesUploadProps> = ({
         <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-lg flex items-start gap-2">
           <ImageIcon className="h-4 w-4 shrink-0 mt-0.5" />
           <span>
-            Ladda upp 2-4 exempelbilder för bättre precision. AI:n lär sig känna igen 
-            objektet baserat på dessa bilder (few-shot learning).
+            {t(
+              'Ladda upp 2-4 exempelbilder för bättre precision. AI:n lär sig känna igen objektet baserat på dessa bilder (few-shot learning).',
+              'Upload 2–4 example images for better accuracy. The AI learns to recognize the object based on these images (few-shot learning).'
+            )}
           </span>
         </p>
       )}

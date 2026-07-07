@@ -1,4 +1,5 @@
 import React, { useState, useContext } from 'react';
+import { useLanguage } from '@/context/LanguageContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -9,6 +10,7 @@ import FaultReportSuccess from './FaultReportSuccess';
 import type { FaultReportFormData } from './FaultReportForm';
 
 const InAppFaultReport: React.FC = () => {
+  const { t } = useLanguage();
   const isMobile = useIsMobile();
   const { faultReportPrefill, clearFaultReportPrefill, setActiveApp } = useContext(AppContext);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -20,8 +22,8 @@ const InAppFaultReport: React.FC = () => {
       const externalId = `FR-${Date.now()}`;
       const descSnippet = data.description.slice(0, 50);
       const autoTitle = faultReportPrefill?.buildingName
-        ? `Felanmälan: ${faultReportPrefill.buildingName}`
-        : `Felanmälan: ${descSnippet}`;
+        ? `${t('Felanmälan', 'Fault report')}: ${faultReportPrefill.buildingName}`
+        : `${t('Felanmälan', 'Fault report')}: ${descSnippet}`;
 
       const workOrder = {
         title: autoTitle,
@@ -49,7 +51,7 @@ const InAppFaultReport: React.FC = () => {
       if (error) throw error;
 
       setSubmittedId(externalId);
-      toast.success('Felanmälan skickad!');
+      toast.success(t('Felanmälan skickad!', 'Fault report submitted!'));
     } catch (err: any) {
       console.error('Submit error:', err);
       toast.error('Could not submit fault report', { description: err.message });

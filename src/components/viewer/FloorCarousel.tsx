@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Layers } from 'lucide-react';
+import { useLanguage } from '@/context/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
@@ -39,6 +40,7 @@ const FloorCarousel: React.FC<FloorCarouselProps> = ({
   selectedFloorId,
   className
 }) => {
+  const { t } = useLanguage();
   const [floors, setFloors] = useState<FloorInfo[]>([]);
   const [isVisible, setIsVisible] = useState(false);
   const [isGeneratingThumbnails, setIsGeneratingThumbnails] = useState(false);
@@ -126,7 +128,7 @@ const FloorCarousel: React.FC<FloorCarouselProps> = ({
               break;
             }
           }
-          displayName = inferredNumber ? `Våning ${inferredNumber.replace(/^0+/, '') || '0'}` : `Våning ${extractedFloors.length + 1}`;
+          displayName = inferredNumber ? `${t('Våning', 'Floor')} ${inferredNumber.replace(/^0+/, '') || '0'}` : `${t('Våning', 'Floor')} ${extractedFloors.length + 1}`;
         } else {
           displayName = rawName;
         }
@@ -351,7 +353,7 @@ const FloorCarousel: React.FC<FloorCarouselProps> = ({
         )}
       >
         <Layers className="h-4 w-4 mr-1.5" />
-        <span className="text-xs">{floors.length} våningar</span>
+        <span className="text-xs">{floors.length} {t('våningar', 'floors')}</span>
       </Button>
 
       {/* Floor carousel */}

@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef, useContext, useMemo } from 'react';
+import { useLanguage } from '@/context/LanguageContext';
 import ViewerFilterPanel from '@/components/viewer/ViewerFilterPanel';
 import {
   X, Menu, Orbit, Hand, Maximize, MousePointer, Ruler,
@@ -117,6 +118,7 @@ const readSpd = (key: string, fb = 100) => { try { return parseInt(localStorage.
 
 /** Mobile-specific navigation speed with per-axis sliders + FastNav */
 const MobileNavigationSpeed: React.FC<{ navSpeed: number; setNavSpeed: (v: number) => void }> = ({ navSpeed, setNavSpeed }) => {
+  const { t } = useLanguage();
   const [zoom, setZoom] = React.useState(() => readSpd(SPEED_KEYS.zoom));
   const [pan, setPan] = React.useState(() => readSpd(SPEED_KEYS.pan));
   const [rotate, setRotate] = React.useState(() => readSpd(SPEED_KEYS.rotate));
@@ -158,13 +160,13 @@ const MobileNavigationSpeed: React.FC<{ navSpeed: number; setNavSpeed: (v: numbe
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <div className="p-1.5 rounded-md bg-muted text-muted-foreground"><SlidersHorizontal className="h-4 w-4" /></div>
-        <span className="text-sm">Navigation speed</span>
+        <span className="text-sm">{t('Navigationshastighet', 'Navigation speed')}</span>
         <span className="text-xs font-medium ml-auto">{navSpeed}%</span>
       </div>
       <div className="pl-10 space-y-2">
         <Slider value={[navSpeed]} onValueChange={handleMaster} min={25} max={300} step={25} className="w-full" />
         <button onClick={() => setExpanded(!expanded)} className="text-xs text-primary hover:underline">
-          {expanded ? 'Hide per-axis' : 'Per-axis settings ▸'}
+          {expanded ? t('Dölj per axel', 'Hide per-axis') : t('Per-axel-inställningar ▸', 'Per-axis settings ▸')}
         </button>
         {expanded && (
           <div className="space-y-2 pt-1">
@@ -183,10 +185,10 @@ const MobileNavigationSpeed: React.FC<{ navSpeed: number; setNavSpeed: (v: numbe
           </div>
         )}
         <div className="flex items-center justify-between pt-1">
-          <span className="text-xs text-muted-foreground">FastNav (snappier interaction)</span>
+          <span className="text-xs text-muted-foreground">FastNav ({t('snabbare interaktion', 'snappier interaction')})</span>
           <Switch checked={fastNav} onCheckedChange={handleFastNav} />
         </div>
-        <p className="text-xs text-muted-foreground">Touch navigation</p>
+        <p className="text-xs text-muted-foreground">{t('Peknavigering', 'Touch navigation')}</p>
       </div>
     </div>
   );
@@ -236,6 +238,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
   setInsightsPanelOpen,
 }) => {
   const { allData } = useContext(AppContext);
+  const { t } = useLanguage();
   const { user } = useAuth();
   const isSplit = viewMode === 'split2d3d';
   const modelFilterTarget = useMemo(() => {
@@ -783,7 +786,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
 
   /* ── Sub-sheet back button ── */
   const BackButton = () => (
-    <Button variant="ghost" size="sm" onClick={() => setSubSheet(null)} className="h-7 px-2">← Back</Button>
+    <Button variant="ghost" size="sm" onClick={() => setSubSheet(null)} className="h-7 px-2">← {t('Tillbaka', 'Back')}</Button>
   );
 
   return (
@@ -911,7 +914,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
                     soloFloorId === null ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-muted'
                   )}
                 >
-                  All floors
+                  {t('Alla plan', 'All floors')}
                 </button>
               </div>
             </PopoverContent>
@@ -1126,19 +1129,19 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
               <div className="px-4 pb-6 space-y-2">
                 <Button variant="outline" className="w-full justify-start gap-2 h-11" onClick={() => { setSheetOpen(false); setTimeout(captureViewState, 300); }} disabled={!viewerReady}>
                   <div className="p-1.5 rounded-md bg-primary/10 text-primary"><Camera className="h-4 w-4" /></div>
-                  <span className="text-sm">Create view</span>
+                  <span className="text-sm">{t('Skapa vy', 'Create view')}</span>
                 </Button>
                 <Button variant="outline" className="w-full justify-start gap-2 h-11" onClick={() => { setSheetOpen(false); setTimeout(handleSetStartView, 300); }} disabled={!viewerReady || isSavingStartView}>
                   <div className="p-1.5 rounded-md bg-primary/10 text-primary"><Home className="h-4 w-4" /></div>
-                  <span className="text-sm">{isSavingStartView ? 'Saving…' : 'Set as start view'}</span>
+                  <span className="text-sm">{isSavingStartView ? t('Sparar…', 'Saving…') : t('Ange som startvy', 'Set as start view')}</span>
                 </Button>
                 <Button variant="outline" className="w-full justify-start gap-2 h-11" onClick={() => { setSheetOpen(false); setTimeout(captureIssueState, 300); }} disabled={!viewerReady}>
                   <div className="p-1.5 rounded-md bg-amber-500/10 text-amber-600"><MessageSquarePlus className="h-4 w-4" /></div>
-                  <span className="text-sm">Create issue</span>
+                  <span className="text-sm">{t('Skapa ärende', 'Create issue')}</span>
                 </Button>
                 <Button variant="outline" className="w-full justify-start gap-2 h-11" onClick={() => { setSheetOpen(false); window.dispatchEvent(new CustomEvent(VIEWER_CREATE_ASSET_EVENT)); }}>
                   <div className="p-1.5 rounded-md bg-primary/10 text-primary"><Plus className="h-4 w-4" /></div>
-                  <span className="text-sm">Register asset</span>
+                  <span className="text-sm">{t('Registrera tillgång', 'Register asset')}</span>
                 </Button>
               </div>
             </>
@@ -1163,7 +1166,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
                     <div className={cn("p-1.5 rounded-md", navPanelOpen ? "bg-primary-foreground/20" : "bg-primary/10 text-primary")}>
                       <Navigation className="h-4 w-4" />
                     </div>
-                    <span className="text-sm">{navPanelOpen ? 'Navigation open' : 'Open navigation'}</span>
+                    <span className="text-sm">{navPanelOpen ? t('Navigering öppen', 'Navigation open') : t('Öppna navigering', 'Open navigation')}</span>
                   </Button>
                   {navPanelOpen && (
                     <Button
@@ -1177,7 +1180,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
                       }}
                     >
                       <div className="p-1.5 rounded-md bg-destructive/10 text-destructive"><X className="h-4 w-4" /></div>
-                      <span className="text-sm">Close navigation</span>
+                      <span className="text-sm">{t('Stäng navigering', 'Close navigation')}</span>
                     </Button>
                   )}
                 </div>
@@ -1195,12 +1198,12 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <div className="p-1.5 rounded-md bg-muted text-muted-foreground"><Scissors className="h-4 w-4" /></div>
-                    <span className="text-sm">Clip height (2D view)</span>
+                    <span className="text-sm">{t('Klipphöjd (2D-vy)', 'Clip height (2D view)')}</span>
                     <span className="text-xs font-medium ml-auto">{clipHeight.toFixed(1)}m</span>
                   </div>
                   <div className="pl-10">
                     <Slider value={[clipHeight]} onValueChange={handleClipHeightChange} min={0.5} max={2.5} step={0.1} className="w-full" />
-                    <p className="text-xs text-muted-foreground mt-1">Height above floor</p>
+                    <p className="text-xs text-muted-foreground mt-1">{t('Höjd ovan golv', 'Height above floor')}</p>
                   </div>
                 </div>
 
@@ -1212,7 +1215,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
                     <div className={cn("p-1.5 rounded-md", showRoomLabels ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
                       <Type className="h-4 w-4" />
                     </div>
-                    <span className="text-sm">Room labels</span>
+                    <span className="text-sm">{t('Rumsetiketter', 'Room labels')}</span>
                   </div>
                   <div className="pl-10 space-y-1">
                     {loadingRoomLabelConfigs ? (
@@ -1230,10 +1233,10 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
                             onClick={() => handleRoomLabelConfigSelect(config.id)}
                           >
                             {config.name}
-                            {config.is_default && <span className="ml-1 text-[10px] text-muted-foreground">(standard)</span>}
+                            {config.is_default && <span className="ml-1 text-[10px] text-muted-foreground">({t('standard', 'default')})</span>}
                           </button>
                         ))}
-                        {roomLabelConfigs.length === 0 && <div className="text-xs text-muted-foreground py-1">No configurations. Create in Settings.</div>}
+                        {roomLabelConfigs.length === 0 && <div className="text-xs text-muted-foreground py-1">{t('Inga konfigurationer. Skapa i Inställningar.', 'No configurations. Create in Settings.')}</div>}
                       </>
                     )}
                   </div>

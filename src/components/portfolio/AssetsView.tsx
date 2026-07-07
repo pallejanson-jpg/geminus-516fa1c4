@@ -47,6 +47,7 @@ import { Facility } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { AppContext } from '@/context/AppContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { syncBuildingAssetsIfNeeded, syncAssetToGeminusPlus, batchSyncAssetsToGeminusPlus, fetchAssetsForBuilding } from '@/services/geminus-plus-service';
 import {
   DndContext,
@@ -183,6 +184,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   onSelectAsset,
 }) => {
   const { toast } = useToast();
+  const { t } = useLanguage();
   const { startAnnotationPlacement } = useContext(AppContext);
   const [viewMode, setViewMode] = useState<'grid' | 'gallery'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
@@ -788,9 +790,9 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     return (
       <div className="absolute inset-0 z-40 bg-background flex flex-col items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-        <p className="text-lg font-medium">Loading assets...</p>
+        <p className="text-lg font-medium">{t('Laddar tillgångar...', 'Loading assets...')}</p>
         <p className="text-sm text-muted-foreground mt-1">
-          Checking and loading assets for this building
+          {t('Kontrollerar och laddar tillgångar för denna byggnad', 'Checking and loading assets for this building')}
         </p>
       </div>
     );
@@ -805,10 +807,10 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           <div className="min-w-0">
             <h1 className="text-sm sm:text-base md:text-lg font-bold truncate">{title}</h1>
             <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
-              {filteredAssets.length} of {assetData.length} assets
+              {filteredAssets.length} {t('av', 'of')} {assetData.length} {t('tillgångar', 'assets')}
               {orphanCount > 0 && (
                 <span className="ml-2 text-amber-500">
-                  • {orphanCount} not in model
+                  • {orphanCount} {t('ej i modell', 'not in model')}
                 </span>
               )}
             </p>
@@ -827,7 +829,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search assets..."
+            placeholder={t('Sök tillgångar...', 'Search assets...')}
             className="pl-7 sm:pl-9 h-8 sm:h-9 text-xs sm:text-sm"
           />
         </div>
@@ -838,32 +840,32 @@ const AssetsView: React.FC<AssetsViewProps> = ({
             <Button variant="outline" size="sm" className="gap-2">
               <Filter className="h-4 w-4" />
               {filterMode === 'all'
-                ? 'All'
+                ? t('Alla', 'All')
                 : filterMode === 'orphans'
-                  ? 'Not in model'
+                  ? t('Ej i modell', 'Not in model')
                   : filterMode === 'unsynced'
-                    ? 'Not synced'
-                    : 'No annotation'}
+                    ? t('Ej synkad', 'Not synced')
+                    : t('Ingen annotation', 'No annotation')}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="bg-popover">
-            <DropdownMenuLabel>Filter</DropdownMenuLabel>
+            <DropdownMenuLabel>{t('Filter', 'Filter')}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setFilterMode('all')}>
               <Check className={`h-4 w-4 mr-2 ${filterMode === 'all' ? 'opacity-100' : 'opacity-0'}`} />
-              All assets
+              {t('Alla tillgångar', 'All assets')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setFilterMode('orphans')}>
               <Check className={`h-4 w-4 mr-2 ${filterMode === 'orphans' ? 'opacity-100' : 'opacity-0'}`} />
-              Not in model ({orphanCount})
+              {t('Ej i modell', 'Not in model')} ({orphanCount})
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setFilterMode('no-annotation')}>
               <Check className={`h-4 w-4 mr-2 ${filterMode === 'no-annotation' ? 'opacity-100' : 'opacity-0'}`} />
-              No annotation ({noAnnotationCount})
+              {t('Ingen annotation', 'No annotation')} ({noAnnotationCount})
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setFilterMode('unsynced')}>
               <Check className={`h-4 w-4 mr-2 ${filterMode === 'unsynced' ? 'opacity-100' : 'opacity-0'}`} />
-              Not synced ({unsyncedCount})
+              {t('Ej synkad', 'Not synced')} ({unsyncedCount})
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -878,7 +880,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 max-h-80 overflow-y-auto bg-popover">
-            <DropdownMenuLabel>System properties</DropdownMenuLabel>
+            <DropdownMenuLabel>{t('Systemegenskaper', 'System properties')}</DropdownMenuLabel>
             {SYSTEM_COLUMNS.map(col => (
               <DropdownMenuCheckboxItem
                 key={col.key}
@@ -889,7 +891,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
               </DropdownMenuCheckboxItem>
             ))}
             <DropdownMenuSeparator />
-            <DropdownMenuLabel>Status</DropdownMenuLabel>
+            <DropdownMenuLabel>{t('Status', 'Status')}</DropdownMenuLabel>
             {STATUS_COLUMNS.map(col => (
               <DropdownMenuCheckboxItem
                 key={col.key}
@@ -902,7 +904,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
             {allColumns.filter(c => c.category === 'userDefined').length > 0 && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuLabel>User defined</DropdownMenuLabel>
+                <DropdownMenuLabel>{t('Användardefinierade', 'User defined')}</DropdownMenuLabel>
                 {allColumns.filter(c => c.category === 'userDefined').map(col => (
                   <DropdownMenuCheckboxItem
                     key={col.key}
@@ -941,11 +943,11 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       {/* Selection toolbar - shown when rows are selected */}
       {selectedRows.size > 0 && (
         <div className="border-b px-4 py-2 flex items-center gap-2 bg-muted/50 shrink-0">
-          <Badge variant="secondary">{selectedRows.size} selected</Badge>
+          <Badge variant="secondary">{selectedRows.size} {t('valda', 'selected')}</Badge>
           
           <Button size="sm" variant="outline" onClick={handleShowSelectedProperties} className="gap-1">
             <Info size={14} />
-            Properties
+            {t('Egenskaper', 'Properties')}
           </Button>
 
           {selectedRows.size === 1 && onOpen3D && (
@@ -977,7 +979,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           
           <Button size="sm" variant="ghost" onClick={() => setSelectedRows(new Set())} className="gap-1 ml-auto">
             <ArrowLeft size={14} />
-            Deselect
+            {t('Avmarkera', 'Deselect')}
           </Button>
         </div>
       )}
@@ -1047,7 +1049,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                         className="text-center py-12 text-muted-foreground"
                       >
                         <Box className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                        <p>No assets found</p>
+                        <p>{t('Inga tillgångar hittades', 'No assets found')}</p>
                       </TableCell>
                     </TableRow>
                   )}
@@ -1063,7 +1065,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                   onClick={() => setRowLimit(prev => prev + ROW_PAGE_SIZE)}
                   className="gap-2"
                 >
-                  Show more ({filteredAssets.length - rowLimit} remaining)
+                  {t('Visa fler', 'Show more')} ({filteredAssets.length - rowLimit} {t('kvar', 'remaining')})
                 </Button>
               </div>
             )}
@@ -1113,7 +1115,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
               {filteredAssets.length === 0 && (
                 <div className="col-span-full text-center py-12 text-muted-foreground">
                   <Box className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No assets found</p>
+                  <p>{t('Inga tillgångar hittades', 'No assets found')}</p>
                 </div>
               )}
             </div>
@@ -1124,7 +1126,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                   onClick={() => setRowLimit(prev => prev + ROW_PAGE_SIZE)}
                   className="gap-2"
                 >
-                  Show more ({filteredAssets.length - rowLimit} remaining)
+                  {t('Visa fler', 'Show more')} ({filteredAssets.length - rowLimit} {t('kvar', 'remaining')})
                 </Button>
               </div>
             )}

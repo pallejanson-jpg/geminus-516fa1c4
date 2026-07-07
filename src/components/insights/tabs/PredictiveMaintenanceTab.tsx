@@ -96,11 +96,14 @@ export default function PredictiveMaintenanceTab({ facility }: { facility?: Faci
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold text-foreground">Predictive Maintenance</h3>
-          <p className="text-xs text-muted-foreground">AI analysis of equipment and sensors</p>
+          <p className="text-xs text-muted-foreground">
+            AI analysis of equipment and sensors
+            {data?.isMock && <span className="ml-2 text-[10px] bg-muted text-muted-foreground rounded px-1.5 py-0.5">Estimated</span>}
+          </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => analyze()} disabled={isLoading}>
           <RefreshCw className={cn('h-3.5 w-3.5 mr-1.5', isLoading && 'animate-spin')} />
-          {isLoading ? 'Analyzing...' : 'Analyze'}
+          {isLoading ? 'Analyzing...' : 'Re-analyze'}
         </Button>
       </div>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { User, Camera, Sun, Moon, Palette } from 'lucide-react';
+import { User, Camera, Sun, Moon, Palette, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { AppContext, ThemeType } from '@/context/AppContext';
 import { THEME_OPTIONS } from '@/lib/constants';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface UserProfile {
   displayName: string;
@@ -17,6 +18,7 @@ interface UserProfile {
 const ProfileSettings: React.FC = () => {
   const { toast } = useToast();
   const { theme, setTheme } = useContext(AppContext);
+  const { language, setLanguage, t } = useLanguage();
   
   const [profile, setProfile] = useState<UserProfile>({
     displayName: '',
@@ -115,18 +117,18 @@ const ProfileSettings: React.FC = () => {
             />
           </label>
         </div>
-        <p className="text-sm text-muted-foreground">Click the camera to upload a photo</p>
+        <p className="text-sm text-muted-foreground">{t('Klicka på kameran för att ladda upp ett foto', 'Click the camera to upload a photo')}</p>
       </div>
 
       {/* Name & Email */}
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="displayName">Name</Label>
+          <Label htmlFor="displayName">{t('Namn', 'Name')}</Label>
           <Input
             id="displayName"
             value={profile.displayName}
             onChange={(e) => setProfile(prev => ({ ...prev, displayName: e.target.value }))}
-            placeholder="Your name"
+            placeholder={t('Ditt namn', 'Your name')}
           />
         </div>
 
@@ -140,7 +142,7 @@ const ProfileSettings: React.FC = () => {
             placeholder="you@email.com"
           />
           <p className="text-xs text-muted-foreground">
-            Email is used for identification (authentication coming soon)
+            {t('E-post används för identifiering (autentisering kommer snart)', 'Email is used for identification (authentication coming soon)')}
           </p>
         </div>
       </div>
@@ -149,7 +151,7 @@ const ProfileSettings: React.FC = () => {
       <div className="space-y-4 pt-4 border-t">
         <div className="flex items-center gap-2">
           <Palette size={18} />
-          <Label className="text-base font-medium">Theme</Label>
+          <Label className="text-base font-medium">{t('Tema', 'Theme')}</Label>
         </div>
         
         <div className="grid grid-cols-3 gap-3">
@@ -180,10 +182,42 @@ const ProfileSettings: React.FC = () => {
         </div>
       </div>
 
+      {/* Language Section */}
+      <div className="space-y-4 pt-4 border-t">
+        <div className="flex items-center gap-2">
+          <Globe size={18} />
+          <Label className="text-base font-medium">{t('Språk', 'Language')}</Label>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => setLanguage('sv')}
+            className={`flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all ${
+              language === 'sv'
+                ? 'border-primary bg-primary/10'
+                : 'border-border hover:border-primary/50 hover:bg-muted'
+            }`}
+          >
+            <span>🇸🇪</span>
+            <span className="text-sm font-medium">Svenska</span>
+          </button>
+          <button
+            onClick={() => setLanguage('en')}
+            className={`flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all ${
+              language === 'en'
+                ? 'border-primary bg-primary/10'
+                : 'border-border hover:border-primary/50 hover:bg-muted'
+            }`}
+          >
+            <span>🇬🇧</span>
+            <span className="text-sm font-medium">English</span>
+          </button>
+        </div>
+      </div>
+
       {/* Save Button */}
       <div className="pt-4 border-t">
         <Button onClick={handleSaveProfile} disabled={isSaving} className="w-full">
-          {isSaving ? 'Saving...' : 'Save Profile'}
+          {isSaving ? t('Sparar...', 'Saving...') : t('Spara profil', 'Save Profile')}
         </Button>
       </div>
     </div>

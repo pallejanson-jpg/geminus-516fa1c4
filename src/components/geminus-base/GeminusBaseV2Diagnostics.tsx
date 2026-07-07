@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, Download } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface ProbeResult {
   label: string;
@@ -73,6 +74,7 @@ const PROBES: Array<{ label: string; path: string; method?: string; body?: objec
 ];
 
 const GeminusBaseV2Diagnostics: React.FC = () => {
+  const { t } = useLanguage();
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<ProbeResult[]>([]);
   const [done, setDone] = useState(false);
@@ -105,14 +107,14 @@ const GeminusBaseV2Diagnostics: React.FC = () => {
       <div>
         <h2 className="text-sm font-semibold mb-1">Geminus Base Diagnostics v2</h2>
         <p className="text-xs text-muted-foreground mb-3">
-          Provar {PROBES.length} endpoints med korrekta IDs från nätverkskapturingen.
+          {t(`Provar ${PROBES.length} endpoints med korrekta IDs från nätverkskapturingen.`, `Testing ${PROBES.length} endpoints with correct IDs from the network capture.`)}
         </p>
         <div className="flex gap-2">
           <Button size="sm" onClick={runDiagnostics} disabled={running} className="gap-1.5">
             {running && <Loader2 size={13} className="animate-spin" />}
-            {running ? 'Kör…' : 'Kör diagnostik v2'}
+            {running ? t('Kör…', 'Running…') : t('Kör diagnostik v2', 'Run diagnostics v2')}
           </Button>
-          {done && <Button size="sm" variant="outline" onClick={download} className="gap-1.5">Ladda ned</Button>}
+          {done && <Button size="sm" variant="outline" onClick={download} className="gap-1.5">{t('Ladda ned', 'Download')}</Button>}
         </div>
       </div>
 
@@ -123,7 +125,7 @@ const GeminusBaseV2Diagnostics: React.FC = () => {
               <tr>
                 <th className="text-left px-3 py-1.5 font-medium">Endpoint</th>
                 <th className="text-left px-3 py-1.5 font-medium w-16">Status</th>
-                <th className="text-left px-3 py-1.5 font-medium">Svar</th>
+                <th className="text-left px-3 py-1.5 font-medium">{t('Svar', 'Response')}</th>
               </tr>
             </thead>
             <tbody>
@@ -147,7 +149,7 @@ const GeminusBaseV2Diagnostics: React.FC = () => {
           </table>
         </ScrollArea>
       )}
-      {done && <p className="text-xs text-muted-foreground">✓ Klart. Ladda ned JSON och dela med Claude.</p>}
+      {done && <p className="text-xs text-muted-foreground">✓ {t('Klart. Ladda ned JSON och dela med Claude.', 'Done. Download JSON and share with Claude.')}</p>}
     </div>
   );
 };

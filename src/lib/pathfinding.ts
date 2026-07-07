@@ -11,7 +11,7 @@ export interface NavNode {
   coordinates: [number, number]; // [x%, y%] normalized
   room_fm_guid?: string | null;
   floor_fm_guid?: string | null;
-  type?: 'waypoint' | 'stairwell' | 'elevator';
+  type?: 'waypoint' | 'stairwell' | 'elevator' | 'entrance';
 }
 
 export interface NavEdge {
@@ -46,7 +46,7 @@ export function parseNavGraph(geojson: GeoJSON.FeatureCollection): NavGraph {
         coordinates: feature.geometry.coordinates as [number, number],
         room_fm_guid: props.room_fm_guid || null,
         floor_fm_guid: props.floor_fm_guid || null,
-        type: props.type || 'waypoint',
+        type: (props.type as NavNode['type']) || 'waypoint',
       });
     } else if (feature.geometry.type === 'LineString') {
       const props = feature.properties || {};
@@ -156,6 +156,90 @@ export function dijkstra(graph: NavGraph, startNodeId: string, endNodeId: string
   };
 }
 
+export interface DijkstraOptions {
+  /** When true, stairwell edges get a heavy weight penalty so the algorithm prefers elevators */
+  preferElevator?: boolean;
+}
+
+/** Dijkstra with routing options (e.g. elevator preference for accessibility) */
+export function dijkstraWithOptions(
+  graph: NavGraph,
+  startNodeId: string,
+  endNodeId: string,
+  options: DijkstraOptions = {},
+): RouteResult | null {
+  if (!graph.nodes.has(startNodeId) || !graph.nodes.has(endNodeId)) return null;
+  if (startNodeId === endNodeId) {
+    const node = graph.nodes.get(startNodeId)!;
+    return { path: [node], totalDistance: 0, floorTransitions: [] };
+  }
+
+  const STAIR_PENALTY = options.preferElevator ? 1000 : 0;
+
+  const adj = new Map<string, Array<{ neighbor: string; weight: number }>>();
+  for (const [nodeId] of graph.nodes) adj.set(nodeId, []);
+
+  for (const edge of graph.edges) {
+    const fromNode = graph.nodes.get(edge.from);
+    const toNode = graph.nodes.get(edge.to);
+    const isStairEdge =
+      fromNode?.type === 'stairwell' || toNode?.type === 'stairwell';
+    const w = edge.weight + (isStairEdge ? STAIR_PENALTY : 0);
+    adj.get(edge.from)?.push({ neighbor: edge.to, weight: w });
+    adj.get(edge.to)?.push({ neighbor: edge.from, weight: w });
+  }
+
+  const dist = new Map<string, number>();
+  const prev = new Map<string, string | null>();
+  const visited = new Set<string>();
+
+  for (const [nodeId] of graph.nodes) {
+    dist.set(nodeId, Infinity);
+    prev.set(nodeId, null);
+  }
+  dist.set(startNodeId, 0);
+
+  const queue: string[] = [startNodeId];
+
+  while (queue.length > 0) {
+    queue.sort((a, b) => (dist.get(a) ?? Infinity) - (dist.get(b) ?? Infinity));
+    const current = queue.shift()!;
+    if (current === endNodeId) break;
+    if (visited.has(current)) continue;
+    visited.add(current);
+
+    for (const { neighbor, weight } of adj.get(current) || []) {
+      if (visited.has(neighbor)) continue;
+      const newDist = (dist.get(current) ?? Infinity) + weight;
+      if (newDist < (dist.get(neighbor) ?? Infinity)) {
+        dist.set(neighbor, newDist);
+        prev.set(neighbor, current);
+        queue.push(neighbor);
+      }
+    }
+  }
+
+  if (dist.get(endNodeId) === Infinity) return null;
+
+  const path: NavNode[] = [];
+  let current: string | null = endNodeId;
+  while (current) {
+    path.unshift(graph.nodes.get(current)!);
+    current = prev.get(current) ?? null;
+  }
+
+  const floorTransitions: RouteResult['floorTransitions'] = [];
+  for (let i = 1; i < path.length; i++) {
+    const prevFloor = path[i - 1].floor_fm_guid;
+    const curFloor = path[i].floor_fm_guid;
+    if (prevFloor && curFloor && prevFloor !== curFloor) {
+      floorTransitions.push({ nodeId: path[i].nodeId, fromFloor: prevFloor, toFloor: curFloor });
+    }
+  }
+
+  return { path, totalDistance: dist.get(endNodeId) ?? 0, floorTransitions };
+}
+
 /** Merge multiple per-floor graphs into one combined graph */
 export function mergeGraphs(graphs: NavGraph[]): NavGraph {
   const merged: NavGraph = { nodes: new Map(), edges: [] };
@@ -167,19 +251,21 @@ export function mergeGraphs(graphs: NavGraph[]): NavGraph {
 }
 
 /** Calculate Euclidean distance between two normalized coordinate points */
-/** Find the nearest entrance node (lowest floor, closest to origin 0,0) */
+/** Find the best entrance node.
+ *  Priority: 1) nodes explicitly typed 'entrance', 2) any other node (fallback).
+ *  When multiple entrance nodes exist, pick the one closest to geographic origin (0,0 normalized).
+ */
 export function findNearestEntranceNode(graph: NavGraph): NavNode | null {
-  let best: NavNode | null = null;
-  let bestScore = Infinity;
+  const entranceNodes = Array.from(graph.nodes.values()).filter(n => n.type === 'entrance');
+  const candidates = entranceNodes.length > 0 ? entranceNodes : Array.from(graph.nodes.values());
+  if (candidates.length === 0) return null;
 
-  for (const [, node] of graph.nodes) {
-    // Prefer nodes on lowest floors and closest to origin
+  let best: NavNode | null = null;
+  let bestDist = Infinity;
+  for (const node of candidates) {
     const dist = Math.sqrt(node.coordinates[0] ** 2 + node.coordinates[1] ** 2);
-    // Stairwell/elevator nodes make good entrances
-    const typeBonus = (node.type === 'stairwell' || node.type === 'elevator') ? -50 : 0;
-    const score = dist + typeBonus;
-    if (score < bestScore) {
-      bestScore = score;
+    if (dist < bestDist) {
+      bestDist = dist;
       best = node;
     }
   }
@@ -213,9 +299,9 @@ export function generateIndoorSteps(route: RouteResult): IndoorStep[] {
 
     // Check floor transition
     if (current.floor_fm_guid && next.floor_fm_guid && current.floor_fm_guid !== next.floor_fm_guid) {
-      const vehicle = next.type === 'elevator' || current.type === 'elevator' ? 'hissen' : 'trappan';
+      const vehicle = next.type === 'elevator' || current.type === 'elevator' ? 'the elevator' : 'the stairs';
       steps.push({
-        instruction: `Ta ${vehicle}`,
+        instruction: `Take ${vehicle}`,
         distance: euclideanDist(current.coordinates, next.coordinates),
         coordinates: current.coordinates,
         type: next.type === 'elevator' ? 'elevator' : 'stairs',
@@ -246,15 +332,15 @@ export function generateIndoorSteps(route: RouteResult): IndoorStep[] {
           i++;
           // Add the walk segment
           steps.push({
-            instruction: `Gå rakt ~${Math.round(segmentDist)} m`,
+            instruction: `Walk straight ~${Math.round(segmentDist)} m`,
             distance: segmentDist,
             coordinates: route.path[segStart].coordinates,
             type: 'walk',
           });
           // Add turn instruction
-          const dir = angle > 0 ? 'höger' : 'vänster';
+          const dir = angle > 0 ? 'right' : 'left';
           steps.push({
-            instruction: `Sväng ${dir}`,
+            instruction: `Turn ${dir}`,
             distance: 0,
             coordinates: b.coordinates,
             type: 'turn',
@@ -269,7 +355,7 @@ export function generateIndoorSteps(route: RouteResult): IndoorStep[] {
     // Flush remaining straight segment
     if (segmentDist > 0) {
       steps.push({
-        instruction: i >= route.path.length - 1 ? 'Framme' : `Gå rakt ~${Math.round(segmentDist)} m`,
+        instruction: i >= route.path.length - 1 ? 'Arrived' : `Walk straight ~${Math.round(segmentDist)} m`,
         distance: segmentDist,
         coordinates: route.path[segStart].coordinates,
         type: i >= route.path.length - 1 ? 'arrive' : 'walk',
@@ -302,7 +388,7 @@ export function navGraphToGeoJSON(graph: NavGraph): GeoJSON.FeatureCollection {
         nodeId: node.nodeId,
         room_fm_guid: node.room_fm_guid || null,
         floor_fm_guid: node.floor_fm_guid || null,
-        type: node.type || 'waypoint',
+        type: node.type ?? 'waypoint',
       },
     });
   }

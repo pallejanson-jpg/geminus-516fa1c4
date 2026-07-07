@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { lazy, Suspense, useEffect } from "react";
 import { AppProvider } from "@/context/AppContext";
+import { LanguageProvider } from "@/context/LanguageContext";
 import AppLayout from "@/components/layout/AppLayout";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import Login from "@/pages/Login";
@@ -31,6 +32,8 @@ const Mobile360Viewer = lazy(() => import("@/pages/Mobile360Viewer"));
 const FaultReport = lazy(() => import("@/pages/FaultReport"));
 // Autodesk OAuth callback page (public, no auth required)
 const AutodeskCallback = lazy(() => import("@/pages/AutodeskCallback"));
+// Keycloak OAuth callback page (public, no auth required)
+const KeycloakCallback = lazy(() => import("@/pages/KeycloakCallback"));
 // Jury presentation slide deck
 const Presentation = lazy(() => import("@/pages/Presentation"));
 // Internal showcase presentation
@@ -53,6 +56,8 @@ const GeminusView = lazy(() => import("@/pages/GeminusView"));
 const ViewerMockup = lazy(() => import("@/pages/ViewerMockup"));
 // Geminus Base 2D Standalone test page
 const GeminusBase2DStandalone = lazy(() => import("@/pages/GeminusBase2DStandalone"));
+// New Geminus UI design POC (isolated, Material Design 3 direction)
+const NewUiPreview = lazy(() => import("@/pages/NewUiPreview"));
 
 const queryClient = new QueryClient();
 
@@ -84,6 +89,7 @@ const App = () => {
   return (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
+      <LanguageProvider>
       <AppProvider>
         <Toaster />
         <Sonner />
@@ -102,6 +108,7 @@ const App = () => {
           <Route path="/360-viewer" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><Mobile360Viewer /></ProtectedRoute></Suspense>} />
           <Route path="/fault-report" element={<Suspense fallback={<FullPageSpinner />}><FaultReport /></Suspense>} />
           <Route path="/auth/autodesk/callback" element={<Suspense fallback={<FullPageSpinner />}><AutodeskCallback /></Suspense>} />
+          <Route path="/keycloak-callback" element={<Suspense fallback={<FullPageSpinner />}><KeycloakCallback /></Suspense>} />
           <Route path="/presentation" element={<Suspense fallback={<PresentationSpinner />}><Presentation /></Suspense>} />
           <Route path="/presentation2" element={<Suspense fallback={<PresentationSpinner />}><Presentation2 /></Suspense>} />
           <Route path="/issue/:token" element={<Suspense fallback={<FullPageSpinner />}><IssueResolution /></Suspense>} />
@@ -112,12 +119,14 @@ const App = () => {
           <Route path="/ai" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><AiChat /></ProtectedRoute></Suspense>} />
           <Route path="/view" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><GeminusView /></ProtectedRoute></Suspense>} />
           <Route path="/geminus-base-2d" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><GeminusBase2DStandalone /></ProtectedRoute></Suspense>} />
-          
+          <Route path="/new-ui-preview" element={<Suspense fallback={<FullPageSpinner />}><ProtectedRoute><NewUiPreview /></ProtectedRoute></Suspense>} />
+
           <Route path="/*" element={<ProtectedRoute><AppLayout /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
       </AppProvider>
+      </LanguageProvider>
     </TooltipProvider>
   </QueryClientProvider>
   );

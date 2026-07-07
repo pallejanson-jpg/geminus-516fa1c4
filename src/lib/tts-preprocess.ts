@@ -3,40 +3,34 @@
  * Expands abbreviations, adds natural pauses, cleans markdown
  */
 
-/** Swedish & common abbreviations → full words */
+/** Abbreviations → full words */
 const ABBREVIATIONS: Record<string, string> = {
-  'dr.': 'doktor',
-  'Dr.': 'Doktor',
+  'dr.': 'doctor',
+  'Dr.': 'Doctor',
   'prof.': 'professor',
   'Prof.': 'Professor',
-  'ing.': 'ingenjör',
-  'Ing.': 'Ingenjör',
-  'st.': 'stycken',
-  'nr.': 'nummer',
-  'Nr.': 'Nummer',
-  'tel.': 'telefon',
-  'Tel.': 'Telefon',
-  'ca.': 'cirka',
-  'Ca.': 'Cirka',
-  'bl.a.': 'bland annat',
-  't.ex.': 'till exempel',
-  'd.v.s.': 'det vill säga',
-  'o.s.v.': 'och så vidare',
-  'f.d.': 'före detta',
-  's.k.': 'så kallad',
-  'osv.': 'och så vidare',
-  'resp.': 'respektive',
-  'inkl.': 'inklusive',
-  'exkl.': 'exklusive',
-  'ev.': 'eventuellt',
-  'dvs.': 'det vill säga',
-  'tex.': 'till exempel',
-  'kvm': 'kvadratmeter',
-  'm²': 'kvadratmeter',
-  'm2': 'kvadratmeter',
-  '°C': 'grader celsius',
+  'eng.': 'engineer',
+  'Eng.': 'Engineer',
+  'no.': 'number',
+  'No.': 'Number',
+  'tel.': 'telephone',
+  'Tel.': 'Telephone',
+  'ca.': 'approximately',
+  'Ca.': 'Approximately',
+  'e.g.': 'for example',
+  'i.e.': 'that is',
+  'etc.': 'et cetera',
+  'approx.': 'approximately',
+  'incl.': 'including',
+  'excl.': 'excluding',
+  'est.': 'estimated',
+  'sq.m': 'square meters',
+  'kvm': 'square meters',
+  'm²': 'square meters',
+  'm2': 'square meters',
+  '°C': 'degrees Celsius',
   'ppm': 'PPM',
-  'kWh': 'kilowattimmar',
+  'kWh': 'kilowatt hours',
   'kW': 'kilowatt',
   'MW': 'megawatt',
   'W': 'watt',
@@ -123,7 +117,7 @@ export function preprocessForTTS(text: string): string {
 
   // Truncate for ElevenLabs limit (5000 chars)
   if (result.length > 4800) {
-    result = result.slice(0, 4800) + '... och mer.';
+    result = result.slice(0, 4800) + '... and more.';
   }
 
   return result;

@@ -25,6 +25,7 @@ import {
 import { Trash2, Search, Loader2, AlertTriangle, ChevronLeft, ChevronRight, Mail, Box, MapPin, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
+import { emit } from '@/lib/event-bus';
 
 
 interface AlarmAsset {
@@ -203,35 +204,12 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
   const handleDeleteRandom90 = async () => {
     setIsDeleting(true);
     try {
-      const { data: allAlarms, error: fetchError } = await supabase
-        .from('assets')
-        .select('fm_guid')
-        .eq('building_fm_guid', buildingFmGuid)
-        .eq('asset_type', 'IfcAlarm')
-        .limit(10000);
-      if (fetchError) throw fetchError;
-      if (!allAlarms || allAlarms.length === 0) {
-        toast({ title: 'No alarms to delete' });
-        setShowDeleteRandom(false);
-        setIsDeleting(false);
-        return;
-      }
-
-      const shuffled = [...allAlarms].sort(() => Math.random() - 0.5);
-      const toDelete = shuffled.slice(0, Math.floor(shuffled.length * 0.9));
-      const guids = toDelete.map(a => a.fm_guid);
-
-      for (let i = 0; i < guids.length; i += 500) {
-        const batch = guids.slice(i, i + 500);
-        const { error } = await supabase
-          .from('assets')
-          .delete()
-          .in('fm_guid', batch)
-          .eq('building_fm_guid', buildingFmGuid);
-        if (error) throw error;
-      }
-
-      toast({ title: `${toDelete.length} of ${allAlarms.length} alarms deleted (90%)` });
+      const { data: deletedCount, error } = await supabase.rpc('delete_random_alarms', {
+        p_building_fm_guid: buildingFmGuid,
+        p_keep_fraction: 0.1,
+      });
+      if (error) throw error;
+      toast({ title: `${deletedCount} alarms deleted (~90%)` });
       setShowDeleteRandom(false);
       setPage(0);
       fetchAlarms();
@@ -249,7 +227,16 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
   };
 
   const handleShowAnnotation = (alarm: AlarmAsset) => {
-    navigate(`/viewer?building=${buildingFmGuid}&object=${alarm.fm_guid}&annotations=true`);
+    const payload = {
+      alarms: [{ fmGuid: alarm.fm_guid, roomFmGuid: alarm.in_room_fm_guid }],
+      flyTo: true,
+    };
+    if ((window as any).__nativeXeokitViewer) {
+      emit('ALARM_ANNOTATIONS_SHOW', payload);
+    } else {
+      sessionStorage.setItem('pending_alarm_annotations', JSON.stringify(payload));
+      navigate(`/viewer?building=${buildingFmGuid}&mode=3d`);
+    }
   };
 
   const handleSendEmail = (alarm: AlarmAsset) => {
@@ -375,6 +362,7 @@ ${attrs}
                 />
               </TableHead>
               <TableHead>Name / FM-GUID</TableHead>
+              <TableHead>Description</TableHead>
               <TableHead>Floor</TableHead>
               <TableHead>Room</TableHead>
               <TableHead>Updated</TableHead>
@@ -399,6 +387,11 @@ ${attrs}
                   <div className="font-mono text-[10px] text-muted-foreground">
                     {alarm.fm_guid.length > 20 ? `${alarm.fm_guid.slice(0, 8)}...${alarm.fm_guid.slice(-6)}` : alarm.fm_guid}
                   </div>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground max-w-[160px]">
+                  <span className="line-clamp-2">
+                    {alarm.attributes?.description || alarm.attributes?.Description || alarm.attributes?.comment || alarm.attributes?.Comment || '—'}
+                  </span>
                 </TableCell>
                 <TableCell className="text-xs">
                   {alarm.level_fm_guid

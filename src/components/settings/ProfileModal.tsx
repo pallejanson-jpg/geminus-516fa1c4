@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { User, Bot, MousePointer } from 'lucide-react';
+import { useLanguage } from '@/context/LanguageContext';
 import ProfileSettings from './ProfileSettings';
 import GunnarSettings from './GunnarSettings';
 import IleanSettings from './IleanSettings';
@@ -25,6 +26,7 @@ interface ProfileModalProps {
  * Separated from system settings (ApiSettingsModal) for clearer UX.
  */
 const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState('profile');
 
   return (
@@ -33,10 +35,10 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
         <DialogHeader className="pr-8">
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
-            Profile & Assistants
+            {t('Profil & assistenter', 'Profile & Assistants')}
           </DialogTitle>
           <DialogDescription>
-            Your personal settings, theme, and AI assistants.
+            {t('Dina personliga inställningar, tema och AI-assistenter.', 'Your personal settings, theme, and AI assistants.')}
           </DialogDescription>
         </DialogHeader>
 
@@ -44,15 +46,15 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="profile" className="gap-2">
               <User className="h-4 w-4" />
-              Profile
+              {t('Profil', 'Profile')}
             </TabsTrigger>
             <TabsTrigger value="assistants" className="gap-2">
               <Bot className="h-4 w-4" />
-              Assistants
+              {t('Assistenter', 'Assistants')}
             </TabsTrigger>
             <TabsTrigger value="contextmenu" className="gap-2">
               <MousePointer className="h-4 w-4" />
-              Context Menu
+              {t('Kontextmeny', 'Context Menu')}
             </TabsTrigger>
           </TabsList>
 
@@ -78,7 +80,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
         </Tabs>
 
         <div className="flex justify-end mt-4 pt-4 border-t">
-          <Button onClick={onClose}>Close</Button>
+          <Button onClick={onClose}>{t('Stäng', 'Close')}</Button>
         </div>
       </DialogContent>
     </Dialog>

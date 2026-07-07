@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useContext, useMemo } from 'react';
 import { AlertCircle, X, Maximize2, Minimize2, TreeDeciduous, Menu, Filter } from 'lucide-react';
+import { useLanguage } from '@/context/LanguageContext';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -172,6 +173,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
   onMobileChangeViewMode,
   mobileHasIvion = false,
 }) => {
+  const { t } = useLanguage();
   const { allData } = useContext(AppContext);
   const viewerContainerRef = useRef<HTMLDivElement>(null);
   const viewportWrapperRef = useRef<HTMLDivElement>(null);
@@ -4922,7 +4924,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
       console.error('[GeminusPlusViewer] WebGL context lost – GPU out of memory or tab backgrounded');
       setState(prev => ({
         ...prev,
-        error: 'WebGL-kontext förlorad. Enheten kan ha slut på grafikminne.',
+        error: t('WebGL-kontext förlorad. Enheten kan ha slut på grafikminne.', 'WebGL context lost. The device may have run out of graphics memory.'),
         isLoading: false,
       }));
       setShowError(true);
@@ -5004,11 +5006,11 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
                 <AlertCircle className="h-8 w-8 text-destructive" />
               </div>
               <div>
-                <p className="text-lg font-medium">Could not load 3D viewer</p>
+                <p className="text-lg font-medium">{t('Kunde inte ladda 3D-visaren', 'Could not load 3D viewer')}</p>
                 <p className="text-sm text-muted-foreground mt-2">{state.error}</p>
               </div>
               <Button onClick={handleRetry} variant="outline">
-                Try again
+                {t('Försök igen', 'Try again')}
               </Button>
             </div>
           </CardContent>
@@ -5056,7 +5058,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
             <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none bg-background/30">
               <Spinner 
                 size="xl" 
-                label={xktSyncStatus === 'syncing' ? 'Syncing 3D models...' : undefined} 
+                label={xktSyncStatus === 'syncing' ? t('Synkroniserar 3D-modeller...', 'Syncing 3D models...') : undefined} 
               />
             </div>
           )}
@@ -5088,7 +5090,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
                     size="icon"
                     onClick={onClose} 
                     className="h-8 w-8 sm:h-10 sm:w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
-                    aria-label="Close 3D view"
+                    aria-label={t('Stäng 3D-vy', 'Close 3D view')}
                   >
                     <X className="h-4 w-4 sm:h-5 sm:w-5" />
                   </Button>
@@ -5098,7 +5100,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
                   size="icon"
                   onClick={() => setIsFullscreen(!isFullscreen)} 
                   className="h-8 w-8 sm:h-10 sm:w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
-                  aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                  aria-label={isFullscreen ? t('Avsluta helskärm', 'Exit fullscreen') : t('Helskärm', 'Fullscreen')}
                 >
                   {isFullscreen ? <Minimize2 className="h-4 w-4 sm:h-5 sm:w-5" /> : <Maximize2 className="h-4 w-4 sm:h-5 sm:w-5" />}
                 </Button>
@@ -5157,7 +5159,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
             <div className="absolute inset-0 pointer-events-none z-10 border-4 border-dashed border-accent/50 animate-pulse">
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card/90 backdrop-blur-sm px-4 py-2 rounded-lg shadow-lg">
                  <p className="text-sm font-medium text-center">
-                  🎯 Click on a surface to select position
+                  🎯 {t('Klicka på en yta för att välja position', 'Click on a surface to select position')}
                 </p>
               </div>
             </div>
@@ -5167,7 +5169,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           {pendingPickCoords && (
             <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30 bg-card/95 backdrop-blur-md p-4 rounded-xl shadow-2xl border flex flex-col gap-3 min-w-[280px]">
               <div className="text-center">
-                <p className="font-medium text-sm mb-1">📍 Position marked</p>
+                <p className="font-medium text-sm mb-1">📍 {t('Position markerad', 'Position marked')}</p>
                 <p className="text-xs text-muted-foreground font-mono">
                   X: {pendingPickCoords.x.toFixed(2)} Y: {pendingPickCoords.y.toFixed(2)} Z: {pendingPickCoords.z.toFixed(2)}
                 </p>
@@ -5178,13 +5180,13 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
                   onClick={handleRepickPosition}
                   className="flex-1"
                 >
-                  Re-pick
+                  {t('Välj om', 'Re-pick')}
                 </Button>
                 <Button 
                   onClick={handleConfirmPosition}
                   className="flex-1"
                 >
-                  Confirm ✓
+                  {t('Bekräfta', 'Confirm')} ✓
                 </Button>
               </div>
             </div>

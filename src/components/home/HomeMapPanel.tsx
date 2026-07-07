@@ -12,6 +12,7 @@ import React, { Suspense, useState, useContext } from 'react';
 import { Globe, Map, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AppContext } from '@/context/AppContext';
+import { useLanguage } from '@/context/LanguageContext';
 
 // Lazy load Mapbox only — no Cesium here
 const MapView = React.lazy(() => import('@/components/map/MapView'));
@@ -19,7 +20,7 @@ const MapView = React.lazy(() => import('@/components/map/MapView'));
 // Error boundary to prevent map crashes from bubbling up to the whole app
 interface MapErrorBoundaryState { hasError: boolean; }
 class MapErrorBoundary extends React.Component<
-  { children: React.ReactNode; onRetry: () => void },
+  { children: React.ReactNode; onRetry: () => void; errorText: string; retryText: string },
   MapErrorBoundaryState
 > {
   constructor(props: any) {
@@ -33,7 +34,7 @@ class MapErrorBoundary extends React.Component<
       return (
         <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
           <AlertTriangle className="h-8 w-8 opacity-50" />
-          <p className="text-sm">Kartan kunde inte laddas</p>
+          <p className="text-sm">{this.props.errorText}</p>
           <Button
             size="sm"
             variant="outline"
@@ -44,7 +45,7 @@ class MapErrorBoundary extends React.Component<
             }}
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            Försök igen
+            {this.props.retryText}
           </Button>
         </div>
       );
@@ -56,6 +57,7 @@ class MapErrorBoundary extends React.Component<
 export default function HomeMapPanel() {
   const [boundaryKey, setBoundaryKey] = useState(0);
   const { setActiveApp } = useContext(AppContext);
+  const { t } = useLanguage();
 
   return (
     <div className="relative w-full h-full rounded-xl overflow-hidden border border-border bg-card/40">
@@ -66,26 +68,26 @@ export default function HomeMapPanel() {
           variant="ghost"
           className="h-7 px-2.5 text-xs gap-1.5"
           onClick={() => setActiveApp('globe')}
-          title="Öppna 3D-glob"
+          title={t('Öppna 3D-glob', 'Open 3D globe')}
         >
           <Globe className="h-3.5 w-3.5" />
-          Glob
+          {t('Glob', 'Globe')}
         </Button>
         <Button
           size="sm"
           variant="default"
           className="h-7 px-2.5 text-xs gap-1.5"
           onClick={() => setActiveApp('map')}
-          title="Öppna fullskärmskarta"
+          title={t('Öppna fullskärmskarta', 'Open full-screen map')}
         >
           <Map className="h-3.5 w-3.5" />
-          Karta
+          {t('Karta', 'Map')}
         </Button>
       </div>
 
       {/* Map content */}
       <div className="absolute inset-0">
-        <MapErrorBoundary key={boundaryKey} onRetry={() => setBoundaryKey(k => k + 1)}>
+        <MapErrorBoundary key={boundaryKey} onRetry={() => setBoundaryKey(k => k + 1)} errorText={t('Kartan kunde inte laddas', 'The map could not be loaded')} retryText={t('Försök igen', 'Try again')}>
           <Suspense
             fallback={
               <div className="flex items-center justify-center h-full">

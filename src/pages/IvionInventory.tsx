@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useLanguage } from '@/context/LanguageContext';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Building2, Loader2, Camera, Layers, Wifi, WifiOff, AlertCircle, Info, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -41,6 +42,7 @@ type ConnectionStatus = 'unknown' | 'connected' | 'error' | 'expired';
 const IvionInventory: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { t } = useLanguage();
   
   const [formOpen, setFormOpen] = useState(false);
   const [unplacedPanelOpen, setUnplacedPanelOpen] = useState(false);
@@ -155,7 +157,7 @@ const IvionInventory: React.FC = () => {
 
       if (error) {
         setConnectionStatus('error');
-        setConnectionError(error.message || 'API-fel');
+        setConnectionError(error.message || t('API-fel', 'API error'));
         return false;
       }
 
@@ -163,7 +165,7 @@ const IvionInventory: React.FC = () => {
         // Check for auth-related errors
         if (data.error.includes('401') || data.error.includes('token') || data.error.includes('auth')) {
           setConnectionStatus('expired');
-          setConnectionError('Access token har gått ut');
+          setConnectionError(t('Access token har gått ut', 'Access token has expired'));
         } else {
           setConnectionStatus('error');
           setConnectionError(data.error);
@@ -176,7 +178,7 @@ const IvionInventory: React.FC = () => {
       return true;
     } catch (err: any) {
       setConnectionStatus('error');
-      setConnectionError(err.message || 'Kunde inte ansluta');
+      setConnectionError(err.message || t('Kunde inte ansluta', 'Could not connect'));
       return false;
     }
   }, [currentIvionSiteId]);
@@ -206,11 +208,11 @@ const IvionInventory: React.FC = () => {
         if (error || data?.error) {
           if (data?.error?.includes('401') || data?.error?.includes('token')) {
             setConnectionStatus('expired');
-            setConnectionError('Access token har gått ut');
+            setConnectionError(t('Access token har gått ut', 'Access token has expired'));
           } else if (connectionStatus === 'connected') {
             // Only show error if we were previously connected
             setConnectionStatus('error');
-            setConnectionError(data?.error || error?.message || 'Polling misslyckades');
+            setConnectionError(data?.error || error?.message || t('Polling misslyckades', 'Polling failed'));
           }
           return;
         }
@@ -463,8 +465,8 @@ const IvionInventory: React.FC = () => {
             {!formOpen && ivionUrl && (
               <Button onClick={() => setFormOpen(true)} className="gap-2">
                 <Camera className="h-4 w-4" />
-                <span className="hidden md:inline">Registrera tillgång</span>
-                <span className="md:hidden">Registrera</span>
+                <span className="hidden md:inline">{t('Registrera tillgång', 'Register asset')}</span>
+                <span className="md:hidden">{t('Registrera', 'Register')}</span>
               </Button>
             )}
           </div>
@@ -475,7 +477,7 @@ const IvionInventory: React.FC = () => {
           <div className="px-4 py-2 bg-blue-50 dark:bg-blue-950/50 border-t border-blue-100 dark:border-blue-900 flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
             <Info className="h-4 w-4 shrink-0" />
             <span>
-              <strong>Arbetsflöde:</strong> Skapa en POI i Ivions 360°-vy (använd +) → Registreringsformuläret öppnas automatiskt
+              <strong>{t('Arbetsflöde:', 'Workflow:')}</strong> {t('Skapa en POI i Ivions 360°-vy (använd +) → Registreringsformuläret öppnas automatiskt', 'Create a POI in Ivion\'s 360° view (use +) → The registration form opens automatically')}
             </span>
           </div>
         )}
@@ -485,11 +487,11 @@ const IvionInventory: React.FC = () => {
           <div className="px-4 py-2 bg-amber-50 dark:bg-amber-950/50 border-t border-amber-100 dark:border-amber-900 flex items-center justify-between text-sm text-amber-700 dark:text-amber-300">
             <div className="flex items-center gap-2">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>Ivion access token har gått ut. POI-detektion fungerar inte automatiskt.</span>
+              <span>{t('Ivion access token har gått ut. POI-detektion fungerar inte automatiskt.', 'Ivion access token has expired. POI detection does not work automatically.')}</span>
             </div>
             <Button variant="outline" size="sm" onClick={testConnection} className="shrink-0">
               <RefreshCw className="h-3.5 w-3.5 mr-1" />
-              Försök igen
+              {t('Försök igen', 'Try again')}
             </Button>
           </div>
         )}

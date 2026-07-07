@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
 import StreetViewMiniMap from './StreetViewMiniMap';
+import { useLanguage } from '@/context/LanguageContext';
 
 // Import Cesium — base URL already set by CesiumGlobeView
 import * as Cesium from 'cesium';
@@ -33,6 +34,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
   const [currentHeading, setCurrentHeading] = useState(0);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
+  const { t } = useLanguage();
 
   // Load a panorama at given position, replacing the current one
   const loadPanoAtPosition = useCallback(async (panoId: string, longitude: number, latitude: number) => {
@@ -183,7 +185,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
         }
 
         if (!panoIdObject) {
-          setError('Ingen Street View-täckning vid denna position');
+          setError(t('Ingen Street View-täckning vid denna position', 'No Street View coverage at this location'));
           setLoading(false);
           return;
         }
@@ -262,7 +264,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
       } catch (err: any) {
         console.error('Street View init error:', err);
         if (!cancelled) {
-          setError(err.message || 'Kunde inte ladda Street View');
+          setError(err.message || t('Kunde inte ladda Street View', 'Could not load Street View'));
           setLoading(false);
         }
       }
@@ -321,7 +323,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
             className="h-7 w-7"
             onClick={moveBackward}
             disabled={moving || loading}
-            title="Gå bakåt"
+            title={t('Gå bakåt', 'Go back')}
           >
             <ArrowDown size={14} />
           </Button>
@@ -331,7 +333,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
             className="h-7 w-7"
             onClick={moveForward}
             disabled={moving || loading}
-            title="Gå framåt"
+            title={t('Gå framåt', 'Go forward')}
           >
             <ArrowUp size={14} />
           </Button>
@@ -391,7 +393,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
         <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-20 pointer-events-none">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 size={20} className="animate-spin" />
-            <span className="text-sm">{loading ? 'Laddar Street View…' : 'Laddar panorama…'}</span>
+            <span className="text-sm">{loading ? t('Laddar Street View…', 'Loading Street View…') : t('Laddar panorama…', 'Loading panorama…')}</span>
           </div>
         </div>
       )}
@@ -401,7 +403,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
         <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-20">
           <div className="text-center space-y-2">
             <p className="text-sm text-muted-foreground">{error}</p>
-            <Button variant="outline" size="sm" onClick={onClose}>Stäng</Button>
+            <Button variant="outline" size="sm" onClick={onClose}>{t('Stäng', 'Close')}</Button>
           </div>
         </div>
       )}

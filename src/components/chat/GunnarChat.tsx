@@ -11,6 +11,7 @@ import ReactMarkdown from "react-markdown";
 import { useDeepgramSpeechRecognition as useWebSpeechRecognition } from "@/hooks/useDeepgramSpeechRecognition";
 import { getGunnarSettings, saveGunnarSettings } from "@/components/settings/GunnarSettings";
 import { dispatchAiViewerCommand } from "@/hooks/useAiViewerBridge";
+import { useLanguage } from '@/context/LanguageContext';
 import { AI_SENSOR_DATA_EVENT } from "@/components/viewer/SensorDataOverlay";
 import { preprocessForTTS } from "@/lib/tts-preprocess";
 import { speakWithDeepgram, stopDeepgramAudio } from "@/lib/deepgram-tts";
@@ -104,6 +105,7 @@ function normalizeButtons(raw: ActionButton[] | string[] | undefined): ActionBut
 const CHAT_URL = `${SUPABASE_URL}/functions/v1/geminus-ai`;
 
 const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function GunnarChat({ open, onClose, context, embedded, autoVoice, onAutoVoiceConsumed }, _ref) {
+  const { t } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -313,7 +315,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       const params = new URLSearchParams({ building: buildingGuid, mode: '2d' });
       if (d.storey_fm_guid) params.set('floor', d.storey_fm_guid);
       if (d.storey_name) params.set('floorName', d.storey_name);
-      toast.info(d.storey_name ? `Öppnar ritningen för ${d.storey_name}…` : 'Öppnar ritningen…');
+      toast.info(d.storey_name ? t(`Öppnar ritningen för ${d.storey_name}…`, `Opening drawing for ${d.storey_name}…`) : t('Öppnar ritningen…', 'Opening drawing…'));
       window.location.href = `/viewer?${params.toString()}`;
       return;
     }
@@ -346,7 +348,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
     if (!viewerCommand && (shouldNavigateToViewer || isViewerAction)) {
       const buildingGuid = context?.currentBuilding?.fmGuid || context?.viewerState?.buildingFmGuid || '';
       if (buildingGuid && !isOnViewerPage()) {
-        toast.info('Öppnar viewern…');
+        toast.info(t('Öppnar viewern…', 'Opening viewer…'));
         window.location.href = `/viewer?building=${buildingGuid}`;
         return;
       }
@@ -368,7 +370,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       // Not in viewer — save command and navigate
       sessionStorage.setItem('pending_ai_viewer_command', JSON.stringify(viewerCommand));
       const buildingGuid = context?.currentBuilding?.fmGuid || context?.viewerState?.buildingFmGuid || '';
-      toast.info('Öppnar viewern…');
+      toast.info(t('Öppnar viewern…', 'Opening viewer…'));
       window.location.href = `/viewer${buildingGuid ? `?building=${buildingGuid}` : ''}`;
     }
   }, [context, isOnViewerPage]);
@@ -423,7 +425,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
           response = await processSSEResponse(resp);
         } else {
           response = await resp.json();
-          setMessages(prev => [...prev, { role: "assistant", content: response.message || "Inga resultat hittades." }]);
+          setMessages(prev => [...prev, { role: "assistant", content: response.message || t("Inga resultat hittades.", "No results found.") }]);
         }
 
         const normalizedButtons = normalizeButtons(response.buttons);
@@ -498,7 +500,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
             response = await processSSEResponse(resp);
           } else {
             response = await resp.json();
-            setMessages(prev => [...prev, { role: "assistant", content: response.message || "Inga resultat hittades." }]);
+            setMessages(prev => [...prev, { role: "assistant", content: response.message || t("Inga resultat hittades.", "No results found.") }]);
           }
 
           const normalizedButtons = normalizeButtons(response.buttons);
@@ -540,7 +542,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
       }
     },
     onError: (errorMessage) => {
-      toastHook({ variant: 'destructive', title: 'Röstfel', description: errorMessage });
+      toastHook({ variant: 'destructive', title: t('Röstfel', 'Voice error'), description: errorMessage });
     },
   });
 
@@ -618,7 +620,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
                     }}
                   >
                     {speakingIndex === i ? <Square className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-                    {speakingIndex === i ? "Stoppa" : "Läs upp"}
+                    {speakingIndex === i ? t("Stoppa", "Stop") : t("Läs upp", "Read aloud")}
                   </button>
                 </div>
               </div>
@@ -633,7 +635,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-1.5">
           <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
             <Info className="h-3.5 w-3.5" />
-            Aktuell status
+            {t('Aktuell status', 'Current status')}
           </div>
           {proactiveInsights.map((insight, i) => (
             <p key={i} className="text-sm text-foreground">{insight}</p>
@@ -677,7 +679,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
         <div className="flex justify-start">
           <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
             <Loader2 className="h-4 w-4 animate-spin" />
-            <span>{streamingStatus || "Tänker..."}</span>
+            <span>{streamingStatus || t("Tänker...", "Thinking...")}</span>
           </div>
         </div>
       )}
@@ -716,7 +718,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ställ en fråga..."
+            placeholder={t("Ställ en fråga...", "Ask a question...")}
             disabled={isLoading}
             className={cn("flex-1 min-w-0", compact && "h-8 sm:h-9 text-sm")}
           />

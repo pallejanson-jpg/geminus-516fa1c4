@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useContext, useRef } from 'react';
+import { useLanguage } from '@/context/LanguageContext';
 import { ChevronDown, ChevronRight, Search, X, Filter, Paintbrush, Box, MapPin, Eye } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -135,6 +136,7 @@ const HIGHLIGHT_COLOR: [number, number, number] = [0.25, 0.55, 0.95];
 const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   viewerRef, buildingFmGuid, isVisible, onClose, onNodeSelect,
 }) => {
+  const { t } = useLanguage();
   const { allData } = useContext(AppContext);
 
   // ── Shared hooks for consistent data ─────────────────────────────────
@@ -2086,7 +2088,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 }
               }
             }}
-            title="Reset all colors to default"
+            title={t('Återställ alla färger till standard', 'Reset all colors to default')}
           >
             <Paintbrush className="h-3.5 w-3.5" />
           </Button>
@@ -2095,7 +2097,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             size="icon"
             className="h-7 w-7 text-foreground"
             onClick={handleResetAll}
-            title="Show all objects"
+            title={t('Visa alla objekt', 'Show all objects')}
           >
             <Eye className="h-3.5 w-3.5" />
           </Button>
@@ -2104,11 +2106,11 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             size="icon"
             className={cn("h-7 w-7", xrayMode && "bg-primary text-primary-foreground")}
             onClick={() => setXrayMode(!xrayMode)}
-            title={xrayMode ? "X-ray on (click to hide)" : "Show X-ray"}
+            title={xrayMode ? t('Röntgen på (klicka för att dölja)', 'X-ray on (click to hide)') : t('Visa röntgen', 'Show X-ray')}
           >
             <Box className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="outline" size="icon" className="h-8 w-8 border-destructive/50 text-destructive hover:bg-destructive hover:text-destructive-foreground bg-background shadow-md relative z-50" onClick={(e) => { e.stopPropagation(); e.preventDefault(); onClose(); }} title="Close filter panel">
+          <Button variant="outline" size="icon" className="h-8 w-8 border-destructive/50 text-destructive hover:bg-destructive hover:text-destructive-foreground bg-background shadow-md relative z-50" onClick={(e) => { e.stopPropagation(); e.preventDefault(); onClose(); }} title={t('Stäng filterpanelen', 'Close filter panel')}>
             <X className="h-5 w-5" />
           </Button>
         </div>
@@ -2118,7 +2120,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         <div className="py-1">
           {/* Sources */}
           <FilterSection
-            title="Sources"
+            title={t('Källor', 'Sources')}
             count={sources.length}
             selectedCount={checkedSources.size}
             isOpen={sourcesOpen}
@@ -2135,13 +2137,13 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
               />
             ))}
             {sources.length === 0 && (
-              <p className="text-sm text-muted-foreground px-3 py-2">No sources found</p>
+              <p className="text-sm text-muted-foreground px-3 py-2">{t('Inga källor hittades', 'No sources found')}</p>
             )}
           </FilterSection>
 
           {/* Levels */}
           <FilterSection
-            title="Levels"
+            title={t('Våningar', 'Levels')}
             count={levels.length}
             selectedCount={checkedLevels.size}
             isOpen={levelsOpen}
@@ -2155,7 +2157,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 variant="ghost"
                 size="icon"
                 className={cn("h-6 w-6", autoColorEnabled ? "text-primary" : "text-muted-foreground")}
-                title={autoColorEnabled ? "Disable auto colors" : "Enable auto colors"}
+                title={autoColorEnabled ? t('Inaktivera automatiska färger', 'Disable auto colors') : t('Aktivera automatiska färger', 'Enable auto colors')}
                 onClick={(e) => { e.stopPropagation(); setAutoColorEnabled(!autoColorEnabled); }}
               >
                 <Paintbrush className="h-3.5 w-3.5" />
@@ -2178,7 +2180,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
           {/* Spaces */}
           <FilterSection
-            title="Spaces"
+            title={t('Rum', 'Spaces')}
             count={spaces.length}
             selectedCount={checkedSpaces.size}
             isOpen={spacesOpen}
@@ -2192,7 +2194,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 variant="ghost"
                 size="icon"
                 className={cn("h-6 w-6", autoColorSpaces ? "text-primary" : "text-muted-foreground")}
-                title={autoColorSpaces ? "Disable space colors" : "Enable space colors"}
+                title={autoColorSpaces ? t('Inaktivera rumsfärger', 'Disable space colors') : t('Aktivera rumsfärger', 'Enable space colors')}
                 onClick={(e) => { e.stopPropagation(); setAutoColorSpaces(!autoColorSpaces); }}
               >
                 <Paintbrush className="h-3.5 w-3.5" />
@@ -2212,19 +2214,19 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             ))}
             {filteredSpaces.length > 200 && (
               <p className="text-sm text-muted-foreground px-3 py-1">
-                Showing 200 of {filteredSpaces.length} spaces
+                {t(`Visar 200 av ${filteredSpaces.length} rum`, `Showing 200 of ${filteredSpaces.length} spaces`)}
               </p>
             )}
             {filteredSpaces.length === 0 && (
               <p className="text-sm text-muted-foreground px-3 py-2">
-                {spacesSearch ? 'No match' : 'No spaces on selected level'}
+                {spacesSearch ? t('Ingen träff', 'No match') : t('Inga rum på vald våning', 'No spaces on selected level')}
               </p>
             )}
           </FilterSection>
 
           {/* Categories */}
           <FilterSection
-            title="Categories"
+            title={t('Kategorier', 'Categories')}
             count={categories.length}
             selectedCount={checkedCategories.size}
             isOpen={categoriesOpen}
@@ -2235,7 +2237,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 variant="ghost"
                 size="icon"
                 className={cn("h-6 w-6", autoColorCategories ? "text-primary" : "text-muted-foreground")}
-                title={autoColorCategories ? "Disable category colors" : "Enable category colors"}
+                title={autoColorCategories ? t('Inaktivera kategorifärger', 'Disable category colors') : t('Aktivera kategorifärger', 'Enable category colors')}
                 onClick={(e) => { e.stopPropagation(); setAutoColorCategories(!autoColorCategories); }}
               >
                 <Paintbrush className="h-3.5 w-3.5" />
@@ -2257,7 +2259,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
           {/* Modification filter */}
           <FilterSection
-            title="Modifications"
+            title={t('Ändringar', 'Modifications')}
             count={modifiedAssets.length}
             selectedCount={(showMovedAssets ? 1 : 0) + (showDeletedAssets ? 1 : 0)}
             isOpen={modificationsOpen}
@@ -2270,7 +2272,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 onClick={(e) => e.stopPropagation()}
                 onCheckedChange={(v) => setShowMovedAssets(!!v)} />
               <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: '#FF9919' }} />
-              <span className="text-sm truncate flex-1 text-foreground">Show moved objects</span>
+              <span className="text-sm truncate flex-1 text-foreground">{t('Visa flyttade objekt', 'Show moved objects')}</span>
               <span className="text-xs text-muted-foreground shrink-0">
                 {modifiedAssets.filter(a => a.modification_status === 'moved').length}
               </span>
@@ -2281,7 +2283,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 onClick={(e) => e.stopPropagation()}
                 onCheckedChange={(v) => setShowDeletedAssets(!!v)} />
               <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: '#FF3333' }} />
-              <span className="text-sm truncate flex-1 text-foreground">Show deleted objects</span>
+              <span className="text-sm truncate flex-1 text-foreground">{t('Visa borttagna objekt', 'Show deleted objects')}</span>
               <span className="text-xs text-muted-foreground shrink-0">
                 {modifiedAssets.filter(a => a.modification_status === 'deleted').length}
               </span>
@@ -2291,7 +2293,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           {/* Annotations */}
           {annotationCategories.length > 0 && (
             <FilterSection
-              title="Annotations"
+              title={t('Anteckningar', 'Annotations')}
               count={annotationCategories.reduce((s, c) => s + c.count, 0)}
               selectedCount={checkedAnnotations.size}
               isOpen={annotationsOpen}
@@ -2346,7 +2348,9 @@ interface FilterSectionProps {
 const FilterSection: React.FC<FilterSectionProps> = ({
   title, count, selectedCount, isOpen, onToggle, onReset,
   showSearch, searchValue, onSearchChange, rightAction, children,
-}) => (
+}) => {
+  const { t } = useLanguage();
+  return (
   <div className="border-b last:border-b-0">
     <button
       className="flex items-center justify-between w-full px-3 py-2.5 hover:bg-accent/30 transition-colors"
@@ -2366,7 +2370,7 @@ const FilterSection: React.FC<FilterSectionProps> = ({
             className="text-xs text-primary hover:underline"
             onClick={(e) => { e.stopPropagation(); onReset(); }}
           >
-            Reset
+            {t('Återställ', 'Reset')}
           </button>
         )}
       </div>
@@ -2377,7 +2381,7 @@ const FilterSection: React.FC<FilterSectionProps> = ({
           <div className="px-3 pb-1.5">
             <div className="relative">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input value={searchValue || ''} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search…" className="h-7 pl-7 text-sm" />
+              <Input value={searchValue || ''} onChange={(e) => onSearchChange(e.target.value)} placeholder={t('Sök…', 'Search…')} className="h-7 pl-7 text-sm" />
             </div>
           </div>
         )}
@@ -2385,7 +2389,8 @@ const FilterSection: React.FC<FilterSectionProps> = ({
       </div>
     )}
   </div>
-);
+  );
+};
 
 interface FilterRowProps {
   label: string;

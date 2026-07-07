@@ -31,7 +31,6 @@ const NativeXeokitViewer = React.lazy(() => import('@/components/viewer/NativeXe
 import { useGeminusPremiumBuildingData } from '@/hooks/useGeminusPremiumData';
 import { cn } from '@/lib/utils';
 import RoomSensorDetailSheet from '@/components/insights/RoomSensorDetailSheet';
-import { INSIGHTS_COLOR_UPDATE_EVENT, ALARM_ANNOTATIONS_SHOW_EVENT, INSIGHTS_COLOR_RESET_EVENT } from '@/lib/viewer-events';
 import { FORCE_SHOW_SPACES_EVENT } from '@/components/viewer/RoomVisualizationPanel';
 import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { toast } from 'sonner';
@@ -126,6 +125,7 @@ const InsightsInlineViewer: React.FC<InsightsInlineViewerProps> = ({ fmGuid, ins
                     </div>
                 }>
                     <NativeXeokitViewer
+                        key={fmGuid}
                         buildingFmGuid={fmGuid}
                     />
                 </React.Suspense>
@@ -192,12 +192,23 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     // Controlled tabs
     const [activeTab, setActiveTab] = useState('performance');
 
-    // Reset 3D colorization when switching tabs (dispatch reset event, no full model reload)
+    // Reset 3D colorization when switching tabs — skip the initial mount render
+    const prevTabRef = React.useRef<string | null>(null);
     useEffect(() => {
+        if (prevTabRef.current === null) {
+            // First render — record current tab, don't reset
+            prevTabRef.current = activeTab;
+            return;
+        }
+        if (prevTabRef.current === activeTab) return;
+        prevTabRef.current = activeTab;
         emit('INSIGHTS_COLOR_RESET');
-        // Also reset inline viewer state
         setInlineInsightsMode(undefined);
         setInlineColorMap(undefined);
+        // Hide spaces when leaving space/performance tabs — they get turned on by those tabs
+        if (activeTab !== 'performance' && activeTab !== 'space') {
+            emit('FORCE_SHOW_SPACES', { show: false });
+        }
     }, [activeTab]);
 
     // Room metadata lookup from allData (for enriching alarm list)
@@ -525,14 +536,14 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             // so NativeXeokitViewer has time to process the space visibility change
             emit('FORCE_SHOW_SPACES', { show: true });
             setTimeout(() => {
-                window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail }));
+                emit('INSIGHTS_COLOR_UPDATE', detail);
             }, 150);
         } else if (isMobile) {
             navigateToInsights3D(opts);
         } else {
             setInlineInsightsMode(opts.mode);
             setInlineColorMap(opts.colorMap);
-            window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail }));
+            emit('INSIGHTS_COLOR_UPDATE', detail);
         }
     }, [isMobile, drawerMode, navigateToInsights3D, buildingStoreys, buildingSpaces]);
 
@@ -568,39 +579,40 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         if (drawerMode) {
             emit('FORCE_SHOW_SPACES', { show: true });
             setTimeout(() => {
-                window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail }));
+                emit('INSIGHTS_COLOR_UPDATE', detail);
             }, 150);
         } else {
             setInlineInsightsMode('room_spaces');
             setInlineColorMap(roomColorMap);
-            window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail }));
+            emit('INSIGHTS_COLOR_UPDATE', detail);
         }
     }, [sensorRoomValues, sensorMetric, drawerMode]);
 
-    // Auto-colorize when switching metrics (if sensor tab is active)
+    // Auto-colorize when switching metrics (if sensor tab is active).
+    // Uses a short delay so the tab-change reset settles in the viewer before re-applying.
     useEffect(() => {
         if (activeTab !== 'performance') return;
         if (sensorRoomValues.length === 0) return;
         if (!drawerMode && isMobile) return;
-        const roomColorMap: Record<string, [number, number, number]> = {};
-        sensorRoomValues.forEach((room: any) => {
-            if (room.value !== null) {
-                const rgb = getVisualizationColor(room.value, sensorMetric);
-                if (rgb) roomColorMap[room.fmGuid] = rgb;
-            }
-        });
-        const nameColorMap: Record<string, [number, number, number]> = {};
-        sensorRoomValues.forEach((room: any) => {
-            if (room.value !== null) {
-                const name = (room.commonName || room.name || '').toLowerCase().trim();
-                const rgb = getVisualizationColor(room.value, sensorMetric);
-                if (name && rgb) nameColorMap[name] = rgb;
-            }
-        });
-        const detail = { mode: 'room_spaces', colorMap: roomColorMap, nameColorMap };
-        setInlineInsightsMode('room_spaces');
-        setInlineColorMap(roomColorMap);
-        window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail }));
+        const timer = setTimeout(() => {
+            const roomColorMap: Record<string, [number, number, number]> = {};
+            const nameColorMap: Record<string, [number, number, number]> = {};
+            sensorRoomValues.forEach((room: any) => {
+                if (room.value !== null) {
+                    const rgb = getVisualizationColor(room.value, sensorMetric);
+                    if (rgb) {
+                        roomColorMap[room.fmGuid] = rgb;
+                        const name = (room.commonName || room.name || '').toLowerCase().trim();
+                        if (name) nameColorMap[name] = rgb;
+                    }
+                }
+            });
+            const detail = { mode: 'room_spaces', colorMap: roomColorMap, nameColorMap };
+            setInlineInsightsMode('room_spaces');
+            setInlineColorMap(roomColorMap);
+            emit('INSIGHTS_COLOR_UPDATE', detail);
+        }, 200);
+        return () => clearTimeout(timer);
     }, [sensorMetric, sensorRoomValues, activeTab]);
 
     // Clear selection when metric changes

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Facility } from '@/lib/types';
+import { useLanguage } from '@/context/LanguageContext';
 
 export interface InventoryPrefill {
   buildingFmGuid?: string;
@@ -59,6 +60,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
   onFaultReport
 }) => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const isBuilding = facility.category === 'Building';
   const isStorey = facility.category === 'Building Storey';
   const isSpace = facility.category === 'Space';
@@ -87,7 +89,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
     return (
       <Card className="mt-4 sm:mt-6">
         <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
-          <CardTitle className="text-sm sm:text-base">Quick Actions</CardTitle>
+          <CardTitle className="text-sm sm:text-base">{t('Snabbåtgärder', 'Quick Actions')}</CardTitle>
         </CardHeader>
         <CardContent className="px-3 sm:px-6">
           <div className="grid grid-cols-2 md:grid-cols-4 auto-rows-fr items-stretch gap-1 sm:gap-2 md:gap-4">
@@ -115,7 +117,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
               className={btnClass}
             >
               <Eye size={iconSize} className="text-primary" />
-              <span className={labelClass}>Viewer</span>
+              <span className={labelClass}>{t('Visare', 'Viewer')}</span>
             </Button>
           )}
 
@@ -124,20 +126,20 @@ const QuickActions: React.FC<QuickActionsProps> = ({
           {/* Insights */}
           <Button variant="ghost" onClick={() => onShowInsights(facility)} className={btnClass}>
             <BarChart size={iconSize} className="text-accent" />
-            <span className={labelClass}>Insights</span>
+            <span className={labelClass}>{t('Insikter', 'Insights')}</span>
           </Button>
 
           {/* Assets */}
           <Button variant="ghost" onClick={() => onShowAssets(facility)} className={btnClass}>
             <Package size={iconSize} className="text-primary" />
-            <span className={labelClass}>Assets</span>
+            <span className={labelClass}>{t('Tillgångar', 'Assets')}</span>
           </Button>
 
           {/* Rooms */}
           {(isBuilding || isStorey) && (
             <Button variant="ghost" onClick={() => onShowRooms(facility)} className={btnClass}>
               <DoorOpen size={iconSize} className="text-accent" />
-              <span className={labelClass}>Rooms</span>
+              <span className={labelClass}>{t('Rum', 'Rooms')}</span>
             </Button>
           )}
 
@@ -145,7 +147,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
           {isBuilding && (
             <Button variant="ghost" onClick={onOpenMap} className={btnClass}>
               <Globe size={iconSize} className="text-accent" />
-              <span className={labelClass}>Map</span>
+              <span className={labelClass}>{t('Karta', 'Map')}</span>
             </Button>
           )}
 
@@ -153,7 +155,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
           {canAddAsset && onAddAsset && (
             <Button variant="ghost" onClick={() => onAddAsset(facility)} className={btnClass}>
               <Plus size={iconSize} className="text-accent" />
-              <span className={labelClass}>Add Asset</span>
+              <span className={labelClass}>{t('Lägg till tillgång', 'Add Asset')}</span>
             </Button>
           )}
 
@@ -169,21 +171,21 @@ const QuickActions: React.FC<QuickActionsProps> = ({
               className={btnClass}
             >
               <ClipboardList size={iconSize} className="text-accent" />
-              <span className={labelClass}>Inventory</span>
+              <span className={labelClass}>{t('Inventering', 'Inventory')}</span>
             </Button>
           )}
 
           {/* Docs+ */}
           <Button variant="ghost" onClick={() => onShowDocs(facility)} className={btnClass}>
             <FolderOpen size={iconSize} className="text-primary" />
-            <span className={labelClass}>Docs+</span>
+            <span className={labelClass}>{t('Dokument+', 'Docs+')}</span>
           </Button>
 
           {/* Felanmälan */}
           {onFaultReport && (
             <Button variant="ghost" onClick={() => onFaultReport(facility)} className={btnClass}>
               <AlertTriangle size={iconSize} className="text-destructive" />
-              <span className={labelClass}>Fault Report</span>
+              <span className={labelClass}>{t('Felanmälan', 'Fault Report')}</span>
             </Button>
           )}
         </div>

@@ -7,8 +7,9 @@ import React, { useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import type { NavGraph, NavEdge } from '@/lib/pathfinding';
 import { euclideanDist } from '@/lib/pathfinding';
+import { useLanguage } from '@/context/LanguageContext';
 
-type EditorMode = 'node' | 'edge' | 'room-link' | 'delete';
+type EditorMode = 'node' | 'edge' | 'room-link' | 'delete' | 'entrance';
 
 interface NavGraphEditorOverlayProps {
   graph: NavGraph;
@@ -30,9 +31,10 @@ const NavGraphEditorOverlay: React.FC<NavGraphEditorOverlayProps> = ({
 }) => {
   const [mode, setMode] = useState<EditorMode>('node');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   const handleSvgClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    if (mode !== 'node') return;
+    if (mode !== 'node' && mode !== 'entrance') return;
     const svg = e.currentTarget;
     const rect = svg.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
@@ -54,7 +56,7 @@ const NavGraphEditorOverlay: React.FC<NavGraphEditorOverlayProps> = ({
       coordinates: [x, y],
       room_fm_guid: roomFmGuid,
       floor_fm_guid: floorFmGuid || null,
-      type: 'waypoint',
+      type: mode === 'entrance' ? 'entrance' : 'waypoint',
     });
 
     onGraphChange({ nodes: newNodes, edges: [...graph.edges] });
@@ -137,10 +139,11 @@ const NavGraphEditorOverlay: React.FC<NavGraphEditorOverlayProps> = ({
         onMouseDown={e => e.stopPropagation()}
       >
         {([
-          ['node', '📍 Nod'],
-          ['edge', '🔗 Kant'],
-          ['room-link', '🏠 Rum'],
-          ['delete', '🗑️ Radera'],
+          ['node', `📍 ${t('Nod', 'Node')}`],
+          ['entrance', `🚪 ${t('Entré', 'Entrance')}`],
+          ['edge', `🔗 ${t('Kant', 'Edge')}`],
+          ['room-link', `🏠 ${t('Rum', 'Room')}`],
+          ['delete', `🗑️ ${t('Radera', 'Delete')}`],
         ] as [EditorMode, string][]).map(([m, label]) => (
           <button
             key={m}
@@ -190,14 +193,17 @@ const NavGraphEditorOverlay: React.FC<NavGraphEditorOverlayProps> = ({
             <circle
               cx={`${node.coordinates[0]}%`}
               cy={`${node.coordinates[1]}%`}
-              r={NODE_RADIUS}
-              fill={node.room_fm_guid ? 'hsl(var(--accent))' : 'hsl(var(--primary))'}
+              r={node.type === 'entrance' ? NODE_RADIUS + 2 : NODE_RADIUS}
+              fill={
+                node.type === 'entrance' ? '#22c55e' :
+                node.room_fm_guid ? 'hsl(var(--accent))' : 'hsl(var(--primary))'
+              }
               stroke={selectedNodeId === node.nodeId ? '#fff' : 'hsl(var(--primary-foreground))'}
               strokeWidth={selectedNodeId === node.nodeId ? 2.5 : 1.5}
               className="cursor-pointer"
               onClick={(e) => handleNodeClick(e, node.nodeId)}
             />
-            {node.type === 'stairwell' && (
+            {(node.type === 'stairwell' || node.type === 'elevator' || node.type === 'entrance') && (
               <text
                 x={`${node.coordinates[0]}%`}
                 y={`${node.coordinates[1]}%`}
@@ -207,7 +213,7 @@ const NavGraphEditorOverlay: React.FC<NavGraphEditorOverlayProps> = ({
                 fill="white"
                 className="pointer-events-none"
               >
-                🔼
+                {node.type === 'entrance' ? '🚪' : node.type === 'elevator' ? '🛗' : '🔼'}
               </text>
             )}
           </g>

@@ -1,4 +1,5 @@
 import React, { useState, useContext, useMemo } from 'react';
+import { useLanguage } from '@/context/LanguageContext';
 import { extractSpaceArea } from '@/lib/building-utils';
 import { Search, LayoutGrid, List, Filter, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,7 @@ interface ComplexGroup {
 }
 
 const PortfolioView: React.FC = () => {
+  const { t } = useLanguage();
   const { selectedFacility, setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData, setViewer3dFmGuid, refreshInitialData, open360WithContext, openGeminusPremiumDashboard, appConfigs } = useContext(AppContext);
   
   // Preload XKT when a building is selected
@@ -58,25 +60,34 @@ const PortfolioView: React.FC = () => {
 
 // extractNtaFromAttributes imported from shared module at top
 
-  // Convert navigatorTreeData (buildings) to Facility[] format, filtering out empty duplicates
+  // Flatten Property nodes → Building nodes, preserving complexCommonName
+  const allBuildingNodes = useMemo(() => {
+    const result: Array<{ node: NavigatorNode; complexCommonName?: string }> = [];
+    navigatorTreeData.forEach((topNode) => {
+      if (topNode.category === 'Property') {
+        (topNode.children || []).forEach((child) => {
+          result.push({ node: child, complexCommonName: topNode.commonName || topNode.name });
+        });
+      } else {
+        result.push({ node: topNode, complexCommonName: topNode.complexCommonName });
+      }
+    });
+    return result;
+  }, [navigatorTreeData]);
+
+  // Convert buildings to Facility[] format
   const facilities: Facility[] = useMemo(() => {
-    return navigatorTreeData.filter((building) => {
-      // Show buildings that have storeys, spaces, OR at least one XKT model (newly imported)
-      const hasStoreys = allData.some((a: any) => a.category === 'Building Storey' && a.buildingFmGuid === building.fmGuid);
-      const hasSpaces = allData.some((a: any) => a.category === 'Space' && a.buildingFmGuid === building.fmGuid);
-      const hasChildren = building.children && building.children.length > 0;
-      return hasStoreys || hasSpaces || hasChildren;
-    }).map((building, index) => {
+    return allBuildingNodes.map(({ node: building, complexCommonName }, index) => {
       // Get spaces for this building from allData
       const buildingSpaces = allData.filter(
         (a: any) => a.category === 'Space' && a.buildingFmGuid === building.fmGuid
       );
-      
+
       // Get storeys for this building from allData (more reliable than tree children)
       const buildingStoreys = allData.filter(
         (a: any) => a.category === 'Building Storey' && a.buildingFmGuid === building.fmGuid
       );
-      
+
       // Calculate total area using unified extraction
       const totalArea = buildingSpaces.reduce((sum: number, space: any) => sum + extractSpaceArea(space), 0);
 
@@ -93,7 +104,7 @@ const PortfolioView: React.FC = () => {
         numberOfSpaces: buildingSpaces.length,
         area: Math.round(totalArea), // Round to integer
         address: building.attributes?.address || undefined,
-        complexCommonName: building.complexCommonName || undefined,
+        complexCommonName: complexCommonName || undefined,
       };
     });
   }, [navigatorTreeData, allData, getHeroImage]);
@@ -446,7 +457,7 @@ const PortfolioView: React.FC = () => {
         <FacilityLandingPage
           facility={selectedFacility}
           breadcrumbs={[
-            { label: 'Portfolio', onClick: () => { setFacilityHistory([]); setSelectedFacility(null); } },
+            { label: t('Portfolio', 'Portfolio'), onClick: () => { setFacilityHistory([]); setSelectedFacility(null); } },
             ...facilityHistory.map((f, i) => ({
               label: f.commonName || f.name || f.category || '',
               onClick: () => { const target = facilityHistory[i]; setFacilityHistory(prev => prev.slice(0, i)); setSelectedFacility(target); }
@@ -495,15 +506,15 @@ const PortfolioView: React.FC = () => {
           <div className="absolute bottom-4 sm:bottom-8 left-4 sm:left-8 right-4 sm:right-8">
             <div className="flex items-center gap-2 mb-1">
               <span className="px-2 py-0.5 rounded bg-primary/90 text-primary-foreground text-[10px] sm:text-xs font-medium">
-                ★ Featured
+                ★ {t('Utvald', 'Featured')}
               </span>
             </div>
             <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-white mb-1 sm:mb-2 truncate">
               {heroBuilding.commonName || heroBuilding.name}
             </h2>
             <div className="flex items-center gap-4 text-white/70 text-xs sm:text-sm">
-              <span>{heroBuilding.numberOfLevels || 0} floors</span>
-              <span>{heroBuilding.numberOfSpaces || 0} rooms</span>
+              <span>{heroBuilding.numberOfLevels || 0} {t('våningar', 'floors')}</span>
+              <span>{heroBuilding.numberOfSpaces || 0} {t('rum', 'rooms')}</span>
               <span>{heroBuilding.area ? `${heroBuilding.area.toLocaleString()} m²` : ''}</span>
             </div>
             <div className="flex gap-2 mt-3">
@@ -512,7 +523,7 @@ const PortfolioView: React.FC = () => {
                 className="h-8 gap-1.5 text-xs"
                 onClick={(e) => { e.stopPropagation(); navigateToFacility(heroBuilding); }}
               >
-                View details
+                {t('Visa detaljer', 'View details')}
               </Button>
               <Button 
                 size="sm" 
@@ -526,7 +537,7 @@ const PortfolioView: React.FC = () => {
                   }
                 }}
               >
-                Open 3D
+                {t('Öppna 3D', 'Open 3D')}
               </Button>
             </div>
           </div>
@@ -536,8 +547,8 @@ const PortfolioView: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold">Portfolio</h1>
-          <p className="text-sm text-muted-foreground">Overview of all your buildings</p>
+          <h1 className="text-xl sm:text-2xl font-bold">{t('Portfolio', 'Portfolio')}</h1>
+          <p className="text-sm text-muted-foreground">{t('Översikt över alla dina byggnader', 'Overview of all your buildings')}</p>
         </div>
       </div>
 
@@ -546,7 +557,7 @@ const PortfolioView: React.FC = () => {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search properties..."
+            placeholder={t('Sök fastigheter...', 'Search properties...')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -555,13 +566,13 @@ const PortfolioView: React.FC = () => {
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
           <SelectTrigger className="w-full sm:w-[180px]">
             <Filter size={14} className="mr-2" />
-            <SelectValue placeholder="Category" />
+            <SelectValue placeholder={t('Kategori', 'Category')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All categories</SelectItem>
-            <SelectItem value="Building">Buildings</SelectItem>
-            <SelectItem value="Building Storey">Floors</SelectItem>
-            <SelectItem value="Space">Rooms</SelectItem>
+            <SelectItem value="all">{t('Alla kategorier', 'All categories')}</SelectItem>
+            <SelectItem value="Building">{t('Byggnader', 'Buildings')}</SelectItem>
+            <SelectItem value="Building Storey">{t('Våningar', 'Floors')}</SelectItem>
+            <SelectItem value="Space">{t('Rum', 'Rooms')}</SelectItem>
           </SelectContent>
         </Select>
         <div className="hidden sm:flex border rounded-md">
@@ -609,7 +620,7 @@ const PortfolioView: React.FC = () => {
             <Card>
               <CardContent className="pt-4 p-3 sm:p-4 sm:pt-4">
                 <p className="text-xl sm:text-2xl font-bold">{facilities.length}</p>
-                <p className="text-xs text-muted-foreground">Total buildings</p>
+                <p className="text-xs text-muted-foreground">{t('Totalt byggnader', 'Total buildings')}</p>
               </CardContent>
             </Card>
             <Card>
@@ -617,7 +628,7 @@ const PortfolioView: React.FC = () => {
                 <p className="text-xl sm:text-2xl font-bold">
                   {facilities.reduce((sum, f) => sum + (typeof f.numberOfSpaces === 'number' ? f.numberOfSpaces : 0), 0)}
                 </p>
-                <p className="text-xs text-muted-foreground">Total rooms</p>
+                <p className="text-xs text-muted-foreground">{t('Totalt rum', 'Total rooms')}</p>
               </CardContent>
             </Card>
             <Card>
@@ -625,13 +636,13 @@ const PortfolioView: React.FC = () => {
                 <p className="text-xl sm:text-2xl font-bold">
                   {facilities.reduce((sum, f) => sum + (f.area || 0), 0).toLocaleString()} m²
                 </p>
-                <p className="text-xs text-muted-foreground">Total area</p>
+                <p className="text-xs text-muted-foreground">{t('Total area', 'Total area')}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-4 p-3 sm:p-4 sm:pt-4">
                 <p className="text-xl sm:text-2xl font-bold">{complexGroups.length}</p>
-                <p className="text-xs text-muted-foreground">Properties</p>
+                <p className="text-xs text-muted-foreground">{t('Fastigheter', 'Properties')}</p>
               </CardContent>
             </Card>
           </div>
@@ -642,10 +653,10 @@ const PortfolioView: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-base sm:text-lg font-semibold flex items-center gap-2">
-                    ★ My favorites
+                    ★ {t('Mina favoriter', 'My favorites')}
                   </h2>
                   <p className="text-xs sm:text-sm text-muted-foreground">
-                    {favoriteFacilities.length} {favoriteFacilities.length === 1 ? 'building' : 'buildings'}
+                    {favoriteFacilities.length} {favoriteFacilities.length === 1 ? t('byggnad', 'building') : t('byggnader', 'buildings')}
                   </p>
                 </div>
               </div>
@@ -679,7 +690,7 @@ const PortfolioView: React.FC = () => {
                     <div>
                       <h2 className="text-base sm:text-lg font-semibold">{group.complexName}</h2>
                       <p className="text-xs sm:text-sm text-muted-foreground">
-                        {group.facilities.length} {group.facilities.length === 1 ? 'building' : 'buildings'}
+                        {group.facilities.length} {group.facilities.length === 1 ? t('byggnad', 'building') : t('byggnader', 'buildings')}
                       </p>
                     </div>
                   </div>
@@ -719,7 +730,7 @@ const PortfolioView: React.FC = () => {
                       <div className="flex sm:hidden justify-center gap-1 mt-3">
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <ChevronLeft size={14} />
-                          <span>Swipe for more</span>
+                          <span>{t('Svep för mer', 'Swipe for more')}</span>
                           <ChevronRight size={14} />
                         </div>
                       </div>
@@ -732,11 +743,11 @@ const PortfolioView: React.FC = () => {
             <Card className="flex-1">
               <CardContent className="flex flex-col items-center justify-center h-64 text-center">
                 <LayoutGrid className="h-12 w-12 text-muted-foreground mb-4" />
-                <CardTitle className="mb-2">No buildings found</CardTitle>
+                <CardTitle className="mb-2">{t('Inga byggnader hittades', 'No buildings found')}</CardTitle>
                 <CardDescription>
-                  {facilities.length === 0 
-                    ? 'Sync data from Geminus Plus to display buildings'
-                    : 'Try adjusting your search filters'
+                  {facilities.length === 0
+                    ? t('Synkronisera data från Geminus Plus för att visa byggnader', 'Sync data from Geminus Plus to display buildings')
+                    : t('Prova att justera dina sökfilter', 'Try adjusting your search filters')
                   }
                 </CardDescription>
               </CardContent>

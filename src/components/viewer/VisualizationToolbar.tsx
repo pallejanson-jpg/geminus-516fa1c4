@@ -1,4 +1,5 @@
 import React, { useCallback, useState, useEffect, useContext, useRef } from "react";
+import { useLanguage } from '@/context/LanguageContext';
 import { Layers, MessageSquare, MessageSquarePlus, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed, Settings, ChevronDown, Type, TreeDeciduous, Eye, Thermometer, Wind, Droplets, Users, Ruler, Move3D } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useFlashHighlight } from "@/hooks/useFlashHighlight";
@@ -295,7 +296,8 @@ interface VisualizationToolbarProps {
  * Features swipe-to-close on mobile and semi-transparent frosted glass effect.
  */
 const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
-  const { 
+  const { t } = useLanguage();
+  const {
     viewerRef,
     buildingFmGuid,
     buildingName,
@@ -940,7 +942,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
             <Box className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </div>
-          <span className="text-xs sm:text-sm">BIM models</span>
+          <span className="text-xs sm:text-sm">{t('BIM-modeller', 'BIM models')}</span>
         </div>
         <Button
           variant={activeSubMenu === 'models' ? "secondary" : "ghost"}
@@ -961,7 +963,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
             <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </div>
-          <span className="text-xs sm:text-sm">Floors</span>
+          <span className="text-xs sm:text-sm">{t('Våningar', 'Floors')}</span>
         </div>
         <Button
           variant={activeSubMenu === 'floors' ? "secondary" : "ghost"}
@@ -982,7 +984,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
       {/* Visibility section */}
       <div>
         <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1.5 sm:mb-2 block">
-          Visibility
+          {t('Synlighet', 'Visibility')}
         </Label>
 
         <div className="space-y-2 sm:space-y-3">
@@ -995,7 +997,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                 <div className={cn("p-1 sm:p-1.5 rounded-md", showTreeView ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
                   <TreeDeciduous className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </div>
-                <span className="text-xs sm:text-sm">Model tree</span>
+                <span className="text-xs sm:text-sm">{t('Modellträd', 'Model tree')}</span>
               </div>
               <Switch checked={showTreeView} onCheckedChange={(checked) => onToggleTreeView(checked)} />
             </div>
@@ -1008,7 +1010,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                 <div className={cn("p-1 sm:p-1.5 rounded-md", showSpaces ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
                   <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </div>
-                <span className="text-xs sm:text-sm">Show spaces</span>
+                <span className="text-xs sm:text-sm">{t('Visa rum', 'Show spaces')}</span>
               </div>
               <Switch checked={showSpaces} onCheckedChange={handleToggleSpaces} />
             </div>
@@ -1020,7 +1022,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                   <div className={cn("p-1 rounded-md", showRoomLabels ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
                     <Type className="h-3 w-3" />
                   </div>
-                  <span className="text-xs">Room labels</span>
+                  <span className="text-xs">{t('Rumsetiketter', 'Room labels')}</span>
                 </div>
                 <div className="pl-6">
                   {loadingRoomLabelConfigs ? (
@@ -1063,7 +1065,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                 <div className={cn("p-1 sm:p-1.5 rounded-md", showAnnotations ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
                   <MessageSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </div>
-                <span className="text-xs sm:text-sm">Show annotations</span>
+                <span className="text-xs sm:text-sm">{t('Visa anteckningar', 'Show annotations')}</span>
               </div>
               <div className="flex items-center gap-1">
                 <Switch checked={showAnnotations} onCheckedChange={handleToggleAnnotations} />
@@ -1101,7 +1103,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
                 <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </div>
-              <span className="text-xs sm:text-sm font-medium">Viewer settings</span>
+              <span className="text-xs sm:text-sm font-medium">{t('Visningsinställningar', 'Viewer settings')}</span>
             </div>
             <ChevronDown className={cn(
               "h-4 w-4 text-muted-foreground transition-transform",
@@ -1116,12 +1118,12 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
                 <Scissors className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </div>
-              <span className="text-xs sm:text-sm">Clip height (2D view)</span>
+              <span className="text-xs sm:text-sm">{t('Snittshöjd (2D-vy)', 'Clip height (2D view)')}</span>
               <span className="text-xs font-medium ml-auto">{clipHeight.toFixed(1)}m</span>
             </div>
             <div className="pl-8 sm:pl-10">
               <Slider value={[clipHeight]} onValueChange={handleClipHeightChange} min={0.5} max={2.5} step={0.1} className="w-full" />
-              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Height above floor</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">{t('Höjd ovanför golv', 'Height above floor')}</p>
             </div>
           </div>
 
@@ -1131,13 +1133,13 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               <div className={cn("p-1 sm:p-1.5 rounded-md", isSoloFloor && !is2DMode ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
                 <Box className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </div>
-              <span className="text-xs sm:text-sm">Ceiling clip (3D solo)</span>
+              <span className="text-xs sm:text-sm">{t('Taksnitt (3D ensam)', 'Ceiling clip (3D solo)')}</span>
               <span className="text-xs font-medium ml-auto">{clipHeight3D >= 0 ? '+' : ''}{clipHeight3D.toFixed(1)}m</span>
             </div>
             <div className="pl-8 sm:pl-10">
               <Slider value={[clipHeight3D]} onValueChange={handleClipHeight3DChange} min={-1.5} max={1.5} step={0.1} className="w-full" disabled={is2DMode || !isSoloFloor} />
               <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
-                {isSoloFloor && !is2DMode ? "Offset from next floor level" : "Enabled when a single floor is isolated in 3D"}
+                {isSoloFloor && !is2DMode ? t('Offset från nästa våningsnivå', 'Offset from next floor level') : t('Aktiveras när en enskild våning isoleras i 3D', 'Enabled when a single floor is isolated in 3D')}
               </p>
             </div>
           </div>
@@ -1153,7 +1155,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
                 <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </div>
-              <span className="text-xs sm:text-sm">Background color</span>
+              <span className="text-xs sm:text-sm">{t('Bakgrundsfärg', 'Background color')}</span>
             </div>
             <div className="pl-8 sm:pl-10">
               <div className="grid grid-cols-5 gap-1.5">
@@ -1180,7 +1182,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               <div className={cn("p-1 sm:p-1.5 rounded-md", showFloorPills ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
                 <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </div>
-              <span className="text-xs sm:text-sm">Floor switcher (pills)</span>
+              <span className="text-xs sm:text-sm">{t('Våningsväxlare (knappar)', 'Floor switcher (pills)')}</span>
             </div>
             <Switch
               checked={showFloorPills}
@@ -1208,7 +1210,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
       {/* Actions section */}
       <div>
         <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1.5 sm:mb-2 block">
-          Actions
+          {t('Åtgärder', 'Actions')}
         </Label>
 
         <div className="space-y-1">
@@ -1217,7 +1219,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             <div className="p-1 sm:p-1.5 rounded-md bg-primary/10 text-primary">
               <Camera className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </div>
-            <span className="text-xs sm:text-sm">Create view</span>
+            <span className="text-xs sm:text-sm">{t('Skapa vy', 'Create view')}</span>
           </Button>
 
           {/* Create Issue button */}
@@ -1226,7 +1228,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               <div className="p-1 sm:p-1.5 rounded-md bg-primary/10 text-primary">
                 <MessageSquarePlus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </div>
-              <span className="text-xs sm:text-sm">Create issue</span>
+              <span className="text-xs sm:text-sm">{t('Skapa ärende', 'Create issue')}</span>
             </Button>
           )}
 
@@ -1241,7 +1243,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                 <div className={cn("p-1 sm:p-1.5 rounded-md", showIssueList ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
                   <MessageSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </div>
-                <span className="text-xs sm:text-sm">Issues</span>
+                <span className="text-xs sm:text-sm">{t('Ärenden', 'Issues')}</span>
               </div>
               <ChevronRight className={cn("h-3 w-3 transition-transform", showIssueList && "rotate-180")} />
             </Button>
@@ -1257,7 +1259,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
                 <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </div>
-              <span className="text-xs sm:text-sm">Asset panel</span>
+              <span className="text-xs sm:text-sm">{t('Tillgångspanel', 'Asset panel')}</span>
             </div>
             <ChevronRight className="h-3 w-3" />
           </Button>
@@ -1267,7 +1269,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               <div className="p-1 sm:p-1.5 rounded-md bg-primary/10 text-primary">
                 <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </div>
-              <span className="text-xs sm:text-sm">Register asset</span>
+              <span className="text-xs sm:text-sm">{t('Registrera tillgång', 'Register asset')}</span>
             </Button>
           )}
         </div>
@@ -1282,7 +1284,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           <Button
             variant="secondary"
             size="icon"
-            title="Display"
+            title={t('Visa', 'Display')}
             onClick={() => handleSetIsOpen(true)}
             className={cn(
               "shadow-lg bg-card/95 backdrop-blur-sm border",
@@ -1298,7 +1300,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           <Drawer open={isOpen} onOpenChange={handleSetIsOpen}>
             <DrawerContent className="max-h-[92dvh]">
               <DrawerHeader className="py-2 px-3">
-                <DrawerTitle className="text-sm">Display</DrawerTitle>
+                <DrawerTitle className="text-sm">{t('Visa', 'Display')}</DrawerTitle>
               </DrawerHeader>
               <ScrollArea className="max-h-[85dvh]">
                 <div className="px-3 pb-3">
@@ -1318,7 +1320,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             <TooltipProvider delayDuration={300}>
               {/* Header */}
               <div className="flex items-center justify-between px-3 py-3 border-b shrink-0">
-                <span className="font-medium text-sm">Display</span>
+                <span className="font-medium text-sm">{t('Visa', 'Display')}</span>
                 <Button
                   variant="outline"
                   size="icon"

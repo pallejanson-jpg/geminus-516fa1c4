@@ -9,6 +9,7 @@ import { VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail, AI_VIEWER_FOC
 import { getGunnarSettings, saveGunnarSettings, GUNNAR_SETTINGS_CHANGED_EVENT, type GunnarSettingsData } from '@/components/settings/GunnarSettings';
 
 import { on } from '@/lib/event-bus';
+import { useLanguage } from '@/context/LanguageContext';
 const BUTTON_SIZE = 56; // h-14 w-14
 
 /**
@@ -18,6 +19,7 @@ const BUTTON_SIZE = 56; // h-14 w-14
  * The trigger button itself is now draggable with position persistence.
  */
 export default function GunnarButton() {
+  const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [autoVoice, setAutoVoice] = useState(false);
@@ -418,7 +420,7 @@ export default function GunnarButton() {
             </div>
           </TooltipTrigger>
           <TooltipContent side="left" className="font-medium">
-            Fråga Geminus AI (dra för att flytta)
+            {t('Fråga Geminus AI (dra för att flytta)', 'Ask Geminus AI (drag to move)')}
           </TooltipContent>
         </Tooltip>
       </div>
@@ -495,7 +497,7 @@ export default function GunnarButton() {
                       <Minimize2 className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="text-xs">Minimera</TooltipContent>
+                  <TooltipContent side="bottom" className="text-xs">{t('Minimera', 'Minimize')}</TooltipContent>
                 </Tooltip>
               )}
               <Button

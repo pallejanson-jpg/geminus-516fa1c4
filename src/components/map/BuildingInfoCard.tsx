@@ -1,4 +1,5 @@
 import React from 'react';
+import { useLanguage } from '@/context/LanguageContext';
 import { Building2, Eye, ArrowRight, Globe } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +21,9 @@ const BuildingInfoCard: React.FC<BuildingInfoCardProps> = ({
   onViewDetails,
   onOpen3D,
   extraActions,
-}) => (
+}) => {
+  const { t } = useLanguage();
+  return (
   <Card className="w-[170px] sm:w-[190px] bg-card/95 backdrop-blur-md shadow-xl border-border/60 overflow-hidden">
     <CardContent className="p-2">
       <h3 className="text-[11px] sm:text-xs font-semibold text-foreground truncate">{name}</h3>
@@ -30,7 +33,7 @@ const BuildingInfoCard: React.FC<BuildingInfoCardProps> = ({
       <div className="flex items-center gap-1 mt-1">
         <Badge variant="outline" className="text-[8px] sm:text-[9px] px-1 py-0 h-3.5">
           <Building2 size={8} className="mr-0.5" />
-          Fastighet
+          {t('Fastighet', 'Property')}
         </Badge>
         {has360 && (
           <Badge variant="outline" className="text-[8px] sm:text-[9px] px-1 py-0 h-3.5 text-primary border-primary/30">
@@ -46,7 +49,7 @@ const BuildingInfoCard: React.FC<BuildingInfoCardProps> = ({
         >
           <span className="flex items-center gap-1.5">
             <Building2 size={11} className="text-primary" />
-            Visa detaljer
+            {t('Visa detaljer', 'View details')}
           </span>
           <ArrowRight size={10} className="text-muted-foreground" />
         </button>
@@ -56,7 +59,7 @@ const BuildingInfoCard: React.FC<BuildingInfoCardProps> = ({
         >
           <span className="flex items-center gap-1.5">
             <Eye size={11} className="text-primary" />
-            Öppna 3D-viewer
+            {t('Öppna 3D-viewer', 'Open 3D viewer')}
           </span>
           <ArrowRight size={10} className="text-muted-foreground" />
         </button>
@@ -64,6 +67,7 @@ const BuildingInfoCard: React.FC<BuildingInfoCardProps> = ({
       </div>
     </CardContent>
   </Card>
-);
+  );
+};
 
 export default BuildingInfoCard;

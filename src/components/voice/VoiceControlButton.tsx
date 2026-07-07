@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { useDeepgramSpeechRecognition as useWebSpeechRecognition } from '@/hooks/useDeepgramSpeechRecognition';
 import { useVoiceCommands, VoiceCommandCallbacks } from '@/hooks/useVoiceCommands';
 import { toast } from 'sonner';
+import { useLanguage } from '@/context/LanguageContext';
 
 const BUTTON_SIZE = 56;
 const POSITION_KEY = 'voice-control-position';
@@ -30,6 +31,7 @@ export default function VoiceControlButton({
   callbacks = {}, 
   className 
 }: VoiceControlButtonProps) {
+  const { t } = useLanguage();
   const [feedback, setFeedback] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -63,11 +65,11 @@ export default function VoiceControlButton({
         }]);
 
         if (result.matched) {
-          setFeedback(result.feedback || 'Kommando utfört');
+          setFeedback(result.feedback || t('Kommando utfört', 'Command executed'));
           setTimeout(() => setFeedback(''), 2000);
         } else {
-          toast.info(`Okänt kommando: "${transcript}"`, {
-            description: 'Säg "hjälp" för att se tillgängliga kommandon',
+          toast.info(`${t('Okänt kommando', 'Unknown command')}: "${transcript}"`, {
+            description: t('Säg "hjälp" för att se tillgängliga kommandon', 'Say "help" to see available commands'),
           });
         }
       }
@@ -264,7 +266,7 @@ export default function VoiceControlButton({
             </div>
           </TooltipTrigger>
           <TooltipContent side="left" className="font-medium">
-            Röststyrning (dra för att flytta)
+            {t('Röststyrning (dra för att flytta)', 'Voice control (drag to move)')}
           </TooltipContent>
         </Tooltip>
       </div>
@@ -278,7 +280,7 @@ export default function VoiceControlButton({
         >
           <div className="bg-card/90 backdrop-blur-lg border rounded-full p-3 shadow-lg flex items-center gap-2 hover:bg-card transition-colors">
             <Mic className={cn("h-5 w-5", isListening ? "text-destructive" : "text-violet-500")} />
-            <span className="text-sm font-medium">Röst</span>
+            <span className="text-sm font-medium">{t('Röst', 'Voice')}</span>
             <Maximize2 className="h-4 w-4 text-muted-foreground" />
           </div>
         </div>
@@ -314,9 +316,9 @@ export default function VoiceControlButton({
             <div className="flex items-center gap-2">
               <GripHorizontal className="h-4 w-4 text-muted-foreground" />
               <Mic className="h-4 w-4 text-violet-500" />
-              <span className="font-medium text-sm">Röststyrning</span>
+              <span className="font-medium text-sm">{t('Röststyrning', 'Voice Control')}</span>
               {isListening && (
-                <span className="text-xs text-destructive animate-pulse">● Lyssnar</span>
+                <span className="text-xs text-destructive animate-pulse">● {t('Lyssnar', 'Listening')}</span>
               )}
             </div>
             <div className="flex items-center gap-1">
@@ -340,7 +342,7 @@ export default function VoiceControlButton({
                 className="h-12 flex-1"
               >
                 {isListening ? <MicOff className="h-5 w-5 mr-2" /> : <Mic className="h-5 w-5 mr-2" />}
-                {isListening ? "Stoppa" : "Starta"}
+                {isListening ? t('Stoppa', 'Stop') : t('Starta', 'Start')}
               </Button>
             </div>
 
@@ -352,7 +354,7 @@ export default function VoiceControlButton({
             )}
             {isListening && !displayText && (
               <div className="bg-muted/50 border rounded-lg px-3 py-2 text-sm animate-pulse">
-                <p className="text-muted-foreground">Lyssnar...</p>
+                <p className="text-muted-foreground">{t('Lyssnar...', 'Listening...')}</p>
               </div>
             )}
 
@@ -366,7 +368,7 @@ export default function VoiceControlButton({
             {/* History */}
             {history.length > 0 && (
               <div className="space-y-1">
-                <h4 className="text-xs font-medium text-muted-foreground">Historik</h4>
+                <h4 className="text-xs font-medium text-muted-foreground">{t('Historik', 'History')}</h4>
                 {history.slice().reverse().map((item, idx) => (
                   <div key={idx} className={cn(
                     "text-xs px-2 py-1 rounded",
@@ -382,7 +384,7 @@ export default function VoiceControlButton({
             {/* Commands reference */}
             <div className="space-y-2 pt-2 border-t">
               <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                <HelpCircle className="h-3 w-3" /> Tillgängliga kommandon
+                <HelpCircle className="h-3 w-3" /> {t('Tillgängliga kommandon', 'Available commands')}
               </h4>
               {Object.entries(commandsByCategory).map(([category, cmds]) => (
                 <div key={category}>
@@ -403,7 +405,7 @@ export default function VoiceControlButton({
 
           {/* Footer */}
           <div className="px-3 py-2 border-t text-xs text-muted-foreground">
-            Tryck på mikrofon-knappen och tala tydligt.
+            {t('Tryck på mikrofon-knappen och tala tydligt.', 'Press the microphone button and speak clearly.')}
           </div>
         </div>
       )}

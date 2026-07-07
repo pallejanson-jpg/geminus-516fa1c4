@@ -2,6 +2,7 @@ import React, { createContext, useState, useCallback, useContext, useEffect, Rea
 import { fetchLocalAssets } from '@/services/geminus-plus-service';
 import { isModelName, isAModelName } from '@/lib/building-utils';
 import type { Facility, NavigatorNode } from '@/lib/types';
+import { supabase } from '@/integrations/supabase/client';
 
 interface DataContextType {
   allData: Facility[];
@@ -35,8 +36,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [navigatorTreeData, setNavigatorTreeData] = useState<NavigatorNode[]>([]);
 
   const buildNavigatorTree = useCallback((items: Facility[]): NavigatorNode[] => {
-    // STRICT HIERARCHY: Building → Building Storey → Space → Instance
-    // With synthetic "Unknown floor" fallback for orphan spaces
+    // STRICT HIERARCHY: Property (Complex) → Building → Building Storey → Space → Instance
+    const complexItems = items.filter(item => item.category === 'Complex');
     const buildings = items.filter(item =>
       item.category === 'Building' || item.category === 'IfcBuilding'
     );
@@ -235,7 +236,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     });
 
-    const sortedTree = Array.from(buildingMap.values());
+    const buildingNodes = Array.from(buildingMap.values());
     const sortNode = (node: NavigatorNode) => {
       if (!node.children?.length) return;
       node.children.sort((a, b) => {
@@ -247,21 +248,96 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
       node.children.forEach(sortNode);
     };
-    sortedTree.forEach(sortNode);
-    sortedTree.sort((a, b) => (a.commonName || a.name || '').localeCompare(b.commonName || b.name || ''));
-    return sortedTree;
+    buildingNodes.forEach(sortNode);
+
+    // Build Property nodes — Complex assets from Geminus Plus are authoritative.
+    // Buildings reference their property via attributes.complexFmGuid.
+    const propertyMap = new Map<string, NavigatorNode>();
+    const buildingsWithoutProperty: NavigatorNode[] = [];
+
+    // Seed propertyMap from synced Complex assets (includes complexes with no buildings yet)
+    complexItems.forEach((c: any) => {
+      const attrs = c.attributes || {};
+      propertyMap.set(c.fmGuid, {
+        fmGuid: c.fmGuid,
+        category: 'Property',
+        name: c.commonName || c.name || c.fmGuid,
+        commonName: c.commonName || c.name || c.fmGuid,
+        complexFmGuid: c.fmGuid,
+        complexDesignation: attrs.complexDesignation || attrs.designation,
+        children: [],
+      });
+    });
+
+    // Attach buildings to their property; create synthetic Property node if not yet synced
+    buildingNodes.forEach((buildingNode) => {
+      const attrs = (buildingNode as any).attributes || {};
+      const complexFmGuid = attrs.complexFmGuid || (buildingNode as any).complexFmGuid;
+      const complexCommonName = (buildingNode as any).complexCommonName || attrs.complexCommonName;
+      const complexDesignation = attrs.complexDesignation;
+
+      if (complexFmGuid) {
+        if (!propertyMap.has(complexFmGuid)) {
+          propertyMap.set(complexFmGuid, {
+            fmGuid: complexFmGuid,
+            category: 'Property',
+            name: complexCommonName || complexFmGuid,
+            commonName: complexCommonName || complexFmGuid,
+            complexFmGuid,
+            complexDesignation,
+            children: [],
+          });
+        }
+        propertyMap.get(complexFmGuid)!.children!.push(buildingNode);
+      } else {
+        buildingsWithoutProperty.push(buildingNode);
+      }
+    });
+
+    const sortedProperties = Array.from(propertyMap.values()).sort(
+      (a, b) => (a.commonName || a.name || '').localeCompare(b.commonName || b.name || '')
+    );
+    sortedProperties.forEach((prop) => {
+      prop.children!.sort((a, b) =>
+        (a.commonName || a.name || '').localeCompare(b.commonName || b.name || '')
+      );
+    });
+    buildingsWithoutProperty.sort((a, b) =>
+      (a.commonName || a.name || '').localeCompare(b.commonName || b.name || '')
+    );
+
+    return [...sortedProperties, ...buildingsWithoutProperty];
   }, []);
 
   const refreshInitialData = useCallback(async () => {
     setIsLoadingData(true);
     try {
-      const allObjects = await fetchLocalAssets([
-        'Building', 'IfcBuilding',
-        'Building Storey', 'IfcBuildingStorey',
-        'Space', 'IfcSpace',
+      const [allObjects, { data: buildingSettingsRows }] = await Promise.all([
+        fetchLocalAssets([
+          'Complex',
+          'Building', 'IfcBuilding',
+          'Building Storey', 'IfcBuildingStorey',
+          'Space', 'IfcSpace',
+        ]),
+        supabase.from('building_settings').select('fm_guid'),
       ]);
       setAllData(allObjects);
-      setNavigatorTreeData(buildNavigatorTree(allObjects));
+
+      // Add synthetic Building nodes for fm_guids in building_settings with no asset row
+      const knownBuildingGuids = new Set(
+        allObjects.filter(o => o.category === 'Building' || o.category === 'IfcBuilding').map(o => o.fmGuid)
+      );
+      const syntheticBuildings = (buildingSettingsRows || [])
+        .filter(row => !knownBuildingGuids.has(row.fm_guid))
+        .map(row => ({
+          fmGuid: row.fm_guid,
+          category: 'Building' as const,
+          name: row.fm_guid,
+          commonName: row.fm_guid,
+          buildingFmGuid: row.fm_guid,
+        }));
+
+      setNavigatorTreeData(buildNavigatorTree([...allObjects, ...syntheticBuildings]));
     } catch (error) {
       console.error('Failed to load assets:', error);
     } finally {

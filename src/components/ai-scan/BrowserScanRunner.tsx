@@ -279,12 +279,17 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     return api.view?.mainView ?? (typeof api.getMainView === 'function' ? api.getMainView() : null) ?? api.mainView ?? null;
   };
 
-  const getImagePosition = (): { x: number; y: number; z: number } => {
+  const getImagePosition = (): { x: number; y: number; z: number; siteModelEntity?: any } => {
     try {
       const mainView = getMainView();
       const image = mainView?.getImage?.();
       if (image?.location) {
-        return { x: image.location.x, y: image.location.y, z: image.location.z };
+        return {
+          x: image.location.x,
+          y: image.location.y,
+          z: image.location.z,
+          siteModelEntity: image.siteModelEntity || null,
+        };
       }
     } catch (e) {
       console.warn('[BrowserScan] Could not get image position:', e);
@@ -340,7 +345,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
   const analyzeScreenshotBatch = async (
     screenshots: string[],
     imageId: number | null,
-    position: { x: number; y: number; z: number },
+    position: { x: number; y: number; z: number; siteModelEntity?: any },
     datasetName?: string,
   ): Promise<number> => {
     if (screenshots.length === 0) return 0;
@@ -353,6 +358,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
           imageId,
           imagePosition: position,
           datasetName,
+          siteModelEntity: position.siteModelEntity || null,
         },
       });
 
@@ -382,9 +388,13 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         const images = await imageApi.repository.findAll(true);
         if (Array.isArray(images) && images.length > 0) {
           console.log(`[BrowserScan] ✅ Got ${images.length} images from SDK repository`);
+          if (images[0]?.siteModelEntity) {
+            console.log('[BrowserScan] siteModelEntity sample:', JSON.stringify(images[0].siteModelEntity, null, 2));
+          }
           return images.map((img: any) => ({
             id: img.id,
             datasetName: img.siteModelEntity?.name || undefined,
+            siteModelEntity: img.siteModelEntity || null,
           }));
         }
         console.warn('[BrowserScan] findAll() returned empty array');
@@ -405,6 +415,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
               return images.map((img: any) => ({
                 id: img.id,
                 datasetName: img.siteModelEntity?.name || undefined,
+                siteModelEntity: img.siteModelEntity || null,
               }));
             }
           }

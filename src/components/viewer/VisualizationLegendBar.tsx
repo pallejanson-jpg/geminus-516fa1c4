@@ -9,6 +9,7 @@ import {
 } from '@/lib/visualization-utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Thermometer, Wind, Droplets, Users, Ruler, Sun, AlertTriangle } from 'lucide-react';
+import { useLanguage } from '@/context/LanguageContext';
 
 /** Custom event name for legend-based room selection */
 export const VISUALIZATION_LEGEND_SELECT_EVENT = 'VISUALIZATION_LEGEND_SELECT';
@@ -53,6 +54,7 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
   className,
 }) => {
   const isMobile = useIsMobile();
+  const { t } = useLanguage();
   const [activeStop, setActiveStop] = useState<number | null>(null);
 
   const config = VISUALIZATION_CONFIGS[visualizationType];
@@ -166,7 +168,7 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
                   filter: 'drop-shadow(0 0 2px rgba(0,0,0,0.5))',
                   transform: 'translateY(50%)',
                 }}
-                title={`Medel: ${actualMean!.toFixed(1)} ${config.unit}`}
+                title={`${t('Medel', 'Mean')}: ${actualMean!.toFixed(1)} ${config.unit}`}
               />
             )}
           </div>
@@ -202,7 +204,7 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
                       ? 'bg-white/25 text-white ring-1 ring-white/40'
                       : 'text-white/80',
                   )}
-                  title={`${stop.value} ${config.unit} — ${matchCount} rum`}
+                  title={`${stop.value} ${config.unit} — ${matchCount} ${t('rum', 'rooms')}`}
                 >
                   <span>{stop.value}</span>
                   <span
@@ -235,7 +237,7 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
         {/* Mean summary */}
         {actualMean !== null && (
           <div className="text-[9px] text-white/60 text-center mt-1.5 border-t border-white/10 pt-1">
-            Medel: {actualMean.toFixed(1)} {config.unit} · {roomValues.length} rum
+            {t('Medel', 'Mean')}: {actualMean.toFixed(1)} {config.unit} · {roomValues.length} {t('rum', 'rooms')}
           </div>
         )}
       </div>

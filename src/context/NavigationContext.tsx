@@ -1,4 +1,4 @@
-import React, { createContext, useState, useCallback, useContext, ReactNode } from 'react';
+import React, { createContext, useState, useCallback, useContext, useEffect, ReactNode } from 'react';
 import { DEFAULT_APP_CONFIGS } from '@/lib/constants';
 import type { Facility, AppConfig } from '@/lib/types';
 
@@ -112,6 +112,13 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children
     }
     return DEFAULT_APP_CONFIGS;
   });
+
+  const VIEWER_APPS = new Set(['native_viewer', 'geminus_plus_viewer', 'viewer']);
+  useEffect(() => {
+    if (!VIEWER_APPS.has(activeApp)) {
+      sessionStorage.setItem('viewer-return-app', activeApp);
+    }
+  }, [activeApp]);
 
   const toggleRightSidebar = useCallback(() => {
     setIsRightSidebarVisible(prev => !prev);

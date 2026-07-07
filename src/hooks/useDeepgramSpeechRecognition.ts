@@ -96,7 +96,7 @@ export function useDeepgramSpeechRecognition(
 
   const start = useCallback(async () => {
     if (!isSupported) {
-      const msg = 'Mikrofon stöds inte i denna webbläsare';
+      const msg = 'Microphone is not supported in this browser';
       setError(msg);
       onError?.(msg);
       return;
@@ -117,7 +117,7 @@ export function useDeepgramSpeechRecognition(
       );
 
       if (tokenErr || !tokenData?.key) {
-        const msg = 'Kunde inte hämta Deepgram-token';
+        const msg = 'Could not fetch Deepgram token';
         setError(msg);
         onError?.(msg);
         return;
@@ -195,7 +195,7 @@ export function useDeepgramSpeechRecognition(
       };
 
       ws.onerror = () => {
-        const msg = 'WebSocket-fel vid taligenkänning';
+        const msg = 'WebSocket error during speech recognition';
         setError(msg);
         onError?.(msg);
         cleanup();
@@ -218,8 +218,8 @@ export function useDeepgramSpeechRecognition(
     } catch (err: unknown) {
       const message =
         err instanceof DOMException && err.name === 'NotAllowedError'
-          ? 'Mikrofonåtkomst nekad. Tillåt mikrofon i webbläsaren.'
-          : 'Kunde inte starta röstinspelning';
+          ? 'Microphone access denied. Please allow microphone access in your browser.'
+          : 'Could not start voice recording';
       setError(message);
       onError?.(message);
       cleanup();

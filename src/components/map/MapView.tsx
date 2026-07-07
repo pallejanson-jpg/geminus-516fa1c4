@@ -1,6 +1,6 @@
 import React, { useState, useContext, useCallback, useEffect, useMemo, useRef } from 'react';
 import Map, { Popup, Marker, NavigationControl, GeolocateControl, Source, Layer } from 'react-map-gl';
-import { MapPin, Maximize2, Layers, Loader2, Palette, ArrowLeft, Navigation, Eye } from 'lucide-react';
+import { MapPin, Maximize2, Layers, Loader2, Palette, ArrowLeft, Navigation, Eye, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { AppContext } from '@/context/AppContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { Facility } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
 import { ClusterMarker, SingleMarker } from './MapCluster';
@@ -35,7 +36,7 @@ import {
 import { useMapFacilities, MapFacility } from '@/hooks/useMapFacilities';
 import { useIndoorGeoJSON } from '@/hooks/useIndoorGeoJSON';
 import { localToGeo, BuildingOrigin } from '@/lib/coordinate-transform';
-import { parseNavGraph, dijkstra, findNodeByRoom, findNearestEntranceNode, mergeGraphs, generateIndoorSteps } from '@/lib/pathfinding';
+import { parseNavGraph, dijkstraWithOptions, findNodeByRoom, findNearestEntranceNode, mergeGraphs, generateIndoorSteps } from '@/lib/pathfinding';
 import type { Json } from '@/integrations/supabase/types';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
@@ -82,6 +83,7 @@ interface MapViewProps {
 const INDOOR_ZOOM_THRESHOLD = 17;
 
 const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSidebar, compact, externalColoringMode }) => {
+  const { t } = useLanguage();
   const { setSelectedFacility, setActiveApp, isLoadingData } = useContext(AppContext);
   const isMobile = useIsMobile();
   const navigate = useNavigate();
@@ -299,6 +301,7 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
     buildingFmGuid: string;
     targetRoomFmGuid: string | null;
     profile: 'walking' | 'driving' | 'transit';
+    preferElevator: boolean;
   }) => {
     setNavBuildingGuid(params.buildingFmGuid);
     setRouteOrigin(params.origin);
@@ -358,22 +361,58 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
         }> | undefined;
 
         if (params.targetRoomFmGuid) {
-          // Fetch building origin for coordinate conversion
-          const { data: bsData } = await supabase
-            .from('building_settings')
-            .select('latitude, longitude, rotation')
-            .eq('fm_guid', params.buildingFmGuid)
-            .maybeSingle();
+          // Fetch building origin + room bounds + nav graph in parallel
+          const [bsResult, roomBoundsResult, graphResult] = await Promise.all([
+            supabase
+              .from('building_settings')
+              .select('latitude, longitude, rotation')
+              .eq('fm_guid', params.buildingFmGuid)
+              .maybeSingle(),
+            supabase
+              .from('assets')
+              .select('coordinate_x, coordinate_z')
+              .eq('building_fm_guid', params.buildingFmGuid)
+              .eq('category', 'Space')
+              .not('coordinate_x', 'is', null)
+              .not('coordinate_z', 'is', null),
+            supabase
+              .from('navigation_graphs')
+              .select('graph_data')
+              .eq('building_fm_guid', params.buildingFmGuid),
+          ]);
 
+          const bsData = bsResult.data;
           const bOrigin = bsData?.latitude && bsData?.longitude
             ? { lat: Number(bsData.latitude), lng: Number(bsData.longitude), rotation: Number(bsData.rotation || 0) }
             : null;
 
-          const { data: graphRows } = await supabase
-            .from('navigation_graphs')
-            .select('graph_data')
-            .eq('building_fm_guid', params.buildingFmGuid);
+          // Compute BIM bounding box from room coordinates — used to denormalize nav graph % → meters
+          let planBounds: { minX: number; maxX: number; minZ: number; maxZ: number } | null = null;
+          if (roomBoundsResult.data && roomBoundsResult.data.length > 0) {
+            const xs = roomBoundsResult.data.map(r => r.coordinate_x as number);
+            const zs = roomBoundsResult.data.map(r => r.coordinate_z as number);
+            planBounds = {
+              minX: Math.min(...xs), maxX: Math.max(...xs),
+              minZ: Math.min(...zs), maxZ: Math.max(...zs),
+            };
+          }
 
+          // Convert a nav node's normalized [0–100, 0–100] percentage coordinate to BIM meters.
+          // The nav graph editor renders an SVG over the floor plan image — x% and y% map linearly
+          // to the BIM extent of the floor (derived from room asset coordinates).
+          const pctToBimLocal = (xPct: number, zPct: number, y = 0) => {
+            if (planBounds) {
+              return {
+                x: planBounds.minX + (xPct / 100) * (planBounds.maxX - planBounds.minX),
+                y,
+                z: planBounds.minZ + (zPct / 100) * (planBounds.maxZ - planBounds.minZ),
+              };
+            }
+            // Fallback: treat % as meters (will be inaccurate but avoids silent failure)
+            return { x: xPct, y, z: zPct };
+          };
+
+          const graphRows = graphResult.data;
           if (graphRows && graphRows.length > 0) {
             const graphs = graphRows.map(r => parseNavGraph(r.graph_data as unknown as GeoJSON.FeatureCollection));
             const merged = mergeGraphs(graphs);
@@ -381,20 +420,16 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
             const target = findNodeByRoom(merged, params.targetRoomFmGuid);
 
             if (entrance && target) {
-              const result = dijkstra(merged, entrance.nodeId, target.nodeId);
+              const result = dijkstraWithOptions(merged, entrance.nodeId, target.nodeId, {
+                preferElevator: params.preferElevator,
+              });
               if (result) {
                 indoorDist = result.totalDistance;
-
-                // Generate detailed indoor steps
                 const rawSteps = generateIndoorSteps(result);
 
                 if (bOrigin) {
-                  // Convert normalized % coords to geo for map display
                   const geoCoords = result.path.map(n => {
-                    // Normalized coords are [x%, y%] — treat as local meters offset (scale factor)
-                    // For buildings, the nav graph uses percentage-based coords of the floor plan
-                    // We approximate by scaling to a reasonable building size
-                    const local = { x: n.coordinates[0], y: 0, z: n.coordinates[1] };
+                    const local = pctToBimLocal(n.coordinates[0], n.coordinates[1]);
                     const geo = localToGeo(local, bOrigin);
                     return [geo.lng, geo.lat] as [number, number];
                   });
@@ -408,9 +443,8 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
                     }],
                   });
 
-                  // Convert indoor step coordinates to geo
                   indoorStepsGeo = rawSteps.map(s => {
-                    const local = { x: s.coordinates[0], y: 0, z: s.coordinates[1] };
+                    const local = pctToBimLocal(s.coordinates[0], s.coordinates[1]);
                     const geo = localToGeo(local, bOrigin);
                     return {
                       instruction: s.instruction,
@@ -420,7 +454,7 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
                     };
                   });
                 } else {
-                  // No origin — use raw normalized coords (indoor route only in 3D)
+                  // No building origin — indoor route can't be geo-positioned
                   const coords = result.path.map(n => [n.coordinates[0], n.coordinates[1]]);
                   setIndoorRoute({
                     type: 'FeatureCollection',
@@ -508,7 +542,7 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
       <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Loading map...</p>
+          <p className="text-sm text-muted-foreground">{t('Laddar karta...', 'Loading map...')}</p>
         </div>
       </div>
     );
@@ -525,7 +559,7 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">Contact the administrator to configure the map functionality.</p>
+            <p className="text-sm text-muted-foreground">{t('Kontakta administratören för att konfigurera kartfunktionen.', 'Contact the administrator to configure the map functionality.')}</p>
           </CardContent>
         </Card>
       </div>
@@ -594,7 +628,7 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>Color markers by</DropdownMenuLabel>
+            <DropdownMenuLabel>{t('Färgsätt markörer efter', 'Color markers by')}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuRadioGroup value={coloringMode} onValueChange={(v) => setColoringMode(v as MapColoringMode)}>
               {(Object.keys(COLORING_MODE_LABELS) as MapColoringMode[]).map((mode) => (
@@ -618,10 +652,10 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
           facilities={sidebarItems}
           selectedId={selectedMarker?.fmGuid ?? null}
           onSelect={handleSidebarSelect}
-          title="Buildings"
-          searchPlaceholder="Search buildings..."
-          emptyLabel="No buildings loaded"
-          noMatchLabel="No matching buildings"
+          title={t('Byggnader', 'Buildings')}
+          searchPlaceholder={t('Sök byggnader...', 'Search buildings...')}
+          emptyLabel={t('Inga byggnader laddade', 'No buildings loaded')}
+          noMatchLabel={t('Inga matchande byggnader', 'No matching buildings')}
         />
       )}
 
@@ -808,42 +842,59 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
             anchor="top"
             onClose={() => setSelectedMarker(null)}
             closeOnClick={false}
+            closeButton={false}
             className="map-popup"
           >
             <Card className="border-0 shadow-xl bg-black/95 backdrop-blur-sm">
               <CardContent className="p-0">
-                {selectedMarker.image && (
-                  <img src={selectedMarker.image} alt={selectedMarker.name} className="w-full h-20 sm:h-24 object-cover rounded-t-md" />
-                )}
+                <div className="relative">
+                  {selectedMarker.image && (
+                    <img src={selectedMarker.image} alt={selectedMarker.name} className="w-full h-20 sm:h-24 object-cover rounded-t-md" />
+                  )}
+                  <button
+                    onClick={() => setSelectedMarker(null)}
+                    className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
+                    aria-label={t('Stäng', 'Close')}
+                  >
+                    <X size={12} className="text-white" />
+                  </button>
+                </div>
                 <div className="p-2 sm:p-3">
                   <h3 className="font-semibold text-sm text-foreground">{selectedMarker.commonName || selectedMarker.name}</h3>
                   <p className="text-[10px] sm:text-xs text-muted-foreground mb-2">{selectedMarker.address}</p>
                   <div className="flex gap-2 mb-2 sm:mb-3">
-                    <Badge variant="secondary" className="text-[10px] sm:text-xs">{selectedMarker.numberOfLevels} floors</Badge>
+                    <Badge variant="secondary" className="text-[10px] sm:text-xs">{selectedMarker.numberOfLevels} {t('våningar', 'floors')}</Badge>
                     <Badge variant="secondary" className="text-[10px] sm:text-xs">{selectedMarker.area?.toLocaleString()} m²</Badge>
                   </div>
                   <div className="flex gap-1.5">
                     <Button size="sm" className="flex-1 text-xs sm:text-sm" onClick={() => handleOpenFacility(selectedMarker)}>
-                      View details
+                      {t('Visa detaljer', 'View details')}
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       className="text-xs sm:text-sm gap-1"
-                      disabled={!cesiumToken}
                       onClick={() => {
-                        setStreetViewTarget({
-                          lat: selectedMarker.lat,
-                          lng: selectedMarker.lng,
-                          name: selectedMarker.commonName || selectedMarker.name,
-                          fmGuid: selectedMarker.fmGuid!,
-                          has360: !!selectedMarker.ivionSiteId,
-                        });
-                        setSelectedMarker(null);
+                        if (cesiumToken) {
+                          setStreetViewTarget({
+                            lat: selectedMarker.lat,
+                            lng: selectedMarker.lng,
+                            name: selectedMarker.commonName || selectedMarker.name,
+                            fmGuid: selectedMarker.fmGuid!,
+                            has360: !!selectedMarker.ivionSiteId,
+                          });
+                          setSelectedMarker(null);
+                        } else {
+                          window.open(
+                            `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${selectedMarker.lat},${selectedMarker.lng}`,
+                            '_blank',
+                            'noopener,noreferrer'
+                          );
+                        }
                       }}
                     >
                       <Eye size={14} />
-                      Street View
+                      {t('Gatuvy', 'Street View')}
                     </Button>
                   </div>
                 </div>

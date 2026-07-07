@@ -3,6 +3,7 @@ import { Camera, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useLanguage } from '@/context/LanguageContext';
 
 export interface PhotoData {
   fileName: string;
@@ -33,6 +34,7 @@ const PhotoCapture: React.FC<PhotoCaptureProps> = ({
   maxPhotos = 3,
   workOrderId,
 }) => {
+  const { t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [photoDataList, setPhotoDataList] = useState<PhotoData[]>([]);
@@ -51,11 +53,11 @@ const PhotoCapture: React.FC<PhotoCaptureProps> = ({
 
       for (const file of filesToUpload) {
         if (!file.type.startsWith('image/')) {
-          toast.error('Endast bilder tillåtna');
+          toast.error(t('Endast bilder tillåtna', 'Only images are allowed'));
           continue;
         }
         if (file.size > 5 * 1024 * 1024) {
-          toast.error('Bilden får max vara 5 MB');
+          toast.error(t('Bilden får max vara 5 MB', 'Image must be at most 5 MB'));
           continue;
         }
 
@@ -131,7 +133,7 @@ const PhotoCapture: React.FC<PhotoCaptureProps> = ({
           ) : (
             <Camera className="h-4 w-4" />
           )}
-          Ta Bild / Bläddra...
+          {t('Ta Bild / Bläddra...', 'Take Photo / Browse...')}
         </Button>
       )}
 
@@ -139,7 +141,7 @@ const PhotoCapture: React.FC<PhotoCaptureProps> = ({
         <div className="grid grid-cols-3 gap-2">
           {photos.map((url, index) => (
             <div key={index} className="relative aspect-square rounded-lg overflow-hidden border border-border bg-muted">
-              <img src={url} alt={`Foto ${index + 1}`} className="w-full h-full object-cover" />
+              <img src={url} alt={t(`Foto ${index + 1}`, `Photo ${index + 1}`)} className="w-full h-full object-cover" />
               <Button
                 variant="destructive"
                 size="icon"

@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Facility } from '@/lib/types';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface Document {
   id: string;
@@ -50,6 +51,7 @@ const getFileIcon = (mimeType: string | null): string => {
 
 const DocumentsView: React.FC<DocumentsViewProps> = ({ facility, onClose }) => {
   const { toast } = useToast();
+  const { t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -227,7 +229,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ facility, onClose }) => {
             <ChevronLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h2 className="font-semibold text-lg">Documents</h2>
+            <h2 className="font-semibold text-lg">{t('Dokument', 'Documents')}</h2>
             <p className="text-sm text-muted-foreground">
               {facility.commonName || facility.name}
             </p>
@@ -236,11 +238,11 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ facility, onClose }) => {
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
             {isUploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
-            Upload
+            {t('Ladda upp', 'Upload')}
           </Button>
           <Button variant="outline" size="sm" onClick={handleSync} disabled={isSyncing}>
             {isSyncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-            Sync
+            {t('Synkronisera', 'Sync')}
           </Button>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="h-5 w-5" />
@@ -253,7 +255,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ facility, onClose }) => {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search documents..."
+            placeholder={t('Sök dokument...', 'Search documents...')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -284,18 +286,18 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ facility, onClose }) => {
         ) : documents.length === 0 ? (
           <div className="text-center py-12">
             <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-            <h3 className="font-medium mb-2">No documents</h3>
+            <h3 className="font-medium mb-2">{t('Inga dokument', 'No documents')}</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Sync from Congeria or upload documents manually.
+              {t('Synkronisera från Congeria eller ladda upp dokument manuellt.', 'Sync from Congeria or upload documents manually.')}
             </p>
             <div className="flex items-center justify-center gap-2">
               <Button variant="outline" onClick={handleSync} disabled={isSyncing}>
                 {isSyncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-                Sync
+                {t('Synkronisera', 'Sync')}
               </Button>
               <Button variant="default" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
                 {isUploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
-                Upload
+                {t('Ladda upp', 'Upload')}
               </Button>
             </div>
           </div>
@@ -338,7 +340,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ facility, onClose }) => {
       {/* Footer */}
       {lastSyncDate && (
         <div className="p-3 border-t text-xs text-muted-foreground text-center">
-          Last synced: {format(new Date(lastSyncDate), 'PPP HH:mm')} • Source: Congeria
+          {t('Senast synkad', 'Last synced')}: {format(new Date(lastSyncDate), 'PPP HH:mm')} • {t('Källa', 'Source')}: Congeria
         </div>
       )}
     </div>

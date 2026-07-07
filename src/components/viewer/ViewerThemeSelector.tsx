@@ -18,6 +18,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { useViewerTheme, VIEWER_THEME_REQUESTED_EVENT } from '@/hooks/useViewerTheme';
 import { on, emit } from '@/lib/event-bus';
+import { useLanguage } from '@/context/LanguageContext';
 
 const STORAGE_KEY = 'geminus-viewer-theme-id';
 const NONE_VALUE = 'none';
@@ -32,6 +33,7 @@ const ViewerThemeSelector: React.FC<ViewerThemeSelectorProps> = ({
   disabled = false,
 }) => {
   const { themes, activeTheme, isLoading, selectTheme, resetTheme } = useViewerTheme();
+  const { t } = useLanguage();
   const [selectedId, setSelectedId] = useState<string>('');
 
   // True while we're waiting to apply the saved theme (MODEL_LOAD_COMPLETE fired but
@@ -110,7 +112,7 @@ const ViewerThemeSelector: React.FC<ViewerThemeSelectorProps> = ({
         <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
           <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
         </div>
-        <span className="text-xs sm:text-sm text-muted-foreground">Loading themes...</span>
+        <span className="text-xs sm:text-sm text-muted-foreground">{t('Laddar teman...', 'Loading themes...')}</span>
         <Loader2 className="h-3 w-3 animate-spin ml-auto" />
       </div>
     );
@@ -122,7 +124,7 @@ const ViewerThemeSelector: React.FC<ViewerThemeSelectorProps> = ({
         <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
           <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
         </div>
-        <Label className="text-xs sm:text-sm">Viewer Theme</Label>
+        <Label className="text-xs sm:text-sm">{t('Viewer-tema', 'Viewer Theme')}</Label>
       </div>
 
       <Select
@@ -131,14 +133,14 @@ const ViewerThemeSelector: React.FC<ViewerThemeSelectorProps> = ({
         disabled={disabled}
       >
         <SelectTrigger className="h-8 text-xs sm:text-sm bg-background/80">
-          <SelectValue placeholder="Select theme..." />
+          <SelectValue placeholder={t('Välj tema...', 'Select theme...')} />
         </SelectTrigger>
         <SelectContent className="bg-popover z-[100]">
           {/* "None" option — show native XKT model colours */}
           <SelectItem value={NONE_VALUE} className="text-xs sm:text-sm">
             <div className="flex items-center gap-2">
-              <span>Ingen (modellens färger)</span>
-              <span className="text-[10px] text-muted-foreground">(Standard)</span>
+              <span>{t('Ingen (modellens färger)', 'None (model colors)')}</span>
+              <span className="text-[10px] text-muted-foreground">({t('Standard', 'Default')})</span>
             </div>
           </SelectItem>
           {themes.map((theme) => (

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { Plus, Trash2, Play, RotateCcw, ChevronDown, Filter } from 'lucide-react';
+import { useLanguage } from '@/context/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -124,6 +125,7 @@ interface ObjectColorFilterPanelProps {
 }
 
 const ObjectColorFilterPanel: React.FC<ObjectColorFilterPanelProps> = ({ viewerRef, buildingFmGuid }) => {
+  const { t } = useLanguage();
   const { allData } = useContext(AppContext);
   const [rules, setRules] = useState<ColorFilterRule[]>(loadRules);
   const [open, setOpen] = useState(false);
@@ -276,7 +278,7 @@ const ObjectColorFilterPanel: React.FC<ObjectColorFilterPanelProps> = ({ viewerR
             <div className={cn("p-1 sm:p-1.5 rounded-md", rules.some(r => r.enabled) ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
               <Filter className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </div>
-            <span className="text-xs sm:text-sm font-medium">Object color rules</span>
+            <span className="text-xs sm:text-sm font-medium">{t('Objektfärgregler', 'Object color rules')}</span>
             {matchCount !== null && <span className="text-[10px] text-muted-foreground">({matchCount})</span>}
           </div>
           <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", open && "rotate-180")} />
@@ -296,7 +298,7 @@ const ObjectColorFilterPanel: React.FC<ObjectColorFilterPanelProps> = ({ viewerR
               <Input
                 value={rule.name}
                 onChange={e => updateRule(rule.id, { name: e.target.value })}
-                placeholder="Rule name"
+                placeholder={t('Regelnamn', 'Rule name')}
                 className="h-6 text-xs flex-1"
               />
               <Switch
@@ -312,7 +314,7 @@ const ObjectColorFilterPanel: React.FC<ObjectColorFilterPanelProps> = ({ viewerR
             {/* Logic toggle */}
             {rule.conditions.length > 1 && (
               <div className="flex items-center gap-1 text-[10px]">
-                <span className="text-muted-foreground">Match</span>
+                <span className="text-muted-foreground">{t('Matcha', 'Match')}</span>
                 <button
                   className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium", rule.logic === 'AND' ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground")}
                   onClick={() => updateRule(rule.id, { logic: 'AND' })}
@@ -330,14 +332,14 @@ const ObjectColorFilterPanel: React.FC<ObjectColorFilterPanelProps> = ({ viewerR
                 <Select value={cond.target} onValueChange={v => updateCondition(rule.id, cond.id, { target: v as any })}>
                   <SelectTrigger className="h-6 text-[10px] w-[72px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="category">Category</SelectItem>
-                    <SelectItem value="property">Property</SelectItem>
+                    <SelectItem value="category">{t('Kategori', 'Category')}</SelectItem>
+                    <SelectItem value="property">{t('Egenskap', 'Property')}</SelectItem>
                   </SelectContent>
                 </Select>
 
                 {cond.target === 'category' ? (
                   <Select value={cond.field} onValueChange={v => updateCondition(rule.id, cond.id, { field: v })}>
-                    <SelectTrigger className="h-6 text-[10px] w-[100px]"><SelectValue placeholder="Type" /></SelectTrigger>
+                    <SelectTrigger className="h-6 text-[10px] w-[100px]"><SelectValue placeholder={t('Typ', 'Type')} /></SelectTrigger>
                     <SelectContent>
                       {IFC_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c.replace('Ifc', '')}</SelectItem>)}
                     </SelectContent>
@@ -346,7 +348,7 @@ const ObjectColorFilterPanel: React.FC<ObjectColorFilterPanelProps> = ({ viewerR
                   <Input
                     value={cond.field}
                     onChange={e => updateCondition(rule.id, cond.id, { field: e.target.value })}
-                    placeholder="Property"
+                    placeholder={t('Egenskap', 'Property')}
                     className="h-6 text-[10px] w-[80px]"
                   />
                 )}
@@ -362,7 +364,7 @@ const ObjectColorFilterPanel: React.FC<ObjectColorFilterPanelProps> = ({ viewerR
                   <Input
                     value={cond.value}
                     onChange={e => updateCondition(rule.id, cond.id, { value: e.target.value })}
-                    placeholder="Value"
+                    placeholder={t('Värde', 'Value')}
                     className="h-6 text-[10px] w-[60px]"
                   />
                 )}
@@ -376,7 +378,7 @@ const ObjectColorFilterPanel: React.FC<ObjectColorFilterPanelProps> = ({ viewerR
             ))}
 
             <Button variant="ghost" size="sm" className="h-5 text-[10px] px-1.5" onClick={() => addCondition(rule.id)}>
-              <Plus className="h-2.5 w-2.5 mr-0.5" /> Condition
+              <Plus className="h-2.5 w-2.5 mr-0.5" /> {t('Villkor', 'Condition')}
             </Button>
           </div>
         ))}
@@ -384,13 +386,13 @@ const ObjectColorFilterPanel: React.FC<ObjectColorFilterPanelProps> = ({ viewerR
         {/* Actions */}
         <div className="flex items-center gap-1.5 pt-1">
           <Button variant="outline" size="sm" className="h-6 text-[10px] px-2" onClick={addRule}>
-            <Plus className="h-3 w-3 mr-0.5" /> Rule
+            <Plus className="h-3 w-3 mr-0.5" /> {t('Regel', 'Rule')}
           </Button>
           <Button size="sm" className="h-6 text-[10px] px-2" onClick={applyRules} disabled={rules.length === 0}>
-            <Play className="h-3 w-3 mr-0.5" /> Apply
+            <Play className="h-3 w-3 mr-0.5" /> {t('Tillämpa', 'Apply')}
           </Button>
           <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={resetColors}>
-            <RotateCcw className="h-3 w-3 mr-0.5" /> Reset
+            <RotateCcw className="h-3 w-3 mr-0.5" /> {t('Återställ', 'Reset')}
           </Button>
         </div>
       </CollapsibleContent>

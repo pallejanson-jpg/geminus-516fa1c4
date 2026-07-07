@@ -3,6 +3,7 @@ import { ChevronRight, ChevronDown, Building2, Layers, DoorOpen, Box, Home, Load
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { GeminusBaseNode, CLASS_LABELS } from '@/hooks/useGeminusBaseApi';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface GeminusBaseTreeProps {
   rootNode: GeminusBaseNode | null;
@@ -28,12 +29,13 @@ interface TreeNodeProps {
 }
 
 const TreeNodeItem: React.FC<TreeNodeProps> = ({ node, depth, selectedGuid, path, onSelect }) => {
+  const { t } = useLanguage();
   const [expanded, setExpanded] = useState(depth < 2);
   const hasChildren = node.children && node.children.length > 0;
   const nodeGuid = node.guid || node.systemGuid;
   const isSelected = nodeGuid === selectedGuid;
   const Icon = CLASS_ICONS[node.classId || 0] || Box;
-  const label = node.objectName || node.name || 'Namnlöst';
+  const label = node.objectName || node.name || t('Namnlöst', 'Unnamed');
   const classLabel = node.classId ? CLASS_LABELS[node.classId] : node.className;
 
   return (

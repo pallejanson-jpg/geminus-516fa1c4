@@ -20,6 +20,7 @@ import { toast } from '@/hooks/use-toast';
 import { AppContext } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface Props {
   open: boolean;
@@ -60,6 +61,7 @@ interface BuildingOption {
 const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill }) => {
   const { user } = useAuth();
   const { selectedFacility } = useContext(AppContext);
+  const { t } = useLanguage();
 
   const [title, setTitle] = useState(prefill?.title || '');
   const [description, setDescription] = useState(prefill?.description || '');
@@ -162,19 +164,19 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
     <Sheet open={open} onOpenChange={o => !o && onClose()}>
       <SheetContent className="sm:max-w-lg w-full overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>New support case</SheetTitle>
-          <SheetDescription>Describe your case and we will get back to you</SheetDescription>
+          <SheetTitle>{t('Nytt supportärende', 'New support case')}</SheetTitle>
+          <SheetDescription>{t('Beskriv ditt ärende så återkommer vi till dig', 'Describe your case and we will get back to you')}</SheetDescription>
         </SheetHeader>
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="title">Title *</Label>
-            <Input id="title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Brief description of the case" />
+            <Label htmlFor="title">{t('Titel *', 'Title *')}</Label>
+            <Input id="title" value={title} onChange={e => setTitle(e.target.value)} placeholder={t('Kort beskrivning av ärendet', 'Brief description of the case')} />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Case type</Label>
+              <Label>{t('Ärendetyp', 'Case type')}</Label>
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -185,30 +187,30 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Priority</Label>
+              <Label>{t('Prioritet', 'Priority')}</Label>
               <Select value={priority} onValueChange={setPriority}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="critical">Critical</SelectItem>
+                  <SelectItem value="low">{t('Låg', 'Low')}</SelectItem>
+                  <SelectItem value="medium">{t('Medium', 'Medium')}</SelectItem>
+                  <SelectItem value="high">{t('Hög', 'High')}</SelectItem>
+                  <SelectItem value="critical">{t('Kritisk', 'Critical')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea id="description" value={description} onChange={e => setDescription(e.target.value)} placeholder="Detailed description..." rows={4} />
+            <Label htmlFor="description">{t('Beskrivning', 'Description')}</Label>
+            <Textarea id="description" value={description} onChange={e => setDescription(e.target.value)} placeholder={t('Detaljerad beskrivning...', 'Detailed description...')} rows={4} />
           </div>
 
           {/* Building selector */}
           <div className="space-y-2">
-            <Label>Building</Label>
+            <Label>{t('Byggnad', 'Building')}</Label>
             {buildings.length > 0 ? (
               <Select value={buildingGuid} onValueChange={handleBuildingChange}>
-                <SelectTrigger><SelectValue placeholder="Select building..." /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t('Välj byggnad...', 'Select building...')} /></SelectTrigger>
                 <SelectContent>
                   {buildings.map(b => (
                     <SelectItem key={b.fm_guid} value={b.fm_guid}>{b.name}</SelectItem>
@@ -216,24 +218,24 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
                 </SelectContent>
               </Select>
             ) : (
-              <Input value={buildingName} onChange={e => setBuildingName(e.target.value)} placeholder="Building name" />
+              <Input value={buildingName} onChange={e => setBuildingName(e.target.value)} placeholder={t('Byggnadsnamn', 'Building name')} />
             )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="location">Location / Space</Label>
-              <Input id="location" value={locationDescription} onChange={e => setLocationDescription(e.target.value)} placeholder="E.g. Floor 3, room 301" />
+              <Label htmlFor="location">{t('Plats / Utrymme', 'Location / Space')}</Label>
+              <Input id="location" value={locationDescription} onChange={e => setLocationDescription(e.target.value)} placeholder={t('T.ex. Våning 3, rum 301', 'E.g. Floor 3, room 301')} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="installation">Installation number</Label>
-              <Input id="installation" value={installationNumber} onChange={e => setInstallationNumber(e.target.value)} placeholder="E.g. HVAC-001" />
+              <Label htmlFor="installation">{t('Installationsnummer', 'Installation number')}</Label>
+              <Input id="installation" value={installationNumber} onChange={e => setInstallationNumber(e.target.value)} placeholder={t('T.ex. HVAC-001', 'E.g. HVAC-001')} />
             </div>
           </div>
 
           {/* Desired date */}
           <div className="space-y-2">
-            <Label>Desired resolution date</Label>
+            <Label>{t('Önskat lösningsdatum', 'Desired resolution date')}</Label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -241,7 +243,7 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
                   className={cn("w-full justify-start text-left font-normal", !desiredDate && "text-muted-foreground")}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {desiredDate ? format(desiredDate, 'PPP') : 'Select date...'}
+                  {desiredDate ? format(desiredDate, 'PPP') : t('Välj datum...', 'Select date...')}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
@@ -259,19 +261,19 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Contact email</Label>
+              <Label htmlFor="email">{t('Kontakt-e-post', 'Contact email')}</Label>
               <Input id="email" type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} placeholder="your@email.com" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="phone">Contact phone</Label>
+              <Label htmlFor="phone">{t('Kontakttelefon', 'Contact phone')}</Label>
               <Input id="phone" type="tel" value={contactPhone} onChange={e => setContactPhone(e.target.value)} placeholder="+46..." />
             </div>
           </div>
 
           <div className="flex gap-2 pt-2">
-            <Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
+            <Button variant="outline" className="flex-1" onClick={onClose}>{t('Avbryt', 'Cancel')}</Button>
             <Button className="flex-1" onClick={handleSubmit} disabled={!title.trim() || submitting}>
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Submit case'}
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : t('Skicka ärende', 'Submit case')}
             </Button>
           </div>
         </div>

@@ -72,31 +72,31 @@ const IFC_TYPE_COLORS: Record<string, number[]> = {
 // Background color presets - all gradients from white to color
 export const ARCHITECT_BACKGROUND_PRESETS = [
   // Neutrals row
-  { id: 'white', name: 'Vit', bottom: 'rgb(255, 255, 255)' },
-  { id: 'light-gray', name: 'Ljusgrå', bottom: 'rgb(230, 230, 230)' },
-  { id: 'gray', name: 'Grå', bottom: 'rgb(180, 180, 180)' },
-  { id: 'dark-gray', name: 'Mörkgrå', bottom: 'rgb(120, 120, 120)' },
-  { id: 'charcoal', name: 'Antracit', bottom: 'rgb(60, 60, 60)' },
-  
+  { id: 'white', name: 'White', bottom: 'rgb(255, 255, 255)' },
+  { id: 'light-gray', name: 'Light Gray', bottom: 'rgb(230, 230, 230)' },
+  { id: 'gray', name: 'Gray', bottom: 'rgb(180, 180, 180)' },
+  { id: 'dark-gray', name: 'Dark Gray', bottom: 'rgb(120, 120, 120)' },
+  { id: 'charcoal', name: 'Charcoal', bottom: 'rgb(60, 60, 60)' },
+
   // Colors row 1 - Light pastels
   { id: 'mint', name: 'Mint', bottom: 'rgb(200, 235, 220)' },
-  { id: 'sage', name: 'Salvia', bottom: 'rgb(223, 236, 220)' }, // Original green
-  { id: 'sky', name: 'Himmel', bottom: 'rgb(210, 230, 245)' },
-  { id: 'lavender', name: 'Lavendel', bottom: 'rgb(230, 220, 245)' },
-  { id: 'blush', name: 'Rouge', bottom: 'rgb(245, 225, 230)' },
-  
+  { id: 'sage', name: 'Sage', bottom: 'rgb(223, 236, 220)' }, // Original green
+  { id: 'sky', name: 'Sky', bottom: 'rgb(210, 230, 245)' },
+  { id: 'lavender', name: 'Lavender', bottom: 'rgb(230, 220, 245)' },
+  { id: 'blush', name: 'Blush', bottom: 'rgb(245, 225, 230)' },
+
   // Colors row 2 - Warm tones
-  { id: 'cream', name: 'Grädde', bottom: 'rgb(250, 245, 235)' },
+  { id: 'cream', name: 'Cream', bottom: 'rgb(250, 245, 235)' },
   { id: 'sand', name: 'Sand', bottom: 'rgb(240, 230, 210)' },
-  { id: 'peach', name: 'Persika', bottom: 'rgb(255, 220, 200)' },
-  { id: 'coral', name: 'Korall', bottom: 'rgb(255, 200, 180)' },
-  { id: 'terracotta', name: 'Terrakotta', bottom: 'rgb(230, 180, 160)' },
-  
-  // Colors row 3 - Cool tones  
-  { id: 'ice', name: 'Is', bottom: 'rgb(225, 240, 250)' },
-  { id: 'powder', name: 'Puder', bottom: 'rgb(200, 220, 240)' },
-  { id: 'steel', name: 'Stål', bottom: 'rgb(180, 200, 220)' },
-  { id: 'slate', name: 'Skiffer', bottom: 'rgb(160, 180, 200)' },
+  { id: 'peach', name: 'Peach', bottom: 'rgb(255, 220, 200)' },
+  { id: 'coral', name: 'Coral', bottom: 'rgb(255, 200, 180)' },
+  { id: 'terracotta', name: 'Terracotta', bottom: 'rgb(230, 180, 160)' },
+
+  // Colors row 3 - Cool tones
+  { id: 'ice', name: 'Ice', bottom: 'rgb(225, 240, 250)' },
+  { id: 'powder', name: 'Powder', bottom: 'rgb(200, 220, 240)' },
+  { id: 'steel', name: 'Steel', bottom: 'rgb(180, 200, 220)' },
+  { id: 'slate', name: 'Slate', bottom: 'rgb(160, 180, 200)' },
   { id: 'ocean', name: 'Ocean', bottom: 'rgb(140, 180, 200)' },
 ];
 

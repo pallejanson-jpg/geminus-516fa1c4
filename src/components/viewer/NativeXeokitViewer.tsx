@@ -307,8 +307,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         onViewerReady?.(viewer);
         emit('VIEWER_MODELS_LOADED', { buildingFmGuid });
 
-        // Build IFC GUID → FM GUID map from the assets table so the color filter
-        // can match metaObjects (IFC GUIDs) to colorMap keys (FM GUIDs).
+        // Build XKT entity ID → Faciliate FM GUID map via name matching.
+        // Needed because Asset+ XKT GUIDs (Revit/IFC element IDs) differ from
+        // Faciliate FM GUIDs. We bridge via storey/room names (unique per building).
         supabase
           .from('assets')
           .select('fm_guid, attributes')
@@ -316,17 +317,48 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           .in('category', ['Building Storey', 'Space', 'IfcBuildingStorey', 'IfcSpace'])
           .then(({ data }) => {
             if (!data?.length) return;
-            const map = new Map<string, string>();
-            data.forEach((row: any) => {
-              const attrs = typeof row.attributes === 'string' ? JSON.parse(row.attributes) : (row.attributes || {});
-              const extGuid = attrs.externalGuid;
-              if (extGuid && row.fm_guid) {
-                map.set(extGuid.toLowerCase(), row.fm_guid.toLowerCase());
+            const metaObjects = viewer.metaScene?.metaObjects;
+            if (!metaObjects) return;
+
+            // Build name → XKT id maps from loaded metaObjects
+            const storeyByName = new Map<string, string>();
+            const spacesByName = new Map<string, string[]>();
+            Object.values(metaObjects).forEach((mo: any) => {
+              const name = (mo.name || '').toLowerCase().trim();
+              if (!name) return;
+              const t = (mo.type || '').toLowerCase();
+              if (t.includes('buildingstorey') || t.includes('storey')) {
+                storeyByName.set(name, mo.id);
+              } else if (t === 'ifcspace' || t === 'space') {
+                const arr = spacesByName.get(name) || [];
+                arr.push(mo.id);
+                spacesByName.set(name, arr);
               }
             });
-            if (map.size > 0) {
-              (window as any).__ifcToFmGuid = map;
-              console.log(`[NativeViewer] Built IFC→FM GUID map: ${map.size} entries`);
+
+            // Map: XKT entity id (normalized: lowercase, no dashes) → Faciliate fm_guid (normalized)
+            // Keys must match normalizeGuid() output used in useViewerEventListeners
+            const norm = (s: string) => s.toLowerCase().replace(/-/g, '');
+            const xktToFm = new Map<string, string>();
+            data.forEach((row: any) => {
+              const fmGuid = norm(row.fm_guid || '');
+              if (!fmGuid) return;
+              const attrs = typeof row.attributes === 'string' ? JSON.parse(row.attributes) : (row.attributes || {});
+              const name = (attrs.commonName || attrs.levelName || attrs.roomName || '').toLowerCase().trim();
+              if (!name) return;
+              const cat = (attrs.category || attrs.objectTypeValue || '').toLowerCase();
+              if (cat.includes('storey')) {
+                const xktId = storeyByName.get(name);
+                if (xktId) xktToFm.set(norm(xktId), fmGuid);
+              } else if (cat.includes('space') || cat.includes('ifcspace')) {
+                const ids = spacesByName.get(name);
+                if (ids?.length === 1) xktToFm.set(norm(ids[0]), fmGuid); // unique name only
+              }
+            });
+
+            if (xktToFm.size > 0) {
+              (window as any).__xktIdToFmGuid = xktToFm;
+              console.log(`[NativeViewer] Built XKT→FM GUID name-bridge: ${xktToFm.size} entries`);
             }
           })
           .catch(() => {});

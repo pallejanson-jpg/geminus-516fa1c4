@@ -29,23 +29,24 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useViewerTheme, ViewerTheme, ThemeColorMapping, DEFAULT_VIEWER_THEME_BACKGROUND } from '@/hooks/useViewerTheme';
+import { useLanguage } from '@/context/LanguageContext';
 
-// IFC categories for color mapping
+// IFC categories for color mapping — labels are translated at render time via t()
 const IFC_CATEGORIES = [
-  { key: 'ifcwall', label: 'Väggar (Fasad)', defaultColor: '#AFAA87' },
-  { key: 'ifcwallstandardcase', label: 'Väggar (Invändiga)', defaultColor: '#C2BEA2' },
-  { key: 'ifcdoor', label: 'Dörrar', defaultColor: '#5B776B' },
-  { key: 'ifcwindow', label: 'Fönster', defaultColor: '#C7C7C2' },
-  { key: 'ifcslab', label: 'Golv/Tak', defaultColor: '#999B97' },
-  { key: 'ifcroof', label: 'Tak', defaultColor: '#999B97' },
-  { key: 'ifcspace', label: 'Rum', defaultColor: '#B8D4E3' },
-  { key: 'ifcstair', label: 'Trappor', defaultColor: '#999B97' },
-  { key: 'ifcrailing', label: 'Räcken', defaultColor: '#BDBAAB' },
-  { key: 'ifcfurnishingelement', label: 'Möbler', defaultColor: '#738B77' },
-  { key: 'ifcbuildingelementproxy', label: 'Entourage', defaultColor: '#738B77' },
-  { key: 'ifcplate', label: 'Glas', defaultColor: '#B8D4E3' },
-  { key: 'ifccurtainwall', label: 'Glasfasad', defaultColor: '#B8D4E3' },
-  { key: 'default', label: 'Övrigt', defaultColor: '#EEEEEE' },
+  { key: 'ifcwall', labelSv: 'Väggar (Fasad)', labelEn: 'Walls (Facade)', defaultColor: '#AFAA87' },
+  { key: 'ifcwallstandardcase', labelSv: 'Väggar (Invändiga)', labelEn: 'Walls (Interior)', defaultColor: '#C2BEA2' },
+  { key: 'ifcdoor', labelSv: 'Dörrar', labelEn: 'Doors', defaultColor: '#5B776B' },
+  { key: 'ifcwindow', labelSv: 'Fönster', labelEn: 'Windows', defaultColor: '#C7C7C2' },
+  { key: 'ifcslab', labelSv: 'Golv/Tak', labelEn: 'Floor/Ceiling', defaultColor: '#999B97' },
+  { key: 'ifcroof', labelSv: 'Tak', labelEn: 'Roof', defaultColor: '#999B97' },
+  { key: 'ifcspace', labelSv: 'Rum', labelEn: 'Spaces', defaultColor: '#B8D4E3' },
+  { key: 'ifcstair', labelSv: 'Trappor', labelEn: 'Stairs', defaultColor: '#999B97' },
+  { key: 'ifcrailing', labelSv: 'Räcken', labelEn: 'Railings', defaultColor: '#BDBAAB' },
+  { key: 'ifcfurnishingelement', labelSv: 'Möbler', labelEn: 'Furniture', defaultColor: '#738B77' },
+  { key: 'ifcbuildingelementproxy', labelSv: 'Entourage', labelEn: 'Entourage', defaultColor: '#738B77' },
+  { key: 'ifcplate', labelSv: 'Glas', labelEn: 'Glass', defaultColor: '#B8D4E3' },
+  { key: 'ifccurtainwall', labelSv: 'Glasfasad', labelEn: 'Curtain Wall', defaultColor: '#B8D4E3' },
+  { key: 'default', labelSv: 'Övrigt', labelEn: 'Other', defaultColor: '#EEEEEE' },
 ];
 
 interface EditingTheme {
@@ -59,6 +60,7 @@ interface EditingTheme {
 
 const ViewerThemeSettings: React.FC = () => {
   const { toast } = useToast();
+  const { t } = useLanguage();
   const { themes, isLoading, fetchThemes, createTheme, updateTheme, deleteTheme } = useViewerTheme();
   
   const [editingThemeId, setEditingThemeId] = useState<string | null>(null);
@@ -79,7 +81,7 @@ const ViewerThemeSettings: React.FC = () => {
     });
 
     setEditingTheme({
-      name: 'Nytt tema',
+      name: t('Nytt tema', 'New theme'),
       color_mappings: defaultMappings,
       edge_settings: { enabled: true },
       background_color: DEFAULT_VIEWER_THEME_BACKGROUND,
@@ -134,7 +136,7 @@ const ViewerThemeSettings: React.FC = () => {
           background_color: editingTheme.background_color,
           space_opacity: editingTheme.space_opacity,
         });
-        toast({ title: 'Theme updated', description: `"${editingTheme.name}" has been saved.` });
+        toast({ title: t('Tema uppdaterat', 'Theme updated'), description: `"${editingTheme.name}" ${t('har sparats.', 'has been saved.')}` });
       } else {
         await createTheme({
           name: editingTheme.name,
@@ -144,7 +146,7 @@ const ViewerThemeSettings: React.FC = () => {
           background_color: editingTheme.background_color,
           space_opacity: editingTheme.space_opacity,
         });
-        toast({ title: 'Tema skapat', description: `"${editingTheme.name}" har skapats.` });
+        toast({ title: t('Tema skapat', 'Theme created'), description: `"${editingTheme.name}" ${t('har skapats.', 'has been created.')}` });
       }
       handleCancelEdit();
     } catch (err: any) {
@@ -162,7 +164,7 @@ const ViewerThemeSettings: React.FC = () => {
   const handleDeleteTheme = async (id: string) => {
     try {
       await deleteTheme(id);
-      toast({ title: 'Tema borttaget' });
+      toast({ title: t('Tema borttaget', 'Theme deleted') });
       setDeleteConfirmId(null);
       if (editingThemeId === id) {
         handleCancelEdit();
@@ -219,14 +221,14 @@ const ViewerThemeSettings: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium">Viewer Themes</h3>
+          <h3 className="text-sm font-medium">{t('Viewer-teman', 'Viewer Themes')}</h3>
           <p className="text-xs text-muted-foreground">
-            Configure color themes for the 3D viewer
+            {t('Konfigurera färgteman för 3D-visaren', 'Configure color themes for the 3D viewer')}
           </p>
         </div>
         <Button size="sm" onClick={handleNewTheme} disabled={isCreatingNew}>
           <Plus className="h-3.5 w-3.5 mr-1.5" />
-          New Theme
+          {t('Nytt tema', 'New Theme')}
         </Button>
       </div>
 
@@ -236,13 +238,13 @@ const ViewerThemeSettings: React.FC = () => {
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-medium flex items-center gap-2">
               <Palette className="h-4 w-4" />
-              Create New Theme
+              {t('Skapa nytt tema', 'Create New Theme')}
             </h4>
           </div>
           
           {/* Theme name */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Name</Label>
+            <Label className="text-xs">{t('Namn', 'Name')}</Label>
             <Input
               value={editingTheme.name}
               onChange={(e) => setEditingTheme({ ...editingTheme, name: e.target.value })}
@@ -252,7 +254,7 @@ const ViewerThemeSettings: React.FC = () => {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Background color</Label>
+            <Label className="text-xs">{t('Bakgrundsfärg', 'Background color')}</Label>
             <div className="flex items-center gap-2">
               <div
                 className="h-8 w-8 rounded border border-border"
@@ -271,7 +273,7 @@ const ViewerThemeSettings: React.FC = () => {
 
           {/* Color mappings */}
           <div className="space-y-2">
-            <Label className="text-xs">Color Mappings</Label>
+            <Label className="text-xs">{t('Färgmappningar', 'Color Mappings')}</Label>
             <ScrollArea className="h-[200px] pr-3">
               <div className="space-y-2">
                 {IFC_CATEGORIES.map((cat) => {
@@ -279,7 +281,7 @@ const ViewerThemeSettings: React.FC = () => {
                   return (
                     <div key={cat.key} className="flex items-center gap-2 py-1">
                       <div className="flex-1 min-w-0">
-                        <span className="text-xs truncate">{cat.label}</span>
+                        <span className="text-xs truncate">{t(cat.labelSv, cat.labelEn)}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <input
@@ -308,7 +310,7 @@ const ViewerThemeSettings: React.FC = () => {
 
           {/* Space opacity */}
           <div className="space-y-2">
-            <Label className="text-xs">Space Opacity</Label>
+            <Label className="text-xs">{t('Rumsopacitet', 'Space Opacity')}</Label>
             <div className="flex items-center gap-3">
               <Slider
                 value={[editingTheme.space_opacity * 100]}
@@ -336,7 +338,7 @@ const ViewerThemeSettings: React.FC = () => {
               disabled={isSaving}
             >
               <X className="h-3.5 w-3.5 mr-1.5" />
-               Cancel
+               {t('Avbryt', 'Cancel')}
             </Button>
             <Button
               size="sm"
@@ -348,7 +350,7 @@ const ViewerThemeSettings: React.FC = () => {
               ) : (
                 <Check className="h-3.5 w-3.5 mr-1.5" />
               )}
-              Save Theme
+              {t('Spara tema', 'Save Theme')}
             </Button>
           </div>
         </div>
@@ -387,7 +389,7 @@ const ViewerThemeSettings: React.FC = () => {
                 <div className="space-y-4">
                   {/* Theme name */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Name</Label>
+                    <Label className="text-xs">{t('Namn', 'Name')}</Label>
                     <Input
                       value={editingTheme.name}
                       onChange={(e) => setEditingTheme({ ...editingTheme, name: e.target.value })}
@@ -397,7 +399,7 @@ const ViewerThemeSettings: React.FC = () => {
                   </div>
 
                    <div className="space-y-1.5">
-                     <Label className="text-xs">Background color</Label>
+                     <Label className="text-xs">{t('Bakgrundsfärg', 'Background color')}</Label>
                      <div className="flex items-center gap-2">
                        <div
                          className="h-8 w-8 rounded border border-border"
@@ -416,7 +418,7 @@ const ViewerThemeSettings: React.FC = () => {
 
                   {/* Color mappings */}
                   <div className="space-y-2">
-                    <Label className="text-xs">Color Mappings</Label>
+                    <Label className="text-xs">{t('Färgmappningar', 'Color Mappings')}</Label>
                     <ScrollArea className="h-[200px] pr-3">
                       <div className="space-y-2">
                         {IFC_CATEGORIES.map((cat) => {
@@ -424,7 +426,7 @@ const ViewerThemeSettings: React.FC = () => {
                           return (
                             <div key={cat.key} className="flex items-center gap-2 py-1">
                               <div className="flex-1 min-w-0">
-                                <span className="text-xs truncate">{cat.label}</span>
+                                <span className="text-xs truncate">{t(cat.labelSv, cat.labelEn)}</span>
                               </div>
                               <div className="flex items-center gap-2">
                                 <input
@@ -453,7 +455,7 @@ const ViewerThemeSettings: React.FC = () => {
 
                   {/* Space opacity */}
                   <div className="space-y-2">
-                    <Label className="text-xs">Space Opacity</Label>
+                    <Label className="text-xs">{t('Rumsopacitet', 'Space Opacity')}</Label>
                     <div className="flex items-center gap-3">
                       <Slider
                         value={[editingTheme.space_opacity * 100]}
@@ -481,7 +483,7 @@ const ViewerThemeSettings: React.FC = () => {
                       disabled={isSaving}
                     >
                       <X className="h-3.5 w-3.5 mr-1.5" />
-                      Cancel
+                      {t('Avbryt', 'Cancel')}
                     </Button>
                     <Button
                       size="sm"
@@ -493,7 +495,7 @@ const ViewerThemeSettings: React.FC = () => {
                       ) : (
                         <Check className="h-3.5 w-3.5 mr-1.5" />
                       )}
-                      Save
+                      {t('Spara', 'Save')}
                     </Button>
                   </div>
                 </div>
@@ -501,9 +503,9 @@ const ViewerThemeSettings: React.FC = () => {
                 // View mode
                 <div className="space-y-3">
                   <p className="text-xs text-muted-foreground">
-                    {Object.keys(theme.color_mappings || {}).length} color mappings • 
-                    Background: {theme.background_color || DEFAULT_VIEWER_THEME_BACKGROUND} • 
-                    Space opacity: {Math.round((theme.space_opacity ?? 0.25) * 100)}%
+                    {Object.keys(theme.color_mappings || {}).length} {t('färgmappningar', 'color mappings')} •
+                    {t('Bakgrund', 'Background')}: {theme.background_color || DEFAULT_VIEWER_THEME_BACKGROUND} •
+                    {t('Rumsopacitet', 'Space opacity')}: {Math.round((theme.space_opacity ?? 0.25) * 100)}%
                   </p>
                   
                   {/* All color swatches */}
@@ -513,7 +515,7 @@ const ViewerThemeSettings: React.FC = () => {
                         key={key}
                         className="w-5 h-5 rounded border border-border"
                         style={{ backgroundColor: (mapping as ThemeColorMapping).color }}
-                        title={IFC_CATEGORIES.find(c => c.key === key)?.label || key}
+                        title={(() => { const c = IFC_CATEGORIES.find(c => c.key === key); return c ? t(c.labelSv, c.labelEn) : key; })()}
                       />
                     ))}
                   </div>
@@ -526,7 +528,7 @@ const ViewerThemeSettings: React.FC = () => {
                       onClick={() => handleEditTheme(theme)}
                     >
                       <Edit2 className="h-3.5 w-3.5 mr-1.5" />
-                      Edit
+                      {t('Redigera', 'Edit')}
                     </Button>
                     {!theme.is_system && (
                       <Button
@@ -536,7 +538,7 @@ const ViewerThemeSettings: React.FC = () => {
                         onClick={() => setDeleteConfirmId(theme.id)}
                       >
                         <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                        Delete
+                        {t('Ta bort', 'Delete')}
                       </Button>
                     )}
                   </div>
@@ -550,9 +552,9 @@ const ViewerThemeSettings: React.FC = () => {
       {themes.length === 0 && (
         <div className="text-center py-8 text-muted-foreground border rounded-lg bg-muted/30">
           <Palette className="h-8 w-8 mx-auto mb-2 opacity-50" />
-          <p>No themes configured</p>
+          <p>{t('Inga teman konfigurerade', 'No themes configured')}</p>
           <Button onClick={handleNewTheme} variant="outline" size="sm" className="mt-2">
-            Create your first theme
+            {t('Skapa ditt första tema', 'Create your first theme')}
           </Button>
         </div>
       )}
@@ -561,18 +563,18 @@ const ViewerThemeSettings: React.FC = () => {
       <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Theme?</AlertDialogTitle>
+            <AlertDialogTitle>{t('Ta bort tema?', 'Delete Theme?')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this theme? This action cannot be undone.
+              {t('Är du säker på att du vill ta bort detta tema? Åtgärden kan inte ångras.', 'Are you sure you want to delete this theme? This action cannot be undone.')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t('Avbryt', 'Cancel')}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => deleteConfirmId && handleDeleteTheme(deleteConfirmId)}
             >
-              Delete
+              {t('Ta bort', 'Delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

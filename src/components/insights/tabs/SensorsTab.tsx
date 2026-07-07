@@ -176,7 +176,8 @@ export default function SensorsTab() {
   }, [selectedBuildingGuid, selectedFacility, buildings]);
 
   const { data: buildingData, isLoading, isLive, error } = useGeminusPremiumBuildingData(
-    building?.fmGuid ?? null
+    building?.fmGuid ?? null,
+    refreshKey
   );
 
   // Flatten rooms from tree

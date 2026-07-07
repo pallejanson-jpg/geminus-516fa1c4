@@ -1,6 +1,7 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 import { VisualizationType, VISUALIZATION_CONFIGS } from '@/lib/visualization-utils';
+import { useLanguage } from '@/context/LanguageContext';
 
 export interface IoTHoverLabelProps {
   visible: boolean;
@@ -25,6 +26,8 @@ const IoTHoverLabel: React.FC<IoTHoverLabelProps> = ({
   color,
   className,
 }) => {
+  const { t } = useLanguage();
+
   if (!visible || visualizationType === 'none') return null;
 
   const config = VISUALIZATION_CONFIGS[visualizationType];
@@ -62,7 +65,7 @@ const IoTHoverLabel: React.FC<IoTHoverLabelProps> = ({
     >
       <div className="flex items-center gap-1.5 text-foreground font-medium text-xs truncate max-w-[150px]">
         <span>{getIcon()}</span>
-        <span className="truncate">{roomName || 'Okänt rum'}</span>
+        <span className="truncate">{roomName || t('Okänt rum', 'Unknown room')}</span>
       </div>
       <div 
         className="text-lg font-bold mt-0.5"

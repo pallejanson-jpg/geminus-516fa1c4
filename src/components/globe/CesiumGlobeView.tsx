@@ -16,6 +16,7 @@ import { useMapFacilities, MapFacility } from '@/hooks/useMapFacilities';
 import BuildingSidebar from '@/components/map/BuildingSidebar';
 import BuildingInfoCard from '@/components/map/BuildingInfoCard';
 import StreetViewOverlay from '@/components/globe/StreetViewOverlay';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface SelectedBuilding {
   facility: MapFacility;
@@ -61,6 +62,7 @@ const CESIUM_CAMERA_STATE_KEY = 'cesium-camera-state';
 
 const CesiumGlobeView: React.FC = () => {
   const { navigatorTreeData, setActiveApp, setSelectedFacility, setViewer3dFmGuid } = useContext(AppContext);
+  const { t } = useLanguage();
   const { facilities: mapFacilities } = useMapFacilities();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -103,104 +105,160 @@ const CesiumGlobeView: React.FC = () => {
   useEffect(() => { facilitiesByGuidRef.current = facilitiesByGuid; }, [facilitiesByGuid]);
   useEffect(() => { zoomedFmGuidRef.current = zoomedFmGuid; }, [zoomedFmGuid]);
 
-  // Fetch Cesium token
+  // Set Ion token directly. TODO: replace with get-cesium-token once secret is updated.
   useEffect(() => {
-    supabase.functions.invoke('get-cesium-token').then(({ data, error }) => {
-      if (!error && data?.token) {
-        Cesium.Ion.defaultAccessToken = data.token;
-        setCesiumToken(data.token);
-      } else {
-        const fallback = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlYWE1OWUxNy1mMWZiLTQzYjYtYTQ0OS1kMWFjYmFkNjc4ZTkiLCJpZCI6NTc3MzMsImlhdCI6MTYyMjY0NjQ5OH0.XcKpgANiY19MC4bdFUXMVEBToBmqS8kuYpUlxJHYZxk';
-        Cesium.Ion.defaultAccessToken = fallback;
-        setCesiumToken(fallback);
-      }
-      setTokenReady(true);
-    });
+    const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MzYxODRjMi0xMjRhLTQxYWQtYWE1Zi1mMjc3ZjNkOWExYjMiLCJpZCI6MjgyMTIyLCJpYXQiOjE3NDEzMzMwMzB9.Dg4SiqhsUDZNi0qRXDPRziso3xpEkyZYKom_iUGjSLM';
+    Cesium.Ion.defaultAccessToken = token;
+    setCesiumToken(token);
+    setTokenReady(true);
   }, []);
 
   // Create Cesium Viewer imperatively
   useEffect(() => {
     if (!containerRef.current || !tokenReady) return;
 
-    const viewer = new Cesium.Viewer(containerRef.current, {
-      timeline: false, animation: false, baseLayerPicker: false, geocoder: false,
-      homeButton: false, sceneModePicker: false, navigationHelpButton: false,
-      infoBox: false, selectionIndicator: false,
-    });
+    let destroyed = false;
+    let pollId: ReturnType<typeof setInterval> | null = null;
+    let retryCount = 0;
 
-    cesiumViewerRef.current = viewer;
-    viewer.resolutionScale = window.innerWidth > 768 ? 0.85 : 1.0;
-
-    // Minimize Cesium credits on mobile
-    if (window.innerWidth < 768) {
-      const creditContainer = viewer.cesiumWidget.creditContainer as HTMLElement;
-      if (creditContainer) {
-        creditContainer.style.transform = 'scale(0.6)';
-        creditContainer.style.transformOrigin = 'bottom right';
-        creditContainer.style.opacity = '0.5';
-      }
-    }
-
-    // Start fully zoomed out to show the whole globe
-    viewer.camera.setView({
-      destination: Cesium.Cartesian3.fromDegrees(15.0, 20.0, 20000000),
-      orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
-    });
-
-    Cesium.CesiumTerrainProvider.fromIonAssetId(1).then(tp => {
-      if (cesiumViewerRef.current && !cesiumViewerRef.current.isDestroyed()) cesiumViewerRef.current.terrainProvider = tp;
-    }).catch(() => {});
-
-    viewer.scene.globe.depthTestAgainstTerrain = true;
-
-    const pinDataSource = new Cesium.CustomDataSource('facility-pins');
-    pinDataSourceRef.current = pinDataSource;
-    viewer.dataSources.add(pinDataSource);
-
-    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-    clickHandlerRef.current = handler;
-
-    handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
-      if (viewer.isDestroyed()) return;
-      const picked = viewer.scene.pick(movement.position);
-      const entity = picked?.id as Cesium.Entity | undefined;
-      const fmGuid = entity?.properties?.fm_guid?.getValue?.() as string | undefined;
-
-      if (!fmGuid) {
-        setSelectedBuilding(null); setSelectedFmGuid(null); setZoomedFmGuid(null);
-        return;
-      }
-
-      const facility = facilitiesByGuidRef.current.get(fmGuid);
-      if (!facility) return;
-
-      setSelectedFmGuid(facility.fmGuid!);
-      const alreadyZoomed = zoomedFmGuidRef.current === fmGuid;
-
-      if (alreadyZoomed) {
-        const screenPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, toCartesian(facility.lat, facility.lng, 0));
-        if (screenPos) setSelectedBuilding({ facility, screenX: screenPos.x, screenY: screenPos.y });
-        return;
-      }
-
-      setSelectedBuilding(null);
-      setZoomedFmGuid(fmGuid);
-      viewer.camera.flyToBoundingSphere(
-        new Cesium.BoundingSphere(toCartesian(facility.lat, facility.lng, 0), 24),
-        { offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-50), 360), duration: 1.4 },
-      );
-    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
-
-    setViewerReady(true);
-
-    return () => {
+    // Destroys the current viewer without marking the effect as done.
+    // Used internally for retry logic.
+    const destroyViewer = () => {
       setViewerReady(false);
-      handler.destroy();
-      clickHandlerRef.current = null;
+      if (clickHandlerRef.current) { clickHandlerRef.current.destroy(); clickHandlerRef.current = null; }
       pinDataSourceRef.current = null;
-      if (!viewer.isDestroyed()) viewer.destroy();
+      if (cesiumViewerRef.current && !cesiumViewerRef.current.isDestroyed()) cesiumViewerRef.current.destroy();
       cesiumViewerRef.current = null;
     };
+
+    // Full effect cleanup — also stops any pending poll/retry.
+    const teardown = () => {
+      destroyed = true;
+      if (pollId !== null) { clearInterval(pollId); pollId = null; }
+      destroyViewer();
+    };
+
+    const initViewer = (container: HTMLDivElement) => {
+      if (destroyed) return;
+      console.log('[Globe] initViewer', { w: container.clientWidth, h: container.clientHeight, retryCount });
+      let viewer: Cesium.Viewer;
+      try {
+        viewer = new Cesium.Viewer(container, {
+          timeline: false, animation: false, baseLayerPicker: false, geocoder: false,
+          homeButton: false, sceneModePicker: false, navigationHelpButton: false,
+          infoBox: false, selectionIndicator: false,
+          showRenderLoopErrors: false,
+        });
+      } catch (err) {
+        console.error('[CesiumGlobeView] Viewer creation failed:', err);
+        return;
+      }
+
+      // When the render loop throws (e.g. maximumTextureSize=0 on a lost WebGL
+      // context), destroy the dead viewer and retry up to 3 times.
+      viewer.scene.renderError.addEventListener((_scene: unknown, error: unknown) => {
+        console.warn('[CesiumGlobeView] Render error:', error);
+        if (destroyed) return;
+        retryCount++;
+        if (retryCount > 3) {
+          console.error('[CesiumGlobeView] Giving up after 3 render errors.');
+          return;
+        }
+        destroyViewer();
+        setTimeout(() => {
+          if (!destroyed && containerRef.current) initViewer(containerRef.current);
+        }, 500 * retryCount);
+      });
+
+      cesiumViewerRef.current = viewer;
+
+      // Default Ion imagery requires a Bing Maps licence — replace with OSM.
+      viewer.imageryLayers.removeAll();
+      viewer.imageryLayers.add(new Cesium.ImageryLayer(
+        new Cesium.UrlTemplateImageryProvider({
+          url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          maximumLevel: 19,
+          credit: '© OpenStreetMap contributors',
+        })
+      ));
+
+      viewer.resolutionScale = window.innerWidth > 768 ? 0.85 : 1.0;
+
+      if (window.innerWidth < 768) {
+        const creditContainer = viewer.cesiumWidget.creditContainer as HTMLElement;
+        if (creditContainer) {
+          creditContainer.style.transform = 'scale(0.6)';
+          creditContainer.style.transformOrigin = 'bottom right';
+          creditContainer.style.opacity = '0.5';
+        }
+      }
+
+      viewer.camera.setView({
+        destination: Cesium.Cartesian3.fromDegrees(15.0, 20.0, 20000000),
+        orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
+      });
+
+
+      const pinDataSource = new Cesium.CustomDataSource('facility-pins');
+      pinDataSourceRef.current = pinDataSource;
+      viewer.dataSources.add(pinDataSource);
+
+      const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+      clickHandlerRef.current = handler;
+
+      handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
+        if (viewer.isDestroyed()) return;
+        const picked = viewer.scene.pick(movement.position);
+        const entity = picked?.id as Cesium.Entity | undefined;
+        const fmGuid = entity?.properties?.fm_guid?.getValue?.() as string | undefined;
+
+        if (!fmGuid) {
+          setSelectedBuilding(null); setSelectedFmGuid(null); setZoomedFmGuid(null);
+          return;
+        }
+
+        const facility = facilitiesByGuidRef.current.get(fmGuid);
+        if (!facility) return;
+
+        setSelectedFmGuid(facility.fmGuid!);
+        const alreadyZoomed = zoomedFmGuidRef.current === fmGuid;
+
+        if (alreadyZoomed) {
+          const screenPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, toCartesian(facility.lat, facility.lng, 0));
+          if (screenPos) setSelectedBuilding({ facility, screenX: screenPos.x, screenY: screenPos.y });
+          return;
+        }
+
+        setSelectedBuilding(null);
+        setZoomedFmGuid(fmGuid);
+        viewer.camera.flyToBoundingSphere(
+          new Cesium.BoundingSphere(toCartesian(facility.lat, facility.lng, 0), 24),
+          { offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-50), 360), duration: 1.4 },
+        );
+      }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+      setViewerReady(true);
+    };
+
+    const el = containerRef.current;
+    if (el.clientWidth === 0 || el.clientHeight === 0) {
+      // Container not yet painted — poll until it has dimensions (up to 2 s).
+      // Cesium throws maximumTextureSize=0 when initialized against a zero-size canvas.
+      let attempts = 0;
+      pollId = setInterval(() => {
+        attempts++;
+        if (el.clientWidth > 0 && el.clientHeight > 0) {
+          if (pollId !== null) { clearInterval(pollId); pollId = null; }
+          initViewer(el);
+        } else if (attempts >= 20) {
+          if (pollId !== null) { clearInterval(pollId); pollId = null; }
+        }
+      }, 100);
+    } else {
+      initViewer(el);
+    }
+
+    return teardown;
   }, [tokenReady]);
 
   // Save camera state helper
@@ -310,10 +368,10 @@ const CesiumGlobeView: React.FC = () => {
         duration: 1.5,
       });
 
-      toast.success('BIM-modell laddad');
+      toast.success(t('BIM-modell laddad', 'BIM model loaded'));
     } catch (err: any) {
       console.error('BIM load error:', err);
-      toast.error(`Kunde inte ladda BIM: ${err.message}`);
+      toast.error(t(`Kunde inte ladda BIM: ${err.message}`, `Could not load BIM: ${err.message}`));
     } finally {
       setBimLoading(false);
     }
@@ -462,6 +520,7 @@ const CesiumGlobeView: React.FC = () => {
   const handleSidebarSelect = useCallback((id: string) => {
     const viewer = cesiumViewerRef.current;
     const facility = facilitiesByGuidRef.current.get(id);
+    console.log('[Globe] sidebarSelect', id, { viewer: !!viewer, destroyed: viewer?.isDestroyed(), facility: !!facility });
     if (!viewer || viewer.isDestroyed() || !facility) return;
 
     setSelectedFmGuid(id);
