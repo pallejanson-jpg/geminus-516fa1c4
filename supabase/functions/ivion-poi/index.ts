@@ -458,7 +458,7 @@ serve(async (req) => {
         if (!poiData && params.formData) {
           const fd = params.formData;
           const fmGuid = fd.fmGuid || crypto.randomUUID();
-          const displayName = fd.name || fd.categoryLabel || 'Ny tillgång';
+          const displayName = fd.name || fd.categoryLabel || 'New Asset';
           const customData: Record<string, any> = {
             fm_guid: fmGuid,
             asset_type: fd.category || null,

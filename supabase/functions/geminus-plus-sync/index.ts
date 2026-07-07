@@ -455,9 +455,16 @@ async function upsertGeometryMappings(supabase: any, items: any[]): Promise<void
 async function upsertAssets(supabase: any, items: any[], options?: { skipGeometryMapping?: boolean }): Promise<number> {
   if (items.length === 0) return 0;
 
-  const assets = items.map((item: any) => ({
+  const assets = items.map((item: any) => {
+    // Asset+ occasionally returns objectType=4 (Instance) for buildings (objectTypeValue="IfcBuilding").
+    // Override category based on objectTypeValue when there's a mismatch.
+    let derivedCategory = objectTypeToCategory(item.objectType);
+    if (derivedCategory === 'Instance' && item.objectTypeValue === 'IfcBuilding') {
+      derivedCategory = 'Building';
+    }
+    return {
     fm_guid: item.fmGuid,
-    category: objectTypeToCategory(item.objectType),
+    category: derivedCategory,
     name: item.designation || null,
     common_name: item.commonName || null,
     building_fm_guid: item.buildingFmGuid || null,
@@ -470,7 +477,8 @@ async function upsertAssets(supabase: any, items: any[], options?: { skipGeometr
     source_updated_at: item.dateModified || null,
     attributes: item,
     synced_at: new Date().toISOString(),
-  }));
+    };
+  });
 
   // Upsert in chunks of 100 to avoid Postgres statement timeouts on large batches.
   // Before overwriting, check whether the local row was edited (via the app UI) after
@@ -595,11 +603,11 @@ async function updateSyncState(
 
 function getSubtreeName(subtreeId: string): string {
   const names: Record<string, string> = {
-    'structure': 'Byggnad/Plan/Rum',
-    'assets': 'Alla Tillgångar',
-    'xkt': 'XKT-filer',
+    'structure': 'Building/Floor/Room',
+    'assets': 'All Assets',
+    'xkt': 'XKT Files',
     'full': 'Full Sync',
-    'buildings': 'Byggnader',
+    'buildings': 'Buildings',
   };
   return names[subtreeId] || subtreeId;
 }
@@ -737,7 +745,7 @@ serve(async (req) => {
         buildingCount,
         syncStatesRes,
       ] = await Promise.all([
-        safeCount(supabase.from('assets').select('fm_guid', { count: 'estimated', head: true }).in('category', ['Building', 'Building Storey', 'Space'])),
+        safeCount(supabase.from('assets').select('fm_guid', { count: 'estimated', head: true }).in('category', ['Complex', 'Building', 'Building Storey', 'Space'])),
         safeCount(supabase.from('assets').select('fm_guid', { count: 'estimated', head: true }).in('category', ['Instance'])),
         safeCount(supabase.from('xkt_models' as any).select('id', { count: 'estimated', head: true })),
         safeCount(supabase.from('assets').select('fm_guid', { count: 'estimated', head: true }).eq('category', 'Building')),
@@ -760,7 +768,7 @@ serve(async (req) => {
           Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs))]);
 
         const [rStructure, rAssets] = await Promise.all([
-          withTimeout(getRemoteCountByTypes(accessToken, [1, 2, 3])),
+          withTimeout(getRemoteCountByTypes(accessToken, [0, 1, 2, 3])),
           withTimeout(getRemoteCountByTypes(accessToken, [4])),
         ]);
         remoteStructureCount = rStructure;
@@ -833,6 +841,11 @@ serve(async (req) => {
       await updateSyncState(supabase, 'structure', 'running');
       const accessToken = await getAccessToken();
 
+      // force=true resets progress so we start from scratch (full sync)
+      if (force) {
+        await supabase.from('asset_sync_progress').delete().eq('job', 'structure_objects');
+      }
+
       // Load or create progress record
       const { data: existingProgress } = await supabase
         .from('asset_sync_progress')
@@ -844,15 +857,26 @@ serve(async (req) => {
       let totalSynced = existingProgress?.total_synced || 0;
       const phase = existingProgress?.page_mode || 'upsert'; // 'upsert' or 'cleanup'
 
-      console.log(`Starting resumable sync-structure phase=${phase} skip=${skip} totalSynced=${totalSynced}`);
+      // Determine if we can do an incremental sync (only changed items since last completed sync)
+      const { data: structState } = await supabase
+        .from('asset_sync_state')
+        .select('last_sync_completed_at')
+        .eq('subtree_id', 'structure')
+        .maybeSingle();
+      const lastSyncCompletedAt = structState?.last_sync_completed_at;
+      // Use incremental filter if: not forced, has a previous completion timestamp, and starting fresh (skip=0)
+      const useIncremental = !force && !!lastSyncCompletedAt && skip === 0 && phase === 'upsert';
+
+      console.log(`Starting resumable sync-structure phase=${phase} skip=${skip} totalSynced=${totalSynced} incremental=${useIncremental}`);
 
       if (phase === 'upsert') {
-        // Filter: structure objects (1=Building, 2=Storey, 3=Space) that are NOT expired
-        const filter = [
-          "(", ["objectType", "=", 1], "or", ["objectType", "=", 2], "or", ["objectType", "=", 3], ")",
-          "and",
-          ["expireDate", "=", null]
+        const objectTypeGroup = [
+          ["objectType", "=", 0], "or", ["objectType", "=", 1], "or", ["objectType", "=", 2], "or", ["objectType", "=", 3],
         ];
+        // Incremental: only fetch items modified since last completed sync
+        const filter = useIncremental
+          ? [objectTypeGroup, "and", ["dateModified", ">", lastSyncCompletedAt], "and", ["expireDate", "=", null]]
+          : [objectTypeGroup, "and", ["expireDate", "=", null]];
 
         const take = 200;
         let hasMore = true;
@@ -890,7 +914,18 @@ serve(async (req) => {
           await updateSyncState(supabase, 'structure', 'running', totalSynced);
         }
 
-        // Upsert phase complete — transition to cleanup
+        // Incremental sync with 0 changes = nothing to do, mark complete immediately
+        if (useIncremental && totalSynced === 0) {
+          console.log('Incremental structure sync: no changes since last sync, marking complete');
+          await supabase.from('asset_sync_progress').delete().eq('job', 'structure_objects');
+          await updateSyncState(supabase, 'structure', 'completed', 0);
+          return new Response(
+            JSON.stringify({ success: true, interrupted: false, totalSynced: 0, message: 'No structure changes since last sync' }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Upsert phase complete — transition to cleanup (only for full syncs or when changes found)
         console.log(`Structure upsert done: ${totalSynced} items. Starting orphan cleanup...`);
         await supabase.from('asset_sync_progress').upsert({
           job: 'structure_objects',
@@ -910,21 +945,35 @@ serve(async (req) => {
       }
 
       // ---- Cleanup phase ----
-      // Re-fetch all remote fm_guids for orphan detection (structure is ~2800, fits in memory)
+      // Re-fetch all remote fm_guids for orphan detection, resumable via saved cleanup_skip
       console.log('Running orphan cleanup for structure...');
       const cleanupFilter = [
-        "(", ["objectType", "=", 1], "or", ["objectType", "=", 2], "or", ["objectType", "=", 3], ")",
+        [["objectType", "=", 0], "or", ["objectType", "=", 1], "or", ["objectType", "=", 2], "or", ["objectType", "=", 3]],
         "and",
         ["expireDate", "=", null]
       ];
       const remoteFmGuids = new Set<string>();
-      let cleanupSkip = 0;
-      const cleanupTake = 500;
+      // Resume from saved cleanup position if available
+      const { data: cleanupProgress } = await supabase
+        .from('asset_sync_progress')
+        .select('cleanup_skip')
+        .eq('job', 'structure_objects')
+        .maybeSingle();
+      let cleanupSkip = (cleanupProgress as any)?.cleanup_skip || 0;
+      const cleanupTake = 2000; // larger batch = fewer API calls, fits in 45s
       let cleanupHasMore = true;
 
       while (cleanupHasMore) {
         if (Date.now() - startTime > MAX_EXECUTION_TIME) {
-          console.log('Timeout during orphan fetch — will retry next invocation');
+          console.log(`Timeout during orphan fetch at cleanupSkip=${cleanupSkip} — saving position`);
+          await supabase.from('asset_sync_progress').upsert({
+            job: 'structure_objects',
+            skip: 0,
+            total_synced: totalSynced,
+            page_mode: 'cleanup',
+            cleanup_skip: cleanupSkip,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'job' });
           return new Response(
             JSON.stringify({ success: true, interrupted: true, phase: 'cleanup', totalSynced }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -1059,7 +1108,7 @@ serve(async (req) => {
         // Clear progress
         await supabase.from('asset_sync_progress').delete().eq('job', 'assets_instances');
         await updateSyncState(supabase, 'assets', 'completed', totalSynced, undefined, {
-          subtree_name: 'Alla Tillgångar'
+          subtree_name: 'All Assets'
         });
         return new Response(
           JSON.stringify({ success: true, message: `Completed: ${totalSynced} assets`, totalSynced, interrupted: false }),
@@ -1199,7 +1248,7 @@ serve(async (req) => {
 
             // Update sync state (heartbeat)
             await updateSyncState(supabase, 'assets', 'running', totalSynced, undefined, {
-              subtree_name: `Alla Tillgångar (${currentBuildingIndex + 1}/${totalBuildings} - ${pageMode})`
+              subtree_name: `All Assets (${currentBuildingIndex + 1}/${totalBuildings} - ${pageMode})`
             });
             
           } catch (error) {
@@ -1306,11 +1355,11 @@ serve(async (req) => {
         // Clear progress on completion
         await supabase.from('asset_sync_progress').delete().eq('job', 'assets_instances');
         await updateSyncState(supabase, 'assets', 'completed', totalSynced, undefined, {
-          subtree_name: 'Alla Tillgångar'
+          subtree_name: 'All Assets'
         });
       } else {
         await updateSyncState(supabase, 'assets', 'running', totalSynced, `Progress: building ${currentBuildingIndex + 1}/${totalBuildings} (${pageMode})`, {
-          subtree_name: `Alla Tillgångar (${currentBuildingIndex + 1}/${totalBuildings})`
+          subtree_name: `All Assets (${currentBuildingIndex + 1}/${totalBuildings})`
         });
       }
 
@@ -1469,7 +1518,7 @@ serve(async (req) => {
       if (currentBuildingIndex >= totalBuildings) {
         await supabase.from('asset_sync_progress').delete().eq('job', 'xkt_models');
         await updateSyncState(supabase, 'xkt', 'completed', totalSynced, undefined, {
-          subtree_name: 'XKT-filer'
+          subtree_name: 'XKT Files'
         });
         return new Response(
           JSON.stringify({ success: true, message: `Completed: ${totalSynced} models`, synced: totalSynced, interrupted: false }),
@@ -1863,6 +1912,41 @@ serve(async (req) => {
                 } catch {}
               }
 
+              // Strategy 5: Retry key combos with context=Default and context=Asset
+              // (Asset+ API spec says context=Default; some environments differ)
+              if (!xktData) {
+                outer5: for (const ctx of ['Default', 'Asset', 'Level']) {
+                  for (const combo of [
+                    { param: 'bimobjectid', value: bimObjId, label: `bimobjectid+ctx=${ctx}` },
+                    { param: 'bimobjectid', value: revModelId, label: `modelid-as-bimobj+ctx=${ctx}` },
+                  ].filter(c => c.value)) {
+                    const url5 = `${discovery.url}/GetXktData?modelid=${revModelId}&${combo.param}=${encodeURIComponent(combo.value)}&context=${ctx}&apiKey=${apiKey}`;
+                    try {
+                      const controller = new AbortController();
+                      const timeoutId = setTimeout(() => controller.abort(), 20000);
+                      const res = await fetch(url5, { headers: { "Authorization": `Bearer ${accessToken}` }, signal: controller.signal });
+                      clearTimeout(timeoutId);
+                      if (res.ok) {
+                        const data = await res.arrayBuffer();
+                        if (data.byteLength >= 1024) { xktData = data; usedIdentifier = combo.label; break outer5; }
+                      }
+                    } catch {}
+                  }
+                  // Also try modelid-only with this context
+                  const urlMid = `${discovery.url}/GetXktData?modelid=${revModelId}&context=${ctx}&apiKey=${apiKey}`;
+                  try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 20000);
+                    const res = await fetch(urlMid, { headers: { "Authorization": `Bearer ${accessToken}` }, signal: controller.signal });
+                    clearTimeout(timeoutId);
+                    if (res.ok) {
+                      const data = await res.arrayBuffer();
+                      if (data.byteLength >= 1024) { xktData = data; usedIdentifier = `modelid-only+ctx=${ctx}`; break outer5; }
+                    }
+                  } catch {}
+                }
+              }
+
               if (!xktData) {
                 console.log(`Failed to fetch ${modelName} (${revModelId}): all identifier combos returned 404`);
                 errors.push(`${buildingName}/${revModelId}: 404 all combos`);
@@ -1871,6 +1955,25 @@ serve(async (req) => {
 
               const fileSize = xktData.byteLength;
               console.log(`Model ${revModelId} (${modelName}): Downloaded ${(fileSize / 1024 / 1024).toFixed(2)} MB via ${usedIdentifier}`);
+
+              // Dedup guard: if the fallback context=Default/Asset was used, check whether another
+              // building already has the same model_id at the same file size. If so, this is a
+              // complex-level model returned without building-scope filtering — reject it so we
+              // don't store wrong geometry under each individual building.
+              if (usedIdentifier.includes('ctx=Default') || usedIdentifier.includes('ctx=Asset') || usedIdentifier.includes('modelid-only+ctx=Default')) {
+                const { data: existingForOtherBuildings } = await supabase
+                  .from('xkt_models')
+                  .select('building_fm_guid, file_size')
+                  .eq('model_id', revModelId)
+                  .neq('building_fm_guid', buildingFmGuid)
+                  .eq('file_size', fileSize)
+                  .limit(1);
+                if (existingForOtherBuildings && existingForOtherBuildings.length > 0) {
+                  console.log(`⚠️ Skipping ${modelName} (${revModelId}) for ${buildingName}: context=Default returned same file (${(fileSize / 1024 / 1024).toFixed(2)} MB) as building ${existingForOtherBuildings[0].building_fm_guid.substring(0, 8)}… — likely unscoped complex model`);
+                  errors.push(`${buildingName}/${revModelId}: skipped (unscoped complex model duplicate)`);
+                  continue;
+                }
+              }
 
               // Upload to storage with no-cache to prevent stale CDN delivery
               const { error: uploadError } = await supabase.storage
@@ -1948,7 +2051,7 @@ serve(async (req) => {
             }, { onConflict: 'job' });
 
           await updateSyncState(supabase, 'xkt', 'running', totalSynced, undefined, {
-            subtree_name: `XKT-filer (${currentBuildingIndex}/${totalBuildings})`
+            subtree_name: `XKT Files (${currentBuildingIndex}/${totalBuildings})`
           });
         }
       }
@@ -1957,7 +2060,7 @@ serve(async (req) => {
         await supabase.from('asset_sync_progress').delete().eq('job', 'xkt_models');
         await updateSyncState(supabase, 'xkt', 'completed', totalSynced, 
           errors.length > 0 ? errors.slice(0, 5).join('; ') : undefined, {
-          subtree_name: 'XKT-filer'
+          subtree_name: 'XKT Files'
         });
       } else if (interrupted) {
         // Save progress for resume
@@ -1992,6 +2095,65 @@ serve(async (req) => {
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // ============ DIAGNOSE XKT — returns raw discovery info without syncing ============
+    if (action === 'diagnose-xkt') {
+      if (!buildingFmGuid) return new Response(JSON.stringify({ error: 'buildingFmGuid required' }), { status: 400, headers: corsHeaders });
+      const accessToken = await getAccessToken();
+      const apiUrl = _creds.apiUrl || Deno.env.get("GEMINUS_PLUS_API_URL") || "";
+      const apiKey = _creds.apiKey || Deno.env.get("GEMINUS_PLUS_API_KEY") || "";
+      const discovery = await discover3dModelsEndpoint(supabase, accessToken, apiUrl, apiKey, buildingFmGuid);
+      const models = discovery.models || [];
+      let revisions: any[] = [];
+      if (discovery.url) {
+        try {
+          const revRes = await fetch(`${discovery.url}/GetAllModelRevisions`, { headers: { "Authorization": `Bearer ${accessToken}` } });
+          if (revRes.ok) {
+            const revData = await revRes.json();
+            revisions = revData?.modelRevisions || (Array.isArray(revData) ? revData : []);
+          }
+        } catch {}
+      }
+      // Quick XKT probe for first model
+      const xktTests: any[] = [];
+      if (models.length > 0 && discovery.url) {
+        const m = models[0];
+        const mId = m.modelId || m.id || m.ModelId || '';
+        const bimId = m.bimObjectId || m.BimObjectId || m.bimId || '';
+        // Use bimObjectId as modelid fallback when modelId is absent
+        const effectiveModelId = mId || bimId;
+        for (const ctx of ['Building', 'Default', 'Asset', 'Level']) {
+          // Test: modelid=effectiveModelId + bimobjectid
+          if (effectiveModelId && bimId) {
+            const url = `${discovery.url}/GetXktData?modelid=${effectiveModelId}&bimobjectid=${encodeURIComponent(bimId)}&context=${ctx}&apiKey=${apiKey}`;
+            try {
+              const r = await fetch(url, { headers: { "Authorization": `Bearer ${accessToken}` }, signal: AbortSignal.timeout(8000) });
+              const body = r.ok ? (await r.arrayBuffer()).byteLength : await r.text().then(t => t.substring(0, 100));
+              xktTests.push({ label: `modelid=effectiveId+bimobj ctx=${ctx}`, url: url.replace(/apiKey=[^&]+/, 'apiKey=***'), status: r.status, body });
+            } catch (e) { xktTests.push({ url, error: String(e) }); }
+          }
+          // Test: modelid-only
+          if (effectiveModelId) {
+            const url = `${discovery.url}/GetXktData?modelid=${effectiveModelId}&context=${ctx}&apiKey=${apiKey}`;
+            try {
+              const r = await fetch(url, { headers: { "Authorization": `Bearer ${accessToken}` }, signal: AbortSignal.timeout(8000) });
+              const body = r.ok ? (await r.arrayBuffer()).byteLength : await r.text().then(t => t.substring(0, 100));
+              xktTests.push({ label: `modelid-only ctx=${ctx}`, url: url.replace(/apiKey=[^&]+/, 'apiKey=***'), status: r.status, body });
+            } catch (e) { xktTests.push({ url, error: String(e) }); }
+          }
+          // Test: bimobjectid-only (no modelid param)
+          if (bimId) {
+            const url = `${discovery.url}/GetXktData?bimobjectid=${encodeURIComponent(bimId)}&context=${ctx}&apiKey=${apiKey}`;
+            try {
+              const r = await fetch(url, { headers: { "Authorization": `Bearer ${accessToken}` }, signal: AbortSignal.timeout(8000) });
+              const body = r.ok ? (await r.arrayBuffer()).byteLength : await r.text().then(t => t.substring(0, 100));
+              xktTests.push({ label: `bimobjectid-only ctx=${ctx}`, url: url.replace(/apiKey=[^&]+/, 'apiKey=***'), status: r.status, body });
+            } catch (e) { xktTests.push({ url, error: String(e) }); }
+          }
+        }
+      }
+      return new Response(JSON.stringify({ discoveryUrl: discovery.url, modelCount: models.length, models: models.slice(0, 3), revisions: revisions.slice(0, 5), xktTests }, null, 2), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // ============ SYNC XKT FOR SINGLE BUILDING (on-demand) ============
@@ -2031,7 +2193,7 @@ serve(async (req) => {
           return new Response(
             JSON.stringify({ 
               success: true, 
-              message: '3D API ej tillgänglig från servern. Modeller cachas automatiskt när du öppnar 3D-viewern.',
+              message: '3D API not available from server. Models are cached automatically when you open the 3D viewer.',
               hint: 'cache-on-load',
               modelCount: 0,
               synced: 0
@@ -2089,24 +2251,59 @@ serve(async (req) => {
           token: string,
           key: string
         ): Promise<{ data: ArrayBuffer; usedIdentifier: string } | null> {
-          for (const id of identifiers) {
-            if (!id.value) continue;
-            const url = `${baseUrl}/GetXktData?modelid=${modelId}&${id.param}=${encodeURIComponent(id.value)}&context=Building&apiKey=${key}`;
-            console.log(`Trying XKT: ${id.label} → ${url.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
-            try {
-              const res = await fetch(url, { headers: { "Authorization": `Bearer ${token}` } });
-              if (res.ok) {
-                const data = await res.arrayBuffer();
-                if (data.byteLength >= 1024) {
-                  console.log(`✓ XKT download succeeded with ${id.label} (${(data.byteLength / 1024 / 1024).toFixed(2)} MB)`);
-                  return { data, usedIdentifier: id.label };
+          const contexts = ['Building', 'Default', 'Asset'];
+          for (const ctx of contexts) {
+            // Strategy A: modelid + secondary identifier
+            for (const id of identifiers) {
+              if (!id.value) continue;
+              const url = `${baseUrl}/GetXktData?modelid=${modelId}&${id.param}=${encodeURIComponent(id.value)}&context=${ctx}&apiKey=${key}`;
+              console.log(`Trying XKT [${ctx}]: ${id.label} → ${url.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
+              try {
+                const res = await fetch(url, { headers: { "Authorization": `Bearer ${token}` }, signal: AbortSignal.timeout(30000) });
+                if (res.ok) {
+                  const data = await res.arrayBuffer();
+                  if (data.byteLength >= 1024) {
+                    console.log(`✓ XKT download succeeded with ${id.label} ctx=${ctx} (${(data.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+                    return { data, usedIdentifier: `${id.label}+ctx=${ctx}` };
+                  }
+                  console.log(`XKT too small with ${id.label} ctx=${ctx} (${data.byteLength} bytes), trying next`);
+                } else {
+                  console.log(`XKT ${res.status} with ${id.label} ctx=${ctx}, trying next`);
                 }
-                console.log(`XKT too small with ${id.label} (${data.byteLength} bytes), trying next`);
-              } else {
-                console.log(`XKT ${res.status} with ${id.label}, trying next`);
+              } catch (e) {
+                console.log(`XKT fetch error with ${id.label} ctx=${ctx}: ${e}`);
               }
-            } catch (e) {
-              console.log(`XKT fetch error with ${id.label}: ${e}`);
+            }
+            // Strategy B: modelid-only (no secondary param)
+            if (modelId) {
+              const url = `${baseUrl}/GetXktData?modelid=${modelId}&context=${ctx}&apiKey=${key}`;
+              try {
+                const res = await fetch(url, { headers: { "Authorization": `Bearer ${token}` }, signal: AbortSignal.timeout(20000) });
+                if (res.ok) {
+                  const data = await res.arrayBuffer();
+                  if (data.byteLength >= 1024) {
+                    console.log(`✓ XKT (modelid-only ctx=${ctx}): ${(data.byteLength / 1024 / 1024).toFixed(2)} MB`);
+                    return { data, usedIdentifier: `modelid-only+ctx=${ctx}` };
+                  }
+                }
+              } catch {}
+            }
+          }
+          // Strategy C: bimobjectid-only (no modelid param) with each context
+          const bimId = identifiers.find(i => i.param === 'bimobjectid')?.value;
+          if (bimId) {
+            for (const ctx of contexts) {
+              const url = `${baseUrl}/GetXktData?bimobjectid=${encodeURIComponent(bimId)}&context=${ctx}&apiKey=${key}`;
+              try {
+                const res = await fetch(url, { headers: { "Authorization": `Bearer ${token}` }, signal: AbortSignal.timeout(20000) });
+                if (res.ok) {
+                  const data = await res.arrayBuffer();
+                  if (data.byteLength >= 1024) {
+                    console.log(`✓ XKT (bimobjectid-only ctx=${ctx}): ${(data.byteLength / 1024 / 1024).toFixed(2)} MB`);
+                    return { data, usedIdentifier: `bimobjectid-only+ctx=${ctx}` };
+                  }
+                }
+              } catch {}
             }
           }
           return null;
@@ -2114,6 +2311,7 @@ serve(async (req) => {
 
         for (const model of models) {
           const rawModelId = model.modelId || model.id || model.ModelId || '';
+          const bimObjectId = model.bimObjectId || model.BimObjectId || '';
           const modelName = model.name || model.modelName || model.Name || `Model`;
           const matchedRevisionId = pickLatestPublishedRevision(
             revisions.filter((rev: any) => {
@@ -2123,8 +2321,9 @@ serve(async (req) => {
                 || (!!revName && !!modelNameLower && (revName === modelNameLower || revName.includes(modelNameLower) || modelNameLower.includes(revName)));
             })
           )?.modelId || '';
-          const modelId = rawModelId || matchedRevisionId || `model_${Date.now()}`;
-          const bimObjectId = model.bimObjectId || model.BimObjectId || '';
+          // When modelId is absent from GetAllRelatedModels, use bimObjectId as modelid —
+          // some Asset+ environments omit modelId but GetXktData accepts bimObjectId as modelid.
+          const modelId = rawModelId || matchedRevisionId || bimObjectId || `model_${Date.now()}`;
           const buildingBimObjectIdForModel = model.buildingBimObjectId || model.BuildingBimObjectId || '';
           const modelFmGuid = model.fmGuid || model.FmGuid || '';
           const externalGuid = model.externalGuid || model.ExternalGuid || '';
@@ -2220,16 +2419,35 @@ serve(async (req) => {
                 cacheControl: '0',
               });
 
+            const isSizeLimitError = uploadError?.message?.toLowerCase().includes('exceeded') ||
+              uploadError?.message?.toLowerCase().includes('size') ||
+              uploadError?.message?.toLowerCase().includes('too large');
+
+            if (uploadError && !isSizeLimitError) {
+              console.error(`❌ Storage upload failed for ${modelId}: ${uploadError.message}`);
+              modelErrors.push(`${modelId}: storage upload failed: ${uploadError.message}`);
+              continue;
+            }
+
+            // When file is too large for storage, register as direct-stream record so the viewer
+            // fetches it live from Asset+ as a last-resort fallback (Memory → IDB → Storage → Asset+).
+            const isDirectStream = !!uploadError && isSizeLimitError;
+            if (isDirectStream) {
+              console.warn(`⚠️  ${modelId} (${modelName}) exceeds storage limit (${(fileSize / 1024 / 1024).toFixed(0)} MB) — registering as direct-stream`);
+            }
+
             let signedUrl: string | null = null;
-            if (!uploadError) {
+            if (!isDirectStream) {
               const { data: urlData } = await supabase.storage
                 .from('xkt-models')
                 .createSignedUrl(storagePath, 86400 * 365);
               signedUrl = urlData?.signedUrl || null;
             }
 
-            // Insert into database with revision tracking
-            await supabase
+            // Insert into database with revision tracking.
+            // direct-stream rows: file_url=null, storage_path=null, source_url='direct-stream:<bimObjectId>'
+            // The viewer reads source_url to know it must fetch live from Asset+.
+            const { error: upsertError } = await supabase
               .from('xkt_models')
               .upsert({
                 building_fm_guid: buildingFmGuid,
@@ -2237,13 +2455,21 @@ serve(async (req) => {
                 model_id: modelId,
                 model_name: modelName,
                 file_name: fileName,
-                file_url: signedUrl,
+                file_url: isDirectStream ? null : signedUrl,
                 file_size: fileSize,
-                storage_path: storagePath,
-                source_url: `GetXktData via ${result.usedIdentifier}`,
-                source_updated_at: revisionId || new Date().toISOString(),
+                storage_path: isDirectStream ? null : storagePath,
+                source_url: isDirectStream
+                  ? `direct-stream:${bimObjectId || modelId}`
+                  : `GetXktData via ${result.usedIdentifier}`,
+                source_updated_at: new Date().toISOString(),
                 synced_at: new Date().toISOString(),
               }, { onConflict: 'building_fm_guid,model_id' });
+
+            if (upsertError) {
+              console.error(`❌ DB upsert failed for ${modelId}: ${upsertError.message}`);
+              modelErrors.push(`${modelId}: db upsert failed: ${upsertError.message}`);
+              continue;
+            }
 
             synced++;
             console.log(`✅ Synced model ${modelId} for ${buildingName}`);
@@ -2344,11 +2570,11 @@ serve(async (req) => {
           discrepancy,
           ifcOnlyExcluded: ifcOnlyCount,
           canPush: hasOrphans,
-          message: discrepancy === 0 
-            ? 'Data är synkroniserad' 
-            : hasOrphans 
-              ? `${Math.abs(discrepancy)} objekt finns lokalt men inte i Geminus Plus`
-              : `${Math.abs(discrepancy)} objekt saknas lokalt`
+          message: discrepancy === 0
+            ? 'Data is in sync'
+            : hasOrphans
+              ? `${Math.abs(discrepancy)} objects exist locally but not in Geminus Plus`
+              : `${Math.abs(discrepancy)} objects are missing locally`
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -2363,7 +2589,7 @@ serve(async (req) => {
       const baseUrl = apiUrl.replace(/\/+$/, "");
       
       await updateSyncState(supabase, 'structure', 'running', undefined, undefined, {
-        subtree_name: 'Byggnad/Plan/Rum (tvåvägs-synk)'
+        subtree_name: 'Building/Floor/Room (two-way sync)'
       });
       
       // ── Step 1: Pull all remote objects (structure + instances) ──
@@ -2536,11 +2762,11 @@ serve(async (req) => {
       await updateSyncState(supabase, 'structure', 'completed', totalSynced);
       
       const messageParts: string[] = [];
-      if (totalSynced > 0) messageParts.push(`synkade ${totalSynced} objekt`);
-      if (removedCount > 0) messageParts.push(`tog bort ${removedCount} föräldralösa`);
-      if (pushedCount > 0) messageParts.push(`skapade ${pushedCount} i Geminus Plus`);
-      if (pushFailedCount > 0) messageParts.push(`${pushFailedCount} push misslyckades`);
-      if (messageParts.length === 0) messageParts.push('allt redan synkroniserat');
+      if (totalSynced > 0) messageParts.push(`synced ${totalSynced} objects`);
+      if (removedCount > 0) messageParts.push(`removed ${removedCount} orphans`);
+      if (pushedCount > 0) messageParts.push(`created ${pushedCount} in Geminus Plus`);
+      if (pushFailedCount > 0) messageParts.push(`${pushFailedCount} push(es) failed`);
+      if (messageParts.length === 0) messageParts.push('everything already in sync');
       
       return new Response(
         JSON.stringify({
@@ -3117,8 +3343,8 @@ serve(async (req) => {
         JSON.stringify({
           success: true,
           message: interrupted
-            ? `Synkade ${totalSystemsCreated} system (${currentBuildingIndex}/${totalBuildings} byggnader). Anropa igen för att fortsätta.`
-            : `Klart: ${totalSystemsCreated} system, ${totalLinksCreated} kopplingar från ${totalBuildings} byggnader`,
+            ? `Synced ${totalSystemsCreated} systems (${currentBuildingIndex}/${totalBuildings} buildings). Call again to continue.`
+            : `Done: ${totalSystemsCreated} systems, ${totalLinksCreated} links from ${totalBuildings} buildings`,
           systemsCreated: totalSystemsCreated,
           linksCreated: totalLinksCreated,
           interrupted,

@@ -950,6 +950,7 @@ export type Database = {
           source_type: string
           status: string
           updated_at: string | null
+          use_fmguid_map: boolean | null
         }
         Insert: {
           building_fm_guid: string
@@ -966,6 +967,7 @@ export type Database = {
           source_type?: string
           status?: string
           updated_at?: string | null
+          use_fmguid_map?: boolean | null
         }
         Update: {
           building_fm_guid?: string
@@ -982,6 +984,7 @@ export type Database = {
           source_type?: string
           status?: string
           updated_at?: string | null
+          use_fmguid_map?: boolean | null
         }
         Relationships: []
       }

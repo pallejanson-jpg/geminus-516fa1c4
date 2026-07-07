@@ -310,7 +310,7 @@ serve(async (req) => {
               if (!floorId) continue;
               const content = [
                 floor.objectName || floor.ObjectName || "",
-                "Våningsplan",
+                "Floor",
               ].filter(Boolean).join(" | ");
 
               if (content.trim()) {
@@ -319,7 +319,7 @@ serve(async (req) => {
                     source_type: "geminus_base",
                     source_id: `floor-${floorId}`,
                     building_fm_guid: b.fm_guid,
-                    file_name: floor.objectName || floor.ObjectName || "Geminus Base våning",
+                    file_name: floor.objectName || floor.ObjectName || "Geminus Base floor",
                     content,
                     chunk_index: 0,
                     metadata: { system: "geminus_base", type: "floor" },

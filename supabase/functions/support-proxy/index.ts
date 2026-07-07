@@ -85,7 +85,7 @@ async function proxyRequest(method: string, path: string, body?: unknown, retrie
       console.error("Auto-login failed:", loginErr);
       return new Response(JSON.stringify({
         error: "jwt_expired",
-        message: "SWG JWT har gått ut och automatisk inloggning misslyckades. Kontrollera SWG_SUPPORT_USERNAME och SWG_SUPPORT_PASSWORD.",
+        message: "SWG JWT has expired and automatic re-login failed. Please check SWG_SUPPORT_USERNAME and SWG_SUPPORT_PASSWORD.",
       }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -105,13 +105,13 @@ serve(async (req) => {
 
     if (!body.complexDesignation || !body.complexName) {
       return new Response(
-        JSON.stringify({ success: false, error: "complexDesignation och complexName krävs" }),
+        JSON.stringify({ success: false, error: "complexDesignation and complexName are required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
     if (!body.buildingDesignation || !body.buildingName) {
       return new Response(
-        JSON.stringify({ success: false, error: "buildingDesignation och buildingName krävs" }),
+        JSON.stringify({ success: false, error: "buildingDesignation and buildingName are required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -122,13 +122,13 @@ serve(async (req) => {
 
     if (!apiUrl || !apiKey) {
       return new Response(
-        JSON.stringify({ success: false, error: "Geminus Plus API inte konfigurerat" }),
+        JSON.stringify({ success: false, error: "Geminus Plus API not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const complexFmGuid = crypto.randomUUID();
-    const buildingFmGuid = crypto.randomUUID();
+    const buildingFmGuid = (body.buildingFmGuid as string | undefined)?.trim() || crypto.randomUUID();
     const modelFmGuid = crypto.randomUUID();
     const modelName = body.modelName || "A-modell";
 

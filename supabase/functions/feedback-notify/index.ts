@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const callerEmail = userData.user.email || "okänd";
+    const callerEmail = userData.user.email || "unknown";
     const callerName = userData.user.user_metadata?.full_name || userData.user.user_metadata?.name || callerEmail;
 
     const { title, description, category } = await req.json();
@@ -73,10 +73,10 @@ Deno.serve(async (req) => {
 
     const appUrl = "https://gemini-spark-glow.lovable.app";
     const categoryLabels: Record<string, string> = {
-      suggestion: "Förslag",
-      ux_issue: "UX-problem",
-      bug: "Bugg",
-      question: "Fråga",
+      suggestion: "Suggestion",
+      ux_issue: "UX issue",
+      bug: "Bug",
+      question: "Question",
     };
 
     const sent: string[] = [];
@@ -99,14 +99,14 @@ Deno.serve(async (req) => {
             subject: `[Feedback] ${title}`,
             html: `
               <div style="font-family: sans-serif; max-width: 600px;">
-                <h2 style="color: #333;">Ny feedback från ${callerName}</h2>
-                <p><strong>Kategori:</strong> ${categoryLabels[category] || category}</p>
-                <p><strong>Titel:</strong> ${title}</p>
-                ${description ? `<p><strong>Beskrivning:</strong><br/>${description.replace(/\n/g, "<br/>")}</p>` : ""}
+                <h2 style="color: #333;">New feedback from ${callerName}</h2>
+                <p><strong>Category:</strong> ${categoryLabels[category] || category}</p>
+                <p><strong>Title:</strong> ${title}</p>
+                ${description ? `<p><strong>Description:</strong><br/>${description.replace(/\n/g, "<br/>")}</p>` : ""}
                 <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
                 <p style="color: #666; font-size: 13px;">
-                  Användarens e-post: ${callerEmail}<br/>
-                  <a href="${appUrl}" style="color: #2563eb;">Öppna Geminus</a>
+                  User email: ${callerEmail}<br/>
+                  <a href="${appUrl}" style="color: #2563eb;">Open Geminus</a>
                 </p>
               </div>
             `,

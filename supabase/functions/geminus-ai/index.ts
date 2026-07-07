@@ -848,7 +848,7 @@ async function execQueryFaciliate(supabase: any, args: any) {
     // Guard against the misleading "global total answers a building question" case.
     if (building && !buildingDataAvailable) {
       return { object_type: objectType, count: count ?? 0, building_filter_unavailable: true,
-        note: "Jag kan inte dela upp per byggnad just nu — detta är det totala antalet." };
+        note: "I cannot break this down per building right now — this is the total count." };
     }
     return { object_type: objectType, count: count ?? 0, filtered_by_building: building || null };
   }
@@ -856,12 +856,12 @@ async function execQueryFaciliate(supabase: any, args: any) {
   const { data, error } = await query.limit(100);
   if (error) throw error;
   const rows = data || [];
-  const label = objectType === "rentlandlord" ? "hyreskontrakt" : objectType === "maintenance" ? "planerat underhåll" : "arbetsorder";
+  const label = objectType === "rentlandlord" ? "rental contracts" : objectType === "maintenance" ? "planned maintenance" : "work orders";
   if (rows.length === 0) {
     return {
       object_type: objectType,
       count: 0,
-      hint: `Jag har ingen information om ${label} just nu.`,
+      hint: `I have no information about ${label} right now.`,
     };
   }
   return {
@@ -1193,9 +1193,9 @@ function makeButtons(buttons: ActionButton[]): ActionButton[] {
 function defaultButtons(context: any): ActionButton[] {
   const buildingName = context?.currentBuilding?.name;
   return [
-    { label: buildingName ? `Byggnadsöversikt ${buildingName}` : "Byggnadsöversikt", action: "building_summary" },
-    { label: "Visa ventilation", action: "system_query", payload: { system: "ventilation" } },
-    { label: "Sök utrustning", action: "search_prompt" },
+    { label: buildingName ? `Building Overview ${buildingName}` : "Building Overview", action: "building_summary" },
+    { label: "Show ventilation", action: "system_query", payload: { system: "ventilation" } },
+    { label: "Search equipment", action: "search_prompt" },
   ];
 }
 
@@ -1379,7 +1379,7 @@ function detectButtonAction(messages: any[], context: any): ButtonActionIntent |
 /** Execute a button action deterministically — no AI needed */
 async function executeButtonAction(supabase: any, intent: ButtonActionIntent, context: any): Promise<FastPathResult | null> {
   const buildingGuid = context?.currentBuilding?.fmGuid;
-  const buildingName = context?.currentBuilding?.name || "byggnaden";
+  const buildingName = context?.currentBuilding?.name || "the building";
 
   switch (intent.action) {
     case "building_summary": {
@@ -1391,50 +1391,44 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
           summaryGuid = resolved.buildings[0].building_fm_guid || resolved.buildings[0].fm_guid;
         } else {
           return {
-            message: `Jag hittar ingen byggnad som heter "${intent.payload.name}".`,
+            message: `I cannot find a building named "${intent.payload.name}".`,
             response_type: "answer", action: "none",
-            buttons: makeButtons([{ label: "Visa alla byggnader", action: "list_buildings" }]),
+            buttons: makeButtons([{ label: "Show all buildings", action: "list_buildings" }]),
             asset_ids: [], external_entity_ids: [], filters: {},
-            suggestions: ["Vilka byggnader finns?"],
+            suggestions: ["Which buildings exist?"],
           };
         }
       }
       if (!summaryGuid) {
         return {
-          message: "Vilken byggnad vill du se? Här är alla byggnader.",
+          message: "Which building would you like to see? Here are all buildings.",
           response_type: "answer", action: "none",
           buttons: makeButtons([
-            { label: "Visa alla byggnader", action: "list_buildings" },
+            { label: "Show all buildings", action: "list_buildings" },
           ]),
           asset_ids: [], external_entity_ids: [], filters: {},
-          suggestions: ["Vilka byggnader finns?"],
+          suggestions: ["Which buildings exist?"],
         };
       }
       const summary = await execBuildingSummary(supabase, { fm_guid: summaryGuid });
       const topTypes = summary.top_asset_types?.slice(0, 3).map((t: any) => `${t.count}× ${translateIfcType(t.type)}`).join(", ") || "";
       return {
-        message: `**${summary.building_name}**\n\n• ${summary.floors_count} våningar, ${summary.rooms} rum, ${summary.assets} tillgångar\n• Total yta: ${summary.total_space_area_m2} m²\n• ${summary.total_issues} ärenden${summary.total_issues > 0 ? ` (${Object.entries(summary.issues_by_status).map(([s, n]) => `${n} ${s}`).join(", ")})` : ""}${topTypes ? `\n• Vanligaste typer: ${topTypes}` : ""}`,
+        message: `**${summary.building_name}**\n\n• ${summary.floors_count} floors, ${summary.rooms} rooms, ${summary.assets} assets\n• Total area: ${summary.total_space_area_m2} m²\n• ${summary.total_issues} issues${summary.total_issues > 0 ? ` (${Object.entries(summary.issues_by_status).map(([s, n]) => `${n} ${s}`).join(", ")})` : ""}${topTypes ? `\n• Most common types: ${topTypes}` : ""}`,
         response_type: "answer", action: "none",
         buttons: makeButtons([
-          { label: "Visa alla rum", action: "category_query", payload: { category: "Space" } },
-          { label: "Visa ventilation", action: "system_query", payload: { system: "ventilation" } },
-          { label: "Visa öppna ärenden", action: "issue_query" },
+          { label: "Show all rooms", action: "category_query", payload: { category: "Space" } },
+          { label: "Show ventilation", action: "system_query", payload: { system: "ventilation" } },
+          { label: "Show open issues", action: "issue_query" },
         ]),
         asset_ids: [], external_entity_ids: [], filters: {},
-        suggestions: ["Vilka system finns?", "Visa alla tillgångar", "Visa dörrar"],
+        suggestions: ["Which systems exist?", "Show all assets", "Show doors"],
       };
     }
 
     case "category_query": {
       const category = intent.payload.category || "Instance";
       if (!buildingGuid) {
-        return {
-          message: "Ingen byggnad är vald. Välj en byggnad först.",
-          response_type: "answer", action: "none",
-          buttons: makeButtons([{ label: "Visa alla byggnader", action: "list_buildings" }]),
-          asset_ids: [], external_entity_ids: [], filters: {},
-          suggestions: ["Vilka byggnader finns?"],
-        };
+        return null; // Fall through to AI — it can resolve the building from conversation
       }
 
       // Door is stored as category="Instance" + asset_type="IfcDoor", not category="Door"
@@ -1456,18 +1450,18 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
       const totalCount = countResult.count ?? 0;
       const assetList = rpcResult.data || [];
       const assetIds = assetList.map((a: any) => a.fm_guid);
-      const categoryLabel = category === "Space" ? "rum" : category === "Instance" ? "tillgångar" : category === "Door" ? "dörrar" : category === "Building Storey" ? "våningar" : category;
+      const categoryLabel = category === "Space" ? "rooms" : category === "Instance" ? "assets" : category === "Door" ? "doors" : category === "Building Storey" ? "floors" : category;
 
       if (totalCount === 0) {
         return {
-          message: `Inga ${categoryLabel} hittades i ${buildingName}.`,
+          message: `No ${categoryLabel} found in ${buildingName}.`,
           response_type: "data_query", action: "none",
           buttons: makeButtons([
-            { label: "Byggnadsöversikt", action: "building_summary" },
-            { label: "Visa ventilation", action: "system_query", payload: { system: "ventilation" } },
+            { label: "Building Overview", action: "building_summary" },
+            { label: "Show ventilation", action: "system_query", payload: { system: "ventilation" } },
           ]),
           asset_ids: [], external_entity_ids: [], filters: {},
-          suggestions: ["Vilka system finns?", "Sök utrustning"],
+          suggestions: ["Which systems exist?", "Search equipment"],
         };
       }
 
@@ -1475,34 +1469,28 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
       let summary = "";
       if (category === "Instance") {
         const types: Record<string, number> = {};
-        assetList.forEach((a: any) => { const t = a.asset_type || "okänd"; types[t] = (types[t] || 0) + 1; });
+        assetList.forEach((a: any) => { const t = a.asset_type || "unknown"; types[t] = (types[t] || 0) + 1; });
         const topTypes = Object.entries(types).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t, n]) => `${n}× ${translateIfcType(t)}`).join(", ");
-        summary = `\n\nFördelning (topp): ${topTypes}`;
+        summary = `\n\nBreakdown (top): ${topTypes}`;
       }
 
       return {
-        message: `Det finns **${totalCount}** ${categoryLabel} i ${buildingName}.${summary}`,
+        message: `There are **${totalCount}** ${categoryLabel} in ${buildingName}.${summary}`,
         response_type: "data_query", action: "none",
         buttons: makeButtons([
-          { label: `Visa ${categoryLabel} i viewer`, action: "viewer_highlight", payload: { category } },
-          { label: "Filtrera per våning", action: "floor_query" },
-          { label: "Byggnadsöversikt", action: "building_summary" },
+          { label: `Show ${categoryLabel} in viewer`, action: "viewer_highlight", payload: { category } },
+          { label: "Filter by floor", action: "floor_query" },
+          { label: "Building Overview", action: "building_summary" },
         ]),
         asset_ids: assetIds.slice(0, 50), external_entity_ids: [], filters: { category },
-        suggestions: [`Visa ${categoryLabel} i viewer`, "Visa annan utrustning", "Vilka våningar finns?"],
+        suggestions: [`Show ${categoryLabel} in viewer`, "Show other equipment", "Which floors exist?"],
       };
     }
 
     case "system_query": {
       const system = intent.payload.system || "ventilation";
       if (!buildingGuid) {
-        return {
-          message: "Ingen byggnad är vald.",
-          response_type: "answer", action: "none",
-          buttons: makeButtons([{ label: "Visa alla byggnader", action: "list_buildings" }]),
-          asset_ids: [], external_entity_ids: [], filters: {},
-          suggestions: ["Vilka byggnader finns?"],
-        };
+        return null; // Fall through to AI
       }
       const { data: assets } = await supabase.rpc("get_assets_by_system", { system_query: system, building_guid: buildingGuid });
       const assetList = assets || [];
@@ -1516,57 +1504,51 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         const { data: searchResults } = await supabase.rpc("search_assets_rpc", { search: system, building_guid: buildingGuid });
         if (searchResults?.length) {
           const types: Record<string, number> = {};
-          searchResults.forEach((a: any) => { const t = a.asset_type || a.category || "okänd"; types[t] = (types[t] || 0) + 1; });
+          searchResults.forEach((a: any) => { const t = a.asset_type || a.category || "unknown"; types[t] = (types[t] || 0) + 1; });
           const typeSummary = Object.entries(types).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t, n]) => `${n}× ${t}`).join(", ");
           return {
-            message: `Hittade **${searchResults.length}** objekt som matchar "${system}" i ${buildingName}: ${typeSummary}.`,
+            message: `Found **${searchResults.length}** objects matching "${system}" in ${buildingName}: ${typeSummary}.`,
             response_type: "data_query", action: "none",
             buttons: makeButtons([
-              { label: `Visa ${system} i viewer`, action: "viewer_highlight", payload: { system } },
-              { label: "Byggnadsöversikt", action: "building_summary" },
+              { label: `Show ${system} in viewer`, action: "viewer_highlight", payload: { system } },
+              { label: "Building Overview", action: "building_summary" },
             ]),
             asset_ids: searchResults.slice(0, 50).map((a: any) => a.fm_guid), external_entity_ids: [], filters: { system },
-            suggestions: ["Visa i viewer", "Visa annan utrustning"],
+            suggestions: ["Show in viewer", "Show other equipment"],
           };
         }
         return {
-          message: `Inga "${system}"-objekt hittades i ${buildingName}. Prova en annan sökning.`,
+          message: `No "${system}" objects found in ${buildingName}. Try a different search.`,
           response_type: "data_query", action: "none",
           buttons: makeButtons([
-            { label: "Byggnadsöversikt", action: "building_summary" },
-            { label: "Sök utrustning", action: "search_prompt" },
+            { label: "Building Overview", action: "building_summary" },
+            { label: "Search equipment", action: "search_prompt" },
           ]),
           asset_ids: [], external_entity_ids: [], filters: {},
-          suggestions: ["Vilka system finns?", "Visa alla tillgångar"],
+          suggestions: ["Which systems exist?", "Show all assets"],
         };
       }
       const assetIds = assetList.map((a: any) => a.fm_guid);
       const types: Record<string, number> = {};
-      assetList.forEach((a: any) => { const t = a.asset_type || a.common_name || "okänd"; types[t] = (types[t] || 0) + 1; });
+      assetList.forEach((a: any) => { const t = a.asset_type || a.common_name || "unknown"; types[t] = (types[t] || 0) + 1; });
       const typeSummary = Object.entries(types).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t, n]) => `${n}× ${t}`).join(", ");
       return {
-        message: `Det finns **${assetList.length}** ${system}-objekt i ${buildingName}.\n\nFördelning: ${typeSummary}.`,
+        message: `There are **${assetList.length}** ${system} objects in ${buildingName}.\n\nBreakdown: ${typeSummary}.`,
         response_type: "data_query", action: "none",
         buttons: makeButtons([
-          { label: `Visa ${system} i viewer`, action: "viewer_highlight", payload: { system } },
-          { label: "Filtrera per våning", action: "floor_query" },
-          { label: "Byggnadsöversikt", action: "building_summary" },
+          { label: `Show ${system} in viewer`, action: "viewer_highlight", payload: { system } },
+          { label: "Filter by floor", action: "floor_query" },
+          { label: "Building Overview", action: "building_summary" },
         ]),
         asset_ids: assetIds.slice(0, 50), external_entity_ids: [], filters: { system },
-        suggestions: [`Visa ${system} i viewer`, "Visa annan utrustning", "Vilka rum har detta system?"],
+        suggestions: [`Show ${system} in viewer`, "Show other equipment", "Which rooms have this system?"],
       };
     }
 
     case "viewer_highlight": {
       const system = intent.payload.system || intent.payload.category;
       if (!buildingGuid || !system) {
-        return {
-          message: "Ingen byggnad eller system att visa.",
-          response_type: "answer", action: "none",
-          buttons: makeButtons(defaultButtons(context)),
-          asset_ids: [], external_entity_ids: [], filters: {},
-          suggestions: [],
-        };
+        return null; // Fall through to AI
       }
       // Get assets by system or category
       let assetList: any[] = [];
@@ -1587,29 +1569,23 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
       }
       return {
         message: entityIds.length > 0
-          ? `Markerar **${entityIds.length}** ${system}-objekt i viewern.`
-          : `Öppnar viewern för ${buildingName}. (Inga geometriobjekt hittades för ${system} att markera.)`,
+          ? `Highlighting **${entityIds.length}** ${system} objects in the viewer.`
+          : `Opening viewer for ${buildingName}. (No geometry objects found for ${system} to highlight.)`,
         response_type: "action", action: "highlight",
         buttons: makeButtons([
-          { label: "Byggnadsöversikt", action: "building_summary" },
-          { label: "Filtrera per våning", action: "floor_query" },
+          { label: "Building Overview", action: "building_summary" },
+          { label: "Filter by floor", action: "floor_query" },
         ]),
         asset_ids: assetIds.slice(0, 50), external_entity_ids: entityIds,
         filters: intent.payload.category ? { category: intent.payload.category } : { system: system },
-        suggestions: ["Visa annan utrustning", "Filtrera per våning"],
+        suggestions: ["Show other equipment", "Filter by floor"],
         navigate_to_viewer: true,
       };
     }
 
     case "issue_query": {
       if (!buildingGuid) {
-        return {
-          message: "Ingen byggnad är vald.",
-          response_type: "answer", action: "none",
-          buttons: makeButtons([{ label: "Visa alla byggnader", action: "list_buildings" }]),
-          asset_ids: [], external_entity_ids: [], filters: {},
-          suggestions: [],
-        };
+        return null; // Fall through to AI
       }
       const { data: issues } = await supabase
         .from("bcf_issues")
@@ -1620,52 +1596,46 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
       const issueList = issues || [];
       if (issueList.length === 0) {
         return {
-          message: `✅ Inga ärenden i ${buildingName}.`,
+          message: `✅ No issues in ${buildingName}.`,
           response_type: "answer", action: "none",
-          buttons: makeButtons([{ label: "Byggnadsöversikt", action: "building_summary" }]),
+          buttons: makeButtons([{ label: "Building Overview", action: "building_summary" }]),
           asset_ids: [], external_entity_ids: [], filters: {},
-          suggestions: ["Visa alla tillgångar", "Visa ventilation"],
+          suggestions: ["Show all assets", "Show ventilation"],
         };
       }
       const byStatus: Record<string, number> = {};
       issueList.forEach((i: any) => { byStatus[i.status] = (byStatus[i.status] || 0) + 1; });
       const statusSummary = Object.entries(byStatus).map(([s, n]) => `${n} ${s}`).join(", ");
       return {
-        message: `**${issueList.length} ärenden** i ${buildingName}: ${statusSummary}.`,
+        message: `**${issueList.length} issues** in ${buildingName}: ${statusSummary}.`,
         response_type: "data_query", action: "none",
         buttons: makeButtons([
-          { label: "Byggnadsöversikt", action: "building_summary" },
-          { label: "Visa ventilation", action: "system_query", payload: { system: "ventilation" } },
+          { label: "Building Overview", action: "building_summary" },
+          { label: "Show ventilation", action: "system_query", payload: { system: "ventilation" } },
         ]),
         asset_ids: [], external_entity_ids: [], filters: {},
-        suggestions: ["Visa högprioriterade ärenden", "Byggnadsöversikt"],
+        suggestions: ["Show high-priority issues", "Building Overview"],
       };
     }
 
     case "search_prompt": {
       return {
-        message: "Vad vill du söka efter? Skriv ett nyckelord eller systemnamn.",
+        message: "What would you like to search for? Enter a keyword or system name.",
         response_type: "answer", action: "none",
         buttons: makeButtons([
-          { label: "Visa ventilation", action: "system_query", payload: { system: "ventilation" } },
-          { label: "Visa dörrar", action: "category_query", payload: { category: "Door" } },
-          { label: "Visa sensorer", action: "system_query", payload: { system: "IfcSensor" } },
+          { label: "Show ventilation", action: "system_query", payload: { system: "ventilation" } },
+          { label: "Show doors", action: "category_query", payload: { category: "Door" } },
+          { label: "Show sensors", action: "system_query", payload: { system: "IfcSensor" } },
         ]),
         asset_ids: [], external_entity_ids: [], filters: {},
-        suggestions: ["Ventilation", "Dörrar", "Pumpar"],
+        suggestions: ["Ventilation", "Doors", "Pumps"],
       };
     }
 
     case "floor_query":
     case "floor_list": {
       if (!buildingGuid) {
-        return {
-          message: "Ingen byggnad är vald.",
-          response_type: "answer", action: "none",
-          buttons: makeButtons([{ label: "Visa alla byggnader", action: "list_buildings" }]),
-          asset_ids: [], external_entity_ids: [], filters: {},
-          suggestions: [],
-        };
+        return null; // Fall through to AI
       }
       const { data: floors } = await supabase
         .from("assets")
@@ -1676,23 +1646,23 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
       const floorList = floors || [];
       if (floorList.length === 0) {
         return {
-          message: `Inga våningar registrerade i ${buildingName}.`,
+          message: `No floors registered in ${buildingName}.`,
           response_type: "answer", action: "none",
-          buttons: makeButtons([{ label: "Byggnadsöversikt", action: "building_summary" }]),
+          buttons: makeButtons([{ label: "Building Overview", action: "building_summary" }]),
           asset_ids: [], external_entity_ids: [], filters: {},
           suggestions: [],
         };
       }
       const floorNames = floorList.map((f: any) => f.common_name || f.name).join(", ");
       return {
-        message: `**${floorList.length} våningar** i ${buildingName}: ${floorNames}.`,
+        message: `**${floorList.length} floors** in ${buildingName}: ${floorNames}.`,
         response_type: "data_query", action: "none",
         buttons: makeButtons([
-          { label: "Byggnadsöversikt", action: "building_summary" },
-          { label: "Visa alla rum", action: "category_query", payload: { category: "Space" } },
+          { label: "Building Overview", action: "building_summary" },
+          { label: "Show all rooms", action: "category_query", payload: { category: "Space" } },
         ]),
         asset_ids: [], external_entity_ids: [], filters: {},
-        suggestions: ["Visa rum per våning", "Visa ventilation"],
+        suggestions: ["Show rooms per floor", "Show ventilation"],
       };
     }
 
@@ -1700,7 +1670,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
       const result = await execListBuildings(supabase, { limit: 20 });
       if (result.total === 0) {
         return {
-          message: "Inga byggnader hittades.",
+          message: "No buildings found.",
           response_type: "answer", action: "none",
           buttons: makeButtons([]),
           asset_ids: [], external_entity_ids: [], filters: {},
@@ -1709,39 +1679,33 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
       }
       const names = result.buildings.map((b: any) => b.name).join(", ");
       return {
-        message: `**${result.total} byggnader**: ${names}.`,
+        message: `**${result.total} buildings**: ${names}.`,
         response_type: "answer", action: "none",
         buttons: makeButtons(result.buildings.slice(0, 5).map((b: any) => ({
-          label: `Översikt ${b.name}`, action: "building_summary", payload: { fm_guid: b.fm_guid, name: b.name },
+          label: `Overview ${b.name}`, action: "building_summary", payload: { fm_guid: b.fm_guid, name: b.name },
         }))),
         asset_ids: [], external_entity_ids: [], filters: {},
-        suggestions: result.buildings.slice(0, 3).map((b: any) => `Översikt ${b.name}`),
+        suggestions: result.buildings.slice(0, 3).map((b: any) => `Overview ${b.name}`),
       };
     }
 
     case "detail_view": {
       return {
-        message: "Vilken typ av detaljer vill du se?",
+        message: "What type of details would you like to see?",
         response_type: "answer", action: "none",
         buttons: makeButtons([
-          { label: "Visa alla rum", action: "category_query", payload: { category: "Space" } },
-          { label: "Visa alla tillgångar", action: "category_query", payload: { category: "Instance" } },
-          { label: "Visa dörrar", action: "category_query", payload: { category: "Door" } },
+          { label: "Show all rooms", action: "category_query", payload: { category: "Space" } },
+          { label: "Show all assets", action: "category_query", payload: { category: "Instance" } },
+          { label: "Show doors", action: "category_query", payload: { category: "Door" } },
         ]),
         asset_ids: [], external_entity_ids: [], filters: {},
-        suggestions: ["Visa ventilation", "Visa sensorer"],
+        suggestions: ["Show ventilation", "Show sensors"],
       };
     }
 
     case "iot_query": {
       if (!buildingGuid) {
-        return {
-          message: "Ingen byggnad är vald. Välj en byggnad först.",
-          response_type: "answer", action: "none",
-          buttons: makeButtons([{ label: "Visa alla byggnader", action: "list_buildings" }]),
-          asset_ids: [], external_entity_ids: [], filters: {},
-          suggestions: ["Vilka byggnader finns?"],
-        };
+        return null; // Fall through to AI
       }
       const sensorType = intent.payload.sensor_type || "all";
       const roomGuids = intent.payload.room_guid ? [intent.payload.room_guid] : undefined;
@@ -1749,11 +1713,11 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
 
       if (!sensorResult.available) {
         return {
-          message: `Inga sensordata tillgängliga för ${buildingName}.`,
+          message: `No sensor data available for ${buildingName}.`,
           response_type: "answer", action: "none",
-          buttons: makeButtons([{ label: "Byggnadsöversikt", action: "building_summary" }]),
+          buttons: makeButtons([{ label: "Building Overview", action: "building_summary" }]),
           asset_ids: [], external_entity_ids: [], filters: {},
-          suggestions: ["Visa alla rum", "Byggnadsöversikt"],
+          suggestions: ["Show all rooms", "Building Overview"],
         };
       }
 
@@ -1766,41 +1730,41 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
       if (sensorResult.rooms?.length && !sensorResult.averages) {
         // Room-specific live data (single room query)
         const room = sensorResult.rooms[0];
-        const roomName = room.machine_name || room.name || "Okänt rum";
+        const roomName = room.machine_name || room.name || "Unknown room";
         const parts: string[] = [];
         if (room.temperature !== null && room.temperature !== undefined) parts.push(`${room.temperature.toFixed(1)}°C`);
         if (room.co2 !== null && room.co2 !== undefined) parts.push(`CO₂: ${Math.round(room.co2)} ppm`);
         if (room.humidity !== null && room.humidity !== undefined) parts.push(`${room.humidity.toFixed(1)}% RH`);
-        if (room.occupancy !== null && room.occupancy !== undefined) parts.push(`${Math.round(room.occupancy)}% beläggning`);
-        message = `**Sensordata** för ${roomName}:\n${parts.join(" · ")}`;
+        if (room.occupancy !== null && room.occupancy !== undefined) parts.push(`${Math.round(room.occupancy)}% occupancy`);
+        message = `**Sensor data** for ${roomName}:\n${parts.join(" · ")}`;
       } else if (sensorResult.averages) {
         // Building-level data (both Geminus Premium and DB fallback)
         const avg = sensorResult.averages;
         const parts: string[] = [];
-        if (avg.temperature !== null && avg.temperature !== undefined) parts.push(`Medeltemp: ${avg.temperature}°C`);
+        if (avg.temperature !== null && avg.temperature !== undefined) parts.push(`Avg temp: ${avg.temperature}°C`);
         if (avg.co2 !== null && avg.co2 !== undefined) parts.push(`CO₂: ${avg.co2} ppm`);
-        if (avg.humidity !== null && avg.humidity !== undefined) parts.push(`Fuktighet: ${avg.humidity}%`);
-        if (avg.occupancy !== null && avg.occupancy !== undefined) parts.push(`Beläggning: ${avg.occupancy}%`);
+        if (avg.humidity !== null && avg.humidity !== undefined) parts.push(`Humidity: ${avg.humidity}%`);
+        if (avg.occupancy !== null && avg.occupancy !== undefined) parts.push(`Occupancy: ${avg.occupancy}%`);
 
         const roomCount = sensorResult.room_count || sensorResult.machine_count || 0;
-        message = `**Sensordata** för ${buildingName} (${roomCount} rum):\n${parts.join(" · ")}`;
+        message = `**Sensor data** for ${buildingName} (${roomCount} rooms):\n${parts.join(" · ")}`;
 
         // Add highest/lowest info
         if (sensorResult.highest_temperature) {
           const ht = sensorResult.highest_temperature;
-          message += `\n\nVarmast: **${ht.name || "Okänt rum"}** (${Math.round(ht.value * 10) / 10}°C)`;
+          message += `\n\nWarmest: **${ht.name || "Unknown room"}** (${Math.round(ht.value * 10) / 10}°C)`;
         }
         if (sensorResult.lowest_temperature) {
           const lt = sensorResult.lowest_temperature;
-          message += `\nKallast: **${lt.name || "Okänt rum"}** (${Math.round(lt.value * 10) / 10}°C)`;
+          message += `\nCoolest: **${lt.name || "Unknown room"}** (${Math.round(lt.value * 10) / 10}°C)`;
         }
         if (sensorResult.highest_co2) {
           const hc = sensorResult.highest_co2;
-          message += `\nHögst CO₂: **${hc.name || "Okänt rum"}** (${Math.round(hc.value)} ppm)`;
+          message += `\nHighest CO₂: **${hc.name || "Unknown room"}** (${Math.round(hc.value)} ppm)`;
         }
         if (sensorResult.highest_humidity) {
           const hh = sensorResult.highest_humidity;
-          message += `\nHögst fuktighet: **${hh.name || "Okänt rum"}** (${Math.round(hh.value * 10) / 10}%)`;
+          message += `\nHighest humidity: **${hh.name || "Unknown room"}** (${Math.round(hh.value * 10) / 10}%)`;
         }
 
         // Build color map for temperature visualization from rooms (DB) or machines (Geminus Premium)
@@ -1825,18 +1789,18 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
       // If message is still empty, provide a helpful fallback
       if (!message) {
         const count = sensorResult.room_count || sensorResult.machine_count || 0;
-        message = `${buildingName} har ${count} rum med sensordata, men inga aktuella mätvärden kunde hämtas just nu.`;
+        message = `${buildingName} has ${count} rooms with sensor data, but no current readings could be retrieved right now.`;
       }
 
       return {
         message,
         response_type: "data_query", action: Object.keys(colorMap).length > 0 ? "colorize" : "none",
         buttons: makeButtons([
-          { label: "Byggnadsöversikt", action: "building_summary" },
-          { label: "Visa alla rum", action: "category_query", payload: { category: "Space" } },
+          { label: "Building Overview", action: "building_summary" },
+          { label: "Show all rooms", action: "category_query", payload: { category: "Space" } },
         ]),
         asset_ids: [], external_entity_ids: [], filters: {},
-        suggestions: ["Visa temperatur i viewer", "Vilka rum har hög CO2?", "Visa luftkvalitet"],
+        suggestions: ["Show temperature in viewer", "Which rooms have high CO2?", "Show air quality"],
         sensor_data: sensorData.length > 0 ? sensorData : undefined,
         color_map: Object.keys(colorMap).length > 0 ? colorMap : undefined,
       };
@@ -1844,35 +1808,29 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
 
     case "room_sensor_query": {
       if (!buildingGuid) {
-        return {
-          message: "Ingen byggnad är vald. Välj en byggnad först.",
-          response_type: "answer", action: "none",
-          buttons: makeButtons([{ label: "Visa alla byggnader", action: "list_buildings" }]),
-          asset_ids: [], external_entity_ids: [], filters: {},
-          suggestions: ["Vilka byggnader finns?"],
-        };
+        return null; // Fall through to AI
       }
       const metric = intent.payload.metric || "temperature";
       const order = intent.payload.order || "desc";
       const res: any = await execRoomSensorData(supabase, { building_guid: buildingGuid, metric, order });
       if (!res.available) {
         return {
-          message: `Inga sensordata finns registrerade för ${buildingName}.`,
+          message: `No sensor data registered for ${buildingName}.`,
           response_type: "answer", action: "none",
-          buttons: makeButtons([{ label: "Byggnadsöversikt", action: "building_summary" }]),
+          buttons: makeButtons([{ label: "Building Overview", action: "building_summary" }]),
           asset_ids: [], external_entity_ids: [], filters: {},
-          suggestions: ["Visa alla rum", "Byggnadsöversikt"],
+          suggestions: ["Show all rooms", "Building Overview"],
         };
       }
       const unit = metric === "temperature" ? "°C" : metric === "co2" ? " ppm" : metric === "humidity" ? "%" : "%";
-      const label = metric === "temperature" ? "temperatur" : metric === "co2" ? "CO₂" : metric === "humidity" ? "fuktighet" : "beläggning";
+      const label = metric === "temperature" ? "temperature" : metric === "co2" ? "CO₂" : metric === "humidity" ? "humidity" : "occupancy";
       const avg = res.averages?.[metric];
       const hi = metric === "co2" ? res.highest_co2 : metric === "humidity" ? res.highest_humidity : res.highest_temperature;
       const lo = res.lowest_temperature;
       let message = `**${label}** i ${buildingName} (${res.room_count} rum med data):`;
-      if (avg !== null && avg !== undefined) message += `\n• Medel: **${avg}${unit}**`;
-      if (hi) message += `\n• Högst: **${hi.name}** (${Math.round(hi.value * 10) / 10}${unit})`;
-      if (metric === "temperature" && lo) message += `\n• Lägst: **${lo.name}** (${Math.round(lo.value * 10) / 10}${unit})`;
+      if (avg !== null && avg !== undefined) message += `\n• Average: **${avg}${unit}**`;
+      if (hi) message += `\n• Highest: **${hi.name}** (${Math.round(hi.value * 10) / 10}${unit})`;
+      if (metric === "temperature" && lo) message += `\n• Lowest: **${lo.name}** (${Math.round(lo.value * 10) / 10}${unit})`;
       // Temperature colorize map (same scale as iot_query)
       const colorMap: Record<string, [number, number, number]> = {};
       if (metric === "temperature") {
@@ -1890,37 +1848,37 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
         message,
         response_type: "data_query", action: Object.keys(colorMap).length > 0 ? "colorize" : "none",
         buttons: makeButtons([
-          { label: "Visa temperatur i viewer", action: "iot_query", payload: { sensor_type: "temperature" } },
-          { label: "Byggnadsöversikt", action: "building_summary" },
+          { label: "Show temperature in viewer", action: "iot_query", payload: { sensor_type: "temperature" } },
+          { label: "Building Overview", action: "building_summary" },
         ]),
         asset_ids: [], external_entity_ids: [], filters: {},
-        suggestions: ["Vilket rum har högst CO₂?", "Vad är medelfuktigheten?", "Visa alla rum"],
+        suggestions: ["Which room has the highest CO₂?", "What is the average humidity?", "Show all rooms"],
         color_map: Object.keys(colorMap).length > 0 ? colorMap : undefined,
       };
     }
 
     case "faciliate_count": {
       const objectType = intent.payload.object_type || "workorder";
-      const label = objectType === "rentlandlord" ? "hyreskontrakt" : objectType === "maintenance" ? "poster planerat underhåll" : "arbetsordrar";
+      const label = objectType === "rentlandlord" ? "rental contracts" : objectType === "maintenance" ? "planned maintenance records" : "work orders";
       const res: any = await execQueryFaciliate(supabase, { object_type: objectType, mode: "count" });
       if (res.hint) {
         return {
           message: res.hint,
           response_type: "answer", action: "none",
-          buttons: makeButtons([{ label: "Byggnadsöversikt", action: "building_summary" }]),
+          buttons: makeButtons([{ label: "Building Overview", action: "building_summary" }]),
           asset_ids: [], external_entity_ids: [], filters: {},
-          suggestions: ["Visa arbetsordrar", "Byggnadsöversikt"],
+          suggestions: ["Show work orders", "Building Overview"],
         };
       }
       return {
-        message: `Det finns **${res.count}** ${label} i Faciliate.`,
+        message: `There are **${res.count}** ${label} in Faciliate.`,
         response_type: "data_query", action: "none",
         buttons: makeButtons([
-          { label: "Visa exempel", action: "free_text" },
-          { label: "Byggnadsöversikt", action: "building_summary" },
+          { label: "Show examples", action: "free_text" },
+          { label: "Building Overview", action: "building_summary" },
         ]),
         asset_ids: [], external_entity_ids: [], filters: {},
-        suggestions: ["Visa några arbetsordrar", "Hur många hyreskontrakt finns?", "Hur många underhållsposter finns?"],
+        suggestions: ["Show some work orders", "How many rental contracts exist?", "How many maintenance records exist?"],
       };
     }
 
@@ -2218,40 +2176,30 @@ function getSimpleIntentResponse(intent: string, text: string, previousConversat
   let suggestions: string[] = [];
   switch (intent) {
     case "greeting":
-      message = isSv ? "Hej! Hur kan jag hjälpa dig idag?" : "Hello! How can I help you today?";
-      buttons = isSv
-        ? [{ label: "Byggnadsöversikt", action: "building_summary" }, { label: "Visa ventilation", action: "system_query", payload: { system: "ventilation" } }, { label: "Sök utrustning", action: "search_prompt" }]
-        : [{ label: "Building overview", action: "building_summary" }, { label: "Show HVAC", action: "system_query", payload: { system: "ventilation" } }, { label: "Search equipment", action: "search_prompt" }];
-      suggestions = isSv ? ["Vilka system finns?", "Visa alla rum"] : ["What systems exist?", "Show all rooms"];
+      message = "Hello! How can I help you today?";
+      buttons = [{ label: "Building Overview", action: "building_summary" }, { label: "Show ventilation", action: "system_query", payload: { system: "ventilation" } }, { label: "Search equipment", action: "search_prompt" }];
+      suggestions = ["What systems exist?", "Show all rooms"];
       break;
     case "thanks":
-      message = isSv ? "Varsågod! Finns det något mer jag kan hjälpa dig med?" : "You're welcome! Is there anything else I can help with?";
-      buttons = isSv
-        ? [{ label: "Byggnadsöversikt", action: "building_summary" }, { label: "Visa ventilation", action: "system_query", payload: { system: "ventilation" } }, { label: "Sök utrustning", action: "search_prompt" }]
-        : [{ label: "Building overview", action: "building_summary" }, { label: "Show HVAC", action: "system_query", payload: { system: "ventilation" } }, { label: "Search equipment", action: "search_prompt" }];
-      suggestions = isSv ? ["Visa alla tillgångar", "Öppna ärenden"] : ["Show all assets", "Open issues"];
+      message = "You're welcome! Is there anything else I can help with?";
+      buttons = [{ label: "Building Overview", action: "building_summary" }, { label: "Show ventilation", action: "system_query", payload: { system: "ventilation" } }, { label: "Search equipment", action: "search_prompt" }];
+      suggestions = ["Show all assets", "Open issues"];
       break;
     case "help":
-      message = isSv
-        ? "Jag kan hjälpa dig med byggnadsdata, system, 3D-navigering och sökning."
-        : "I can help with building data, systems, 3D navigation and search.";
-      buttons = isSv
-        ? [{ label: "Byggnadsöversikt", action: "building_summary" }, { label: "Visa ventilation", action: "system_query", payload: { system: "ventilation" } }, { label: "Sök utrustning", action: "search_prompt" }]
-        : [{ label: "Building overview", action: "building_summary" }, { label: "Show HVAC", action: "system_query", payload: { system: "ventilation" } }, { label: "Search equipment", action: "search_prompt" }];
-      suggestions = isSv ? ["Vilka system finns?", "Visa alla rum", "Öppna ärenden"] : ["What systems exist?", "Show all rooms", "Open issues"];
+      message = "I can help with building data, systems, 3D navigation and search.";
+      buttons = [{ label: "Building Overview", action: "building_summary" }, { label: "Show ventilation", action: "system_query", payload: { system: "ventilation" } }, { label: "Search equipment", action: "search_prompt" }];
+      suggestions = ["What systems exist?", "Show all rooms", "Open issues"];
       break;
     case "confirmation": {
       const prevMsgs = previousConversation?.messages || [];
       const lastAssistant = [...prevMsgs].reverse().find((m: any) => m.role === "assistant");
       if (lastAssistant?.content) {
-        message = isSv ? "Bra! Vad vill du göra härnäst?" : "Great! What would you like to do next?";
+        message = "Great! What would you like to do next?";
       } else {
-        message = isSv ? "Vad kan jag hjälpa dig med?" : "What can I help you with?";
+        message = "What can I help you with?";
       }
-      buttons = isSv
-        ? [{ label: "Byggnadsöversikt", action: "building_summary" }, { label: "Visa ventilation", action: "system_query", payload: { system: "ventilation" } }, { label: "Sök utrustning", action: "search_prompt" }]
-        : [{ label: "Building overview", action: "building_summary" }, { label: "Show HVAC", action: "system_query", payload: { system: "ventilation" } }, { label: "Search equipment", action: "search_prompt" }];
-      suggestions = isSv ? ["Vilka system finns?", "Visa alla rum", "Öppna ärenden"] : ["What systems exist?", "Show all rooms", "Open issues"];
+      buttons = [{ label: "Building Overview", action: "building_summary" }, { label: "Show ventilation", action: "system_query", payload: { system: "ventilation" } }, { label: "Search equipment", action: "search_prompt" }];
+      suggestions = ["What systems exist?", "Show all rooms", "Open issues"];
       break;
     }
   }
@@ -2354,7 +2302,9 @@ RULES:
 4. Respond in the SAME LANGUAGE as the user (default Swedish).
 5. Never show UUIDs/GUIDs in message text.
 6. Max 2-3 sentences in the final answer.
-7. Never use IFC class names (IfcXxx) in the final answer — always use Swedish terms.`;
+7. Never use IFC class names (IfcXxx) in the final answer — always use Swedish terms.
+8. When currentBuilding is null but the user's request or recent conversation names a building (e.g. "Visa ventilation" after asking about "Småviken's temperature"), call resolve_building_by_name FIRST with that building name, then proceed. NEVER respond with "Ingen byggnad är vald" when the building is implied by context — always infer and resolve.
+9. After sensor/temperature data answers (e.g. "varmaste rummen", ranking by temperature/CO₂), always include a "Visa i 3D" button in present_results with action="colorize" so the user can jump directly to the color visualization.`;
 
 async function buildDynamicContext(supabase: any, context: any, userProfile: any, previousConversation: any) {
   let modelsCtx = "";
@@ -2395,11 +2345,38 @@ async function buildDynamicContext(supabase: any, context: any, userProfile: any
     memoryCtx = `\nPrevious conversation:\n${msgs}`;
   }
 
+  // When no building is selected, scan conversation for implicit building context
+  let implicitBuildingCtx = "";
+  if (!context?.currentBuilding?.fmGuid && previousConversation?.messages?.length) {
+    try {
+      const { data: buildings } = await supabase
+        .from("assets")
+        .select("fm_guid, common_name, name")
+        .eq("category", "Building")
+        .limit(50);
+      if (buildings?.length) {
+        const prevText = previousConversation.messages
+          .filter((m: any) => m.role === "user" || m.role === "assistant")
+          .slice(-6)
+          .map((m: any) => typeof m.content === "string" ? m.content : JSON.stringify(m.content))
+          .join(" ")
+          .toLowerCase();
+        for (const b of buildings) {
+          const bName = (b.common_name || b.name || "").toLowerCase().trim();
+          if (bName.length >= 4 && prevText.includes(bName)) {
+            implicitBuildingCtx = `\nIMPLICIT BUILDING FROM CONVERSATION: "${b.common_name || b.name}" (fm_guid: ${b.fm_guid}). The recent conversation strongly implies this is the target building. Pass fm_guid="${b.fm_guid}" directly to viewer and data tools — do NOT call resolve_building_by_name again.`;
+            break;
+          }
+        }
+      }
+    } catch (e) { console.error("Implicit building scan failed:", e); }
+  }
+
   const buildingAlreadyResolved = context?.currentBuilding?.fmGuid
     ? `\nThe current building "${context.currentBuilding.name}" (fm_guid: ${context.currentBuilding.fmGuid}) is ALREADY resolved. Do NOT call resolve_building_by_name for it. Always pass building_guid="${context.currentBuilding.fmGuid}" to data tools.`
     : "";
 
-  return `CURRENT SESSION CONTEXT:${buildingAlreadyResolved}${userCtx}${ctx}${modelsCtx}${memoryCtx}`;
+  return `CURRENT SESSION CONTEXT:${buildingAlreadyResolved}${userCtx}${ctx}${modelsCtx}${memoryCtx}${implicitBuildingCtx}`;
 }
 
 /* ─────────────────────────────────────────────
@@ -2452,12 +2429,12 @@ async function runClaudeRound(
 function generateFallbackSuggestions(result: any, context: any): string[] {
   const buildingName = context?.currentBuilding?.name;
   if (result?.action === "colorize") {
-    return ["Visa temperatur i fler rum", "Vilka sensorer finns?", "Byggnadsöversikt"];
+    return ["Show temperature in more rooms", "Which sensors are available?", "Building overview"];
   }
   return [
-    buildingName ? `Vilka system finns i ${buildingName}?` : "Vilka system finns?",
-    "Visa alla rum",
-    "Öppna ärenden",
+    buildingName ? `Which systems exist in ${buildingName}?` : "Which systems exist?",
+    "Show all rooms",
+    "Open issues",
   ];
 }
 
@@ -2609,13 +2586,13 @@ serve(async (req) => {
       async start(controller) {
         const send = (data: any) => { try { controller.enqueue(encoder.encode(sse(data))); } catch {} };
         try {
-          send({ type: "status", message: "Analyserar frågan…" });
+          send({ type: "status", message: "Analyzing query…" });
 
           let presentMeta: any = null;
           let fullText = "";
 
           for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-            if (round > 0) send({ type: "status", message: "Bearbetar resultat…" });
+            if (round > 0) send({ type: "status", message: "Processing results…" });
 
             // Buffer this round's text; only the FINAL round's text is the answer.
             // Intermediate rounds may contain step narration which we must not show.
@@ -2671,7 +2648,7 @@ serve(async (req) => {
 
           // Guard: the model finished without any user-facing text
           if (!fullText.trim()) {
-            fullText = "Här är resultatet — se alternativen nedan.";
+            fullText = "Here is the result — see the options below.";
             send({ type: "delta", content: fullText });
           }
 

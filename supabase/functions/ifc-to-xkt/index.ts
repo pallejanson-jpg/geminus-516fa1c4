@@ -374,7 +374,9 @@ async function populateAssetsFromMetaObjects(
   supabase: any,
   buildingFmGuid: string,
   metaObjects: any[],
-  appendLog: (msg: string, progress?: number) => Promise<void>
+  appendLog: (msg: string, progress?: number) => Promise<void>,
+  existingStoreyNames?: Map<string, string>,  // normalizedName → fm_guid; provided for secondary models
+  fmguidMap?: Map<string, string>             // IFC GlobalId → FMGUID from ifc_fmguid_map + property scan
 ) {
   const now = new Date().toISOString();
   const importedFmGuids = new Set<string>();
@@ -455,22 +457,44 @@ async function populateAssetsFromMetaObjects(
   }
 
   // Pass 1: Collect storeys
+  // For secondary models (existingStoreyNames provided), match by name to master's storeys.
   const storeyRows: any[] = [];
   for (const m of metaObjects) {
     const t = m.metaType || m.type || "";
     if (t !== "IfcBuildingStorey") continue;
     const id = m.metaObjectId || m.id || "";
     const name = m.metaObjectName || m.name || t;
-    const fmGuid = id || await deterministicGuid([buildingFmGuid, name, "IfcBuildingStorey"]);
+
+    let fmGuid: string;
+    let skipUpsert = false;
+    if (existingStoreyNames) {
+      // Secondary model: try to match by exact name, then case-insensitive
+      const existingGuid =
+        existingStoreyNames.get(name) ||
+        existingStoreyNames.get(name.trim().toLowerCase());
+      if (existingGuid) {
+        fmGuid = existingGuid;
+        skipUpsert = true;  // storey already exists from master model
+      } else {
+        // No match — create with a warning (storey exists only in secondary model)
+        fmGuid = id || await deterministicGuid([buildingFmGuid, name, "IfcBuildingStorey"]);
+        console.warn(`[ifc-to-xkt] Secondary model: no matching storey for "${name}" — creating new`);
+      }
+    } else {
+      fmGuid = fmguidMap?.get(id) || id || await deterministicGuid([buildingFmGuid, name, "IfcBuildingStorey"]);
+    }
+
     storeyIdToFmGuid.set(id, fmGuid);
     importedFmGuids.add(fmGuid);
-    const attrs = extractProperties(m);
-    storeyRows.push({
-      fm_guid: fmGuid, name, common_name: name,
-      category: "Building Storey", building_fm_guid: buildingFmGuid, level_fm_guid: fmGuid,
-      is_local: false, created_in_model: true, synced_at: now,
-      ...(attrs ? { attributes: { source: "ifc", ...attrs } } : {}),
-    });
+    if (!skipUpsert) {
+      const attrs = extractProperties(m);
+      storeyRows.push({
+        fm_guid: fmGuid, name, common_name: name,
+        category: "Building Storey", building_fm_guid: buildingFmGuid, level_fm_guid: fmGuid,
+        is_local: false, created_in_model: true, synced_at: now,
+        ...(attrs ? { attributes: { source: "ifc", ...attrs } } : {}),
+      });
+    }
   }
 
   // Pass 2: Collect spaces
@@ -480,7 +504,7 @@ async function populateAssetsFromMetaObjects(
     if (t !== "IfcSpace") continue;
     const id = m.metaObjectId || m.id || "";
     const name = m.metaObjectName || m.name || t;
-    const fmGuid = id || await deterministicGuid([buildingFmGuid, name, "IfcSpace"]);
+    const fmGuid = fmguidMap?.get(id) || id || await deterministicGuid([buildingFmGuid, name, "IfcSpace"]);
     spaceIdToFmGuid.set(id, fmGuid);
     importedFmGuids.add(fmGuid);
     const parentId = m.parentMetaObjectId || m.parentId || "";
@@ -504,7 +528,7 @@ async function populateAssetsFromMetaObjects(
     const id = m.metaObjectId || m.id || "";
     const name = m.metaObjectName || m.name || "";
     if (!id && !name) continue;
-    const fmGuid = id || await deterministicGuid([buildingFmGuid, name, t]);
+    const fmGuid = fmguidMap?.get(id) || id || await deterministicGuid([buildingFmGuid, name, t]);
     importedFmGuids.add(fmGuid);
     const storeyMetaId = resolveStorey(id);
     const levelFmGuid = storeyMetaId ? storeyIdToFmGuid.get(storeyMetaId) || null : null;
@@ -628,7 +652,7 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    const { ifcStoragePath, buildingFmGuid, modelName, jobId } = await req.json();
+    const { ifcStoragePath, buildingFmGuid, modelName, jobId, isMasterModel = true, useFmguidMap = false } = await req.json();
 
     if (!ifcStoragePath || !buildingFmGuid) {
       return new Response(
@@ -756,6 +780,53 @@ Deno.serve(async (req) => {
 
     await appendLog(`Hierarchy: ${levels.length} levels, ${spaces.length} spaces`, 65);
 
+    // 4a. Build FMGUID map when requested (from IFC-upload flow)
+    //     Priority: FMGuid property in metaObject → ifc_fmguid_map DB table
+    let fmguidMap: Map<string, string> | undefined;
+    if (useFmguidMap) {
+      fmguidMap = new Map<string, string>();
+
+      // Extract FMGuid property from each metaObject's propertySets
+      for (const m of metaObjectsList as any[]) {
+        const id = m.metaObjectId || m.id || "";
+        if (!id) continue;
+        const props = m.propertySets || m.properties || {};
+        for (const setVal of Object.values(props)) {
+          if (setVal && typeof setVal === "object" && !Array.isArray(setVal)) {
+            for (const [k, v] of Object.entries(setVal as Record<string, any>)) {
+              if (k.toLowerCase() === "fmguid" && v) {
+                fmguidMap.set(id, String(v));
+                break;
+              }
+            }
+          }
+        }
+      }
+      await appendLog(`FMGuid property scan: ${fmguidMap.size} elements already had FMGuid in IFC`, 66);
+
+      // Load ifc_fmguid_map from DB for elements without a property-level FMGuid
+      const allMetaIds = (metaObjectsList as any[])
+        .map((m: any) => m.metaObjectId || m.id || "")
+        .filter((id: string) => id && !fmguidMap!.has(id));
+
+      if (allMetaIds.length > 0) {
+        for (let i = 0; i < allMetaIds.length; i += 500) {
+          const batch = allMetaIds.slice(i, i + 500);
+          const { data: rows } = await supabase
+            .from("ifc_fmguid_map")
+            .select("ifc_global_id, fm_guid")
+            .eq("building_fm_guid", buildingFmGuid)
+            .in("ifc_global_id", batch);
+          for (const row of rows || []) {
+            if (!fmguidMap.has(row.ifc_global_id)) {
+              fmguidMap.set(row.ifc_global_id, row.fm_guid);
+            }
+          }
+        }
+        await appendLog(`ifc_fmguid_map: resolved ${fmguidMap.size} total FMGUID mappings`, 67);
+      }
+    }
+
     // 4. Extract systems, connections, and external IDs
     await appendLog("Extracting systems and connectivity...", 66);
     const { systems, connections, objectExternalIds } = extractSystemsAndConnections(metaObjectsList as any[]);
@@ -848,6 +919,25 @@ Deno.serve(async (req) => {
 
     // 8+9. Persist systems AND populate assets in parallel (independent DB operations)
     await appendLog("Saving systems, connectivity, and building hierarchy in parallel...", 85);
+
+    // For secondary models, pre-fetch existing storeys so floor matching can reuse master's fm_guids
+    let existingStoreyNames: Map<string, string> | undefined;
+    if (!isMasterModel) {
+      const { data: existingStoreys } = await supabase
+        .from("assets")
+        .select("fm_guid, common_name")
+        .eq("building_fm_guid", buildingFmGuid)
+        .eq("category", "Building Storey");
+      if (existingStoreys && existingStoreys.length > 0) {
+        existingStoreyNames = new Map<string, string>();
+        for (const s of existingStoreys) {
+          existingStoreyNames.set(s.common_name as string, s.fm_guid as string);
+          existingStoreyNames.set((s.common_name as string).trim().toLowerCase(), s.fm_guid as string);
+        }
+        await appendLog(`Secondary model: found ${existingStoreys.length} existing storeys for floor matching`, 86);
+      }
+    }
+
     await Promise.all([
       persistSystemsAndConnections(
         supabase,
@@ -857,7 +947,7 @@ Deno.serve(async (req) => {
         objectExternalIds,
         appendLog
       ),
-      populateAssetsFromMetaObjects(supabase, buildingFmGuid, metaObjectsList as any[], appendLog),
+      populateAssetsFromMetaObjects(supabase, buildingFmGuid, metaObjectsList as any[], appendLog, existingStoreyNames, fmguidMap),
     ]);
 
     await updateJob({

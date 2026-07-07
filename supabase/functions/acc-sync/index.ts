@@ -709,6 +709,111 @@ const ROOM_PROPERTY_FIELDS: Record<string, string[]> = {
   comments: ['comments', 'kommentarer'],
 };
 
+async function extractBimHierarchyViaMD(
+  token: string,
+  versionUrns: string[],
+  isEmea: boolean,
+): Promise<{ levels: any[]; rooms: any[]; instances: any[] }> {
+  const mdBase = isEmea
+    ? "https://developer.api.autodesk.com/modelderivative/v2/regions/eu/designdata"
+    : "https://developer.api.autodesk.com/modelderivative/v2/designdata";
+
+  const allLevels: any[] = [];
+  const allRooms: any[] = [];
+  const allInstances: any[] = [];
+
+  for (const versionUrn of versionUrns) {
+    const urnBase64 = btoa(versionUrn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+    // Get metadata (list of viewables)
+    const metaRes = await fetch(`${mdBase}/${urnBase64}/metadata`, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+    });
+    if (!metaRes.ok) {
+      console.warn(`[MD fallback] metadata failed (${metaRes.status}) for urn ${versionUrn.slice(-20)}`);
+      continue;
+    }
+    const metaData = await metaRes.json();
+    const viewables = metaData.data?.metadata || [];
+    const view3d = viewables.find((v: any) => v.role === '3d') || viewables[0];
+    if (!view3d) { console.warn(`[MD fallback] no 3D viewable for urn ${versionUrn.slice(-20)}`); continue; }
+
+    console.log(`[MD fallback] Using viewable guid=${view3d.guid} for urn ${versionUrn.slice(-20)}`);
+
+    // Get properties (may need polling for large models)
+    const propsUrl = `${mdBase}/${urnBase64}/metadata/${view3d.guid}/properties?forceget=true`;
+    let propsData: any = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const propsRes = await fetch(propsUrl, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+      });
+      if (propsRes.status === 202) {
+        console.log(`[MD fallback] Properties not ready yet (202), waiting 5s…`);
+        await new Promise(r => setTimeout(r, 5000));
+        continue;
+      }
+      if (!propsRes.ok) {
+        const err = await propsRes.text();
+        console.warn(`[MD fallback] properties failed (${propsRes.status}): ${err.substring(0, 200)}`);
+        break;
+      }
+      propsData = await propsRes.json();
+      break;
+    }
+
+    if (!propsData) continue;
+
+    const collection: any[] = propsData.data?.collection || [];
+    console.log(`[MD fallback] Got ${collection.length} objects from MD properties`);
+
+    for (const obj of collection) {
+      const allProps = obj.properties || {};
+      // Category can be in various property groups depending on the model
+      let category = '';
+      for (const [, grp] of Object.entries(allProps)) {
+        const cat = (grp as any)?.['Category'];
+        if (cat) { category = cat; break; }
+      }
+      const name = obj.name || '';
+      const externalId = obj.externalId || String(obj.objectid || '');
+
+      if (!category && !name) continue;
+
+      const isLevel = category === 'Revit Levels' || category === 'Levels' || category === 'IfcBuildingStorey';
+      const isRoom = category === 'Revit Rooms' || category === 'Rooms' || category === 'IfcSpace' || /^room$/i.test(category);
+
+      if (isLevel) {
+        const elev = (allProps['Constraints'] as any)?.['Elevation'] ?? (allProps['Dimensions'] as any)?.['Elevation'] ?? null;
+        allLevels.push({
+          externalId, name, objectId: obj.objectid, versionUrn,
+          elevation: elev != null ? parseFloat(String(elev)) : null,
+          fmGuid: '',
+        });
+      } else if (isRoom) {
+        const idData = (allProps['Identity Data'] as any) || {};
+        const number = idData['Number'] || idData['Room Number'] || '';
+        const level = (allProps['Constraints'] as any)?.['Level'] || null;
+        const area = (allProps['Dimensions'] as any)?.['Area'] ?? null;
+        const commonName = number && name ? `${number} ${name}` : (number || name || `Room ${externalId.slice(-8)}`);
+        allRooms.push({
+          externalId, name, number, level, commonName, objectId: obj.objectid, versionUrn,
+          properties: area != null ? { area: parseFloat(String(area)) } : {},
+          fmGuid: '',
+        });
+      } else if (category && !SKIP_INSTANCE_CATEGORIES.has(category)) {
+        const level = (allProps['Constraints'] as any)?.['Level'] || null;
+        allInstances.push({
+          externalId, name: name || category, category, level, room: null,
+          objectId: obj.objectid, versionUrn, properties: {}, fmGuid: '',
+        });
+      }
+    }
+  }
+
+  console.log(`[MD fallback] Extracted: ${allLevels.length} levels, ${allRooms.length} rooms, ${allInstances.length} instances`);
+  return { levels: allLevels, rooms: allRooms, instances: allInstances };
+}
+
 async function extractBimHierarchy(
   token: string,
   projectId: string,
@@ -716,9 +821,13 @@ async function extractBimHierarchy(
   regionHeaders: Record<string, string>,
 ): Promise<{ levels: any[]; rooms: any[]; instances: any[]; fieldsMap: Record<string, string>; indexState: string }> {
   const cleanProjectId = projectId.replace(/^b\./, "");
+  const isEmea = regionHeaders?.["region"]?.toUpperCase() === "EMEA";
+  const indexBase = isEmea
+    ? `https://developer.api.autodesk.com/construction/index/v2/regions/eu/projects/${cleanProjectId}`
+    : `https://developer.api.autodesk.com/construction/index/v2/projects/${cleanProjectId}`;
 
   // Step 1: POST to batch-status to start/check indexing
-  const batchUrl = `https://developer.api.autodesk.com/construction/index/v2/projects/${cleanProjectId}/indexes:batch-status`;
+  const batchUrl = `${indexBase}/indexes:batch-status`;
 
   const batchRes = await fetch(batchUrl, {
     method: 'POST',
@@ -735,6 +844,13 @@ async function extractBimHierarchy(
 
   if (!batchRes.ok) {
     const errorText = await batchRes.text();
+    // 403 = project doesn't have Model Coordination / Design Collaboration.
+    // Fall back to extracting properties via the Model Derivative API instead.
+    if (batchRes.status === 403) {
+      console.log(`[extractBimHierarchy] Index API 403 — falling back to Model Derivative properties`);
+      const { levels, rooms, instances } = await extractBimHierarchyViaMD(token, versionUrns, isEmea);
+      return { levels, rooms, instances, fieldsMap: {}, indexState: 'FINISHED' };
+    }
     throw new Error(`Model Properties batch-status failed (${batchRes.status}): ${errorText}`);
   }
 
@@ -2184,7 +2300,7 @@ serve(async (req: Request) => {
           console.error(`sync-bim-data error: ${errMsg}`);
           return new Response(
             JSON.stringify({ success: false, error: errMsg }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
       }
@@ -2386,17 +2502,18 @@ serve(async (req: Request) => {
         const overallStatus = manifest.status; // "pending", "inprogress", "success", "failed"
         const progress = manifest.progress || "0%";
 
-        // Find all derivatives (SVF2 + any geometry resources)
+        // Find all derivatives — propagate outputType from parent derivative to resource children
         const derivatives: any[] = [];
-        function findDerivatives(node: any) {
+        function findDerivatives(node: any, parentOutputType?: string) {
+          const ot = node.outputType || parentOutputType;
           if (node.type === "resource" && node.role) {
-            derivatives.push({ urn: node.urn, role: node.role, mime: node.mime, type: node.type, outputType: node.outputType });
+            derivatives.push({ urn: node.urn, role: node.role, mime: node.mime, type: node.type, outputType: ot });
           }
           if (node.children) {
-            for (const child of node.children) findDerivatives(child);
+            for (const child of node.children) findDerivatives(child, ot);
           }
           if (node.derivatives) {
-            for (const d of node.derivatives) findDerivatives(d);
+            for (const d of node.derivatives) findDerivatives(d, ot);
           }
         }
         findDerivatives(manifest);
@@ -3644,7 +3761,7 @@ serve(async (req: Request) => {
     const message = error instanceof Error ? error.message : String(error);
     return new Response(
       JSON.stringify({ success: false, error: message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });

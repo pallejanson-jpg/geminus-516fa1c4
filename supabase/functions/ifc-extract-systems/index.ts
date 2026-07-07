@@ -354,12 +354,12 @@ function extractSystemsAndConnections(metaObjects: any[]): {
 
 function inferDiscipline(name: string, type: string): string {
   const lower = (name + " " + type).toLowerCase();
-  if (lower.includes("vent") || lower.includes("air") || lower.includes("lb") || lower.includes("duct")) return "Ventilation";
-  if (lower.includes("heat") || lower.includes("radi") || lower.includes("vs")) return "Heating";
-  if (lower.includes("cool") || lower.includes("kyl")) return "Cooling";
-  if (lower.includes("elec") || lower.includes("el-") || lower.includes("circuit")) return "Electrical";
-  if (lower.includes("plumb") || lower.includes("pipe") || lower.includes("va")) return "Plumbing";
-  if (lower.includes("fire") || lower.includes("brand") || lower.includes("sprink")) return "FireProtection";
+  if (/vent|air|lb|duct|ta|fra/.test(lower)) return "Ventilation";
+  if (/heat|radi|vs|vv/.test(lower)) return "Heating";
+  if (/cool|kyl|ka/.test(lower)) return "Cooling";
+  if (/elec|el-|circuit|kraft/.test(lower)) return "Electrical";
+  if (/plumb|pipe|va|avlopp/.test(lower)) return "Plumbing";
+  if (/fire|brand|sprink/.test(lower)) return "FireProtection";
   return "Other";
 }
 
@@ -395,7 +395,10 @@ async function reconcileGuids(
   // Map: IFC metaObjectId → resolved fm_guid
   const guidMap = new Map<string, string>();
 
-  // 1. Check asset_external_ids for existing mappings
+  // 1. Check asset_external_ids for existing mappings — both IFC and ACC sources.
+  // If ACC was synced first, we need to find acc-bim-instance-* fm_guids via their externalId.
+  // IFC GlobalId != ACC externalId, so direct lookup won't match cross-source.
+  // But if IFC was previously run, source='ifc' will match.
   const ifcIds = objectExternalIds.map((o) => o.metaObjectId);
   const existingMappings = new Map<string, string>();
 
@@ -403,13 +406,15 @@ async function reconcileGuids(
     const chunk = ifcIds.slice(i, i + 500);
     const { data } = await supabase
       .from("asset_external_ids")
-      .select("external_id, fm_guid")
-      .eq("source", "ifc")
+      .select("external_id, fm_guid, source")
       .in("external_id", chunk);
 
     if (data) {
       for (const row of data) {
-        existingMappings.set(row.external_id, row.fm_guid);
+        // Prefer ifc source if both exist for same id; acc is fallback
+        if (!existingMappings.has(row.external_id) || row.source === "ifc") {
+          existingMappings.set(row.external_id, row.fm_guid);
+        }
       }
     }
   }

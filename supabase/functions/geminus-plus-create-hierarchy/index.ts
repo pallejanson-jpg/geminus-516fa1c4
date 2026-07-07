@@ -96,7 +96,7 @@ serve(async (req) => {
 
     if (!body.buildingFmGuid || !body.modelFmGuid) {
       return new Response(
-        JSON.stringify({ success: false, error: "buildingFmGuid och modelFmGuid krävs" }),
+        JSON.stringify({ success: false, error: "buildingFmGuid and modelFmGuid are required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -107,7 +107,7 @@ serve(async (req) => {
 
     if (!apiUrl || !apiKey) {
       return new Response(
-        JSON.stringify({ success: false, error: "Geminus Plus API inte konfigurerat" }),
+        JSON.stringify({ success: false, error: "Geminus Plus API not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -215,7 +215,7 @@ serve(async (req) => {
         success: true,
         levelsCreated,
         spacesCreated,
-        message: `Skapade ${levelsCreated} våningsplan och ${spacesCreated} rum i Geminus Plus`,
+        message: `Created ${levelsCreated} floors and ${spacesCreated} rooms in Geminus Plus`,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -224,7 +224,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: false,
-        error: error instanceof Error ? error.message : "Internt serverfel",
+        error: error instanceof Error ? error.message : "Internal server error",
       }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
