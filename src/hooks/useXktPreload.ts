@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { xktCacheService } from '@/services/xkt-cache-service';
+import { xktIdbCache } from '@/services/xkt-idb-cache';
 import { supabase } from '@/integrations/supabase/client';
 
 // Global cache to persist preloaded buildings across component unmounts
@@ -95,9 +96,10 @@ export function clearBuildingFromMemory(buildingFmGuid: string): void {
     }
   });
   keysToDelete.forEach(key => xktMemoryCache.delete(key));
-  // Also remove from the preload guard so next preload fetches fresh data
   globalPreloadedBuildings.delete(buildingFmGuid);
-  console.log(`XKT Memory: Cleared ${keysToDelete.length} models for building ${buildingFmGuid.substring(0, 8)}... (preload guard reset)`);
+  // Also evict IDB entries so forced re-sync gets fresh data from Asset+
+  xktIdbCache.clearBuilding(buildingFmGuid).catch(() => {});
+  console.log(`XKT Memory: Cleared ${keysToDelete.length} models for building ${buildingFmGuid.substring(0, 8)}... (preload guard + IDB reset)`);
 }
 
 /**
@@ -253,10 +255,22 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
           const fetchModel = async (model: typeof models[0], signedUrl?: string) => {
             try {
               const modelSize = model.file_size || 0;
-
               if (modelSize > MAX_SINGLE_MODEL_BYTES) return;
               if (modelSize > 0 && modelSize < 50_000) return;
               if (isModelInMemory(model.model_id, buildingFmGuid)) return;
+
+              // Check IDB disk cache before hitting the network
+              const stale = (model as any).updated_at
+                ? await xktIdbCache.isStale(buildingFmGuid, model.model_id, (model as any).updated_at)
+                : false;
+              if (!stale) {
+                const idbData = await xktIdbCache.get(buildingFmGuid, model.model_id);
+                if (idbData) {
+                  storeModelInMemory(model.model_id, buildingFmGuid, idbData);
+                  console.log(`XKT Preload: ⚡ IDB hit ${model.model_id}`);
+                  return;
+                }
+              }
 
               const url = signedUrl || model.file_url;
               if (!url) return;
@@ -267,6 +281,8 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
                 const firstByte = data.byteLength > 0 ? String.fromCharCode(new Uint8Array(data)[0]) : '';
                 if (data.byteLength < 50_000 || firstByte === '<' || firstByte === '{') return;
                 storeModelInMemory(model.model_id, buildingFmGuid, data);
+                // Save to IDB in background for future sessions
+                xktIdbCache.put(buildingFmGuid, model.model_id, data, (model as any).updated_at ?? null).catch(() => {});
               }
             } catch (e) {
               console.warn(`XKT Preload: Failed to fetch ${model.model_id}:`, e);

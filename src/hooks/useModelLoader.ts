@@ -10,6 +10,7 @@ import { useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeGuid } from '@/lib/utils';
 import { xktCacheService } from '@/services/xkt-cache-service';
+import { xktIdbCache } from '@/services/xkt-idb-cache';
 import { clearBuildingFromMemory, getModelFromMemory, storeModelInMemory, getMemoryStats } from '@/hooks/useXktPreload';
 import { applyArchitectColors } from '@/lib/architect-colors';
 import { isRealTiling, getTilesToLoad } from '@/hooks/useFloorPriorityLoading';
@@ -19,7 +20,7 @@ import type { GeometryManifest } from '@/lib/types';
 export interface ModelInfo {
   model_id: string;
   model_name: string | null;
-  storage_path: string;
+  storage_path: string | null;
   file_size: number | null;
   storey_fm_guid: string | null;
   is_chunk?: boolean;
@@ -27,6 +28,7 @@ export interface ModelInfo {
   parent_model_id?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  source_url?: string | null;
 }
 
 type ModelCandidate = ModelInfo & { synced_at?: string | null; source: 'db' | 'storage' };
@@ -82,7 +84,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
     // to avoid re-querying on every load
     const dbResult = await supabase
       .from('xkt_models')
-      .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at, is_chunk, chunk_order, parent_model_id, format, created_at, updated_at')
+      .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at, is_chunk, chunk_order, parent_model_id, format, created_at, updated_at, source_url')
       .eq('building_fm_guid', buildingFmGuid)
       .order('file_size', { ascending: true })  // Load smallest first
       .limit(100);  // Safety limit
@@ -182,7 +184,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
         console.log(`[ModelLoader] Server synced ${syncResult.synced} models — reading fresh DB records`);
         const { data: freshModels } = await supabase
           .from('xkt_models')
-          .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at, is_chunk, chunk_order, parent_model_id')
+          .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at, is_chunk, chunk_order, parent_model_id, source_url')
           .eq('building_fm_guid', buildingFmGuid)
           .order('file_size', { ascending: true });
         if (freshModels?.length) return freshModels.map((m: any) => ({ ...m, source: 'db' as const }));
@@ -330,6 +332,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
         const finalModelName = rawModelName || matchedRevision?.modelName || matchedRevision?.entityName || modelId;
         storeModelInMemory(modelId, buildingFmGuid, xktData);
         xktCacheService.saveModelFromViewer(modelId, xktData, buildingFmGuid, finalModelName, revisionId || undefined).catch(() => {});
+        xktIdbCache.put(buildingFmGuid, modelId, xktData, new Date().toISOString()).catch(() => {});
         bootstrapped.push({
           model_id: modelId, model_name: finalModelName,
           storage_path: `${buildingFmGuid}/${modelId}.xkt`,
@@ -341,6 +344,78 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
       console.warn('[ModelLoader] Client-side bootstrap failed:', e);
       return [];
     }
+  }, [buildingFmGuid]);
+
+  /**
+   * Tier 4: Fetch XKT directly from Asset+ API (last resort for models too large for storage).
+   * Source info is encoded in model.source_url as "direct-stream:<bimObjectId>".
+   * Fetched data is saved to IDB so subsequent loads skip this tier.
+   */
+  const loadFromAssetPlus = useCallback(async (
+    model: ModelInfo,
+    viewer: any,
+    xktLoader: any,
+    metaModelSrc: string | undefined,
+    modelStart: number,
+  ): Promise<boolean> => {
+    const waitForModel = (entity: any) =>
+      new Promise<boolean>((resolve) => {
+        let settled = false;
+        const done = (ok: boolean) => { if (!settled) { settled = true; resolve(ok); } };
+        entity?.on?.('loaded', () => done(true));
+        entity?.on?.('error', (err: unknown) => { console.error(`[ModelLoader] Direct-stream error: ${model.model_id}`, err); done(false); });
+        setTimeout(() => done(false), 120_000);
+      });
+    const modelId = model.model_id;
+    const bimObjectId = model.source_url?.startsWith('direct-stream:')
+      ? model.source_url.slice('direct-stream:'.length)
+      : modelId;
+
+    console.log(`[ModelLoader] 🌐 Direct-stream → ${modelId} (bimObjectId: ${bimObjectId.substring(0, 8)}…)`);
+
+    try {
+      const [tokenRes, configRes] = await Promise.all([
+        supabase.functions.invoke('geminus-plus-query', { body: { action: 'getToken', buildingFmGuid } }),
+        supabase.functions.invoke('geminus-plus-query', { body: { action: 'getConfig', buildingFmGuid } }),
+      ]);
+      const accessToken = tokenRes.data?.accessToken;
+      const apiUrl = configRes.data?.apiUrl;
+      const apiKey = configRes.data?.apiKey;
+      if (!accessToken || !apiUrl) {
+        console.warn('[ModelLoader] Direct-stream: missing credentials');
+        return false;
+      }
+
+      const baseUrl = apiUrl.replace(/\/+$/, '');
+      // Try context=Default first (confirmed working), fall back to Building
+      for (const ctx of ['Default', 'Building']) {
+        const xktUrl = `${baseUrl}/GetXktData?modelid=${bimObjectId}&context=${ctx}&apiKey=${apiKey}`;
+        const resp = await fetch(xktUrl, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          signal: AbortSignal.timeout(120_000),
+        });
+        if (!resp.ok) continue;
+
+        const arrayBuf = await resp.arrayBuffer();
+        if (arrayBuf.byteLength < 50_000) continue;
+
+        // Cache to IDB so next load comes from disk
+        xktIdbCache.put(buildingFmGuid, modelId, arrayBuf, new Date().toISOString()).catch(() => {});
+        storeModelInMemory(modelId, buildingFmGuid, arrayBuf);
+
+        const entity = xktLoader.load({ id: modelId, xkt: arrayBuf, edges: true, ...(metaModelSrc && { metaModelSrc }) });
+        const ok = await waitForModel(entity);
+        if (!ok) return false;
+        const loaded = viewer.scene?.models?.[modelId];
+        const count = loaded?.numEntities ?? Object.keys(loaded?.objects || {}).length ?? 0;
+        if (count === 0) { try { loaded?.destroy?.(); } catch {} return false; }
+        console.log(`%c[ModelLoader] 🌐 Asset+ → ${modelId} (${(arrayBuf.byteLength / 1024 / 1024).toFixed(1)} MB, ctx=${ctx}) ${Math.round(performance.now() - modelStart)}ms`, 'color:#f97316;font-weight:bold');
+        return true;
+      }
+    } catch (e) {
+      console.warn('[ModelLoader] Direct-stream failed:', e);
+    }
+    return false;
   }, [buildingFmGuid]);
 
   /**
@@ -374,12 +449,12 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
           setTimeout(() => done(false), 90_000);
         });
 
+      // 1. Memory cache (in-process, fastest)
       const memData = getModelFromMemory(modelId, buildingFmGuid);
       if (memData) {
         const entity = xktLoader.load({ id: modelId, xkt: memData, edges: true, ...(metaModelSrc && { metaModelSrc }) });
         const ok = await waitForModel(entity);
         if (!ok) return false;
-        // Check for empty model
         const loaded = viewer.scene?.models?.[modelId];
         const count = loaded?.numEntities ?? Object.keys(loaded?.objects || {}).length ?? 0;
         if (count === 0) { try { loaded?.destroy?.(); } catch {} return false; }
@@ -387,10 +462,37 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
         return true;
       }
 
+      // 2. IndexedDB disk cache — survives page refresh, no network needed
+      const stale = model.updated_at
+        ? await xktIdbCache.isStale(buildingFmGuid, modelId, model.updated_at)
+        : false;
+      if (!stale) {
+        const idbData = await xktIdbCache.get(buildingFmGuid, modelId);
+        if (idbData) {
+          storeModelInMemory(modelId, buildingFmGuid, idbData);
+          const entity = xktLoader.load({ id: modelId, xkt: idbData, edges: true, ...(metaModelSrc && { metaModelSrc }) });
+          const ok = await waitForModel(entity);
+          if (!ok) return false;
+          const loaded = viewer.scene?.models?.[modelId];
+          const count = loaded?.numEntities ?? Object.keys(loaded?.objects || {}).length ?? 0;
+          if (count === 0) { try { loaded?.destroy?.(); } catch {} return false; }
+          console.log(`%c[ModelLoader] ⚡ IDB → ${modelId} (${(idbData.byteLength / 1024 / 1024).toFixed(1)} MB) ${Math.round(performance.now() - modelStart)}ms`, 'color:#a855f7;font-weight:bold');
+          return true;
+        }
+      }
+
+      // 3. Supabase Storage (network)
+      if (!model.storage_path) {
+        // No storage path — jump straight to tier 4 (direct-stream from Asset+)
+        return loadFromAssetPlus(model, viewer, xktLoader, metaModelSrc, modelStart);
+      }
       const { data: urlData } = await supabase.storage
         .from('xkt-models')
         .createSignedUrl(model.storage_path, 3600);
-      if (!urlData?.signedUrl) return false;
+      if (!urlData?.signedUrl) {
+        // Signed URL failed — fall through to direct-stream as last resort
+        return loadFromAssetPlus(model, viewer, xktLoader, metaModelSrc, modelStart);
+      }
 
       const shouldStream = (model.file_size ?? 0) > 30 * 1024 * 1024;
       if (shouldStream) {
@@ -405,6 +507,8 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
       if (arrayBuf.byteLength < 50_000 || firstByte === '<' || firstByte === '{') return false;
 
       storeModelInMemory(modelId, buildingFmGuid, arrayBuf);
+      // Save to IDB in background — don't block loading
+      xktIdbCache.put(buildingFmGuid, modelId, arrayBuf, model.updated_at ?? null).catch(() => {});
       const entity = xktLoader.load({ id: modelId, xkt: arrayBuf, edges: true, ...(metaModelSrc && { metaModelSrc }) });
       const ok = await waitForModel(entity);
       if (!ok) return false;
@@ -418,7 +522,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
       console.warn(`[ModelLoader] Error loading ${modelId}:`, e);
       return false;
     }
-  }, [buildingFmGuid]);
+  }, [buildingFmGuid, loadFromAssetPlus]);
 
   /**
    * Run the full model loading pipeline with progressive visibility.
