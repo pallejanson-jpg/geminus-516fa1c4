@@ -16,5 +16,18 @@
       "mcp__geminus__list_buildings",
       "Bash(where *)"
     ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "n=$(git -C \"C:/MDP/GEMINUS\" status --porcelain 2>/dev/null | wc -l); if [ \"$n\" -gt 20 ]; then echo \"{\\\"systemMessage\\\": \\\"⚠️ Arbetsträdet har $n ändrade/ospårade filer — dags att committa i tematiska delar innan det växer.\\\"}\"; fi",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
   }
 }
