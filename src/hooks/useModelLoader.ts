@@ -162,6 +162,18 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
     clearBuildingFromMemory(buildingFmGuid);
     console.log(`[ModelLoader] bootstrapFromGeminusPlus started for ${buildingFmGuid}`);
 
+    // Fire-and-forget structure sync so building/storey/space names appear in the Navigator.
+    // Runs in background — doesn't block XKT loading.
+    supabase.functions.invoke('geminus-plus-sync', {
+      body: { action: 'sync-structure', buildingFmGuid, force: false },
+    }).then(({ error }) => {
+      if (error) console.warn('[ModelLoader] Background sync-structure failed:', error);
+      else {
+        console.log('[ModelLoader] Background sync-structure complete — emitting building-data-changed');
+        window.dispatchEvent(new Event('building-data-changed'));
+      }
+    }).catch(() => {});
+
     // Step 1: Server-side sync with timeout (fail-fast on slow networks)
     try {
       console.log('[ModelLoader] Trying server-side sync with force=true...');

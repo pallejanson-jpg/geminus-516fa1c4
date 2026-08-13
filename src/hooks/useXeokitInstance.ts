@@ -181,6 +181,17 @@ export function useXeokitInstance({ canvasRef, buildingFmGuid, onContextLost }: 
       });
     }
 
+    // 6b. ViewCullPlugin — kd-tree frustum culling, reduces GPU draw calls on large models
+    if (sdk.ViewCullPlugin) {
+      new sdk.ViewCullPlugin(viewer, { maxTreeDepth: 20 });
+    }
+
+    // 6c. BCFViewpointsPlugin — save/restore camera + section planes + object states in BCF format
+    if (sdk.BCFViewpointsPlugin) {
+      const bcf = new sdk.BCFViewpointsPlugin(viewer, {});
+      (window as any).__xeokitBCF = bcf;
+    }
+
     // 7. Loaders
     const xktLoader = new sdk.XKTLoaderPlugin(viewer, { reuseGeometries: true });
     let gltfLoader: any = null;

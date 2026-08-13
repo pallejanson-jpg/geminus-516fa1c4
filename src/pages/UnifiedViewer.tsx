@@ -45,6 +45,7 @@ import { VIEWER_TOOL_CHANGED_EVENT, VIEW_MODE_2D_TOGGLED_EVENT, VIEW_MODE_REQUES
 import SplitPlanView from '@/components/viewer/SplitPlanView';
 import { FLOOR_SELECTION_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
 import NavigationPanel from '@/components/viewer/NavigationPanel';
+import { BCFViewpointsPanel } from '@/components/viewer/BCFViewpointsPanel';
 import NavGraphEditorOverlay from '@/components/viewer/NavGraphEditorOverlay';
 import RouteDisplayOverlay from '@/components/viewer/RouteDisplayOverlay';
 import type { NavGraph, RouteResult } from '@/lib/pathfinding';
@@ -881,6 +882,13 @@ const UnifiedViewerContent: React.FC<{
               </TooltipTrigger>
               <TooltipContent>Building insights & analytics</TooltipContent>
             </Tooltip>
+          )}
+
+          {buildingFmGuid && (viewMode === '3d' || viewMode === '2d' || viewMode === 'split2d3d') && (
+            <BCFViewpointsPanel
+              buildingFmGuid={buildingFmGuid}
+              buildingName={buildingData.name}
+            />
           )}
 
           {viewMode === 'vt' && vtSyncActive && (

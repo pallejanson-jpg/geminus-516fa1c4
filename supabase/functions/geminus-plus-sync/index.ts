@@ -708,10 +708,15 @@ serve(async (req) => {
 
     // Resolve per-building credentials (falls back to env vars)
     _creds = await getGeminusPlusCredentials(supabase, buildingFmGuid);
-    // Only admins can run full sync operations
-    const adminOnlyActions = ['full-sync', 'sync-structure', 'sync-assets-chunked', 'sync-assets-resumable', 'sync-xkt', 'sync-xkt-resumable'];
+    // Only admins can run full (all-buildings) sync operations.
+    // Exception: sync-structure is allowed for authenticated users when scoped to a single building.
+    const adminOnlyActions = ['full-sync', 'sync-assets-chunked', 'sync-assets-resumable', 'sync-xkt', 'sync-xkt-resumable'];
+    const scopedStructureSync = action === 'sync-structure' && !!buildingFmGuid;
     if (adminOnlyActions.includes(action) && !auth.isAdmin) {
       return forbiddenResponse("Only admins can run full sync operations");
+    }
+    if (action === 'sync-structure' && !auth.isAdmin && !scopedStructureSync) {
+      return forbiddenResponse("Only admins can run full structure sync — provide buildingFmGuid for per-building sync");
     }
     
     console.log(`Action: ${action} (user: ${auth.userId}, admin: ${auth.isAdmin})`);
@@ -873,10 +878,17 @@ serve(async (req) => {
         const objectTypeGroup = [
           ["objectType", "=", 0], "or", ["objectType", "=", 1], "or", ["objectType", "=", 2], "or", ["objectType", "=", 3],
         ];
+        // When scoped to one building: match the building itself (fmGuid) OR its children (buildingFmGuid)
+        const buildingScope = buildingFmGuid
+          ? [["fmGuid", "=", buildingFmGuid], "or", ["buildingFmGuid", "=", buildingFmGuid]]
+          : null;
         // Incremental: only fetch items modified since last completed sync
-        const filter = useIncremental
-          ? [objectTypeGroup, "and", ["dateModified", ">", lastSyncCompletedAt], "and", ["expireDate", "=", null]]
+        const baseFilter = buildingScope
+          ? [objectTypeGroup, "and", buildingScope, "and", ["expireDate", "=", null]]
           : [objectTypeGroup, "and", ["expireDate", "=", null]];
+        const filter = useIncremental && !buildingFmGuid
+          ? [objectTypeGroup, "and", ["dateModified", ">", lastSyncCompletedAt], "and", ["expireDate", "=", null]]
+          : baseFilter;
 
         const take = 200;
         let hasMore = true;
