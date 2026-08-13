@@ -229,7 +229,7 @@ function getBaseUrl(region?: string): string {
 
 function getRegionHeader(region?: string): Record<string, string> {
   if (region?.toUpperCase() === "EMEA") {
-    return { "region": "EMEA" };
+    return { "region": "EMEA", "x-ads-region": "EMEA" };
   }
   return {};
 }
@@ -757,7 +757,24 @@ async function extractBimHierarchyViaMD(
         console.warn(`[MD fallback] properties failed (${propsRes.status}): ${err.substring(0, 200)}`);
         break;
       }
-      propsData = await propsRes.json();
+      const propsText = await propsRes.text();
+      if (!propsText.trim()) {
+        console.warn(`[MD fallback] properties returned empty body`);
+        break;
+      }
+      try {
+        propsData = JSON.parse(propsText);
+      } catch (parseErr) {
+        // Autodesk may return NDJSON for large models — parse first line
+        const firstLine = propsText.split('\n')[0].trim();
+        if (firstLine) {
+          try { propsData = JSON.parse(firstLine); } catch { /* ignore */ }
+        }
+        if (!propsData) {
+          console.warn(`[MD fallback] properties JSON parse failed: ${(parseErr as Error).message}`);
+          break;
+        }
+      }
       break;
     }
 
@@ -822,9 +839,9 @@ async function extractBimHierarchy(
 ): Promise<{ levels: any[]; rooms: any[]; instances: any[]; fieldsMap: Record<string, string>; indexState: string }> {
   const cleanProjectId = projectId.replace(/^b\./, "");
   const isEmea = regionHeaders?.["region"]?.toUpperCase() === "EMEA";
-  const indexBase = isEmea
-    ? `https://developer.api.autodesk.com/construction/index/v2/regions/eu/projects/${cleanProjectId}`
-    : `https://developer.api.autodesk.com/construction/index/v2/projects/${cleanProjectId}`;
+  // Construction Index API uses the same global endpoint for all regions (no /regions/eu/ path).
+  // Region is indicated via the "x-ads-region" header rather than the URL.
+  const indexBase = `https://developer.api.autodesk.com/construction/index/v2/projects/${cleanProjectId}`;
 
   // Step 1: POST to batch-status to start/check indexing
   const batchUrl = `${indexBase}/indexes:batch-status`;
@@ -844,9 +861,10 @@ async function extractBimHierarchy(
 
   if (!batchRes.ok) {
     const errorText = await batchRes.text();
-    // 403 = project doesn't have Model Coordination / Design Collaboration.
+    // 403 = project lacks Model Coordination / Design Collaboration.
+    // 404 = project not found in Construction Index (same root cause).
     // Fall back to extracting properties via the Model Derivative API instead.
-    if (batchRes.status === 403) {
+    if (batchRes.status === 403 || batchRes.status === 404) {
       console.log(`[extractBimHierarchy] Index API 403 — falling back to Model Derivative properties`);
       const { levels, rooms, instances } = await extractBimHierarchyViaMD(token, versionUrns, isEmea);
       return { levels, rooms, instances, fieldsMap: {}, indexState: 'FINISHED' };

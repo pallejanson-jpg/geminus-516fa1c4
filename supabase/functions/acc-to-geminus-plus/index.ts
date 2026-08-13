@@ -723,6 +723,23 @@ serve(async (req) => {
         });
       }
 
+      case "delete-job": {
+        const { versionUrn } = body;
+        if (!versionUrn) {
+          return new Response(JSON.stringify({ success: false, error: "versionUrn required" }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const { error: delErr } = await supabase
+          .from("acc_model_translations")
+          .delete()
+          .eq("version_urn", versionUrn);
+        if (delErr) throw new Error(delErr.message);
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       case "get-gp-auth-config": {
         const tokenUrl = Deno.env.get("GEMINUS_PLUS_KEYCLOAK_URL") || "";
         const clientId = Deno.env.get("GEMINUS_PLUS_CLIENT_ID") || "asset-api";

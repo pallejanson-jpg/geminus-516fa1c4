@@ -449,7 +449,7 @@ export default function FormaToGeminusPlusPanel() {
           for (const { folderId, folderName, files } of byFolder.values()) {
             log(`Syncing BIM data from "${folderName}" (${files.length} file(s))…`);
             for (const file of files) {
-              const { data: bimData, error: bimErr } = await supabase.functions.invoke('acc-sync', {
+              const { data: bimRaw, error: bimErr } = await supabase.functions.invoke('acc-sync', {
                 body: {
                   action: 'sync-bim-data',
                   projectId: selectedProjectId,
@@ -459,7 +459,15 @@ export default function FormaToGeminusPlusPanel() {
                   buildingFmGuid,
                   region: selectedHubRegion,
                 },
+                responseType: 'text',
               });
+              // Parse manually so we can log the raw body on parse error
+              let bimData: any = null;
+              if (bimRaw) {
+                try { bimData = JSON.parse(bimRaw); } catch {
+                  log(`${file.name}: RAW response: ${String(bimRaw).substring(0, 300)}`, 'error');
+                }
+              }
               if (bimErr || bimData?.state === 'PROCESSING') {
                 const msg = bimData?.error || bimData?.message || bimErr?.message || 'Indexing still in progress — try again in 60s.';
                 log(`${file.name}: ${msg}`, bimData?.state === 'PROCESSING' ? 'warn' : 'error');
@@ -851,6 +859,16 @@ export default function FormaToGeminusPlusPanel() {
                       {jobCheckResults[job.version_urn] === '…' ? '…' : t('Kör check', 'Run check')}
                     </button>
                   )}
+                  <button
+                    onClick={async () => {
+                      await supabase.functions.invoke('acc-to-geminus-plus', {
+                        body: { action: 'delete-job', versionUrn: job.version_urn },
+                      });
+                      fetchJobs();
+                    }}
+                    className="shrink-0 text-[10px] text-muted-foreground hover:text-destructive"
+                    title={t('Radera jobb', 'Delete job')}
+                  >✕</button>
                   <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
                     isActive ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400' :
                     isDone   ? 'bg-green-500/15 text-green-700 dark:text-green-400' :
