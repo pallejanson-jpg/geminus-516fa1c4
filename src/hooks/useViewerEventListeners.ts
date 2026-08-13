@@ -259,10 +259,30 @@ export function useViewerEventListeners({
       };
       _runColorize();
 
+      // GUID matching found nothing — try name-based fallback before giving up.
+      // This handles buildings where XKT entity IDs don't match Supabase FM GUIDs.
+      if (matchCount === 0 && detail.nameColorMap && Object.keys(detail.nameColorMap).length > 0) {
+        const nmcm = detail.nameColorMap;
+        const isRoomMode2 = mode === 'room_spaces' || mode === 'room_type' || mode === 'room_types';
+        Object.values(metaObjects).forEach((mo: any) => {
+          if (alreadyColored.has(mo.id)) return;
+          if (isRoomMode2) {
+            const t = (mo.type || '').toLowerCase();
+            if (t !== 'ifcspace' && t !== 'ifc_space' && t !== 'space') return;
+          }
+          const moName = (mo.name || '').toLowerCase().trim();
+          const rgb = moName ? nmcm[moName] : undefined;
+          if (rgb) {
+            const entity = scene.objects?.[mo.id];
+            if (entity) { entity.visible = true; entity.pickable = true; }
+            colorizeEntity(mo, rgb, 1.0);
+          }
+        });
+      }
+
       console.log('[ViewerEvents] INSIGHTS_COLOR_UPDATE:', mode, Object.keys(colorMap).length, 'entries,', matchCount, 'matched');
 
       if (matchCount === 0) {
-        // Don't xray — restore visibility and return silently
         (window as any).__colorFilterActive = false;
         console.warn('[ViewerEvents] No entity matches for color filter — skipping xray pass');
         return;
@@ -345,6 +365,11 @@ export function useViewerEventListeners({
       scene.setObjectsXRayed(scene.objectIds, false);
       scene.alphaDepthMask = true;
       (window as any).__colorFilterActive = false;
+      // Clean up alarm DOM markers
+      const alarmContainer = (window as any).__alarmMarkerContainer as HTMLDivElement | null;
+      if (alarmContainer) { alarmContainer.remove(); (window as any).__alarmMarkerContainer = null; }
+      const alarmUnsubs = (window as any).__alarmMarkerCameraUnsubs as Array<() => void> | null;
+      if (alarmUnsubs) { alarmUnsubs.forEach(fn => fn()); (window as any).__alarmMarkerCameraUnsubs = null; }
       const vizSet = (window as any).__vizColorizedEntityIds;
       if (vizSet instanceof Set) vizSet.clear();
       // Restore native model colors (no automatic architect palette)
@@ -406,6 +431,50 @@ export function useViewerEventListeners({
 
       if (detail.flyTo && matchedIds.length > 0) {
         viewer.cameraFlight?.flyTo({ aabb: scene.getAABB(matchedIds), duration: 1.0 });
+      }
+
+      // Create DOM pin markers for alarm positions
+      const existingAlarmContainer = (window as any).__alarmMarkerContainer as HTMLDivElement | null;
+      const existingAlarmUnsubs = (window as any).__alarmMarkerCameraUnsubs as Array<() => void> | null;
+      if (existingAlarmContainer) { existingAlarmContainer.remove(); (window as any).__alarmMarkerContainer = null; }
+      if (existingAlarmUnsubs) { existingAlarmUnsubs.forEach(fn => fn()); (window as any).__alarmMarkerCameraUnsubs = null; }
+
+      const canvas = viewer.scene.canvas?.canvas;
+      const parent = canvas?.parentElement;
+      if (parent && matchedIds.length > 0) {
+        const container = document.createElement('div');
+        container.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:30;overflow:hidden;';
+        parent.appendChild(container);
+        (window as any).__alarmMarkerContainer = container;
+        const cameraUnsubs: Array<() => void> = [];
+
+        for (const entityId of matchedIds) {
+          const entity = scene.objects?.[entityId];
+          if (!entity?.aabb) continue;
+          const aabb = entity.aabb;
+          const worldPos = [(aabb[0] + aabb[3]) / 2, aabb[4], (aabb[2] + aabb[5]) / 2];
+
+          const marker = document.createElement('div');
+          marker.style.cssText = 'position:absolute;pointer-events:none;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:600;color:white;background:#dc2626;white-space:nowrap;transform:translate(-50%,-100%);box-shadow:0 2px 6px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.25);';
+          marker.textContent = '⚠ Alarm';
+          container.appendChild(marker);
+
+          const updatePos = () => {
+            if (!viewer.scene?.canvas) return;
+            const pos = worldToCanvas(viewer, worldPos);
+            if (pos && pos[2] > 0) {
+              marker.style.left = pos[0] + 'px';
+              marker.style.top = pos[1] + 'px';
+              marker.style.display = 'block';
+            } else {
+              marker.style.display = 'none';
+            }
+          };
+          const unsub = viewer.scene.camera?.on?.('matrix', updatePos);
+          if (unsub) cameraUnsubs.push(() => viewer.scene.camera?.off?.('matrix', unsub));
+          updatePos();
+        }
+        (window as any).__alarmMarkerCameraUnsubs = cameraUnsubs;
       }
     };
     const off = on('ALARM_ANNOTATIONS_SHOW', handler);

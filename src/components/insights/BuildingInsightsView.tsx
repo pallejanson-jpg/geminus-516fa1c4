@@ -615,6 +615,51 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         return () => clearTimeout(timer);
     }, [sensorMetric, sensorRoomValues, activeTab]);
 
+    // Auto-colorize Space tab: all rooms colored by room type when tab becomes active or floor filter changes
+    useEffect(() => {
+        if (activeTab !== 'space') return;
+        if (spaceTypePie.length === 0) return;
+        if (!drawerMode && isMobile) return;
+        if (selectedRoomType) return; // user has an active selection — don't override
+        const timer = setTimeout(() => {
+            const roomColorMap: Record<string, [number, number, number]> = {};
+            const nameColorMap: Record<string, [number, number, number]> = {};
+            spaceTypePie.forEach(pie => {
+                const rgb = hslStringToRgbFloat(pie.color);
+                floorFilteredSpaces.forEach((space: any) => {
+                    if ((space.commonName || space.name || 'Unknown') === pie.fullName) {
+                        roomColorMap[space.fmGuid] = rgb;
+                        const n = (space.commonName || space.name || '').toLowerCase().trim();
+                        if (n) nameColorMap[n] = rgb;
+                    }
+                });
+            });
+            if (Object.keys(roomColorMap).length === 0) return;
+            emit('FORCE_SHOW_SPACES', { show: true });
+            setTimeout(() => {
+                emit('INSIGHTS_COLOR_UPDATE', { mode: 'room_spaces', colorMap: roomColorMap, nameColorMap });
+            }, 150);
+            setInlineInsightsMode('room_spaces');
+            setInlineColorMap(roomColorMap);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [activeTab, spaceTypePie, floorFilteredSpaces, selectedRoomType, drawerMode, isMobile]);
+
+    // Auto-colorize Asset tab: all assets colored by category when tab becomes active
+    useEffect(() => {
+        if (activeTab !== 'asset') return;
+        if (assetCategoryPie.length === 0) return;
+        if (!drawerMode && isMobile) return;
+        const timer = setTimeout(() => {
+            const colorMap: Record<string, [number, number, number]> = {};
+            assetCategoryPie.forEach(c => { colorMap[c.name] = hslStringToRgbFloat(c.color); });
+            emit('INSIGHTS_COLOR_UPDATE', { mode: 'asset_categories', colorMap });
+            setInlineInsightsMode('asset_categories');
+            setInlineColorMap(colorMap);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [activeTab, assetCategoryPie, drawerMode, isMobile]);
+
     // Clear selection when metric changes
     useEffect(() => {
         setSelectedSensorRooms(new Set());
