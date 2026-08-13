@@ -2,57 +2,114 @@
   Scoped styles for the "New Geminus UI" design POC (Material Design 3 direction).
   Everything lives under .ngui-root so it cannot leak into or be affected by
   the rest of the app's design tokens (Tailwind / index.css).
+
+  Color tokens below are copied verbatim from the real generated
+  faciliate.md3.css (source: SWG Portfolio MD3 token-generator, seed #9ED7DF,
+  built with @material/material-color-utilities) — used as a temporary
+  stand-in because Geminus does not have a confirmed logo source color yet.
+  When Geminus gets its own generated tokens, only the two [data-theme] blocks
+  below need to be replaced with geminus.md3.css's values — nothing else in
+  this file or in NewUiPreview.tsx needs to change.
+
+  Typography / shape / motion / state-layer tokens are copied verbatim from
+  the shared global.json (product-agnostic, same for all four SWG products).
 */
 .ngui-root {
-  /* --- MD3-style tokens, seeded from Geminus's current primary (hsl(262 52% 57%)) --- */
-  --ngui-primary: #6E3FA8;
-  --ngui-on-primary: #FFFFFF;
-  --ngui-primary-container: #EDE0F9;
-  --ngui-on-primary-container: #2C1552;
-
-  --ngui-secondary: #625B72;
-  --ngui-secondary-container: #E9E0F5;
-  --ngui-on-secondary-container: #1E182B;
-
-  --ngui-tertiary: #1D6C6C;
-  --ngui-tertiary-container: #C7EEEA;
-  --ngui-on-tertiary-container: #0A2626;
-
-  --ngui-error: #BA1A1A;
-  --ngui-error-container: #FFDAD6;
-  --ngui-on-error-container: #410002;
-
-  --ngui-warning: #8A5B00;
-  --ngui-warning-container: #FFDEA6;
-  --ngui-on-warning-container: #2B1C00;
-
-  --ngui-surface: #FDFBFF;
-  --ngui-surface-variant: #F3EEF7;
-  --ngui-surface-dim: #EDE7F2;
-  --ngui-on-surface: #1C1B1F;
-  --ngui-on-surface-variant: #48454E;
-  --ngui-outline: #D6D0DC;
-  --ngui-outline-strong: #B8B2BF;
-
-  /* Shape scale (avsnitt 5.3) */
-  --ngui-corner-xs: 4px;
-  --ngui-corner-s: 8px;
-  --ngui-corner-m: 12px;
-  --ngui-corner-l: 16px;
-  --ngui-corner-xl: 28px;
-
-  /* Elevation (avsnitt 5.5) */
-  --ngui-elev-1: 0 1px 2px rgba(28,27,31,0.12), 0 1px 3px rgba(28,27,31,0.10);
-  --ngui-elev-2: 0 1px 2px rgba(28,27,31,0.14), 0 2px 6px rgba(28,27,31,0.12);
-
-  /* Motion (avsnitt 5.4) */
-  --ngui-motion-short: 150ms cubic-bezier(0.2, 0, 0, 1);
-  --ngui-motion-medium: 300ms cubic-bezier(0.2, 0, 0, 1);
-
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: var(--ngui-surface);
-  color: var(--ngui-on-surface);
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
   min-height: 100vh;
+
+  /* --- Shape scale (global.json → sys.shape.corner) --- */
+  --md-sys-shape-corner-none: 0px;
+  --md-sys-shape-corner-xs: 4px;
+  --md-sys-shape-corner-s: 8px;
+  --md-sys-shape-corner-m: 12px;
+  --md-sys-shape-corner-l: 16px;
+  --md-sys-shape-corner-xl: 28px;
+
+  /* --- Motion (global.json → sys.motion) --- */
+  --md-sys-motion-short1: 100ms cubic-bezier(0.2, 0, 0, 1);
+  --md-sys-motion-short4: 200ms cubic-bezier(0.2, 0, 0, 1);
+  --md-sys-motion-medium2: 300ms cubic-bezier(0.2, 0, 0, 1);
+  --md-sys-motion-long2: 500ms cubic-bezier(0.2, 0, 0, 1);
+
+  /* --- State layer opacities (global.json → sys.state-layer-opacity) --- */
+  --md-sys-state-hover: 0.08;
+  --md-sys-state-focus: 0.12;
+  --md-sys-state-pressed: 0.12;
+  --md-sys-state-dragged: 0.16;
+
+  /* Elevation (avsnitt 5.5) — light-mode default, overridden for dark below */
+  --md-sys-elevation-1: 0 1px 2px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.10);
+  --md-sys-elevation-2: 0 1px 2px rgba(0,0,0,0.14), 0 2px 6px rgba(0,0,0,0.12);
+}
+
+/* --- Faciliate MD3 color tokens (real, generated — seed #9ED7DF) --- */
+.ngui-root[data-theme="light"] {
+  --md-sys-color-primary: #006972;
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-primary-container: #8ef2ff;
+  --md-sys-color-on-primary-container: #001f23;
+  --md-sys-color-secondary: #4a6366;
+  --md-sys-color-on-secondary: #ffffff;
+  --md-sys-color-secondary-container: #cde7eb;
+  --md-sys-color-on-secondary-container: #051f22;
+  --md-sys-color-tertiary: #515e7d;
+  --md-sys-color-on-tertiary: #ffffff;
+  --md-sys-color-tertiary-container: #d9e2ff;
+  --md-sys-color-on-tertiary-container: #0c1b36;
+  --md-sys-color-error: #ba1a1a;
+  --md-sys-color-on-error: #ffffff;
+  --md-sys-color-error-container: #ffdad6;
+  --md-sys-color-on-error-container: #410002;
+  --md-sys-color-background: #fafdfd;
+  --md-sys-color-on-background: #191c1d;
+  --md-sys-color-surface: #fafdfd;
+  --md-sys-color-on-surface: #191c1d;
+  --md-sys-color-surface-variant: #dae4e6;
+  --md-sys-color-on-surface-variant: #3f484a;
+  --md-sys-color-outline: #6f797a;
+  --md-sys-color-outline-variant: #bec8ca;
+
+  /* Not part of MD3's spec — SWG-specific extension role (avsnitt 8, custom) */
+  --md-sys-color-warning: #8a5b00;
+  --md-sys-color-warning-container: #ffdea6;
+  --md-sys-color-on-warning-container: #2b1c00;
+}
+
+.ngui-root[data-theme="dark"] {
+  --md-sys-color-primary: #4ed8e8;
+  --md-sys-color-on-primary: #00363c;
+  --md-sys-color-primary-container: #004f56;
+  --md-sys-color-on-primary-container: #8ef2ff;
+  --md-sys-color-secondary: #b1cbcf;
+  --md-sys-color-on-secondary: #1c3437;
+  --md-sys-color-secondary-container: #324b4e;
+  --md-sys-color-on-secondary-container: #cde7eb;
+  --md-sys-color-tertiary: #b9c6ea;
+  --md-sys-color-on-tertiary: #23304d;
+  --md-sys-color-tertiary-container: #394664;
+  --md-sys-color-on-tertiary-container: #d9e2ff;
+  --md-sys-color-error: #ffb4ab;
+  --md-sys-color-on-error: #690005;
+  --md-sys-color-error-container: #93000a;
+  --md-sys-color-on-error-container: #ffb4ab;
+  --md-sys-color-background: #191c1d;
+  --md-sys-color-on-background: #e0e3e3;
+  --md-sys-color-surface: #191c1d;
+  --md-sys-color-on-surface: #e0e3e3;
+  --md-sys-color-surface-variant: #3f484a;
+  --md-sys-color-on-surface-variant: #bec8ca;
+  --md-sys-color-outline: #899294;
+  --md-sys-color-outline-variant: #3f484a;
+
+  --md-sys-color-warning: #ffb945;
+  --md-sys-color-warning-container: #634400;
+  --md-sys-color-on-warning-container: #ffdea6;
+
+  --md-sys-elevation-1: 0 1px 2px rgba(0,0,0,0.4), 0 1px 3px rgba(0,0,0,0.3);
+  --md-sys-elevation-2: 0 1px 2px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.4);
 }
 
 .ngui-root * {
@@ -65,29 +122,33 @@
   align-items: center;
   gap: 12px;
   padding: 10px 20px;
-  background: var(--ngui-tertiary-container);
-  color: var(--ngui-on-tertiary-container);
+  background: var(--md-sys-color-tertiary-container);
+  color: var(--md-sys-color-on-tertiary-container);
   font-size: 13px;
-  border-bottom: 1px solid var(--ngui-outline);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
 }
 .ngui-banner strong { font-weight: 600; }
 .ngui-banner .ngui-spacer { flex: 1; }
 
-.ngui-back-btn {
+.ngui-back-btn,
+.ngui-theme-toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: var(--ngui-surface);
-  color: var(--ngui-on-surface);
-  border: 1px solid var(--ngui-outline-strong);
-  border-radius: var(--ngui-corner-s);
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-s);
   padding: 6px 12px;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background var(--ngui-motion-short);
+  transition: background var(--md-sys-motion-short1);
 }
-.ngui-back-btn:hover { background: var(--ngui-surface-dim); }
+.ngui-back-btn:hover,
+.ngui-theme-toggle:hover {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) calc(var(--md-sys-state-hover) * 100%), var(--md-sys-color-surface));
+}
 
 /* --- Top app bar --- */
 .ngui-topbar {
@@ -95,15 +156,15 @@
   align-items: center;
   gap: 16px;
   padding: 14px 24px;
-  background: var(--ngui-surface);
-  border-bottom: 1px solid var(--ngui-outline);
+  background: var(--md-sys-color-surface);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
 }
 .ngui-logo {
   width: 36px;
   height: 36px;
-  border-radius: var(--ngui-corner-m);
-  background: var(--ngui-primary);
-  color: var(--ngui-on-primary);
+  border-radius: var(--md-sys-shape-corner-m);
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -112,21 +173,23 @@
 }
 .ngui-headline {
   font-size: 22px;
-  font-weight: 600;
+  font-weight: 500;
+  line-height: 28px;
   letter-spacing: -0.2px;
 }
 .ngui-subtext {
   font-size: 13px;
-  color: var(--ngui-on-surface-variant);
+  color: var(--md-sys-color-on-surface-variant);
 }
+.ngui-topbar-spacer { flex: 1; }
 
 /* --- Tabs --- */
 .ngui-tabs {
   display: flex;
   gap: 4px;
   padding: 0 24px;
-  background: var(--ngui-surface);
-  border-bottom: 1px solid var(--ngui-outline);
+  background: var(--md-sys-color-surface);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
 }
 .ngui-tab {
   border: none;
@@ -134,24 +197,25 @@
   padding: 12px 16px;
   font-size: 14px;
   font-weight: 500;
-  color: var(--ngui-on-surface-variant);
+  line-height: 20px;
+  color: var(--md-sys-color-on-surface-variant);
   cursor: pointer;
   border-bottom: 2px solid transparent;
-  transition: color var(--ngui-motion-short), border-color var(--ngui-motion-short);
+  transition: color var(--md-sys-motion-short1), border-color var(--md-sys-motion-short1), background var(--md-sys-motion-short1);
 }
 .ngui-tab:hover {
-  background: var(--ngui-surface-dim);
-  border-radius: var(--ngui-corner-xs) var(--ngui-corner-xs) 0 0;
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) calc(var(--md-sys-state-hover) * 100%), var(--md-sys-color-surface));
+  border-radius: var(--md-sys-shape-corner-xs) var(--md-sys-shape-corner-xs) 0 0;
 }
 .ngui-tab.active {
-  color: var(--ngui-primary);
-  border-bottom-color: var(--ngui-primary);
+  color: var(--md-sys-color-primary);
+  border-bottom-color: var(--md-sys-color-primary);
 }
 
 /* --- Content --- */
 .ngui-content {
   padding: 24px;
-  animation: ngui-fade-in var(--ngui-motion-medium);
+  animation: ngui-fade-in var(--md-sys-motion-medium2);
 }
 @keyframes ngui-fade-in {
   from { opacity: 0; transform: translateY(4px); }
@@ -160,119 +224,296 @@
 
 .ngui-section-title {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 500;
+  line-height: 24px;
   margin: 0 0 4px;
 }
 .ngui-section-desc {
-  font-size: 13px;
-  color: var(--ngui-on-surface-variant);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--md-sys-color-on-surface-variant);
   margin: 0 0 16px;
 }
 
-/* --- Portfolio cards --- */
-.ngui-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 16px;
+/* --- Home header --- */
+.ngui-home-header {
+  text-align: center;
+  padding: 32px 0 28px;
 }
-.ngui-card {
-  background: var(--ngui-surface);
-  border: 1px solid var(--ngui-outline);
-  border-radius: var(--ngui-corner-l);
-  padding: 16px;
-  box-shadow: var(--ngui-elev-1);
-  transition: box-shadow var(--ngui-motion-short), transform var(--ngui-motion-short);
-  cursor: pointer;
-}
-.ngui-card:hover {
-  box-shadow: var(--ngui-elev-2);
-  transform: translateY(-2px);
-}
-.ngui-card-title {
-  font-size: 15px;
+.ngui-home-title {
+  font-size: 28px;
   font-weight: 600;
-  margin-bottom: 2px;
+  line-height: 36px;
+  margin: 0 0 6px;
 }
-.ngui-card-meta {
-  font-size: 12px;
-  color: var(--ngui-on-surface-variant);
-  margin-bottom: 12px;
-}
-.ngui-card-stats {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.ngui-kpi {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--ngui-primary);
-}
-.ngui-kpi-label {
-  font-size: 11px;
-  color: var(--ngui-on-surface-variant);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
+.ngui-home-subtitle {
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--md-sys-color-on-surface-variant);
+  margin: 0;
 }
 
-/* --- Status chips --- */
-.ngui-chip {
+/* --- AI assistant cards --- */
+.ngui-ai-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 32px;
+}
+.ngui-ai-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--md-sys-color-surface);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-l);
+  padding: 14px 16px;
+  box-shadow: var(--md-sys-elevation-1);
+  cursor: pointer;
+  transition: box-shadow var(--md-sys-motion-short1), transform var(--md-sys-motion-short1);
+}
+.ngui-ai-card:hover { box-shadow: var(--md-sys-elevation-2); transform: translateY(-2px); }
+.ngui-ai-icon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--md-sys-shape-corner-m);
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ngui-ai-title { font-size: 14px; font-weight: 600; }
+.ngui-ai-desc { font-size: 12px; color: var(--md-sys-color-on-surface-variant); }
+
+/* --- Carousel rows --- */
+.ngui-carousel { margin-bottom: 32px; }
+.ngui-carousel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ngui-carousel-nav { display: flex; gap: 4px; flex-shrink: 0; }
+.ngui-carousel-track {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scroll-behavior: smooth;
+}
+.ngui-carousel-track::-webkit-scrollbar { height: 0; }
+
+.ngui-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface-variant);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-s);
+  cursor: pointer;
+  transition: background var(--md-sys-motion-short1);
+}
+.ngui-icon-btn:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) calc(var(--md-sys-state-hover) * 100%), var(--md-sys-color-surface)); }
+.ngui-icon-btn.active { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); border-color: transparent; }
+
+/* --- Building / view tiles --- */
+.ngui-tile {
+  flex: 0 0 220px;
+  border-radius: var(--md-sys-shape-corner-l);
+  overflow: hidden;
+  background: var(--md-sys-color-surface);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  box-shadow: var(--md-sys-elevation-1);
+  transition: box-shadow var(--md-sys-motion-short1), transform var(--md-sys-motion-short1);
+  position: relative;
+}
+.ngui-tile:hover { box-shadow: var(--md-sys-elevation-2); transform: translateY(-2px); }
+.ngui-tile-img {
+  height: 120px;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  background-color: var(--md-sys-color-surface-variant);
+  background-size: cover;
+  background-position: center;
+}
+.ngui-tile-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--md-sys-color-on-surface-variant);
+}
+.ngui-empty-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 20px;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 13px;
+  border: 1px dashed var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-l);
+  width: 100%;
+}
+.ngui-tile-overlay {
+  width: 100%;
+  padding: 8px 12px;
+  background: linear-gradient(to top, rgba(0,0,0,0.55), transparent);
+  color: #fff;
+}
+.ngui-tile-title { font-size: 14px; font-weight: 600; }
+.ngui-tile-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  opacity: 0.85;
+}
+.ngui-tile-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  font-size: 11px;
+  font-weight: 600;
   padding: 3px 10px;
-  border-radius: var(--ngui-corner-xl);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
+  border-radius: var(--md-sys-shape-corner-xl);
+  z-index: 1;
 }
-.ngui-chip.ok { background: var(--ngui-tertiary-container); color: var(--ngui-on-tertiary-container); }
-.ngui-chip.warn { background: var(--ngui-warning-container); color: var(--ngui-on-warning-container); }
-.ngui-chip.critical { background: var(--ngui-error-container); color: var(--ngui-on-error-container); }
-.ngui-chip.neutral { background: var(--ngui-surface-variant); color: var(--ngui-on-surface-variant); }
+.ngui-tile-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 10px 12px;
+}
+.ngui-tile-stat { display: flex; flex-direction: column; align-items: center; }
+.ngui-tile-stat-value { font-size: 14px; font-weight: 700; color: var(--md-sys-color-primary); }
+.ngui-tile-stat-label { font-size: 10px; color: var(--md-sys-color-on-surface-variant); text-transform: uppercase; letter-spacing: 0.3px; }
 
-/* --- Alarm table --- */
-.ngui-table-wrap {
-  background: var(--ngui-surface);
-  border: 1px solid var(--ngui-outline);
-  border-radius: var(--ngui-corner-l);
-  overflow: hidden;
-  box-shadow: var(--ngui-elev-1);
+/* --- Portfolio hero --- */
+.ngui-hero {
+  flex: none;
+  width: 100%;
+  height: 220px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: flex-end;
+  background-color: var(--md-sys-color-surface-variant);
+  background-size: cover;
+  background-position: center;
 }
-.ngui-table { width: 100%; border-collapse: collapse; }
-.ngui-table th {
-  text-align: left;
+.ngui-hero .ngui-tile-overlay {
+  padding: 20px 24px;
+  background: linear-gradient(to top, rgba(0,0,0,0.65), transparent 70%);
+}
+.ngui-hero-title { font-size: 24px; font-weight: 600; line-height: 32px; color: #fff; }
+.ngui-hero-stats { font-size: 13px; color: rgba(255,255,255,0.85); margin: 4px 0 12px; }
+.ngui-hero-actions { display: flex; gap: 10px; }
+.ngui-hero .ngui-tile-badge { top: 16px; right: 16px; }
+
+.ngui-btn-outline {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.6);
+  border-radius: var(--md-sys-shape-corner-xl);
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--md-sys-motion-short1);
+}
+.ngui-btn-outline:hover { background: rgba(255,255,255,0.28); }
+
+/* --- Portfolio header + filter bar --- */
+.ngui-portfolio-header { margin-bottom: 16px; }
+.ngui-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.ngui-search-wrap {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--md-sys-color-surface);
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-s);
+  padding: 8px 12px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+.ngui-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--md-sys-color-on-surface);
+  font-family: inherit;
+}
+.ngui-view-toggle { display: flex; gap: 4px; }
+
+/* --- Stat cards --- */
+.ngui-stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.ngui-stat-card {
+  background: var(--md-sys-color-surface);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-l);
+  padding: 14px 16px;
+  box-shadow: var(--md-sys-elevation-1);
+}
+.ngui-kpi { font-size: 22px; font-weight: 700; color: var(--md-sys-color-primary); }
+.ngui-kpi-label {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface-variant);
   text-transform: uppercase;
   letter-spacing: 0.4px;
-  color: var(--ngui-on-surface-variant);
-  background: var(--ngui-surface-variant);
-  padding: 10px 16px;
 }
-.ngui-table td {
-  padding: 12px 16px;
-  font-size: 13px;
-  border-top: 1px solid var(--ngui-outline);
+
+/* --- Facility grid/list --- */
+.ngui-facility-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
 }
-.ngui-table tr.body-row {
-  transition: background var(--ngui-motion-short);
+.ngui-facility-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-.ngui-table tr.body-row:hover {
-  background: var(--ngui-surface-dim);
-}
+.ngui-facility-list .ngui-tile { flex: none; width: 100%; display: flex; flex-direction: row; }
+.ngui-facility-list .ngui-tile-img { width: 160px; height: auto; flex-shrink: 0; }
+.ngui-facility-list .ngui-tile-stats { flex: 1; }
 
 /* --- Buttons --- */
 .ngui-btn-filled {
-  background: var(--ngui-primary);
-  color: var(--ngui-on-primary);
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
   border: none;
-  border-radius: var(--ngui-corner-xl);
+  border-radius: var(--md-sys-shape-corner-xl);
   padding: 8px 20px;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
-  transition: filter var(--ngui-motion-short);
+  transition: filter var(--md-sys-motion-short1);
 }
 .ngui-btn-filled:hover { filter: brightness(1.1); }
 
@@ -280,8 +521,13 @@
 .ngui-footnote {
   margin-top: 28px;
   padding-top: 16px;
-  border-top: 1px solid var(--ngui-outline);
+  border-top: 1px solid var(--md-sys-color-outline-variant);
   font-size: 12px;
-  color: var(--ngui-on-surface-variant);
+  color: var(--md-sys-color-on-surface-variant);
   line-height: 1.6;
+}
+.ngui-footnote code {
+  background: var(--md-sys-color-surface-variant);
+  padding: 1px 5px;
+  border-radius: var(--md-sys-shape-corner-xs);
 }
