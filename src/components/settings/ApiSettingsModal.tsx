@@ -16,7 +16,7 @@ import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "@/integrations
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle,
     Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2,
-    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles, FileText, FolderOpen, ChevronRight, ChevronDown as ChevronDownIcon, File, Database as DatabaseIcon, Cuboid, Bot, Network, RotateCcw, Copy
+    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles, FileText, FolderOpen, ChevronRight, ChevronDown as ChevronDownIcon, File, Database as DatabaseIcon, Cuboid, Bot, Network, RotateCcw, Copy, Users
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -39,6 +39,7 @@ import ConversionProgressOverlay from './ConversionProgressOverlay';
 import { SyncStatusLog, type SyncStep, type SyncOutcome } from './SyncStatusLog';
 import CreateBuildingPanel from './CreateBuildingPanel';
 import ApiProfilesManager from './ApiProfilesManager';
+import TenantsManager from './TenantsManager';
 import type { TranslationStatus } from '@/services/acc-xkt-converter';
 
 interface ApiSettingsModalProps {
@@ -2653,6 +2654,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                             <Network className="h-3 w-3 sm:h-4 sm:w-4" />
                             API Profiles
                         </TabsTrigger>
+                        <TabsTrigger value="tenants" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                            <Users className="h-3 w-3 sm:h-4 sm:w-4" />
+                            Customers
+                        </TabsTrigger>
                     </TabsList>
 
                     {/* Profile Settings Tab */}
@@ -4452,6 +4457,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     {/* API Profiles Tab */}
                     <TabsContent value="api-profiles" className="mt-4 flex-1 min-h-0 space-y-4 overflow-y-auto overflow-x-hidden pr-1">
                         <ApiProfilesManager />
+                    </TabsContent>
+                    <TabsContent value="tenants" className="mt-4 flex-1 min-h-0 space-y-4 overflow-y-auto overflow-x-hidden pr-1">
+                        <TenantsManager />
                     </TabsContent>
                 </Tabs>
             </DialogContent>

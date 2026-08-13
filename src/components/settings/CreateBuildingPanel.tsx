@@ -22,6 +22,7 @@ import ExcelImportDialog from '@/components/import/ExcelImportDialog';
 import CreatePropertyDialog from '@/components/properties/CreatePropertyDialog';
 import { formatDistanceToNow } from 'date-fns';
 import { useLanguage } from '@/context/LanguageContext';
+import { useTenant } from '@/context/TenantContext';
 
 interface CreatedBuilding {
   complexFmGuid: string;
@@ -46,6 +47,7 @@ interface CreateBuildingPanelProps {
 const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAccTab }) => {
   const { toast } = useToast();
   const { t } = useLanguage();
+  const { selectedTenantId } = useTenant();
 
   // ── Shared building selector ──
   const [existingBuildings, setExistingBuildings] = useState<ExistingBuilding[]>([]);
@@ -382,6 +384,15 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       setCreatedBuilding(created);
       setSelectedBuildingFmGuid(created.buildingFmGuid);
       setShowCreateForm(false);
+
+      // Tag the new building with whichever customer is currently active,
+      // so it's covered by that customer's tenant-level Asset+/Senslinc credentials.
+      if (selectedTenantId) {
+        await supabase
+          .from('building_settings')
+          .upsert({ fm_guid: created.buildingFmGuid, tenant_id: selectedTenantId } as any, { onConflict: 'fm_guid' });
+        window.dispatchEvent(new Event('building-settings-changed'));
+      }
 
       toast({ title: 'Building created!', description: data.message });
     } catch (err: any) {

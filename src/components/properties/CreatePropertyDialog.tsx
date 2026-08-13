@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/context/TenantContext';
 import { Loader2, Save, Star } from 'lucide-react';
 
 interface CreatePropertyDialogProps {
@@ -39,6 +40,7 @@ interface FormData {
   latitude: string;
   longitude: string;
   api_profile_id: string; // '' means default / none
+  tenant_id: string; // '' means unassigned
 }
 
 const EMPTY_FORM: FormData = {
@@ -47,6 +49,7 @@ const EMPTY_FORM: FormData = {
   latitude: '',
   longitude: '',
   api_profile_id: '',
+  tenant_id: '',
 };
 
 export default function CreatePropertyDialog({
@@ -58,6 +61,7 @@ export default function CreatePropertyDialog({
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [profiles, setProfiles] = useState<ProfileOption[]>([]);
+  const { tenants, selectedTenantId } = useTenant();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -66,9 +70,10 @@ export default function CreatePropertyDialog({
     if (editFmGuid) {
       loadExisting(editFmGuid);
     } else {
-      setForm(EMPTY_FORM);
+      // New buildings default to whichever customer is currently active.
+      setForm({ ...EMPTY_FORM, tenant_id: selectedTenantId || '' });
     }
-  }, [open, editFmGuid]);
+  }, [open, editFmGuid, selectedTenantId]);
 
   async function fetchProfiles() {
     const { data } = await supabase
@@ -82,7 +87,7 @@ export default function CreatePropertyDialog({
   async function loadExisting(fmGuid: string) {
     const { data } = await supabase
       .from('building_settings')
-      .select('fm_guid, latitude, longitude, api_profile_id')
+      .select('fm_guid, latitude, longitude, api_profile_id, tenant_id')
       .eq('fm_guid', fmGuid)
       .maybeSingle();
 
@@ -101,6 +106,7 @@ export default function CreatePropertyDialog({
       latitude: (data as any).latitude?.toString() || '',
       longitude: (data as any).longitude?.toString() || '',
       api_profile_id: (data as any).api_profile_id || '',
+      tenant_id: (data as any).tenant_id || '',
     });
   }
 
@@ -121,6 +127,7 @@ export default function CreatePropertyDialog({
         latitude: form.latitude ? parseFloat(form.latitude) : null,
         longitude: form.longitude ? parseFloat(form.longitude) : null,
         api_profile_id: form.api_profile_id || null,
+        tenant_id: form.tenant_id || null,
       };
 
       const { data: existing } = await supabase
@@ -225,6 +232,28 @@ export default function CreatePropertyDialog({
                 />
               </div>
             </div>
+          </div>
+
+          {/* Tenant (customer) Selector */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-foreground">Customer</h3>
+            <p className="text-xs text-muted-foreground">
+              Which customer this building belongs to. Determines what's visible when that customer is selected, and which Asset+/Senslinc credentials it uses by default.
+            </p>
+            <Select
+              value={form.tenant_id || 'none'}
+              onValueChange={(val) => set('tenant_id', val === 'none' ? '' : val)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a customer" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Unassigned</SelectItem>
+                {tenants.map(tn => (
+                  <SelectItem key={tn.id} value={tn.id}>{tn.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* API Profile Selector */}

@@ -13,6 +13,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import CreatePropertyDialog from '@/components/properties/CreatePropertyDialog';
+import { useTenant } from '@/context/TenantContext';
 
 interface PropertyRow {
   fmGuid: string;
@@ -23,6 +24,7 @@ interface PropertyRow {
   profileName: string | null;
   hasCustomGeminusPlus: boolean;
   hasCustomGeminusPremium: boolean;
+  tenantName: string | null;
 }
 
 export default function Properties() {
@@ -31,13 +33,18 @@ export default function Properties() {
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editFmGuid, setEditFmGuid] = useState<string | null>(null);
+  const { tenants, selectedTenantId } = useTenant();
 
   const fetchProperties = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: settings, error } = await supabase
+      let query = supabase
         .from('building_settings')
-        .select('fm_guid, latitude, longitude, is_favorite, geminus_plus_api_url, geminus_premium_api_url, api_profile_id');
+        .select('fm_guid, latitude, longitude, is_favorite, geminus_plus_api_url, geminus_premium_api_url, api_profile_id, tenant_id');
+      if (selectedTenantId) {
+        query = query.eq('tenant_id', selectedTenantId);
+      }
+      const { data: settings, error } = await query;
 
       if (error) throw error;
 
@@ -77,6 +84,7 @@ export default function Properties() {
         profileName: s.api_profile_id ? (profileMap[s.api_profile_id] || null) : null,
         hasCustomGeminusPlus: !!s.geminus_plus_api_url,
         hasCustomGeminusPremium: !!s.geminus_premium_api_url,
+        tenantName: s.tenant_id ? (tenants.find(t => t.id === s.tenant_id)?.name || null) : null,
       }));
 
       setProperties(rows);
@@ -85,7 +93,7 @@ export default function Properties() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedTenantId, tenants]);
 
   useEffect(() => {
     fetchProperties();
@@ -206,6 +214,9 @@ export default function Properties() {
                   </p>
                 )}
                 <div className="flex flex-wrap gap-1.5">
+                  {property.tenantName && (
+                    <Badge variant="outline" className="text-[10px]">{property.tenantName}</Badge>
+                  )}
                   {property.isFavorite && (
                     <Badge variant="default" className="text-[10px]">Favorite</Badge>
                   )}

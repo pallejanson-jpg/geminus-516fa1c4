@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useTenant } from '@/context/TenantContext';
 
 interface BuildingSettingsMap {
   [fmGuid: string]: {
@@ -13,39 +14,46 @@ interface BuildingSettingsMap {
   };
 }
 
-const CACHE_KEY = 'all-building-settings-cache';
+const CACHE_KEY_PREFIX = 'all-building-settings-cache';
 
-function readCache(): BuildingSettingsMap | null {
+function cacheKey(tenantId: string | null): string {
+  return tenantId ? `${CACHE_KEY_PREFIX}:${tenantId}` : CACHE_KEY_PREFIX;
+}
+
+function readCache(tenantId: string | null): BuildingSettingsMap | null {
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
+    const raw = localStorage.getItem(cacheKey(tenantId));
     if (!raw) return null;
     return JSON.parse(raw);
   } catch { return null; }
 }
 
-function writeCache(map: BuildingSettingsMap) {
+function writeCache(tenantId: string | null, map: BuildingSettingsMap) {
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(map));
+    localStorage.setItem(cacheKey(tenantId), JSON.stringify(map));
   } catch { /* quota exceeded */ }
 }
 
 /**
- * Hook to fetch ALL building_settings from the database.
+ * Hook to fetch building_settings for the currently selected tenant.
  * Uses stale-while-revalidate: returns cached data instantly, then refreshes in background.
  */
 export function useAllBuildingSettings() {
-  const [settingsMap, setSettingsMap] = useState<BuildingSettingsMap>(() => readCache() || {});
+  const { selectedTenantId } = useTenant();
+  const [settingsMap, setSettingsMap] = useState<BuildingSettingsMap>(() => readCache(selectedTenantId) || {});
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
     // Only show loading spinner if we have no cached data
-    const hasCached = Object.keys(settingsMap).length > 0 || readCache() !== null;
+    const hasCached = Object.keys(settingsMap).length > 0 || readCache(selectedTenantId) !== null;
     setIsLoading(!hasCached);
 
     try {
-      const { data, error } = await supabase
-        .from('building_settings')
-        .select('*');
+      let query = supabase.from('building_settings').select('*');
+      if (selectedTenantId) {
+        query = query.eq('tenant_id', selectedTenantId);
+      }
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -62,13 +70,13 @@ export function useAllBuildingSettings() {
         };
       });
       setSettingsMap(map);
-      writeCache(map);
+      writeCache(selectedTenantId, map);
     } catch (error) {
       console.error('Failed to fetch all building settings:', error);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [selectedTenantId]);
 
   useEffect(() => {
     fetchAll();

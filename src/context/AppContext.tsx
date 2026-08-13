@@ -7,6 +7,7 @@
  *   useNavigation() — src/context/NavigationContext.tsx
  *   useViewer()     — src/context/ViewerContext.tsx
  *   useData()       — src/context/DataContext.tsx
+ *   useTenant()     — src/context/TenantContext.tsx
  */
 
 import React, { createContext, ReactNode, useContext } from 'react';
@@ -16,6 +17,7 @@ import { ThemeProvider, ThemeContext, type ThemeType } from './ThemeContext';
 import { NavigationProvider, NavigationContext, type Ivion360Context, type GeminusPremiumDashboardContext } from './NavigationContext';
 import { ViewerProvider, ViewerContext, type AssetRegistrationContext, type InventoryPrefill, type FaultReportPrefill, type AnnotationPlacementContext, type ViewerDiagnostics } from './ViewerContext';
 import { DataProvider, DataContext } from './DataContext';
+import { TenantProvider } from './TenantContext';
 
 // Re-export types for backward compatibility
 export type { ThemeType } from './ThemeContext';
@@ -237,15 +239,17 @@ interface AppProviderProps {
 export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     return (
         <ThemeProvider>
-            <DataProvider>
-                <NavigationProvider>
-                    <ViewerBridge>
-                        <AppContextBridge>
-                            {children}
-                        </AppContextBridge>
-                    </ViewerBridge>
-                </NavigationProvider>
-            </DataProvider>
+            <TenantProvider>
+                <DataProvider>
+                    <NavigationProvider>
+                        <ViewerBridge>
+                            <AppContextBridge>
+                                {children}
+                            </AppContextBridge>
+                        </ViewerBridge>
+                    </NavigationProvider>
+                </DataProvider>
+            </TenantProvider>
         </ThemeProvider>
     );
 };

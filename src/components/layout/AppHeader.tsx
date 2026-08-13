@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useContext, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { 
+import {
     Search, Home, LayoutGrid, Globe, Network, User as UserIcon,
-    Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Settings, LogOut, Shield, Sparkles, AppWindow, Code, Wand2
+    Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Settings, LogOut, Shield, Sparkles, AppWindow, Code, Wand2,
+    Building2, Check, ChevronDown
 } from 'lucide-react';
 import ApiSettingsModal from '@/components/settings/ApiSettingsModal';
 import ProfileModal from '@/components/settings/ProfileModal';
@@ -27,6 +28,7 @@ import { SearchResultsList } from '@/components/common/SearchResultsList';
 import { CommandSearch } from '@/components/common/CommandSearch';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/context/LanguageContext';
+import { useTenant } from '@/context/TenantContext';
 
 interface AppHeaderProps {
     isLoading?: boolean;
@@ -51,6 +53,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     } = useContext(AppContext);
     
     const { user, profile, isAdmin, signOut } = useAuth();
+    const { tenants, selectedTenantId, setSelectedTenantId } = useTenant();
     const { t } = useLanguage();
     const isMobile = useIsMobile();
     const { toast } = useToast();
@@ -173,6 +176,39 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                         </AppButton>
                     ))}
                 </div>
+
+                {tenants.length > 1 && (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                className="hidden sm:flex items-center gap-1.5 h-9 px-2.5 ml-1 rounded-md border border-border bg-background text-sm hover:bg-accent/50 transition-colors"
+                                title={t('Byt kund', 'Switch customer')}
+                            >
+                                <Building2 size={16} className="text-muted-foreground" />
+                                <span className="max-w-[8rem] truncate">
+                                    {tenants.find(tn => tn.id === selectedTenantId)?.name || t('Välj kund', 'Select customer')}
+                                </span>
+                                <ChevronDown size={14} className="text-muted-foreground" />
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-48 bg-popover">
+                            {tenants.map(tenant => (
+                                <DropdownMenuItem
+                                    key={tenant.id}
+                                    onClick={() => {
+                                        setSelectedTenantId(tenant.id);
+                                        setSelectedFacility(null);
+                                        setActiveApp('home');
+                                    }}
+                                    className="justify-between"
+                                >
+                                    {tenant.name}
+                                    {tenant.id === selectedTenantId && <Check size={14} />}
+                                </DropdownMenuItem>
+                            ))}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                )}
             </div>
 
             {/* Center - Search (click opens command palette) */}

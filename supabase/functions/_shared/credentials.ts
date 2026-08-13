@@ -58,6 +58,32 @@ async function getLinkedProfile(
   return profile || null;
 }
 
+/**
+ * Fetch the api_profiles row for the building's tenant, if any.
+ * One credential set per tenant covers all of that tenant's buildings,
+ * so buildings don't each need their own api_profile_id override.
+ */
+async function getTenantProfile(
+  supabase: any,
+  buildingFmGuid: string
+): Promise<any | null> {
+  const { data: settings } = await supabase
+    .from('building_settings')
+    .select('tenant_id')
+    .eq('fm_guid', buildingFmGuid)
+    .maybeSingle();
+
+  if (!settings?.tenant_id) return null;
+
+  const { data: profile } = await supabase
+    .from('api_profiles')
+    .select('*')
+    .eq('tenant_id', settings.tenant_id)
+    .maybeSingle();
+
+  return profile || null;
+}
+
 export async function getGeminusPlusCredentials(
   supabase: any,
   buildingFmGuid?: string | null
@@ -78,7 +104,22 @@ export async function getGeminusPlusCredentials(
       };
     }
 
-    // 2. Check per-building overrides (legacy, backward compat)
+    // 2. Check the building's tenant profile
+    const tenantProfile = await getTenantProfile(supabase, buildingFmGuid);
+    if (tenantProfile?.geminus_plus_api_url) {
+      return {
+        apiUrl: tenantProfile.geminus_plus_api_url,
+        apiKey: tenantProfile.geminus_plus_api_key || '',
+        keycloakUrl: tenantProfile.geminus_plus_keycloak_url || '',
+        clientId: tenantProfile.geminus_plus_client_id || '',
+        clientSecret: tenantProfile.geminus_plus_client_secret || '',
+        username: tenantProfile.geminus_plus_username || '',
+        password: tenantProfile.geminus_plus_password || '',
+        audience: tenantProfile.geminus_plus_audience || 'asset-api',
+      };
+    }
+
+    // 3. Check per-building overrides (legacy, backward compat)
     const { data } = await supabase
       .from('building_settings')
       .select('geminus_plus_api_url, geminus_plus_api_key, geminus_plus_keycloak_url, geminus_plus_client_id, geminus_plus_client_secret, geminus_plus_username, geminus_plus_password')
@@ -99,7 +140,7 @@ export async function getGeminusPlusCredentials(
     }
   }
 
-  // 3. Fall back to global env vars
+  // 4. Fall back to global env vars
   return {
     apiUrl: Deno.env.get('GEMINUS_PLUS_API_URL') || '',
     apiKey: Deno.env.get('GEMINUS_PLUS_API_KEY') || '',
@@ -127,7 +168,17 @@ export async function getGeminusPremiumCredentials(
       };
     }
 
-    // 2. Check per-building overrides (legacy)
+    // 2. Check the building's tenant profile
+    const tenantProfile = await getTenantProfile(supabase, buildingFmGuid);
+    if (tenantProfile?.geminus_premium_api_url) {
+      return {
+        apiUrl: tenantProfile.geminus_premium_api_url,
+        email: tenantProfile.geminus_premium_email || '',
+        password: tenantProfile.geminus_premium_password || '',
+      };
+    }
+
+    // 3. Check per-building overrides (legacy)
     const { data } = await supabase
       .from('building_settings')
       .select('geminus_premium_api_url, geminus_premium_email, geminus_premium_password')
@@ -161,6 +212,15 @@ export async function getGeminusBaseCredentials(
         apiUrl: profile.geminus_base_api_url,
         username: profile.geminus_base_username || '',
         password: profile.geminus_base_password || '',
+      };
+    }
+
+    const tenantProfile = await getTenantProfile(supabase, buildingFmGuid);
+    if (tenantProfile?.geminus_base_api_url) {
+      return {
+        apiUrl: tenantProfile.geminus_base_api_url,
+        username: tenantProfile.geminus_base_username || '',
+        password: tenantProfile.geminus_base_password || '',
       };
     }
   }

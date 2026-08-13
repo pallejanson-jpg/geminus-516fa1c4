@@ -3,6 +3,7 @@ import { fetchLocalAssets } from '@/services/geminus-plus-service';
 import { isModelName, isAModelName } from '@/lib/building-utils';
 import type { Facility, NavigatorNode } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
+import { useTenant } from './TenantContext';
 
 interface DataContextType {
   allData: Facility[];
@@ -31,6 +32,7 @@ export const DataContext = createContext<DataContextType>({
 export const useData = () => useContext(DataContext);
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { selectedTenantId } = useTenant();
   const [allData, setAllData] = useState<Facility[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [navigatorTreeData, setNavigatorTreeData] = useState<NavigatorNode[]>([]);
@@ -319,31 +321,71 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           'Building Storey', 'IfcBuildingStorey',
           'Space', 'IfcSpace',
         ]),
-        supabase.from('building_settings').select('fm_guid'),
+        supabase.from('building_settings').select('fm_guid, display_name, tenant_id'),
       ]);
-      setAllData(allObjects);
+
+      // Scope everything to the selected tenant's buildings. Assets aren't
+      // tenant-tagged themselves, so we derive the allowed building/complex
+      // fm_guids from building_settings.tenant_id and filter the asset tree
+      // down to just those (and their storeys/spaces/instances/complex).
+      const tenantSettingsRows = selectedTenantId
+        ? (buildingSettingsRows || []).filter((row: any) => row.tenant_id === selectedTenantId)
+        : (buildingSettingsRows || []);
+
+      let scopedObjects = allObjects;
+      if (selectedTenantId) {
+        const tenantBuildingFmGuids = new Set(tenantSettingsRows.map((row: any) => row.fm_guid));
+        const allowedBuildingGuids = new Set(
+          allObjects
+            .filter(o => (o.category === 'Building' || o.category === 'IfcBuilding') && tenantBuildingFmGuids.has(o.fmGuid))
+            .map(o => o.fmGuid)
+        );
+        const allowedComplexGuids = new Set(
+          allObjects
+            .filter(o => (o.category === 'Building' || o.category === 'IfcBuilding') && allowedBuildingGuids.has(o.fmGuid))
+            .map((o: any) => o.attributes?.complexFmGuid || o.complexFmGuid)
+            .filter(Boolean)
+        );
+        scopedObjects = allObjects.filter((o: any) => {
+          if (o.category === 'Complex') return allowedComplexGuids.has(o.fmGuid);
+          if (o.category === 'Building' || o.category === 'IfcBuilding') return allowedBuildingGuids.has(o.fmGuid);
+          if (o.buildingFmGuid) return allowedBuildingGuids.has(o.buildingFmGuid);
+          return true;
+        });
+      }
+      setAllData(scopedObjects);
 
       // Add synthetic Building nodes for fm_guids in building_settings with no asset row
       const knownBuildingGuids = new Set(
-        allObjects.filter(o => o.category === 'Building' || o.category === 'IfcBuilding').map(o => o.fmGuid)
+        scopedObjects.filter(o => o.category === 'Building' || o.category === 'IfcBuilding').map(o => o.fmGuid)
       );
-      const syntheticBuildings = (buildingSettingsRows || [])
-        .filter(row => !knownBuildingGuids.has(row.fm_guid))
-        .map(row => ({
-          fmGuid: row.fm_guid,
-          category: 'Building' as const,
-          name: row.fm_guid,
-          commonName: row.fm_guid,
-          buildingFmGuid: row.fm_guid,
-        }));
+      const syntheticBuildings = tenantSettingsRows
+        .filter((row: any) => !knownBuildingGuids.has(row.fm_guid))
+        .map((row: any) => {
+          // Priority: display_name from building_settings > storey attributes > GUID
+          const displayName = row.display_name || null;
+          const childStorey = !displayName ? scopedObjects.find(
+            (o: any) => o.buildingFmGuid === row.fm_guid &&
+              (o.category === 'Building Storey' || o.category === 'IfcBuildingStorey')
+          ) : null;
+          const attrs = childStorey?.attributes || {};
+          const inferredName = displayName || attrs.buildingCommonName || attrs.buildingDesignation || null;
+          return {
+            fmGuid: row.fm_guid,
+            category: 'Building' as const,
+            name: inferredName || row.fm_guid,
+            commonName: inferredName || row.fm_guid,
+            buildingFmGuid: row.fm_guid,
+          };
+        });
 
-      setNavigatorTreeData(buildNavigatorTree([...allObjects, ...syntheticBuildings]));
+      setNavigatorTreeData(buildNavigatorTree([...scopedObjects, ...syntheticBuildings]));
     } catch (error) {
       console.error('Failed to load assets:', error);
     } finally {
       setIsLoadingData(false);
     }
-  }, [buildNavigatorTree]);
+  }, [buildNavigatorTree, selectedTenantId]);
 
   useEffect(() => {
     refreshInitialData().catch((e) => {
