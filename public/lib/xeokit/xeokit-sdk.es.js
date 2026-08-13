@@ -1,11 +1,11 @@
 /**
- * xeokit-sdk v2.6.107
- *  Commit: a1558d52a694d6b8435eb85661f0d13b0a1a6fea
- *  Built: 2026-03-12T09:08:30.647Z
+ * xeokit-sdk v2.6.112
+ *  Commit: 2ce58020bcf3e4af1f68e47009f413c448a8a2a4
+ *  Built: 2026-06-25T15:09:42.607Z
  */
 
 if (typeof window !== 'undefined') {
-    window.__XEOKIT__ = { version: '2.6.107', commit: 'a1558d52a694d6b8435eb85661f0d13b0a1a6fea', built: '2026-03-12T09:08:30.647Z' };
+    window.__XEOKIT__ = { version: '2.6.112', commit: '2ce58020bcf3e4af1f68e47009f413c448a8a2a4', built: '2026-06-25T15:09:42.607Z' };
 }
 
 /** @private */
@@ -20733,7 +20733,7 @@ const tempVec3a$f = math.vec3();
 const tempVec4$3 = math.vec4();
 const TEXTURE_DECODE_FUNCS = { [sRGBEncoding]: "sRGBToLinear" };
 
-const iota$3 = function(n) {
+const iota$4 = function(n) {
     const ret = [ ];
     for (let i = 0; i < n; ++i) ret.push(i);
     return ret;
@@ -20932,7 +20932,7 @@ const createProgramVariablesState = function() {
 
             const sectionPlanesState = cfg.sectionPlanesState;
             const getClippingDistance = sectionPlanesState && (function() {
-                const allocatedUniforms = iota$3(sectionPlanesState.getNumAllocatedSectionPlanes()).map(i => {
+                const allocatedUniforms = iota$4(sectionPlanesState.getNumAllocatedSectionPlanes()).map(i => {
                     const sectionPlaneUniform = (type, postfix, getValue) => {
                         return programVariables.createUniform(type, `sectionPlane${postfix}${i}`, (set, state) => {
                             const sectionPlanes = sectionPlanesState.sectionPlanes;
@@ -32535,9 +32535,7 @@ class Layer {
     }
 
     drawEdgesColorOpaque(renderFlags, frameCtx) {
-        if (this._compiledPortions.edgesColorOpaqueAllowed()) {
-            this.__drawVertexEdges(renderFlags, frameCtx, RENDER_PASSES.EDGES_COLOR_OPAQUE);
-        }
+        this.__drawVertexEdges(renderFlags, frameCtx, RENDER_PASSES.EDGES_COLOR_OPAQUE);
     }
 
     drawEdgesColorTransparent(renderFlags, frameCtx) {
@@ -32828,7 +32826,7 @@ class Configs {
     }
 }
 
-const iota$2 = (n) => { const ret = [ ]; for (let i = 0; i < n; ++i) ret.push(i); return ret; };
+const iota$3 = (n) => { const ret = [ ]; for (let i = 0; i < n; ++i) ret.push(i); return ret; };
 
 const dataTextureRamStats = {
     sizeDataColorsAndFlags: 0,
@@ -33410,17 +33408,6 @@ class DTXLayer extends Layer {
         };
 
         return {
-            edgesColorOpaqueAllowed: () => {
-                if (scene.logarithmicDepthBufferEnabled) {
-                    if (!scene._loggedWarning) {
-                        console.log("Edge enhancement for SceneModel data texture layers currently disabled with logarithmic depth buffer");
-                        scene._loggedWarning = true;
-                    }
-                    return false;
-                } else {
-                    return true;
-                }
-            },
             sortId: sortId,
             setClippableFlags: setFlags2,
             setFlags: (portionId, flags, transparent, deferred = false) => {
@@ -33657,7 +33644,7 @@ const makeDTXRenderingAttributes = function(programVariables, isTriangle) {
         geometryParameters: {
             attributes: {
                 color:             colorA,
-                flags:             iota$2(4).map(i => `int(flags[${i}])`),
+                flags:             iota$3(4).map(i => `int(flags[${i}])`),
                 metallicRoughness: null,
                 normal:            {
                     view:  viewNormal,
@@ -33949,7 +33936,7 @@ const tempVec3g = math.vec3();
 const tempUint8Array4 = new Uint8Array(4);
 const matricesUniformBlockBufferData = new Float32Array(4 * 4 * 6); // there is 6 mat4
 
-const iota$1 = function(n) {
+const iota$2 = function(n) {
     const ret = [ ];
     for (let i = 0; i < n; ++i) ret.push(i);
     return ret;
@@ -34496,7 +34483,6 @@ class VBOLayer extends Layer {
 
         const solid = (primitive === "solid");
         return {
-            edgesColorOpaqueAllowed: () => true,
             solid: solid,
             sortId: (((primitive === "points") ? "Points" : ((primitive === "lines") ? "Lines" : "Triangles"))
                      + (instancing ? "Instancing" : "Batching") + "Layer" +
@@ -34877,8 +34863,8 @@ const makeVBORenderingAttributes = function(programVariables, instancing, entity
         metallicRoughness:    createAttribute("vec2",  "metallicRoughness"),
         flags:                createAttribute("float", "flagsA"),
         offset:               entityOffsetsEnabled && createAttribute("vec3", "offset"),
-        modelMatrixCol:       instancing && iota$1(3).map(i => createAttribute("vec4", "modelMatrixCol" + i)),
-        modelNormalMatrixCol: instancing && instancing.hasModelNormalMat && iota$1(3).map(i => createAttribute("vec4", "modelNormalMatrixCol" + i))
+        modelMatrixCol:       instancing && iota$2(3).map(i => createAttribute("vec4", "modelMatrixCol" + i)),
+        modelNormalMatrixCol: instancing && instancing.hasModelNormalMat && iota$2(3).map(i => createAttribute("vec4", "modelNormalMatrixCol" + i))
     };
 
     const uvA            = lazyShaderVariable("aUv");
@@ -34909,7 +34895,7 @@ const makeVBORenderingAttributes = function(programVariables, instancing, entity
         geometryParameters: {
             attributes: {
                 color:             attributes.color,
-                flags:             iota$1(4).map(i => ({ toString: () => `(int(${attributes.flags}) >> ${i * 4} & 0xF)` })),
+                flags:             iota$2(4).map(i => ({ toString: () => `(int(${attributes.flags}) >> ${i * 4} & 0xF)` })),
                 metallicRoughness: attributes.metallicRoughness,
                 normal:            {
                     view:  viewNormal,
@@ -40720,7 +40706,7 @@ class SceneModel extends Component {
         const positionsDecodeHash = posDecode ? this._createHashStringFromMatrix(posDecode) : "-";
         const textureSetId = cfg.textureSetId || "-";
         const geometryId = instancing ? cfg.geometryId : "-";
-        const layerId = (instancing ? "instancing" : "batching") + `.${Math.round(origin[0])}.${Math.round(origin[1])}.${Math.round(origin[2])}.${primitive}.${positionsDecodeHash}.${textureSetId}.${geometryId}`;
+        const layerId = (instancing ? "instancing" : "batching") + `.${Math.round(origin[0])}.${Math.round(origin[1])}.${Math.round(origin[2])}.${primitive}.${positionsDecodeHash}.${textureSetId}.${geometryId}.${((cfg.normalsCompressed || cfg.normals || [ ]).length > 0) ? "n" : "-"}`;
 
         if ((! instancing) && (layerId in this._vboLayers)) {
             const layer = this._vboLayers[layerId];
@@ -47131,9 +47117,9 @@ class OcclusionTester {
 
 const vec3_0 = math.vec3([0,0,0]);
 
-const iota = (n) => { const ret = [ ]; for (let i = 0; i < n; ++i) ret.push(i); return ret; };
+const iota$1 = (n) => { const ret = [ ]; for (let i = 0; i < n; ++i) ret.push(i); return ret; };
 
-const tempPlanes = iota(6).map(() => math.vec4());
+const tempPlanes = iota$1(6).map(() => math.vec4());
 const tempVec4 = math.vec4();
 
 const bitShiftScreenZ = math.vec4([1.0 / (256.0 * 256.0 * 256.0 * 256.0), 1.0 / (256.0 * 256.0 * 256.0), 1.0 / (256.0 * 256.0), 1.0 / 256.0]);
@@ -47464,7 +47450,7 @@ const Renderer$1 = function (scene, options) {
         const sampleOffsetsHor = createSampleOffsets([1, 0]);
 
         const gaussian = (i, stdDev) => Math.exp(-(i * i) / (2.0 * (stdDev * stdDev))) / (Math.sqrt(2.0 * Math.PI) * stdDev);
-        const sampleWeights = new Float32Array(iota(KERNEL_RADIUS + 1).map(i => gaussian(i, blurStdDev))); // TODO: Optimize
+        const sampleWeights = new Float32Array(iota$1(KERNEL_RADIUS + 1).map(i => gaussian(i, blurStdDev))); // TODO: Optimize
 
         const programVariablesState = createProgramVariablesState();
 
@@ -59087,26 +59073,18 @@ class CameraUpdater {
 
             if (updates.rotateDeltaY !== 0 || updates.rotateDeltaX !== 0) {
 
-                if ((!configs.firstPerson) && configs.followPointer && pivotController.getPivoting()) {
-                    pivotController.continuePivot(updates.rotateDeltaY, updates.rotateDeltaX);
-                    pivotController.showPivot();
-
-                } else {
-
+                if (configs.firstPerson) {
                     if (updates.rotateDeltaX !== 0) {
-                        if (configs.firstPerson) {
-                            camera.pitch(-updates.rotateDeltaX);
-                        } else {
-                            camera.orbitPitch(updates.rotateDeltaX);
-                        }
+                        camera.pitch(-updates.rotateDeltaX);
                     }
-
                     if (updates.rotateDeltaY !== 0) {
-                        if (configs.firstPerson) {
-                            camera.yaw(updates.rotateDeltaY);
-                        } else {
-                            camera.orbitYaw(updates.rotateDeltaY);
-                        }
+                        camera.yaw(updates.rotateDeltaY);
+                    }
+                }
+                else {
+                    if (configs.followPointer && pivotController.getPivoting()){
+                        pivotController.continuePivot(updates.rotateDeltaY, updates.rotateDeltaX);
+                        pivotController.showPivot();
                     }
                 }
 
@@ -62765,6 +62743,20 @@ class MetaScene {
         metaModel.finalize();
 
         return metaModel;
+    }
+
+    /**
+     * Destroys this MetaScene.
+     */
+    _destroy() {
+        this.viewer = null;
+        this.scene = null;
+        this.metaModels = {};
+        this.propertySets = {};
+        this.metaObjects = {};
+        this.metaObjectsByType = {};
+        this.rootMetaObjects = {};
+        this._eventSubs = {};
     }
 
     /**
@@ -101821,10 +101813,25 @@ class Label3D {
         this.__visible = true;
 
         this._updatePos = () => {
-            toClipSpace(camera, this._start, tmpVec4a);
-            math.mulVec4Scalar(tmpVec4a, 1.0 / tmpVec4a[3]);
-            toCanvasSpace(scene.canvas.canvas, parentElement, tmpVec4a, tmpVec2a);
-            this._label.setPos(tmpVec2a[0], tmpVec2a[1]);
+            const p0 = tmpVec4a;
+            toClipSpace(camera, this._start, p0);
+            math.mulVec3Scalar(p0, 1.0 / p0[3]);
+
+            const outsideFrustum = ((p0[3] < 0)
+                                    ||
+                                    (p0[0] < -1) || (p0[0] > 1)
+                                    ||
+                                    (p0[1] < -1) || (p0[1] > 1)
+                                    ||
+                                    (p0[2] < -1) || (p0[2] > 1));
+            const culled = outsideFrustum || scene._sectionPlanesState.sectionPlanes.some(
+                plane => plane.active && (math.dotVec3(plane.dir, math.subVec3(plane.pos, this._start, tmpVec3a$2)) > 0));
+
+            this._label.setCulled(culled);
+            if (! culled) {
+                toCanvasSpace(scene.canvas.canvas, parentElement, p0, tmpVec2a);
+                this._label.setPos(tmpVec2a[0], tmpVec2a[1]);
+            }
         };
 
         const setPosOnWire = (p0, p1, yOff) => {
@@ -103336,6 +103343,7 @@ class Viewer {
             const plugin = plugins[i];
             plugin.destroy();
         }
+        this.metaScene._destroy();
         this.scene.destroy();
     }
 }
@@ -104761,7 +104769,7 @@ class AngleMeasurementsPlugin extends Plugin {
      * @param {Viewer} viewer The Viewer.
      * @param {Object} [cfg]  Plugin configuration.
      * @param {String} [cfg.id="AngleMeasurements"] Optional ID for this plugin, so that we can find it within {@link Viewer#plugins}.
-     * @param {HTMLElement} [cfg.container] Container DOM element for markers and labels. Defaults to ````document.body````.
+     * @param {HTMLElement} [cfg.container] Container DOM element for markers and labels. Defaults to ````document.body````, but different element should be specified to capture it with {@link Viewer.getSnapshotWithPlugins}.
      * @param {string} [cfg.defaultColor=null] The default color of the dots, wire and label.
      * @param {boolean} [cfg.defaultLabelsVisible=true] The default value of {@link AngleMeasurement.labelsVisible}.
      * @param {number} [cfg.zIndex] If set, the wires, dots and labels will have this zIndex (+1 for dots and +2 for labels).
@@ -106804,7 +106812,7 @@ class AnnotationsPlugin extends Plugin {
      * @param {String} [cfg.id="Annotations"] Optional ID for this plugin, so that we can find it within {@link Viewer#plugins}.
      * @param {String} [cfg.markerHTML] HTML text template for Annotation markers. Defaults to ````<div></div>````. Ignored on {@link Annotation}s configured with a ````markerElementId````.
      * @param {String} [cfg.labelHTML] HTML text template for Annotation labels. Defaults to ````<div></div>````.  Ignored on {@link Annotation}s configured with a ````labelElementId````.
-     * @param {HTMLElement} [cfg.container] Container DOM element for markers and labels. Defaults to ````document.body````.
+     * @param {HTMLElement} [cfg.container] Container DOM element for markers and labels. Defaults to ````document.body````, but different element should be specified to capture it with {@link Viewer.getSnapshotWithPlugins}.
      * @param {{String:(String|Number)}} [cfg.values={}] Map of default values to insert into the HTML templates for the marker and label.
      * @param {Number}  [cfg.surfaceOffset=0.3] The amount by which each {@link Annotation} is offset from the surface of
      * its {@link Entity} when we create the Annotation by supplying a {@link PickResult} to {@link AnnotationsPlugin#createAnnotation}.
@@ -109748,7 +109756,7 @@ class DistanceMeasurementsPlugin extends Plugin {
    * @param {Object} [cfg]  Plugin configuration.
    * @param {String} [cfg.id="DistanceMeasurements"] Optional ID for this plugin, so that we can find it within {@link Viewer#plugins}.
    * @param {Number} [cfg.labelMinAxisLength=25] The minimum length, in pixels, of an axis wire beyond which its label is shown.
-   * @param {HTMLElement} [cfg.container] Container DOM element for markers and labels. Defaults to ````document.body````.
+   * @param {HTMLElement} [cfg.container] Container DOM element for markers and labels. Defaults to ````document.body````, but different element should be specified to capture it with {@link Viewer.getSnapshotWithPlugins}.
    * @param {boolean} [cfg.defaultVisible=true] The default value of the DistanceMeasurements `visible` property.
    * @param {boolean} [cfg.defaultOriginVisible=true] The default value of the DistanceMeasurements `originVisible` property.
    * @param {boolean} [cfg.defaultTargetVisible=true] The default value of the DistanceMeasurements `targetVisible` property.
@@ -111490,6 +111498,13 @@ function getBasePath$1(src) {
     return (i !== 0) ? src.substring(0, i + 1) : "";
 }
 
+const iota = n => {
+    const ret = [ ];
+    for (let i = 0; i < n; ++i)
+        ret.push(i);
+    return ret;
+};
+
 /**
  * @private
  */
@@ -111572,11 +111587,12 @@ function getBasePath(src) {
 function parseGLTF(plugin, src, gltf, metaModelJSON, options, sceneModel, ok, error) {
     const spinner = plugin.viewer.scene.canvas.spinner;
     spinner.processes++;
-    parse$4(gltf, GLTFLoader, {
+    const loadersGl = options.loadersGl;
+    (loadersGl ? loadersGl.core.parse : parse$4)(gltf, loadersGl ? loadersGl.gltf.GLTFLoader : GLTFLoader, {
         ...(options.parseOptions || { }),
         baseUri: options.basePath
     }).then((gltfData) => {
-        const processedGLTF = postProcessGLTF(gltfData);
+        const processedGLTF = (loadersGl ? loadersGl.gltf.postProcessGLTF : postProcessGLTF)(gltfData);
         const ctx = {
             src: src,
             entityId: options.entityId,
@@ -112053,32 +112069,6 @@ function parseNodeMesh(node, ctx, matrix, meshIds) {
                 meshCfg.color = new Float32Array([1.0, 1.0, 1.0]);
                 meshCfg.opacity = 1.0;
             }
-            const backfaces = ((ctx.backfaces !== false) || (material && material.doubleSided !== false));
-            switch (primitive.mode) {
-                case 0: // POINTS
-                    meshCfg.primitive = "points";
-                    break;
-                case 1: // LINES
-                    meshCfg.primitive = "lines";
-                    break;
-                case 2: // LINE_LOOP
-                    meshCfg.primitive = "lines";
-                    break;
-                case 3: // LINE_STRIP
-                    meshCfg.primitive = "lines";
-                    break;
-                case 4: // TRIANGLES
-                    meshCfg.primitive = backfaces ? "triangles" : "solid";
-                    break;
-                case 5: // TRIANGLE_STRIP
-                    meshCfg.primitive = backfaces ? "triangles" : "solid";
-                    break;
-                case 6: // TRIANGLE_FAN
-                    meshCfg.primitive = backfaces ? "triangles" : "solid";
-                    break;
-                default:
-                    meshCfg.primitive = backfaces ? "triangles" : "solid";
-            }
             const POSITION = primitive.attributes.POSITION;
             if (!POSITION) {
                 continue;
@@ -112098,6 +112088,61 @@ function parseNodeMesh(node, ctx, matrix, meshIds) {
                 math.transformPositions3(matrix, meshCfg.localPositions, meshCfg.positions);
             } else { // eqiv to math.transformPositions3(math.identityMat4(), meshCfg.localPositions, meshCfg.positions);
                 meshCfg.positions.set(meshCfg.localPositions);
+            }
+            const linearize = closeLoop => {
+                const indices = meshCfg.indices || iota(meshCfg.localPositions.length / 3);
+                const len = indices.length;
+                const cnt = closeLoop ? len : (len - 1);
+                const linesIndices = new Uint32Array(cnt * 2);
+                for (let i = 0; i < cnt; ++i) {
+                    const idx = i * 2;
+                    linesIndices[idx]   = indices[i];
+                    linesIndices[idx+1] = indices[(i+1) % len];
+                }
+                meshCfg.indices = linesIndices;
+            };
+            const triangularize = getFirstPoint => {
+                const indices = meshCfg.indices || iota(meshCfg.localPositions.length / 3);
+                const len = indices.length;
+                const cnt = len - 2;
+                const trianglesIndices = new Uint32Array(cnt * 3);
+                for (let i = 0; i < cnt; ++i) {
+                    const idx = i * 3;
+                    trianglesIndices[idx]   = getFirstPoint(indices, i);
+                    trianglesIndices[idx+1] = indices[(i+1) % len];
+                    trianglesIndices[idx+2] = indices[(i+2) % len];
+                }
+                meshCfg.indices = trianglesIndices;
+            };
+            const backfaces = ((ctx.backfaces !== false) || (material && material.doubleSided !== false));
+            switch (primitive.mode) {
+                case 0: // POINTS
+                    meshCfg.primitive = "points";
+                    break;
+                case 1: // LINES
+                    meshCfg.primitive = "lines";
+                    break;
+                case 2: // LINE_LOOP
+                    meshCfg.primitive = "lines";
+                    linearize(true);
+                    break;
+                case 3: // LINE_STRIP
+                    meshCfg.primitive = "lines";
+                    linearize(false);
+                    break;
+                case 4: // TRIANGLES
+                    meshCfg.primitive = backfaces ? "triangles" : "solid";
+                    break;
+                case 5: // TRIANGLE_STRIP
+                    meshCfg.primitive = backfaces ? "triangles" : "solid";
+                    triangularize((indices, i) => indices[i]);
+                    break;
+                case 6: // TRIANGLE_FAN
+                    meshCfg.primitive = backfaces ? "triangles" : "solid";
+                    triangularize((indices, i) => indices[0]);
+                    break;
+                default:
+                    meshCfg.primitive = backfaces ? "triangles" : "solid";
             }
             const origin = math.vec3();
             const rtcNeeded = worldToRTCPositions(meshCfg.positions, meshCfg.positions, origin); // Small cellsize guarantees better accuracy
@@ -112449,6 +112494,9 @@ class GLTFLoaderPlugin extends Plugin {
      * @param {Boolean} [params.globalizeObjectIds=false] Indicates whether to globalize each {@link Entity#id} and {@link MetaObject#id}, in case you need to prevent ID clashes with other models.
      * @param {*} [params.parseOptions={}] Options to pass to loaders.gl parse method, eg. ````{ gltf: { excludeExtensions: { "KHR_texture_transform": false } } }````.
      * @param {Boolean} [params.entityPerMesh=false] Create an entity for each mesh, instead of grouping leaf meshes under their common entity.
+     * @param {*} [params.loadersGl={core,gltf}] Alternative user-provided loaders.gl library.
+     * This feature has been tested with loaders.gl 4.3.4 version.
+     * Because loaders.gl is supplied externally, xeokit cannot guarantee compatibility with all loaders.gl versions.
      * @returns {Entity} Entity representing the model, which will have {@link Entity#isModel} set ````true```` and will be registered by {@link Entity#id} in {@link Scene#models}
      */
     load(params = {}) {
@@ -121034,6 +121082,9 @@ class ViewCullPlugin extends Plugin {
         if (cullDirty) {
             const kdNode = this._kdRoot;
             if (kdNode) {
+                for (let objectIdx = 0, len = this._objectCullStates.numObjects; objectIdx < len; objectIdx++) {
+                    this._objectCullStates.setObjectViewCulled(objectIdx, false);
+                }
                 this._visitKDNode(kdNode);
             }
         }
@@ -123495,7 +123546,7 @@ function load$4(viewer, options, inflatedData, sceneModel, metaModel, manifestCt
                     if (!geometryArrays) {
 
                         geometryArrays = {
-                            batchThisMesh: (!options.reuseGeometries)
+                            batchThisMesh: (!options.reuseGeometries({ instanceCount: geometryReuseCount }))
                         };
 
                         const primitiveType = eachGeometryPrimitiveType[geometryIndex];
@@ -124009,7 +124060,7 @@ function load$3(viewer, options, inflatedData, sceneModel, metaModel, manifestCt
 
                     if (!geometryArrays) {
                         geometryArrays = {
-                            batchThisMesh: (!options.reuseGeometries)
+                            batchThisMesh: (!options.reuseGeometries({ instanceCount: geometryReuseCount }))
                         };
                         const primitiveType = eachGeometryPrimitiveType[geometryIndex];
                         let geometryValid = false;
@@ -124615,7 +124666,7 @@ function load$2(viewer, options, inflatedData, sceneModel, metaModel, manifestCt
 
                     if (!geometryArrays) {
                         geometryArrays = {
-                            batchThisMesh: (!options.reuseGeometries)
+                            batchThisMesh: (!options.reuseGeometries({ instanceCount: geometryReuseCount }))
                         };
                         const primitiveType = eachGeometryPrimitiveType[geometryIndex];
                         let geometryValid = false;
@@ -125263,7 +125314,7 @@ function load$1(viewer, options, inflatedData, sceneModel, metaModel, manifestCt
 
                     if (!geometryArrays) {
                         geometryArrays = {
-                            batchThisMesh: (!options.reuseGeometries)
+                            batchThisMesh: (!options.reuseGeometries({ instanceCount: geometryReuseCount }))
                         };
                         const primitiveType = eachGeometryPrimitiveType[geometryIndex];
                         let geometryValid = false;
@@ -125998,7 +126049,7 @@ function load(viewer, options, inflatedData, sceneModel, metaModel, manifestCtx)
 
                     if (!geometryArrays) {
                         geometryArrays = {
-                            batchThisMesh: (!options.reuseGeometries)
+                            batchThisMesh: (!options.reuseGeometries({ instanceCount: geometryReuseCount }))
                         };
                         const primitiveType = eachGeometryPrimitiveType[geometryIndex];
                         const axisLabel = eachGeometryAxisLabel[geometryIndex];
@@ -126934,7 +126985,7 @@ class XKTLoaderPlugin extends Plugin {
      * @param {String[]} [cfg.includeTypes] When loading metadata, only loads objects that have {@link MetaObject}s with {@link MetaObject#type} values in this list.
      * @param {String[]} [cfg.excludeTypes] When loading metadata, never loads objects that have {@link MetaObject}s with {@link MetaObject#type} values in this list.
      * @param {Boolean} [cfg.excludeUnclassifiedObjects=false] When loading metadata and this is ````true````, will only load {@link Entity}s that have {@link MetaObject}s (that are not excluded). This is useful when we don't want Entitys in the Scene that are not represented within IFC navigation components, such as {@link TreeViewPlugin}.
-     * @param {Boolean} [cfg.reuseGeometries=true] Indicates whether to enable geometry reuse (````true```` by default) or whether to internally expand
+     * @param {Boolean|Function} [cfg.reuseGeometries=true] Indicates whether to enable geometry reuse (````true```` by default) or whether to internally expand, a function will be called with a `{ instanceCount: <number> }` argument.
      * all geometry instances into batches (````false````), and not use instancing to render them. Setting this ````false```` can significantly
      * improve Viewer performance for models that have a lot of geometry reuse, but may also increase the amount of
      * browser and GPU memory they require. See [#769](https://github.com/xeokit/xeokit-sdk/issues/769) for more info.
@@ -127202,7 +127253,7 @@ class XKTLoaderPlugin extends Plugin {
      * @type {Boolean}
      */
     set reuseGeometries(value) {
-        this._reuseGeometries = value !== false;
+        this._reuseGeometries = value;
     }
 
     /**
@@ -127220,6 +127271,7 @@ class XKTLoaderPlugin extends Plugin {
      * @param {ArrayBuffer} [params.xkt] The *````.xkt````* file data, as an alternative to the ````src```` parameter.
      * @param {String} [params.metaModelSrc] Path or URL to an optional metadata file, as an alternative to the ````metaModelData```` parameter.
      * @param {*} [params.metaModelData] JSON model metadata, as an alternative to the ````metaModelSrc```` parameter.
+     * @param {Boolean} [params.loadIntoMetaScene=true] Whether to load metadata into MetaScene, otherwise expose as SceneModel::metadata.
      * @param {String} [params.manifestSrc] Path or URL to a JSON manifest file that provides paths to ````.xkt```` files to load as parts of the model. Use this option to load models that have been split into
      * multiple XKT files. See [tutorial](https://xeokit.io/blog/automatically-splitting-large-models-for-better-performance) for more info.
      * @param {Object} [params.manifest] A JSON manifest object (as an alternative to a path or URL) that provides paths to ````.xkt```` files to load as parts of the model. Use this option to load models that have been split into
@@ -127243,9 +127295,9 @@ class XKTLoaderPlugin extends Plugin {
      * Viewer will hide backfaces on watertight meshes, show backfaces on open meshes, and always show backfaces on meshes when we slice them open with {@link SectionPlane}s.
      * @param {Boolean} [params.excludeUnclassifiedObjects=false] When loading metadata and this is ````true````, will only load {@link Entity}s that have {@link MetaObject}s (that are not excluded). This is useful when we don't want Entitys in the Scene that are not represented within IFC navigation components, such as {@link TreeViewPlugin}.
      * @param {Boolean} [params.globalizeObjectIds=false] Indicates whether to globalize each {@link Entity#id} and {@link MetaObject#id}, in case you need to prevent ID clashes with other models. See {@link XKTLoaderPlugin#globalizeObjectIds} for more info.
-     * @param {Boolean} [params.reuseGeometries=true] Indicates whether to enable geometry reuse (````true```` by default) or whether to expand
-     * all geometry instances into batches (````false````), and not use instancing to render them. Setting this ````false```` can significantly
-     * improve Viewer performance for models that have excessive geometry reuse, but may also increases the amount of
+     * @param {Boolean|Function} [params.reuseGeometries=true] Indicates whether to enable geometry reuse (````true```` by default) or whether to expand
+     * all geometry instances into batches (````false````), and not use instancing to render them. A function will be called with a `{ instanceCount: <number> }` argument. Setting this ````false```` can significantly
+     * improve Viewer performance for models that have excessive geometry reuse, but may also increase the amount of
      * browser and GPU memory used by the model. See [#769](https://github.com/xeokit/xeokit-sdk/issues/769) for more info.
      * @param {Boolean} [params.dtxEnabled=true] When ````true```` (default) use data textures (DTX), where appropriate, to
      * represent the returned model. Set false to always use vertex buffer objects (VBOs). Note that DTX is only applicable
@@ -127272,7 +127324,8 @@ class XKTLoaderPlugin extends Plugin {
         const includeIds = params.includeIds || this._includeIds;
         const objectDefaults = params.objectDefaults || this._objectDefaults;
 
-        options.reuseGeometries = (params.reuseGeometries !== null && params.reuseGeometries !== undefined) ? params.reuseGeometries : (this._reuseGeometries !== false);
+        const reuseGeometries = params.reuseGeometries ?? this._reuseGeometries;
+        options.reuseGeometries = (typeof reuseGeometries !== "function") ? (() => reuseGeometries) : reuseGeometries;
 
         if (includeTypes) {
             options.includeTypesMap = {};
@@ -127315,10 +127368,30 @@ class XKTLoaderPlugin extends Plugin {
 
         const modelId = sceneModel.id;  // In case ID was auto-generated
 
-        const metaModel = new MetaModel({
-            metaScene: this.viewer.metaScene,
-            id: modelId
-        });
+        const loadIntoMetaScene = (! ("loadIntoMetaScene" in params)) || params.loadIntoMetaScene;
+        const metaModel = (loadIntoMetaScene
+                           ? new MetaModel({
+                               id: modelId,
+                               metaScene: this.viewer.metaScene
+                           })
+                           : (function() {
+                               let firstMetadata = null;
+                               let modelMetadata = null;
+                               return {
+                                   loadData: metadata => {
+                                       if (! firstMetadata) {
+                                           firstMetadata = metadata;
+                                       } else {
+                                           if (! modelMetadata) {
+                                               modelMetadata = { };
+                                               Object.entries(firstMetadata).forEach(([ k, v ]) => modelMetadata[k] = Array.isArray(v) ? v.slice(0) : v);
+                                           }
+                                           Object.entries(metadata).forEach(([ k, v ]) => { if (Array.isArray(v)) { v.forEach(e => modelMetadata[k].push(e)); } });
+                                       }
+                                   },
+                                   finalize: () => sceneModel.metadata = modelMetadata || firstMetadata
+                               };
+                           })());
 
         this.viewer.scene.canvas.spinner.processes++;
 
@@ -127331,7 +127404,7 @@ class XKTLoaderPlugin extends Plugin {
             metaModel.finalize();
             this.viewer.scene.canvas.spinner.processes--;
             sceneModel.once("destroyed", () => {
-                this.viewer.metaScene.destroyMetaModel(metaModel.id);
+                loadIntoMetaScene && this.viewer.metaScene.destroyMetaModel(metaModel.id);
             });
             this.scheduleTask(() => {
                 if (sceneModel.destroyed) {
