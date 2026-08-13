@@ -41,6 +41,8 @@ export interface GeminusBaseV2ViewerHandle {
   clearFilter: () => void;
   setExternalFilter: (filterData: object, autoApply?: boolean) => void;
   getSelectedObjects: (domainId: string, callback: (success: boolean, data: any) => void) => void;
+  /** Escape hatch: send a raw EmbeddedApi postMessage (for commands not wrapped above) */
+  postRaw: (message: object) => void;
   isReady: () => boolean;
 }
 
@@ -184,6 +186,7 @@ const GeminusBaseV2ViewerPanel = forwardRef<GeminusBaseV2ViewerHandle, GeminusBa
       post({ type: 'getSelectedObjects', domain: domainId });
       // Response arrives via handleMessage → onObjectSelected
     },
+    postRaw: (message) => post(message),
     isReady: () => readyRef.current,
   }), [post]);
 

@@ -17,6 +17,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import GeminusBaseTree from './GeminusBaseTree';
 import GeminusBaseV2ViewerPanel, { GeminusBaseV2ViewerHandle } from './GeminusBaseV2ViewerPanel';
 import GeminusBaseV2ObjectGrid from './GeminusBaseV2ObjectGrid';
+import GeminusBaseLegendPanel, { LegendFilter } from './GeminusBaseLegendPanel';
 
 // ── Viewer toolbar ────────────────────────────────────────────────────────────
 // 2d-fma = FM Access vector drawing (Tessel embedded viewer).
@@ -183,6 +184,28 @@ const GeminusBaseV2View: React.FC = () => {
   const viewerRef = useRef<GeminusBaseV2ViewerHandle>(null);
   const pendingShowRef = useRef<{ classId: number; objectId: number } | null>(null);
 
+  // ── Legend (FM Access presentation API) ─────────────────────────────────────
+  const [selectedFloor, setSelectedFloor] = useState<{ classId: number; objectId: number } | null>(null);
+
+  const handleLegendApplied = useCallback((presentationId: number, _filters: LegendFilter[]) => {
+    // Ask the embedded Tessel viewer to render the presentation coloring
+    viewerRef.current?.postRaw({ type: 'showPresentation', presentationId });
+    viewerRef.current?.applyFilter(presentationId);
+  }, []);
+
+  const handleLegendCleared = useCallback(() => {
+    viewerRef.current?.clearFilter();
+  }, []);
+
+  const handleLegendFilterClicked = useCallback((filter: LegendFilter) => {
+    // Zoom the viewer to the rooms in this legend bucket
+    const first = filter.spotObjects[0];
+    if (first && viewerRef.current?.isReady()) {
+      viewerRef.current.showObject(String(first.objectId), String(first.classId),
+        undefined, { mode: '2D', fitMode: 0, fitMargin: 0.3 });
+    }
+  }, []);
+
   // ── Build Geminus Base tree via search ──────────────────────────────────────────
   // The Fastigheter are NOT accessible via Kfast's children in perspective/json.
   // Instead we search for them using Geminus building names, then load their
@@ -300,6 +323,10 @@ const GeminusBaseV2View: React.FC = () => {
     const allNodes = [...path, node];
     const byggnad = [...allNodes].reverse().find(n => n.classId === 104);
     const fastighet = [...allNodes].reverse().find(n => n.classId === 103);
+
+    // Legend context: nearest floor (Plan) in the selection path
+    const plan = [...allNodes].reverse().find(n => n.classId === 105);
+    setSelectedFloor(plan?.objectId ? { classId: 105, objectId: plan.objectId } : null);
 
     // Geminus Base building systemGuid → used to resolve drawings in get-embed-config
     const geminusBaseGuid = byggnad?.systemGuid || fastighet?.systemGuid || '';
@@ -585,10 +612,19 @@ const GeminusBaseV2View: React.FC = () => {
                 </div>
               ) : (
                 <>
-                  <div className={cn('absolute inset-0', viewMode === '2d-fma' ? 'block' : 'hidden')}>
-                    <GeminusBaseV2ViewerPanel ref={viewerRef} buildingFmGuid={viewerBuildingGuid}
-                      geminusBaseBuildingGuid={viewerGeminusBaseGuid || undefined}
-                      onObjectSelected={handleViewerSelection} onReady={handleViewerReady} className="h-full" />
+                  <div className={cn('absolute inset-0 flex', viewMode === '2d-fma' ? 'flex' : 'hidden')}>
+                    <div className="flex-1 overflow-hidden">
+                      <GeminusBaseV2ViewerPanel ref={viewerRef} buildingFmGuid={viewerBuildingGuid}
+                        geminusBaseBuildingGuid={viewerGeminusBaseGuid || undefined}
+                        onObjectSelected={handleViewerSelection} onReady={handleViewerReady} className="h-full" />
+                    </div>
+                    <GeminusBaseLegendPanel
+                      floorNode={selectedFloor}
+                      onPresentationApplied={handleLegendApplied}
+                      onCleared={handleLegendCleared}
+                      onFilterClicked={handleLegendFilterClicked}
+                      className="w-64 border-l border-border bg-card shrink-0"
+                    />
                   </div>
                   {iframeMounted && iframeSrc && (
                     <iframe ref={iframeRef} src={iframeSrc} onLoad={handleIframeLoad}
