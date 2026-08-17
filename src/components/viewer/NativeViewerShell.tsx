@@ -17,9 +17,11 @@ import VisualizationToolbar from './VisualizationToolbar';
 import RoomVisualizationPanel from './RoomVisualizationPanel';
 import InventoryPanel from './InventoryPanel';
 import InventoryFormSheet from '@/components/inventory/InventoryFormSheet';
-import RouteDisplayOverlay from './RouteDisplayOverlay';
 import VisualizationLegendOverlay from './VisualizationLegendOverlay';
 import SensorDataOverlay from './SensorDataOverlay';
+import IndoorRoute3DRenderer from './IndoorRoute3DRenderer';
+import IndoorWayfindingPanel from './IndoorWayfindingPanel';
+import type { RouteResult } from '@/lib/pathfinding';
 
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
@@ -32,8 +34,6 @@ import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDi
 import { ARCHITECT_BACKGROUND_CHANGED_EVENT, ARCHITECT_BACKGROUND_PRESETS, type BackgroundPresetId } from '@/hooks/useArchitectViewMode';
 import { recolorArchitectObjects } from '@/lib/architect-colors';
 import { Filter, ArrowLeft } from 'lucide-react';
-import { parseNavGraph, dijkstra, findNodeByRoom, findNearestEntranceNode, mergeGraphs } from '@/lib/pathfinding';
-import type { RouteResult } from '@/lib/pathfinding';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 
@@ -54,9 +54,13 @@ interface NativeViewerShellProps {
   modelFilterFmGuid?: string;
   /** Optional model filter category (e.g. discipline/category) */
   modelFilterCategory?: string;
+  /** Active indoor navigation route (from the outdoor map handoff or in-viewer NavigationPanel) — drawn in 3D + turn-by-turn */
+  navRoute?: RouteResult | null;
+  /** Called when the user dismisses the wayfinding panel */
+  onNavRouteClose?: () => void;
 }
 
-const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, onClose, hideBackButton = false, hideMobileOverlay = false, hideToolbar = false, hideFloorSwitcher = false, showGeminusMenu = false, modelFilterFmGuid: _modelFilterFmGuid, modelFilterCategory: _modelFilterCategory }) => {
+const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, onClose, hideBackButton = false, hideMobileOverlay = false, hideToolbar = false, hideFloorSwitcher = false, showGeminusMenu = false, modelFilterFmGuid: _modelFilterFmGuid, modelFilterCategory: _modelFilterCategory, navRoute = null, onNavRouteClose }) => {
   const isMobile = useIsMobile();
   const { allData, isSidebarExpanded } = useContext(AppContext);
 
@@ -102,8 +106,9 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const startViewAppliedRef = useRef<string | null>(null);
 
   // ─── Auto-apply start view when viewer models finish loading ───
+  // Skipped when an indoor route is active — the wayfinding panel owns the camera then.
   useEffect(() => {
-    if (startViewAppliedRef.current === buildingFmGuid) return;
+    if (startViewAppliedRef.current === buildingFmGuid || navRoute) return;
 
     let cancelled = false;
 
@@ -168,10 +173,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       cancelled = true;
       cleanup?.();
     };
-  }, [buildingFmGuid, isViewerReady]);
-
-  // Indoor route from navigation handoff
-  const [pendingIndoorRoute, setPendingIndoorRoute] = useState<any>(null);
+  }, [buildingFmGuid, isViewerReady, navRoute]);
 
   // Helper: apply a saved view to the xeokit viewer
   const applySavedView = useCallback((viewer: any, detail: LoadSavedViewDetail) => {
@@ -620,57 +622,6 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       delete (window as any).__nativeXeokitViewer;
     };
   }, []);
-
-  // Consume pending_indoor_route from sessionStorage (navigation handoff)
-  useEffect(() => {
-    if (!isViewerReady) return;
-    try {
-      const raw = sessionStorage.getItem('pending_indoor_route');
-      if (!raw) return;
-      sessionStorage.removeItem('pending_indoor_route');
-      const payload = JSON.parse(raw);
-      if (payload.buildingFmGuid !== buildingFmGuid) return;
-
-      // If route is already computed (from MapView), use it directly
-      if (payload.route) {
-        // We need to recalculate the Dijkstra route to get a RouteResult for the overlay
-        // The route in sessionStorage is a GeoJSON FeatureCollection — we need path nodes
-        // So we re-compute from the navigation graph
-        (async () => {
-          const { data: graphRows } = await supabase
-            .from('navigation_graphs')
-            .select('graph_data')
-            .eq('building_fm_guid', buildingFmGuid);
-
-          if (!graphRows?.length) return;
-          const graphs = graphRows.map(r => parseNavGraph(r.graph_data as unknown as GeoJSON.FeatureCollection));
-          const merged = mergeGraphs(graphs);
-          const entrance = findNearestEntranceNode(merged);
-
-          if (!entrance) return;
-
-          // Try to find target from payload
-          let targetNodeId: string | null = null;
-          if (payload.targetRoomFmGuid) {
-            const target = findNodeByRoom(merged, payload.targetRoomFmGuid);
-            if (target) targetNodeId = target.nodeId;
-          }
-
-          if (!targetNodeId) {
-            // Pick the last node in the graph as fallback
-            const nodes = Array.from(merged.nodes.values());
-            if (nodes.length === 0) return;
-            targetNodeId = nodes[nodes.length - 1].nodeId;
-          }
-
-          const result = dijkstra(merged, entrance.nodeId, targetNodeId);
-          if (result) setPendingIndoorRoute(result);
-        })();
-      }
-    } catch (e) {
-      console.warn('[NativeViewerShell] Failed to parse pending_indoor_route:', e);
-    }
-  }, [isViewerReady, buildingFmGuid]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -1134,6 +1085,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         onClose={onClose}
         onViewerReady={handleViewerReady}
         forceBootstrap={forceBootstrap}
+        suppressAutoFit={!!navRoute}
       />
 
       {/* Bottom toolbar — always mounted for event handling, hidden visually when hideToolbar */}
@@ -1252,11 +1204,24 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         />
       )}
 
-      {/* Indoor route overlay from navigation handoff */}
-      {pendingIndoorRoute && (
-        <RouteDisplayOverlay route={pendingIndoorRoute} />
+      {/* Indoor navigation — 3D route geometry + turn-by-turn panel */}
+      {navRoute && (
+        <>
+          <IndoorRoute3DRenderer
+            viewerRef={viewerShimRef}
+            buildingFmGuid={buildingFmGuid}
+            isViewerReady={isViewerReady}
+            route={navRoute}
+          />
+          <IndoorWayfindingPanel
+            viewerRef={viewerShimRef}
+            buildingFmGuid={buildingFmGuid}
+            isViewerReady={isViewerReady}
+            route={navRoute}
+            onClose={onNavRouteClose}
+          />
+        </>
       )}
-
 
       {/* Context menu */}
       {contextMenu && (

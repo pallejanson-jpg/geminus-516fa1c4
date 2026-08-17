@@ -397,6 +397,12 @@ export function useRoomLabels(
     const container = ensureContainer();
     if (!container) return;
 
+    // Clear any existing label elements before recreating to prevent duplicates
+    // (createLabels can be called multiple times in one toggle cycle via CONFIG + TOGGLE events)
+    labelsRef.current.forEach(label => { label.element.remove(); });
+    labelsRef.current.clear();
+    occlusionCacheRef.current.clear();
+
     const config = configRef.current;
 
     // Update ref for future position updates

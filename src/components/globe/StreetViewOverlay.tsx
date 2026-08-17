@@ -1,8 +1,10 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { X, Loader2, DoorOpen, ArrowUp, ArrowDown } from 'lucide-react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { X, Loader2, DoorOpen, ArrowUp, ArrowDown, MapPin, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { supabase } from '@/integrations/supabase/client';
 import StreetViewMiniMap from './StreetViewMiniMap';
 import { useLanguage } from '@/context/LanguageContext';
 
@@ -35,6 +37,29 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { t } = useLanguage();
+
+  // Target room — lets "Enter building" hand off a route to the indoor wayfinding
+  // pipeline (usePendingIndoorRoute) instead of only opening the 360° tour.
+  const [rooms, setRooms] = useState<Array<{ fm_guid: string; name: string }>>([]);
+  const [showRoomPicker, setShowRoomPicker] = useState(false);
+  const [roomSearch, setRoomSearch] = useState('');
+  const [targetRoom, setTargetRoom] = useState<{ fm_guid: string; name: string } | null>(null);
+
+  useEffect(() => {
+    supabase
+      .from('assets')
+      .select('fm_guid, name')
+      .eq('building_fm_guid', fmGuid)
+      .in('category', ['Space', 'IfcSpace'])
+      .order('name')
+      .then(({ data }) => setRooms((data || []).map(r => ({ fm_guid: r.fm_guid, name: r.name || r.fm_guid }))));
+  }, [fmGuid]);
+
+  const filteredRooms = useMemo(() => {
+    if (!roomSearch.trim()) return rooms;
+    const q = roomSearch.toLowerCase();
+    return rooms.filter(r => r.name.toLowerCase().includes(q));
+  }, [rooms, roomSearch]);
 
   // Load a panorama at given position, replacing the current one
   const loadPanoAtPosition = useCallback(async (panoId: string, longitude: number, latitude: number) => {
@@ -135,18 +160,31 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
   useEffect(() => {
     if (!containerRef.current) return;
     let cancelled = false;
+    let pollId: ReturnType<typeof setInterval> | null = null;
 
-    const init = async () => {
+    const init = async (container: HTMLDivElement) => {
       try {
         Cesium.Ion.defaultAccessToken = cesiumToken;
 
-        const viewer = new Cesium.Viewer(containerRef.current!, {
+        const viewer = new Cesium.Viewer(container, {
           timeline: false, animation: false, baseLayerPicker: false,
           geocoder: false, homeButton: false, sceneModePicker: false,
           navigationHelpButton: false, infoBox: false, selectionIndicator: false,
+          showRenderLoopErrors: false,
         });
         if (cancelled) { viewer.destroy(); return; }
         viewerRef.current = viewer;
+
+        // Cesium can end up with a dead WebGL context (maximumCubeMapSize=0)
+        // if the container was zero-sized at creation time — bail out cleanly
+        // instead of letting the cube-map panorama load throw uncaught.
+        viewer.scene.renderError.addEventListener((_scene: unknown, err: unknown) => {
+          console.error('[StreetViewOverlay] Render error:', err);
+          if (!cancelled) {
+            setError(t('Kunde inte ladda Street View', 'Could not load Street View'));
+            setLoading(false);
+          }
+        });
 
         viewer.scene.globe.show = false;
 
@@ -270,10 +308,31 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
       }
     };
 
-    init();
+    const el = containerRef.current;
+    if (el.clientWidth === 0 || el.clientHeight === 0) {
+      // Container not yet painted — poll until it has real dimensions before
+      // creating the viewer (a zero-size canvas is what produces the
+      // "maximumCubeMapSize (0)" DeveloperError).
+      let attempts = 0;
+      pollId = setInterval(() => {
+        attempts++;
+        if (cancelled) { if (pollId !== null) clearInterval(pollId); return; }
+        if (el.clientWidth > 0 && el.clientHeight > 0) {
+          if (pollId !== null) { clearInterval(pollId); pollId = null; }
+          init(el);
+        } else if (attempts >= 20) {
+          if (pollId !== null) { clearInterval(pollId); pollId = null; }
+          setError(t('Kunde inte ladda Street View', 'Could not load Street View'));
+          setLoading(false);
+        }
+      }, 100);
+    } else {
+      init(el);
+    }
 
     return () => {
       cancelled = true;
+      if (pollId !== null) { clearInterval(pollId); pollId = null; }
       if (viewerRef.current && !viewerRef.current.isDestroyed()) {
         viewerRef.current.destroy();
       }
@@ -281,7 +340,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
       providerRef.current = null;
       currentPanoRef.current = null;
     };
-  }, [lat, lng, cesiumToken, loadPanoAtPosition]);
+  }, [lat, lng, cesiumToken, loadPanoAtPosition, t]);
 
   // Track heading changes
   useEffect(() => {
@@ -295,7 +354,9 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
     return () => clearInterval(interval);
   }, [loading]);
 
-  // Enter building
+  // Enter building — with a target room selected, hand off to the indoor wayfinding
+  // pipeline (same pending_indoor_route contract the outdoor Mapbox map uses) instead
+  // of the 360° tour, since the tour has no route/room concept at all.
   const handleEnterBuilding = useCallback(() => {
     const viewer = viewerRef.current;
     if (viewer && !viewer.isDestroyed()) {
@@ -304,8 +365,16 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
       sessionStorage.setItem('street-view-entry-heading', String(headingDeg));
     }
     onClose();
-    navigate(`/unified?building=${fmGuid}&mode=360&returnTo=/`);
-  }, [fmGuid, navigate, onClose]);
+    if (targetRoom) {
+      sessionStorage.setItem('pending_indoor_route', JSON.stringify({
+        buildingFmGuid: fmGuid,
+        targetRoomFmGuid: targetRoom.fm_guid,
+      }));
+      navigate(`/unified?building=${fmGuid}&returnTo=/`);
+    } else {
+      navigate(`/unified?building=${fmGuid}&mode=360&returnTo=/`);
+    }
+  }, [fmGuid, navigate, onClose, targetRoom]);
 
   return (
     <div className="fixed inset-0 z-[60] bg-background flex flex-col">
@@ -338,10 +407,67 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
             <ArrowUp size={14} />
           </Button>
 
-          {has360 && (
+          {/* Target room picker — optional destination for "Enter building" */}
+          <div className="relative">
+            {targetRoom ? (
+              <button
+                type="button"
+                onClick={() => setTargetRoom(null)}
+                className="h-7 flex items-center gap-1 px-2 rounded-md bg-primary/15 text-primary text-xs font-medium"
+                title={t('Ta bort målrum', 'Clear target room')}
+              >
+                <MapPin size={11} />
+                {targetRoom.name}
+                <X size={11} />
+              </button>
+            ) : (
+              <Button
+                variant="secondary"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => setShowRoomPicker(p => !p)}
+                title={t('Välj målrum', 'Pick target room')}
+                disabled={rooms.length === 0}
+              >
+                <MapPin size={14} />
+              </Button>
+            )}
+
+            {showRoomPicker && !targetRoom && (
+              <div className="absolute top-full right-0 mt-1 w-56 bg-popover border border-border rounded-md shadow-lg z-20 p-2">
+                <div className="relative mb-1.5">
+                  <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    autoFocus
+                    value={roomSearch}
+                    onChange={e => setRoomSearch(e.target.value)}
+                    placeholder={t('Sök rum…', 'Search rooms…')}
+                    className="h-7 pl-6 text-xs"
+                  />
+                </div>
+                <div className="max-h-48 overflow-y-auto space-y-0.5">
+                  {filteredRooms.map(room => (
+                    <button
+                      key={room.fm_guid}
+                      type="button"
+                      className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-accent/50 truncate"
+                      onClick={() => { setTargetRoom(room); setShowRoomPicker(false); setRoomSearch(''); }}
+                    >
+                      {room.name}
+                    </button>
+                  ))}
+                  {filteredRooms.length === 0 && (
+                    <p className="px-2 py-1.5 text-xs text-muted-foreground">{t('Inga rum hittades', 'No rooms found')}</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {(has360 || targetRoom) && (
             <Button variant="secondary" size="sm" className="h-7 text-xs gap-1" onClick={handleEnterBuilding}>
               <DoorOpen size={12} />
-              Enter building
+              {targetRoom ? t('Gå till rum', 'Go to room') : t('Gå in i byggnaden', 'Enter building')}
             </Button>
           )}
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>

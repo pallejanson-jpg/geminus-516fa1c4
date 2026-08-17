@@ -128,7 +128,36 @@ const NavGraphEditorOverlay: React.FC<NavGraphEditorOverlayProps> = ({
     }
   }, [mode, graph, onGraphChange]);
 
+  // Nodes/edges carry floor_fm_guid from whichever floor they were placed on. The
+  // graph passed in here is the whole building's merged multi-floor graph, but this
+  // overlay only ever shows one floor's plan image at a time — so nodes from other
+  // floors must not be drawn at their raw %, that coordinate space belongs to a
+  // different image entirely.
+  const currentFloor = floorFmGuid ?? null;
+  const sameFloor = (nf: string | null | undefined) => (nf ?? null) === currentFloor;
+
   const nodeArray = Array.from(graph.nodes.values());
+  const currentFloorNodes = nodeArray.filter(n => sameFloor(n.floor_fm_guid));
+  // Stairwells/elevators/entrances on other floors are shown dimmed as a reference
+  // for cross-floor linking, but aren't interactive here — they belong to a floor
+  // plan image that isn't the one currently displayed.
+  const ghostNodes = nodeArray.filter(n =>
+    !sameFloor(n.floor_fm_guid) && (n.type === 'stairwell' || n.type === 'elevator' || n.type === 'entrance')
+  );
+
+  // Nodes on this floor that have an edge to a node on a different floor (e.g. a
+  // stairwell continuing up) get a small ring so the connection is visible even
+  // though the far end can't be drawn on this floor's image.
+  const crossFloorLinkedNodeIds = new Set<string>();
+  for (const edge of graph.edges) {
+    const fromNode = graph.nodes.get(edge.from);
+    const toNode = graph.nodes.get(edge.to);
+    if (!fromNode || !toNode) continue;
+    const fromOnFloor = sameFloor(fromNode.floor_fm_guid);
+    const toOnFloor = sameFloor(toNode.floor_fm_guid);
+    if (fromOnFloor && !toOnFloor) crossFloorLinkedNodeIds.add(fromNode.nodeId);
+    if (toOnFloor && !fromOnFloor) crossFloorLinkedNodeIds.add(toNode.nodeId);
+  }
 
   return (
     <div className={cn('absolute inset-0 pointer-events-none', className)}>
@@ -166,11 +195,12 @@ const NavGraphEditorOverlay: React.FC<NavGraphEditorOverlayProps> = ({
         style={{ cursor: mode === 'node' ? 'crosshair' : mode === 'delete' ? 'not-allowed' : 'pointer' }}
         onClick={handleSvgClick}
       >
-        {/* Edges */}
+        {/* Edges — only drawn when both ends are on this floor's plan image */}
         {graph.edges.map((edge, idx) => {
           const from = graph.nodes.get(edge.from);
           const to = graph.nodes.get(edge.to);
           if (!from || !to) return null;
+          if (!sameFloor(from.floor_fm_guid) || !sameFloor(to.floor_fm_guid)) return null;
           return (
             <line
               key={`edge-${idx}`}
@@ -187,9 +217,39 @@ const NavGraphEditorOverlay: React.FC<NavGraphEditorOverlayProps> = ({
           );
         })}
 
-        {/* Nodes */}
-        {nodeArray.map(node => (
+        {/* Ghost nodes — stairwells/elevators/entrances on other floors, shown for
+            reference only (dimmed, non-interactive) so cross-floor links can be
+            planned even though this image can't show them at the right spot. */}
+        {ghostNodes.map(node => (
+          <circle
+            key={`ghost-${node.nodeId}`}
+            cx={`${node.coordinates[0]}%`}
+            cy={`${node.coordinates[1]}%`}
+            r={NODE_RADIUS - 1.5}
+            fill="none"
+            stroke="hsl(var(--muted-foreground))"
+            strokeWidth={1}
+            strokeDasharray="2 2"
+            opacity={0.4}
+            className="pointer-events-none"
+          />
+        ))}
+
+        {/* Nodes on this floor */}
+        {currentFloorNodes.map(node => (
           <g key={node.nodeId}>
+            {crossFloorLinkedNodeIds.has(node.nodeId) && (
+              <circle
+                cx={`${node.coordinates[0]}%`}
+                cy={`${node.coordinates[1]}%`}
+                r={NODE_RADIUS + 4}
+                fill="none"
+                stroke="hsl(var(--accent))"
+                strokeWidth={1.5}
+                strokeDasharray="2 2"
+                className="pointer-events-none"
+              />
+            )}
             <circle
               cx={`${node.coordinates[0]}%`}
               cy={`${node.coordinates[1]}%`}

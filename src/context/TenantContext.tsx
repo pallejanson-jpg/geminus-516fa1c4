@@ -55,7 +55,7 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         if (current && rows.some(t => t.id === current)) return current;
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored && rows.some(t => t.id === stored)) return stored;
-        return rows[0]?.id ?? null;
+        return null; // no auto-selection — user must pick a tenant explicitly
       });
     } finally {
       setIsLoadingTenants(false);

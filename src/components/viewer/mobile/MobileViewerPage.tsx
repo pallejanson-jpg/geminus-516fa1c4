@@ -28,6 +28,7 @@ import NavigationPanel from '@/components/viewer/NavigationPanel';
 import NavGraphEditorOverlay from '@/components/viewer/NavGraphEditorOverlay';
 import RouteDisplayOverlay from '@/components/viewer/RouteDisplayOverlay';
 import type { NavGraph, RouteResult } from '@/lib/pathfinding';
+import { usePendingIndoorRoute } from '@/hooks/usePendingIndoorRoute';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
@@ -289,6 +290,21 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
   const [navRoute, setNavRoute] = useState<RouteResult | null>(null);
   const [navFloorFmGuid, setNavFloorFmGuid] = useState<string | null>(null);
   const [planRoomLabels, setPlanRoomLabels] = useState<Array<{ id: string; name: string; x: number; y: number }>>([]);
+
+  // Consume a route handed off from the outdoor map ("Visa i byggnad") — open the
+  // nav panel so the fullscreen SplitPlanView + RouteDisplayOverlay branch below
+  // renders it aligned to the floor plan.
+  const handlePendingIndoorRoute = useCallback((graph: NavGraph, route: RouteResult) => {
+    setNavGraph(graph);
+    setNavRoute(route);
+    setNavEditMode(false);
+    setNavPanelOpen(true);
+  }, []);
+  usePendingIndoorRoute({
+    buildingFmGuid: buildingData.fmGuid,
+    ready: true,
+    onRoute: handlePendingIndoorRoute,
+  });
 
   // Floor data
   const { floors } = useFloorData(viewerInstanceRef, buildingData.fmGuid);
@@ -810,13 +826,13 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
             </div>
             <div className="absolute left-0 right-0 z-30 h-1 bg-border" style={{ top: '50%', transform: 'translateY(-50%)' }} />
             <div className="absolute left-0 right-0 bottom-0 overflow-hidden" style={{ height: '50%' }}>
-              <NativeViewerShell buildingFmGuid={buildingData.fmGuid} modelFilterFmGuid={modelFilterTarget.fmGuid} modelFilterCategory={modelFilterTarget.category} onClose={onGoBack} hideBackButton hideMobileOverlay hideToolbar hideFloorSwitcher showGeminusMenu={false} />
+              <NativeViewerShell buildingFmGuid={buildingData.fmGuid} modelFilterFmGuid={modelFilterTarget.fmGuid} modelFilterCategory={modelFilterTarget.category} onClose={onGoBack} hideBackButton hideMobileOverlay hideToolbar hideFloorSwitcher showGeminusMenu={false} navRoute={navRoute} onNavRouteClose={() => setNavRoute(null)} />
             </div>
           </>
         ) : viewMode === '360' && hasIvion ? (
           <div ref={sdkContainerRef} className="h-full w-full" />
         ) : (
-          <NativeViewerShell buildingFmGuid={buildingData.fmGuid} modelFilterFmGuid={modelFilterTarget.fmGuid} modelFilterCategory={modelFilterTarget.category} onClose={onGoBack} hideBackButton hideMobileOverlay hideToolbar hideFloorSwitcher showGeminusMenu={viewMode === '3d'} />
+          <NativeViewerShell buildingFmGuid={buildingData.fmGuid} modelFilterFmGuid={modelFilterTarget.fmGuid} modelFilterCategory={modelFilterTarget.category} onClose={onGoBack} hideBackButton hideMobileOverlay hideToolbar hideFloorSwitcher showGeminusMenu={viewMode === '3d'} navRoute={navRoute} onNavRouteClose={() => setNavRoute(null)} />
         )}
       </div>
 

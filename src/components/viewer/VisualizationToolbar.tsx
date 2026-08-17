@@ -528,13 +528,13 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
   // Handle room labels toggle with config
   const handleRoomLabelsToggle = useCallback((enabled: boolean, configId?: string) => {
+    const wasEnabled = showRoomLabels;
     setShowRoomLabels(enabled);
-    
+
     if (enabled && configId) {
       setActiveRoomLabelConfigId(configId);
       const config = roomLabelConfigs.find(c => c.id === configId);
       if (config) {
-        // Dispatch config event first
         emit('ROOM_LABELS_CONFIG', {
             fields: config.fields,
             heightOffset: config.height_offset,
@@ -544,14 +544,16 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             occlusionEnabled: config.occlusion_enabled,
             flatOnFloor: config.flat_on_floor,
           } as RoomLabelsConfigDetail);
+        // If labels were already on, ROOM_LABELS_CONFIG already triggers a recreate —
+        // skip the TOGGLE event to avoid creating labels twice.
+        if (wasEnabled) return;
       }
     } else if (!enabled) {
       setActiveRoomLabelConfigId(null);
     }
-    
-    // Then dispatch enable/disable event
+
     emit('ROOM_LABELS_TOGGLE', { enabled });
-  }, [roomLabelConfigs]);
+  }, [roomLabelConfigs, showRoomLabels]);
 
   // Handle room label config selection
   const handleRoomLabelConfigSelect = useCallback((configId: string) => {

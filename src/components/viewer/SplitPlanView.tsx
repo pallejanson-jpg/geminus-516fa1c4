@@ -43,6 +43,8 @@ interface SplitPlanViewProps {
   onEntityClick?: (entityId: string, fmGuid: string | null, entityName: string | null) => void;
   /** When true, hide the camera position indicator (blue dot) */
   hidePositionIndicator?: boolean;
+  /** Increment to trigger an immediate fit-to-content of the 2D plan */
+  fitTrigger?: number;
 }
 
 interface PanZoom {
@@ -66,6 +68,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
   isSplitMode = false,
   onEntityClick,
   hidePositionIndicator = false,
+  fitTrigger,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -678,6 +681,14 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     const timer = setTimeout(centerImage, 50);
     return () => clearTimeout(timer);
   }, [storeyMap, centerImage]);
+
+  // Re-center 2D plan when fitTrigger increments (e.g. entering split2d3d mode)
+  useEffect(() => {
+    if (fitTrigger == null || fitTrigger === 0) return;
+    initialCenterApplied.current = false;
+    const timer = setTimeout(centerImage, 80);
+    return () => clearTimeout(timer);
+  }, [fitTrigger, centerImage]);
 
   // Camera position overlay — use xeokit's built-in worldPosToStoreyMap for accuracy
   useEffect(() => {

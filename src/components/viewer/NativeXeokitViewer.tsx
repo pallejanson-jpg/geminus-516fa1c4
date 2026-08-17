@@ -29,6 +29,8 @@ interface NativeXeokitViewerProps {
   onViewerReady?: (viewer: any) => void;
   /** When true, forces a re-download of XKT models from Geminus Plus before loading */
   forceBootstrap?: boolean;
+  /** When true, skips the instant camera-fit-to-whole-model snap once loading completes — used when something else (e.g. indoor wayfinding) owns the camera. */
+  suppressAutoFit?: boolean;
 }
 
 const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
@@ -36,6 +38,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   onClose,
   onViewerReady,
   forceBootstrap = false,
+  suppressAutoFit = false,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isMobile = useIsMobile();
@@ -43,6 +46,10 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   const [loadProgress, setLoadProgress] = useState({ loaded: 0, total: 0, currentModel: '' });
   const [errorMsg, setErrorMsg] = useState('');
   const mountedRef = useRef(true);
+  // Read via ref inside the (memoized) initialize() callback so a suppressAutoFit
+  // change is always picked up, even though it isn't in initialize's own deps array.
+  const suppressAutoFitRef = useRef(suppressAutoFit);
+  suppressAutoFitRef.current = suppressAutoFit;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -375,9 +382,10 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           (window as any).__xktVirtualChunks = virtualChunks;
         }
 
-        // Instant viewFit (skip in split2d3d mode)
+        // Instant viewFit (skip in split2d3d mode, or when something else — e.g. indoor
+        // wayfinding — already owns the camera for this load)
         const isSplit2d3d = new URLSearchParams(window.location.search).get('mode') === 'split2d3d';
-        if (!isSplit2d3d) {
+        if (!isSplit2d3d && !suppressAutoFitRef.current) {
           try {
             const aabb = viewer.scene?.aabb;
             if (aabb) viewer.cameraFlight.flyTo({ aabb, duration: 0 });

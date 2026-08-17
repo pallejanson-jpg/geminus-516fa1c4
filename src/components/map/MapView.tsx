@@ -35,8 +35,9 @@ import {
 } from '@/lib/map-coloring-utils';
 import { useMapFacilities, MapFacility } from '@/hooks/useMapFacilities';
 import { useIndoorGeoJSON } from '@/hooks/useIndoorGeoJSON';
-import { localToGeo, BuildingOrigin } from '@/lib/coordinate-transform';
+import { BuildingOrigin } from '@/lib/coordinate-transform';
 import { parseNavGraph, dijkstraWithOptions, findNodeByRoom, findNearestEntranceNode, mergeGraphs, generateIndoorSteps } from '@/lib/pathfinding';
+import { computePlanBoundsFromRooms, navRouteToGeoJSON, navStepsToGeoSteps } from '@/lib/indoor-route-geometry';
 import type { Json } from '@/integrations/supabase/types';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
@@ -120,6 +121,7 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
     }>;
   } | null>(null);
   const [navBuildingGuid, setNavBuildingGuid] = useState<string | null>(null);
+  const [navTargetRoomFmGuid, setNavTargetRoomFmGuid] = useState<string | null>(null);
   const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
 
   // Pick-on-map state
@@ -304,6 +306,7 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
     preferElevator: boolean;
   }) => {
     setNavBuildingGuid(params.buildingFmGuid);
+    setNavTargetRoomFmGuid(params.targetRoomFmGuid);
     setRouteOrigin(params.origin);
     setRouteDestination(params.destination);
     setActiveStepIndex(null);
@@ -387,30 +390,7 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
             : null;
 
           // Compute BIM bounding box from room coordinates — used to denormalize nav graph % → meters
-          let planBounds: { minX: number; maxX: number; minZ: number; maxZ: number } | null = null;
-          if (roomBoundsResult.data && roomBoundsResult.data.length > 0) {
-            const xs = roomBoundsResult.data.map(r => r.coordinate_x as number);
-            const zs = roomBoundsResult.data.map(r => r.coordinate_z as number);
-            planBounds = {
-              minX: Math.min(...xs), maxX: Math.max(...xs),
-              minZ: Math.min(...zs), maxZ: Math.max(...zs),
-            };
-          }
-
-          // Convert a nav node's normalized [0–100, 0–100] percentage coordinate to BIM meters.
-          // The nav graph editor renders an SVG over the floor plan image — x% and y% map linearly
-          // to the BIM extent of the floor (derived from room asset coordinates).
-          const pctToBimLocal = (xPct: number, zPct: number, y = 0) => {
-            if (planBounds) {
-              return {
-                x: planBounds.minX + (xPct / 100) * (planBounds.maxX - planBounds.minX),
-                y,
-                z: planBounds.minZ + (zPct / 100) * (planBounds.maxZ - planBounds.minZ),
-              };
-            }
-            // Fallback: treat % as meters (will be inaccurate but avoids silent failure)
-            return { x: xPct, y, z: zPct };
-          };
+          const planBounds = computePlanBoundsFromRooms(roomBoundsResult.data || []);
 
           const graphRows = graphResult.data;
           if (graphRows && graphRows.length > 0) {
@@ -428,31 +408,8 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
                 const rawSteps = generateIndoorSteps(result);
 
                 if (bOrigin) {
-                  const geoCoords = result.path.map(n => {
-                    const local = pctToBimLocal(n.coordinates[0], n.coordinates[1]);
-                    const geo = localToGeo(local, bOrigin);
-                    return [geo.lng, geo.lat] as [number, number];
-                  });
-
-                  setIndoorRoute({
-                    type: 'FeatureCollection',
-                    features: [{
-                      type: 'Feature',
-                      geometry: { type: 'LineString', coordinates: geoCoords },
-                      properties: {},
-                    }],
-                  });
-
-                  indoorStepsGeo = rawSteps.map(s => {
-                    const local = pctToBimLocal(s.coordinates[0], s.coordinates[1]);
-                    const geo = localToGeo(local, bOrigin);
-                    return {
-                      instruction: s.instruction,
-                      distance: s.distance,
-                      coordinates: { lat: geo.lat, lng: geo.lng },
-                      type: s.type,
-                    };
-                  });
+                  setIndoorRoute(navRouteToGeoJSON(result, planBounds, bOrigin));
+                  indoorStepsGeo = navStepsToGeoSteps(rawSteps, planBounds, bOrigin);
                 } else {
                   // No building origin — indoor route can't be geo-positioned
                   const coords = result.path.map(n => [n.coordinates[0], n.coordinates[1]]);
@@ -506,6 +463,7 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
     setIndoorRoute(null);
     setRouteSummary(null);
     setNavBuildingGuid(null);
+    setNavTargetRoomFmGuid(null);
     setSelectedFloor(null);
     setRouteOrigin(null);
     setRouteDestination(null);
@@ -522,11 +480,12 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
     if (indoorRoute) {
       sessionStorage.setItem('pending_indoor_route', JSON.stringify({
         buildingFmGuid: navBuildingGuid,
+        targetRoomFmGuid: navTargetRoomFmGuid,
         route: indoorRoute,
       }));
     }
     navigate(`/viewer?building=${navBuildingGuid}`);
-  }, [navBuildingGuid, indoorRoute, navigate]);
+  }, [navBuildingGuid, navTargetRoomFmGuid, indoorRoute, navigate]);
 
   // Outdoor route GeoJSON
   const outdoorRouteGeoJSON = useMemo((): GeoJSON.FeatureCollection | null => {

@@ -18,6 +18,7 @@ import {
   Navigation,
   Bot,
   X,
+  Triangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -49,7 +50,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type ViewerTool = 'select' | 'measure' | 'slicer' | null;
+type ViewerTool = 'select' | 'measure' | 'angleMeasure' | 'slicer' | null;
 type NavMode = 'orbit' | 'firstPerson';
 type ViewMode = '3d' | '2d';
 
@@ -539,6 +540,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
 
   // ── Measure & Section plugin refs ──────────────────────────────────────
   const measurePluginRef = useRef<any>(null);
+  const angleMeasurePluginRef = useRef<any>(null);
   const sectionPluginRef = useRef<any>(null);
 
   const activateMeasure = useCallback(() => {
@@ -552,6 +554,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
         defaultLabelsVisible: true,
       });
     }
+    angleMeasurePluginRef.current?.control?.deactivate?.();
     measurePluginRef.current.control?.activate?.();
   }, [viewer]);
 
@@ -564,6 +567,28 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
       measurePluginRef.current.clear?.();
       console.log('[ViewerToolbar] Measurements cleared');
     }
+  }, []);
+
+  const activateAngleMeasure = useCallback(() => {
+    if (!viewer?.scene) return;
+    const sdk = (window as any).__xeokitSdk;
+    if (!sdk?.AngleMeasurementsPlugin) { console.warn('[ViewerToolbar] AngleMeasurementsPlugin not in SDK'); return; }
+    if (!angleMeasurePluginRef.current) {
+      angleMeasurePluginRef.current = new sdk.AngleMeasurementsPlugin(viewer, {
+        defaultVisible: true,
+        defaultLabelsVisible: true,
+      });
+    }
+    measurePluginRef.current?.control?.deactivate?.();
+    angleMeasurePluginRef.current.control?.activate?.();
+  }, [viewer]);
+
+  const deactivateAngleMeasure = useCallback(() => {
+    angleMeasurePluginRef.current?.control?.deactivate?.();
+  }, []);
+
+  const clearAngleMeasurements = useCallback(() => {
+    angleMeasurePluginRef.current?.clear?.();
   }, []);
 
   const activateSection = useCallback(() => {
@@ -632,10 +657,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
 
     // Deactivate previous tool plugins
     if (activeTool === 'measure') deactivateMeasure();
+    if (activeTool === 'angleMeasure') deactivateAngleMeasure();
     if (activeTool === 'slicer') deactivateSection();
 
     // Activate new tool plugins
     if (newTool === 'measure') activateMeasure();
+    if (newTool === 'angleMeasure') activateAngleMeasure();
     if (newTool === 'slicer') activateSection();
 
     setActiveTool(newTool);
@@ -644,7 +671,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
       detail: { tool: newTool },
     }));
     selfDispatchRef.current = false;
-  }, [activeTool, activateMeasure, deactivateMeasure, activateSection, deactivateSection]);
+  }, [activeTool, activateMeasure, deactivateMeasure, activateAngleMeasure, deactivateAngleMeasure, activateSection, deactivateSection]);
 
   // Ref to track activeTool without stale closures in the external listener
   const activeToolRef2 = useRef<ViewerTool>(activeTool);
@@ -661,17 +688,19 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
 
       // Deactivate previous
       if (prev === 'measure') deactivateMeasure();
+      if (prev === 'angleMeasure') deactivateAngleMeasure();
       if (prev === 'slicer') deactivateSection();
 
       // Activate new
       if (tool === 'measure') activateMeasure();
+      if (tool === 'angleMeasure') activateAngleMeasure();
       if (tool === 'slicer') activateSection();
 
       setActiveTool(tool);
     };
     const off = on('VIEWER_TOOL_CHANGED', handler);
     return () => off();
-  }, [activateMeasure, deactivateMeasure, activateSection, deactivateSection]);
+  }, [activateMeasure, deactivateMeasure, activateAngleMeasure, deactivateAngleMeasure, activateSection, deactivateSection]);
 
   const handleClearSlices = useCallback(() => {
     if (!viewer?.scene) return;
@@ -1191,6 +1220,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
                   <ToolButton icon={tool.icon} label={tool.label} onClick={() => handleToolChange('measure')} active={activeTool === 'measure'} disabled={!isReady} />
                   {activeTool === 'measure' && (
                     <ToolButton icon={<RotateCcw className="h-3 w-3 sm:h-3.5 sm:w-3.5" />} label="Clear measurements" onClick={clearMeasurements} disabled={!isReady} />
+                  )}
+                  <ToolButton icon={<Triangle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="Angle measure" onClick={() => handleToolChange('angleMeasure')} active={activeTool === 'angleMeasure'} disabled={!isReady} />
+                  {activeTool === 'angleMeasure' && (
+                    <ToolButton icon={<RotateCcw className="h-3 w-3 sm:h-3.5 sm:w-3.5" />} label="Clear angles" onClick={clearAngleMeasurements} disabled={!isReady} />
                   )}
                 </>
               )}

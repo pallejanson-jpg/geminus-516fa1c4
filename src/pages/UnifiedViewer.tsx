@@ -49,6 +49,7 @@ import { BCFViewpointsPanel } from '@/components/viewer/BCFViewpointsPanel';
 import NavGraphEditorOverlay from '@/components/viewer/NavGraphEditorOverlay';
 import RouteDisplayOverlay from '@/components/viewer/RouteDisplayOverlay';
 import type { NavGraph, RouteResult } from '@/lib/pathfinding';
+import { usePendingIndoorRoute } from '@/hooks/usePendingIndoorRoute';
 
 import { useIsMobile } from '@/hooks/use-mobile';
 import { toast } from 'sonner';
@@ -137,6 +138,8 @@ const UnifiedViewerContent: React.FC<{
       if (viewer?.cameraFlight && viewer?.scene?.aabb) {
         viewer.cameraFlight.flyTo({ aabb: viewer.scene.aabb, duration: 0.3 });
       }
+      // Trigger 2D plan re-center
+      setSplit2d3dFitKey(k => k + 1);
     }, 300);
     return () => clearTimeout(timer);
   }, [viewMode, floorFmGuid, floorName]);
@@ -401,6 +404,23 @@ const UnifiedViewerContent: React.FC<{
   const [planRoomLabels, setPlanRoomLabels] = useState<Array<{ id: string; name: string; x: number; y: number }>>([]);
   const [navFloorFmGuid, setNavFloorFmGuid] = useState<string | null>(null);
 
+  // Consume a route handed off from the outdoor map ("Visa i byggnad") — surface it
+  // through the same nav-panel state used by the in-viewer navigator, and switch to
+  // a view mode where SplitPlanView actually renders RouteDisplayOverlay aligned to
+  // the floor plan (a bare 3D perspective view has no meaningful place to draw it).
+  const handlePendingIndoorRoute = useCallback((graph: NavGraph, route: RouteResult) => {
+    setNavGraph(graph);
+    setNavRoute(route);
+    setNavEditMode(false);
+    setNavPanelOpen(true);
+    setViewMode('split2d3d');
+  }, []);
+  usePendingIndoorRoute({
+    buildingFmGuid: buildingData?.fmGuid ?? null,
+    ready: !isMobile && !!buildingData?.fmGuid,
+    onRoute: handlePendingIndoorRoute,
+  });
+
   // Listen for toolbar toggle event
   useEffect(() => {
     const handler = () => setNavPanelOpen(p => !p);
@@ -425,10 +445,11 @@ const UnifiedViewerContent: React.FC<{
   }, [buildingData?.transform]);
 
   // ─── Apply start view ONLY when startView exists, triggered by VIEWER_MODELS_LOADED ──
+  // Skipped when an indoor route is active — the wayfinding panel owns the camera then.
   const startViewAppliedRef = useRef<string | null>(null);
   useEffect(() => {
     const sv = buildingData?.startView;
-    if (!sv || !buildingData) return;
+    if (!sv || !buildingData || navRoute) return;
     if (startViewAppliedRef.current === buildingData.fmGuid) return;
 
     // Wait for VIEWER_MODELS_LOADED instead of a hardcoded timeout
@@ -464,7 +485,7 @@ const UnifiedViewerContent: React.FC<{
 
     const off = on('VIEWER_MODELS_LOADED', handler);
     return () => off();
-  }, [buildingData]);
+  }, [buildingData, navRoute]);
 
   // ─── Viewer instance ref (for xeokit) ──────────────────────────────
   const viewerInstanceRef = useRef<any>(null);
@@ -673,6 +694,9 @@ const UnifiedViewerContent: React.FC<{
     }, 1500);
     return () => clearTimeout(timer);
   }, [entityFmGuid, viewerReady, shouldUseNative3D]);
+
+  // Counter to trigger 2D plan fit-to-content when entering split2d3d
+  const [split2d3dFitKey, setSplit2d3dFitKey] = useState(0);
 
   // Draggable split ratio for desktop split2d3d
   const [desktopSplitRatio, setDesktopSplitRatio] = useState(40);
@@ -963,6 +987,8 @@ const UnifiedViewerContent: React.FC<{
               hideBackButton
               hideFloorSwitcher={false}
               showGeminusMenu={viewMode === '3d'}
+              navRoute={navRoute}
+              onNavRouteClose={() => setNavRoute(null)}
             />
           ) : (
             <React.Suspense fallback={<div className="flex items-center justify-center h-full bg-black"><Loader2 className="h-8 w-8 animate-spin text-white/50" /></div>}>
@@ -998,6 +1024,7 @@ const UnifiedViewerContent: React.FC<{
                 lockCameraToFloor={false}
                 monochrome
                 isSplitMode
+                fitTrigger={split2d3dFitKey}
                 onRoomLabelsChange={setPlanRoomLabels}
                 navigationOverlay={navPanelOpen ? (
                   <>
