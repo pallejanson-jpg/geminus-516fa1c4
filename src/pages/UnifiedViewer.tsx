@@ -980,6 +980,7 @@ const UnifiedViewerContent: React.FC<{
         <div style={viewerContainerStyle}>
           {shouldUseNative3D ? (
             <NativeViewerShell
+              key={buildingData.fmGuid}
               buildingFmGuid={buildingData.fmGuid}
               modelFilterFmGuid={modelFilterTarget.fmGuid}
               modelFilterCategory={modelFilterTarget.category}
