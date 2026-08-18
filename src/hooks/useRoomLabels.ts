@@ -224,7 +224,7 @@ export function useRoomLabels(
     const labelCount = labelsRef.current.size;
     // Adaptive throttling: more labels = less frequent occlusion checks
     // Auto-disable occlusion above threshold for performance
-    const occlusionThreshold = 30;
+    const occlusionThreshold = 200;
     const effectiveOcclusion = config.occlusionEnabled && labelCount <= occlusionThreshold;
     const occlusionInterval = labelCount > 40 ? 15 : labelCount > 20 ? 10 : 5;
 
@@ -265,15 +265,15 @@ export function useRoomLabels(
                 const pickResult = viewer.scene.pick({
                   origin: cameraEye,
                   direction: dir,
-                  pickSurface: false,
+                  pickSurface: true,
                 });
                 if (pickResult?.entity && pickResult.entity.id !== label.entityId) {
                   // Check if hit is closer than label
-                  const hitPos = pickResult.worldPos || pickResult.entity?.aabb;
-                  if (hitPos) {
-                    const hx = (hitPos[0] ?? ((hitPos[0] + hitPos[3]) / 2)) - cameraEye[0];
-                    const hy = (hitPos[1] ?? ((hitPos[1] + hitPos[4]) / 2)) - cameraEye[1];
-                    const hz = (hitPos[2] ?? ((hitPos[2] + hitPos[5]) / 2)) - cameraEye[2];
+                  const wp = pickResult.worldPos;
+                  if (wp) {
+                    const hx = wp[0] - cameraEye[0];
+                    const hy = wp[1] - cameraEye[1];
+                    const hz = wp[2] - cameraEye[2];
                     const hitDist = Math.sqrt(hx * hx + hy * hy + hz * hz);
                     if (hitDist < len * 0.95) {
                       occluded = true;

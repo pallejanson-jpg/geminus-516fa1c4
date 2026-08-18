@@ -607,7 +607,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
   useEffect(() => {
     if (!storeyPlugin) return;
 
-    const t0 = setTimeout(generateMap, 50);
+    // 400ms delay on first render to ensure applyArchitectColors has run before we snapshot
+    const t0 = setTimeout(generateMap, 400);
 
     // Listen for floor changes from OTHER components (ignore our own)
     const floorHandler = (detail: FloorSelectionEventDetail & { source?: string }) => {
@@ -1274,7 +1275,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
             className="max-w-none cursor-crosshair"
             style={{
               imageRendering: 'crisp-edges',
-              filter: 'contrast(1.8)',
+              filter: 'contrast(1.3)',
             }}
             draggable={false}
             onClick={handleClick}

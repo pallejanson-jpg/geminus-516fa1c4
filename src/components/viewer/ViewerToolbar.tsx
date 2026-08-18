@@ -465,7 +465,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
       scene.setObjectsVisible(allIds, true);
       scene.setObjectsXRayed(allIds, false);
       scene.setObjectsPickable(allIds, true);
-      scene.setObjectsColorized(allIds, false);
+      scene.setObjectsColorized(allIds, null);
     }
     // Reset alphaDepthMask (xray sets it to false, causing white artifacts)
     scene.alphaDepthMask = true;
@@ -480,10 +480,17 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
 
     // Respect current view mode — don't jump to 3D from 2D
     if (viewModeRef.current === '2d') {
-      // Re-center 2D view without switching to 3D
-      const sceneAABB = scene.getAABB?.();
-      if (sceneAABB) {
-        viewer.cameraFlight.flyTo({ aabb: sceneAABB, duration: 0.3 });
+      // Re-apply the current floor selection so other-floor objects get re-hidden
+      const floorId = currentFloorIdRef.current;
+      if (floorId) {
+        window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+          detail: { floorId, visibleMetaFloorIds: [floorId], isAllFloorsVisible: false },
+        }));
+      }
+      // Fly to the current floor's AABB (or full scene if no floor selected)
+      const floorAABB = floorId ? scene.getAABB?.({ objectIds: Object.keys(scene.objects || {}) }) : scene.getAABB?.();
+      if (floorAABB) {
+        viewer.cameraFlight.flyTo({ aabb: floorAABB, duration: 0.3 });
       }
     } else {
       // Fly to initial camera IMMEDIATELY (before slow color reapply)
